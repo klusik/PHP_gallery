@@ -162,7 +162,7 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
                 static fn (string $value): array => ['value' => $value, 'label' => gallery_description_layout_label($value)],
                 gallery_description_layout_options()
             ),
-            'help' => t('admin.gallery_editor.description_layout_help', 'Current source: {source}. Effective layout: {layout}. Horizontal cards place the picture at the top, then title, date placeholder, tags, and a shortened Markdown-capable description.', [
+            'help' => t('admin.gallery_editor.description_layout_help', 'Current source: {source}. Effective layout: {layout}. Vertical cards place the photo above the description; horizontal cards place it beside the description. Cards also show the title, date, tags, and a shortened Markdown-capable description.', [
                 'source' => gallery_description_layout_source_label($gallery),
                 'layout' => gallery_description_layout_label($effectiveDescriptionLayout),
             ]),

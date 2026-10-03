@@ -65,7 +65,7 @@ use function Gallery\Core\run_migrations;
 /**
  * Return the branch names the updater should try, newest preference first.
  *
- * @return array Structured result data for the caller.
+ * @return list<string> Allowed branches in preference order.
  */
 function application_update_branch_candidates(): array
 {
@@ -194,7 +194,7 @@ function application_update_remote_timeout_seconds(?float $deadline, int $defaul
  *
  * @param string $branch Branch value.
  * @param ?float $deadline Absolute microtime deadline for external I/O.
- * @return array Structured result data for the caller.
+ * @return array{candidates:array<string,string>,reachable:bool,diagnostic:string,budget_exhausted:bool} Bounded trusted-branch probe.
  */
 function application_update_remote_version_result(string $branch, ?float $deadline = null): array
 {
@@ -232,6 +232,10 @@ function application_update_remote_version_result(string $branch, ?float $deadli
             }
             // $patchNotes stores the remote release notes used as a secondary version signal.
             $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', $patchTimeout);
+            application_patch_notes_write_cache($branch, [
+                'ok' => true, 'branch' => $branch, 'cached_at' => time(),
+                'source' => 'github-api', 'versions' => application_patch_notes_parse_versions($patchNotes), 'error' => '',
+            ]);
             $reachable = true;
             // $patchNotesVersion stores the newest heading parsed from the release notes.
             $patchNotesVersion = application_update_version_from_patch_notes($patchNotes);

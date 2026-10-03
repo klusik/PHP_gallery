@@ -82,6 +82,9 @@ function admin_dashboard_model_gallery_rows(array $capabilities): array
     $selects[] = !empty($capabilities['public_path']) ? 'g.url_path' : "'' AS url_path";
     $selects[] = !empty($capabilities['access']) ? 'g.access_mode' : "'normal' AS access_mode";
     $selects[] = !empty($capabilities['access']) ? 'g.access_listing' : "'listed' AS access_listing";
+    // Expose presence only: dashboard rows must never carry password hashes or access tokens.
+    $selects[] = !empty($capabilities['access']) ? "CASE WHEN COALESCE(g.access_password_hash, '') <> '' THEN 1 ELSE 0 END AS own_password_set" : '0 AS own_password_set';
+    $selects[] = !empty($capabilities['edit_revision']) ? 'g.edit_revision' : 'NULL AS edit_revision';
     $selects[] = !empty($capabilities['gps_map']) ? 'g.gps_map_enabled' : '0 AS gps_map_enabled';
     $selects[] = !empty($capabilities['background_source']) ? 'g.background_source' : 'NULL AS background_source';
     $selects[] = !empty($capabilities['filename_display']) ? 'g.show_filenames' : '0 AS show_filenames';

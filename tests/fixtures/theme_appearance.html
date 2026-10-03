@@ -1,0 +1,177 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/theme_appearance.html
+Module Type: Browser Test Fixture
+Purpose: Preserve complete Theme form behavior through compact Appearance editing.
+Responsibilities: Render production views and assets with intercepted submissions and no settings writes.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Appearance regression</title>
+</head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupThemeAppearanceResize} from '/public/assets/gallery-modules/theme-appearance-resizer.js';
+let assertions = 0;
+const submits = [];
+/** Original real-rendered workspace used to exercise fresh initialization with saved browser preference. */
+const originalWorkspace=document.querySelector('.theme-appearance-workspace').outerHTML;
+/** Require a real input or layout invariant. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts passing assertions or throws. */
+function check(condition,message) { if (!condition) throw new Error(message); assertions++; }
+/** Find a production control. @param {string} selector DOM selector. @return {HTMLElement} Matching element. */
+function find(selector) { const element=document.querySelector(selector); if (!element) throw new Error('Missing '+selector); return element; }
+/** Edit one input through the production delegated events. @param {string} selector Control selector. @param {string} value New input value. @return {HTMLElement} Edited control. */
+function edit(selector,value) { const element=find(selector); element.value=value; element.dispatchEvent(new Event('input',{bubbles:true})); element.dispatchEvent(new Event('change',{bubbles:true})); return element; }
+/** Activate one retained subsection. @param {string} name Retained subsection suffix. @return {void} Uses the actual native tab control. */
+function tab(name) { find(`[data-admin-subtab-target="admin-theme-appearance-subtab-${name}"]`).click(); }
+/** Wait for layout and browser event processing. @return {Promise<void>} Resolves on a task boundary. */
+function settle() { return new Promise(/** Continue after layout tasks. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,30)); }
+/** Send confined trusted mouse input through the disposable browser adapter. @param {string} type Mouse protocol event type. @param {number} x Viewport horizontal coordinate. @param {number} y Viewport vertical coordinate. @return {Promise<void>} Resolves after native pointer delivery. */
+async function mouse(type,x,y) { const response=await fetch(`/__mouse?type=${type}&x=${x}&y=${y}`); check(response.ok,`trusted separator pointer delivery ${type} ${x},${y} status${response.status}`); }
+/** Activate separator keyboard behavior without changing form values. @param {HTMLElement} handle Actual separator. @param {string} key Named adjustment key. @param {boolean} shift Whether the coarse step is requested. @return {void} Delivers a keyboard event to the existing focusable handle. */
+function resizeKey(handle,key,shift=false) { handle.focus(); handle.dispatchEvent(new KeyboardEvent('keydown',{key,shiftKey:shift,bubbles:true,cancelable:true})); }
+/** Verify actual representative media/text orientation as well as staged layout metadata. @param {string} expected Required global or tag orientation. @param {string} context Meaningful editing scope. @return {void} Requires the computed CSS and geometry to match the selected layout. */
+function layout(expected,context) { const card=find('[data-theme-preview-description-card]'), media=card.querySelector('.theme-preview-media'), copy=media.nextElementSibling; const picture=media.getBoundingClientRect(), text=copy.getBoundingClientRect(); check(card.dataset.descriptionLayout===expected,context+' preview metadata uses '+expected); if(expected==='horizontal') check(getComputedStyle(card).display==='grid' && text.left>picture.left+10 && Math.abs(text.top-picture.top)<3,context+' actual CSS places media and text side by side'); else check(text.top>=picture.bottom-2,context+' actual CSS stacks text below media'); }
+/** Require usable native card-layout controls within the visible compact group. @param {number} minimum Minimum readable dropdown width in pixels. @param {string} context Layout condition under examination. @return {void} Rejects collapsed selects even when the workspace itself does not overflow. */
+function readableLayouts(minimum,context) { for (const name of ['theme_gallery_description_layout','tag_page_gallery_description_layout']) { const control=find(`[name="${name}"]`), rect=control.getBoundingClientRect(), bounds=control.closest('.theme-appearance-settings').getBoundingClientRect(); check(rect.width>=minimum,context+' '+name+' dropdown remains readable at '+rect.width+'px'); check(rect.left>=bounds.left-1 && rect.right<=bounds.right+1,context+' '+name+' dropdown remains inside settings'); } }
+/** Await two real rendering frames in the visible public fixture document. @param {HTMLIFrameElement} frame Confined presentation iframe. @return {Promise<void>} Resolves after scrolling can activate content-visibility and paint current geometry. */
+function publicPaint(frame) { return new Promise(/** Observe the next public rendering frames without overriding production CSS. @param {function():void} resolve Completed-paint consumer. @return {number} First animation frame identifier. */ resolve=>frame.contentWindow.requestAnimationFrame(/** Let the activated card render before measurement. @return {number} Second animation frame identifier. */ ()=>frame.contentWindow.requestAnimationFrame(resolve))); }
+/** Compare real public view geometry against canonical orientation and responsive fallback. @param {HTMLIFrameElement} frame Confined anonymous public presentation document. @param {boolean} mobile Whether the supported narrow-screen stacking fallback applies. @return {Promise<void>} Reveals each real card before checking its rendered physical/Smart geometry and picture variant. */
+async function publicLayouts(frame,mobile) { frame.scrollIntoView({block:'start'}); await publicPaint(frame); const document=frame.contentDocument, cards=Array.from(document.querySelectorAll('.gallery-card')); check(cards.length===8,'actual physical and Smart views cover both layouts and picture variants'); for(const card of cards) { card.scrollIntoView({block:'center'}); await publicPaint(frame); const media=card.querySelector('.gallery-card-media'), body=card.querySelector('.gallery-card-body'), picture=media.getBoundingClientRect(), text=body.getBoundingClientRect(), horizontal=card.querySelector('.gallery-card-title-link').textContent.includes(' horizontal '); check(card.classList.contains(horizontal?'is-gallery-description-vertical':'is-gallery-description-horizontal'),'canonical layout retains historical public CSS hook'); const context=(card.classList.contains('smart-gallery-card')?'Smart':'physical')+' '+card.querySelector('picture').dataset.fixtureRenderer+' '+(horizontal?'horizontal':'vertical')+(mobile?' mobile':' desktop'); check(text.width>0 && picture.width>0,context+' media and description remain visible'); if(horizontal && !mobile) check(text.left>=picture.right-2 && Math.abs(text.top-picture.top)<3,context+' puts photo beside description like horizontal preview'); else check(text.top>=picture.bottom-2,context+' puts photo above description; media='+JSON.stringify({left:picture.left,top:picture.top,width:picture.width,height:picture.height,bottom:picture.bottom})+' body='+JSON.stringify({left:text.left,top:text.top,width:text.width,height:text.height})+' cardcolumns='+frame.contentWindow.getComputedStyle(card).gridTemplateColumns+' viewport='+frame.contentWindow.innerWidth+' image='+JSON.stringify({complete:media.querySelector('img').complete,naturalWidth:media.querySelector('img').naturalWidth})); check(card.scrollWidth<=card.clientWidth+1,context+' card does not overflow'); } check(document.documentElement.scrollWidth<=frame.clientWidth+1,'public fixture fits its viewport'); }
+try {
+    setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm();
+    const form=find('[data-theme-form]'), hex=find('[data-theme-color-hex]'), color=find('[data-theme-preview-color="accent"]');
+    form.addEventListener('submit',/** Capture the complete intended POST without navigation or writes. @param {SubmitEvent} event Native submission event. @return {void} Records prior cancellation and prevents fixture navigation. */ event=>{ submits.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault(); });
+    const save=find('.admin-theme-save-panel button:not([name])');
+    check(!hex.hidden && !hex.name,'JS reveals the unnamed HEX editor');
+    hex.focus(); check(document.activeElement===hex,'visible HEX accepts native focus');
+    check(document.querySelectorAll('[data-theme-live-preview]').length===1,'one shared preview');
+    layout('horizontal','initial Colors');
+    tab('width-map'); await settle(); layout('horizontal','initial Width');
+    tab('gallery-tags'); await settle(); layout('horizontal','Cards and tags navigation preserves global scope');
+    edit('[data-theme-preview-context-select]','tag'); layout('vertical','selected initial Tag pages');
+    check(find('[data-theme-preview-context-label]').textContent.includes('Tag'),'shared preview names tag-page scope');
+    edit('[name="tag_page_gallery_description_layout"]','horizontal'); layout('horizontal','staged Tag pages');
+    tab('colors'); await settle(); layout('horizontal','Colors navigation preserves staged tag scope');
+    check(find('[data-theme-preview-context-select]').value==='tag','tab navigation preserves chosen tag context');
+    edit('[data-theme-preview-context-select]','home'); layout('horizontal','selected global Colors');
+    check(find('[data-theme-preview-context-label]').textContent.includes('Gallery'),'shared preview names global gallery-card scope');
+    tab('gallery-tags'); await settle(); edit('[name="theme_gallery_description_layout"]','vertical');
+    layout('vertical','editing global field in Cards and tags');
+    check(find('[data-theme-preview-context-select]').value==='home','editing global layout selects gallery-card preview scope');
+    edit('[data-theme-preview-context-select]','tag'); layout('horizontal','manual tag scope');
+    check(find('[name="theme_gallery_description_layout"]').value==='vertical' && find('[name="tag_page_gallery_description_layout"]').value==='horizontal','manual preview selector changes neither stored-intent field');
+    edit('[data-theme-preview-context-select]','home'); layout('vertical','manual global scope');
+    tab('gallery-tags'); await settle(); layout('vertical','repeated Cards and tags activation retains manual scope');
+    edit('[name="tag_page_gallery_description_layout"]','vertical'); layout('vertical','editing tag setting selects tag scope');
+    check(find('[data-theme-preview-context-select]').value==='tag','editing tag layout selects tag-page preview scope');
+    edit('[name="tag_page_gallery_description_layout"]','horizontal'); layout('horizontal','restaged tag setting retains independent global value');
+    edit('[data-theme-preview-context-select]','home');
+    tab('colors'); await settle(); layout('vertical','staged global Colors');
+    tab('width-map'); await settle(); layout('vertical','staged global Width');
+    tab('gallery-tags'); await settle(); layout('vertical','Cards and tags navigation preserves global preview');
+    edit('[data-theme-preview-context-select]','tag'); layout('horizontal','retained staged Tag pages');
+    check(find('[name="theme_gallery_description_layout"]').value==='vertical' && find('[name="tag_page_gallery_description_layout"]').value==='horizontal','switching scopes preserves both distinct staged selections');
+    tab('colors'); await settle();
+    edit('[data-theme-color-hex]','a1b2c3');
+    check(color.value==='#a1b2c3','HEX changes native persisted color');
+    check(find('[data-theme-preview-page]').style.getPropertyValue('--preview-accent')==='#a1b2c3','HEX changes actual live preview');
+    check(find('[data-theme-controls-changed]').value==='1','HEX stages theme overrides');
+    edit('[data-theme-preview-color="accent"]','#112233');
+    check(hex.value==='#112233','native picker synchronizes HEX');
+    edit('[data-theme-color-hex]','zzzzzz');
+    check(color.value==='#112233' && !hex.validity.valid,'invalid HEX preserves native state and blocks validity');
+    tab('width-map'); form.requestSubmit(save); await settle();
+    check(submits.length===0,'invalid hidden HEX blocks ordinary save');
+    check(!find('#admin-theme-appearance-subtab-colors').hidden,'invalid save reveals Colors');
+    check(document.activeElement===hex,'invalid save focuses HEX; invalid='+Array.from(form.querySelectorAll(':invalid')).map(/** Describe only fixture invalid control identifiers. @param {Element} element Invalid fixture control. @return {string} Safe name or input identifier. */ element=>element.name||element.id).join(',')+' active='+document.activeElement?.tagName);
+    find('[data-admin-tab-target="admin-theme-tab-custom-css"]').click(); form.requestSubmit(save); await settle();
+    check(!find('#admin-theme-tab-appearance').hidden && document.activeElement===hex,'other primary tab invalid save returns to Appearance');
+    find('.admin-theme-save-panel [name="reset_theme_overrides"]').click();
+    check(submits.length===1 && !submits[0].prevented && submits[0].data.get('reset_theme_overrides')==='1','formnovalidate reset accepts invalid draft');
+    edit('[data-theme-color-hex]','#445566');
+    tab('width-map'); edit('[data-theme-page-width-select]','custom');
+    check(!find('[data-theme-custom-width-control]').hidden,'custom width reveals paired controls');
+    edit('[data-theme-custom-width-number]','1700');
+    check(find('[data-theme-custom-width-slider]').value==='1700' && find('[data-theme-custom-width-display]').textContent.includes('1700'),'number synchronizes slider and width readout');
+    edit('[data-theme-custom-width-slider]','1600');
+    check(find('[data-theme-custom-width-number]').value==='1600','slider synchronizes persisted number');
+    tab('gallery-tags'); await settle(); edit('[data-theme-preview-tag-grid-columns]','5'); edit('[data-theme-preview-tag-grid-rows]','6');
+    check(find('[data-theme-tag-grid-columns-display]').textContent==='5' && find('[data-theme-tag-grid-rows-display]').textContent==='6','tag grid readouts synchronize');
+    check(find('[data-theme-tag-grid-capacity]').textContent.includes('30'),'tag grid capacity uses product');
+    check(find('[data-theme-preview-root]').dataset.themePreviewContext==='tag' && find('[data-theme-preview-tag-grid-state]').textContent.includes('5'),'tag tab updates shared preview context');
+    edit('[data-theme-hero-tag-limit-number]','27');
+    check(find('[data-theme-hero-tag-limit-slider]').value==='27','hero limit synchronizes pair');
+    const all=find('[data-theme-hero-tag-display-all]'); all.checked=true; all.dispatchEvent(new Event('change',{bubbles:true}));
+    check(find('[data-theme-hero-tag-limit-controls]').hidden && find('[data-theme-hero-tag-limit-number]').value==='27','display all hides but retains posted limit');
+    const scroll=find('[data-theme-hero-tag-scrollbar-enabled]'); scroll.checked=false; scroll.dispatchEvent(new Event('change',{bubbles:true}));
+    check(find('[data-theme-hero-tag-scrollbar-controls]').hidden,'disabled scrollbar hides row controls');
+    tab('colors'); tab('width-map');
+    check(color.value==='#445566' && find('[data-theme-custom-width-number]').value==='1600','tab switches retain edits');
+    form.requestSubmit(save);
+    check(submits.length===2 && !submits[1].prevented,'valid ordinary save reaches native shared form');
+    const data=submits[1].data;
+    for (const name of ['theme_accent','theme_page_width_custom','theme_hero_tag_visible_limit','theme_hero_tag_scrollbar_rows','tag_page_gallery_grid_columns','tag_page_gallery_grid_rows','custom_css','pagination_columns','cms_language','public_language']) check(data.has(name),'complete POST retains hidden-tab '+name);
+    check(data.get('theme_accent')==='#445566' && data.get('theme_hero_tag_visible_limit')==='27','POST contains edited native values');
+    check(data.get('theme_gallery_description_layout')==='vertical' && data.get('tag_page_gallery_description_layout')==='horizontal','complete POST retains independently staged global and tag layouts');
+    const first=find('[data-admin-subtab-target="admin-theme-appearance-subtab-colors"]'); first.focus(); first.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+    check(document.activeElement===find('[data-admin-subtab-target="admin-theme-appearance-subtab-width-map"]'),'retained subsection keyboard navigation');
+    await settle(); layout('horizontal','keyboard Width preserves chosen tag context');
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); await settle(); layout('horizontal','keyboard Cards and tags preserves chosen tag context');
+    await fetch('/__viewport?width=1280'); await settle();
+    for (const name of ['colors','width-map','gallery-tags']) { tab(name); await settle(); const workspace=find('.theme-appearance-workspace'); check(workspace.scrollWidth<=workspace.clientWidth+1,'desktop '+name+' workspace has no overflow'); if(name==='gallery-tags') readableLayouts(150,'desktop'); }
+    tab('colors'); await settle();
+    const handle=find('[data-theme-appearance-resizer]'), controls=find('.theme-appearance-settings'), preview=find('.theme-appearance-preview');
+    check(!handle.hidden && handle.getBoundingClientRect().width>0 && handle.getAttribute('aria-disabled')==='false','desktop separator is visible and enabled');
+    handle.scrollIntoView({block:'center'}); await settle();
+    const leftBefore=controls.getBoundingClientRect().width, previewBefore=preview.getBoundingClientRect().width;
+    const point=handle.getBoundingClientRect(), x=point.x+point.width/2, y=point.y+point.height/2;
+    await mouse('mouseMoved',x,y); await mouse('mousePressed',x,y); await mouse('mouseMoved',x-70,y); await mouse('mouseReleased',x-70,y); await settle();
+    check(controls.getBoundingClientRect().width<leftBefore-40 && preview.getBoundingClientRect().width>previewBefore+40,'trusted drag narrows settings and expands shared preview');
+    check(Math.abs(Number(handle.getAttribute('aria-valuenow'))-controls.getBoundingClientRect().width)<2,'separator ARIA reports actual controls width');
+    resizeKey(handle,'Home'); await settle();
+    const minimum=controls.getBoundingClientRect().width;
+    check(minimum>=359 && minimum<=Number(handle.getAttribute('aria-valuemin'))+2,'Home respects minimum settings width');
+    resizeKey(handle,'ArrowRight'); await settle();
+    check(Math.abs(controls.getBoundingClientRect().width-minimum-16)<2,'keyboard arrow adjusts by16px');
+    resizeKey(handle,'ArrowRight',true); await settle();
+    check(Math.abs(controls.getBoundingClientRect().width-minimum-80)<2,'Shift arrow adjusts by64px');
+    resizeKey(handle,'End'); await settle();
+    check(preview.getBoundingClientRect().width>=339 && controls.getBoundingClientRect().width<=Number(handle.getAttribute('aria-valuemax'))+2,'End preserves preview minimum and maximum settings bound');
+    for (const name of ['colors','width-map','gallery-tags']) { tab(name); await settle(); resizeKey(handle,'Home'); await settle(); const workspace=find('.theme-appearance-workspace'); check(workspace.scrollWidth<=workspace.clientWidth+1 && controls.scrollWidth<=controls.clientWidth+1,'minimum-width '+name+' controls have no overflow'); if(name==='gallery-tags') readableLayouts(150,'360px minimum settings'); }
+    resizeKey(handle,'Enter'); await settle();
+    const resetWidth=controls.getBoundingClientRect().width;
+    check(Math.abs(resetWidth/(resetWidth+preview.getBoundingClientRect().width)-0.45)<0.003,'Enter resets45percent of current available pane width');
+    resizeKey(handle,'ArrowLeft'); await settle();
+    check(controls.getBoundingClientRect().width<resetWidth-14,'reset leaves keyboard adjustment functional');
+    handle.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})); await settle();
+    check(Math.abs(controls.getBoundingClientRect().width/(controls.getBoundingClientRect().width+preview.getBoundingClientRect().width)-0.45)<0.003,'doubleclick resets shared column split');
+    await fetch('/__viewport?width=390'); await settle();
+    check(handle.getBoundingClientRect().width===0 && handle.getAttribute('aria-disabled')==='true','mobile stack hides and disables separator');
+    const mobileWidth=controls.getBoundingClientRect().width; resizeKey(handle,'End'); await settle();
+    check(Math.abs(controls.getBoundingClientRect().width-mobileWidth)<1,'hidden mobile separator cannot resize stacked form');
+    for (const name of ['colors','width-map','gallery-tags']) { tab(name); await settle(); const workspace=find('.theme-appearance-workspace'); check(workspace.scrollWidth<=workspace.clientWidth+1,'mobile '+name+' workspace has no overflow'); check(find('[data-theme-live-preview]').getBoundingClientRect().width>0,'mobile '+name+' shared preview remains visible'); if(name==='gallery-tags') readableLayouts(120,'390px mobile viewport'); }
+    check(document.querySelectorAll('[data-theme-live-preview]').length===1,'mobile retains one preview');
+    await fetch('/__viewport?width=1280'); await settle();
+    resizeKey(handle,'ArrowLeft',true); await settle();
+    const storageKey=`php-gallery:theme-appearance-width:${location.pathname}`, storedRatio=Number(localStorage.getItem(storageKey));
+    check(storedRatio>0 && storedRatio<1,'resize persists only a bounded browser preference ratio');
+    find('.theme-appearance-workspace').outerHTML=originalWorkspace;
+    setupThemeAppearanceResize(form); await settle();
+    const freshControls=find('.theme-appearance-settings'), freshPreview=find('.theme-appearance-preview');
+    check(Math.abs(freshControls.getBoundingClientRect().width/(freshControls.getBoundingClientRect().width+freshPreview.getBoundingClientRect().width)-storedRatio)<0.003,'fresh actual workspace restores saved split without app settings mutation');
+    await fetch('/__viewport?width=390'); await settle(); await fetch('/__viewport?width=1280'); await settle();
+    check(Math.abs(freshControls.getBoundingClientRect().width/(freshControls.getBoundingClientRect().width+freshPreview.getBoundingClientRect().width)-storedRatio)<0.003,'saved ratio survives mobile stack and desktop restoration');
+    resizeKey(find('[data-theme-appearance-resizer]'),'Enter'); await settle();
+    check(localStorage.getItem(storageKey)===null,'reset discards browser override and returns CSS default');
+    const publicFrame=document.createElement('iframe'); publicFrame.title='Isolated public card orientation'; publicFrame.style.cssText='display:block;width:100%;height:900px;border:0';
+    const publicReady=new Promise(/** Await only the confined actual public fixture document. @param {function():void} resolve Completion callback. @return {void} Installs a one-shot frame load handler. */ resolve=>publicFrame.addEventListener('load',resolve,{once:true}));
+    publicFrame.src='/__public_cards'; document.body.append(publicFrame); await publicReady; await settle(); await publicLayouts(publicFrame,false);
+    await fetch('/__viewport?width=390'); await settle(); await publicLayouts(publicFrame,true);
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' Appearance assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

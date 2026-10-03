@@ -1,0 +1,553 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-logs.css
+ * Module Type: Stylesheet
+ * Purpose: Keep Admin log filters, records, and archive controls compact and readable.
+ * Responsibilities:
+ *   - Reduce spacing around filters without hiding active search controls.
+ *   - Balance log table columns and preserve accessible expanded details.
+ * Author:
+ *   Rudolf Klusal
+ * Notes: Presentation only; live filtering, exports, and mutations keep their existing owners.
+ */
+
+/* The existing section navigation identifies both Logs pages without affecting other Admin views. */
+.admin-page .site-main:has(.admin-log-section-tabs) {
+    min-width: 0;
+}
+
+.admin-page .admin-log-table-wrap {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-page .site-main:has(.admin-log-section-tabs) > .hero,
+.admin-page .admin-log-filters-panel,
+.admin-page [data-admin-log-results],
+.admin-page .admin-log-archive-files,
+.admin-page .admin-log-archive-panel {
+    padding: .75rem .9rem;
+    margin-bottom: .65rem;
+    min-width: 0;
+}
+
+.admin-page .site-main:has(.admin-log-section-tabs) > .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .35rem .75rem;
+    align-items: center;
+}
+
+.admin-page .site-main:has(.admin-log-section-tabs) > .hero h1 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.admin-page .site-main:has(.admin-log-section-tabs) > .hero p {
+    margin: 0;
+    grid-column: 1;
+    font-size: .85rem;
+}
+
+.admin-page .site-main:has(.admin-log-section-tabs) > .hero .nav {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    gap: .35rem;
+}
+
+.admin-page .admin-log-section-tabs {
+    margin-bottom: .65rem;
+}
+
+.admin-page .admin-log-filters-panel h2,
+.admin-page [data-admin-log-results] h2,
+.admin-page .admin-log-archive-panel h2 {
+    margin: 0 0 .35rem;
+    font-size: 1.1rem;
+}
+
+.admin-page .admin-log-filters-header {
+    margin-bottom: .4rem;
+    padding-bottom: 0;
+    border-bottom: 0;
+    gap: .5rem;
+    align-items: center;
+}
+
+.admin-page .admin-log-filters-header h2 {
+    margin: 0;
+}
+
+.admin-page .admin-log-filters-header .button {
+    padding: .3rem .5rem;
+    font-size: .8rem;
+}
+
+.admin-page .admin-log-filter-state:empty {
+    display: none;
+}
+
+.admin-page .admin-log-filter-grid {
+    grid-template-columns: minmax(32rem, 1.6fr) minmax(14rem, 1fr) 15.5rem auto;
+    gap: .5rem;
+    align-items: end;
+}
+
+.admin-page .admin-log-filter-main,
+.admin-page .admin-log-filter-footer {
+    display: contents;
+}
+
+.admin-page .admin-log-filter-scope {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.admin-page .admin-log-search-control {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.admin-page .admin-log-severity-disclosure {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+}
+
+.admin-page .admin-log-filter-actions {
+    grid-column: 4;
+    grid-row: 1;
+    gap: .35rem;
+}
+
+.admin-page .admin-log-filter-group {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+/* Keep fieldset names available to assistive technology without adding a redundant heading row. */
+.admin-page .admin-log-filter-group > legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-page .admin-log-control-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .5rem;
+}
+
+.admin-page .admin-log-filter-control {
+    gap: .2rem;
+    margin: 0;
+}
+
+.admin-page .admin-log-filter-control span {
+    min-height: 0;
+}
+
+.admin-page .admin-log-filter-control > span,
+.admin-page .admin-log-severity-trigger-label {
+    font-size: .8rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.admin-page .admin-log-severity-disclosure > summary {
+    display: block;
+    cursor: pointer;
+    list-style: none;
+}
+
+.admin-page .admin-log-severity-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-page .admin-log-severity-trigger-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-bottom: .2rem;
+}
+
+.admin-page .admin-log-severity-count {
+    min-width: 1rem;
+    min-height: 1rem;
+    padding: 0 .15rem;
+    font-size: .65rem;
+    line-height: 1;
+}
+
+.admin-page .admin-log-severity-count.is-empty {
+    display: none;
+}
+
+.admin-page .admin-log-severity-disclosure > summary:focus-visible {
+    outline: 2px solid var(--accent, #365fab);
+    outline-offset: 3px;
+    border-radius: 5px;
+}
+
+.admin-page .admin-log-filter-help {
+    margin: 0 0 .25rem;
+    font-size: .75rem;
+}
+
+.admin-page .admin-log-severity-options {
+    gap: .3rem;
+}
+
+.admin-page .admin-log-severity-choice span {
+    min-height: 1.85rem;
+    padding: .3rem .5rem;
+    font-size: .8rem;
+}
+
+.admin-page .admin-log-severity-summary {
+    position: relative;
+    display: block;
+    min-height: 2rem;
+    margin: 0;
+    padding: .4rem 1.5rem .4rem .5rem;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 5px;
+    background: #fff;
+    font-size: .8rem;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-page .admin-log-severity-summary::after {
+    content: '▾';
+    position: absolute;
+    right: .5rem;
+}
+
+.admin-page .admin-log-severity-disclosure[open] {
+    grid-column: 1 / -1;
+    grid-row: 2;
+}
+
+.admin-page .admin-log-severity-disclosure[open] > summary {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    max-width: 28rem;
+}
+
+.admin-page .admin-log-severity-disclosure[open] .admin-log-severity-trigger-label {
+    margin: 0;
+}
+
+.admin-page .admin-log-severity-disclosure[open] .admin-log-severity-summary {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-page .admin-log-severity-disclosure[open] .admin-log-severity-summary::after {
+    content: '▴';
+}
+
+.admin-page .admin-log-severity-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .4rem;
+    padding: .5rem .6rem;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 5px;
+    background: #f8fafc;
+}
+
+.admin-page .admin-log-severity-filter .admin-log-filter-help {
+    margin: 0;
+}
+
+.admin-page .admin-log-severity-filter .button {
+    margin-left: auto;
+    padding: .3rem .5rem;
+    font-size: .8rem;
+}
+
+.admin-page .admin-log-pagination {
+    margin: .4rem 0;
+    font-size: .85rem;
+}
+
+.admin-page .admin-log-results-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .35rem .75rem;
+    margin-bottom: .5rem;
+}
+
+.admin-page .admin-log-results-header h2,
+.admin-page .admin-log-results-header .admin-log-pagination {
+    margin: 0;
+}
+
+/* Let the message use remaining width; long event keys and date ranges wrap in their own cells. */
+.admin-page .admin-log-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 65rem;
+    font-size: .8rem;
+    line-height: 1.4;
+}
+
+.admin-page .admin-log-table th,
+.admin-page .admin-log-table td {
+    padding: .4rem .45rem;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .admin-log-table th:nth-child(1) { width: 3.5rem; }
+.admin-page .admin-log-table th:nth-child(2) { width: 12rem; }
+.admin-page .admin-log-table th:nth-child(3) { width: 4.5rem; }
+.admin-page .admin-log-table th:nth-child(4) { width: 5.25rem; }
+.admin-page .admin-log-table th:nth-child(5) { width: 5.5rem; }
+.admin-page .admin-log-table th:nth-child(6) { width: 14rem; }
+.admin-page .admin-log-table th:nth-child(8) { width: 4rem; }
+
+.admin-page .admin-log-table td:nth-child(3) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-page .admin-log-table td:nth-child(2) {
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-page .admin-log-table code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .admin-log-table .log-context pre,
+.admin-page .admin-log-group-instance pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Keep archives at the top; maintenance settings occupy only a narrow adjacent panel. */
+.admin-page .admin-log-archive-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    align-items: start;
+    gap: .65rem;
+    min-width: 0;
+}
+
+.admin-page .admin-log-archive-files-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .4rem;
+}
+
+.admin-page .admin-log-archive-files h2 {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.admin-page .admin-log-archive-pagination {
+    margin: 0;
+    font-size: .8rem;
+    gap: .35rem;
+}
+
+.admin-page .admin-log-archive-pagination .pagination-link {
+    padding: .3rem .55rem;
+}
+
+.admin-page .admin-log-archive-files > .admin-log-archive-pagination {
+    margin-top: .5rem;
+}
+
+.admin-page .admin-log-archive-sidebar {
+    gap: .75rem;
+}
+
+.admin-page .admin-log-archive-sidebar h2 {
+    font-size: 1rem;
+    line-height: 1.35;
+    margin: 0;
+}
+
+.admin-page .admin-log-archive-controls {
+    display: grid;
+    gap: .5rem;
+}
+
+.admin-page .admin-log-archive-retention-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: .4rem;
+}
+
+.admin-page .admin-log-archive-retention-form label {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    margin: 0;
+    gap: .25rem;
+}
+
+.admin-page .admin-log-archive-run-form {
+    display: flex;
+}
+
+.admin-page .admin-log-archive-run-form button {
+    width: 100%;
+}
+
+.admin-page .admin-log-archive-metrics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+}
+
+.admin-page .admin-log-archive-metrics > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .4rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+}
+
+.admin-page .admin-log-archive-metrics dt {
+    text-transform: none;
+    font-weight: 500;
+    font-size: .8rem;
+    margin: 0;
+}
+
+.admin-page .admin-log-archive-metrics dd {
+    font-size: .85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-page .admin-log-archive-help,
+.admin-page .admin-log-archive-last-result {
+    font-size: .8rem;
+    line-height: 1.45;
+}
+
+.admin-page .admin-log-archive-help summary {
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.admin-page .admin-log-archive-help p {
+    margin: .5rem 0 0;
+}
+
+.admin-page .admin-log-archive-files > .admin-log-archive-help {
+    margin: .25rem 0 .5rem;
+}
+
+.admin-page .admin-log-archive-table {
+    min-width: 40rem;
+}
+
+.admin-page .admin-log-archive-table th,
+.admin-page .admin-log-archive-table td {
+    padding: .45rem .5rem;
+    font-size: .85rem;
+}
+
+.admin-page .admin-log-archive-actions {
+    gap: .3rem;
+}
+
+.admin-page .admin-log-archive-actions .button,
+.admin-page .admin-log-archive-actions button {
+    padding: .3rem .45rem;
+    font-size: .8rem;
+    white-space: nowrap;
+}
+
+@media (min-width: 1101px) and (max-width: 1450px) {
+    .admin-page .admin-log-archive-actions {
+        display: grid;
+        grid-template-columns: repeat(2, max-content);
+    }
+}
+
+@media (max-width: 1100px) {
+    .admin-page .admin-log-archive-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 1350px) {
+    .admin-page .admin-log-filter-grid {
+        grid-template-columns: minmax(0, 1fr) 15.5rem;
+    }
+
+    .admin-page .admin-log-severity-disclosure {
+        grid-column: 2;
+    }
+
+    .admin-page .admin-log-search-control {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .admin-page .admin-log-filter-actions {
+        grid-column: 2;
+        grid-row: 2;
+    }
+
+    .admin-page .admin-log-severity-disclosure[open] {
+        grid-row: 3;
+    }
+}
+
+@media (max-width: 760px) {
+    .admin-page .site-main:has(.admin-log-section-tabs) > .hero,
+    .admin-page .admin-log-filter-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-page .site-main:has(.admin-log-section-tabs) > .hero .nav {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .admin-page .admin-log-control-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-page .admin-log-filter-actions {
+        grid-column: 1;
+        grid-row: 4;
+        justify-content: flex-start;
+    }
+
+    .admin-page .admin-log-severity-disclosure {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    .admin-page .admin-log-severity-filter .button {
+        margin-left: 0;
+    }
+}

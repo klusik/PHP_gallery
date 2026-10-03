@@ -246,7 +246,9 @@ function cms_admin_bulk_galleries(): void
 }
 
 /**
- * Handles cms admin regenerate paths logic for the gallery application.
+ * Regenerate public paths and return to the originating Admin maintenance group.
+ *
+ * @return void Runs the authenticated path workflow and redirects with its result notice.
  */
 function cms_admin_regenerate_paths(): void
 {
@@ -256,15 +258,15 @@ function cms_admin_regenerate_paths(): void
         return;
     }
     verify_csrf();
+    $returnUrl = admin_dashboard_content_return_url(url_for('admin'));
     try {
         // $result stores an intermediate value used by the surrounding gallery workflow.
         $result = regenerate_public_paths();
         flash_message('admin_notice', t('admin.galleries.public_paths_regenerated', 'Regenerated clean public paths. Updated {galleries} gallery path(s) and {images} image path(s).', ['galleries' => (int) $result['galleries'], 'images' => (int) $result['images']]));
-        redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
         flash_message('admin_notice', t('admin.galleries.public_paths_failed', 'Path regeneration failed: {error}', ['error' => $exception->getMessage()]));
-        redirect_to(url_for('admin'));
     }
+    redirect_to($returnUrl);
 }
 
 /**

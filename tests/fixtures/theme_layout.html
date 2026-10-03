@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/theme_layout.html
+Module Type: Browser Test Fixture
+Purpose: Preserve compact Layout inputs, live range output and existing shortcut/reset behavior.
+Responsibilities: Intercept native POST intent and synthetic gallery searches without installation state.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Layout regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
+let assertions=0, confirms=0, approve=false;
+const submits=[];
+/** Require observable controls or geometry. @param {boolean} condition Required invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
+function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
+/** Find one actual rendered control. @param {string} selector Fixed DOM query. @return {HTMLElement} Matching production element. */
+function find(selector) { const element=document.querySelector(selector); if(!element) throw new Error('Missing '+selector); return element; }
+/** Wait for current browser event and layout work. @return {Promise<void>} Resolves after one task boundary. */
+function settle() { return new Promise(/** Resume after browser events. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,30)); }
+/** Activate a retained Layout subsection. @param {string} name Stable subsection suffix. @return {void} Uses actual native tab behavior. */
+function tab(name) { find(`[data-admin-subtab-target="admin-theme-layout-subtab-${name}"]`).click(); }
+/** Edit one native control through production handlers. @param {HTMLElement} control Actual native input or select. @param {string} value New value. @return {void} Emits normal bubbling input and change events. */
+function edit(control,value) { control.value=value; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); }
+/** Retain ordinary existing reset confirmation semantics without showing user dialogs in the fixture. @param {string} message Existing translated confirmation. @return {boolean} Configured synthetic answer. */
+window.confirm=message=>{check(message==='Reset all custom gallery grids?','existing reset confirmation text is preserved'); confirms++; return approve;};
+const realFetch=window.fetch.bind(window);
+/** Confine gallery search to disposable rows while allowing owned viewport requests. @param {RequestInfo|URL} input Fixture request URL. @param {RequestInit|undefined} options Existing read-only transport fields. @return {Promise<Response>} Safe synthetic search or confined native response. */
+window.fetch=async(input,options)=>{ if(String(input).includes('/fixture-gallery-search')) return new Response(JSON.stringify({ok:true,rows:[{id:'42',title:'Gallery <safe>',path:'fixture',label:'Gallery <safe> / fixture'},{id:'84',title:'Second gallery',path:'fixture-two',label:'Second gallery / fixture-two'}],next_after_id:null}),{headers:{'Content-Type':'application/json'}}); return realFetch(input,options); };
+try {
+    const slots=Array.from(document.querySelectorAll('.admin-theme-favorite-gallery-slot'));
+    check(slots.length===3,'three actual shortcut rows');
+    for(const slot of slots) check(slot.querySelector('[data-gallery-search-picker-value]').disabled,'initial server-rendered canonical picker ID stays disabled for no-JS fallback');
+    setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupGallerySearchPickers();
+    const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
+    form.addEventListener('submit',/** Capture native complete POST intent before preventing fixture navigation. @param {SubmitEvent} event Native submission event. @return {void} Records existing cancellation and successful controls without live writes. */ event=>{submits.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault();});
+    find('[data-admin-tab-target="admin-theme-tab-layout"]').click();
+    check(!find('#admin-theme-tab-layout').hidden,'actual primary tabs activate Layout');
+    const targets=slots.map(/** Read the existing native target selector. @param {HTMLElement} slot Actual shortcut row. @return {HTMLSelectElement} Native shortcut type control. */ slot=>slot.querySelector('[name="theme_favorite_gallery_types[]"]'));
+    const pickers=slots.map(/** Read the actual searchable gallery root. @param {HTMLElement} slot Actual shortcut row. @return {HTMLElement} Searchable picker presentation. */ slot=>slot.querySelector('[data-gallery-search-picker]'));
+    const pickerRegions=pickers.map(/** Read the owned target wrapper that includes the native label. @param {HTMLElement} picker Real searchable gallery root. @return {HTMLElement} Presentation region hidden by target selection. */ picker=>picker.closest('.theme-layout-picker')||picker);
+    check(!pickerRegions[0].hidden && pickerRegions[1].hidden && pickerRegions[2].hidden,'only Gallery target initially exposes search picker and label');
+    for(const picker of pickers) check(!picker.querySelector('[data-gallery-search-picker-value]').disabled,'shared picker activation keeps every parallel ID successful including hidden roots');
+    edit(targets[0],'home'); check(pickerRegions[0].hidden && pickers[0].querySelector('[data-gallery-search-picker-value]').value==='42','hiding target retains stored selected gallery');
+    edit(targets[0],'gallery'); check(!pickerRegions[0].hidden,'Gallery selection restores its existing picker');
+    pickers[0].querySelector('[data-gallery-search-picker-input]').focus(); await settle();
+    pickers[0].querySelector('[data-gallery-search-picker-input]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})); await settle();
+    const option=pickers[0].querySelector('[data-gallery-id="84"]'); check(Boolean(option),'actual gallery search exposes bounded fixture destination; status='+pickers[0].querySelector('[data-gallery-search-picker-status]').textContent); option.click();
+    check(pickers[0].querySelector('[data-gallery-search-picker-value]').value==='84','actual shared picker commits selected gallery ID');
+    tab('cards'); edit(find('[name="public_thumbnail_rendering_mode"]'),'responsive');
+    check(find('[name="public_thumbnail_rendering_mode"]').value==='responsive','permanent responsive renderer remains selectable');
+    edit(find('[name="public_thumbnail_rendering_mode"]'),'progressive'); edit(find('[name="public_thumbnail_rendering_mode"]'),'responsive');
+    tab('grids'); edit(find('[data-pagination-columns]'),'5'); edit(find('[data-pagination-rows]'),'6');
+    check(find('[data-pagination-columns-display]').textContent==='5' && find('[data-pagination-rows-display]').textContent==='6' && find('[data-pagination-items-preview]').textContent==='30','pagination ranges synchronize both readouts and product');
+    edit(find('[data-home-grid-columns]'),'7'); edit(find('[data-home-grid-rows]'),'8');
+    check(find('[data-home-grid-columns-display]').textContent==='7' && find('[data-home-grid-rows-display]').textContent==='8' && find('[data-home-grid-items-preview]').textContent==='56','main page ranges synchronize readouts and capacity');
+    edit(find('[name="theme_lightbox_browsing_mode"]'),'3d_carousel');
+    const reset=find('[name="reset_all_gallery_grid_overrides"]'); reset.click();
+    check(confirms===1 && submits.length===0,'cancelled existing confirmation prevents grid reset submission');
+    find('[data-admin-tab-target="admin-theme-tab-appearance"]').click(); edit(find('[data-theme-color-hex]'),'invalid');
+    find('[data-admin-tab-target="admin-theme-tab-layout"]').click(); tab('grids'); approve=true; reset.click();
+    check(confirms===2 && submits.length===1 && !submits[0].prevented && submits[0].data.get('reset_all_gallery_grid_overrides')==='1','confirmed existing reset bypasses hidden invalid Appearance draft');
+    edit(find('[data-theme-color-hex]'),'#445566'); tab('shortcuts'); tab('cards'); form.requestSubmit(save);
+    check(submits.length===2 && !submits[1].prevented,'ordinary shared save retains native complete form flow');
+    const data=submits[1].data;
+    check(JSON.stringify(data.getAll('theme_favorite_gallery_types[]'))===JSON.stringify(['gallery','home','']) && JSON.stringify(data.getAll('theme_favorite_gallery_ids[]'))===JSON.stringify(['84','','']),'parallel shortcut types and IDs preserve exact slot order including hidden picker values');
+    for(const [name,value] of Object.entries({pagination_columns:'5',pagination_rows:'6',home_gallery_grid_columns:'7',home_gallery_grid_rows:'8',theme_lightbox_browsing_mode:'3d_carousel',public_thumbnail_rendering_mode:'responsive'})) check(data.get(name)===value,'complete POST retains staged Layout '+name);
+    for(const name of ['pagination_enabled','theme_gallery_count_badge_enabled','theme_accent','theme_gallery_description_layout','tag_page_gallery_description_layout','theme_branding_separator_width','favicon_cropped_png','cms_language','csrf_token']) check(data.has(name),'complete shared POST retains other-tab '+name);
+    for(const width of [1280,390]) { await fetch('/__viewport?width='+width); await settle(); for(const name of ['shortcuts','cards','grids']) { tab(name); await settle(); const workspace=find('.theme-layout-workspace'), rect=workspace.getBoundingClientRect(); check(workspace.scrollWidth<=workspace.clientWidth+1 && rect.right<=innerWidth+1,width+' '+name+' actual compact Layout has no overflow'); const saveRect=save.getBoundingClientRect(); check(saveRect.width>0 && saveRect.left>=-1 && saveRect.right<=innerWidth+1 && saveRect.bottom<=innerHeight+1,width+' '+name+' floating Save remains usable'); } }
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' Layout assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

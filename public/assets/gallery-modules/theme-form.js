@@ -30,6 +30,8 @@
  *   2026-08-11
  */
 
+import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
+
 /**
  * Theme and pagination form helpers
  *
@@ -79,6 +81,164 @@ function syncGridRangeDisplay(controlSelector, displaySelector) {
         control.addEventListener('change', syncValue);
         syncValue();
     });
+}
+
+/**
+ * Synchronize compact HEX editors with the existing authoritative named color inputs.
+ * @param {HTMLFormElement} form Theme form containing optional compact color rows.
+ * @return {void} Binds complete-value synchronization and blocks submission of invalid drafts.
+ */
+function setupThemeColorHexControls(form) {
+    form.querySelectorAll('[data-theme-color-row]').forEach(/**
+     * Bind one native swatch and its unnamed text editor without changing persistence names.
+     * @param {Element} row Compact color control wrapper.
+     * @return {void} Installs idempotent synchronization when both controls exist.
+     */ (row) => {
+        const color = row.querySelector('input[type="color"][data-theme-preview-color]');
+        const hex = row.querySelector('[data-theme-color-hex]');
+        if (!(color instanceof HTMLInputElement) || !(hex instanceof HTMLInputElement) || row.dataset.themeColorReady === '1') {
+            return;
+        }
+        row.dataset.themeColorReady = '1';
+        hex.required = true;
+        hex.pattern = '#?[0-9A-Fa-f]{6}';
+        let dispatchingHex = false;
+        let hexEdited = false;
+
+        /**
+         * Mirror a native picker change and clear any obsolete invalid text draft.
+         * @return {void} Updates text only when the event did not originate from this HEX editor.
+         */
+        const syncNativeColor = () => {
+            if (dispatchingHex) {
+                return;
+            }
+            hex.value = color.value.toUpperCase();
+            hexEdited = false;
+            hex.setCustomValidity('');
+            hex.removeAttribute('aria-invalid');
+        };
+
+        /**
+         * Commit a complete six-digit value while retaining incomplete drafts for correction.
+         * @param {boolean} normalizeText Whether blur or submission should add the leading hash.
+         * @param {'input'|'change'|null} eventType Canonical notification, or null for final validation.
+         * @return {boolean} Whether the text is a complete supported HEX value.
+         */
+        const syncHexColor = (normalizeText, eventType) => {
+            const raw = hex.value.trim();
+            if (!/^#?[0-9a-f]{6}$/i.test(raw)) {
+                hex.setCustomValidity(hex.dataset.themeColorInvalidMessage || 'Use #RRGGBB.');
+                hex.setAttribute('aria-invalid', 'true');
+                return false;
+            }
+            const value = '#' + raw.replace(/^#/, '').toLowerCase();
+            const changed = color.value.toLowerCase() !== value;
+            hex.setCustomValidity('');
+            hex.removeAttribute('aria-invalid');
+            if (normalizeText) {
+                hex.value = value.toUpperCase();
+            }
+            color.value = value;
+            if (changed || eventType) {
+                dispatchingHex = true;
+                color.dispatchEvent(new Event(eventType || 'change', {bubbles: true}));
+                dispatchingHex = false;
+            }
+            return true;
+        };
+
+        color.addEventListener('input', syncNativeColor);
+        color.addEventListener('change', syncNativeColor);
+        hex.addEventListener('input', /**
+         * Preview only complete text values; incomplete typing never changes the swatch.
+         * @return {void} Validates the draft and emits the canonical input event when complete.
+        */ () => {
+            hexEdited = true;
+            syncHexColor(false, 'input');
+        });
+        hex.addEventListener('blur', /**
+         * Normalize a completed HEX edit when the user leaves its text field.
+         * @return {void} Emits the canonical change event or retains an invalid draft.
+        */ () => {
+            if (syncHexColor(true, hexEdited ? 'change' : null)) {
+                hexEdited = false;
+            }
+        });
+        hex.addEventListener('invalid', /**
+         * Reveal an invalid HEX draft through the existing Theme tab controls before focus.
+         * @param {Event} event Native constraint-validation failure for this text editor.
+         * @return {void} Defers hidden-field focus through the existing tab transition; visible validation stays native.
+         */ (event) => {
+            if (!hex.closest('[hidden]') && hex.getClientRects().length > 0) {
+                return;
+            }
+            event.preventDefault();
+            const scope = form.closest('[data-admin-side-panel-body]') || form.closest('main') || document;
+            scope.querySelector('[role="tab"][data-admin-tab-target="admin-theme-tab-appearance"]')?.click();
+            form.querySelector('[role="tab"][data-admin-subtab-target="admin-theme-appearance-subtab-colors"]')?.click();
+            requestAnimationFrame(/**
+             * Focus and report the draft after the shared tab handlers finish revealing its panel.
+             * @return {void} Reports once for a connected visible field without scheduling another invalid loop.
+             */ () => {
+                if (hex.isConnected && !hex.closest('[hidden]') && hex.getClientRects().length > 0) {
+                    hex.focus();
+                    hex.reportValidity();
+                }
+            });
+        });
+        form.addEventListener('submit', /**
+         * Refuse invalid ordinary saves while preserving intentional validation-bypassing actions.
+         * @param {SubmitEvent} event Submission of the owning Theme form.
+         * @return {void} Prevents invalid drafts from silently submitting the previous swatch value.
+         */ (event) => {
+            if (form.noValidate || event.submitter?.formNoValidate) {
+                return;
+            }
+            if (!syncHexColor(true, null)) {
+                event.preventDefault();
+                hex.reportValidity();
+            }
+        });
+        syncNativeColor();
+        hex.hidden = false;
+    });
+}
+
+/**
+ * Keep public tag-page range readouts and translated capacity synchronized.
+ * @param {HTMLFormElement} form Theme form containing optional tag-page grid controls.
+ * @return {void} Binds the existing named ranges without introducing additional saved fields.
+ */
+function setupThemeTagGridControls(form) {
+    const columns = form.querySelector('[name="tag_page_gallery_grid_columns"]');
+    const rows = form.querySelector('[name="tag_page_gallery_grid_rows"]');
+    if (!(columns instanceof HTMLInputElement) || !(rows instanceof HTMLInputElement) || columns.dataset.themeTagGridReady === '1') {
+        return;
+    }
+    columns.dataset.themeTagGridReady = '1';
+    const columnsDisplay = form.querySelector('[data-theme-tag-grid-columns-display]');
+    const rowsDisplay = form.querySelector('[data-theme-tag-grid-rows-display]');
+    const capacity = form.querySelector('[data-theme-tag-grid-capacity]');
+    /**
+     * Copy range values into their paired readouts and capacity template.
+     * @return {void} Reflects current bounded native range values without changing them.
+     */
+    const sync = () => {
+        const columnCount = Math.max(1, Number.parseInt(columns.value, 10) || 1);
+        const rowCount = Math.max(1, Number.parseInt(rows.value, 10) || 1);
+        if (columnsDisplay) columnsDisplay.textContent = String(columnCount);
+        if (rowsDisplay) rowsDisplay.textContent = String(rowCount);
+        if (capacity) {
+            const template = capacity.getAttribute('data-theme-tag-grid-capacity-template') || '{count}';
+            capacity.textContent = template.split('{count}').join(String(columnCount * rowCount));
+        }
+    };
+    columns.addEventListener('input', sync);
+    columns.addEventListener('change', sync);
+    rows.addEventListener('input', sync);
+    rows.addEventListener('change', sync);
+    sync();
 }
 
 
@@ -409,6 +569,10 @@ export function setupThemeLivePreview(form) {
     const lightboxState = form.querySelector('[data-theme-preview-lightbox-state]');
     const thumbnailState = form.querySelector('[data-theme-preview-thumbnail-state]');
     const wizardStep = form.querySelector('[name="wizard_step"]')?.value || '';
+    const globalLayoutSelector = '[data-theme-preview-description-layout], [name="theme_gallery_description_layout"]';
+    const tagLayoutSelector = '[data-theme-preview-tag-description-layout], [name="tag_page_gallery_description_layout"]';
+    const previewContextLabel = form.querySelector('[data-theme-preview-context-label]');
+    const previewContextSelect = form.querySelector('[data-theme-preview-context-select]');
     // pageWidthSelect stores the preset selector that decides whether the custom-width controls are visible.
     const pageWidthSelect = form.querySelector('[data-theme-page-width-select]');
     // customWidthShell stores the conditional slider/number UI for the Custom page-width preset.
@@ -446,8 +610,24 @@ export function setupThemeLivePreview(form) {
 
         /**
      * Copies all unsaved visual settings into the preview CSS variables.
+     * @param {Event|null} event Optional source control, used only for Appearance's local preview context.
+     * @return {void} Reflects the active Appearance or wizard context using existing form values.
      */
-    const syncPreview = () => {
+    const syncPreview = (event = null) => {
+        if (!wizardStep && previewRoot.classList.contains('theme-appearance-workspace')) {
+            const control = event?.target instanceof Element ? event.target : null;
+            if (control?.matches(globalLayoutSelector)) {
+                previewRoot.dataset.themePreviewContext = 'home';
+            } else if (control?.matches(tagLayoutSelector + ', [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows]')) {
+                previewRoot.dataset.themePreviewContext = 'tag';
+            } else if (previewContextSelect && control === previewContextSelect) {
+                previewRoot.dataset.themePreviewContext = previewContextSelect.value === 'tag' ? 'tag' : 'home';
+            }
+            if (previewContextSelect) {
+                previewContextSelect.value = previewRoot.dataset.themePreviewContext === 'tag' ? 'tag' : 'home';
+            }
+        }
+        const tagContext = wizardStep === 'content' || (!wizardStep && previewRoot.classList.contains('theme-appearance-workspace') && previewRoot.dataset.themePreviewContext === 'tag');
         // colorMap stores form field names and their corresponding preview CSS variables.
         const colorMap = {
             accent: '--preview-accent',
@@ -522,10 +702,17 @@ export function setupThemeLivePreview(form) {
             gpsPinBackgroundSizeDisplay.textContent = `${backgroundSize}px`;
         }
 
-        const baseDescriptionLayout = themeControlValue(form, '[data-theme-preview-description-layout]', 'vertical');
-        const tagDescriptionLayout = themeControlValue(form, '[data-theme-preview-tag-description-layout]', baseDescriptionLayout);
-        const activeDescriptionLayout = wizardStep === 'content' ? tagDescriptionLayout : baseDescriptionLayout;
+        const baseDescriptionLayout = themeControlValue(form, globalLayoutSelector, 'vertical');
+        const tagDescriptionLayout = themeControlValue(form, tagLayoutSelector, baseDescriptionLayout);
+        const activeDescriptionLayout = tagContext ? tagDescriptionLayout : baseDescriptionLayout;
         descriptionCards.forEach((card) => card.setAttribute('data-description-layout', activeDescriptionLayout === 'horizontal' ? 'horizontal' : 'vertical'));
+        if (previewContextLabel) {
+            const contextLabel = tagContext
+                ? (previewContextLabel.dataset.themePreviewContextTagLabel || 'Tag pages')
+                : (previewContextLabel.dataset.themePreviewContextHomeLabel || 'Gallery cards');
+            const layoutLabel = themePreviewControlLabel(form, tagContext ? tagLayoutSelector : globalLayoutSelector, activeDescriptionLayout);
+            previewContextLabel.textContent = `${contextLabel} · ${layoutLabel}`;
+        }
 
         const countBadgeEnabled = themeBooleanControlValue(form, '[data-theme-preview-count-badge]', true);
         countBadgeSamples.forEach((badge) => { badge.hidden = !countBadgeEnabled; });
@@ -541,9 +728,9 @@ export function setupThemeLivePreview(form) {
         const homeRows = Math.max(1, Math.min(50, parseInt(themeControlValue(form, '[data-theme-preview-home-grid-rows]', String(globalRows)), 10) || globalRows));
         const tagColumns = Math.max(1, Math.min(12, parseInt(themeControlValue(form, '[data-theme-preview-tag-grid-columns]', String(globalColumns)), 10) || globalColumns));
         const tagRows = Math.max(1, Math.min(50, parseInt(themeControlValue(form, '[data-theme-preview-tag-grid-rows]', String(globalRows)), 10) || globalRows));
-        const visibleColumns = wizardStep === 'content' ? tagColumns : homeColumns;
+        const visibleColumns = tagContext ? tagColumns : homeColumns;
         if (previewGrid) {
-            previewGrid.style.setProperty('--preview-grid-columns', String(Math.min(4, visibleColumns)));
+            previewGrid.style.setProperty('--preview-grid-columns', String(Math.min(previewRoot.classList.contains('theme-appearance-workspace') ? 2 : 4, visibleColumns)));
         }
         if (homeGridState) {
             homeGridState.textContent = `${homeColumns} × ${homeRows}`;
@@ -559,7 +746,11 @@ export function setupThemeLivePreview(form) {
         }
     };
 
-    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size], [data-theme-preview-description-layout], [data-theme-preview-count-badge], [data-theme-preview-pagination-enabled], [data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows], [data-theme-preview-tag-description-layout], [data-theme-preview-lightbox-mode], [data-theme-preview-thumbnail-mode]').forEach((control) => {
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size], [data-theme-preview-description-layout], [name="theme_gallery_description_layout"], [data-theme-preview-count-badge], [data-theme-preview-pagination-enabled], [data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows], [data-theme-preview-tag-description-layout], [name="tag_page_gallery_description_layout"], [data-theme-preview-context-select], [data-theme-preview-lightbox-mode], [data-theme-preview-thumbnail-mode]').forEach(/**
+     * Bind each canonical or compatibility-hook control to the shared unsaved preview.
+     * @param {Element} control Theme or wizard form control that affects preview presentation.
+     * @return {void} Registers the existing input/change preview pipeline once per matching element.
+     */ (control) => {
         control.addEventListener('input', syncPreview);
         control.addEventListener('change', syncPreview);
     });
@@ -587,6 +778,13 @@ export function setupThemeLivePreview(form) {
         control.addEventListener('change', syncOutput);
         syncOutput();
     });
+    if (previewRoot.classList.contains('theme-appearance-workspace') && !wizardStep) {
+        // Respect the prepared deep-link context once; subsequent tab navigation never changes preview scope.
+        if (!['home', 'tag'].includes(previewRoot.dataset.themePreviewContext)) {
+            const selected = previewRoot.querySelector('[data-admin-subtabs] [data-admin-subtab-target][aria-selected="true"]');
+            previewRoot.dataset.themePreviewContext = selected?.dataset.adminSubtabTarget === 'admin-theme-appearance-subtab-gallery-tags' ? 'tag' : 'home';
+        }
+    }
     syncPreview();
 }
 
@@ -715,9 +913,78 @@ function setupThemeHeroTagControls(form) {
 }
 
 /**
+ * Show each shortcut's gallery picker only for its Gallery target.
+ *
+ * Keep every canonical ID field enabled and in place so parallel shortcut arrays
+ * retain their slot order. Without JavaScript the original visible picker remains.
+ *
+ * @param {HTMLFormElement} form Existing shared Theme form.
+ * @return {void} Binds presentation-only target visibility without changing stored selections.
+ */
+function setupThemeFavoriteGalleryTargets(form) {
+    form.querySelectorAll('.admin-theme-favorite-gallery-slot').forEach(/**
+     * Bind one shortcut without taking ownership of the searchable picker.
+     * @param {Element} slot Rendered shortcut row containing one target and one ID field.
+     * @return {void} Preserves all field values and installs one visibility listener.
+     */ (slot) => {
+        const target = slot.querySelector('select[name="theme_favorite_gallery_types[]"]');
+        const picker = slot.querySelector('[data-gallery-search-picker]')
+            || slot.querySelector('select[name="theme_favorite_gallery_ids[]"]');
+        if (!(target instanceof HTMLSelectElement) || !(picker instanceof HTMLElement)
+            || target.dataset.themeFavoriteTargetBound === '1') {
+            return;
+        }
+        target.dataset.themeFavoriteTargetBound = '1';
+        const pickerShell = picker.closest('.theme-layout-picker') || picker;
+        const hint = slot.querySelector(':scope > small');
+        /**
+         * Update only visibility; ID fields must still submit their original slot.
+         * @return {void} Reveals the picker for Gallery and preserves inactive selections.
+         */
+        const syncTarget = () => {
+            pickerShell.hidden = target.value !== 'gallery';
+            if (hint instanceof HTMLElement) {
+                hint.hidden = pickerShell.hidden;
+            }
+        };
+        target.addEventListener('change', syncTarget);
+        syncTarget();
+    });
+}
+
+/**
+ * Keep the main-page capacity readout aligned with its existing grid sliders.
+ * @param {HTMLFormElement} form Existing shared Theme form.
+ * @return {void} Displays the current column/row product without changing grid values.
+ */
+function setupThemeHomeGridCapacity(form) {
+    const columns = form.querySelector('[data-home-grid-columns]');
+    const rows = form.querySelector('[data-home-grid-rows]');
+    const display = form.querySelector('[data-home-grid-items-preview]');
+    if (!(columns instanceof HTMLInputElement) || !(rows instanceof HTMLInputElement)
+        || !(display instanceof HTMLElement) || display.dataset.themeCapacityBound === '1') {
+        return;
+    }
+    display.dataset.themeCapacityBound = '1';
+    /**
+     * Present the current capacity from the native range values.
+     * @return {void} Updates only the derived readout.
+     */
+    const syncCapacity = () => {
+        display.textContent = String(Math.max(1, Number(columns.value)) * Math.max(1, Number(rows.value)));
+    };
+    columns.addEventListener('input', syncCapacity);
+    columns.addEventListener('change', syncCapacity);
+    rows.addEventListener('input', syncCapacity);
+    rows.addEventListener('change', syncCapacity);
+    syncCapacity();
+}
+
+/**
  * Handle setup theme override form.
  *
  * Used by browser-side gallery behavior.
+ * @return {void} Binds existing Theme controls and optional compact color/tag-grid editors.
  */
 export function setupThemeOverrideForm() {
     syncGridRangeDisplay('[data-home-grid-columns]', '[data-home-grid-columns-display]');
@@ -732,7 +999,12 @@ export function setupThemeOverrideForm() {
     if (!form) {
         return;
     }
+    setupThemeFavoriteGalleryTargets(form);
+    setupThemeHomeGridCapacity(form);
     setupThemeLivePreview(form);
+    setupThemeAppearanceResize(form);
+    setupThemeColorHexControls(form);
+    setupThemeTagGridControls(form);
     setupThemeBackgroundOptimizedSizeDisplay(form);
     setupThemeDescriptionLayoutPicker(form);
     setupThemeHeroTagControls(form);

@@ -44,9 +44,22 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Map canonical orientation to the permanent historical public CSS hook.
+ * Old vertical hooks styled photo beside text; old horizontal hooks styled photo above.
+ * Keeping those class meanings preserves existing custom styles without rewriting CSS.
+ * @param string $layout Canonical horizontal (beside) or vertical (above) orientation.
+ * @return string Historical public class suffix matching the requested actual appearance.
+ */
+function view_public_gallery_description_layout_hook(string $layout): string
+{
+    return $layout === 'horizontal' ? 'vertical' : 'horizontal';
+}
+
+/**
  * Render one physical public gallery card.
  *
  * @param array<string,mixed> $viewModel Controller-prepared gallery-card state.
+ * @return void Emits canonical card content using compatible historical CSS classes.
  */
 function view_render_public_gallery_card(array $viewModel): void
 {
@@ -68,7 +81,7 @@ function view_render_public_gallery_card(array $viewModel): void
     $descriptionPreview = view_gallery_description_markdown_excerpt((string) ($viewModel['description'] ?? ''));
     $descriptionHtml = view_gallery_description_markdown_html($descriptionPreview, (array) ($viewModel['description_links'] ?? []));
 
-    $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout
+    $galleryCardClass = 'gallery-card is-gallery-description-' . view_public_gallery_description_layout_hook($descriptionLayout)
         . ($isProtected ? ' is-protected-gallery' : '')
         . ($showReorderHandle ? ' has-public-reorder-handle' : '')
         . ($pictureManagerEnabled ? ' has-picture-manager-select' : '')
@@ -107,10 +120,13 @@ function view_render_public_gallery_card(array $viewModel): void
 
     echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e($url) . '">' . e($title) . '</a></h2>';
     $horizontalMetaHtml = (string) ($viewModel['horizontal_meta_html'] ?? '');
-    if ($descriptionLayout === 'horizontal' && !$isProtected && $horizontalMetaHtml !== '') {
-        echo '<div class="gallery-card-meta-row">' . $horizontalMetaHtml . '</div>';
-    } elseif (!$isProtected) {
-        echo (string) ($viewModel['date_html'] ?? '');
+    if (!$isProtected) {
+        $dateHtml = (string) ($viewModel['date_html'] ?? '');
+        echo $dateHtml;
+        // Older presentation callers may still provide their combined metadata fragment.
+        if ($dateHtml === '' && $horizontalMetaHtml !== '') {
+            echo '<div class="gallery-card-meta-row">' . $horizontalMetaHtml . '</div>';
+        }
     }
     if ($descriptionHtml !== '') {
         echo '<div class="gallery-card-description gallery-card-description-rich">' . $descriptionHtml . '</div>';
@@ -121,9 +137,7 @@ function view_render_public_gallery_card(array $viewModel): void
         if ($showCountBadge) {
             echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => $branchImageCount])) . '</p>';
         }
-        if ($descriptionLayout !== 'horizontal') {
-            echo (string) ($viewModel['tag_list_html'] ?? '');
-        }
+        echo (string) ($viewModel['tag_list_html'] ?? '');
     }
     echo '</div>';
     echo (string) ($viewModel['admin_controls_html'] ?? '');
@@ -134,6 +148,7 @@ function view_render_public_gallery_card(array $viewModel): void
  * Render one placed Smart Gallery card.
  *
  * @param array<string,mixed> $viewModel Controller-prepared Smart Gallery state.
+ * @return void Emits the placed card with historical appearance-compatible class hooks.
  */
 function view_render_public_smart_gallery_card(array $viewModel): void
 {
@@ -147,7 +162,7 @@ function view_render_public_smart_gallery_card(array $viewModel): void
         $placementAttributes .= ' data-smart-gallery-placement-order="' . max(0, (int) ($viewModel['placement_order'] ?? 0)) . '"';
     }
 
-    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . e((string) ($viewModel['card_layout'] ?? 'vertical')) . '" data-smart-gallery-id="' . $smartGalleryId . '"' . $placementAttributes . '>';
+    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . view_public_gallery_description_layout_hook((string) ($viewModel['card_layout'] ?? 'vertical')) . '" data-smart-gallery-id="' . $smartGalleryId . '"' . $placementAttributes . '>';
     echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', ['title' => $title])) . '">';
     echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $count])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $count . '</span></span>';
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
@@ -165,18 +180,20 @@ function view_render_public_smart_gallery_card(array $viewModel): void
 }
 
 /**
- * Render the public-page child-gallery creation entry point.
+ * Render the prepared public-page root or child gallery creation entry point.
  *
- * @param array<string,mixed> $viewModel Controller-prepared add-child state.
+ * @param array{placement?:string,title?:string,url?:string,panel_url?:string,label?:string,show_label?:bool} $viewModel Prepared root or child action, with an optional visible onboarding label.
  * @return void Emit the prepared creation link.
  */
 function view_render_public_gallery_admin_add_child_link(array $viewModel): void
 {
     $placement = (string) ($viewModel['placement'] ?? 'card');
     $title = (string) ($viewModel['title'] ?? '');
-    $label = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => $title]);
-    $class = $placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card';
-    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    $defaultLabel = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => $title]);
+    $label = (string) ($viewModel['label'] ?? $defaultLabel);
+    $showLabel = !empty($viewModel['show_label']);
+    $class = $showLabel ? 'button public-home-first-gallery-button' : ($placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card');
+    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="' . ($showLabel ? 'public-home-create-label' : 'visually-hidden') . '">' . e($label) . '</span></a>';
 }
 
 /**
@@ -248,7 +265,8 @@ function view_render_public_image_admin_delete_form(array $viewModel): void
 /**
  * Render the shared three-state visibility menu for a gallery or image card.
  *
- * @param array<string,mixed> $viewModel Controller-prepared visibility state.
+ * @param array<string,mixed> $viewModel Prepared entity/state/URL/CSRF markup; optional embedded mode avoids nested forms.
+ * @return void
  */
 function view_render_public_admin_visibility_menu(array $viewModel): void
 {
@@ -261,6 +279,7 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
     $visibility = (string) ($viewModel['visibility'] ?? 'unpublished');
     $visibility = in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
     $idField = $kind === 'gallery' ? 'gallery_id' : 'image_id';
+    $embedded = !empty($viewModel['embedded']);
     $label = t('gallery.visibility.change_named', 'Change visibility for {name}', ['name' => $name]);
     $options = [
         'public' => ['public-admin-visibility-icon-public', t('gallery.visibility.public', 'Published')],
@@ -268,13 +287,16 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
         'private' => ['public-admin-visibility-icon-private', t('gallery.visibility.private', 'Private')],
     ];
 
-    echo '<details class="public-admin-visibility-menu public-admin-visibility-menu-card" data-public-admin-card-action data-public-admin-visibility-menu>';
+    echo '<details class="public-admin-visibility-menu ' . ($embedded ? 'public-admin-visibility-menu-embedded' : 'public-admin-visibility-menu-card') . '" data-public-admin-card-action data-public-admin-visibility-menu' . ($embedded ? ' data-admin-gallery-visibility data-action-url="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-gallery-id="' . $entityId . '" data-edit-revision="' . e((string) ($viewModel['edit_revision'] ?? '')) . '"' : '') . '>';
     echo '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="' . e($label) . '" title="' . e($label) . '"><span class="public-admin-visibility-icon ' . e($options[$visibility][0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($label) . '</span></summary>';
     echo '<div class="public-admin-visibility-options" role="group" aria-label="' . e($label) . '">';
     foreach ($options as $value => $option) {
-        echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . (string) ($viewModel['csrf_html'] ?? '');
-        echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';
-        echo '<button type="submit" class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e((string) $option[1]) . '"><span class="public-admin-visibility-icon ' . e((string) $option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e((string) $option[1]) . '</span></button></form>';
+        if (!$embedded) {
+            echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . (string) ($viewModel['csrf_html'] ?? '');
+            echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';
+        }
+        echo '<button type="' . ($embedded ? 'button' : 'submit') . '"' . ($embedded ? ' data-admin-gallery-visibility-choice data-visibility="' . e($value) . '"' : '') . ' class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e((string) $option[1]) . '"><span class="public-admin-visibility-icon ' . e((string) $option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="' . ($embedded ? 'admin-gallery-visibility-option-label' : 'visually-hidden') . '">' . e((string) $option[1]) . '</span></button>';
+        if (!$embedded) echo '</form>';
     }
     echo '</div></details>';
 }

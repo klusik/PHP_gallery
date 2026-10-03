@@ -546,6 +546,33 @@ function public_home_physical_galleries(): array
 }
 
 /**
+ * Confirm a completely empty catalog for administrator onboarding.
+ * Existing private, nested and disabled definitions also suppress the first-gallery prompt.
+ * This bounded read is used only for an administrator on an empty public home page;
+ * it intentionally considers stored Smart Galleries even when their feature is off.
+ * @return bool True only after confirming no physical or Smart Gallery exists; unknown storage hides the prompt.
+ */
+function gallery_catalog_is_empty(): bool
+{
+    try {
+        if (\Gallery\Models\gallery_model_has_any()) {
+            return false;
+        }
+        $smartTable = schema_inspection_table('smart_galleries');
+        if (schema_inspection_is_missing($smartTable)) {
+            return true;
+        }
+        if (schema_inspection_is_available($smartTable)) {
+            return !\Gallery\Models\smart_gallery_model_has_any();
+        }
+    } catch (\Throwable) {
+        // A failed catalog read must never be presented as a confirmed empty installation.
+    }
+    admin_log_event('warning', 'gallery.onboarding.catalog_unavailable', 'The gallery catalog could not be verified for onboarding.', ['capability' => 'gallery_catalog']);
+    return false;
+}
+
+/**
  * Resolve physical-card context policy before requesting its model-owned count.
  *
  * @param int $parentGalleryId Positive parent ID, or zero for public root cards.

@@ -138,6 +138,7 @@ $knownSuites = [
     'php-regression',
     'mvc-boundaries',
     'source-contract-inventory',
+    'python-import-policy',
     'source-documentation-changed',
     'source-policy-changed',
     'node-fast',
@@ -616,11 +617,14 @@ function audit_run_source_contract_inventory(): array
     $counts = [];
     $artifacts = [];
     $problems = [];
+    $status = STATUS_PASS;
     foreach (['documentation' => 'check_source_documentation.php', 'policy' => 'check_policy_constants.php'] as $kind => $script) {
         $process = run_process([PHP_BINARY, $root . '/scripts/' . $script, '--json'], $root, 90);
         $report = json_decode((string) $process['stdout'], true);
         if ($process['timed_out'] || (int) $process['exit_code'] !== 0 || !isset($report['summary']['finding_count'], $report['summary']['source_files'])) {
             $problems[] = $kind . ' inventory did not produce a complete report.';
+            $failure = $process['timed_out'] || (int) $process['exit_code'] === 2 ? STATUS_BLOCKED : STATUS_FAIL;
+            $status = $status === STATUS_FAIL ? $status : $failure;
             continue;
         }
         $path = $runDirectory . '/source-' . $kind . '.json';
@@ -633,12 +637,12 @@ function audit_run_source_contract_inventory(): array
         : $counts['documentation_findings'] . ' documentation / ' . $counts['policy_findings']
             . ' policy findings; inventory only, remediation remains';
     return task_result('source-contract-inventory', 'Source contract inventory',
-        $problems === [] ? STATUS_PASS : STATUS_FAIL, microtime(true) - $started,
+        $status, microtime(true) - $started,
         $counts, $summary, null, ['problems' => $problems, 'artifacts' => $artifacts]);
 }
 
 /**
- * Enforce one registered changed-source documentation/policy contract against Git HEAD.
+ * Enforce a registered whole-tree or changed-source contract with normalized evidence.
  *
  * Existing debt is reported separately; this task never creates an allowlist.
  * Missing history or failed parsing remains BLOCKED; each checker reports its supported scope and review gaps.
@@ -647,18 +651,23 @@ function audit_run_source_contract_inventory(): array
  * @param string $label Human-readable suite label.
  * @param string $script Repository-owned checker filename selected by the dispatcher, never request input.
  * @param string $artifactKey Stable report artifact identity for downstream audit readers.
+ * @param bool $changedOnly Whether the checker compares declarations against Git; false for mandatory whole-tree import policy.
  * @return array<string,mixed> Normalized audit task; counts describe findings and changed declarations/policy sites, with a complete value-free JSON artifact.
  */
-function audit_run_changed_source_contract(string $suiteId, string $label, string $script, string $artifactKey): array
+function audit_run_source_contract(string $suiteId, string $label, string $script, string $artifactKey, bool $changedOnly = true): array
 {
     global $root, $runDirectory;
     $started = microtime(true);
-    $process = run_process([PHP_BINARY, $root . '/scripts/' . $script, '--changed', '--json'], $root, 90);
+    $command = [PHP_BINARY, $root . '/scripts/' . $script, '--json'];
+    if ($changedOnly) {
+        $command[] = '--changed';
+    }
+    $process = run_process($command, $root, 90);
     $report = json_decode((string) $process['stdout'], true);
     $artifacts = [];
     $status = STATUS_BLOCKED;
     $counts = [];
-    $summary = 'Changed-source coverage did not produce a complete report.';
+    $summary = 'Source-contract coverage did not produce a complete report.';
     if (!$process['timed_out'] && is_array($report)
         && isset($report['status'], $report['summary']['finding_count'])
         && in_array($report['status'], [STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED], true)) {
@@ -666,22 +675,35 @@ function audit_run_changed_source_contract(string $suiteId, string $label, strin
         write_text_file($path, (string) $process['stdout']);
         $artifacts[$artifactKey] = relative_path($path, $root);
         $status = $report['status'];
-        foreach (['finding_count', 'added', 'changed', 'unchanged', 'moved', 'doc_regressions', 'coverage_review_count'] as $key) {
+        $counterNames = $changedOnly ? ['finding_count', 'added', 'changed', 'unchanged', 'moved', 'doc_regressions', 'coverage_review_count']
+            : ['finding_count', 'source_files'];
+        foreach ($counterNames as $key) {
             $counts[$key] = (int) ($report['summary'][$key] ?? 0);
         }
         $expectedExit = match ($status) { STATUS_PASS => 0, STATUS_FAIL => 1, default => 2 };
         if ((int) $process['exit_code'] !== $expectedExit) {
             $status = STATUS_BLOCKED;
-            $summary = 'Changed-source report and process status disagree.';
+            $summary = 'Source-contract report and process status disagree.';
         } else {
-            $summary = $counts['finding_count'] . ' findings; ' . $counts['added'] . ' added / '
-                . $counts['changed'] . ' changed sites; '
+            $summary = $counts['finding_count'] . ' findings; '
+                . ($changedOnly ? $counts['added'] . ' added / ' . $counts['changed'] . ' changed sites; '
+                    : $counts['source_files'] . ' Python files; ')
                 . count($report['blocked'] ?? []) . ' coverage blockers';
+        }
+    }
+    $problems = [];
+    if ($status !== STATUS_PASS) {
+        $problems[] = $summary;
+        foreach (array_slice($report['findings'] ?? [], 0, 30) as $finding) {
+            $problems[] = ($finding['path'] ?? '') . ':' . (int) ($finding['line'] ?? 1) . ' ' . ($finding['rule'] ?? 'source-contract');
+        }
+        foreach ($report['blocked'] ?? [] as $blocker) {
+            $problems[] = ($blocker['path'] ?? '') . ': ' . ($blocker['reason'] ?? 'Source coverage unknown.');
         }
     }
     return task_result($suiteId, $label,
         $status, microtime(true) - $started, $counts, $summary, null,
-        ['artifacts' => $artifacts, 'problems' => $status === STATUS_PASS ? [] : [$summary]]);
+        ['artifacts' => $artifacts, 'problems' => $problems]);
 }
 
 /**
@@ -830,6 +852,7 @@ function audit_suite_console_label(string $suiteId): string
         'php-regression' => 'PHP regression',
         'mvc-boundaries' => 'MVC layer boundaries',
         'source-contract-inventory' => 'Source contract inventory',
+        'python-import-policy' => 'Python import policy (all sources)',
         'source-documentation-changed' => 'Changed declaration documentation',
         'source-policy-changed' => 'Changed runtime policy documentation',
         'node-fast' => 'Node regression (fast)',
@@ -878,8 +901,9 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'php-regression' => audit_run_php_regression($registry),
         'mvc-boundaries' => audit_run_mvc_boundaries(),
         'source-contract-inventory' => audit_run_source_contract_inventory(),
-        'source-documentation-changed' => audit_run_changed_source_contract('source-documentation-changed', 'Changed declaration documentation', 'check_source_documentation.php', 'changed_documentation_json'),
-        'source-policy-changed' => audit_run_changed_source_contract('source-policy-changed', 'Changed runtime policy documentation', 'check_policy_constants.php', 'changed_policy_json'),
+        'python-import-policy' => audit_run_source_contract('python-import-policy', 'Python import policy (all sources)', 'check_python_import_policy.php', 'python_import_policy_json', false),
+        'source-documentation-changed' => audit_run_source_contract('source-documentation-changed', 'Changed declaration documentation', 'check_source_documentation.php', 'changed_documentation_json'),
+        'source-policy-changed' => audit_run_source_contract('source-policy-changed', 'Changed runtime policy documentation', 'check_policy_constants.php', 'changed_policy_json'),
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),

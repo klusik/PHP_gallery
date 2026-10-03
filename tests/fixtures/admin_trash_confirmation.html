@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_trash_confirmation.html
+Module Type: Browser Test Fixture
+Purpose: Verify cancelled Trash confirmations and dynamic delegated submissions.
+Responsibilities: Intercept every fixture request without loading PHP or installation data.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Trash confirmation fixture</title>
+<body><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminTrashActions} from '/public/assets/gallery-modules/admin-trash.js';
+let assertions = 0;
+let confirmed = false;
+let mutationReads = 0;
+let refreshReads = 0;
+let confirmationReads = 0;
+const originalUrl = location.href;
+
+/**
+ * Assert an observable browser contract in this isolated fixture.
+ * @param {boolean} condition Expected browser behavior.
+ * @param {string} message Fixed failure description.
+ * @return {void} Throws on failure and counts successful checks.
+ */
+function check(condition, message) {
+    if (!condition) throw new Error(message);
+    assertions++;
+}
+
+/**
+ * Supply synthetic production-shaped forms with actual inline confirmations.
+ * @return {string} Replaceable Trash root containing all delegated mutation controls.
+ */
+function panelMarkup() {
+    return '<section data-admin-trash-panel data-admin-trash-refresh-url="/fixture-trash-refresh"><p data-admin-trash-status hidden></p>'
+        + ['restore', 'purge', 'empty'].map(/**
+         * Render one fixture action with its unchanged delegation and authority fields.
+         * @param {string} action Stable production mutation action.
+         * @return {string} Confirmed POST form markup.
+         */ action => '<form method="post" action="/fixture-trash-' + action + '" data-admin-trash-' + action + '-form onsubmit="return confirm(\'Fixture confirmation\');">'
+            + '<input type="hidden" name="csrf_token" value="fixture-authority"><input type="hidden" name="trash_token" value="fixture-token"><button type="submit">' + action + '</button></form>').join('') + '</section>';
+}
+
+/**
+ * Wait briefly for asynchronous production handlers to settle.
+ * @param {function():boolean} condition Observable fixture completion condition.
+ * @return {Promise<void>} Resolves when the condition holds or rejects at a bounded deadline.
+ */
+async function until(condition) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+        if (condition()) return;
+        await new Promise(/**
+         * Advance only the owned fixture's bounded event-loop wait.
+         * @param {function():void} resolve Next observation callback.
+         * @return {number} Owned timeout identifier.
+         */ resolve => setTimeout(resolve, 10));
+    }
+    throw new Error('Trash fixture completion timed out.');
+}
+
+window.confirm = /**
+ * Supply an explicit cancellation or approval without displaying a native dialog.
+ * @param {string} message Confirmation prose from the submitted form.
+ * @return {boolean} Current fixture decision.
+ */ (message) => {
+    check(message === 'Fixture confirmation', 'The inline confirmation hook must run.');
+    confirmationReads++;
+    return confirmed;
+};
+
+window.fetch = /**
+ * Intercept all fixture network operations and provide canonical synthetic responses.
+ * @param {string} endpoint Owned fixture URL requested by production code.
+ * @param {RequestInit} options Production request options.
+ * @return {Promise<Response>} Mocked success envelope or refreshed panel only.
+ */ async (endpoint, options = {}) => {
+    const url = new URL(String(endpoint), location.href);
+    if (url.pathname === '/fixture-trash-refresh') {
+        refreshReads++;
+        return new Response(panelMarkup(), {status: 200, headers: {'Content-Type': 'text/html'}});
+    }
+    check(['/fixture-trash-restore', '/fixture-trash-purge', '/fixture-trash-empty'].includes(url.pathname), 'Fixture must refuse unexpected network destinations.');
+    check(options.method === 'POST' && options.body instanceof FormData, 'Mutation must keep its POST form transport.');
+    check(options.body.get('csrf_token') === 'fixture-authority' && options.body.get('trash_token') === 'fixture-token', 'Mutation must retain hidden authority and identity fields.');
+    mutationReads++;
+    return new Response(JSON.stringify({ok: true, message: 'Synthetic completion', mutation: {type: 'gallery.trash', entity: 'gallery_trash', action: 'fixture', entity_ids: []}, panel: {workflow: 'gallery_trash', refresh_url: '/fixture-trash-refresh', keep_open: true}, contexts: [], fallback: {redirect_url: originalUrl}, trash_batch: {purged: 1, failed: 0, remaining: 0}}), {status: 200, headers: {'Content-Type': 'application/json'}});
+};
+
+try {
+    document.querySelector('#workspace').innerHTML = panelMarkup();
+    setupAdminTrashActions();
+    for (const action of ['restore', 'purge', 'empty']) {
+        document.querySelector('[data-admin-trash-' + action + '-form]').requestSubmit();
+    }
+    check(confirmationReads === 3 && mutationReads === 0 && refreshReads === 0, 'Cancelled confirmations must never begin AJAX mutations or refreshes.');
+    confirmed = true;
+    document.querySelector('[data-admin-trash-restore-form]').requestSubmit();
+    await until(/** Observe completion of the owned restore workflow. @return {boolean} Whether its refreshed root is ready. */ () => mutationReads === 1 && refreshReads === 1 && document.querySelector('[data-admin-trash-panel]')?.dataset.adminTrashBusy !== '1');
+    confirmed = false;
+    document.querySelector('[data-admin-trash-purge-form]').requestSubmit();
+    check(mutationReads === 1 && refreshReads === 1, 'A dynamically replaced form must still respect cancellation without rebinding.');
+    confirmed = true;
+    document.querySelector('[data-admin-trash-empty-form]').requestSubmit();
+    await until(/** Observe completion of the bounded synthetic empty workflow. @return {boolean} Whether its refreshed root is ready. */ () => mutationReads === 2 && refreshReads === 2 && document.querySelector('[data-admin-trash-panel]')?.dataset.adminTrashBusy !== '1');
+    check(location.href === originalUrl && document.querySelector('[data-admin-trash-panel]') !== null, 'Enhanced mutations must preserve the URL and owned panel.');
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) {
+    document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack;
+}
+</script></body></html>

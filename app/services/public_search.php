@@ -45,7 +45,7 @@ use function Gallery\Models\public_search_model_compatibility_image_rows;
 const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
 
 /**
- * Return true when the thin public search bar is enabled.
+ * Return whether public search is enabled, defaulting on without changing saved preferences.
  *
  * @return bool True when the condition matches.
  */
@@ -54,7 +54,7 @@ function public_home_search_enabled(): bool
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
         return false;
     }
-    return app_setting(PUBLIC_HOME_SEARCH_SETTING, '0') === '1';
+    return app_setting(PUBLIC_HOME_SEARCH_SETTING, '1') === '1';
 }
 
 /**

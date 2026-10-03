@@ -43,6 +43,7 @@ namespace Gallery\Services;
 
 require_once dirname(__DIR__) . '/policy_constants.php';
 require_once __DIR__ . '/gallery_edit_concurrency.php';
+require_once __DIR__ . '/gallery_description_layout_compatibility.php';
 
 const GALLERY_MIGRATION_PROTOCOL_VERSION = 2;
 const GALLERY_MIGRATION_TIMEOUT_SECONDS = 45;

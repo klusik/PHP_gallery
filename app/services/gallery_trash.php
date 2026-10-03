@@ -41,6 +41,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/gallery_edit_concurrency.php';
+require_once __DIR__ . '/gallery_description_layout_compatibility.php';
 
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
@@ -833,7 +834,7 @@ function gallery_trash_snapshot_image_record(array $image, string $galleryFolder
 /**
  * Build the restore snapshot for one gallery subtree.
  *
- * @param array $rootGallery Root gallery row selected for deletion.
+ * @param array<string,mixed> $rootGallery Root gallery row selected for deletion, including id and folder_path.
  * @param bool $payloadPresent Whether the physical source folder exists and will travel with the entry.
  * @return array<string,mixed> Snapshot document stored with the trash entry.
  */
@@ -871,6 +872,7 @@ function gallery_trash_capture_snapshot(array $rootGallery, bool $payloadPresent
 
     return [
         'version' => GALLERY_TRASH_SNAPSHOT_VERSION,
+        'description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
         'root_folder_path' => $rootPath,
         'payload_present' => $payloadPresent,
         'app_version' => defined('CMS_VERSION') ? CMS_VERSION : '',
@@ -885,7 +887,9 @@ function gallery_trash_capture_snapshot(array $rootGallery, bool $payloadPresent
 /**
  * Upgrade a stored snapshot document to the shape expected by current restore code.
  *
- * Version 1 is currently the only format. Keeping the upgrader as an explicit
+ * Version 1 is currently the only snapshot structure. The separate orientation
+ * semantics marker preserves old card appearance without changing that structure.
+ * Keeping the upgrader as an explicit
  * boundary prevents future code from silently assuming that a 25-day-old trash
  * entry was created by the current release.
  *
@@ -903,7 +907,7 @@ function gallery_trash_snapshot_upgrade(array $snapshot): array
         // Early development snapshots always represented a real moved payload.
         $snapshot['payload_present'] = true;
     }
-    return $snapshot;
+    return gallery_description_layout_upgrade_snapshot($snapshot);
 }
 
 /**
@@ -2300,6 +2304,25 @@ function gallery_trash_entries(array $filters = []): array
     // $limit stores the bounded number of rows returned to the view.
     $limit = max(1, min(500, (int) ($filters['limit'] ?? 200)));
     return gallery_trash_model_entries($status, $limit);
+}
+
+/**
+ * Prepare trash entries for Admin presentation using canonical retention and purge policy.
+ *
+ * Normal trashed rows require no additional overlap query. Broken rows retain the
+ * established live-data safety check before their purge affordance becomes available.
+ *
+ * @param array{status?:string,limit?:int} $filters Optional lifecycle filter and bounded row limit.
+ * @return list<array<string,mixed>> Original rows augmented with integer view_days_remaining and boolean view_can_purge.
+ */
+function gallery_trash_admin_entries(array $filters = []): array
+{
+    $entries = gallery_trash_entries($filters);
+    foreach ($entries as $index => $entry) {
+        $entries[$index]['view_days_remaining'] = gallery_trash_days_remaining($entry);
+        $entries[$index]['view_can_purge'] = gallery_trash_entry_can_purge($entry);
+    }
+    return $entries;
 }
 
 /**

@@ -430,11 +430,20 @@ export function setupAdminTabsInRoot(root) {
          * Handle hash navigation.
          *
          * Used by browser-side gallery behavior.
+         * @return {void} Restores the selected tab from hash or query history.
          */
         const handleHashNavigation = () => {
             // hash stores the normalized browser hash after navigation.
             const hash = normalizedAdminTabHash(window.location.hash);
             if (!hash) {
+                if (urlMode === 'href') {
+                    const current = new URL(window.location.href);
+                    const matching = tabs.find(/** Find a query-addressed tab without an anchor. @param {HTMLAnchorElement} tab Current tab. @return {boolean} Whether its query owns this history entry. */ tab => {
+                        const url = new URL(tab.href, current);
+                        return url.pathname === current.pathname && url.search === current.search;
+                    });
+                    if (matching) activateTab(matching.dataset.adminTabTarget);
+                }
                 syncAdminSidebarHashSelection('');
                 return;
             }

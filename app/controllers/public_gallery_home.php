@@ -172,6 +172,7 @@ const PUBLIC_SUBGALLERY_DATE_SORT_PARAM = 'subgallery_date_sort';
 
 /**
  * Render the public gallery landing page and its filtered gallery listing.
+ * @return void Render the prepared public home page and authorized inline creation controls.
  */
 function cms_home(): void
 {
@@ -259,6 +260,7 @@ function cms_home(): void
         'page_kind' => 'home',
     ]);
 
+    $homeCreation = public_home_admin_creation_view_model($homeGalleryCount);
     \Gallery\Views\view_render_public_gallery_home([
         'site_name' => site_name(),
         'canonical_url' => url_for('home'),
@@ -267,6 +269,8 @@ function cms_home(): void
         'physical_gallery_revision' => $homePhysicalGalleryRevision,
         'smart_gallery_count' => $homeSmartGalleryCount,
         'search_bar' => public_search_bar_view_model(),
+        'creation_action' => $homeCreation['creation_action'],
+        'show_first_gallery' => $homeCreation['show_first_gallery'],
         'pagination_html' => $paginationHtml,
         'grid_class' => pagination_grid_columns_class($paginationSettings),
         'current_page' => (int) ($galleryPagination['current_page'] ?? 1),
@@ -275,5 +279,19 @@ function cms_home(): void
         'back_to_top_html' => $backToTopHtml,
         'render_profile_html' => $renderProfileHtml,
     ]);
+}
+
+/**
+ * Prepare root creation and confirmed-empty onboarding without catalog probes for public visitors.
+ * @param int $visibleGalleryCount Physical and Smart Galleries already known to be visible on the home page.
+ * @return array{creation_action:array{placement:string,title:string,url:string,panel_url:string}|null,show_first_gallery:bool} Authorized controls and a conservative first-gallery prompt.
+ */
+function public_home_admin_creation_view_model(int $visibleGalleryCount): array
+{
+    $action = public_gallery_admin_creation_view_model();
+    return [
+        'creation_action' => $action,
+        'show_first_gallery' => $action !== null && $visibleGalleryCount === 0 && \Gallery\Services\gallery_catalog_is_empty(),
+    ];
 }
 

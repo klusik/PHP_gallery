@@ -264,6 +264,8 @@ use function Gallery\Views\view_render_public_language_selector_settings_panel;
 
 /**
  * Render the Theme language tab.
+ *
+ * @return void Prepares supported catalog metadata, independent language scopes, and draft selector settings.
  */
 function render_admin_theme_language_tab(): void
 {
@@ -272,6 +274,12 @@ function render_admin_theme_language_tab(): void
     // $languagePacks stores only detected packs that are currently selectable.
     $languagePacks = array_values(array_filter(
         translation_detected_language_packs(),
+        /**
+         * Retain only catalogs exposed by the canonical language registry.
+         *
+         * @param array<string, mixed> $pack Detected catalog metadata.
+         * @return bool Whether this catalog is selectable.
+         */
         static fn (array $pack): bool => in_array((string) ($pack['code'] ?? ''), $supportedLanguages, true)
     ));
     // $adminLanguage stores the language selected for the admin interface.
@@ -336,6 +344,7 @@ function render_admin_theme_language_tab(): void
         $languagePack['coverage'] = $packCoverage;
         $languagePack['format_label'] = $formatLabel;
         $languagePack['status_label'] = $statusLabel;
+        $languagePack['edit_url'] = url_for('admin_theme', ['edit_language' => $packCode]) . '#admin-theme-tab-language';
         $presentedLanguagePacks[] = $languagePack;
     }
 
@@ -357,7 +366,19 @@ function render_admin_theme_language_tab(): void
         'errors' => $viewerSettingsErrors,
     ]);
 
+    $activeSubtab = 'admin-theme-language-subtab-settings';
+    $requestedSubtab = (string) ($_GET['language_subtab'] ?? '');
+    if (in_array($requestedSubtab, ['settings', 'design', 'editor', 'diagnostics'], true)) {
+        $activeSubtab = 'admin-theme-language-subtab-' . $requestedSubtab;
+    }
+    $requestedEditLanguage = translation_normalize_language_code((string) ($_GET['edit_language'] ?? ''));
+    if (($requestedEditLanguage !== '' && translation_language_allowed($requestedEditLanguage))
+        || !empty($_GET['language_saved']) || !empty($_GET['language_imported']) || $languageEditorErrors !== []) {
+        $activeSubtab = 'admin-theme-language-subtab-editor';
+    }
+
     view_render_admin_theme_language_tab([
+        'active_subtab' => $activeSubtab,
         'language_packs' => $presentedLanguagePacks,
         'admin_language' => $adminLanguage,
         'public_language' => $publicLanguage,

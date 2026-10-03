@@ -77,7 +77,7 @@ function cms_github_project_url(): string
  *
  * @param bool $force Force value.
  * @param float $requestedBudgetSeconds Preferred wall-clock budget for remote metadata I/O.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function check_application_update(bool $force = false, float $requestedBudgetSeconds = 8.0): array
 {
@@ -155,6 +155,11 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
             if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
                 $latestStatus = $status;
             }
+            // main/master are ordered compatibility fallbacks. A valid preferred
+            // marker owns discovery; probing a second branch adds quota and may
+            // select an unrelated historical branch.
+            application_patch_notes_refresh_pending($branch, $latestVersion, $deadline);
+            break;
         } catch (Throwable $exception) {
             $safe = application_update_safe_error($exception);
             $lastError = $safe['message'] . ' Reference: ' . $safe['reference'];
@@ -199,10 +204,11 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
  * Return a cache-aware update status for the admin page.
  *
  * @param bool $force Force value.
- * @param int $ttlSeconds Ttl seconds value.
- * @return array Structured result data for the caller.
+ * @param int $ttlSeconds Cache lifetime in seconds.
+ * @param bool $onlyIfDue Whether an hourly check should skip a recent concurrent discovery.
+ * @return array<string,mixed> Structured result data for the caller.
  */
-function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 3600): array
+function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 3600, bool $onlyIfDue = false): array
 {
     if (!$force) {
         // $cachedStatus stores GitHub metadata already fetched by automatic or manual checks.
@@ -218,9 +224,66 @@ function application_update_status_for_admin(bool $force = false, int $ttlSecond
         return application_update_unknown_cached_status();
     }
 
-    // $status stores a fresh GitHub probe requested by an explicit administrator action.
-    $status = check_application_update($force);
-    cache_application_update_check($status);
+    // Serialize explicit checks across browser tabs without waiting on another
+    // network request. Page reloads keep their passive cached presentation.
+    $lock = @fopen(application_update_project_root() . '/cache/update-discovery.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        if (is_resource($lock)) { fclose($lock); }
+        return application_update_status_for_admin(false, $ttlSeconds);
+    }
+    try {
+        rewind($lock);
+        if ($onlyIfDue && time() - (int) stream_get_contents($lock) < $ttlSeconds) {
+            return application_update_status_for_admin(false, $ttlSeconds);
+        }
+        $status = check_application_update($force);
+        cache_application_update_check($status);
+        ftruncate($lock, 0);
+        rewind($lock);
+        fwrite($lock, (string) time());
+        return $status;
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+/**
+ * Refresh metadata at most hourly when the Updates page opens.
+ *
+ * @return array<string,mixed> Cached or refreshed release metadata; never installs a package.
+ */
+function application_update_check_if_due(): array
+{
+    if (time() - (int) app_setting('application_update_check_cached_at', '0') < 3600) {
+        return application_update_status_for_admin(false);
+    }
+    return application_update_status_for_admin(true, 3600, true);
+}
+
+/**
+ * Reconcile cached discovery with a verified installed package without HTTP.
+ *
+ * Preserve a known newer release for rollback/beta operations while ensuring a
+ * successful installation cannot leave its former Update button pending.
+ *
+ * @param string $installedVersion Version read from the activated bootstrap.
+ * @param string $branch Installed branch when known.
+ * @return array<string,mixed> Locally reconciled release metadata.
+ */
+function application_update_installed_status(string $installedVersion, string $branch): array
+{
+    $installedVersion = application_update_normalize_version($installedVersion) ?? throw new RuntimeException('Installed package version is unavailable.');
+    $status = cached_application_update_check(3600, false);
+    $latest = application_update_normalize_version((string) ($status['latest_version'] ?? ''));
+    $status['current_version'] = $installedVersion;
+    $status['latest_version'] = $latest !== null && version_compare($latest, $installedVersion, '>') ? $latest : $installedVersion;
+    $status['update_available'] = version_compare($status['latest_version'], $installedVersion, '>');
+    $status['repository'] = CMS_GITHUB_REPOSITORY;
+    $status['branch'] = in_array($branch, application_update_branch_candidates(), true) ? $branch : ($status['branch'] ?? application_update_branch_candidates()[0]);
+    $status['error'] = null;
+    $status['diagnostic'] = '';
+    unset($status['local_cache_only'], $status['remote_marker_missing'], $status['remote_older_than_installed'], $status['github_policy_wait']);
     return $status;
 }
 
@@ -277,4 +340,3 @@ function application_update_record_github_response(string $url, int $status, arr
 {
     cms_github_api_record_response($url, $status, $headers);
 }
-

@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+require_once dirname(__DIR__) . '/services/gallery_editor_quick_access.php';
+
 use Throwable;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
@@ -72,6 +74,7 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\gallery_editor_quick_access_state;
 use function Gallery\Services\image_has_gps;
 use function Gallery\Services\image_editor_update_fields;
 use function Gallery\Services\nsfw_guard_schema_ready;
@@ -163,7 +166,9 @@ function admin_public_inline_json_response(array $payload, int $status = 200, in
 }
 
 /**
- * Handles cms admin public update gallery logic for the gallery application.
+ * Apply authenticated partial gallery edits and return canonical visibility or deletion completion.
+ *
+ * @return void
  */
 function cms_admin_public_update_gallery(): void
 {
@@ -337,13 +342,15 @@ function cms_admin_public_update_gallery(): void
             $postcondition = $isRendered
                 ? admin_mutation_postcondition('gallery_visibility', ['gallery_id' => (int) $gallery['id'], 'visibility' => $action])
                 : admin_mutation_gallery_membership_postcondition((int) $gallery['id'], $parentGalleryId, false);
-            admin_public_inline_json_response(admin_mutation_success_envelope(
+            $result = admin_mutation_success_envelope(
                 t('gallery.visibility.updated', 'Visibility updated.'),
                 admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']]),
                 null,
                 [admin_mutation_public_gallery_context($parentGalleryId, $contextUrl, $postcondition)],
                 ['redirect_url' => $contextUrl]
-            ));
+            );
+            $result['gallery_state'] = gallery_editor_quick_access_state($updatedGallery);
+            admin_public_inline_json_response($result);
             return;
         }
     } catch (Throwable $exception) {

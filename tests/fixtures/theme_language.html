@@ -1,0 +1,105 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/theme_language.html
+Module Type: Browser Test Fixture
+Purpose: Preserve Language controls and staged viewer design in actual Theme rendering.
+Responsibilities: Intercept complete form intent without installation bootstrap or live writes.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Language regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupAdminLanguageSelectorDesign} from '/public/assets/gallery-modules/admin-language-selector-design.js';
+let assertions=0, approve=false, confirmations=0;
+const submissions=[];
+/** Require actual input or geometry behavior. @param {boolean} condition Required invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
+function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
+/** Find a production element. @param {string} selector Fixed DOM selector. @param {ParentNode} owner Query owner. @return {HTMLElement} Matching rendered element. */
+function find(selector,owner=document) { const node=owner.querySelector(selector); if(!node) throw new Error('Missing '+selector); return node; }
+/** Wait for delegated rendering and browser layout. @return {Promise<void>} Resolves after one task boundary. */
+function settle() { return new Promise(/** Resume after browser work. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,35)); }
+/** Activate an actual native Language subtab. @param {string} name Retained subsection suffix. @return {void} Uses production tab handling. */
+function tab(name) { find(`[data-admin-subtab-target="admin-theme-language-subtab-${name}"]`).click(); }
+/** Edit a native input through delegated production handlers. @param {HTMLInputElement|HTMLSelectElement} control Native control. @param {string|boolean} value Proposed local value. @return {void} Emits input and change. */
+function edit(control,value) { if(typeof value==='boolean') control.checked=value; else control.value=value; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); }
+/** Find one canonical design field. @param {string} suffix Bracketed global or preset field path. @return {HTMLInputElement|HTMLSelectElement} Production design input. */
+function field(suffix) { return find(`[name="public_language_selector_design${suffix}"][data-language-design-field]`); }
+/** Preserve existing upload confirmation without showing an interactive test dialog. @param {string} message Existing confirmation wording. @return {boolean} Configured synthetic answer. */
+window.confirm=message=>{check(message.includes('uploaded JSON'),'only existing pack import confirmation is used'); confirmations++; return approve;};
+try {
+    history.replaceState(null,'','?edit_language=cs#admin-theme-tab-language');
+    setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupAdminLanguageSelectorDesign();
+    check(!find('#admin-theme-tab-language').hidden && !find('#admin-theme-language-subtab-editor').hidden,'pack GET primary hash and prepared selection activate real Language and retained editor');
+    const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
+    form.addEventListener('submit',/** Capture complete form authority without any POST. @param {SubmitEvent} event Native submission. @return {void} Records fields and cancels transport. */ event=>{ submissions.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault(); });
+    find('[data-admin-tab-target="admin-theme-tab-language"]').click(); await settle();
+    tab('settings');
+    const editor=find('[data-language-design-editor]'), preview=find('[data-language-design-preview]',editor), choices=find('#admin-theme-public-language-selector');
+    check(!find('#admin-theme-tab-language').hidden,'native primary tab opens Language');
+    check(editor.dataset.languageSettingsId===choices.id && editor.hasAttribute('data-language-design-ready'),'split designer binds explicit owner once');
+    check(preview.querySelectorAll('.public-language-button').length===2 && find('.public-language-button.is-active .public-language-code',preview).textContent==='DE','preview contains only offered languages with offered public default active');
+    check(find('[name="cms_language"]').value==='cs' && find('[name="public_language"]').value==='de','independent Admin/public preferences remain intact');
+    edit(find('[name="public_language"]'),'cs'); check(find('.public-language-button.is-active .public-language-code',preview).textContent==='EN','unoffered public default falls back to first offered sample');
+    edit(find('input[value="cs"]',choices),true); check(preview.querySelectorAll('.public-language-button').length===3 && find('.public-language-button.is-active .public-language-code',preview).textContent==='CS','offering public default refreshes designer across hidden subsection');
+    edit(find('[name="public_language_selector_enabled"]'),false); check(find('[data-language-design-preview-status]',editor).textContent.includes('off') && preview.querySelectorAll('.public-language-button').length===3,'master OFF shows unsaved sample rather than deleting choices');
+    for(const code of ['en','cs','de']) edit(find(`input[value="${code}"]`,choices),false);
+    check(preview.querySelectorAll('.public-language-button').length===0 && find('[data-language-design-preview-status]',editor).textContent.includes('at least one'),'zero offered languages shows safe empty preview guidance');
+    edit(find('input[value="en"]',choices),true); edit(find('input[value="sv"]',choices),true); edit(find('[name="public_language_selector_enabled"]'),true); edit(find('[name="public_language"]'),'sv');
+    tab('design');
+    const designTab=find('[data-admin-subtab-target="admin-theme-language-subtab-design"]');
+    designTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+    check(!find('#admin-theme-language-subtab-editor').hidden && document.activeElement===find('[data-admin-subtab-target="admin-theme-language-subtab-editor"]'),'keyboard navigation preserves new four-subsection order and focus'); tab('design');
+    const stableButton=find('.public-language-button',preview);
+    edit(field('[show_names]'),true); edit(field('[show_codes]'),false); edit(field('[orientation]'),'vertical'); edit(field('[density]'),'compact'); edit(field('[alignment]'),'end'); edit(field('[active_style]'),'underline');
+    check(find('.public-language-switcher',preview).classList.contains('language-orientation-vertical') && find('.public-language-switcher',preview).classList.contains('language-active-underline'),'global design controls apply actual preview classes');
+    check(find('.public-language-code',preview).hidden && !find('.public-language-name',preview).hidden,'display flags change only preview children');
+    await settle(); check(find('.public-language-button',preview)===stableButton,'design updates preserve sample nodes and avoid observer rebuild loops');
+    for(const preset of ['classic','solid_pills','outline','soft_cards','minimal']) { edit(field('[preset]'),preset); check(!find(`[data-language-design-preset="${preset}"]`).hidden,'selected preset '+preset+' exposes original local controls'); check(editor.querySelectorAll('[data-language-design-preset]:not([hidden])').length===1,'only selected preset visible '+preset); }
+    edit(field('[preset]'),'outline'); edit(field('[presets][outline][gap]'),'13');
+    check(field('[presets][outline][gap]').closest('.admin-language-design-control').querySelector('output').textContent==='13 px','range output reflects draft spacing');
+    check(find('.public-language-switcher',preview).style.getPropertyValue('--language-selector-gap')==='13px','range updates actual switcher spacing');
+    edit(field('[presets][outline][use_theme_colors]'),true); check(find('.public-language-switcher',preview).style.getPropertyValue('--language-selector-active-bg').includes('--accent-color'),'theme binding uses shared theme color in preview');
+    edit(field('[presets][outline][use_theme_colors]'),false); check(find('.public-language-switcher',preview).style.getPropertyValue('--language-selector-active-bg')==='#eff6ff','disabling theme binding restores persisted custom preset color');
+    edit(field('[presets][outline][container_bg]'),'#123456'); edit(field('[presets][outline][container_bg_transparent]'),true);
+    check(field('[presets][outline][container_bg]').disabled && new FormData(form).getAll('public_language_selector_design[presets][outline][container_bg_transparent]').join(',')==='0,1','transparency disables ignored color and preserves explicit submitted boolean');
+    field('[presets][outline][container_bg_transparent]').closest('.admin-language-design-control').querySelector('[data-language-design-reset-field]').click();
+    check(!field('[presets][outline][container_bg]').disabled && field('[presets][outline][container_bg]').value==='#ffffff','field reset restores paired color and transparency');
+    find('[data-language-design-reset-preset]',find('[data-language-design-preset="outline"]')).click(); check(field('[presets][outline][gap]').value==='7','preset reset restores canonical defaults');
+    find('[data-language-design-reset-all]',editor).click(); check(field('[preset]').value==='classic' && field('[show_codes]').checked && !field('[show_names]').checked,'full reset restores canonical design globals');
+    check(find('[name="public_language"]').value==='sv' && find('[name="cms_language"]').value==='cs' && find('input[value="sv"]',choices).checked && submissions.length===0,'local design edits and resets preserve language settings without submitting');
+    const another=document.createElement('form'); another.hidden=true; const anotherChoices=choices.cloneNode(true), anotherEditor=editor.cloneNode(true); anotherChoices.id='isolated-language-choices'; anotherEditor.dataset.languageSettingsId=anotherChoices.id; another.append(anotherChoices,anotherEditor); document.body.append(another); await settle();
+    edit(find('input[value="sv"]',anotherChoices),false); await settle(); check(preview.querySelectorAll('.public-language-button').length===2 && anotherEditor.querySelectorAll('.public-language-button').length===1,'delegated cross-form changes remain isolated to explicit owner'); another.remove();
+    find('[data-admin-tab-target="admin-theme-tab-appearance"]').click(); edit(find('[data-theme-color-hex]'),'invalid'); find('[data-admin-tab-target="admin-theme-tab-language"]').click(); tab('editor');
+    const upload=find('[name="language_pack_file"]'), transfer=new DataTransfer(); transfer.items.add(new File(['{"gallery.fixture":"Safe {count}"}'],'cs.json',{type:'application/json'})); upload.files=transfer.files;
+    find('[name="import_language_pack"]').click(); check(confirmations===1 && submissions.length===0,'cancel existing pack import preserves staged changes');
+    approve=true; find('[name="import_language_pack"]').click(); find('[name="save_language_pack"]').click(); tab('diagnostics'); find('[name="clear_translation_diagnostics"]').click();
+    check(submissions.length===3 && submissions.every(/** Require original formnovalidate flow. @param {{prevented:boolean,data:FormData}} submission Captured native intent. @return {boolean} Whether validation bypass stayed intact. */ submission=>!submission.prevented),'all existing file/diagnostic actions bypass hidden invalid Appearance draft');
+    for(const [index,action] of ['import_language_pack','save_language_pack','clear_translation_diagnostics'].entries()) { const data=submissions[index].data; check(data.get(action)==='1' && data.get('cms_language')==='cs' && data.get('public_language')==='sv','action '+action+' preserves complete language preferences'); check(data.getAll('public_language_selector_languages[]').join(',')==='en,sv' && data.has('public_language_selector_design[presets][minimal][gap]'),'action '+action+' retains hidden choices and inactive preset settings'); check(data.has('theme_accent') && data.has('pagination_columns') && data.has('theme_branding_separator_width') && data.get('csrf_token')==='theme-fixture','action '+action+' preserves neighboring tab fields and CSRF'); }
+    check(submissions[0].data.get('language_pack_file').name==='cs.json' && submissions[1].data.get('language_pack_json').includes('{count}'),'upload and editor preserve JSON/file syntax');
+    edit(find('[data-theme-color-hex]'),'#445566'); tab('settings'); form.requestSubmit(save); check(submissions.length===4 && !submissions[3].prevented,'global floating Save retains full valid form intent');
+    const finalData=submissions[3].data;
+    for(const input of editor.querySelectorAll('[name]:not(:disabled)')) {
+        if(input.type==='checkbox' && !input.checked) continue;
+        check(finalData.getAll(input.name).includes(input.value),'full shared Save includes every successful hidden design field '+input.name);
+    }
+    for(const width of [1280,390]) {
+        await fetch('/__viewport?width='+width); await settle();
+        for(const name of ['settings','design','editor','diagnostics']) {
+            tab(name);
+            if(name==='design') for(const details of find('[data-language-design-preset="classic"]').querySelectorAll('details')) details.open=true;
+            await settle();
+            const workspace=find('.theme-language-workspace'), rect=workspace.getBoundingClientRect();
+            check(workspace.scrollWidth<=workspace.clientWidth+1 && rect.right<=innerWidth+1,width+' '+name+' actual Language workspace with editable disclosures has no overflow');
+            if(name==='settings') for(const setting of ['cms_language','public_language']) check(find(`[name="${setting}"]`).getBoundingClientRect().width>=120,width+' '+setting+' offers readable native choices');
+            if(name==='design') for(const input of find('[data-language-design-preset="classic"]').querySelectorAll('input[type="range"],input[type="color"]')) { const bounds=input.getBoundingClientRect(); check(bounds.width>0 && bounds.left>=-1 && bounds.right<=innerWidth+1,width+' editable design input stays within viewport '+input.name); }
+            const saveRect=save.getBoundingClientRect(); check(saveRect.width>0 && saveRect.left>=-1 && saveRect.right<=innerWidth+1 && saveRect.bottom<=innerHeight+1,width+' '+name+' floating Save remains usable');
+        }
+    }
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' Language assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

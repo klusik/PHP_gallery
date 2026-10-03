@@ -223,11 +223,13 @@ function view_render_admin_dashboard_settings_card(array $model = []): void
 }
 
 /**
- * Render the overview card for normal gallery creation and uploads.
+ * Render the overview card for gallery creation and the public upload workspace.
+ *
+ * @return void Outputs shortcuts to gallery creation and public galleries.
  */
 function view_render_admin_dashboard_upload_card(): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.add_content_title', 'Add content')) . '</strong><span>' . e(t('admin.dashboard.add_content_hint', 'Create an empty gallery or upload photos through the existing upload workflow.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_empty_gallery', 'Create empty gallery')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a></div></article>';
+    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.add_content_title', 'Add content')) . '</strong><span>' . e(t('admin.dashboard.add_content_public_hint', 'Create an empty gallery or open galleries to add photos through the public upload panel.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_empty_gallery', 'Create empty gallery')) . '</a><a class="button secondary" href="' . e(url_for('home')) . '">' . e(t('admin.dashboard.open_galleries', 'Open galleries')) . '</a></div></article>';
 }
 
 /**
@@ -288,7 +290,7 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     $runtimeSupport = view_admin_dashboard_array($model, 'runtime_support_status');
     $systemHealthActionRequired = $migrationPending || !empty($runtimeSupport['policy']['action_required']);
     $systemHealthActionRequired = $systemHealthActionRequired || !empty($model['image_move_pending_status']['action_required']);
-    foreach (array_merge($securitySchemaStatuses, view_admin_dashboard_array($model, 'mutation_schema_statuses')) as $securityStatus) {
+    foreach (array_merge($securitySchemaStatuses, view_admin_dashboard_array($model, 'mutation_schema_statuses'), view_admin_dashboard_array($model, 'presentation_schema_statuses')) as $securityStatus) {
         if (is_array($securityStatus) && in_array((string) ($securityStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
             $systemHealthActionRequired = true;
             break;
@@ -305,7 +307,7 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display')],
         ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
         ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata')],
-        ['id' => 'admin-maintenance-trash', 'label' => t('admin.trash.title', 'Trash'), 'badge' => $trashCount > 0 ? (string) $trashCount : ($trashProblemCount > 0 ? t('admin.dashboard.badge_action', 'Action') : null)],
+        ['id' => 'admin-maintenance-trash', 'label' => t('admin.trash.title', 'Trash'), 'icon' => 'trash', 'badge' => $trashCount > 0 ? (string) $trashCount : ($trashProblemCount > 0 ? t('admin.dashboard.badge_action', 'Action') : null)],
         ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
@@ -366,30 +368,61 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
 /**
  * Render maintenance tools that affect public display and metadata policy.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Prepared capability/readiness flags, display defaults, override count and Settings links.
+ * @return void Emits three compact groups without discovering policy or reading storage.
  */
 function view_render_admin_dashboard_content_display_tools(array $model): void
 {
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.dashboard.content_display_kicker', 'Content policy'),
-        'title' => t('admin.dashboard.content_display_title', 'Display, dates, and public URLs'),
-        'description' => t('admin.dashboard.content_display_hint', 'Controls that change what visitors see or how galleries resolve public metadata.'),
-        'class' => 'admin-dashboard-subtab-heading',
-    ]);
-    echo '<div class="admin-maintenance-grid">';
-    if (view_admin_dashboard_feature_enabled($model, 'public_search')) {
-        view_render_admin_dashboard_public_search_card('admin-maintenance-card', $model);
+    $publicSearchEnabled = view_admin_dashboard_feature_enabled($model, 'public_search');
+    $gpsReady = view_admin_dashboard_bool($model, 'gps_map_override_ready');
+    $galleryDatesAvailable = view_admin_dashboard_bool($model, 'gallery_date_range_ready')
+        && view_admin_dashboard_feature_enabled($model, 'exif_gallery_date_suggestions');
+    echo '<header class="admin-content-heading"><h2>' . e(t('admin.dashboard.content_display_title', 'Display, dates, and public URLs')) . '</h2><p>' . e(t('admin.dashboard.content_display_hint', 'Controls that change what visitors see or how galleries resolve public metadata.')) . '</p></header>';
+    echo '<div class="admin-content-display-workspace">';
+    if ($publicSearchEnabled || $gpsReady) {
+        echo '<section class="admin-content-group" data-admin-content-group="public-display"><h3>' . e(t('admin.dashboard.content_public_display', 'Public display')) . '</h3>';
+        if ($publicSearchEnabled) {
+            view_render_admin_dashboard_public_search_card('admin-content-row', $model);
+        }
+        if ($gpsReady) {
+            view_render_admin_exif_gps_defaults_card('admin-content-row', view_admin_dashboard_bool($model, 'exif_gps_default_enabled'), view_admin_dashboard_int($model, 'exif_gps_override_count'), $model);
+        }
+        echo '</section>';
     }
-    if (view_admin_dashboard_bool($model, 'gps_map_override_ready')) {
-        view_render_admin_exif_gps_defaults_card('admin-maintenance-card', view_admin_dashboard_bool($model, 'exif_gps_default_enabled'), view_admin_dashboard_int($model, 'exif_gps_override_count'), $model);
+    if ($galleryDatesAvailable || $gpsReady) {
+        echo '<section class="admin-content-group" data-admin-content-group="gallery-metadata"><h3>' . e(t('admin.dashboard.content_gallery_metadata', 'Gallery metadata')) . '</h3>';
+        if ($galleryDatesAvailable) {
+            view_render_admin_gallery_dates_card('admin-content-row', $model);
+        }
+        if ($gpsReady) {
+            view_render_admin_dashboard_gps_override_reset(view_admin_dashboard_int($model, 'exif_gps_override_count'));
+        }
+        echo '</section>';
     }
-    if (view_admin_dashboard_bool($model, 'gallery_date_range_ready')) {
-        view_render_admin_gallery_dates_card('admin-maintenance-card', $model);
+    echo '<section class="admin-content-group" data-admin-content-group="urls-protection"><h3>' . e(t('admin.dashboard.content_urls_protection', 'Public URLs and protection')) . '</h3>';
+    view_render_admin_url_rewrite_card('admin-content-row', $model, true);
+    view_render_admin_dashboard_public_paths_card('admin-content-row');
+    view_render_admin_dashboard_seo_guard_card('admin-content-row', $model);
+    echo '</section></div>';
+}
+
+/**
+ * Render an explicit bulk reset independently of the global GPS map preference.
+ *
+ * @param int $overrideCount Prepared number of individual gallery map overrides.
+ * @return void Emits an explanatory disclosure with a reset form only when overrides exist.
+ */
+function view_render_admin_dashboard_gps_override_reset(int $overrideCount): void
+{
+    $overrideCount = max(0, $overrideCount);
+    echo '<article class="admin-content-row"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_overrides_title', 'GPS map overrides')) . '</strong><span>' . e(t('admin.dashboard.content_overrides_count', '{count} individual override(s).', ['count' => (string) $overrideCount])) . '</span></div>';
+    if ($overrideCount > 0) {
+        echo '<details class="admin-content-details admin-content-reset-details"><summary>' . e(t('admin.dashboard.content_overrides_details', 'Reset gallery overrides')) . '</summary><p>' . e(t('admin.dashboard.content_overrides_hint', 'Return every gallery\'s individual map choice to the global default. The global default remains unchanged.')) . '</p>';
+        echo '<form method="post" action="' . e(url_for('admin_exif_gps_settings')) . '" class="admin-content-gps-reset">' . csrf_field() . '<input type="hidden" name="maintenance_return" value="content"><input type="hidden" name="reset_gallery_overrides" value="1"><input type="hidden" name="reset_gallery_overrides_only" value="1"><button type="submit" class="secondary">' . e(t('admin.dashboard.content_overrides_action', 'Reset {count} overrides', ['count' => (string) $overrideCount])) . '</button></form></details>';
+    } else {
+        echo '<span class="muted admin-content-status">' . e(t('admin.dashboard.content_overrides_none', 'All galleries currently inherit the global map default.')) . '</span>';
     }
-    view_render_admin_dashboard_public_paths_card('admin-maintenance-card');
-    view_render_admin_dashboard_seo_guard_card('admin-maintenance-card', $model);
-    view_render_admin_url_rewrite_card('admin-maintenance-card', $model);
-    echo '</div>';
+    echo '</article>';
 }
 
 /**
@@ -458,7 +491,7 @@ function view_render_admin_gallery_report_maintenance_card(array $model, string 
  * @param array<string,mixed> $model Dashboard read model containing runtime_support_status,
  *   image_move_pending_status and capability-keyed security/mutation/presentation records
  *   prepared by their shared service owners, plus update labels and migration readiness.
- * @return void Emit escaped health cards and tool links without resolving service policy.
+ * @return void Emit compact health rows and existing tool controls without resolving service policy.
  * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard_system_tools(array $model): void
@@ -488,9 +521,7 @@ function view_render_admin_dashboard_system_tools(array $model): void
         'description' => t('admin.dashboard.system_health_hint', 'Operational status, deployment checks, feature visibility, and developer diagnostics.'),
         'class' => 'admin-dashboard-subtab-heading',
     ]);
-    echo '<div class="admin-maintenance-grid">';
-    view_render_admin_runtime_support_card($runtimeSupport);
-    view_render_admin_image_move_pending_card($imageMovePending);
+    echo '<div class="admin-system-health-workspace"><div class="admin-system-health-tools">';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
     if (view_admin_dashboard_feature_enabled($model, 'telemetry')) {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
@@ -500,29 +531,49 @@ function view_render_admin_dashboard_system_tools(array $model): void
     view_render_admin_gallery_report_maintenance_card($model, 'admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
+    echo '</div><div class="admin-system-health-controls">';
     view_render_admin_devmode_card('admin-maintenance-card', $model);
     if ($migrationPending) {
         view_render_admin_dashboard_migration_card('admin-maintenance-card');
     }
+    echo '</div><div class="admin-system-health-list">';
+    view_render_admin_runtime_support_card($runtimeSupport, 'admin-maintenance-card admin-system-health-row' . ($runtimeActionRequired ? ' is-attention' : ''), true);
+    view_render_admin_image_move_pending_card($imageMovePending, 'admin-maintenance-card admin-system-health-row' . ($pendingActionRequired ? ' is-attention' : ''), true);
     foreach ($securitySchemaStatuses as $feature => $securityStatus) {
         if (is_array($securityStatus)) {
-            view_render_admin_dashboard_security_schema_card((string) $feature, $securityStatus, 'admin-maintenance-card');
+            view_render_admin_dashboard_security_schema_card((string) $feature, $securityStatus, view_admin_dashboard_health_row_class($securityStatus));
         }
     }
     foreach ($mutationSchemaStatuses as $feature => $mutationStatus) {
         if (is_array($mutationStatus)) {
-            view_render_admin_dashboard_mutation_schema_card((string) $feature, $mutationStatus, 'admin-maintenance-card');
+            view_render_admin_dashboard_mutation_schema_card((string) $feature, $mutationStatus, view_admin_dashboard_health_row_class($mutationStatus));
         }
     }
     foreach ($presentationSchemaStatuses as $feature => $presentationStatus) {
         if (is_array($presentationStatus)) {
-            view_render_admin_dashboard_presentation_schema_card((string) $feature, $presentationStatus, 'admin-maintenance-card');
+            view_render_admin_dashboard_presentation_schema_card((string) $feature, $presentationStatus, view_admin_dashboard_health_row_class($presentationStatus));
         }
     }
     if (!$updatePending && !$migrationPending && !$schemaActionRequired && !$runtimeActionRequired && !$pendingActionRequired) {
-        echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.system_ready_title', 'System ready')) . '</strong><span>' . e(t('admin.dashboard.system_ready_hint', 'No update or migration warning is currently active on the dashboard.')) . '</span></article>';
+        echo '<article class="admin-maintenance-card admin-system-health-row is-state-available"><strong>' . e(t('admin.dashboard.system_ready_title', 'System ready')) . '</strong><span>' . e(t('admin.dashboard.system_ready_hint', 'No update or migration warning is currently active on the dashboard.')) . '</span></article>';
     }
-    echo '</div>';
+    echo '</div></div>';
+}
+
+/**
+ * Select presentation classes from an already resolved schema state.
+ *
+ * @param array{state?:string} $status Prepared health state; omitted state displays unknown.
+ * @return string Compact row classes with attention styling for missing or unknown state.
+ */
+function view_admin_dashboard_health_row_class(array $status): string
+{
+    $state = (string) ($status['state'] ?? 'unknown');
+    if (!in_array($state, ['available', 'missing', 'unknown', 'disabled'], true)) {
+        $state = 'unknown';
+    }
+    return 'admin-maintenance-card admin-system-health-row is-state-' . $state
+        . (in_array($state, ['missing', 'unknown'], true) ? ' is-attention' : '');
 }
 
 /**
@@ -531,9 +582,10 @@ function view_render_admin_dashboard_system_tools(array $model): void
  * @param array{policy?:array<string,mixed>,labels?:array<string,string>} $health
  *   Prepared runtime_support_health_status() model; omitted legacy models render no card.
  * @param string $className Existing presentation class for the owning surface.
+ * @param bool $compact Whether ancillary support detail belongs in a disclosure.
  * @return void All policy values, localized strings and the official URL are escaped.
  */
-function view_render_admin_runtime_support_card(array $health, string $className = 'admin-maintenance-card'): void
+function view_render_admin_runtime_support_card(array $health, string $className = 'admin-maintenance-card', bool $compact = false): void
 {
     $policy = $health['policy'] ?? [];
     $labels = $health['labels'] ?? [];
@@ -545,11 +597,22 @@ function view_render_admin_runtime_support_card(array $health, string $className
     if (!empty($policy['action_required'])) {
         echo '<span class="admin-tab-badge">' . e((string) $labels['action']) . '</span>';
     }
-    foreach (['summary', 'deadline', 'baseline', 'guidance', 'reviewed'] as $label) {
+    if ($compact) {
+        echo '<span>' . e((string) $labels['summary']) . '</span>';
+        if (!empty($policy['action_required'])) {
+            echo '<span>' . e((string) $labels['guidance']) . '</span>';
+        }
+        echo '<details class="admin-system-health-details"><summary>' . e(t('admin.dashboard.health_details', 'Details')) . '</summary>';
+    }
+    foreach ($compact ? ['deadline', 'baseline', 'reviewed'] : ['summary', 'deadline', 'baseline', 'guidance', 'reviewed'] as $label) {
         echo '<span>' . e((string) $labels[$label]) . '</span>';
     }
+    if ($compact && empty($policy['action_required'])) {
+        echo '<span>' . e((string) $labels['guidance']) . '</span>';
+    }
     echo '<a href="' . e((string) $policy['reference_url']) . '" rel="noopener noreferrer" target="_blank">'
-        . e((string) $labels['reference']) . '</a></article>';
+        . e((string) $labels['reference']) . '</a>';
+    echo ($compact ? '</details>' : '') . '</article>';
 }
 
 /**
@@ -558,9 +621,10 @@ function view_render_admin_runtime_support_card(array $health, string $className
  * @param array{state?:string,action_required?:bool,request_id?:string,entries?:list<string>,labels?:array<string,string>} $health
  *   Localized health data; an omitted lazy snapshot renders nothing.
  * @param string $className Existing presentation class for the owning surface.
+ * @param bool $compact Whether healthy explanatory guidance belongs in a disclosure.
  * @return void All prepared text and identifiers are HTML-escaped; there are no actions.
  */
-function view_render_admin_image_move_pending_card(array $health, string $className = 'admin-maintenance-card'): void
+function view_render_admin_image_move_pending_card(array $health, string $className = 'admin-maintenance-card', bool $compact = false): void
 {
     if ($health === []) {
         return;
@@ -572,10 +636,17 @@ function view_render_admin_image_move_pending_card(array $health, string $classN
         echo '<span class="admin-tab-badge">' . e((string) ($labels['action'] ?? '')) . '</span>';
     }
     echo '<span>' . e((string) ($labels['summary'] ?? '')) . '</span>';
+    $discloseGuidance = $compact && empty($health['action_required']);
+    if ($discloseGuidance) {
+        echo '<details class="admin-system-health-details"><summary>' . e(t('admin.dashboard.health_details', 'Details')) . '</summary>';
+    }
     foreach ($health['entries'] ?? [] as $entry) {
         echo '<span>' . e((string) $entry) . '</span>';
     }
     echo '<span>' . e((string) ($labels['guidance'] ?? '')) . '</span>';
+    if ($discloseGuidance) {
+        echo '</details>';
+    }
     if ((string) ($health['request_id'] ?? '') !== '') {
         echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $health['request_id']])) . '</span>';
     }
@@ -771,31 +842,36 @@ function view_render_admin_dashboard_nsfw_schema_card(array $status, string $cla
 /**
  * Render the public search settings card.
  *
- * @param string $className Class name value.
+ * @param string $className Row presentation class supplied by the owning dashboard group.
+ * @param array<string,mixed> $model Prepared public-search preference and global Settings URLs.
+ * @return void Emits the existing public-search preference with its owned Content return context.
  */
 function view_render_admin_dashboard_public_search_card(string $className, array $model = []): void
 {
     echo '<form method="post" action="' . e(url_for('admin_public_search_settings')) . '" class="' . e($className) . ' admin-public-search-settings">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.public_search_title', 'Public search')) . '</strong><span>' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '</span>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1"' . (!empty($model['public_home_search_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.public_search_enable', 'Enable public search bar')) . '</span></label>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['general'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_search_title', 'Public search')) . '</strong><span title="' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '">' . e(t('admin.dashboard.content_search_hint', 'Show a search bar on public gallery pages.')) . '</span></div>';
+    echo '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1" aria-label="' . e(t('admin.dashboard.content_search_title', 'Public search')) . '"' . (!empty($model['public_home_search_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_enabled', 'Enabled')) . '</span></label></div>';
+    echo '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.content_search_title', 'Public search')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button><a href="' . e((string) ($model['admin_settings_urls']['general'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.content_search_settings', 'Search settings')) . '</a></div></form>';
 }
 
 /**
  * Render the clean public-path regeneration card.
  *
- * @param string $className Class name value.
+ * @param string $className Row presentation class supplied by the owning dashboard group.
+ * @return void Emits stored-path regeneration with its existing explicit confirmation.
  */
 function view_render_admin_dashboard_public_paths_card(string $className): void
 {
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="' . e($className) . '" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
+    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_paths_title', 'Stored public paths')) . '</strong><span>' . e(t('admin.dashboard.content_paths_hint', 'Rebuild saved gallery and photo URLs.')) . '</span></div><div class="admin-content-actions"><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></div></form>';
 }
 
 /**
  * Render public crawler safety settings.
  *
- * @param string $className Class name value.
+ * @param string $className Row presentation class supplied by the owning dashboard group.
+ * @param array<string,mixed> $model Prepared crawler safety preferences, bounded logging counters and Settings URLs.
+ * @return void Emits safety/logging toggles and the existing bounded diagnostic details.
  */
 function view_render_admin_dashboard_seo_guard_card(string $className, array $model = []): void
 {
@@ -814,12 +890,10 @@ function view_render_admin_dashboard_seo_guard_card(string $className, array $mo
         : t('admin.dashboard.seo_guard_log_status_empty', 'No sampled rejection event has been logged today.');
 
     echo '<form method="post" action="' . e(url_for('admin_seo_guard_settings')) . '" class="' . e($className) . ' admin-seo-guard-settings">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '</strong>';
-    echo '<span>' . e(t('admin.dashboard.seo_guard_hint', 'Reject public URLs with unknown query parameters before they render as duplicate gallery pages. Suspicious requests return 404 with X-Robots-Tag: noindex, nofollow.')) . '</span>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_enable', 'Reject suspicious public query strings')) . '</span></label>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_logging_enable', 'Log sampled rejected requests')) . '</span></label>';
-    echo '<small class="muted">' . e($logStatus) . '</small>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '</strong><span>' . e(t('admin.dashboard.content_crawler_hint', 'Reject suspicious public query strings.')) . '</span><details class="admin-content-details"><summary>' . e(t('admin.dashboard.content_details', 'Details')) . '</summary><p>' . e(t('admin.dashboard.seo_guard_hint', 'Reject public URLs with unknown query parameters before they render as duplicate gallery pages. Suspicious requests return 404 with X-Robots-Tag: noindex, nofollow.')) . '</p><small class="muted">' . e($logStatus) . '</small></details></div>';
+    echo '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_crawler_enabled', 'Protection enabled')) . '</span></label>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_crawler_logging', 'Sample rejection logs')) . '</span></label></div>';
+    echo '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button><a href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.content_crawler_settings', 'Crawler settings')) . '</a></div></form>';
 }
 
 /**

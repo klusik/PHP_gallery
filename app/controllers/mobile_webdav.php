@@ -40,6 +40,10 @@ use Gallery\Services\MobileWebdavBodyException;
 use Gallery\Services\MutationSchemaUnavailableException;
 use Throwable;
 use function Gallery\Core\base_url;
+use function Gallery\Core\admin_wants_json;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_mutation_error_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
@@ -65,33 +69,128 @@ use function Gallery\Services\mobile_webdav_store_put_stream;
 use function Gallery\Services\mobile_webdav_tokens;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\feature_capability_effective_enabled;
 
 /**
  * Render and manage mobile WebDAV upload connections.
+ *
+ * @return void Emits the legacy page, Settings mutation JSON, or a fallback redirect.
  */
 function cms_admin_mobile_uploads(): void
 {
     require_admin();
     if (request_method() === 'POST') {
         verify_csrf();
-        $action = (string) ($_POST['action'] ?? '');
+        $settingsContext = (string) ($_POST['return_context'] ?? '') === 'settings_uploads';
+        $redirectUrl = $settingsContext ? url_for('admin_settings', ['section' => 'uploads']) : url_for('admin_mobile_uploads');
+        $json = $settingsContext && admin_wants_json();
+        $action = strtolower(trim((string) ($_POST['action'] ?? '')));
+        $entityIds = [];
+        $created = null;
+        $ok = false;
         try {
+            if (!in_array($action, ['create', 'delete'], true) || !feature_capability_effective_enabled('mobile_webdav')) {
+                throw new \InvalidArgumentException('Unavailable mobile upload action.');
+            }
             if ($action === 'create') {
                 $created = mobile_webdav_create_token((int) current_user()['id'], (int) ($_POST['gallery_id'] ?? 0), (string) ($_POST['label'] ?? ''));
-                $_SESSION['mobile_webdav_created'] = $created;
-                flash_message('admin_notice', t('mobile_webdav.notice_created', 'Mobile upload connection created. Copy the password now, it will not be shown again.'));
+                $entityIds = [(int) $created['id']];
+                $message = t('mobile_webdav.notice_created', 'Mobile upload connection created. Copy the password now, it will not be shown again.');
             } elseif ($action === 'delete') {
-                mobile_webdav_delete_token((int) ($_POST['token_id'] ?? 0));
-                flash_message('admin_notice', t('mobile_webdav.notice_deleted', 'Mobile upload connection deleted.'));
+                $tokenId = (int) ($_POST['token_id'] ?? 0);
+                if ($tokenId <= 0) {
+                    throw new \InvalidArgumentException('Invalid mobile upload identifier.');
+                }
+                mobile_webdav_delete_token($tokenId);
+                $entityIds = [$tokenId];
+                $message = t('mobile_webdav.notice_deleted', 'Mobile upload connection deleted.');
             }
+            $ok = true;
         } catch (Throwable $exception) {
-            flash_message('admin_notice', t('mobile_webdav.notice_failed', 'Mobile upload setup failed: {error}', ['error' => $exception->getMessage()]));
+            $message = t('mobile_webdav.notice_failed_safe', 'The mobile upload connection could not be changed. Check the gallery selection and database availability, then try again.');
         }
-        redirect_to(url_for('admin_mobile_uploads'));
+        if ($json) {
+            $mutation = admin_mutation_descriptor('mobile_upload.' . (in_array($action, ['create', 'delete'], true) ? $action : 'invalid'), 'mobile_upload', $action, $entityIds);
+            $payload = $ok
+                ? admin_mutation_success_envelope($message, $mutation, null, [], ['redirect_url' => $redirectUrl])
+                : admin_mutation_error_envelope($message, 'mobile_upload_failed', $mutation, ['redirect_url' => $redirectUrl]);
+            $viewModel = admin_mobile_uploads_view_model($created, $message);
+            ob_start();
+            \Gallery\Views\view_render_admin_mobile_uploads_settings($viewModel);
+            $payload['html'] = (string) ob_get_clean();
+            header('Content-Type: application/json; charset=UTF-8');
+            header('Cache-Control: private, no-store');
+            http_response_code($ok ? 200 : 422);
+            echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        if ($created !== null) {
+            $_SESSION['mobile_webdav_created'] = $created;
+        }
+        flash_message('admin_notice', $message);
+        redirect_to($redirectUrl);
     }
 
+    $viewModel = admin_mobile_uploads_settings_view_model();
+    $viewModel['notice'] = (string) (flash_message('admin_notice') ?? '');
+    \Gallery\Views\view_render_admin_mobile_uploads($viewModel);
+}
+
+/**
+ * Prepare connection management for either the existing page or Settings uploads.
+ *
+ * @return array<string,mixed> Prepared state with one-time credentials consumed from the session.
+ */
+function admin_mobile_uploads_settings_view_model(): array
+{
     $created = is_array($_SESSION['mobile_webdav_created'] ?? null) ? $_SESSION['mobile_webdav_created'] : null;
     unset($_SESSION['mobile_webdav_created']);
+    return admin_mobile_uploads_view_model($created);
+}
+
+/**
+ * Prepare bounded connection state without probing an effectively disabled capability.
+ *
+ * @param array<string,mixed>|null $created Authorized one-time credentials from this request.
+ * @param string $notice Optional mutation feedback owned by the mobile fragment.
+ * @return array<string,mixed> Presentation state, with no credentials or token rows when disabled.
+ */
+function admin_mobile_uploads_view_model(?array $created = null, string $notice = ''): array
+{
+    if (!feature_capability_effective_enabled('mobile_webdav')) {
+        return [
+            'disabled' => true,
+            'ready' => false,
+            'unavailable_title' => t('mobile_webdav.disabled_title', 'Mobile uploads are disabled'),
+            'unavailable_help' => t('mobile_webdav.disabled_help', 'Enable Mobile uploads in Features to manage WebDAV connections. Existing connections are preserved.'),
+            'tokens' => [],
+            'created' => null,
+        ];
+    }
+    try {
+        return admin_mobile_uploads_available_view_model($created, $notice);
+    } catch (Throwable $exception) {
+        // Inventory reads must not turn an already persisted mutation into a failed response.
+        return [
+            'ready' => false,
+            'notice' => $notice,
+            'created' => $created,
+            'tokens' => [],
+            'unavailable_title' => t('mobile_webdav.inventory_unavailable_title', 'Connection management temporarily unavailable'),
+            'unavailable_help' => t('mobile_webdav.inventory_unavailable_help', 'Connection management could not be refreshed. Copy any new password shown here before reloading this page.'),
+        ];
+    }
+}
+
+/**
+ * Prepare available-capability inventory and forms behind the safe presentation boundary.
+ *
+ * @param array<string,mixed>|null $created Authorized one-time credentials to preserve if inventory fails.
+ * @param string $notice Existing mutation feedback.
+ * @return array<string,mixed> Schema, inventory and form presentation state.
+ */
+function admin_mobile_uploads_available_view_model(?array $created, string $notice): array
+{
     $ready = mobile_webdav_ready();
     $unavailableTitle = '';
     $unavailableHelp = '';
@@ -110,8 +209,8 @@ function cms_admin_mobile_uploads(): void
     }
     unset($tokenRow);
     $confirmMessage = t('mobile_webdav.confirm_delete', 'Delete this mobile upload connection?');
-    \Gallery\Views\view_render_admin_mobile_uploads([
-        'notice' => (string) (flash_message('admin_notice') ?? ''),
+    return [
+        'notice' => $notice,
         'ready' => $ready,
         'unavailable_title' => $unavailableTitle,
         'unavailable_help' => $unavailableHelp,
@@ -127,7 +226,7 @@ function cms_admin_mobile_uploads(): void
             'csrf_html' => csrf_field(),
             'confirm_json' => json_encode($confirmMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '""',
         ],
-    ]);
+    ];
 }
 
 /**

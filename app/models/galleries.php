@@ -80,6 +80,15 @@ use function Gallery\Core\db;
 use function Gallery\Core\slugify;
 
 /**
+ * Check whether any physical gallery exists, regardless of visibility or parent.
+ * @return bool True for any persisted gallery; the bounded probe does not load the catalog.
+ */
+function gallery_model_has_any(): bool
+{
+    return db()->query('SELECT 1 FROM galleries LIMIT 1')->fetchColumn() !== false;
+}
+
+/**
  * Find catalog ownership of a requested folder or any descendant without loading the tree.
  *
  * Uses equality and a slash-delimited prefix, not LIKE wildcards. This is an

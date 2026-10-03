@@ -257,11 +257,13 @@ use function Gallery\Views\view_render_admin_theme_custom_css_tab;
 
 /**
  * Render the Theme custom CSS tab.
+ * @return void Passes actual asset status and explicit replacement choices to the view.
  */
 function render_admin_theme_custom_css_tab(): void
 {
-    // Variable $selectedPreset stores this steps working value.
-    $selectedPreset = (string) app_setting('custom_css_preset', '');
+    // The installed file is authoritative; its marker records only the last selected source.
+    $state = \Gallery\Services\custom_css_state();
+    $lastPresetLabel = '';
     // $presetOptions stores presentation-only preset rows for the Theme view.
     $presetOptions = [];
     foreach (custom_css_presets() as $filename => $path) {
@@ -270,12 +272,32 @@ function render_admin_theme_custom_css_tab(): void
         $presetOptions[] = [
             'filename' => (string) $filename,
             'label' => $label,
-            'selected' => $selectedPreset === (string) $filename,
         ];
+        if ($state['preset'] === (string) $filename) {
+            $lastPresetLabel = t('admin.theme.custom_css.last_preset', 'Last selected preset: {preset}', ['preset' => $label]);
+        }
     }
+    if ($state['preset'] === 'uploaded') {
+        $lastPresetLabel = t('admin.theme.custom_css.source_uploaded', 'Uploaded stylesheet');
+    } elseif ($lastPresetLabel === '' && $state['active']) {
+        $lastPresetLabel = t('admin.theme.custom_css.source_custom', 'Custom stylesheet');
+    }
+    $errors = (array) ($_SESSION['cms_custom_css_errors'] ?? []);
+    unset($_SESSION['cms_custom_css_errors']);
 
     view_render_admin_theme_custom_css_tab([
         'presets' => $presetOptions,
+        'errors' => $errors,
+        'current_css' => [
+            'active' => $state['active'],
+            'status_label' => $state['active']
+                ? t('admin.theme.custom_css.status_active', 'Custom stylesheet is active')
+                : t('admin.theme.custom_css.status_none', 'No custom stylesheet is installed'),
+            'preset_label' => $state['active'] ? $lastPresetLabel : '',
+            'size_label' => $state['active'] ? number_format($state['bytes'] / 1024, 1) . ' KB' : '',
+            'modified_label' => $state['active'] && $state['modified'] > 0 ? gmdate('Y-m-d H:i', $state['modified']) . ' UTC' : '',
+            'public_url' => $state['active'] ? $state['url'] . '?v=' . $state['modified'] : '',
+        ],
         'labels' => [
             'kicker' => t('admin.theme.custom_css.kicker', 'Custom CSS'),
             'title' => t('admin.theme.custom_css.title', 'Skins and manual CSS'),

@@ -259,12 +259,13 @@ function gallery_migration_target_gallery_id(array $job, int $sourceGalleryId): 
 }
 
 /**
- * Apply imported gallery metadata without moving its target folder or copying secrets.
+ * Apply imported metadata, converting legacy orientation semantics without moving folders or copying secrets.
  *
  * @param int $targetGalleryId Target gallery id identifier.
- * @param array $manifest Manifest or gallery-entry value.
+ * @param array<string,mixed> $manifest Manifest or entry containing gallery metadata and its semantics marker.
  * @param bool $includeSortOrder Preserve source sibling order value.
  * @param bool $includeVisibility Apply source visibility value.
+ * @return void Applies allowed metadata while preserving null/inherited orientation overrides.
  */
 function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $manifest, bool $includeSortOrder = true, bool $includeVisibility = true): void
 {
@@ -274,7 +275,7 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
         'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
         'Gallery migration metadata could not be applied because the database schema could not be verified.'
     );
-    $metadata = (array) ($manifest['gallery'] ?? []);
+    $metadata = gallery_description_layout_upgrade_document((array) ($manifest['gallery'] ?? []));
     $updates = [];
     $allowed = [
         'title',

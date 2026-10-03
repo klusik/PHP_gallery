@@ -246,8 +246,8 @@ $adminThemeViewSource = @file_get_contents($root . '/app/views/admin_theme.php')
 if (
     !is_string($adminThemeControllerSource)
     || !is_string($adminThemeViewSource)
-    || !str_contains($adminThemeViewSource, '<select name="cms_language">')
-    || !str_contains($adminThemeViewSource, '<select name="public_language">')
+    || preg_match('/<select\b[^>]*\sname="cms_language"(?=\s|>)[^>]*>/', $adminThemeViewSource) !== 1
+    || preg_match('/<select\b[^>]*\sname="public_language"(?=\s|>)[^>]*>/', $adminThemeViewSource) !== 1
     || !str_contains($adminThemeControllerSource, 'translation_supported_languages()')
     || !str_contains($adminThemeControllerSource, 'translation_detected_language_packs()')
     || substr_count($adminThemeViewSource, 'foreach ($languagePacks as $languagePack)') < 2

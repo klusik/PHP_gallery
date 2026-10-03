@@ -258,11 +258,12 @@ use function Gallery\Views\view_render_admin_theme_layout_tab;
 /**
  * Render the Theme layout tab.
  *
- * @param array $theme Current theme settings.
- * @param array $paginationSettings Global pagination settings.
- * @param array $homeGridSettings Main-page gallery grid settings.
+ * @param array<string,mixed> $theme Current normalized theme preferences.
+ * @param array<string,mixed> $paginationSettings Prepared global pagination preferences.
+ * @param array<string,mixed> $homeGridSettings Prepared main-page gallery grid dimensions.
  * @param string $publicThumbnailRenderingMode Public thumbnail renderer mode.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
+ * @return void Sends prepared Layout controls and labels to their presentation renderer.
  */
 function render_admin_theme_layout_tab(array $theme, array $paginationSettings, array $homeGridSettings, string $publicThumbnailRenderingMode, bool $lightboxModesFeatureEnabled): void
 {
@@ -306,8 +307,8 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
             'label' => gallery_description_layout_label($descriptionLayoutOption),
             'selected' => $currentDescriptionLayout === $descriptionLayoutOption,
             'summary' => $descriptionLayoutOption === 'horizontal'
-                ? t('admin.theme.layout.description_layout_horizontal_summary', 'Image first, then a compact story card below it.')
-                : t('admin.theme.layout.description_layout_vertical_summary', 'Image and text side by side, close to the classic gallery look.'),
+                ? t('admin.theme.layout.description_layout_horizontal_summary', 'Photo beside the description.')
+                : t('admin.theme.layout.description_layout_vertical_summary', 'Photo above the description.'),
         ];
     }
 
@@ -347,6 +348,13 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         'lightbox_modes_enabled' => $lightboxModesFeatureEnabled,
         'lightbox_options' => $lightboxOptions,
         'labels' => [
+            'compact_hint' => t('admin.theme.layout.compact_hint', 'Set header shortcuts, card details and default grids.'),
+            'shortcuts_compact_hint' => t('admin.theme.layout.shortcuts_compact_hint', 'Choose up to three header shortcuts. Gallery targets use the picker.'),
+            'home_grid_compact_hint' => t('admin.theme.layout.home_grid_compact_hint', 'Only the main page; gallery-page grids are configured separately.'),
+            'lightbox_compact_hint' => t('admin.theme.layout.lightbox_compact_hint', 'Default for the photo viewer; individual galleries may override it.'),
+            'reset_grid_details' => t('admin.theme.layout.reset_grid_details', 'Reset individual gallery grids'),
+            'renderer_details' => t('admin.theme.layout.renderer_details', 'Rendering details'),
+            'compact_title' => t('admin.theme.layout.compact_title', 'Layout'),
             'kicker' => t('admin.theme.layout.kicker', 'Layout'),
             'title' => t('admin.theme.layout.title', 'Pagination and gallery grids'),
             'description' => t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.'),
@@ -363,15 +371,15 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
             'favorite_gallery_gallery_hint' => t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.'),
             'favorite_galleries_visibility_hint' => t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.'),
             'description_layout_legend' => t('admin.theme.layout.description_layout_legend', 'Gallery description format'),
-            'description_layout_hint' => t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.'),
+            'description_layout_hint' => t('admin.theme.layout.description_layout_hint', 'Vertical places the gallery photo above the description. Horizontal places it beside the description. Cards include the title, tags, and a shortened Markdown-capable description.'),
             'description_layout_label' => t('admin.theme.layout.description_layout_label', 'Default gallery-card layout'),
             'description_preview_title' => t('admin.theme.layout.description_preview_title', 'Summer gallery'),
             'description_preview_meta' => t('admin.theme.layout.description_preview_meta', '12 photos'),
             'description_preview_tag_travel' => t('admin.theme.layout.description_preview_tag_travel', 'travel'),
             'description_preview_tag_family' => t('admin.theme.layout.description_preview_tag_family', 'family'),
             'count_badge_legend' => t('admin.theme.layout.count_badge_legend', 'Contained-picture badge'),
-            'show_count_badge' => t('admin.theme.layout.show_count_badge', 'Show stacked-picture image count on gallery cards and opened gallery heroes'),
-            'count_badge_hint' => t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.'),
+            'show_count_badge' => t('admin.theme.layout.count_badge_compact_label', 'Show image counts'),
+            'count_badge_hint' => t('admin.theme.layout.count_badge_compact_hint', 'Default for gallery cards and gallery headers; individual galleries may override it.'),
             'thumbnail_rendering_legend' => t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering'),
             'thumbnail_rendering_label' => t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards'),
             'thumbnail_rendering_responsive_title' => t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:'),

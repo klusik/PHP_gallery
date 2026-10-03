@@ -173,13 +173,14 @@ namespace Gallery\Views {
     }
 
     /**
-     * Omit developer settings without consulting host configuration.
+     * Record developer-control delegation without consulting host configuration.
      * @param string $className Unused presentation wrapper.
      * @param array<string,mixed> $model Unused prepared developer settings.
      * @return void
      */
     function view_render_admin_devmode_card(string $className, array $model = []): void
     {
+        $GLOBALS['maintenance_devmode_delegated'] = $className;
     }
 }
 
@@ -208,18 +209,19 @@ namespace {
      * @param string $surface Fixed dashboard/diagnostics selection.
      * @param array<string,array<string,mixed>> $statuses Shared mutation registry output.
      * @param array<string,mixed> $pending Read-only pending snapshot.
+     * @param array<string,mixed> $dashboardState Additional already prepared dashboard state.
      * @return string Captured production HTML without host/database access.
      */
-    function maintenance_health_render(string $surface, array $statuses, array $pending): string
+    function maintenance_health_render(string $surface, array $statuses, array $pending, array $dashboardState = []): string
     {
         ob_start();
         try {
             if ($surface === 'dashboard') {
-                Gallery\Views\view_render_admin_dashboard_system_tools([
+                Gallery\Views\view_render_admin_dashboard_system_tools(array_replace([
                     'mutation_schema_statuses' => $statuses,
                     'image_move_pending_status' => $pending,
                     'feature_enabled' => [],
-                ]);
+                ], $dashboardState));
             } else {
                 Gallery\Views\view_render_admin_diagnostics_page([
                     'mutation_schema_health' => $statuses,
@@ -375,6 +377,69 @@ namespace {
         $html = maintenance_health_render($surface, ['mutation_gallery_edit' => $escapeEdit], $escapeHealth);
         maintenance_health_assert(!str_contains($html, '<script>PRIVATE_') && str_contains($html, '&lt;script&gt;PRIVATE_'), 'Shared views escape every prepared dynamic line.');
     }
+
+    // Exercise the compact production surface with every established capability state.
+    $GLOBALS['maintenance_catalog'] = [];
+    foreach (['available', 'missing', 'unknown', 'disabled'] as $state) {
+        $attention = in_array($state, ['missing', 'unknown'], true);
+        $status = [
+            'state' => $state,
+            'request_id' => $state === 'unknown' ? 'compact-reference' : '',
+            'affected_objects' => $attention ? ['galleries.edit_revision'] : [],
+            'suggested_checks' => $state === 'unknown' ? ['database_connection', 'schema_inspection_permissions'] : [],
+        ];
+        $mutation = $status + ['title' => '<b>Compact protection</b>', 'message' => '<script>Compact guidance</script>'];
+        $html = maintenance_health_render('dashboard', ['mutation_gallery_edit' => $mutation], [], [
+            'security_schema_statuses' => ['gallery_access' => $status],
+            'presentation_schema_statuses' => ['presentation_image_voting' => $status],
+        ]);
+        maintenance_health_assert(substr_count($html, 'admin-system-health-row is-state-' . $state) >= 3, 'All health families preserve their explicit compact state.');
+        maintenance_health_assert(str_contains($html, '&lt;b&gt;Compact protection&lt;/b&gt;') && str_contains($html, '&lt;script&gt;Compact guidance&lt;/script&gt;'), 'Compact titles and guidance remain escaped in every state.');
+        maintenance_health_assert(!str_contains($html, '<script>Compact guidance') && !str_contains($html, '<b>Compact protection'), 'Compact diagnostics cannot inject active markup.');
+        maintenance_health_assert(str_contains($html, 'System ready') === !$attention, 'Only confirmed healthy or intentionally disabled capabilities permit System ready.');
+        maintenance_health_assert(str_contains($html, 'admin-tab-badge') === $attention, 'Warnings remain actionable while disabled integrations remain quiet.');
+        maintenance_health_assert(substr_count($html, 'is-attention') === ($attention ? 3 : 0), 'Each compact warning row remains visibly actionable.');
+        if ($state === 'unknown') {
+            maintenance_health_assert(substr_count($html, 'compact-reference') === 3, 'Each unknown health family preserves request correlation.');
+        }
+        if ($attention) {
+            maintenance_health_assert(substr_count($html, 'galleries.edit_revision') === 3, 'Compact warning rows preserve safe affected-object guidance.');
+        }
+    }
+
+    // Presentation-only warnings must still prevent a misleading ready summary.
+    foreach (['missing', 'unknown'] as $state) {
+        $html = maintenance_health_render('dashboard', [], [], [
+            'presentation_schema_statuses' => ['presentation_image_voting' => ['state' => $state]],
+        ]);
+        maintenance_health_assert(!str_contains($html, 'System ready') && str_contains($html, 'is-attention'), 'Presentation-only warnings suppress System ready and keep their attention state.');
+    }
+
+    $runtime = [
+        'policy' => ['state' => 'supported', 'action_required' => false, 'reference_url' => 'https://example.invalid/runtime'],
+        'labels' => ['title' => 'Runtime fixture', 'action' => 'Action', 'summary' => 'Runtime summary', 'deadline' => 'Deadline fixture', 'baseline' => 'Baseline fixture', 'guidance' => 'Runtime guidance', 'reviewed' => 'Reviewed fixture', 'reference' => 'Runtime reference'],
+    ];
+    $clear = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
+    $healthyHtml = maintenance_health_render('dashboard', [], $clear, ['runtime_support_status' => $runtime]);
+    maintenance_health_assert(substr_count($healthyHtml, '<details class="admin-system-health-details">') === 2, 'Healthy runtime and move guidance uses native compact disclosures.');
+    maintenance_health_assert(str_contains($healthyHtml, 'Runtime summary') && str_contains($healthyHtml, 'Runtime guidance') && str_contains($healthyHtml, 'https://example.invalid/runtime'), 'Runtime summary, guidance and reference survive compact rendering.');
+    $runtime['policy']['action_required'] = true;
+    $pending = Gallery\Services\admin_image_move_pending_health_status(['state' => 'unknown'], true);
+    $warningHtml = maintenance_health_render('dashboard', [], $pending, ['runtime_support_status' => $runtime]);
+    $firstDisclosure = strpos($warningHtml, '<details');
+    maintenance_health_assert($firstDisclosure !== false && strpos($warningHtml, 'Runtime guidance') < $firstDisclosure, 'Actionable runtime guidance remains outside collapsed detail.');
+    maintenance_health_assert(str_contains($warningHtml, Gallery\Core\e($pending['labels']['guidance'])) && str_contains($warningHtml, 'maintenance-fixture-reference'), 'Unknown pending-work guidance and correlation are preserved.');
+    maintenance_health_assert(!str_contains($warningHtml, 'System ready'), 'Runtime or pending warnings never display System ready.');
+
+    $toolsHtml = maintenance_health_render('dashboard', [], [], [
+        'migration_pending' => true,
+        'feature_enabled' => ['telemetry' => true, 'complete_gallery_report' => true],
+    ]);
+    foreach (['admin_logs', 'admin_telemetry', 'admin_integrity', 'admin_search_diagnostics', 'admin_gallery_report', 'admin_update', 'admin_features'] as $route) {
+        maintenance_health_assert(str_contains($toolsHtml, 'href="/index.php?page=' . $route . '"'), 'Compact operational tools retain their existing destination: ' . $route);
+    }
+    maintenance_health_assert(str_contains($toolsHtml, '<form method="post" action="/index.php?page=admin_run_migrations"') && str_contains($toolsHtml, 'type="submit"'), 'Pending migration retains its existing POST action and submit control.');
+    maintenance_health_assert(($GLOBALS['maintenance_devmode_delegated'] ?? '') === 'admin-maintenance-card', 'Compact health still delegates developer controls to their existing form owner.');
 
     $dashboard = maintenance_health_source('app/services/admin_dashboard.php');
     $diagnostics = maintenance_health_source('app/controllers/admin_diagnostics.php');

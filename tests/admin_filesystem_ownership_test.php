@@ -12,6 +12,19 @@
  */
 declare(strict_types=1);
 namespace Gallery\Services {
+    /** Supply verified disposable settings storage for existing filesystem ownership checks.
+     * @param string $capability Stable mutation capability.
+     * @param string $table Settings storage table.
+     * @param list<string> $columns Required columns.
+     * @return array{state:string} Verified fixture observation.
+     */
+    function mutation_schema_table_columns_status(string $capability,string $table,array $columns): array { return ['state'=>'available']; }
+    /** Accept only this fixture's prepared schema observation without installation access.
+     * @param array{state:string} $status Prepared fixture observation.
+     * @param string $operation Stable operation identifier.
+     * @return void No installation schema is queried.
+     */
+    function mutation_schema_assert_available(array $status,string $operation): void { if($status['state']!=='available') throw new \RuntimeException('Fixture storage unavailable.'); }
     /**
      * Read only this test's in-memory setting map.
      * @param string $key Requested setting identifier.

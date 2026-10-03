@@ -132,7 +132,7 @@ use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_LEGACY;
 
-/** Render and process Smart Gallery administration. */
+/** Render and process Smart Gallery administration. @return void Emits the list/editor or canonical mutation response. */
 function cms_admin_smart_galleries(): void
 {
     require_admin();
@@ -322,8 +322,12 @@ function cms_admin_smart_galleries(): void
         }
         $rows[] = [
             'url' => url_for('admin_smart_galleries', ['id' => (int) $row['id']]),
+            'public_url' => ($row['visibility'] ?? '') === 'public' && !empty($row['enabled'])
+                ? url_for('smart_gallery', ['slug' => (string) ($row['slug'] ?? '')]) : '',
             'title' => (string) $row['title'],
+            'slug' => (string) ($row['slug'] ?? ''),
             'status_label' => $statusLabel,
+            'placement_label' => t('smart_gallery.placement_' . (string) ($row['placement_mode'] ?? 'unlisted'), 'Unlisted (URL only)'),
         ];
     }
 

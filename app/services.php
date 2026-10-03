@@ -132,6 +132,8 @@ require_once __DIR__ . '/services/theme_layout_settings.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_bulk_mutations.php';
 require_once __DIR__ . '/services/gallery_editor_mutations.php';
+require_once __DIR__ . '/services/gallery_editor_quick_access.php';
+require_once __DIR__ . '/services/gallery_feature_plans.php';
 require_once __DIR__ . '/services/gallery_paths.php';
 // Load the recoverable gallery trash bin after gallery paths, sidecars, and mutation helpers exist.
 require_once __DIR__ . '/services/gallery_trash.php';

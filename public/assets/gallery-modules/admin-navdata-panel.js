@@ -176,6 +176,7 @@ async function runNavigationDataLookup(form) {
         return;
     }
 
+    result.hidden = false;
     const ident = input.value.trim();
     if (ident.length < ADMIN_NAVDATA_LOOKUP_MIN_CHARACTERS) {
         result.textContent = i18n('admin.navdata.lookup_min_chars', 'Enter at least two characters.');

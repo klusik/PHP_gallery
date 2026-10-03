@@ -36,13 +36,13 @@ import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20260925-editor-tabs-v2';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261002-overview-navigation-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260920-panel-lifecycle-v1';
-import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
+import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260920-operation-keys-v1';
-import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1';
+import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';

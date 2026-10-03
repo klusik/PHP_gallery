@@ -30,16 +30,16 @@
  *   2026-09-02
  */
 
-export { setupAdminTabs } from './admin-tabs.js?v=20260925-editor-tabs-v2';
+export { setupAdminTabs } from './admin-tabs.js?v=20261002-overview-navigation-v1';
 export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-actions-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260927-cooperative-review-v2';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20261002-gallery-tree-v3';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260925-gallery-scope-fix-v1';
-export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20260920-admin-interaction-policy-v1';
+export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
 export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20260810-admin-log-scaling-v1';
-export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260519-public-drop-refactor-v1';
+export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260920-panel-lifecycle-v1';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260902-mutation-stage3-v1';
 export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20260920-panel-lifecycle-v1';
-export { setupAdminTrashActions } from './admin-trash.js?v=20260907-gallery-trash-v1';
+export { setupAdminTrashActions } from './admin-trash.js?v=20261002-trash-confirmation-v2';

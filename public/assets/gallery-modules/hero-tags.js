@@ -7,7 +7,7 @@
  *
  * Purpose:
  *   Applies progressive disclosure and responsive row-based scrolling to the
- *   complete server-rendered gallery hero tag collection.
+ *   complete server-rendered tag collections in gallery headers and cards.
  *
  * Responsibilities:
  *   - Collapse large tag collections to the configured initial tag count
@@ -46,7 +46,7 @@ function heroTagInteger(value, fallback, minimum, maximum) {
 }
 
 /**
- * Return visual rows occupied by currently visible tag elements.
+ * Return visual rows occupied by currently visible clickable or read-only tags.
  *
  * Nodes sharing nearly the same vertical origin are treated as one row. Each
  * row also records its lowest bottom edge so the applied max-height never clips
@@ -57,7 +57,7 @@ function heroTagInteger(value, fallback, minimum, maximum) {
  */
 function heroTagVisualRows(content) {
     const contentRect = content.getBoundingClientRect();
-    const nodes = Array.from(content.querySelectorAll('.tag-list-label, a.tag')).filter((node) => {
+    const nodes = Array.from(content.querySelectorAll('.tag-list-label, .tag-list .tag')).filter((node) => {
         return node instanceof HTMLElement && !node.hidden && node.getClientRects().length > 0;
     });
     const rows = [];
@@ -107,7 +107,35 @@ function syncHeroTagScrollbar(root, content) {
 }
 
 /**
- * Initialize one server-rendered hero tag collection.
+ * Keep a card's inline toggle beside the last currently displayed tag.
+ *
+ * @param {HTMLElement} content Tag content container.
+ * @param {HTMLButtonElement} toggle Accessible expand/collapse button.
+ * @param {HTMLElement|null} lastTag Last displayed tag, or null for an empty collection.
+ * @return {void} Repositions the tail pair without changing the tag order.
+ */
+function syncInlineTagToggle(content, toggle, lastTag) {
+    const previousTail = content.querySelector('[data-hero-tags-tail]');
+    if (previousTail) {
+        const previousTag = previousTail.querySelector('.tag:not([data-hero-tags-toggle])');
+        if (previousTag) {
+            previousTail.before(previousTag);
+        }
+        previousTail.before(toggle);
+        previousTail.remove();
+    }
+    if (!lastTag || toggle.hidden) {
+        return;
+    }
+    const tail = document.createElement('span');
+    tail.className = 'gallery-card-tag-tail';
+    tail.setAttribute('data-hero-tags-tail', '');
+    lastTag.before(tail);
+    tail.append(lastTag, toggle);
+}
+
+/**
+ * Initialize one server-rendered gallery header or card tag collection.
  *
  * @param {HTMLElement} root Hero tag root element.
  */
@@ -123,7 +151,7 @@ function setupHeroTagRoot(root) {
         return;
     }
 
-    const tags = Array.from(content.querySelectorAll('.tag-list a.tag')).filter((node) => node instanceof HTMLElement);
+    const tags = Array.from(content.querySelectorAll('.tag-list .tag:not([data-hero-tags-toggle])')).filter((node) => node instanceof HTMLElement);
     const visibleLimit = heroTagInteger(root.dataset.heroTagVisibleLimit || null, 20, 1, 200);
     const displayAllImmediately = root.dataset.heroTagDisplayAll === '1';
     const needsDisclosure = !displayAllImmediately && tags.length > visibleLimit && toggle instanceof HTMLButtonElement;
@@ -138,7 +166,7 @@ function setupHeroTagRoot(root) {
             if (!(label instanceof HTMLElement)) {
                 return;
             }
-            const hasVisibleTag = Array.from(list.querySelectorAll('a.tag')).some((tag) => tag instanceof HTMLElement && !tag.hidden);
+            const hasVisibleTag = Array.from(list.querySelectorAll('.tag:not([data-hero-tags-toggle])')).some((tag) => tag instanceof HTMLElement && !tag.hidden);
             label.hidden = !hasVisibleTag;
         });
     };
@@ -157,7 +185,16 @@ function setupHeroTagRoot(root) {
             toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
             const showAllLabel = toggle.dataset.showAllLabel || 'Display all tags';
             const showFewerLabel = toggle.dataset.showFewerLabel || 'Show fewer tags';
-            toggle.textContent = expanded ? showFewerLabel : showAllLabel;
+            const label = expanded ? showFewerLabel : showAllLabel;
+            toggle.setAttribute('aria-label', label);
+            if (root.dataset.heroTagInlineToggle === '1') {
+                toggle.textContent = '[...]';
+                toggle.title = label;
+                const lastVisibleTag = expanded ? tags[tags.length - 1] : tags[Math.min(visibleLimit, tags.length) - 1];
+                syncInlineTagToggle(content, toggle, lastVisibleTag || null);
+            } else {
+                toggle.textContent = label;
+            }
         }
         syncHeroTagScrollbar(root, content);
     };
@@ -205,7 +242,9 @@ function setupHeroTagRoot(root) {
 }
 
 /**
- * Set up progressive hero-tag disclosure for every gallery hero on the page.
+ * Set up Theme-controlled tags and cover collections inserted by page refreshes.
+ *
+ * @return {void} Initializes existing roots and observes newly inserted collections.
  */
 export function setupHeroTagDisclosure() {
     document.querySelectorAll('[data-hero-tags]').forEach((root) => {
@@ -213,4 +252,24 @@ export function setupHeroTagDisclosure() {
             setupHeroTagRoot(root);
         }
     });
+    if (heroTagInsertionObserver || !document.body || !('MutationObserver' in window)) {
+        return;
+    }
+    heroTagInsertionObserver = new MutationObserver((records) => {
+        records.forEach((record) => {
+            record.addedNodes.forEach((node) => {
+                if (!(node instanceof HTMLElement)) {
+                    return;
+                }
+                if (node.matches('[data-hero-tags]')) {
+                    setupHeroTagRoot(node);
+                }
+                node.querySelectorAll('[data-hero-tags]').forEach(setupHeroTagRoot);
+            });
+        });
+    });
+    heroTagInsertionObserver.observe(document.body, { childList: true, subtree: true });
 }
+
+// One observer per module keeps dynamically refreshed cards on the same tag pipeline.
+let heroTagInsertionObserver = null;

@@ -343,6 +343,56 @@
     display: none;
 }
 
+/* Cards use the same saved tag limit and measured row scrollbar as gallery headers. */
+.public-page .gallery-card-tags {
+    display: grid;
+    gap: .3rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.public-page .gallery-card-tags-content {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.public-page .gallery-card-tags-content.is-scrollable {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.public-page .gallery-card-tags .tag-list {
+    margin: 0;
+}
+
+.public-page .gallery-card-tag-tail {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: .3rem;
+    max-width: 100%;
+}
+
+.public-page .gallery-card-tags .gallery-card-tags-toggle {
+    flex: 0 0 auto;
+    min-height: 0;
+    margin: 0;
+    padding: .12rem .4rem;
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+/* Explicit hiding also wins over the normal flex/inline tag presentation rules. */
+.public-page [data-hero-tags] .tag[hidden],
+.public-page [data-hero-tags] .tag-list-label[hidden],
+.public-page [data-hero-tags-toggle][hidden] {
+    display: none;
+}
+
 .public-page .hero .tag-list {
     justify-content: flex-start;
     gap: 0.28rem;

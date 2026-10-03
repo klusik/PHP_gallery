@@ -52,6 +52,8 @@ const FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS = 'ourairports';
 const FLIGHT_MAP_NAVDATA_URL_AIRPORTS = 'https://davidmegginson.github.io/ourairports-data/airports.csv';
 const FLIGHT_MAP_NAVDATA_URL_NAVAIDS = 'https://davidmegginson.github.io/ourairports-data/navaids.csv';
 
+require_once __DIR__ . '/flight_maps/navdata_update.php';
+
 /**
  * Return whether the flight map storage migration has been applied.
  *
@@ -663,7 +665,7 @@ function flight_route_is_duplicate_last_point(array $points, array $point): bool
 /**
  * Return current imported navdata status for admin maintenance UI.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Prepared freshness, import counters and source health.
  */
 function flight_map_navdata_status(): array
 {
@@ -673,6 +675,7 @@ function flight_map_navdata_status(): array
         'by_kind' => [],
         'by_source' => [],
         'last_update' => app_setting('flight_map_navdata_last_update', ''),
+        'refresh_due' => flight_map_navdata_refresh_due(),
         'last_source' => app_setting('flight_map_navdata_last_source', ''),
         'last_airports' => (int) app_setting('flight_map_navdata_last_airports', '0'),
         'last_navaids' => (int) app_setting('flight_map_navdata_last_navaids', '0'),
@@ -704,10 +707,11 @@ function flight_map_navdata_status(): array
  * The public gallery viewer never downloads OurAirports data and never performs
  * nav lookup while rendering a map.
  *
- * @return array Structured result data for the caller.
+ * @return array{airports:int,navaids:int,skipped:int,deleted:int,total:int,source:string,updated_at:string} Imported snapshot counters.
  */
 function flight_map_update_navdata_from_ourairports(): array
 {
+    presentation_schema_assert_write_available(presentation_flight_navdata_schema_status(), 'flight_navdata_import');
     if (!flight_map_navdata_schema_ready()) {
         throw new RuntimeException('Flight-map navdata storage is not ready. Run database migrations first.');
     }
@@ -733,6 +737,10 @@ function flight_map_update_navdata_from_ourairports(): array
     $airportResult = flight_map_import_ourairports_airports($airportCsv, $cycle, $now);
     $navaidResult = flight_map_import_ourairports_navaids($navaidCsv, $cycle, $now);
     $rows = array_merge($airportResult['rows'], $navaidResult['rows']);
+    if ($airportResult['rows'] === [] || $navaidResult['rows'] === []) {
+        throw new RuntimeException('Downloaded navigation data contains no valid airports or navaids. Existing data was preserved.');
+    }
+    presentation_schema_assert_write_available(presentation_flight_navdata_schema_status(), 'flight_navdata_import');
     $deleted = flight_maps_model_replace_navdata($rows, FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS, $now);
 
     $result['airports'] = (int) $airportResult['imported'];

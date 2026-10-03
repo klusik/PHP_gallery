@@ -71,6 +71,7 @@ require_once __DIR__ . '/models/ai_image_analysis.php';
 require_once __DIR__ . '/models/tags.php';
 require_once __DIR__ . '/models/image_order.php';
 require_once __DIR__ . '/models/gallery_order.php';
+require_once __DIR__ . '/models/gallery_feature_plans.php';
 require_once __DIR__ . '/models/gallery_mutations.php';
 require_once __DIR__ . '/models/gallery_trash.php';
 require_once __DIR__ . '/models/viewer_rate_limits.php';

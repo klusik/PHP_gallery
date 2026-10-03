@@ -77,8 +77,8 @@ function view_render_language_design_value(string $id, string $name, string $lab
 /**
  * Render the shared viewer-language selector settings panel.
  *
- * @param array<string,mixed> $model Field names, values, errors, and id prefix.
- * @return void Emit the prepared language controls.
+ * @param array<string,mixed> $model Prepared field names, values, errors, design metadata, id prefix, optional parts (all/choices/design), and Theme presentation flag.
+ * @return void Emits the requested canonical controls while preserving the default combined Settings presentation.
  */
 function view_render_public_language_selector_settings_panel(array $model = []): void
 {
@@ -100,48 +100,61 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     $presentations = is_array($model['presentations'] ?? null) ? $model['presentations'] : [];
     $detailedDesign = !array_key_exists('detailed_design', $model) || !empty($model['detailed_design']);
     $compact = !empty($model['compact']);
+    $parts = in_array(($model['parts'] ?? 'all'), ['choices', 'design'], true) ? (string) $model['parts'] : 'all';
+    $renderChoices = $parts !== 'design';
+    $renderDesign = $parts !== 'choices';
+    $themeEditor = !empty($model['theme_editor']);
     $designDefaults = is_array($model['design_defaults'] ?? null) ? $model['design_defaults'] : [];
     $design = is_array($model['design'] ?? null) ? $model['design'] : $designDefaults;
 
-    echo '<section class="admin-language-selector-settings" id="' . e($idPrefix) . '" data-public-language-selector-settings' . (!empty($model['admin_setting_target']) ? ' data-admin-setting-target tabindex="-1"' : '') . '>';
-    echo '<div class="admin-language-selector-settings-copy"><strong>' . e(t('admin.theme.language.viewer_selector_title', 'Viewer language selector')) . '</strong>';
-    echo '<p class="muted">' . e(t('admin.theme.language.viewer_selector_hint', 'This selector is only for public viewers. Each viewer\'s personal language is saved only in that viewer\'s browser; it does not change the site default, the Admin language, or any other viewer.')) . '</p></div>';
-    if ($markerName !== '') {
-        echo '<input type="hidden" name="' . e($markerName) . '" value="1">';
-    }
-
-    $enabledId = $idPrefix . '-enabled';
-    echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e($compact ? t('admin.settings.workspace.viewer_enable', 'Let visitors choose their language') : t('admin.theme.language.viewer_selector_enabled', 'Allow each public viewer to choose a browser-only interface language')) . '</label>';
-    if ($enabledError !== '') {
-        echo '<span class="error">' . e($enabledError) . '</span>';
-    }
-
-    echo '<fieldset class="admin-language-selector-language-list"' . ($languagesTargetId !== '' ? ' id="' . e($languagesTargetId) . '" data-admin-setting-target tabindex="-1"' : '') . ($languagesError !== '' ? ' aria-invalid="true"' : '') . '><legend>' . e(t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers')) . '</legend>';
-    echo '<p class="muted">' . e($compact ? t('admin.settings.workspace.viewer_hint', 'Offer at least one language. Each visitor changes only their own display language.') : t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
-    echo '<div class="admin-language-selector-language-grid">';
-    foreach ((array) ($model['supported_languages'] ?? []) as $language) {
-        $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
-        $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
-        $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
-        $languageId = $idPrefix . '-language-' . $language;
-        echo '<label class="admin-language-selector-language" for="' . e($languageId) . '"><input id="' . e($languageId) . '" type="checkbox" name="' . e($languagesName) . '" value="' . e($language) . '"' . (in_array($language, $languages, true) ? ' checked' : '') . '>';
-        if ($flagAsset !== '') {
-            echo '<img src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="24" height="18" decoding="async">';
+    echo '<section class="admin-language-selector-settings' . ($themeEditor ? ' theme-language-card theme-language-' . ($renderChoices ? 'viewer' : 'designer') : '') . '" id="' . e($parts === 'design' ? $idPrefix . '-design-panel' : $idPrefix) . '"' . ($renderChoices ? ' data-public-language-selector-settings' : '') . (!empty($model['admin_setting_target']) ? ' data-admin-setting-target tabindex="-1"' : '') . '>';
+    if ($renderChoices) {
+        echo '<div class="admin-language-selector-settings-copy"><strong>' . e(t('admin.theme.language.viewer_selector_title', 'Viewer language selector')) . '</strong>';
+        echo '<p class="muted">' . e($themeEditor ? t('admin.theme.language.viewer_compact_hint', 'Each visitor chooses only their own browser language; site and Admin defaults stay unchanged.') : t('admin.theme.language.viewer_selector_hint', 'This selector is only for public viewers. Each viewer\'s personal language is saved only in that viewer\'s browser; it does not change the site default, the Admin language, or any other viewer.')) . '</p></div>';
+        if ($markerName !== '') {
+            echo '<input type="hidden" name="' . e($markerName) . '" value="1">';
         }
-        echo '<span><strong>' . e($languageName) . '</strong><small>' . e(strtoupper($language)) . '</small></span></label>';
-    }
-    echo '</div>';
-    if ($languagesError !== '') {
-        echo '<span class="error">' . e($languagesError) . '</span>';
-    }
-    echo '</fieldset>';
 
-    echo '<fieldset class="admin-language-selector-design" data-language-design-editor data-defaults="' . e((string) json_encode($designDefaults, JSON_UNESCAPED_SLASHES)) . '"><legend>' . e(t('admin.theme.language.design_legend', 'Viewer language selector design')) . '</legend>';
+        $enabledId = $idPrefix . '-enabled';
+        echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e($compact ? t('admin.settings.workspace.viewer_enable', 'Let visitors choose their language') : t('admin.theme.language.viewer_selector_enabled', 'Allow each public viewer to choose a browser-only interface language')) . '</label>';
+        if ($enabledError !== '') {
+            echo '<span class="error">' . e($enabledError) . '</span>';
+        }
+
+        echo '<fieldset class="admin-language-selector-language-list"' . ($languagesTargetId !== '' ? ' id="' . e($languagesTargetId) . '" data-admin-setting-target tabindex="-1"' : '') . ($languagesError !== '' ? ' aria-invalid="true"' : '') . '><legend>' . e(t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers')) . '</legend>';
+        echo '<p class="muted">' . e($compact ? t('admin.settings.workspace.viewer_hint', 'Offer at least one language. Each visitor changes only their own display language.') : t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
+        echo '<div class="admin-language-selector-language-grid">';
+        foreach ((array) ($model['supported_languages'] ?? []) as $language) {
+            $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
+            $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
+            $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
+            $languageId = $idPrefix . '-language-' . $language;
+            echo '<label class="admin-language-selector-language" for="' . e($languageId) . '"><input id="' . e($languageId) . '" type="checkbox" name="' . e($languagesName) . '" value="' . e($language) . '"' . (in_array($language, $languages, true) ? ' checked' : '') . '>';
+            if ($flagAsset !== '') {
+                echo '<img src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="24" height="18" decoding="async">';
+            }
+            echo '<span><strong>' . e($languageName) . '</strong><small>' . e(strtoupper($language)) . '</small></span></label>';
+        }
+        echo '</div>';
+        if ($languagesError !== '') {
+            echo '<span class="error">' . e($languagesError) . '</span>';
+        }
+        echo '</fieldset>';
+    }
+    if (!$renderDesign) {
+        echo '</section>';
+        return;
+    }
+
+    echo '<fieldset class="admin-language-selector-design' . ($themeEditor ? ' theme-language-design-workspace' : '') . '" data-language-design-editor' . ($themeEditor ? ' data-language-theme-editor data-language-settings-id="' . e($idPrefix) . '"' : '') . ' data-defaults="' . e((string) json_encode($designDefaults, JSON_UNESCAPED_SLASHES)) . '"><legend>' . e(t('admin.theme.language.design_legend', 'Viewer language selector design')) . '</legend>';
     if (!$compact) {
         echo '<p class="muted">' . e(t('admin.theme.language.design_hint', 'Customize only the public viewer selector. The Admin language, site default, and each viewer\'s browser-local choice remain unchanged.')) . '</p>';
     }
     if (!$detailedDesign) {
         echo '<input type="hidden" name="' . e($designName . '[basic_only]') . '" value="1">';
+    }
+    if ($themeEditor) {
+        echo '<div class="theme-language-design-basics">';
     }
     view_render_language_design_select($idPrefix . '-design-preset', $designName . '[preset]', t('admin.theme.language.design_preset', 'Design preset'), (string) $design['preset'], 'classic', [
         'classic' => t('admin.theme.language.preset_classic', 'Classic'), 'solid_pills' => t('admin.theme.language.preset_solid_pills', 'Solid pills'),
@@ -149,23 +162,40 @@ function view_render_public_language_selector_settings_panel(array $model = []):
         'minimal' => t('admin.theme.language.preset_minimal', 'Minimal'),
     ]);
     echo '<div class="admin-language-design-global">';
+    if ($themeEditor && $detailedDesign) {
+        echo '<div class="theme-language-design-toggles">';
+    }
     view_render_language_design_checkbox($idPrefix . '-show-flags', $designName . '[show_flags]', t('admin.theme.language.design_show_flags', 'Show flags'), (bool) $design['show_flags'], true);
     if (!$detailedDesign) {
         echo '</div><p class="muted admin-language-design-details-link">';
         if (!$compact) {
             echo e(t('admin.theme.language.design_detailed_elsewhere', 'For colors, spacing, borders, sizing, preview, and reset controls, open Theme > Language.')) . ' ';
         }
-        echo '<a href="' . e(url_for('admin_theme') . '#admin-theme-tab-language') . '">' . e($compact ? t('admin.settings.workspace.viewer_design', 'Detailed selector design') : t('admin.theme.language.design_open_detailed', 'Open detailed language design settings')) . '</a></p></fieldset></section>';
+        echo '<a href="' . e(url_for('admin_theme') . '#admin-theme-tab-language') . '">' . e($compact ? t('admin.settings.workspace.viewer_design', 'Detailed selector design') : t('admin.theme.language.design_open_detailed', 'Open detailed language design settings')) . '</a></p>';
+        if ($themeEditor) {
+            echo '</div>';
+        }
+        echo '</fieldset></section>';
         return;
     }
     view_render_language_design_checkbox($idPrefix . '-show-codes', $designName . '[show_codes]', t('admin.theme.language.design_show_codes', 'Show language codes'), (bool) $design['show_codes'], true);
     view_render_language_design_checkbox($idPrefix . '-show-names', $designName . '[show_names]', t('admin.theme.language.design_show_names', 'Show native language names'), (bool) $design['show_names'], false);
+    if ($themeEditor) {
+        echo '</div>';
+    }
     view_render_language_design_select($idPrefix . '-orientation', $designName . '[orientation]', t('admin.theme.language.design_orientation', 'Orientation'), (string) $design['orientation'], 'wrap', ['horizontal' => t('admin.theme.language.design_horizontal', 'Horizontal'), 'wrap' => t('admin.theme.language.design_wrap', 'Wrapped'), 'vertical' => t('admin.theme.language.design_vertical', 'Vertical')]);
     view_render_language_design_select($idPrefix . '-density', $designName . '[density]', t('admin.theme.language.design_density', 'Density'), (string) $design['density'], 'comfortable', ['comfortable' => t('admin.theme.language.design_comfortable', 'Comfortable'), 'compact' => t('admin.theme.language.design_compact', 'Compact')]);
     view_render_language_design_select($idPrefix . '-alignment', $designName . '[alignment]', t('admin.theme.language.design_alignment', 'Alignment'), (string) $design['alignment'], 'start', ['start' => t('admin.theme.language.design_start', 'Start'), 'center' => t('admin.theme.language.design_center', 'Center'), 'end' => t('admin.theme.language.design_end', 'End')]);
     view_render_language_design_select($idPrefix . '-active-style', $designName . '[active_style]', t('admin.theme.language.design_active_style', 'Active emphasis'), (string) $design['active_style'], 'filled', ['filled' => t('admin.theme.language.design_filled', 'Filled'), 'outline' => t('admin.theme.language.design_outline', 'Outline'), 'underline' => t('admin.theme.language.design_underline', 'Underline')]);
     echo '</div>';
-    echo '<div class="admin-language-design-preview-shell"><strong>' . e(t('admin.theme.language.design_preview', 'Live preview')) . '</strong><div class="admin-language-design-preview" data-language-design-preview></div></div>';
+    if ($themeEditor) {
+        echo '</div>';
+    }
+    echo '<div class="admin-language-design-preview-shell' . ($themeEditor ? ' theme-language-design-preview' : '') . '"><strong>' . e(t('admin.theme.language.design_preview', 'Live preview')) . '</strong><div class="admin-language-design-preview" data-language-design-preview></div>';
+    if ($themeEditor) {
+        echo '<p class="theme-language-hint" data-language-design-preview-status data-language-preview-disabled-message="' . e(t('admin.theme.language.preview_disabled_hint', 'The switcher is off. This sample previews your unsaved design.')) . '" data-language-preview-empty-message="' . e(t('admin.theme.language.preview_empty_hint', 'Choose at least one offered language to preview the switcher.')) . '"></p>';
+    }
+    echo '</div>';
 
     $colorLabels = ['container_bg' => 'Background', 'text_color' => 'Text', 'border_color' => 'Border', 'active_bg' => 'Active background', 'active_text' => 'Active text', 'hover_bg' => 'Hover background', 'focus_color' => 'Focus outline'];
     $numericLabels = ['selector_padding_x' => 'Selector horizontal padding', 'selector_padding_y' => 'Selector vertical padding', 'selector_margin' => 'Selector margin', 'gap' => 'Item gap', 'button_padding_x' => 'Button horizontal padding', 'button_padding_y' => 'Button vertical padding', 'border_width' => 'Border width', 'selector_radius' => 'Selector radius', 'button_radius' => 'Button radius', 'flag_width' => 'Flag width', 'flag_height' => 'Flag height', 'font_size' => 'Text size'];
@@ -176,10 +206,19 @@ function view_render_public_language_selector_settings_panel(array $model = []):
         $presetValues = array_replace($presetDefaults, is_array($presetValues) ? $presetValues : []);
         echo '<section class="admin-language-design-preset" data-language-design-preset="' . e($presetId) . '"' . ($presetId !== $design['preset'] ? ' hidden' : '') . '><h4>' . e((string) ($presetValues['label'] ?? ucfirst(str_replace('_', ' ', $presetId)))) . '</h4>';
         view_render_language_design_checkbox($idPrefix . '-' . $presetId . '-theme-colors', $designName . '[presets][' . $presetId . '][use_theme_colors]', t('admin.theme.language.design_theme_colors', 'Use theme colors'), (bool) ($presetValues['use_theme_colors'] ?? false), (bool) $presetDefaults['use_theme_colors']);
+        if ($themeEditor) {
+            echo '<p class="theme-language-hint">' . e(t('admin.theme.language.design_theme_colors_hint', 'Use theme colors follows Appearance; switch it off to use the custom colors below.')) . '</p>';
+        }
         echo '<div class="admin-language-design-grid">';
+        if ($themeEditor) {
+            echo '<details class="theme-language-details theme-language-design-colors"><summary>' . e(t('admin.theme.language.design_colors_group', 'Colors')) . '</summary>';
+        }
         foreach ($colorLabels as $field => $fallbackLabel) {
             $defaultValue = (string) ($presetDefaults[$field] ?? '#000000');
             view_render_language_design_value($idPrefix . '-' . $presetId . '-' . $field, $designName . '[presets][' . $presetId . '][' . $field . ']', t('admin.theme.language.design_' . $field, $fallbackLabel), 'color', $presetValues[$field] ?? $defaultValue, $defaultValue);
+        }
+        if ($themeEditor) {
+            echo '</details><details class="theme-language-details theme-language-design-spacing"><summary>' . e(t('admin.theme.language.design_spacing_group', 'Spacing & size')) . '</summary>';
         }
         foreach ($numericLabels as $field => $fallbackLabel) {
             $defaultValue = (int) ($presetDefaults[$field] ?? ($bounds[$field][0] ?? 0));
@@ -187,8 +226,14 @@ function view_render_public_language_selector_settings_panel(array $model = []):
         }
         $defaultBorderStyle = (string) ($presetDefaults['border_style'] ?? 'solid');
         view_render_language_design_select($idPrefix . '-' . $presetId . '-border-style', $designName . '[presets][' . $presetId . '][border_style]', t('admin.theme.language.design_border_style', 'Border style'), (string) ($presetValues['border_style'] ?? $defaultBorderStyle), $defaultBorderStyle, ['solid' => t('admin.theme.language.design_solid', 'Solid'), 'dashed' => t('admin.theme.language.design_dashed', 'Dashed'), 'dotted' => t('admin.theme.language.design_dotted', 'Dotted'), 'double' => t('admin.theme.language.design_double', 'Double')]);
+        if ($themeEditor) {
+            echo '</details>';
+        }
         echo '</div><button type="button" class="secondary" data-language-design-reset-preset>' . e(t('admin.theme.language.design_reset_preset', 'Reset this preset')) . '</button></section>';
     }
-    echo '<button type="button" class="secondary danger" data-language-design-reset-all>' . e(t('admin.theme.language.design_reset_all', 'Reset all language selector settings')) . '</button>';
+    echo '<button type="button" class="secondary' . ($themeEditor ? '' : ' danger') . '" data-language-design-reset-all>' . e($themeEditor ? t('admin.theme.language.design_reset_compact', 'Reset design') : t('admin.theme.language.design_reset_all', 'Reset all language selector settings')) . '</button>';
+    if ($themeEditor) {
+        echo '<p class="theme-language-hint">' . e(t('admin.theme.language.design_pending_save_hint', 'Design changes and resets take effect when you save Theme.')) . '</p>';
+    }
     echo '</fieldset></section>';
 }

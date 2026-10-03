@@ -68,6 +68,9 @@ $contracts = [
     'app/models/gallery_edit_concurrency.php' => [
         'gallery_edit_model_reserve' => 1,
     ],
+    'app/models/gallery_description_layout_migration.php' => [
+        'gallery_layout_migration_model_apply' => 1,
+    ],
     'app/models/galleries.php' => [
         'gallery_model_update_scalar_for_ids' => 1,
         'gallery_model_update_fields' => 1,

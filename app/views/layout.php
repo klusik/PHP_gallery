@@ -137,7 +137,7 @@ function view_favorite_gallery_nav_html(array $items): string
 /**
  * Return the full legacy stylesheet set required by admin screens and logged-in public tools.
  *
- * @return array<int string> Stylesheet paths relative to the public web root.
+ * @return list<string> Stylesheet paths relative to the public web root.
  */
 function view_admin_stylesheet_files(): array
 {
@@ -149,18 +149,26 @@ function view_admin_stylesheet_files(): array
         'assets/styles/admin-layout.css',
         'assets/styles/admin-dashboard.css',
         'assets/styles/admin-maintenance-center.css',
+        'assets/styles/admin-telemetry.css',
+        'assets/styles/admin-logs.css',
         'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css',
         'assets/styles/admin-setup-wizard.css',
         'assets/styles/admin-reordering.css',
         'assets/styles/admin-media-tools.css',
         'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-theme-media.css',
+        'assets/styles/admin-theme-layout.css',
+        'assets/styles/admin-theme-language.css',
+        'assets/styles/admin-theme-custom-css.css',
         'assets/styles/admin-gallery-list.css',
+        'assets/styles/admin-smart-galleries.css',
         'assets/styles/admin-gallery-title-completion.css',
         'assets/styles/admin-patch-notes.css',
         'assets/styles/admin-update.css',
         'assets/styles/admin-tags.css',
         'assets/styles/side-panel.css',
+        'assets/styles/admin-gallery-create.css',
         'assets/styles/admin-duplicate-photo-detector.css',
         'assets/styles/admin-cinematic.css',
         'assets/styles/admin-settings.css',

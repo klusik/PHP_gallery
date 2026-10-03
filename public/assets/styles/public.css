@@ -1758,6 +1758,31 @@ button:disabled,
     line-height: 1.15;
 }
 
+/* Root creation shares the search row without depending on gallery cards or search availability. */
+.public-page .public-home-toolbar {
+    --public-home-control-height: 3rem;
+    display: flex;
+    align-items: stretch;
+    gap: 0.55rem;
+    margin: 0.55rem 0 0.9rem;
+}
+.public-page .public-home-toolbar .public-home-search { flex: 1; min-width: 0; margin: 0; }
+.public-page .public-home-toolbar .public-home-search-shell { box-sizing: border-box; min-height: var(--public-home-control-height); }
+.public-page .public-home-toolbar .public-home-actions { display: flex; align-items: stretch; flex: 0 0 auto; margin: 0; }
+.public-page .public-home-toolbar .hero-actions.public-home-actions .hero-icon-button {
+    width: var(--public-home-control-height);
+    min-width: var(--public-home-control-height);
+    height: auto;
+    min-height: var(--public-home-control-height);
+    align-self: stretch;
+    margin: 0;
+    box-sizing: border-box;
+}
+.public-page .public-home-empty { padding: 1.5rem; margin: 0.5rem 0; border: 1px solid var(--border); border-radius: var(--radius, 16px); background: var(--panel); text-align: center; }
+.public-page .public-home-empty h2 { margin: 0 0 0.45rem; font-size: 1.25rem; }
+.public-page .public-home-empty p { margin: 0 0 1rem; }
+.public-home-first-gallery-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+
 .public-home-search {
     position: relative;
     z-index: 15;

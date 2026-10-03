@@ -92,7 +92,7 @@ namespace {
         $GLOBALS['settings_denied'] = $GLOBALS['settings_fail'] = '';
         $GLOBALS['settings_method'] = 'POST';
         $_GET = ['section' => 'general'];
-        $_POST = ['settings' => ['base_url' => 'http://fixture.test/gallery', 'site_name' => 'Updated', 'admin_language' => 'cs', 'public_language' => 'en', 'thumbnail' => 'responsive', 'secret' => 'injected', 'unknown' => 'injected']];
+        $_POST = ['settings' => ['base_url' => 'http://fixture.test/gallery', 'site_name' => 'Updated', 'admin_language' => 'cs', 'public_language' => 'en']];
         $_SESSION = [];
         $_SERVER['HTTP_ACCEPT'] = 'application/json';
     }
@@ -110,6 +110,11 @@ namespace {
     settings_check(!in_array('thumbnail', $GLOBALS['settings_writes'], true) && !in_array('secret', $GLOBALS['settings_writes'], true) && !in_array('unknown', $GLOBALS['settings_writes'], true), 'Category and editability whitelist must reject injected writes');
     settings_check($GLOBALS['settings_values']['url_rewrite_enabled'] === '0', 'Omitted checkbox must retain standard unchecked semantics');
     settings_check($GLOBALS['settings_values']['admin_language'] === 'cs' && $GLOBALS['settings_values']['public_language'] === 'en' && $GLOBALS['settings_cookies'] === [['language' => 'cs']] && $result['language_url'] !== '', 'Admin and visitor languages must remain independent');
+    foreach (['thumbnail', 'secret', 'unknown'] as $injectedId) {
+        settings_reset(); $_POST['settings'][$injectedId] = 'injected';
+        $result = settings_request();
+        settings_check(!$result['ok'] && isset($result['errors'][$injectedId]) && $GLOBALS['settings_writes'] === [], 'Wrong-section, non-editable, and unknown settings must reject the complete submission');
+    }
     foreach (['auth', 'csrf'] as $boundary) {
         settings_reset(); $GLOBALS['settings_denied'] = $boundary;
         try { settings_request(); throw new \LogicException('Boundary accepted'); }
@@ -127,7 +132,7 @@ namespace {
     settings_reset(); unset($_POST['settings']['admin_language'], $_POST['settings']['base_url']);
     $result = settings_request();
     settings_check($result['ok'] && $GLOBALS['settings_values']['admin_language'] === 'en' && !in_array('base_url', $GLOBALS['settings_writes'], true), 'Older General clients must preserve newly added language and address fields');
-    settings_reset(); $_GET['section'] = 'site'; $_POST['settings'] = ['base_url' => 'http://fixture.test/new', 'site_name' => 'injected'];
+    settings_reset(); $_GET['section'] = 'site'; $_POST['settings'] = ['base_url' => 'http://fixture.test/new'];
     $result = settings_request();
     settings_check($result['ok'] && $result['section'] === 'general' && $GLOBALS['settings_writes'] === ['base_url'], 'Historical site POSTs must keep their narrow whitelist');
     settings_reset(); $_SERVER['HTTP_ACCEPT'] = 'text/html';

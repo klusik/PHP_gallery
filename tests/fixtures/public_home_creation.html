@@ -1,0 +1,181 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_home_creation.html
+Module Type: Browser Test Fixture
+Purpose: Verify root gallery creation with production presentation and drawer modules.
+Responsibilities: Keep synthetic requests isolated; exercise canonical completion and dynamic links.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Root gallery creation fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/lightbox.css">
+<link rel="stylesheet" href="/public/assets/styles/public-shared.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/utilities.css">
+<link rel="stylesheet" href="/public/assets/styles.css">
+<body class="public-page"><main class="site-main"></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+
+/** @typedef {{type:string,entity:string,action:string,entity_ids:number[]}} Mutation */
+/** @typedef {{type:string,gallery_id:number,present:boolean,count:number}} Membership */
+/** @typedef {{type:string,gallery_id:null,render_url:string,render_mode:string,postcondition:Membership}} Context */
+/** @typedef {{ok:boolean,message:string,mutation:Mutation,panel:{workflow:string,refresh_url:string,keep_open:boolean},contexts:Context[],fallback:{redirect_url:string},gallery_id:number,gallery_title:string,gallery_url:string,edit_url:string,parent_gallery_id:number,parent_gallery_url:string,refresh_url:string,refresh_gallery_id:number,created_gallery:boolean}} CreateResponse */
+
+let assertions = 0;
+let posts = 0;
+let homeGets = 0;
+let createGets = 0;
+let editorGets = 0;
+let published = false;
+const originalUrl = location.href;
+const originalDocument = document;
+const fixtureCreate = '/fixture-create';
+const fixtureEditor = '/fixture-editor?id=77';
+
+/** Require a fixture observation. @param {boolean} condition Expected behavior. @param {string} message Failure context. @return {void} Throws when unmet. */
+function check(condition, message) { assertions++; if (!condition) throw new Error(message); }
+/** Obtain a required element with a bounded error. @param {string} selector Owned selector. @param {ParentNode} root Search scope. @return {HTMLElement} Fixture control. */
+function element(selector, root = document) {
+    const node = root.querySelector(selector);
+    if (!(node instanceof HTMLElement)) throw new Error('Missing fixture element: ' + selector);
+    return node;
+}
+/** Wait for production async work without driving completion ourselves. @param {function():boolean} predicate Expected state. @return {Promise<void>} Resolves when observed. */
+async function until(predicate) {
+    const deadline = Date.now() + 6000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Root creation transition timed out: ' + element('[data-admin-side-panel-status]').textContent);
+        await new Promise(/** Yield to fetch and DOM tasks. @param {function():void} resolve Continue checks. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Render the production add-link shape without a parent parameter. @param {boolean} labelled Whether this is the onboarding CTA. @return {string} Synthetic link markup. */
+function createLink(labelled = false) {
+    const label = labelled ? 'Add your first gallery' : 'Add gallery here';
+    const classes = labelled ? 'button public-home-first-gallery-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button';
+    return `<a class="${classes}" href="${fixtureCreate}" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="Gallery workflow" data-admin-side-panel-title="Add gallery here" data-gallery-side-panel-url="${fixtureCreate}?panel=1" aria-label="${label}" title="${label}"><span aria-hidden="true">+</span><span class="${labelled ? 'public-home-create-label' : 'visually-hidden'}">${label}</span></a>`;
+}
+/** Render the search shell from the public_search view's production classes. @return {string} Search presentation without network search bindings. */
+function searchBar() {
+    return '<section class="public-home-search" data-public-home-search aria-label="Search" aria-busy="false"><label class="visually-hidden" for="public-home-search-input">Search</label><div class="public-home-search-shell"><span class="public-home-search-icon" aria-hidden="true">&#128269;</span><input id="public-home-search-input" class="public-home-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search galleries" data-public-home-search-input><button type="button" class="public-home-search-clear" data-public-home-search-clear aria-label="Clear" hidden>&times;</button></div><div class="public-home-search-results" data-public-home-search-results role="region" aria-label="Search" hidden></div></section>';
+}
+/** Render a server-shaped root frame with verification metadata inside the replaceable content. @return {string} Root content for the current synthetic persistence state. */
+function rootFrame() {
+    const count = published ? 1 : 0;
+    const onboarding = posts === 0 ? `<section class="public-home-empty" data-public-home-first-gallery><h2>No galleries yet</h2><p class="muted">Start with a name.</p>${createLink(true)}</section>` : '';
+    const cards = published ? '<section class="grid public-home-gallery-grid" data-public-gallery-index-grid data-public-root-gallery-count="1" data-public-gallery-page="1" data-public-gallery-total-pages="1"><article class="gallery-card" data-gallery-id="77"><a href="/fixture-gallery?id=77">Fixture gallery</a></article></section>' : '';
+    return `<div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list><div data-public-gallery-index data-public-root-gallery-count="${count}" data-public-root-gallery-revision="fixture-${posts}" data-public-root-smart-gallery-count="0" data-admin-mutation-canonical-url="/" hidden></div>${onboarding}${cards}</div></div>`;
+}
+/** Render the ordinary create form with the server's required replay key. @return {string} Synthetic panel fragment. */
+function createForm() {
+    const key = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
+    return `<section data-gallery-create-panel><form method="post" action="${fixtureCreate}" data-gallery-panel-create-form><input type="hidden" name="csrf_token" value="fixture-csrf"><input type="hidden" name="operation_key" value="${key}" data-admin-operation-key><input type="hidden" name="parent_id" value="0"><label>Title<input name="title" value="Fixture gallery" required></label><label>Visibility<select name="visibility"><option value="unpublished">Unpublished</option><option value="published">Published</option></select></label><button type="submit">Create gallery</button></form></section>`;
+}
+/** Match admin_new_gallery_success_response and helpers_mutation's canonical builders. @return {CreateResponse} Complete server-shaped response, including compatibility fields consumed by production. */
+function creationResponse() {
+    return {ok:true, message:'Gallery created.', mutation:{type:'gallery.create', entity:'gallery', action:'create', entity_ids:[77]}, panel:{workflow:'gallery-edit', refresh_url:fixtureEditor, keep_open:true}, contexts:[{type:'gallery_index', gallery_id:null, render_url:'/', render_mode:'preserve_view', postcondition:{type:'gallery_membership', gallery_id:77, present:published, count:published ? 1 : 0}}], fallback:{redirect_url:fixtureEditor}, gallery_id:77, gallery_title:'Fixture gallery', gallery_url:'/fixture-gallery?id=77', edit_url:fixtureEditor, parent_gallery_id:0, parent_gallery_url:'', refresh_url:'/', refresh_gallery_id:0, created_gallery:true};
+}
+
+window.fetch = /** Intercept only synthetic loopback create/editor/home endpoints. @param {RequestInfo|URL} input Request destination. @param {RequestInit} options Request metadata. @return {Promise<Response>} Synthetic response without installation access. */ async (input, options = {}) => {
+    const target = new URL(input instanceof Request ? input.url : String(input), location.href);
+    check(target.origin === location.origin && ['/', fixtureCreate, '/fixture-editor'].includes(target.pathname), 'Every request remains confined to synthetic loopback endpoints');
+    if (target.pathname === fixtureCreate) {
+        check(!target.searchParams.has('parent_id'), 'Root create URL has no inherited parent');
+        if (options.method === 'POST') {
+            check(options.body instanceof FormData, 'Creation uses its existing multipart transport');
+            const body = /** @type {FormData} */ (options.body);
+            check(body.get('parent_id') === '0' && body.get('ajax') === '1' && body.get('panel') === '1' && body.get('csrf_token') === 'fixture-csrf', 'Root creation retains AJAX, CSRF and explicit root scope');
+            check(/^[a-f0-9]{64}$/.test(String(body.get('operation_key'))), 'Production replay owner sends a valid operation key');
+            check(new Headers(options.headers).get('Accept') === 'application/json', 'Creation requests the canonical JSON envelope');
+            posts++;
+            published = body.get('visibility') === 'published';
+            return new Response(JSON.stringify(creationResponse()), {headers:{'Content-Type':'application/json'}});
+        }
+        createGets++;
+        check(target.searchParams.get('panel') === '1', 'Delegated link requests its panel fragment');
+        return new Response(createForm(), {headers:{'Content-Type':'text/html'}});
+    }
+    check(!options.method || options.method === 'GET', 'Refresh endpoints are read only');
+    if (target.pathname === '/fixture-editor') {
+        editorGets++;
+        check(target.searchParams.get('id') === '77', 'Canonical panel refresh uses the created identity');
+        return new Response('<section data-admin-edit-panel-workspace="gallery-edit"><h2 data-fixture-editor>Fixture gallery editor</h2></section>', {headers:{'Content-Type':'text/html'}});
+    }
+    homeGets++;
+    return new Response(`<!doctype html><html><body><main class="site-main">${rootFrame()}</main></body></html>`, {headers:{'Content-Type':'text/html'}});
+};
+
+try {
+    const main = element('main.site-main');
+    main.innerHTML = `<div class="public-home-toolbar"><div class="hero-actions public-home-actions" aria-label="Gallery actions">${createLink()}</div>${searchBar()}</div>${rootFrame()}`;
+    setupAdminGallerySidePanel();
+    const toolbar = element('.public-home-toolbar');
+    const plus = element('.public-home-actions a');
+    const search = element('.public-home-search');
+    const shell = element('.public-home-search-shell');
+    const plusBounds = plus.getBoundingClientRect();
+    const searchBounds = shell.getBoundingClientRect();
+    check(plusBounds.right <= searchBounds.left && Math.abs(plusBounds.top - searchBounds.top) <= 1, 'Root plus appears directly before search in the same row');
+    check(Math.abs(plusBounds.height - searchBounds.height) <= 1 && plusBounds.height >= 40, 'Plus and production search shell share a usable height');
+    toolbar.style.width = '320px';
+    const narrowToolbar = toolbar.getBoundingClientRect();
+    const narrowPlus = plus.getBoundingClientRect();
+    const narrowSearch = shell.getBoundingClientRect();
+    check(narrowPlus.right <= narrowSearch.left && Math.abs(narrowPlus.top - narrowSearch.top) <= 1 && Math.abs(narrowPlus.height - narrowSearch.height) <= 1, 'At 320px, plus and search retain one row and equal heights');
+    for (const child of toolbar.querySelectorAll('*')) {
+        if (!(child instanceof HTMLElement) || child.getClientRects().length === 0 || child.classList.contains('visually-hidden')) continue;
+        const bounds = child.getBoundingClientRect();
+        check(bounds.left >= narrowToolbar.left - 1 && bounds.right <= narrowToolbar.right + 1, 'At 320px, toolbar child stays inside its bounds: ' + child.tagName + '.' + child.className);
+    }
+    check(toolbar.scrollWidth <= toolbar.clientWidth + 1, 'At 320px, the root toolbar has no horizontal overflow');
+    toolbar.style.width = '';
+    search.remove();
+    check(Math.abs(plus.getBoundingClientRect().height - plusBounds.height) <= 1 && toolbar.children.length === 1, 'Root plus retains the same height when search is disabled');
+    check(element('.gallery-list-frame > .gallery-list-content > [data-public-gallery-index]').dataset.publicRootGalleryCount === '0', 'Empty home keeps its replaceable root marker');
+
+    plus.click();
+    await until(/** Observe production create-form loading. @return {boolean} Whether the form is mounted. */ () => document.querySelector('[data-gallery-panel-create-form]') !== null);
+    const panel = element('[data-admin-side-panel]');
+    check(panel.dataset.adminSidePanelWorkflow === 'create' && panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl && !document.querySelector('.public-home-search'), 'Standalone root plus opens the existing create workflow without search or navigation');
+    element('[data-admin-side-panel-close]', panel).click();
+    check(panel.getAttribute('aria-hidden') === 'true', 'Unmodified create panel can close normally');
+    toolbar.append(search);
+    element('[data-public-home-first-gallery] a').click();
+    await until(/** Observe the CTA's independently loaded create fragment. @return {boolean} Whether the second open completed. */ () => createGets === 2 && document.querySelector('[data-gallery-panel-create-form]') !== null);
+    check(panel.getAttribute('aria-hidden') === 'false' && panel.dataset.adminSidePanelWorkflow === 'create', 'Onboarding CTA delegates to the same create workflow');
+    const oldMarker = element('[data-public-gallery-index]');
+    const draftForm = /** @type {HTMLFormElement} */ (element('[data-gallery-panel-create-form]'));
+    draftForm.requestSubmit();
+    await until(/** Await only observable canonical public and editor replacement. @return {boolean} Whether draft completion finished. */ () => homeGets === 1 && editorGets === 1 && document.querySelector('[data-fixture-editor]') !== null && !document.querySelector('[data-public-home-first-gallery]'));
+    check(posts === 1 && !document.querySelector('[data-gallery-id="77"]') && element('[data-public-gallery-index]').dataset.publicRootGalleryCount === '0', 'Unpublished creation removes onboarding while the public root remains empty');
+    check(!oldMarker.isConnected && element('[data-public-gallery-index]').dataset.publicRootGalleryRevision === 'fixture-1', 'Coordinator replaces verification metadata inside the owned frame');
+    check(panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl && document === originalDocument, 'Draft completion preserves panel, document and browser URL');
+    element('[data-admin-side-panel-close]', panel).click();
+    check(panel.getAttribute('aria-hidden') === 'true', 'Refreshed editor closes without navigation');
+
+    // Simulate a dynamically injected copy of the prepared toolbar link. The fixture
+    // never replaces public content on completion; that belongs to the real coordinator.
+    element('.public-home-actions').innerHTML = createLink();
+    const dynamicPlus = element('.public-home-actions a');
+    check(dynamicPlus !== plus && !plus.isConnected, 'Second creation uses a newly rendered delegated control');
+    dynamicPlus.click();
+    await until(/** Wait for the dynamically opened fragment. @return {boolean} Whether the third open completed. */ () => createGets === 3 && document.querySelector('[data-gallery-panel-create-form]') !== null);
+    const publishedForm = /** @type {HTMLFormElement} */ (element('[data-gallery-panel-create-form]'));
+    const visibility = /** @type {HTMLSelectElement} */ (element('[name="visibility"]', publishedForm));
+    visibility.value = 'published';
+    visibility.dispatchEvent(new Event('change', {bubbles:true}));
+    publishedForm.requestSubmit();
+    await until(/** Await canonical root-card and editor refresh. @return {boolean} Whether published completion finished. */ () => homeGets === 2 && editorGets === 2 && document.querySelector('[data-gallery-id="77"]') !== null && document.querySelector('[data-fixture-editor]') !== null);
+    check(posts === 2 && element('[data-public-gallery-index]').dataset.publicRootGalleryCount === '1' && element('[data-public-gallery-index]').dataset.publicRootGalleryRevision === 'fixture-2', 'Published creation installs the root card and updated marker count');
+    check(panel.getAttribute('aria-hidden') === 'false' && panel.dataset.adminSidePanelWorkflow === 'gallery-edit' && location.href === originalUrl && document === originalDocument, 'Dynamic create completion keeps the refreshed editor open and URL unchanged');
+    element('#results').textContent = 'BROWSER PASS: ' + assertions + ' root home creation assertions';
+} catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    element('#results').textContent = 'BROWSER FAIL: ' + failure.message + '\n' + failure.stack;
+}
+</script></body></html>

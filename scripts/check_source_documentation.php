@@ -7,7 +7,7 @@
  * Purpose:
  *   Report source discovery and explicit documentation coverage/debt.
  * Responsibilities:
- *   - Check native headers and PHP/JavaScript declaration documentation.
+ *   - Check native headers and PHP/JavaScript/Python declaration documentation and types.
  *   - Produce value-free JSON evidence and opt-in strict enforcement.
  * Author:
  *   Rudolf Klusal
@@ -20,6 +20,7 @@ namespace PhpGallery\SourceContracts;
 require_once __DIR__ . '/source_contracts/inventory.php';
 require_once __DIR__ . '/source_contracts/php.php';
 require_once __DIR__ . '/source_contracts/javascript.php';
+require_once __DIR__ . '/source_contracts/python.php';
 require_once __DIR__ . '/source_contracts/changes.php';
 
 /**
@@ -47,6 +48,19 @@ function documentation_report(string $root, array $paths = []): array
     if (array_diff($paths, array_keys($selected)) !== []) {
         throw new \RuntimeException('Selected source is absent or excluded.');
     }
+    $pythonSources = [];
+    foreach ($selected as $path => $extension) {
+        if (in_array($extension, ['py', 'pyw'], true)) {
+            $source = file_get_contents($root . '/' . $path);
+            if (!is_string($source)) {
+                throw new \RuntimeException('Unable to read an inventoried Python source.');
+            }
+            $pythonSources[] = $source;
+        }
+    }
+    if ($pythonSources !== []) {
+        python_source_cache($pythonSources);
+    }
     foreach ($selected as $path => $extension) {
         $source = file_get_contents($root . '/' . $path);
         if (!is_string($source)) {
@@ -60,6 +74,7 @@ function documentation_report(string $root, array $paths = []): array
         $records = match ($extension) {
             'php' => php_declarations($source),
             'js', 'mjs', 'cjs' => javascript_declarations($source),
+            'py', 'pyw' => array_column(python_declaration_snapshots($source), 'record'),
             'html', 'htm' => array_column(source_declaration_snapshots($source, $path), 'record'),
             default => [],
         };
@@ -89,7 +104,9 @@ function documentation_report(string $root, array $paths = []): array
             'headers' => 'Leading native comments: identity, purpose, responsibilities, exact author; all inventoried source extensions.',
             'php' => 'Tokenizer: named/anonymous callables, references, attributes, enums/classes/traits/interfaces, properties; promoted fields use constructor parameters.',
             'javascript' => 'Conservative lexer: functions/generators, classes, methods, bound/inline arrows and nested template expressions; js/mjs/cjs and executable inline HTML scripts. Destructured parameters require review.',
-            'manual_declaration_languages' => 'Python/PYW, PowerShell and shell/batch declaration/docstring semantics remain manual. SQL, YAML, SVG, TeX and Apache htaccess receive native header checks, not application-callable claims.',
+            'python' => 'Python 3 AST: classes, nested/async functions, positional-only, keyword-only and variadic parameters; bound receivers excluded, staticmethod parameters included. Tag-style and typed Google docstrings accepted. Lambdas have no native docstring/annotation syntax and are excluded.',
+            'typing' => 'PHP native parameter/return types required (constructor/destructor return syntax excluded); Python native annotations required; JavaScript uses typed JSDoc braces. This is declaration/contract validation, not a complete static type checker.',
+            'manual_declaration_languages' => 'PowerShell and shell/batch declaration/docstring semantics remain manual. SQL, YAML, SVG, TeX and Apache htaccess receive native header checks, not application-callable claims.',
             'manual_semantics' => 'Primitive PHP type disagreement is detected; review aliases/subtypes, truthfulness, invariants, side effects, exceptions, field semantics, ambiguous JS regex and computed/private fields.',
             'other_formats' => 'Metadata, docs and binaries are extension-counted without reading contents; attribution belongs to their owning source/generator.',
         ],
@@ -126,11 +143,12 @@ function print_report(array $report, bool $json, string $label): void
 /**
  * Parse the shared read-only inventory CLI, rejecting unknown options.
  * @param list<string> $argv Process arguments, including the executable script.
- * @return array{root:string,json:bool,strict:bool,changed:bool,paths:list<string>} Shared CLI modes and exact path selection.
+ * @return array{root:string,json:bool,strict:bool,changed:bool,base:string,paths:list<string>} Shared CLI modes and exact path selection.
  */
 function report_options(array $argv): array
 {
-    $options = ['root' => dirname(__DIR__), 'json' => false, 'strict' => false, 'changed' => false, 'paths' => []];
+    $options = ['root' => dirname(__DIR__), 'json' => false, 'strict' => false, 'changed' => false,
+        'base' => trim((string) getenv('PHP_GALLERY_SOURCE_BASE')) ?: 'HEAD', 'paths' => []];
     foreach (array_slice($argv, 1) as $argument) {
         if ($argument === '--json') {
             $options['json'] = true;
@@ -142,8 +160,10 @@ function report_options(array $argv): array
             $options['root'] = substr($argument, strlen('--root='));
         } elseif (str_starts_with($argument, '--path=')) {
             $options['paths'][] = str_replace('\\', '/', substr($argument, strlen('--path=')));
+        } elseif (str_starts_with($argument, '--base=')) {
+            $options['base'] = substr($argument, strlen('--base='));
         } else {
-            throw new \InvalidArgumentException('Expected --json, --strict, --changed, --root=PATH, or repeated --path=RELATIVE.');
+            throw new \InvalidArgumentException('Expected --json, --strict, --changed, --base=REF, --root=PATH, or repeated --path=RELATIVE.');
         }
     }
     return $options;
@@ -159,7 +179,7 @@ function documentation_main(array $argv): int
     try {
         $options = report_options($argv);
         if ($options['changed']) {
-            $report = changed_documentation_report($options['root'], $options['paths']);
+            $report = changed_documentation_report($options['root'], $options['paths'], null, $options['base']);
             print_report($report, $options['json'], 'Changed declaration gate ' . $report['status']);
             return match ($report['status']) {
                 'PASS' => 0,

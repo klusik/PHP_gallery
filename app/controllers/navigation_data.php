@@ -44,6 +44,7 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_dashboard_notice_messages;
+use function Gallery\Services\flight_map_navdata_status;
 use function Gallery\Services\navigation_data_navigraph_authorization_url;
 use function Gallery\Services\navigation_data_navigraph_disconnect;
 use function Gallery\Services\navigation_data_navigraph_exchange_code;
@@ -70,12 +71,16 @@ function navigation_data_json_response(array $payload, int $statusCode = 200): v
 
 /**
  * Render the dedicated admin navigation-data diagnostics page.
+ *
+ * @return void Passes one prepared import/source snapshot to the shared UI.
  */
 function cms_admin_navdata(): void
 {
     require_admin();
+    $navdataStatus = flight_map_navdata_status();
     view_render_admin_navigation_data([
-        'status' => navigation_data_status(),
+        'status' => $navdataStatus['hybrid'] ?? [],
+        'navdata_status' => $navdataStatus,
         'notices' => admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice')),
     ]);
 }

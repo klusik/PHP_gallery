@@ -379,8 +379,8 @@ namespace {
     admin_setup_wizard_render_assert(!str_contains($wizardStyles, '.admin-setup-wizard-progress {\n    overflow-x: auto'), 'Progress bar must not reintroduce a horizontal scrollbar.');
     admin_setup_wizard_render_assert(str_contains($wizardStyles, '.admin-setup-wizard-progress-nav {') && str_contains($wizardStyles, 'overflow: hidden;'), 'Progress navigation must clip accidental horizontal overflow instead of exposing a scrollbar.');
     admin_setup_wizard_render_assert(substr_count($themeSource, 'data-theme-live-preview') === 1, 'Theme source must define preview markup only in the shared helper.');
-    admin_setup_wizard_render_assert(str_contains($themeSource, 'view_render_admin_theme_live_preview([') && str_contains($viewSource, 'view_render_admin_theme_live_preview($preview)'), 'Original Theme and wizard must call the same preview renderer.');
-    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20260929-setup-wizard-preview-v2"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
+    admin_setup_wizard_render_assert(str_contains($themeSource, 'view_render_admin_theme_live_preview(array_replace(') && str_contains($viewSource, 'view_render_admin_theme_live_preview($preview)'), 'Original Theme and wizard must call the same preview renderer with prepared presentation data.');
+    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20261002-theme-layout-v1"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
     admin_setup_wizard_render_assert(array_values(array_unique($GLOBALS['admin_setup_wizard_render_translation_calls'] ?? [])) !== [], 'Focused rendering must exercise only the explicit translation presentation boundary.');
 
     echo "Admin setup wizard rendering tests passed.\n";

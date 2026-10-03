@@ -41,6 +41,58 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Return a decorative, unfilled Trash symbol for Admin labels and headings.
+ *
+ * @return string Trusted SVG using the surrounding text color and no background.
+ */
+function view_admin_trash_icon(): string
+{
+    return '<svg class="admin-trash-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>';
+}
+
+/**
+ * Return a decorative outline symbol for a main Admin navigation item.
+ *
+ * @param string $icon Presentation identifier from the navigation structure.
+ * @return string Trusted SVG hidden from assistive technology, or empty for unknown icons.
+ */
+function view_admin_menu_icon(string $icon): string
+{
+    if ($icon === 'trash') {
+        return view_admin_trash_icon();
+    }
+    // Keep the same view box, stroke, and text color as the existing Trash symbol.
+    $symbols = [
+        'overview' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+        'settings' => '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+        'galleries' => '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="m3 16 5-5 5 5 3-3 5 5"/><circle cx="16" cy="9" r="1"/>',
+        'create' => '<path d="M3 7V5h7l2 2h9v13H3V7M12 10v7M8.5 13.5h7"/>',
+        'smart' => '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3"/>',
+        'upload' => '<path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/>',
+        'mobile' => '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4m-2-4V6m-3 3 3-3 3 3"/>',
+        'rename' => '<path d="m14 5 5 5M4 20l4-1L21 6l-5-5L3 14l-1 6h2M12 21h9"/>',
+        'api' => '<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 18"/>',
+        'tags' => '<path d="M3 3h8l10 10-8 8L3 11V3"/><circle cx="7.5" cy="7.5" r="1"/>',
+        'theme' => '<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><circle cx="7" cy="10" r="1"/><circle cx="10" cy="6" r="1"/><circle cx="15" cy="6" r="1"/>',
+        'features' => '<rect x="3" y="7" width="18" height="10" rx="5"/><circle cx="16" cy="12" r="2"/>',
+        'logs' => '<path d="M6 3h9l4 4v14H6V3m9 0v5h4M9 12h7m-7 4h7"/>',
+        'telemetry' => '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+        'maintenance' => '<path d="M14 3a6 6 0 0 0-7 7L2 15l7 7 5-5a6 6 0 0 0 7-7l-4 4-5-5 4-4-2-2Z"/>',
+        'report' => '<path d="M5 3h14v18H5V3m4 14v-4m3 4V7m3 10v-7"/>',
+        'integrity' => '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3m-4 9 3 3 5-6"/>',
+        'navigation' => '<circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5 5-3"/>',
+        'update' => '<path d="M20 9a8 8 0 0 0-14-4L3 8m0-5v5h5m-4 7a8 8 0 0 0 14 4l3-3m0 5v-5h-5"/>',
+        'profile' => '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+        'viewers' => '<circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M16 4a3 3 0 0 1 0 6m3 4a6 6 0 0 1 3 5v2"/>',
+        'logout' => '<path d="M9 3H3v18h6m0-9h12m-5-5 5 5-5 5"/>',
+    ];
+    if (!isset($symbols[$icon])) {
+        return '';
+    }
+    return '<svg class="admin-menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . $symbols[$icon] . '</svg>';
+}
+
+/**
  * Return the Admin interface design tokens used by CSS and by the visible spec card.
  *
  * @return array<string mixed>.

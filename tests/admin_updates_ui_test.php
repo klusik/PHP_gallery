@@ -12,6 +12,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    const CMS_GITHUB_REPOSITORY = 'fixture/gallery';
     /** Return the synthetic activated version. @return string Fixture version. */
     function cms_current_version(): string { return '0.113.1'; }
     /** Return disposable CSRF markup. @return string Fixture field. */
@@ -22,8 +23,8 @@ namespace Gallery\Core {
     function require_admin(): void { $GLOBALS['update_ui_auth_checks']++; }
     /** Return the fixture request method. @return string Read-only method. */
     function request_method(): string { return 'GET'; }
-    /** Return the fixture updater route. @param string $route Route ID. @return string Local URL. */
-    function url_for(string $route): string { return '/index.php?page=' . $route; }
+    /** Return the fixture updater route. @param string $route Route ID. @param array<string,string> $query Query arguments. @return string Local URL. */
+    function url_for(string $route, array $query = []): string { return '/index.php?' . http_build_query(['page' => $route] + $query); }
     /** Delegate fixture tabs to the real chrome view.
      * @param list<array<string, mixed>> $tabs Prepared tab entries. @param string $active Selected tab. @return void Emits markup.
      */
@@ -35,6 +36,10 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** Return cached API diagnostics. @return array<string,mixed> Fixture headers. */
+    function application_update_github_api_status(): array { return ['remaining' => 59, 'limit' => 60]; }
+    /** Return fixture repository URL. @return string Repository URL. */
+    function cms_github_project_url(): string { return 'https://github.com/fixture/gallery'; }
     /** Resolve bundled English labels without loading application state.
      * @param string $key Translation key. @param string|array<string, string>|null $fallback Fallback text or parameters.
      * @param array<string, string> $parameters Replacement values. @return string Presentation text.
@@ -69,6 +74,13 @@ namespace Gallery\Services {
         $GLOBALS['update_ui_passive_reads']++;
         return ['latest_version' => '0.113.1', 'current_version' => '0.112.0', 'update_available' => true];
     }
+    /** Supply offline release history. @param ?string $branch Requested branch. @param int $ttl Compatibility lifetime. @return array<string,mixed> Fixture notes. */
+    function application_patch_notes_viewer_data(?string $branch, int $ttl): array
+    {
+        return ['source' => 'local', 'versions' => ['0.113.1' => ['title' => 'Version 0.113.1', 'html' => '<p>Activated release notes</p>'], '0.112.0' => ['title' => 'Version 0.112.0', 'html' => '<p>Old notes</p>']]];
+    }
+    /** Normalize a fixture version. @param string $version Requested version. @return ?string Version identifier. */
+    function application_update_normalize_version(string $version): ?string { return $version; }
 }
 
 namespace {
@@ -114,6 +126,8 @@ namespace {
     $fragment = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
     update_ui_assert($GLOBALS['update_ui_auth_checks'] === 1 && $GLOBALS['update_ui_passive_reads'] === 2, 'Fragment must authenticate and read only passive metadata.');
     update_ui_assert($fragment['ok'] === true && !str_contains($fragment['html'], 'value="stable_update"'), 'Passive fragment must report the activated release.');
+    update_ui_assert(str_contains($fragment['notes_html'], 'Activated release notes') && str_contains($fragment['notes_html'], 'value="0.113.1" data-patch-notes-input'), 'Completion must select and display newly installed notes.');
+    update_ui_assert(str_contains($fragment['notes_html'], 'is-installed') && $fragment['notes_count'] === 2, 'Completion must refresh picker badges and history together.');
     update_ui_assert(str_contains($fragment['html'], 'action="/index.php?page=admin_update"'), 'Refreshed forms must preserve the updater endpoint inside public-page drawers.');
 
     $model = array_merge($pending, [
@@ -135,6 +149,10 @@ namespace {
     update_ui_assert($xpath->query('//details[contains(@class,"admin-update-diagnostics") and not(@open)]')->length === 1, 'Technical diagnostics must start collapsed.');
     update_ui_assert($xpath->query('//*[@data-update-job-scope]//*[@data-update-job-complete]')->length === 2, 'Both job surfaces need completion placeholders before the job finishes.');
     update_ui_assert(strpos($html, 'value="stable_update"') < strpos($html, 'admin-update-diagnostics'), 'Diagnostics must follow primary controls.');
+    $stopped = \Gallery\Controllers\cms_update_job_view_model(['id' => 'old-job', 'status' => 'failed', 'stage' => 'package_validate']);
+    update_ui_assert($stopped['display_title'] === 'Update stopped' && $stopped['stage_label'] === 'Verifying integrity', 'A failed checkpoint must be labelled stopped rather than running.');
+    $paused = \Gallery\Controllers\cms_update_job_view_model(['id' => 'old-auto-job', 'status' => 'running', 'stage' => 'package_validate', 'background' => true], false);
+    update_ui_assert($paused['auto_resume'] === false && $paused['display_title'] === 'Update paused', 'Turning automatic updates off must also pause browser resumption of an old background job.');
 
     if (in_array('--preview', $argv ?? [], true)) {
         $styles = ['base', 'admin', 'admin-layout', 'admin-dashboard', 'admin-maintenance-center', 'admin-patch-notes', 'admin-update', 'side-panel', 'admin-cinematic'];

@@ -233,7 +233,15 @@ export function setupAdminTrashActions() {
         return;
     }
     adminTrashActionsBound = true;
-    document.addEventListener('submit', (event) => {
+    document.addEventListener('submit', /**
+     * Respect earlier confirmation cancellation before dispatching delegated Trash actions.
+     * @param {SubmitEvent} event Submitted form event, including native cancellation state.
+     * @return {void} Starts only an approved enhanced mutation workflow.
+     */ (event) => {
+        // Inline confirmation can cancel submission before this delegated listener runs.
+        if (event.defaultPrevented) {
+            return;
+        }
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) {
             return;

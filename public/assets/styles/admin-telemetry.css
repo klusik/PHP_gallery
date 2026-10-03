@@ -1,0 +1,190 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-telemetry.css
+ * Module Type: Stylesheet
+ * Purpose: Present a compact, readable Admin telemetry workspace.
+ * Responsibilities:
+ *   - Separate reporting from optional configuration without hiding privacy status.
+ *   - Keep metric cards, setting groups, and aggregate tables responsive.
+ * Author:
+ *   Rudolf Klusal
+ * Notes: Presentation only; collection, retention, and mutation policy remain server-owned.
+ */
+
+.admin-telemetry-page {
+    display: grid;
+    gap: .65rem;
+    min-width: 0;
+}
+
+/* Scope shared card and heading overrides to the telemetry dashboard. */
+.admin-page .admin-telemetry-page .hero,
+.admin-page .admin-telemetry-page .panel {
+    min-width: 0;
+    margin: 0;
+    padding: .75rem .9rem;
+}
+
+.admin-page .admin-telemetry-page h1,
+.admin-page .admin-telemetry-page h2 {
+    margin: 0 0 .5rem;
+    font-size: 1.15rem;
+    line-height: 1.35;
+}
+
+.admin-telemetry-page p {
+    margin: .35rem 0;
+    line-height: 1.5;
+}
+
+.admin-telemetry-page .hero .nav {
+    gap: .35rem;
+    margin-top: .5rem;
+}
+
+.admin-telemetry-page .telemetry-privacy-note {
+    padding-left: .65rem;
+    font-size: .85rem;
+}
+
+.admin-telemetry-page .metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .5rem;
+}
+
+.admin-telemetry-page .metric-card {
+    padding: .55rem .65rem;
+    border-radius: .5rem;
+    font-size: .85rem;
+}
+
+.admin-telemetry-page .metric-card strong {
+    font-size: 1.25rem;
+    margin-bottom: .2rem;
+}
+
+/* Native disclosure keeps settings accessible by keyboard and without JavaScript. */
+.telemetry-settings-panel > summary {
+    cursor: pointer;
+}
+
+.admin-page .telemetry-settings-panel > summary h2 {
+    display: inline;
+    margin: 0;
+}
+
+.telemetry-settings-panel > summary:focus-visible {
+    outline: 2px solid var(--admin-brand, #385b9b);
+    outline-offset: 4px;
+}
+
+.admin-telemetry-page .telemetry-settings-panel .form-grid {
+    gap: .75rem;
+    margin-top: .75rem;
+}
+
+.telemetry-settings-switches,
+.telemetry-settings-limits,
+.telemetry-table-grid {
+    display: grid;
+    gap: .65rem;
+    min-width: 0;
+}
+
+.telemetry-settings-switches {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-telemetry-page .telemetry-settings-switches .checkbox-row {
+    margin: 0;
+    padding: .4rem .5rem;
+    border-radius: .4rem;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+    font-size: .85rem;
+}
+
+.telemetry-settings-limits {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+    border-top: 1px solid var(--admin-border);
+    padding-top: .75rem;
+}
+
+.telemetry-settings-limits > label {
+    min-width: 0;
+    margin: 0;
+    font-size: .85rem;
+}
+
+.telemetry-settings-limits .muted {
+    font-size: .8rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+
+.admin-telemetry-page .telemetry-settings-panel .bulk-row {
+    margin: 0;
+    padding: 0;
+}
+
+.telemetry-settings-panel > form + form {
+    border-top: 1px solid var(--admin-border);
+    margin-top: .75rem;
+    padding-top: .75rem;
+}
+
+.telemetry-table-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.admin-telemetry-page table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: .85rem;
+}
+
+.admin-telemetry-page th,
+.admin-telemetry-page td {
+    padding: .45rem .5rem;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.telemetry-table-grid th:first-child {
+    width: 45%;
+}
+
+.telemetry-table-grid th:last-child {
+    width: 20%;
+}
+
+.admin-telemetry-page th:last-child,
+.admin-telemetry-page td:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-telemetry-page .telemetry-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+}
+
+@media (max-width: 1100px) {
+    .telemetry-settings-limits {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .telemetry-table-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .telemetry-settings-switches,
+    .telemetry-settings-limits,
+    .admin-telemetry-page .telemetry-split {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

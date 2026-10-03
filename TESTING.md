@@ -1650,14 +1650,121 @@ Phase 4 is considered complete when this focused regression plus the historical 
 ## Explicit caller contexts and temporary-file ownership
 
 Every profile also runs `source-documentation-changed` and
-`source-policy-changed` against read-only Git HEAD. The first enforces declaration
-contracts; the second checks documented uppercase definitions, recognized
+`source-policy-changed` through read-only Git. The first enforces declaration
+contracts against HEAD locally, or the explicit `PHP_GALLERY_SOURCE_BASE` ref;
+the second checks documented uppercase definitions, recognized
 operational numeric assignments and direct timer literals in runtime PHP/JS.
 Missing history or failed parsing blocks the relevant gate. The policy artifact
 explicitly lists unparsed formats, embedded scripts and map-entry review gaps;
 passing this bounded gate does not mean the complete codebase has no magic values.
 Whole-tree documentation/policy inventory remains an advisory artifact with
 remaining counts, not an accepted-debt baseline.
+
+### Documentation and declaration types across PHP, JavaScript and Python
+
+Every quick/full/release audit scans the complete admitted source tree through
+`source-contract-inventory` and strictly checks added or materially changed
+declarations through `source-documentation-changed`. Documentation-only regressions
+also fail. The full inventory is advisory while existing debt is being repaired;
+a passing inventory means discovery completed, not that every old function complies.
+No accepted-debt baseline or automatic fabricated descriptions are introduced.
+
+The shared contract is a meaningful summary, one typed and described `@param` for
+each explicit parameter, and one typed `@return`/`@returns`. Missing, extra or duplicate
+parameter names, missing types/descriptions, duplicate returns and definite type
+disagreements are findings. Non-void returns require a description; `void`, `never`
+and Python `None` may omit it. PHP arrays and JavaScript objects/arrays must describe
+their members through shapes, generics or an explicit existing opaque contract.
+Nested JSDoc field entries must refer to a real signature parameter.
+
+Use native syntax with the same contract:
+
+```php
+/**
+ * Preserve the supplied selected record count.
+ * @param int $count Selected record count.
+ * @return int Preserved selected record count.
+ */
+function preserve_count(int $count): int { return $count; }
+```
+
+```javascript
+/**
+ * Preserve the supplied selected record count.
+ * @param {number} count Selected record count.
+ * @returns {number} Preserved selected record count.
+ */
+function preserveCount(count) { return count; }
+```
+
+```python
+def preserve_count(count: int) -> int:
+    """Preserve the supplied selected record count.
+
+    @param int count Selected record count.
+    @return int Preserved selected record count.
+    """
+    return count
+```
+
+Python also accepts typed Google-style sections (`Args: count (int): ...` and
+`Returns: int: ...`, on their usual indented lines). Braced tag types support spaces
+inside Python generic/union expressions. A bare prose docstring or an untyped Google
+argument does not satisfy the parameter/type contract.
+For generators, `Yields:` describes individual items and does not replace the
+returned iterator's typed `Returns:`/`@return` contract.
+
+PHP signatures require native parameter and return declarations. Constructor and
+destructor return declarations are exempt because PHP forbids that syntax. Python
+requires parameter and return annotations, including `-> None`, without importing
+the scanned source or evaluating annotations. Python AST coverage includes classes,
+nested/async functions, positional-only and keyword-only arguments, `*args`, `**kwargs`,
+classmethods and staticmethods. Bound receivers are implicit; staticmethod arguments
+are explicit. Python lambdas are excluded because Python supplies no native docstring
+or annotation syntax for them. JavaScript has no native parameter type syntax, so
+its declaration type contract uses standard braced JSDoc types instead.
+
+This gate checks declarations and documentation agreement; it does not prove runtime
+type correctness or documentation truthfulness. PHP primitive conflicts and known
+Python builtin/generic conflicts are detected conservatively. Aliases, imported
+classes, subtyping and complex JavaScript syntax still require review. Missing Python,
+invalid Python source, unreadable Git history or unsupported changed source formats
+block coverage instead of passing silently. Discovery exclusions continue to protect
+installation configuration, runtime/generated data, vendor and agent state.
+Current PHP syntax must parse successfully. Historical PHP is compared lexically,
+so fixing old syntax unsupported by the current PHP version does not block its repair.
+
+Complete value-free findings are in the audit's `source-documentation.json` and
+`source-documentation-changed.json` artifacts. GitHub Actions fetches full history
+and sets `PHP_GALLERY_SOURCE_BASE` to the pull request's target SHA or the previous
+head for a push, covering all commits in a push. Manual runs use `HEAD^`. A clean
+CI checkout therefore checks committed changes. An unavailable base (including a
+root commit or unreachable force-push predecessor) blocks this comparison; choose
+an available immutable comparison ref deliberately rather than bypassing coverage.
+GitHub uploads both documentation reports with the compact audit summary.
+
+For diagnosis or an explicit whole-tree migration check:
+
+```bash
+php scripts/check_source_documentation.php --strict --json
+php scripts/check_source_documentation.php --changed --base=HEAD^ --json
+```
+
+Normal agent verification remains the central audit. Its PHP regression automatically
+discovers `tests/source_type_documentation_test.php`, which exercises valid and invalid
+contracts, signatures, safe Python parsing, source non-execution, documentation-only
+regressions and CI parent-ref enforcement.
+
+The separate `python-import-policy` suite runs in every quick/full/release profile
+and forbids `from __future__ import annotations` throughout all admitted `.py` and
+`.pyw` sources, including unchanged files. It uses AST import statements, so aliases,
+combined imports and multiline syntax are covered; comments, docstrings and ordinary
+strings are ignored. `concurrent.futures` and other future features remain allowed.
+There is no Git comparison or legacy-debt exemption for this rule. Invalid source
+or unavailable Python blocks coverage. The suite writes `python-import-policy.json`
+with safe file/line locations; `tests/python_import_policy_test.php` protects this
+policy through isolated fixtures. Python is required only for developer/CI audits,
+not normal Gallery web requests on shared hosting.
 
 The central audit discovers `viewer_anti_automation_context_test.php` and its
 isolated support fixture. They execute actual registration/resend controllers and

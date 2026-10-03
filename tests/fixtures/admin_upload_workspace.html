@@ -1,0 +1,196 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_upload_workspace.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production upload Settings, legacy navigation and lazy mobile management.
+Responsibilities: Confine network access to first-party assets and synthetic loopback responses.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Upload Settings fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-settings.css">
+<body class="admin-page"><aside class="admin-sidebar"><a href="?page=admin_settings">Settings</a></aside><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminSettingsWorkspace} from '/public/assets/gallery-modules/admin-settings-workspace.js';
+
+let assertions = 0;
+let settingsRequests = 0;
+let mobileReads = 0;
+let mobileRequests = 0;
+let rejectMobile = false;
+let releaseRead = null;
+let releaseMutation = null;
+let releaseSettings = null;
+/** @type {Array<Record<string,unknown>>} Canonical coordinator completion records. */
+const completions = [];
+const documentIdentity = document;
+const originalFetch = window.fetch.bind(window);
+
+/** Assert observable production behavior.
+ * @param {boolean} condition Expected behavior.
+ * @param {string} message Failure description.
+ * @return {void} Throws on regression.
+ */
+function check(condition, message) { assertions++; if (!condition) throw new Error(message); }
+/** Wait for asynchronous browser work.
+ * @param {function():boolean} predicate Observable expected state.
+ * @return {Promise<void>} Resolves before the fixture deadline.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture progress timeout; settings=' + settingsRequests + ', mobile=' + mobileRequests + ', feedback=' + document.querySelector('[data-admin-settings-mobile-feedback]')?.textContent);
+        await new Promise(/** Yield to browser tasks. @param {function():void} resolve Timer consumer. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Render stable Settings form controls.
+ * @param {string} section Settings category.
+ * @param {boolean} legacy Persisted navigation preference.
+ * @return {string} Synthetic form HTML.
+ */
+function formMarkup(section, legacy = false) {
+    const inputs = section === 'general' ? '<input name="settings[site_name]" value="Saved title">'
+        : `<input type="hidden" name="settings[admin_legacy_upload_navigation_enabled]" value="0"><label><input type="checkbox" name="settings[admin_legacy_upload_navigation_enabled]" value="1" ${legacy ? 'checked' : ''}>Legacy navigation</label><label><input type="checkbox" name="settings[upload_overwrite]" value="1">Overwrite upload</label>`;
+    return `<form method="post" action="/fixture-upload-settings" data-admin-settings-form="${section}" data-changes-label="{count} changes" data-clean-label="Clean" data-saving-label="Saving" data-failed-label="Save failed"><input type="hidden" name="csrf_token" value="fixture-only"><input type="hidden" name="return_section" value="${section}"><div data-admin-settings-errors hidden></div>${inputs}<div data-admin-settings-savebar><span data-admin-settings-changes></span><button type="button" data-admin-settings-reset hidden>Revert</button><button data-admin-settings-save>Save</button></div></form>`;
+}
+/** Render the owned mobile manager independently of upload preferences.
+ * @param {string} action Available credential action.
+ * @return {string} Synthetic mobile manager HTML.
+ */
+function mobileMarkup(action = 'create') {
+    return `<section data-admin-settings-mobile data-mobile-failed-label="Mobile failed"><div data-admin-settings-mobile-feedback hidden></div><div data-admin-settings-mobile-content><form method="post" action="/fixture-upload-mobile" data-admin-settings-mobile-form data-failed-label="Mobile failed"><input type="hidden" name="csrf_token" value="fixture-only"><input type="hidden" name="return_context" value="settings_uploads"><input type="hidden" name="action" value="${action}">${action === 'delete' ? '<input type="hidden" name="id" value="77"><strong data-mobile-credential>Fixture credential</strong>' : '<input name="label" value="Fixture phone">'}<button type="submit">${action}</button></form></div></section>`;
+}
+/** Render the sidebar from the persisted preference.
+ * @param {boolean} legacy Whether legacy links are exposed.
+ * @return {string} Server-like complete sidebar fragment.
+ */
+function sidebarMarkup(legacy) {
+    return '<aside class="admin-sidebar"><a href="?page=admin_settings">Settings</a>' + (legacy ? '<a data-legacy href="?page=admin_upload">Legacy uploads</a><a data-legacy href="?page=admin_upload_settings">Legacy upload settings</a><a data-legacy href="?page=admin_mobile_uploads">Legacy mobile uploads</a>' : '') + '</aside>';
+}
+/** Resolve the current dynamically replaced category form.
+ * @param {string} section Category identifier.
+ * @return {HTMLFormElement} Current production-bound form.
+ */
+function form(section) { return document.querySelector(`[data-admin-settings-form="${section}"]`); }
+/** Edit a native checkbox and publish its change.
+ * @param {string} name Canonical setting key.
+ * @param {boolean} checked Draft preference.
+ * @return {void} Dispatches the production change event.
+ */
+function toggle(name, checked) {
+    const control = form('uploads').querySelector(`input[type="checkbox"][name="settings[${name}]"]`);
+    control.checked = checked;
+    control.dispatchEvent(new Event('change', {bubbles:true}));
+}
+/** Return a canonical synthetic JSON result.
+ * @param {Record<string,unknown>} payload Response envelope.
+ * @param {number} status HTTP status.
+ * @return {Response} Confined JSON response.
+ */
+function json(payload, status = 200) { return new Response(JSON.stringify(payload), {status, headers:{'Content-Type':'application/json'}}); }
+/** Compose the exact mutation metadata consumed by the shared coordinator.
+ * @param {string} entity Mutated entity.
+ * @param {string} action Canonical operation.
+ * @param {Array<number>} ids Stable identifiers.
+ * @return {Record<string,unknown>} Successful canonical envelope.
+ */
+function envelope(entity, action, ids = []) {
+    return {ok:true, message:'Saved', mutation:{type:`${entity}.${action}`,entity,action,entity_ids:ids},panel:null,contexts:[],fallback:{redirect_url:location.href}};
+}
+document.addEventListener('php-gallery:mutation-complete', /** Record the real coordinator's retained canonical envelope. @param {CustomEvent<{envelope:Record<string,unknown>}>} event Completion result. @return {number} Stored count. */ event => completions.push(event.detail.envelope));
+
+window.fetch = /** Intercept synthetic endpoints and reject every unrecognized request.
+ * @param {string|URL|Request} input Requested endpoint.
+ * @param {RequestInit} options Production fetch options.
+ * @return {Promise<Response>} Synthetic response or confined first-party asset.
+ */ async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input, location.href);
+    check(url.origin === location.origin, 'Every fetch remains on the confined fixture origin');
+    if (url.pathname.startsWith('/public/assets/')) return originalFetch(input, options);
+    if (url.pathname === '/fixture-upload-mobile-load') {
+        mobileReads++;
+        check(!options.method || options.method === 'GET', 'Lazy mobile discovery performs only a read');
+        return new Promise(/** Hold lazy loading for placeholder assertions. @param {function(Response):void} resolve Response consumer. @return {void} Stores release. */ resolve => { releaseRead = /** Return only the owned mobile HTML. @return {void} Completes the read. */ () => resolve(new Response(mobileMarkup(), {headers:{'Content-Type':'text/html'}})); });
+    }
+    if (url.pathname === '/fixture-upload-settings') {
+        settingsRequests++;
+        check(options.method === 'POST' && options.body.get('csrf_token') === 'fixture-only', 'Settings save retains POST and CSRF');
+        check(options.body.get('return_section') === 'uploads' && !options.body.has('settings[site_name]'), 'Uploads save excludes unrelated General drafts');
+        const legacy = options.body.getAll('settings[admin_legacy_upload_navigation_enabled]').at(-1) === '1';
+        return new Promise(/** Hold the Settings save for duplicate and replacement assertions. @param {function(Response):void} resolve Response consumer. @return {void} Stores release. */ resolve => { releaseSettings = /** Complete only the upload category and sidebar. @return {void} Completes save. */ () => resolve(json({...envelope('settings','update'),section:'uploads',html:formMarkup('uploads',legacy)+mobileMarkup(),errors:{},sidebar_html:sidebarMarkup(legacy),legacy_nav_changed:true})); });
+    }
+    if (url.pathname === '/fixture-upload-mobile') {
+        mobileRequests++;
+        check(options.method === 'POST' && options.body.get('csrf_token') === 'fixture-only' && options.body.get('return_context') === 'settings_uploads', 'Mobile manager keeps CSRF and scoped return context');
+        check(options.headers.Accept === 'application/json' && !options.body.has('settings[upload_overwrite]'), 'Mobile action uses JSON without saving global upload drafts');
+        const action = options.body.get('action');
+        if (rejectMobile) { rejectMobile = false; return json({ok:false,message:'Fixture mobile error'},422); }
+        return new Promise(/** Hold one mobile mutation for duplicate coverage. @param {function(Response):void} resolve Response consumer. @return {void} Stores release. */ resolve => { releaseMutation = /** Complete only the owned credential manager. @return {void} Returns typed completion. */ () => resolve(json({...envelope('mobile_upload',action,[77]),html:mobileMarkup(action === 'create' ? 'delete' : 'create')})); });
+    }
+    throw new Error('Unexpected confined request: ' + url.pathname);
+};
+
+try {
+    document.querySelector('#workspace').innerHTML = '<div data-admin-settings-workspace><nav data-admin-settings-navigation><div role="tablist"><a href="?section=general" data-admin-tab-target="settings-general">General<span data-admin-settings-draft-badge="general" hidden></span></a><a href="?section=uploads" data-admin-tab-target="settings-uploads">Uploads<span data-admin-settings-draft-badge="uploads" hidden></span></a></div></nav><section id="settings-general" class="admin-settings-section admin-tab-panel" data-admin-tab-panel><div data-admin-settings-feedback hidden></div><div data-admin-settings-content>' + formMarkup('general') + '</div></section><section id="settings-uploads" class="admin-settings-section admin-tab-panel" data-admin-tab-panel><div data-admin-settings-feedback hidden></div><div data-admin-settings-content>' + formMarkup('uploads') + '<section data-admin-settings-mobile data-mobile-load-url="/fixture-upload-mobile-load" data-mobile-loading-label="Loading mobile uploads" data-mobile-failed-label="Mobile failed"><div data-admin-settings-mobile-feedback hidden></div><p data-mobile-placeholder>Mobile uploads load when opened</p></section></div></section></div>';
+    setupAdminSettingsWorkspace(); setupAdminSettingsWorkspace();
+    const general = form('general');
+    const title = general.elements.namedItem('settings[site_name]');
+    title.value = 'Unsaved General title'; title.dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(/** Allow deferred initialization tasks to run before asserting laziness. @param {function():void} resolve Timer consumer. @return {number} Timer handle. */ resolve => setTimeout(resolve, 60));
+    check(mobileReads === 0 && document.querySelector('[data-mobile-placeholder]'), 'General initialization leaves mobile storage unloaded');
+    document.querySelector('[data-admin-tab-target="settings-uploads"]').click();
+    const uploadsUrl = location.href;
+    await until(/** Observe the held lazy read. @return {boolean} Whether loading started. */ () => releaseRead !== null);
+    check(mobileReads === 1 && !document.querySelector('[data-admin-settings-mobile-form]'), 'Uploads activation lazily loads once with a visible placeholder');
+    toggle('upload_overwrite',true);
+    check(form('uploads').querySelector('[data-admin-settings-save]').disabled, 'Editing upload preferences during mobile loading keeps Save locked');
+    document.querySelector('[data-admin-tab-target="settings-general"]').click();
+    document.querySelector('[data-admin-tab-target="settings-uploads"]').click();
+    check(mobileReads === 1, 'Repeated category activation deduplicates the pending mobile read');
+    releaseRead(); releaseRead = null;
+    await until(/** Observe loaded credential controls. @return {boolean} Whether create form exists. */ () => Boolean(document.querySelector('[data-admin-settings-mobile-form]')));
+    check(!form('uploads').querySelector('[data-admin-settings-save]').disabled && form('uploads').elements.namedItem('settings[upload_overwrite]').checked, 'Lazy completion unlocks the dirty upload Save without requiring another edit');
+    toggle('upload_overwrite',false);
+    check(general === form('general') && title.value === 'Unsaved General title' && location.href === uploadsUrl, 'Lazy completion preserves category drafts and URL');
+    for (const enabled of [true,false]) {
+        toggle('admin_legacy_upload_navigation_enabled',enabled);
+        form('uploads').requestSubmit();
+        await until(/** Observe held Settings mutation. @return {boolean} Whether saving started. */ () => releaseSettings !== null);
+        const count = settingsRequests;
+        form('uploads').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+        check(settingsRequests === count, 'Settings duplicate submits are suppressed');
+        releaseSettings(); releaseSettings = null;
+        await until(/** Observe fresh navigation and form. @return {boolean} Whether legacy state is rendered. */ () => document.querySelectorAll('.admin-sidebar [data-legacy]').length === (enabled ? 3 : 0) && !form('uploads').hasAttribute('aria-busy'));
+        check(location.href === uploadsUrl && document === documentIdentity && title.value === 'Unsaved General title', 'Legacy preference refreshes sidebar in place and preserves General drafts');
+    }
+    check(settingsRequests === 2, 'New Settings form remains intercepted for the second navigation toggle');
+    const uploads = form('uploads');
+    toggle('upload_overwrite',true);
+    for (const action of ['create','delete','create']) {
+        const mobileForm = document.querySelector('[data-admin-settings-mobile-form]');
+        check(mobileForm.elements.namedItem('action').value === action, 'Returned mobile manager exposes the next dynamic action');
+        mobileForm.requestSubmit();
+        await until(/** Observe held mobile mutation. @return {boolean} Whether saving started. */ () => releaseMutation !== null);
+        const count = mobileRequests;
+        mobileForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+        check(mobileRequests === count, 'Pending mobile action cannot submit twice');
+        releaseMutation(); releaseMutation = null;
+        await until(/** Observe replacement of the owned mobile fragment. @return {boolean} Whether previous form was removed. */ () => !mobileForm.isConnected);
+        check(form('uploads') === uploads && uploads.elements.namedItem('settings[upload_overwrite]').checked && title.value === 'Unsaved General title', 'Mobile mutations preserve unsaved upload and General drafts');
+        check(location.href === uploadsUrl && document === documentIdentity, 'Mobile actions keep current URL and document');
+    }
+    const failing = document.querySelector('[data-admin-settings-mobile-form]');
+    rejectMobile = true; failing.requestSubmit();
+    await until(/** Observe validation failure and unlocked controls. @return {boolean} Whether manager is usable. */ () => mobileRequests === 4 && !failing.hasAttribute('aria-busy') && !failing.querySelector('button').disabled);
+    check(failing.isConnected && document.body.textContent.includes('Fixture mobile error'), 'Mobile error retains its form and displays escaped feedback');
+    check(form('uploads') === uploads && uploads.elements.namedItem('settings[upload_overwrite]').checked && settingsRequests === 2, 'Failed mobile action does not save or replace upload preferences');
+    const mobileCompletions = completions.filter(/** Select mobile coordinator completions. @param {Record<string,unknown>} result Canonical completion. @return {boolean} Whether entity matches. */ result => result.mutation?.entity === 'mobile_upload');
+    check(mobileCompletions.length === 3, 'Every successful mobile action reaches the real shared coordinator');
+    check(mobileCompletions.map(/** Extract retained operation types. @param {Record<string,unknown>} result Coordinator record. @return {string} Canonical operation type. */ result => result.mutation.type).join(',') === 'mobile_upload.create,mobile_upload.delete,mobile_upload.create', 'Typed mobile create/delete metadata survives completion');
+    check(mobileCompletions.every(/** Verify stable credential identity. @param {Record<string,unknown>} result Coordinator record. @return {boolean} Whether ID is preserved. */ result => result.mutation.entity_ids[0] === 77), 'Shared coordinator preserves credential IDs');
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
+</script></body></html>

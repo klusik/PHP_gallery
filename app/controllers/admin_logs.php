@@ -814,6 +814,7 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
         'last_summary' => $lastSummary,
         'items' => $itemModels,
         'labels' => [
+            'details' => admin_log_english_t('admin.logs.details', 'Details'),
             'maintenance_title' => admin_log_english_t('admin.logs.archive.maintenance_title', 'Planned Admin log maintenance'),
             'maintenance_intro' => admin_log_english_t('admin.logs.archive.maintenance_intro', 'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.'),
             'zip_unavailable' => admin_log_english_t('admin.logs.archive.zip_unavailable', 'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.'),

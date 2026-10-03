@@ -193,6 +193,14 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
  */
 function source_declaration_snapshots(string $source, string $path): array
 {
+    if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['py', 'pyw'], true)) {
+        $snapshots = python_declaration_snapshots($source);
+        foreach ($snapshots as &$snapshot) {
+            $snapshot['path'] = $path;
+        }
+        unset($snapshot);
+        return $snapshots;
+    }
     if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['html', 'htm'], true)) {
         $snapshots = [];
         foreach (html_script_sources($source) as $script) {
@@ -278,7 +286,7 @@ function source_head_declaration_allowed(string $path): bool
     $filename = array_pop($parts);
     return $path !== 'config.php' && !str_starts_with((string) $filename, '.env')
         && array_intersect($parts, source_excluded_directories()) === []
-        && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs', 'html', 'htm'], true);
+        && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw'], true);
 }
 
 
@@ -289,16 +297,17 @@ function source_head_declaration_allowed(string $path): bool
  * @param string $root Exact repository root, or a disposable fixture root.
  * @param list<string> $paths Optional exact discovered paths for focused enforcement.
  * @param callable(list<string>,string):array{status:int,stdout:string}|null $git Injectable read-only Git transport for fixtures.
+ * @param string $base Immutable Git comparison ref; HEAD locally, first parent in CI.
  * @return array{status:string,summary:array<string,mixed>,findings:list<array<string,mixed>>,blocked:list<array{path:string,reason:string}>,coverage:array<string,string>} Bounded PASS/FAIL/BLOCKED evidence.
  */
-function changed_documentation_report(string $root, array $paths = [], ?callable $git = null): array
+function changed_documentation_report(string $root, array $paths = [], ?callable $git = null, string $base = 'HEAD'): array
 {
-    $report = ['status' => 'BLOCKED', 'summary' => ['base' => 'HEAD', 'source_files' => 0, 'changed_files' => 0,
+    $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'changed_files' => 0,
         'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0, 'doc_regressions' => 0, 'finding_count' => 0],
         'findings' => [], 'blocked' => [], 'coverage' => [
-            'scope' => 'Added/materially changed PHP, JS/MJS/CJS and inline HTML script declarations; doc-only regressions. Unchanged legacy debt remains visible in the whole-tree inventory.',
+            'scope' => 'Added/materially changed PHP, Python/PYW, JS/MJS/CJS and inline HTML script declarations; doc-only regressions. Unchanged legacy debt remains visible in the whole-tree inventory.',
             'identity' => 'Namespace/containing declaration identity and executable-token fingerprints; no line-number identity or baseline.',
-            'limitations' => 'Conservative JS lexer, complex types and semantic truthfulness require review. Changed Python/shell/PowerShell bodies and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate, not an application-callable gate.',
+            'limitations' => 'Conservative JS lexer, aliases/complex types and semantic truthfulness require review. Python lambdas cannot have native docstrings and are excluded. Changed shell/PowerShell bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
         ]];
     try {
         $root = realpath($root) ?: $root;
@@ -309,12 +318,15 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
         }
         $report['summary']['source_files'] = count($selected);
         $git ??= __NAMESPACE__ . '\\source_git_read';
+        if ($base === '' || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/.^~{}@-]*$/D', $base) !== 1) {
+            throw new \RuntimeException('Unsupported Git comparison ref.');
+        }
         $top = $git(['rev-parse', '--show-toplevel'], $root);
         if ($top['status'] !== 0 || strcasecmp(str_replace('\\', '/', trim($top['stdout'])), str_replace('\\', '/', $root)) !== 0) {
             throw new \RuntimeException('Git repository root unavailable or mismatched.');
         }
-        $tree = $git(['ls-tree', '-r', '-z', 'HEAD'], $root);
-        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', 'HEAD', '--'], $root);
+        $tree = $git(['ls-tree', '-r', '-z', $base], $root);
+        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', $base, '--'], $root);
         if ($tree['status'] !== 0 || $delta['status'] !== 0) {
             throw new \RuntimeException('Git HEAD or change list unavailable.');
         }
@@ -336,7 +348,7 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
                 if (!in_array($tracked[$path], ['100644', '100755'], true)) {
                     throw new \RuntimeException('Unsupported HEAD source mode.');
                 }
-                $blob = $git(['cat-file', 'blob', 'HEAD:' . $path], $root);
+                $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
                     throw new \RuntimeException('Required HEAD blob unreadable.');
                 }
@@ -349,7 +361,7 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
             if ($before === $after) {
                 continue;
             }
-            $supported = in_array($extension, ['php', 'js', 'mjs', 'cjs', 'html', 'htm'], true);
+            $supported = in_array($extension, ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw'], true);
             if (in_array($extension, ['css', 'yml', 'yaml', 'svg', 'tex', 'htaccess'], true)) {
                 continue; // Native header contract owns these non-application-callable formats.
             }
@@ -363,9 +375,9 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
             }
             if ($extension === 'php') {
                 token_get_all($after, TOKEN_PARSE);
-                if ($before !== '') {
-                    token_get_all($before, TOKEN_PARSE);
-                }
+                // Historical code may use syntax unsupported by the current runtime
+                // (for example PHP 8.1 repairing a standalone null return type).
+                // Compare old lexical tokens; only the current source must parse.
             }
             array_push($oldDeclarations, ...source_declaration_snapshots($before, $path));
             array_push($currentDeclarations, ...source_declaration_snapshots($after, $path));
@@ -376,7 +388,7 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
                     || !source_head_declaration_allowed($path) || !in_array($mode, ['100644', '100755'], true)) {
                     continue;
                 }
-                $blob = $git(['cat-file', 'blob', 'HEAD:' . $path], $root);
+                $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
                     throw new \RuntimeException('Deleted HEAD source unreadable.');
                 }

@@ -222,6 +222,12 @@ should_skip() {
     # Variable portable_relative stores this scripts working value.
     local portable_relative="${relative//\\//}"
 
+    # The active stylesheet belongs to the installation owner; deploying a local copy
+    # would overwrite their customization. Catalog templates remain deployable.
+    if [[ "$portable_relative" == "public/assets/custom.css" ]]; then
+        return 0
+    fi
+
     if [[ "$portable_relative" == "cache/.htaccess" \
         || "$portable_relative" == "galleries/.htaccess" \
         || "$portable_relative" == "data/admin-log-archives/.htaccess" \
