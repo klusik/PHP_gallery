@@ -44,7 +44,7 @@ use function Gallery\Services\t;
  */
 function view_render_admin_gallery_upload_automation_panel(array $viewModel): void
 {
-    echo '<section class="panel admin-upload-automation-panel admin-upload-automation-compact">';
+    echo '<section class="panel admin-upload-automation-panel admin-upload-automation-compact admin-gallery-api">';
     echo '<div class="admin-upload-automation-head"><h3>' . e(t('upload_automation.title', 'Watched-folder upload API')) . '</h3>';
     echo '<details class="admin-inline-help"><summary aria-label="' . e(t('upload_automation.help_label', 'About upload API keys')) . '" title="' . e(t('upload_automation.help_label', 'About upload API keys')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('upload_automation.help', 'Generate a gallery-scoped API key for the Windows companion app. The key can upload only into this gallery and can be revoked at any time.')) . ' ' . e(t('upload_automation.endpoint_help', 'Use this exact endpoint with the generated API key in the Windows uploader. The query-string front-controller form is the portable canonical API URL; clean /api/upload routing is treated only as a compatibility fallback.')) . '</div></details></div>';
 
@@ -53,7 +53,7 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
         return;
     }
 
-    echo '<div class="admin-upload-copy-row" data-admin-copy-row><label><span>' . e(t('upload_automation.endpoint', 'Upload endpoint')) . '</span><input type="text" readonly data-admin-copy-input value="' . e((string) ($viewModel['endpoint'] ?? '')) . '"></label>';
+    echo '<div class="admin-upload-copy-row admin-gallery-api-endpoint" data-admin-copy-row><label><span>' . e(t('upload_automation.endpoint', 'Upload endpoint')) . '</span><input type="text" readonly data-admin-copy-input value="' . e((string) ($viewModel['endpoint'] ?? '')) . '"></label>';
     echo '<button type="button" class="secondary admin-copy-icon" data-admin-copy-button data-copy-success="' . e(t('upload_automation.copied', 'Copied')) . '" aria-label="' . e(t('upload_automation.copy_endpoint', 'Copy endpoint')) . '" title="' . e(t('upload_automation.copy_endpoint', 'Copy endpoint')) . '"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status" aria-live="polite"></span></div>';
     if ((string) ($viewModel['new_token'] ?? '') !== '') {
         echo '<div class="admin-upload-copy-row admin-upload-new-key" data-admin-copy-row><label><span>' . e(t('upload_automation.new_key', 'New API key')) . '</span><input type="text" readonly data-admin-copy-input value="' . e((string) $viewModel['new_token']) . '"></label>';
@@ -61,7 +61,7 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
         echo '<p class="admin-upload-key-warning">' . e(t('upload_automation.copy_now', 'Copy this API key now. For security, only its hash is stored and the raw value will not be shown again.')) . '</p>';
     }
 
-    echo '<form method="post" action="' . e((string) ($viewModel['token_action_url'] ?? '')) . '" class="admin-upload-automation-form" data-admin-upload-automation-token-form="1">' . (string) ($viewModel['csrf_html'] ?? '');
+    echo '<form method="post" action="' . e((string) ($viewModel['token_action_url'] ?? '')) . '" class="admin-upload-automation-form admin-gallery-api-create" data-admin-upload-automation-token-form="1">' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="ajax" value="1"><input type="hidden" name="panel" value="1"><input type="hidden" name="gallery_id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
     echo '<input type="hidden" name="return_tab" value="' . e((string) ($viewModel['return_tab'] ?? '')) . '"><input type="hidden" name="return_url" value="' . e((string) ($viewModel['return_url'] ?? '')) . '"><input type="hidden" name="action" value="create">';
     echo '<label><span>' . e(t('upload_automation.label', 'Label')) . '</span><input type="text" name="label" value="' . e(t('upload_automation.folder_watcher', 'Folder watcher')) . '" maxlength="190"></label>';
@@ -69,7 +69,7 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
 
     $tokens = (array) ($viewModel['tokens'] ?? []);
     if ($tokens !== []) {
-        echo '<div class="admin-upload-automation-list"><h4>' . e(t('upload_automation.active_keys', 'Active API keys')) . ' (' . count($tokens) . ')</h4>';
+        echo '<div class="admin-upload-automation-list admin-gallery-api-list"><h4>' . e(t('upload_automation.active_keys', 'Active API keys')) . ' (' . count($tokens) . ')</h4>';
         echo '<table><thead><tr><th>' . e(t('upload_automation.label', 'Label')) . '</th><th>' . e(t('upload_automation.created', 'Created')) . '</th><th>' . e(t('upload_automation.last_used', 'Last used')) . '</th><th>' . e(t('upload_automation.action', 'Action')) . '</th></tr></thead><tbody>';
         foreach ($tokens as $token) {
             echo '<tr><td>' . e((string) ($token['label'] ?? t('upload_automation.folder_watcher', 'Folder watcher'))) . '</td><td>' . e((string) ($token['created_at'] ?? '')) . '</td><td>' . e((string) ($token['last_used_at'] ?? t('upload_automation.never', 'Never'))) . '</td>';

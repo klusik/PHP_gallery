@@ -32,6 +32,9 @@
 
 // Function `setupAdminTabs` executes this focused behavior.
 
+const adminI18nCatalogs = new Map();
+const adminI18nLoads = new Map();
+
 /**
  * Return a translated browser string with simple placeholder replacement.
  *
@@ -45,6 +48,86 @@ export function i18n(key, fallback, parameters = {}) {
     const strings = root.strings && typeof root.strings === 'object' ? root.strings : {};
     let text = typeof strings[key] === 'string' ? strings[key] : fallback;
     Object.entries(parameters).forEach(([name, value]) => {
+        text = text.split(`{${name}}`).join(String(value));
+    });
+    return text;
+}
+
+/**
+ * Load the translated Admin catalog for one injected Admin scope.
+ *
+ * @param {{language?: string, url?: string}|Element} scopeOrElement Scoped Admin metadata or an element inside the scope.
+ * @return {Promise<void>} Resolves when the matching Admin catalog is cached.
+ */
+export function loadAdminI18nScope(scopeOrElement) {
+    const scope = scopeOrElement instanceof Element
+        ? scopeOrElement.closest('[data-admin-i18n-scope]')
+        : null;
+    const language = String(scope?.dataset.adminI18nLanguage || scopeOrElement?.language || '');
+    const url = String(scope?.dataset.adminI18nUrl || scopeOrElement?.url || '');
+    if (language === '' || url === '') return Promise.resolve();
+    const safeUrl = new URL(url, window.location.href);
+    if (safeUrl.origin !== window.location.origin) return Promise.reject(new Error('Admin translations must use the current site.'));
+    if (adminI18nCatalogs.has(language)) return Promise.resolve();
+    const pending = adminI18nLoads.get(language);
+    if (pending) return pending;
+
+    const request = fetch(safeUrl.toString(), {credentials: 'same-origin', headers: {Accept: 'application/json'}})
+        .then(/** Validate and cache the requested Admin catalog.
+         * @param {Response} response Same-origin JSON response.
+         * @return {Promise<void>} Resolves after catalog caching.
+         */ async (response) => {
+            if (!response.ok) throw new Error(`Admin translations unavailable (${response.status}).`);
+            const payload = await response.json();
+            if (String(payload?.language || '') !== language || !payload?.strings || typeof payload.strings !== 'object') {
+                throw new Error('Admin translations returned an invalid catalog.');
+            }
+            adminI18nCatalogs.set(language, payload.strings);
+        })
+        .catch(/** Preserve catalog fetch failures for the caller's fallback path.
+         * @param {Error} error Catalog request or validation failure.
+         * @return {never} Rethrows the failure.
+         */ (error) => {
+            throw error;
+        }).finally(/** Release the in-flight cache entry after settlement.
+         * @return {void} Removes the settled catalog request.
+         */ () => {
+            adminI18nLoads.delete(language);
+        });
+    adminI18nLoads.set(language, request);
+    return request;
+}
+
+/**
+ * Return whether an injected Admin scope has finished loading its language catalog.
+ * @param {Element} element Candidate element in the mounted DOM.
+ * @return {boolean} Whether its Admin language is ready.
+ */
+export function adminI18nScopeReady(element) {
+    const scope = element.closest('[data-admin-i18n-scope]');
+    const language = String(scope?.dataset.adminI18nLanguage || '');
+    return scope === null || scope.dataset.adminI18nFailed === '1' || (language !== '' && adminI18nCatalogs.has(language));
+}
+
+/**
+ * Return a translated string using the nearest injected Admin language scope when present.
+ * @param {Element|null} element Element whose nearest Admin scope owns the string.
+ * @param {string} key Translation key.
+ * @param {string} fallback English fallback.
+ * @param {Object<string,string|number>} parameters Placeholder values.
+ * @return {string} Browser-facing translated text.
+ */
+export function i18nForElement(element, key, fallback, parameters = {}) {
+    const scope = element?.closest('[data-admin-i18n-scope]');
+    const language = String(scope?.dataset.adminI18nLanguage || '');
+    const catalog = language !== '' ? adminI18nCatalogs.get(language) : null;
+    let text = scope
+        ? (catalog && typeof catalog[key] === 'string' ? catalog[key] : fallback)
+        : i18n(key, fallback);
+    Object.entries(parameters).forEach(/** Replace one named interpolation token.
+     * @param {[string,string|number]} entry Placeholder name and value.
+     * @return {void} Updates the translated text.
+     */ ([name, value]) => {
         text = text.split(`{${name}}`).join(String(value));
     });
     return text;

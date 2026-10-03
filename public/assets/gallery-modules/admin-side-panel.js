@@ -33,7 +33,7 @@
 import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261003-images-v4';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
-import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
+import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261003-scoped-i18n-v2';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261002-overview-navigation-v1';
@@ -41,14 +41,15 @@ import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-ci
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
-import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
+import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260920-operation-keys-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
-import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20260920-operation-keys-v1';
+import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261003-scoped-i18n-v1';
 import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
+import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
 
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.
@@ -58,6 +59,7 @@ import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOper
  * @property {string} [title] Localized main heading for a newly opened workflow.
  * @property {string} [loadingMessage] Initial GET progress text.
  * @property {string} [loadErrorMessage] Initial GET failure text.
+ * @property {{language:string,url:string,failed?:boolean}|null} [adminI18n] Scoped Admin browser catalog metadata.
  */
 
 /**
@@ -785,7 +787,17 @@ async function openAdminGallerySidePanel(link) {
     if (!allowAdminPanelTransition(panel, /** Resume this explicit open only after the draft/context guard permits it. @return {Promise<void>} Loads the requested workflow without submitting the old form. */ () => openAdminGallerySidePanel(link))) return;
     const owner = beginAdminPanelOpen(panel, link);
     const workflow = sidePanelWorkflowFromLink(link);
-    setAdminGallerySidePanelHeading(panel, workflow.kicker, workflow.title);
+    workflow.adminI18n = adminI18nScopeFromLink(link);
+    if (workflow.adminI18n) {
+        applyAdminI18nScope(panel, workflow.adminI18n);
+        try { await loadAdminI18nScope(workflow.adminI18n); } catch { panel.dataset.adminI18nFailed = '1'; }
+        if (!owner.isCurrent()) return;
+        workflow.loadingMessage = i18nForElement(panel, 'admin.side_panel.loading_gallery_editor', workflow.loadingMessage);
+        workflow.loadErrorMessage = i18nForElement(panel, 'admin.side_panel.gallery_editor_load_failed', workflow.loadErrorMessage);
+        localizeAdminGalleryEditPanel(panel);
+    }
+    setAdminGallerySidePanelHeading(panel, workflow.adminI18n ? i18nForElement(panel, 'admin.side_panel.gallery_editor_kicker', workflow.kicker) : workflow.kicker,
+        workflow.adminI18n ? i18nForElement(panel, 'admin.side_panel.edit_gallery', workflow.title) : workflow.title);
     panel.dataset.adminSidePanelWorkflow = workflow.name;
     panel.dataset.adminSidePanelSourceUrl = '';
     panel.classList.toggle('is-edit-panel', workflow.name !== 'create');
@@ -812,16 +824,23 @@ async function openAdminGallerySidePanel(link) {
             throw new Error(workflow.loadErrorMessage);
         }
         const content = sidePanelContentFromHtml(html, workflow);
+        if (workflow.adminI18n) {
+            try { await loadAdminI18nScope(workflow.adminI18n); } catch { workflow.adminI18n.failed = true; }
+            if (!owner.isCurrent()) return;
+            applyAdminI18nScope(panel, workflow.adminI18n);
+            localizeAdminGalleryEditPanel(panel);
+        }
         if (!owner.isCurrent()) return;
         body.innerHTML = content;
         panel.dataset.adminSidePanelSourceUrl = response.url || url.toString();
-        prepareAdminSidePanelLoadedContent(body, workflow, response.url || url.toString());
+        await prepareAdminSidePanelLoadedContent(body, workflow, response.url || url.toString());
         writeAdminGallerySidePanelStatus(panel, '', false);
         if (owner.isCurrent()) focusAdminPanelContent(panel);
     } catch (error) {
         if (!owner.isCurrent() || error?.name === 'AbortError') return;
-        writeAdminGallerySidePanelStatus(panel, error.message || workflow.loadErrorMessage, true);
-        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} ${escapeHtmlText(i18n('admin.side_panel.use_normal_page_prefix', 'Use the normal admin page instead:'))} <a href="${escapeHtmlAttribute(link.href)}">${escapeHtmlText(i18n('admin.side_panel.open_directly', 'open directly'))}</a>.</div>`;
+        const loadFailure = error.message || i18nForElement(panel, 'admin.side_panel.gallery_editor_load_failed', workflow.loadErrorMessage);
+        writeAdminGallerySidePanelStatus(panel, loadFailure, true);
+        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(loadFailure)} ${escapeHtmlText(i18nForElement(panel, 'admin.side_panel.use_normal_page_prefix', 'Use the normal admin page instead:'))} <a href="${escapeHtmlAttribute(link.href)}">${escapeHtmlText(i18nForElement(panel, 'admin.side_panel.open_directly', 'open directly'))}</a>.</div>`;
         focusAdminPanelContent(panel);
     }
 }
@@ -926,7 +945,94 @@ function setAdminGallerySidePanelHeading(panel, kicker, title) {
 }
 
 /**
- * Extract a workflow fragment from a trusted same-origin server-rendered response.
+ * Resolve the scoped Admin catalog endpoint from the public edit link.
+ * @param {HTMLAnchorElement} link Public gallery edit entry point.
+ * @return {{language:string,url:string}|null} Prepared scope metadata, or null when unavailable.
+ */
+function adminI18nScopeFromLink(link) {
+    const language = String(link.dataset.adminI18nLanguage || '');
+    if (language === '') return null;
+    const source = Array.from(document.querySelectorAll('script[src]')).map(/** Parse one localizable asset script URL.
+     * @param {HTMLScriptElement} script Script that may own the browser catalog route.
+     * @return {URL|null} Parsed script URL when valid.
+     */ (script) => {
+        try { return new URL(script.getAttribute('src') || '', window.location.href); } catch { return null; }
+    }).find(/** Select the script that provides browser translation assets.
+     * @param {URL|null} url Candidate script URL.
+     * @return {boolean} Whether its route is a browser translation endpoint.
+     */ (url) => url instanceof URL && (url.searchParams.get('page') === 'browser_i18n' || url.searchParams.get('page') === 'admin_browser_i18n'));
+    if (!(source instanceof URL)) return null;
+    source.searchParams.set('page', 'admin_browser_i18n');
+    source.searchParams.set('scope', 'admin');
+    source.searchParams.set('format', 'json');
+    source.searchParams.set('lang', language);
+    return {language, url: source.toString()};
+}
+
+/**
+ * Resolve the scoped Admin catalog endpoint from a fetched full Admin document.
+ * @param {Document} parsed Parsed server response document.
+ * @return {{language:string,url:string}|null} Prepared scope metadata, or null when unavailable.
+ */
+function adminI18nScopeFromDocument(parsed) {
+    const language = String(parsed.documentElement?.lang || '');
+    if (language === '') return null;
+    const source = Array.from(parsed.querySelectorAll('script[src]')).map(/** Parse one localizable asset script URL.
+     * @param {HTMLScriptElement} script Script that may own the browser catalog route.
+     * @return {URL|null} Parsed script URL when valid.
+     */ (script) => {
+        try { return new URL(script.getAttribute('src') || '', window.location.href); } catch { return null; }
+    }).find(/** Select the script that provides browser translation assets.
+     * @param {URL|null} url Candidate script URL.
+     * @return {boolean} Whether its route is a browser translation endpoint.
+     */ (url) => url instanceof URL && (url.searchParams.get('page') === 'admin_browser_i18n' || url.searchParams.get('page') === 'browser_i18n'));
+    if (!(source instanceof URL)) return null;
+    source.searchParams.set('page', 'admin_browser_i18n');
+    source.searchParams.set('scope', 'admin');
+    source.searchParams.set('format', 'json');
+    source.searchParams.set('lang', language);
+    return {language, url: source.toString()};
+}
+
+/**
+ * Attach Admin language metadata to the side-panel shell.
+ * @param {HTMLElement} panel Side-panel shell.
+ * @param {{language:string,url:string,failed?:boolean}} scope Prepared language catalog scope.
+ * @return {void} Sets the shell language and catalog attributes.
+ */
+function applyAdminI18nScope(panel, scope) {
+    panel.dataset.adminI18nScope = 'true';
+    panel.dataset.adminI18nLanguage = scope.language;
+    panel.dataset.adminI18nUrl = scope.url;
+    panel.setAttribute('lang', scope.language);
+    if (scope.failed) panel.dataset.adminI18nFailed = '1';
+    else delete panel.dataset.adminI18nFailed;
+}
+
+/**
+ * Apply scoped Admin translations to the gallery-edit shell labels.
+ * @param {HTMLElement} panel Side-panel shell with scoped Admin language data.
+ * @return {void} Updates the close control and heading.
+ */
+function localizeAdminGalleryEditPanel(panel) {
+    const close = panel.querySelector('[data-admin-side-panel-close]');
+    if (close instanceof HTMLButtonElement) close.textContent = i18nForElement(panel, 'admin.side_panel.close', 'Close');
+    setAdminGallerySidePanelHeading(panel,
+        i18nForElement(panel, 'admin.side_panel.gallery_editor_kicker', 'Gallery editor'),
+        i18nForElement(panel, 'admin.side_panel.edit_gallery', 'Edit gallery'));
+}
+
+/**
+ * Serialize safe Admin locale metadata for an injected workspace wrapper.
+ * @param {{language:string,url:string,failed?:boolean}} scope Prepared language catalog scope.
+ * @return {string} Escaped HTML attributes for the wrapper.
+ */
+function adminI18nScopeAttributes(scope) {
+    return ` lang="${escapeHtmlAttribute(scope.language)}" data-admin-i18n-scope data-admin-i18n-language="${escapeHtmlAttribute(scope.language)}" data-admin-i18n-url="${escapeHtmlAttribute(scope.url)}"${scope.failed ? ' data-admin-i18n-failed="1"' : ''}`;
+}
+
+/**
+ * Extract an authorized server-rendered fragment for the side panel.
  *
  * This is layout extraction, not an HTML sanitizer. It removes the development panel
  * from full-page responses but relies on server view escaping and authorization.
@@ -937,9 +1043,15 @@ function setAdminGallerySidePanelHeading(panel, kicker, title) {
 function sidePanelContentFromHtml(html, workflow) {
     const trimmed = html.trim();
     if (trimmed.startsWith('<div') || trimmed.startsWith('<section')) {
+        if (workflow.name === 'gallery-edit' && workflow.adminI18n && !trimmed.includes('data-admin-i18n-scope')) {
+            return `<div class="admin-side-panel-stack admin-side-panel-edit-workspace" data-admin-edit-panel-workspace="gallery-edit"${adminI18nScopeAttributes(workflow.adminI18n)}>${trimmed}</div>`;
+        }
         return trimmed;
     }
     const parsed = new DOMParser().parseFromString(html, 'text/html');
+    if (workflow.name === 'gallery-edit') {
+        workflow.adminI18n = adminI18nScopeFromDocument(parsed) || workflow.adminI18n || null;
+    }
     if (workflow.name === 'smart-gallery') {
         const smartGalleryWorkspace = parsed.querySelector('[data-smart-gallery-editor-workspace]');
         if (smartGalleryWorkspace instanceof HTMLElement) {
@@ -956,7 +1068,9 @@ function sidePanelContentFromHtml(html, workflow) {
         if (devModePanel instanceof HTMLElement) {
             devModePanel.remove();
         }
-        return `<div class="admin-side-panel-stack admin-side-panel-edit-workspace" data-admin-edit-panel-workspace="${escapeHtmlAttribute(workflow.name)}">${main.innerHTML}</div>`;
+        const scope = workflow.name === 'gallery-edit' && workflow.adminI18n ? workflow.adminI18n : null;
+        const scopeAttributes = scope ? adminI18nScopeAttributes(scope) : '';
+        return `<div class="admin-side-panel-stack admin-side-panel-edit-workspace" data-admin-edit-panel-workspace="${escapeHtmlAttribute(workflow.name)}"${scopeAttributes}>${main.innerHTML}</div>`;
     }
     return trimmed;
 }
@@ -967,15 +1081,23 @@ function sidePanelContentFromHtml(html, workflow) {
  * @param {HTMLElement} body Side-panel body element.
  * @param {AdminPanelWorkflow} workflow Prepared form-binding identity; initial opens also provide presentation text.
  * @param {string} sourceUrl URL that produced the loaded content.
- * @return {void} Binds injected controls and establishes the ordinary form's text baseline.
+ * @return {Promise<void>} Loads any scoped Admin catalog, binds controls and establishes the ordinary form's text baseline.
  */
-function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
+async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
+    const workspace = body.querySelector('[data-admin-i18n-scope]');
+    if (workspace instanceof HTMLElement) {
+        try { await loadAdminI18nScope(workspace); } catch { workspace.dataset.adminI18nFailed = '1'; }
+    }
     setupGalleryUploadProgress();
     setupAdminTabsInRoot(body);
     setupAdminNestedTabs(body);
-    setupAdminPanelRangeDisplays(body);
+    setupAdminGalleryGridControls(body);
     setupAdminPanelThumbnailBoundControls(body);
     setupTagSuggestions(body);
+    if (workspace instanceof HTMLElement) {
+        const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261003-scoped-i18n-v1');
+        setupAdminDatePickers(body);
+    }
     setupGallerySearchPickers();
     setupImageBulkMoveFields();
     if (workflow.name === 'gallery-edit') {
@@ -1073,42 +1195,6 @@ function prepareAdminPanelBulkForm(formCandidate) {
  * @param {HTMLElement} root Side-panel body element.
  * @return {void} Binds each unbound grid slider and synchronizes its initial label.
  */
-function setupAdminPanelRangeDisplays(root) {
-    const pairs = [
-        ['[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]'],
-        ['[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]'],
-    ];
-    pairs.forEach(/** Bind a grid slider and its label as an idempotent pair. @param {[string, string]} selectors Tuple destructured into control and display selectors. @return {void} Binds input/change once and synchronizes the initial label. */ ([controlSelector, displaySelector]) => {
-        const control = root.querySelector(controlSelector);
-        const display = root.querySelector(displaySelector);
-        if (!(control instanceof HTMLInputElement) || !(display instanceof HTMLElement) || control.dataset.adminPanelRangeBound === '1') {
-            return;
-        }
-        control.dataset.adminPanelRangeBound = '1';
-        const override = root.querySelector('[data-gallery-grid-override-enabled]');
-        /**
-         * Copy the grid slider value to its associated text label.
-         * @return {void} Updates presentation text without submitting the form.
-         */
-        const sync = () => {
-            display.textContent = control.value;
-        };
-        /**
-         * Mark a user-adjusted grid dimension as an explicit override and refresh its label.
-         * @return {void} Checks the override control when present and synchronizes its display.
-         */
-        const markCustom = () => {
-            if (override instanceof HTMLInputElement) {
-                override.checked = true;
-            }
-            sync();
-        };
-        control.addEventListener('input', markCustom);
-        control.addEventListener('change', markCustom);
-        sync();
-    });
-}
-
 /**
  * Keep thumbnail-bound slider pairs synchronized inside dynamically loaded panel content.
  *
@@ -1523,7 +1609,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
             const restoreFocus = preserveAdminPanelFocus(panel);
             bodyElement.innerHTML = sidePanelContentFromHtml(html, workflow);
             panel.dataset.adminSidePanelSourceUrl = response.url || actionUrl.toString();
-            prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
+            await prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
             const titleInput = bodyElement.querySelector('[data-smart-gallery-editor] input[name="title"]');
             if (titleInput instanceof HTMLInputElement && titleInput.value.trim() !== '') {
                 setAdminGallerySidePanelHeading(panel, workflow.kicker, titleInput.value.trim());
@@ -2297,7 +2383,7 @@ async function refreshAdminSidePanelFromServer(sourceUrl = '', completionGuard =
         const restoreFocus = preserveAdminPanelFocus(panel);
         body.innerHTML = sidePanelContentFromHtml(html, {name: workflowName});
         panel.dataset.adminSidePanelSourceUrl = resolvedUrl;
-        prepareAdminSidePanelLoadedContent(body, {name: workflowName}, resolvedUrl);
+        await prepareAdminSidePanelLoadedContent(body, {name: workflowName}, resolvedUrl);
         if (activeTabId) {
             activateAdminTabInRoot(body, activeTabId);
         }

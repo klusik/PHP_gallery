@@ -329,6 +329,19 @@ function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
         $editorInput = array_key_exists('simbrief_identifier', $_POST)
             ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)
             : $_POST;
+        $simbriefDraft = null;
+        $simbriefDraftRef = trim((string) ($editorInput['simbrief_draft_ref'] ?? ''));
+        if ($simbriefDraftRef !== '') {
+            if (!feature_capability_effective_enabled('simbrief')) {
+                throw new \RuntimeException(t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                    'feature' => t('admin.features.simbrief.label', 'SimBrief'),
+                ]));
+            }
+            $simbriefDraft = \Gallery\Services\simbrief_description_draft_read(
+                (int) (\Gallery\Core\current_user()['id'] ?? 0),
+                $simbriefDraftRef
+            );
+        }
         $rememberDefaults = !empty($editorInput['remember_simbrief_pilot_id'])
             || !empty($editorInput['remember_simbrief_pilot_name'])
             || !empty($editorInput['remember_content_language']);
@@ -356,6 +369,19 @@ function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
     $gallery = $saveResult['gallery'] ?? $gallery;
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($saveResult['notice'] ?? t('admin.gallery_editor.notice_saved', 'Gallery saved.'));
+    if (is_array($simbriefDraft)) {
+        try {
+            $attached = \Gallery\Services\simbrief_description_draft_attach($gallery, $simbriefDraft);
+            if (empty($attached['ofp']['saved'])) {
+                $notice .= ' ' . t('admin.simbrief.create_ofp_warning', 'The gallery was saved, but its SimBrief OFP could not be saved.');
+            }
+            if (empty($attached['route']['saved'])) {
+                $notice .= ' ' . t('admin.simbrief.create_route_warning', 'The gallery was saved, but its SimBrief route map could not be saved.');
+            }
+        } catch (Throwable $exception) {
+            $notice .= ' ' . t('admin.simbrief.create_attach_warning', 'The gallery was saved, but the SimBrief flight data could not be attached.');
+        }
+    }
     if ($rememberDefaults) {
         try {
             \Gallery\Services\gallery_creation_preferences_remember((int) (\Gallery\Core\current_user()['id'] ?? 0), $editorInput);

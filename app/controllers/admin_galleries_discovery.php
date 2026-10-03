@@ -560,6 +560,7 @@ function admin_new_gallery_input_from_array(array $input): array
         'count_badge_visibility' => $input['count_badge_visibility'] ?? 'inherit',
         'tags' => $input['tags'] ?? '',
         'content_language' => $input['content_language'] ?? '',
+        'translations' => is_array($input['translations'] ?? null) ? $input['translations'] : [],
         'simbrief_draft_ref' => $input['simbrief_draft_ref'] ?? '',
         'simbrief_pilot_id' => $input['simbrief_pilot_id'] ?? '',
         'simbrief_pilot_name' => $input['simbrief_pilot_name'] ?? '',
@@ -687,6 +688,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
     $formModel = admin_gallery_form_view_model('gallery');
     if ($workflow === 'create' && request_method() === 'POST') {
         $formModel['submitted'] = admin_new_gallery_input_from_post();
+        $formModel['localization']['translations'] = $formModel['submitted']['translations'];
         $formModel['date']['start_value'] = (string) ($_POST['gallery_date'] ?? '');
         $formModel['date']['end_value'] = (string) ($_POST['gallery_date_end'] ?? '');
         $prefillParentId = (int) ($_POST['parent_id'] ?? $prefillParentId);
@@ -719,6 +721,7 @@ function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefi
     $formModel = admin_gallery_form_view_model('gallery');
     if ($error !== '' && request_method() === 'POST') {
         $formModel['submitted'] = admin_new_gallery_input_from_post();
+        $formModel['localization']['translations'] = $formModel['submitted']['translations'];
         $formModel['date']['start_value'] = (string) ($_POST['gallery_date'] ?? '');
         $formModel['date']['end_value'] = (string) ($_POST['gallery_date_end'] ?? '');
         $prefillParentId = (int) ($_POST['parent_id'] ?? $prefillParentId);

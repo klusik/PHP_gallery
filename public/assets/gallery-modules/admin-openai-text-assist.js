@@ -31,10 +31,11 @@
  *   2026-05-29
  */
 
-import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 /**
  * Attach OpenAI text-assistance behavior to admin editor controls.
+ * @return {void} Installs delegated handlers for single and bulk generation.
  */
 export function setupOpenAITextAssist() {
     if (document.body?.dataset.openaiTextAssistBound === '1') {
@@ -102,9 +103,10 @@ function buildOpenAIBaseBody(tool, form) {
  *
  * @param {string} endpoint Endpoint URL.
  * @param {FormData} body Request payload.
+ * @param {HTMLElement} contextElement OpenAI tool owning the request.
  * @return {Promise<Record<string, *>>} Parsed JSON response.
  */
-async function postOpenAIJson(endpoint, body) {
+async function postOpenAIJson(endpoint, body, contextElement) {
     const response = await fetch(endpoint, {
         method: 'POST',
         body,
@@ -114,9 +116,9 @@ async function postOpenAIJson(endpoint, body) {
             'X-Requested-With': 'XMLHttpRequest',
         },
     });
-    const result = await readOpenAIJson(response);
+    const result = await readOpenAIJson(response, contextElement);
     if (!response.ok || !result.ok) {
-        throw new Error(String(result.error || result.message || i18n('admin.openai.js_failed', 'OpenAI text generation failed.')));
+        throw new Error(String(result.error || result.message || i18nForElement(contextElement, 'admin.openai.js_failed', 'OpenAI text generation failed.')));
     }
     return result;
 }
@@ -126,18 +128,19 @@ async function postOpenAIJson(endpoint, body) {
  *
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {HTMLButtonElement} button Generate button.
+ * @return {Promise<void>} Requests and inserts a generated suggestion or status error.
  */
 async function generateOpenAITextSuggestion(tool, button) {
     const form = tool.closest('form');
     if (!(form instanceof HTMLFormElement)) {
-        setOpenAIStatus(tool, i18n('admin.openai.js_missing_form', 'The gallery form could not be found.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_missing_form', 'The gallery form could not be found.'), true);
         return;
     }
 
     const targetSelector = String(tool.dataset.openaiTargetSelector || '[data-gallery-description-textarea], [data-openai-description-textarea]').trim();
     const textarea = form.querySelector(targetSelector);
     if (!(textarea instanceof HTMLTextAreaElement) && !(textarea instanceof HTMLInputElement)) {
-        setOpenAIStatus(tool, i18n('admin.openai.js_missing_textarea', 'The description field could not be found.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_missing_textarea', 'The description field could not be found.'), true);
         return;
     }
 
@@ -148,26 +151,26 @@ async function generateOpenAITextSuggestion(tool, button) {
     const sourceField = sourceSelector !== '' ? form.querySelector(sourceSelector) : textarea;
     const sourceText = sourceField instanceof HTMLTextAreaElement || sourceField instanceof HTMLInputElement ? sourceField.value.trim() : '';
     if (task === 'translate_text' && sourceText === '') {
-        setOpenAIStatus(tool, i18n('admin.openai.js_translation_requires_text', 'Add source text before requesting a translation suggestion.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_translation_requires_text', 'Add source text before requesting a translation suggestion.'), true);
         return;
     }
     if ((task === 'cleanup_text' || task === 'expand_text') && currentText === '') {
-        setOpenAIStatus(tool, i18n('admin.openai.js_requires_text', 'This action needs existing description text first.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_requires_text', 'This action needs existing description text first.'), true);
         return;
     }
 
-    if (taskUsesImages(task) && !window.confirm(i18n('admin.openai.js_visual_confirm', 'This action will send one or more small generated thumbnails, not the original files, to OpenAI. Continue?'))) {
+    if (taskUsesImages(task) && !window.confirm(i18nForElement(tool, 'admin.openai.js_visual_confirm', 'This action will send one or more small generated thumbnails, not the original files, to OpenAI. Continue?'))) {
         return;
     }
 
-    if (textarea.value.trim() !== '' && !window.confirm(i18n('admin.openai.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'))) {
+    if (textarea.value.trim() !== '' && !window.confirm(i18nForElement(tool, 'admin.openai.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'))) {
         return;
     }
 
     const endpoint = String(tool.dataset.openaiEndpoint || '').trim();
     const csrfToken = String(form.querySelector('input[name="csrf_token"]')?.value || '').trim();
     if (endpoint === '' || csrfToken === '') {
-        setOpenAIStatus(tool, i18n('admin.openai.js_not_configured', 'OpenAI text assistance is not configured correctly on this page.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_not_configured', 'OpenAI text assistance is not configured correctly on this page.'), true);
         return;
     }
 
@@ -178,20 +181,20 @@ async function generateOpenAITextSuggestion(tool, button) {
     body.set('title', String(form.querySelector('input[name="title"]')?.value || ''));
 
     button.disabled = true;
-    setOpenAIStatus(tool, i18n('admin.openai.js_generating', 'Generating OpenAI text suggestion...'), false);
+    setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_generating', 'Generating OpenAI text suggestion...'), false);
     try {
-        const result = await postOpenAIJson(endpoint, body);
+        const result = await postOpenAIJson(endpoint, body, tool);
         const generatedText = String(result.text || '').trim();
         if (generatedText === '') {
-            throw new Error(i18n('admin.openai.js_empty', 'OpenAI returned an empty suggestion.'));
+            throw new Error(i18nForElement(tool, 'admin.openai.js_empty', 'OpenAI returned an empty suggestion.'));
         }
         textarea.value = generatedText;
         textarea.dispatchEvent(new Event('input', {bubbles: true}));
         textarea.dispatchEvent(new Event('change', {bubbles: true}));
         textarea.focus({preventScroll: true});
-        setOpenAIStatus(tool, String(result.message || i18n('admin.openai.js_generated', 'Suggestion inserted. Save the edited item to keep it.')), false);
+        setOpenAIStatus(tool, String(result.message || i18nForElement(tool, 'admin.openai.js_generated', 'Suggestion inserted. Save the edited item to keep it.')), false);
     } catch (error) {
-        setOpenAIStatus(tool, error instanceof Error ? error.message : i18n('admin.openai.js_failed', 'OpenAI text generation failed.'), true);
+        setOpenAIStatus(tool, error instanceof Error ? error.message : i18nForElement(tool, 'admin.openai.js_failed', 'OpenAI text generation failed.'), true);
     } finally {
         button.disabled = false;
     }
@@ -202,37 +205,38 @@ async function generateOpenAITextSuggestion(tool, button) {
  *
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {HTMLButtonElement} button Bulk button.
+ * @return {Promise<void>} Generates and persists each selected photo description sequentially.
  */
 async function generateOpenAIBulkPhotoDescriptions(tool, button) {
     const form = tool.closest('form');
     if (!(form instanceof HTMLFormElement)) {
-        setOpenAIStatus(tool, i18n('admin.openai.js_missing_form', 'The gallery form could not be found.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_missing_form', 'The gallery form could not be found.'), true);
         return;
     }
 
     const endpoint = String(tool.dataset.openaiEndpoint || '').trim();
     const csrfToken = String(form.querySelector('input[name="csrf_token"]')?.value || '').trim();
     if (endpoint === '' || csrfToken === '') {
-        setOpenAIStatus(tool, i18n('admin.openai.js_not_configured', 'OpenAI text assistance is not configured correctly on this page.'), true);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_not_configured', 'OpenAI text assistance is not configured correctly on this page.'), true);
         return;
     }
 
     button.disabled = true;
-    setOpenAIStatus(tool, i18n('admin.openai.js_bulk_counting', 'Counting photos for bulk description...'), false);
+    setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_bulk_counting', 'Counting photos for bulk description...'), false);
     try {
         const countBody = buildOpenAIBaseBody(tool, form);
         countBody.set('bulk_action', 'count_gallery_images');
-        const countResult = await postOpenAIJson(endpoint, countBody);
+        const countResult = await postOpenAIJson(endpoint, countBody, tool);
         const imageIds = Array.isArray(countResult.image_ids) ? countResult.image_ids.map((value) => Number.parseInt(String(value), 10)).filter((value) => Number.isFinite(value) && value > 0) : [];
         const count = Number.parseInt(String(countResult.count || imageIds.length || 0), 10);
         if (count <= 0 || imageIds.length === 0) {
-            setOpenAIStatus(tool, i18n('admin.openai.js_bulk_no_photos', 'This gallery has no photos to describe.'), false);
+            setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_bulk_no_photos', 'This gallery has no photos to describe.'), false);
             return;
         }
 
-        const confirmation = window.prompt(i18n('admin.openai.js_bulk_confirm', 'This will generate and save descriptions for {count} photo(s), one OpenAI request per photo. Existing descriptions may be replaced. Type {count} to continue.').replaceAll('{count}', String(count)));
+        const confirmation = window.prompt(i18nForElement(tool, 'admin.openai.js_bulk_confirm', 'This will generate and save descriptions for {count} photo(s), one OpenAI request per photo. Existing descriptions may be replaced. Type {count} to continue.', {count}));
         if (confirmation !== String(count)) {
-            setOpenAIStatus(tool, i18n('admin.openai.js_bulk_cancelled', 'Bulk photo description cancelled.'), false);
+            setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_bulk_cancelled', 'Bulk photo description cancelled.'), false);
             return;
         }
 
@@ -242,9 +246,9 @@ async function generateOpenAIBulkPhotoDescriptions(tool, button) {
             const body = buildOpenAIBaseBody(tool, form);
             body.set('bulk_action', 'generate_gallery_image');
             body.set('image_id', String(imageId));
-            setOpenAIStatus(tool, i18n('admin.openai.js_bulk_progress', 'Generating photo descriptions: {done}/{total} complete, {failed} failed.').replace('{done}', String(completed)).replace('{total}', String(count)).replace('{failed}', String(failed)), false);
+            setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_bulk_progress', 'Generating photo descriptions: {done}/{total} complete, {failed} failed.', {done: completed, total: count, failed}), false);
             try {
-                await postOpenAIJson(endpoint, body);
+                await postOpenAIJson(endpoint, body, tool);
                 completed += 1;
             } catch (error) {
                 failed += 1;
@@ -252,9 +256,9 @@ async function generateOpenAIBulkPhotoDescriptions(tool, button) {
             }
         }
 
-        setOpenAIStatus(tool, i18n('admin.openai.js_bulk_done', 'Bulk photo descriptions finished: {done}/{total} saved, {failed} failed.').replace('{done}', String(completed)).replace('{total}', String(count)).replace('{failed}', String(failed)), failed > 0);
+        setOpenAIStatus(tool, i18nForElement(tool, 'admin.openai.js_bulk_done', 'Bulk photo descriptions finished: {done}/{total} saved, {failed} failed.', {done: completed, total: count, failed}), failed > 0);
     } catch (error) {
-        setOpenAIStatus(tool, error instanceof Error ? error.message : i18n('admin.openai.js_failed', 'OpenAI text generation failed.'), true);
+        setOpenAIStatus(tool, error instanceof Error ? error.message : i18nForElement(tool, 'admin.openai.js_failed', 'OpenAI text generation failed.'), true);
     } finally {
         button.disabled = false;
     }
@@ -264,19 +268,20 @@ async function generateOpenAIBulkPhotoDescriptions(tool, button) {
  * Parse an admin JSON response and convert HTML errors into a readable message.
  *
  * @param {Response} response Fetch response.
+ * @param {HTMLElement} contextElement Element owning this Admin request.
  * @return {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
  */
-async function readOpenAIJson(response) {
+async function readOpenAIJson(response, contextElement) {
     const text = await response.text();
     try {
         const parsed = JSON.parse(text);
-        return parsed && typeof parsed === 'object' ? parsed : {ok: false, error: i18n('admin.openai.js_invalid_json', 'The server returned an invalid OpenAI response.')};
+        return parsed && typeof parsed === 'object' ? parsed : {ok: false, error: i18nForElement(contextElement, 'admin.openai.js_invalid_json', 'The server returned an invalid OpenAI response.')};
     } catch (error) {
         return {
             ok: false,
             error: text.trim().startsWith('<')
-                ? i18n('admin.openai.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.')
-                : (text.trim() || i18n('admin.openai.js_invalid_json', 'The server returned an invalid OpenAI response.')),
+                ? i18nForElement(contextElement, 'admin.openai.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.')
+                : (text.trim() || i18nForElement(contextElement, 'admin.openai.js_invalid_json', 'The server returned an invalid OpenAI response.')),
         };
     }
 }
@@ -287,6 +292,7 @@ async function readOpenAIJson(response) {
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {string} message Status text.
  * @param {boolean} failed True when the status is an error.
+ * @return {void} Updates the tool's status message and error styling.
  */
 function setOpenAIStatus(tool, message, failed) {
     const status = tool.querySelector('[data-openai-status]');

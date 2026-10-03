@@ -1,0 +1,266 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-gallery-media.css
+ * Module Type: Stylesheet
+ * Purpose: Compact gallery Media, Organizer, and File Renamer workspaces.
+ * Responsibilities:
+ *   - Keep related fields and preview actions together in gallery editors
+ *   - Keep tables and upload controls usable at narrow panel widths
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) {
+    container: gallery-media-tools / inline-size;
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) :is(h2, h3, p, label, fieldset, form) {
+    margin: 0;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) :is(h2, h3) {
+    font-size: 0.9rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) :is(.admin-gallery-media-heading, .admin-metadata-organizer-heading, .admin-media-renamer-heading) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+}
+
+:is(#admin-edit-media, #admin-edit-renamer) .admin-kicker { display: none; }
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) .admin-inline-help > summary {
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.85rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) .admin-inline-help-content {
+    box-sizing: border-box;
+    width: min(25rem, calc(100cqw - 1rem));
+    font-size: 0.82rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) label {
+    font-size: 0.82rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) :is(input:not([type="checkbox"]):not([type="hidden"]), select) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 2rem;
+    margin: 0;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.84rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) button {
+    min-height: 2rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.82rem;
+}
+
+:is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) .muted {
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.35;
+}
+
+#admin-edit-media .admin-gallery-media-workspace {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    align-items: start;
+}
+
+#admin-edit-media .admin-gallery-media-card {
+    min-width: 0;
+    gap: 0.55rem;
+    padding: 0.6rem;
+    border-radius: 8px;
+    background: #f8fafc;
+    box-shadow: none;
+}
+
+#admin-edit-media .admin-gallery-media-cover { grid-column: 1; grid-row: 1; }
+#admin-edit-media .admin-gallery-media-background { grid-column: 2; grid-row: 1; }
+#admin-edit-media .admin-gallery-media-branding { grid-column: 1 / -1; }
+
+#admin-edit-media .admin-gallery-media-card label {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+#admin-edit-media :is(.admin-gallery-media-field, .admin-gallery-branding-upload) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.4rem;
+}
+
+#admin-edit-media .admin-gallery-media-help { grid-column: 2; grid-row: 1; }
+
+#admin-edit-media .admin-branding-assets {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 0.25rem 0 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+#admin-edit-media .admin-branding-assets legend {
+    padding: 0 2rem 0.25rem 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+#admin-edit-media .admin-gallery-branding-help { position: absolute; top: -1.7rem; right: 0; }
+
+#admin-edit-media .admin-branding-asset {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 0.4rem;
+    min-width: 0;
+    padding: 0.55rem;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: none;
+}
+
+#admin-edit-media .admin-branding-asset .admin-inline-help { position: static; }
+#admin-edit-media .admin-branding-asset .admin-inline-help-content { top: 2.25rem; }
+#admin-edit-media .admin-branding-asset:first-of-type .admin-inline-help-content { right: auto; left: 0; }
+#admin-edit-media .admin-gallery-branding-upload { position: relative; }
+#admin-edit-media .admin-gallery-branding-upload .admin-inline-help-content { top: 1.9rem; }
+
+#admin-edit-media .admin-branding-copy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+}
+
+#admin-edit-media .admin-branding-current {
+    display: grid;
+    gap: 0.35rem;
+}
+
+#admin-edit-media .admin-branding-preview {
+    max-width: 100%;
+    max-height: 3.5rem;
+    object-fit: contain;
+}
+
+#admin-edit-media .admin-branding-current .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+}
+
+#admin-edit-organizer :is(.admin-metadata-organizer-settings, .admin-metadata-organizer-results) {
+    min-width: 0;
+    padding: 0.6rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 8px;
+    background: #f8fafc;
+    box-shadow: none;
+    margin: 0;
+}
+
+#admin-edit-organizer .admin-metadata-organizer { gap: 0.55rem; }
+
+#admin-edit-organizer .admin-metadata-organizer-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+    gap: 0.55rem;
+}
+
+#admin-edit-organizer .admin-metadata-organizer-control { position: relative; display: grid; min-width: 0; gap: 0.25rem; }
+#admin-edit-organizer .admin-metadata-organizer-label { display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; }
+#admin-edit-organizer .admin-metadata-organizer-label .admin-inline-help { position: static; }
+#admin-edit-organizer .admin-metadata-organizer-label .admin-inline-help-content { top: 1.9rem; }
+#admin-edit-organizer .admin-metadata-organizer-control:nth-of-type(-n+2) .admin-inline-help-content { right: auto; left: 0; }
+#admin-edit-organizer .admin-date-picker-control { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem; min-width: 0; }
+#admin-edit-organizer .admin-date-picker-control input[type="date"] { flex: 1 1 6.8rem; width: auto; min-width: 6.8rem; padding: 0.3rem 0.15rem; }
+#admin-edit-organizer .admin-date-picker-trigger { flex: 0 0 auto; width: 1.8rem; min-height: 2rem; padding: 0.3rem; }
+#admin-edit-organizer .admin-date-picker-trigger svg { width: 1rem; height: 1rem; }
+#admin-edit-organizer .admin-date-picker-action.button { flex: 0 0 auto; min-height: 2rem; padding: 0.3rem 0.35rem; font-size: 0.72rem; }
+#admin-edit-organizer .admin-metadata-organizer-actions { grid-column: 1 / -1; }
+#admin-edit-organizer .admin-metadata-organizer-results { display: grid; gap: 0.5rem; }
+#admin-edit-organizer .admin-metadata-organizer-results form { display: grid; gap: 0.55rem; }
+#admin-edit-organizer .admin-metadata-organizer-results .admin-edit-gallery-savebar { flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+
+:is(#admin-edit-organizer, #admin-edit-renamer) .checkbox-label { display: flex; align-items: flex-start; gap: 0.4rem; }
+:is(#admin-edit-organizer, #admin-edit-renamer) input[type="checkbox"] { flex: 0 0 auto; margin-top: 0.15rem; }
+:is(#admin-edit-organizer, #admin-edit-renamer) :is(.admin-log-table-wrap, .admin-metadata-organizer-table-wrap) { min-width: 0; overflow-x: auto; }
+:is(#admin-edit-organizer, #admin-edit-renamer) table { width: 100%; margin: 0; font-size: 0.8rem; }
+:is(#admin-edit-organizer, #admin-edit-renamer) :is(th, td) { padding: 0.4rem 0.5rem; vertical-align: top; overflow-wrap: anywhere; }
+#admin-edit-organizer table { min-width: 30rem; }
+
+#admin-edit-renamer .admin-media-renamer-workspace { display: grid; gap: 0.55rem; min-width: 0; }
+#admin-edit-renamer .admin-media-renamer-heading { margin-bottom: 0; }
+#admin-edit-renamer :is(.admin-media-renamer-pattern-form, .admin-media-renamer-plan-card, .admin-media-renamer-process-card) {
+    min-width: 0;
+    gap: 0.4rem;
+    padding: 0.6rem;
+    border-radius: 8px;
+    background: #f8fafc;
+    box-shadow: none;
+}
+
+#admin-edit-renamer .admin-media-renamer-pattern-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: end;
+    gap: 0.4rem;
+}
+
+#admin-edit-renamer .admin-media-renamer-pattern-form > label { display: grid; gap: 0.25rem; min-width: 0; }
+#admin-edit-renamer .admin-media-renamer-pattern-help { align-self: start; }
+#admin-edit-renamer .admin-media-renamer-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; margin: 0; }
+#admin-edit-renamer .admin-media-renamer-summary .admin-metric-card { min-height: 0; gap: 0.2rem; padding: 0.5rem 0.6rem; border-radius: 6px; box-shadow: none; }
+#admin-edit-renamer .admin-media-renamer-summary .admin-metric-card span { font-size: 0.72rem; }
+#admin-edit-renamer .admin-media-renamer-summary .admin-metric-card strong { font-size: 1rem; }
+#admin-edit-renamer .admin-media-renamer-summary .admin-metric-card small { font-size: 0.72rem; line-height: 1.25; }
+#admin-edit-renamer .admin-inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+#admin-edit-renamer .admin-media-renamer-confirm { flex-basis: 100%; }
+#admin-edit-renamer table { min-width: 34rem; }
+#admin-edit-renamer table code { white-space: normal; overflow-wrap: anywhere; font-size: 0.78rem; }
+
+@container gallery-media-tools (max-width: 45rem) {
+    #admin-edit-media .admin-branding-assets { grid-template-columns: minmax(0, 1fr); }
+    #admin-edit-organizer .admin-metadata-organizer-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #admin-edit-organizer .admin-metadata-organizer-control:nth-of-type(odd) .admin-inline-help-content { right: auto; left: 0; }
+    #admin-edit-organizer .admin-metadata-organizer-control:nth-of-type(even) .admin-inline-help-content { right: 0; left: auto; }
+    #admin-edit-media .admin-branding-asset .admin-inline-help-content { right: 0; left: auto; }
+}
+
+@container gallery-media-tools (max-width: 30rem) {
+    #admin-edit-media .admin-gallery-media-workspace,
+    #admin-edit-organizer .admin-metadata-organizer-fields { grid-template-columns: minmax(0, 1fr); }
+    #admin-edit-media .admin-gallery-media-cover,
+    #admin-edit-media .admin-gallery-media-background { grid-column: 1; grid-row: auto; }
+    #admin-edit-renamer .admin-media-renamer-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #admin-edit-renamer .admin-media-renamer-pattern-form { grid-template-columns: minmax(0, 1fr) auto; }
+    #admin-edit-renamer .admin-media-renamer-pattern-form > button { grid-column: 1 / -1; justify-self: start; }
+}

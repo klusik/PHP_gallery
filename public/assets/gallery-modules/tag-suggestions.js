@@ -31,7 +31,7 @@
  *   2026-05-28
  */
 
-import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 /**
  * Attach enhanced tag editors to all server-rendered tag inputs in a DOM scope.
@@ -87,7 +87,7 @@ function createTagEditor(input) {
     input.removeAttribute('list');
     input.value = '';
     input.autocomplete = 'off';
-    input.placeholder = input.dataset.tagPlaceholder || i18n('tag_suggestions.placeholder', 'Type a tag, then press comma or Enter');
+    input.placeholder = input.dataset.tagPlaceholder || i18nForElement(input, 'tag_suggestions.placeholder', 'Type a tag, then press comma or Enter');
 
         /**
      * Sync the hidden comma-separated payload and redraw the visible controls.
@@ -376,8 +376,8 @@ function suggestionScore(name, fragment) {
  * @param {HTMLInputElement} input Visible tag input.
  * @param {Set<string>} selected Selected normalized tag names.
  * @param {string[]} knownNames All known tag names.
- * @param {*} weightedSuggestions Weighted suggestions value.
- * @param {(name: string) => void} chooseTag Callback used by suggestion buttons.
+ * @param {Array<{name:string,score:number}>} weightedSuggestions Context-ranked suggestion names and scores.
+ * @param {function(string): boolean} chooseTag Callback used by suggestion buttons.
  * @return {void} Result value for the caller.
  */
 function renderSuggestions(container, input, selected, knownNames, weightedSuggestions, chooseTag) {
@@ -412,12 +412,17 @@ function renderSuggestions(container, input, selected, knownNames, weightedSugge
                 || left.name.localeCompare(right.name);
         })
         .slice(0, 18)
-        .forEach((entry) => {
+        .forEach(/** Create one visible suggestion option.
+         * @param {{name:string,matchScore:number,contextScore:number,contextIndex:number}} entry Ranked suggestion data.
+         * @return {void} Appends its option button.
+         */ (entry) => {
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = entry.name;
             button.setAttribute('role', 'option');
-            button.title = entry.contextScore > 0 ? i18n('tag_suggestions.context_score', 'Context score: {score}', {score: entry.contextScore}) : i18n('tag_suggestions.known_tag', 'Known tag');
+            button.title = entry.contextScore > 0
+                ? i18nForElement(input, 'tag_suggestions.context_score', 'Context score: {score}', {score: entry.contextScore})
+                : i18nForElement(input, 'tag_suggestions.known_tag', 'Known tag');
             button.addEventListener('mousedown', (event) => event.preventDefault());
             button.addEventListener('click', () => chooseTag(entry.name));
             container.append(button);

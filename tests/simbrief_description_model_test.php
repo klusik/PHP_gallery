@@ -37,6 +37,7 @@
 declare(strict_types=1);
 
 use function Gallery\Services\simbrief_description_build_markdown;
+use function Gallery\Services\simbrief_description_localized_drafts;
 use function Gallery\Services\simbrief_description_coordinate_value;
 use function Gallery\Services\simbrief_description_extract_details;
 use function Gallery\Services\simbrief_description_expand_identifier_input;
@@ -45,6 +46,7 @@ use function Gallery\Services\simbrief_description_identifier;
 use function Gallery\Services\simbrief_description_pdf_url;
 use function Gallery\Services\simbrief_description_route_text_from_points;
 
+require_once __DIR__ . '/support/simbrief_language_registry_fixture.php';
 require_once __DIR__ . '/../app/services/simbrief_descriptions.php';
 
 /**
@@ -146,6 +148,25 @@ assert_simbrief_description_contains('**LKPR to EDDM**', $description, 'route he
 assert_simbrief_description_contains('`CY1004`', $description, 'flight number');
 assert_simbrief_description_contains('`LKPR DCT OKL DCT EDDM`', $description, 'filed route');
 assert_simbrief_description_contains('184 passengers', $description, 'passenger count');
+
+$localizedDrafts = simbrief_description_localized_drafts($details, 'de', ['en', 'cs', 'de', 'sv']);
+assert_simbrief_description_same(['en', 'cs', 'de', 'sv'], array_keys($localizedDrafts['translations']), 'all maintained languages receive description drafts');
+assert_simbrief_description_same('de', $localizedDrafts['source_language'], 'selected source language is returned');
+assert_simbrief_description_same($description, $localizedDrafts['translations']['en'], 'English translation retains the existing generator output');
+assert_simbrief_description_contains('Letový plán uvádí', $localizedDrafts['translations']['cs'], 'Czech localized draft');
+assert_simbrief_description_contains('Der OFP nennt', $localizedDrafts['translations']['de'], 'German localized draft');
+assert_simbrief_description_contains('OFP:n anger', $localizedDrafts['translations']['sv'], 'Swedish localized draft');
+assert_simbrief_description_contains('**LKPR → EDDM** ist als Flug', $localizedDrafts['description'], 'selected German source uses localized draft in the main field');
+$unlocalizedDraft = simbrief_description_localized_drafts($details, 'en', []);
+assert_simbrief_description_same([], $unlocalizedDraft['translations'], 'localization-disabled response keeps translation mapping empty');
+assert_simbrief_description_same($description, $unlocalizedDraft['description'], 'localization-disabled response keeps the English source description');
+
+$simbriefController = file_get_contents(__DIR__ . '/../app/controllers/admin_simbrief.php');
+assert_simbrief_description_same(true, is_string($simbriefController) && str_contains($simbriefController, 'translation_public_language()'), 'unset source resolves through public language preference');
+assert_simbrief_description_same(false, is_string($simbriefController) && str_contains($simbriefController, 'translation_active_language()'), 'SimBrief source does not use the Admin language resolver');
+assert_simbrief_description_same(true, is_string($simbriefController)
+    && str_contains($simbriefController, "if (\$selectedSourceLanguage === 'en')")
+    && str_contains($simbriefController, "\$localizedDrafts['translations']['en'] = \$description;"), 'English source and translation preserve the legacy renderer output');
 
 
 $routePayload = $payload;

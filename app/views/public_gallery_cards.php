@@ -199,7 +199,8 @@ function view_render_public_gallery_admin_add_child_link(array $viewModel): void
 /**
  * Render the public-page gallery edit entry point.
  *
- * @param array<string,mixed> $viewModel Controller-prepared gallery-edit state.
+ * @param array{placement?:string,title?:string,url?:string,panel_url?:string,admin_i18n_language?:string} $viewModel Controller-prepared gallery-edit state.
+ * @return void Outputs the public-page gallery edit link.
  */
 function view_render_public_gallery_admin_edit_link(array $viewModel): void
 {
@@ -207,7 +208,7 @@ function view_render_public_gallery_admin_edit_link(array $viewModel): void
     $title = (string) ($viewModel['title'] ?? '');
     $label = $placement === 'hero' ? t('gallery.edit_current', 'Edit current gallery') : t('gallery.edit_named', 'Edit gallery {title}', ['title' => $title]);
     $class = $placement === 'hero' ? 'public-admin-edit-button public-admin-edit-button-hero' : 'public-admin-edit-button public-admin-edit-button-card';
-    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-i18n-language="' . e((string) ($viewModel['admin_i18n_language'] ?? 'en')) . '" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
 }
 
 /**

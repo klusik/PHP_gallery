@@ -1,0 +1,171 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/admin-gallery-access.css
+ * Module Type: Stylesheet
+ *
+ * Purpose:
+ *   Compact access and sharing controls in the gallery editor.
+ *
+ * Responsibilities:
+ *   - Style gallery access and sharing controls
+ *   - Preserve responsive layout for access settings
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Loaded after the shared Admin stylesheet so these rules stay local to Access.
+ */
+.admin-page #admin-edit-access,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access {
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 0.5rem;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+.admin-access-compact {
+    display: grid;
+    gap: 0.55rem;
+    font-size: 0.85rem;
+}
+
+.admin-access-protection,
+.admin-access-share {
+    min-width: 0;
+    padding: 0.65rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.admin-access-main {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.5rem;
+}
+
+.admin-page #admin-edit-access .admin-access-main label,
+.admin-page #admin-edit-access .admin-access-share label,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access .admin-access-main label,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access .admin-access-share label {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.admin-page #admin-edit-access .admin-access-main input,
+.admin-page #admin-edit-access .admin-access-main select,
+.admin-page #admin-edit-access .admin-access-share input,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access .admin-access-main input,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access .admin-access-main select,
+.admin-side-panel[data-admin-side-panel-workflow="gallery-edit"] #admin-edit-access .admin-access-share input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 2rem;
+    height: 2rem;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.85rem;
+}
+
+.admin-access-inline-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.admin-access-inline-options .checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    font-size: 0.82rem;
+}
+
+.admin-access-inline-options input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    min-height: 1rem;
+    margin: 0;
+}
+
+.admin-access-share {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.admin-access-share-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.45rem;
+}
+
+.admin-access-share-row > label {
+    flex: 0 1 15rem;
+}
+
+.admin-access-share-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.admin-access-share-actions button {
+    min-height: 2rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.82rem;
+}
+
+.admin-access-share-url {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.admin-access-share-url input {
+    font-size: 0.8rem;
+}
+
+.admin-access-share-empty {
+    margin: 0;
+    font-size: 0.8rem;
+}
+
+.admin-access-compact .notice {
+    margin: 0;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 760px) {
+    .admin-access-main {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 520px) {
+    .admin-access-main {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-access-share-row > label,
+    .admin-access-share-actions {
+        flex-basis: 100%;
+    }
+}

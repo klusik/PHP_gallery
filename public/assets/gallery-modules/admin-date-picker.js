@@ -31,7 +31,7 @@
  *   2026-05-12
  */
 
-import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { adminI18nScopeReady, i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 const ENHANCED_ATTRIBUTE = 'data-admin-date-picker-enhanced';
 const WRAPPER_CLASS = 'admin-date-picker-control';
@@ -81,6 +81,7 @@ function calendarIconMarkup() {
  * Enhances one native date input in-place while keeping its original name/value.
  *
  * @param {HTMLInputElement} input Date input to enhance.
+ * @return {void} Adds translated date controls when the scoped catalog is ready.
  */
 function enhanceDateInput(input) {
     if (input.getAttribute(ENHANCED_ATTRIBUTE) === '1') {
@@ -91,24 +92,26 @@ function enhanceDateInput(input) {
         return;
     }
 
+    if (!adminI18nScopeReady(input)) return;
+
     const wrapper = document.createElement('span');
     wrapper.className = WRAPPER_CLASS;
 
     const opener = document.createElement('button');
     opener.type = 'button';
     opener.className = 'admin-date-picker-trigger';
-    opener.setAttribute('aria-label', i18n('admin.date_picker.open', 'Open calendar'));
+    opener.setAttribute('aria-label', i18nForElement(input, 'admin.date_picker.open', 'Open calendar'));
     opener.innerHTML = calendarIconMarkup();
 
     const todayButton = document.createElement('button');
     todayButton.type = 'button';
     todayButton.className = 'button secondary admin-date-picker-action';
-    todayButton.textContent = i18n('admin.date_picker.today', 'Today');
+    todayButton.textContent = i18nForElement(input, 'admin.date_picker.today', 'Today');
 
     const clearButton = document.createElement('button');
     clearButton.type = 'button';
     clearButton.className = 'button secondary admin-date-picker-action';
-    clearButton.textContent = i18n('admin.date_picker.delete', 'Delete');
+    clearButton.textContent = i18nForElement(input, 'admin.date_picker.delete', 'Delete');
 
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(opener);
@@ -151,9 +154,13 @@ function enhanceDateInputsInRoot(root) {
  *
  * The mutation observer is intentionally narrow and only reacts to added nodes.
  * This covers side-panel content that is injected after the initial page boot.
+ * @param {ParentNode} root DOM root to scan before observing future additions.
+ * @return {void} Enhances the root and installs the shared observer once.
  */
-export function setupAdminDatePickers() {
-    enhanceDateInputsInRoot(document);
+export function setupAdminDatePickers(root = document) {
+    enhanceDateInputsInRoot(root);
+    if (!document.body || document.body.dataset.adminDatePickerObserverBound === '1') return;
+    document.body.dataset.adminDatePickerObserverBound = '1';
 
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {

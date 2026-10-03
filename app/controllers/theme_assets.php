@@ -39,6 +39,7 @@ namespace Gallery\Controllers;
 use InvalidArgumentException;
 use function Gallery\Core\css_value;
 use function Gallery\Views\view_browser_i18n_javascript;
+use function Gallery\Views\view_cms_browser_i18n_strings;
 use function Gallery\Services\favicon_path;
 use function Gallery\Services\favicon_safe_size;
 use function Gallery\Services\link_favicon_public_asset;
@@ -58,15 +59,30 @@ use function Gallery\Services\theme_settings;
 
 /**
  * Stream browser-side translations as a cacheable JavaScript asset.
+ * @return void Sends the JSON Admin catalog or JavaScript public catalog response.
  */
 function cms_browser_i18n(): void
 {
-    $i18nModel = shared_layout_browser_i18n_model((string) ($_GET['lang'] ?? ''));
-    $javascript = view_browser_i18n_javascript(
-        (string) ($i18nModel['language'] ?? 'en'),
-        (array) ($i18nModel['strings'] ?? [])
+    $adminScopeJson = (string) ($_GET['format'] ?? '') === 'json'
+        && (string) ($_GET['scope'] ?? '') === 'admin';
+    $i18nModel = shared_layout_browser_i18n_model(
+        (string) ($_GET['lang'] ?? ''),
+        $adminScopeJson ? 'en' : null
     );
-    $etag = '"' . sha1($javascript) . '"';
+    $strings = (array) ($i18nModel['strings'] ?? []);
+    if ($adminScopeJson) {
+        $payload = [
+            'language' => (string) ($i18nModel['language'] ?? 'en'),
+            'strings' => view_cms_browser_i18n_strings($strings),
+        ];
+        $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $body = is_string($body) ? $body : '{"language":"en","strings":{}}';
+        $contentType = 'application/json; charset=utf-8';
+    } else {
+        $body = view_browser_i18n_javascript((string) ($i18nModel['language'] ?? 'en'), $strings);
+        $contentType = 'application/javascript; charset=utf-8';
+    }
+    $etag = '"' . sha1($body) . '"';
     if ((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
         header('ETag: ' . $etag);
         send_asset_cache_control('public, max-age=31536000, immutable');
@@ -74,11 +90,11 @@ function cms_browser_i18n(): void
         return;
     }
 
-    header('Content-Type: application/javascript; charset=utf-8');
+    header('Content-Type: ' . $contentType);
     header('ETag: ' . $etag);
-    header('Content-Length: ' . (string) strlen($javascript));
+    header('Content-Length: ' . (string) strlen($body));
     send_asset_cache_control('public, max-age=31536000, immutable');
-    echo $javascript;
+    echo $body;
 }
 
 /**

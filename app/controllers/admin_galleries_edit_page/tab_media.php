@@ -43,13 +43,13 @@ use function Gallery\Services\gallery_background_source_schema_ready;
 use function Gallery\Services\gallery_cover_asset_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_media_fields;
-use function Gallery\Views\view_render_admin_tab_intro;
 
 /**
  * Render the Media tab panel.
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
+ * @return void Emit the gallery Media tab from prepared presentation state.
  */
 function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditTab): void
 {
@@ -64,11 +64,6 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
     $backgroundSource = $backgroundSourceSchemaReady ? gallery_background_source($gallery) : null;
 
     ob_start();
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.gallery_editor.media_kicker', 'Media'),
-        'title' => t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'),
-        'description' => t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'),
-    ]);
     view_render_admin_gallery_media_fields([
         'cover_options_html' => $coverOptionsHtml,
         'branding_fields_html' => $brandingFieldsHtml,
@@ -76,6 +71,8 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
         'background_source_schema_ready' => $backgroundSourceSchemaReady,
         'background_source' => $backgroundSource,
         'labels' => [
+            'media_title' => t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'),
+            'media_help' => t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'),
             'title_picture' => t('admin.gallery_editor.title_picture', t('admin.gallery_editor.title_picture_current', 'Title picture')),
             'automatic' => t('admin.gallery_editor.automatic', 'Automatic'),
             'includes_subgallery_images' => t('admin.gallery_editor.includes_subgallery_images', 'Includes images from subgalleries.'),

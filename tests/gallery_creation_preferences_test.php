@@ -180,6 +180,21 @@ namespace {
         && str_contains($languageHtml, 'Pre-filled from your saved defaults.'),
         'The editor did not show and identify the pre-filled source language.');
 
+    $publicDefaultModel = $editorModel;
+    $publicDefaultModel['creation_preferences']['content_language'] = '';
+    $publicDefaultModel['localization']['default_source_language'] = 'cs';
+    ob_start();
+    \Gallery\Views\view_render_content_localization_fields('gallery', ['id' => 7, 'content_language' => ''], $publicDefaultModel);
+    $publicDefaultHtml = (string) ob_get_clean();
+    creation_pref_assert(str_contains($publicDefaultHtml, '<option value="cs" data-flag-src="" selected>')
+        && !str_contains($publicDefaultHtml, 'Pre-filled from your saved defaults.'),
+        'An unspecified gallery must select the prepared public language without claiming a remembered preference.');
+    ob_start();
+    \Gallery\Views\view_render_content_localization_fields('gallery', ['id' => 7, 'content_language' => 'en'], $publicDefaultModel);
+    $explicitLanguageHtml = (string) ob_get_clean();
+    creation_pref_assert(str_contains($explicitLanguageHtml, '<option value="en" data-flag-src="" selected>'),
+        'The public default must preserve an explicitly selected source language.');
+
     ob_start();
     \Gallery\Views\view_render_admin_simbrief_description_tool(7, $editorModel);
     $simbriefHtml = (string) ob_get_clean();

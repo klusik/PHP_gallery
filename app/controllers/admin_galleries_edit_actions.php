@@ -196,6 +196,7 @@ use function Gallery\Views\view_render_admin_gallery_date_range_fields;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_metric_grid;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
+use function Gallery\Views\view_render_admin_gallery_route_disclosure;
 use function Gallery\Views\view_render_admin_simbrief_description_tool;
 use function Gallery\Views\view_render_admin_tab_intro;
 use function Gallery\Services\admin_log_event;
@@ -707,14 +708,16 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  *
  * @param int $galleryId Gallery edited by the current form.
  * @param array<string,mixed> $formModel Prepared saved defaults and control availability.
+ * @param array<string,mixed> $flightMap Controller-prepared route-map state.
  * @return void Emit the generator when SimBrief is enabled.
  */
-function render_admin_simbrief_description_tool(int $galleryId, array $formModel = []): void
+function render_admin_simbrief_description_tool(int $galleryId, array $formModel = [], array $flightMap = []): void
 {
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
+        view_render_admin_gallery_route_disclosure($flightMap);
         return;
     }
-    view_render_admin_simbrief_description_tool($galleryId, $formModel);
+    view_render_admin_simbrief_description_tool($galleryId, $formModel, $flightMap);
 }
 
 /**

@@ -38,6 +38,8 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Services\feature_capability_effective_enabled;
+use function Gallery\Services\gallery_flight_map_row;
+use function Gallery\Services\gallery_flight_map_unresolved_from_row;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\smart_galleries_all;
 use function Gallery\Services\smart_gallery_attachment_rows_for_gallery;
@@ -56,10 +58,11 @@ use function Gallery\Views\view_render_content_localization_fields;
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
+ * @param array<string, mixed> $capabilities Resolved editor capabilities.
  * @return void Emits Identity markup with the bounded parent picker and prepared feature controls.
  * @author Rudolf Klusal
  */
-function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEditTab): void
+function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
     $formModel = admin_gallery_form_view_model('gallery', $gallery);
 
@@ -72,11 +75,43 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
     $descriptionHintHtml = (string) ob_get_clean();
 
     ob_start();
-    view_render_content_localization_fields('gallery', $gallery, $formModel);
-    $localizationHtml = (string) ob_get_clean();
+    view_render_content_localization_fields('gallery', $gallery, $formModel, 'source');
+    $sourceLanguageHtml = (string) ob_get_clean();
 
     ob_start();
-    render_admin_simbrief_description_tool((int) $gallery['id'], $formModel);
+    view_render_content_localization_fields('gallery', $gallery, $formModel, 'translations');
+    $localizationHtml = (string) ob_get_clean();
+
+    $flightMap = ['state' => 'hidden'];
+    if (!empty($capabilities['flight_map_ready'])) {
+        // $flightMapRow stores the existing route-map data shown in the editor.
+        $flightMapRow = gallery_flight_map_row((int) $gallery['id']);
+        // $flightRouteText stores the raw route text that will be resolved during save.
+        $flightRouteText = (string) ($flightMapRow['route_text'] ?? '');
+        // $flightPointCount stores how many route points are ready for display.
+        $flightPointCount = (int) ($flightMapRow['point_count'] ?? 0);
+        // $flightUnresolved stores unresolved diagnostics from the last save.
+        $flightUnresolved = $flightMapRow ? gallery_flight_map_unresolved_from_row($flightMapRow) : [];
+        $flightMap = [
+            'state' => 'ready',
+            'title' => t('admin.gallery_editor.flight_route_map', 'Flight route map'),
+            'label' => t('admin.gallery_editor.flight_route_label', 'Route text'),
+            'route_text' => $flightRouteText,
+            'help' => t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery stores one resolved route map. SimBrief OFP data and route points are stored when you save the gallery. Manual routes still support local lookup and NAME@latitude,longitude entries.'),
+            'status' => t('admin.gallery_editor.flight_route_status', 'Resolved points: {points}. Unresolved skipped: {unresolved}.', [
+                'points' => (string) $flightPointCount,
+                'unresolved' => (string) count($flightUnresolved),
+            ]),
+        ];
+    } elseif (!empty($capabilities['flight_map_feature_enabled'])) {
+        $flightMap = [
+            'state' => 'migration',
+            'migration_message' => t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.'),
+        ];
+    }
+
+    ob_start();
+    render_admin_simbrief_description_tool((int) $gallery['id'], $formModel, $flightMap);
     $simbriefHtml = (string) ob_get_clean();
 
     $openaiHtml = '';
@@ -101,7 +136,9 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
         'date_fields_html' => $dateFieldsHtml,
         'description_hint_html' => $descriptionHintHtml,
         'localization_html' => $localizationHtml,
+        'source_language_html' => $sourceLanguageHtml,
         'simbrief_html' => $simbriefHtml,
+        'flight_map' => $flightMap,
         'openai_html' => $openaiHtml,
         'tag_datalist_html' => $tagDatalistHtml,
         'smart_attachments' => admin_edit_gallery_smart_gallery_attachments_view_model($gallery),

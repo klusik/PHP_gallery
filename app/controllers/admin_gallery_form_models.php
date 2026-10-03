@@ -58,6 +58,7 @@ use function Gallery\Services\openai_text_assist_default_language;
 use function Gallery\Services\openai_text_assist_image_input_allowed;
 use function Gallery\Services\openai_text_assist_language_catalog;
 use function Gallery\Services\translation_language_presentation;
+use function Gallery\Services\translation_public_language;
 
 /**
  * Resolve the current administrator id without exposing authentication logic to Views.
@@ -74,7 +75,7 @@ function admin_gallery_form_current_user_id(): int
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<string,mixed> $entity Entity row being edited.
  * @param ?int $userId Optional administrator id. Null resolves the current administrator.
- * @return array<string,mixed>
+ * @return array<string,mixed> Prepared optional controls and configured public-language fallback.
  */
 function admin_gallery_form_view_model(string $entityType, array $entity = [], ?int $userId = null): array
 {
@@ -145,6 +146,9 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
             'enabled' => $localizationEnabled,
             'schema_ready' => $localizationSchemaReady,
             'languages' => $languages,
+            'default_source_language' => $entityType === 'gallery' && $localizationSchemaReady
+                ? translation_public_language()
+                : '',
             'presentation' => $localizationSchemaReady ? translation_language_presentation() : [],
             'translations' => $translations,
         ],

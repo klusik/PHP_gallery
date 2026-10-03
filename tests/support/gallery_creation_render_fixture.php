@@ -50,7 +50,9 @@ namespace {
             'rows'=>[['id'=>7,'title'=>'Parent <safe>','label'=>'Parent <safe> / parent','path_label'=>'/parent'],['id'=>8,'title'=>'Another parent','label'=>'Another parent / second','path_label'=>'/second']]]);
         return array_replace(['operation_key'=>str_repeat('a',64),'submitted'=>[],'title_completion'=>['url'=>'/fixture-title-completion','candidates'=>[['title'=>'Gallery fixture completion','parent_id'=>7]]],
             'simbrief_enabled'=>true,'creation_preferences_available'=>true,'creation_preferences'=>['simbrief_pilot_id'=>'12345','simbrief_pilot_name'=>'','content_language'=>'cs'],
-            'localization'=>['enabled'=>true,'schema_ready'=>true,'languages'=>['en','cs'],'presentation'=>['en'=>['name'=>'English'],'cs'=>['name'=>'Czech <safe>']]],
+            'localization'=>['enabled'=>true,'schema_ready'=>true,'default_source_language'=>'cs','languages'=>['en','cs','de','sv'],'presentation'=>[
+                'en'=>['name'=>'English'],'cs'=>['name'=>'Czech <safe>'],'de'=>['name'=>'German'],'sv'=>['name'=>'Swedish'],
+            ]],
             'parent_picker_html'=>'<div class="admin-side-panel-field"><span>Parent gallery</span>'.$picker.'</div>',
             'date'=>['schema_ready'=>true,'range_schema_ready'=>true,'start_value'=>'','end_value'=>''],
             'count_badge'=>['schema_ready'=>true,'options'=>[['value'=>'inherit','label'=>'Inherit'],['value'=>'show','label'=>'Show'],['value'=>'hide','label'=>'Hide']]],

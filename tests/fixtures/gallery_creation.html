@@ -16,7 +16,7 @@ import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/a
 import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
 import {setupTagSuggestions} from '/public/assets/gallery-modules/tag-suggestions.js';
 import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
-let assertions=0, panelPosts=0, panelGets=0, editorGets=0, simbriefRequests=0;
+let assertions=0, panelPosts=0, panelGets=0, editorGets=0, simbriefRequests=0, holdSimbriefResponse=false, releaseSimbriefResponse=null;
 const fullSubmissions=[], panelBodies=[], originalUrl=location.href, nativeFetch=window.fetch.bind(window);
 /** Require actual production behavior or geometry. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
 function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
@@ -35,7 +35,22 @@ window.fetch=async(input,options={})=>{
     if(url.pathname.startsWith('/__')) return nativeFetch(input,options);
     if(url.pathname==='/fixture-parent-search') return new Response(JSON.stringify({ok:true,rows:[{id:'7',title:'Parent <safe>',path:'parent',label:'Parent <safe> / parent'},{id:'8',title:'Another parent',path:'second',label:'Another parent / second'}],next_after_id:null}),{headers:{'Content-Type':'application/json'}});
     if(url.pathname==='/fixture-title-completion') return new Response(JSON.stringify({ok:true,candidates:[{title:'Gallery fixture completion',parent_id:7}]}),{headers:{'Content-Type':'application/json'}});
-    if(url.searchParams.get('page')==='admin_simbrief_description') { check(options.method==='POST' && options.body.get('csrf_token')==='theme-fixture' && options.body.get('gallery_id')==='0' && options.body.get('simbrief_pilot_id')==='12345','actual SimBrief generator requests a protected unsaved draft'); simbriefRequests++; return new Response(JSON.stringify({ok:true,description:'Disposable flight description',draft_ref:'fixture-generated-draft',message:'Draft generated.'}),{headers:{'Content-Type':'application/json'}}); }
+    if(url.searchParams.get('page')==='admin_simbrief_description') {
+        check(options.method==='POST' && options.body.get('csrf_token')==='theme-fixture' && options.body.get('gallery_id')==='0' && options.body.get('simbrief_pilot_id')==='12345','actual SimBrief generator requests a protected unsaved draft');
+        simbriefRequests++;
+        const payload={ok:true,description:'Disposable flight description',translations:{en:'English flight draft',cs:'Český návrh letu',de:'Deutscher Flugentwurf',sv:'Svenskt flygutkast'},source_language:'cs',draft_ref:'fixture-generated-draft',message:'Draft generated.'};
+        if(holdSimbriefResponse) {
+            return new Promise(/** Hold a draft result until the pending-edit assertions are ready.
+             * @param {function(Response): void} resolve Promise resolver for a synthetic response.
+             * @return {void} Registers an explicit fixture-release callback.
+             */ resolve=>{
+                releaseSimbriefResponse=/** Release the captured localized response.
+                 * @return {void} Resolves the blocked request with the fixed payload.
+                 */ ()=>resolve(new Response(JSON.stringify(payload),{headers:{'Content-Type':'application/json'}}));
+            });
+        }
+        return new Response(JSON.stringify(payload),{headers:{'Content-Type':'application/json'}});
+    }
     if(url.pathname==='/fixture-create-panel') { check(!options.method || options.method==='GET','panel loading is read-only'); const parent=url.searchParams.get('parent_id'); check(['0','7'].includes(parent),'panel GET has exact root or child scope'); panelGets++; return new Response(find(parent==='0'?'#production-create-root-panel':'#production-create-panel').innerHTML,{headers:{'Content-Type':'text/html'}}); }
     if(url.searchParams.get('page')==='admin_new_gallery') {
         check(options.method==='POST' && options.body instanceof FormData,'name-only panel uses existing AJAX multipart transport');
@@ -62,8 +77,24 @@ try {
     const tags=find('[data-tag-input]',form); for(const tag of ['flight','landscape']) { edit(tags,tag); tags.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})); }
     check(new FormData(form).get('tags')==='flight, landscape','actual enhanced tags preserve canonical hidden payload');
     simbrief.querySelector('summary').focus(); const keyResponse=await fetch('/__key?key=Enter'); await settle(); check(keyResponse.ok && simbrief.open,'native keyboard opens optional SimBrief disclosure');
+    const sourceLanguage=find('[name="content_language"]',form); let sourceLanguageChanges=0; sourceLanguage.addEventListener('change',/** Count observable bubbling source-language changes.
+     * @return {void} Increments the focused fixture counter.
+     */ ()=>sourceLanguageChanges++); edit(sourceLanguage,'');
+    const changesBeforeGeneration=sourceLanguageChanges;
     find('[data-simbrief-generate]',form).click(); await until(/** Observe actual local draft generation. @return {boolean} Whether the existing description tool completed. */ ()=>find('[data-simbrief-draft-ref]',form).value==='fixture-generated-draft');
-    check(simbriefRequests===1 && find('[name="description"]',form).value==='Disposable flight description' && fullSubmissions.length===0 && panelPosts===0,'SimBrief creates only a staged description and draft reference');
+    check(simbriefRequests===1 && find('[name="description"]',form).value==='Disposable flight description' && find('[name="title"]',form).value==='Gallery fixture completion' && sourceLanguage.value==='cs' && sourceLanguageChanges===changesBeforeGeneration+1 && fullSubmissions.length===0 && panelPosts===0,'unset source adopts the server-resolved public language without replacing the title or saving the draft');
+    for(const [language,value] of Object.entries({en:'English flight draft',cs:'Český návrh letu',de:'Deutscher Flugentwurf',sv:'Svenskt flygutkast'})) check(find(`[data-content-translation-description="${language}"]`,form).value===value,'SimBrief fills the '+language+' description draft');
+    edit(sourceLanguage,'en'); const changesBeforeExplicitGeneration=sourceLanguageChanges;
+    find('[data-simbrief-generate]',form).click(); await settle();
+    check(simbriefRequests===1,'existing translated descriptions use the inline replacement guard');
+    find('[data-simbrief-generate]',form).click(); await until(/** Observe an explicit-source replacement request. @return {boolean} Whether the same endpoint completed a second draft. */ ()=>simbriefRequests===2 && find('[data-simbrief-status]',form).textContent.includes('Draft generated.'));
+    check(sourceLanguage.value==='en' && sourceLanguageChanges===changesBeforeExplicitGeneration,'an explicitly selected source language is preserved without a generator change event');
+    find('[data-simbrief-generate]',form).click(); await settle(); holdSimbriefResponse=true; find('[data-simbrief-generate]',form).click();
+    await until(/** Observe the controlled third request before editing its fields. @return {boolean} Whether the request is awaiting its fixture response. */ ()=>simbriefRequests===3 && typeof releaseSimbriefResponse==='function');
+    edit(find('[data-content-translation-description="sv"]',form),'User edit while SimBrief is fetching'); edit(sourceLanguage,'cs');
+    releaseSimbriefResponse(); holdSimbriefResponse=false; await until(/** Wait for the guarded response to be rejected after local edits. @return {boolean} Whether the module reported changed inputs. */ ()=>find('[data-simbrief-status]',form).textContent.includes('form changed during import'));
+    check(find('[data-content-translation-description="sv"]',form).value==='User edit while SimBrief is fetching' && find('[name="description"]',form).value==='Disposable flight description' && find('[data-simbrief-draft-ref]',form).value==='fixture-generated-draft','in-flight edits keep localized descriptions and the matching prior draft reference');
+    edit(sourceLanguage,'cs');
     edit(find('[name="remember_simbrief_identifier"]',form),true); edit(find('[name="remember_content_language"]',form),true); edit(find('[name="visibility"]',form),'private'); edit(find('[name="gallery_date"]',form),'2026-10-01'); edit(find('[name="gallery_date_end"]',form),'2026-10-03');
     advanced.querySelector('summary').focus(); await fetch('/__key?key=Enter'); await settle(); check(advanced.open,'native keyboard opens optional folder and feature settings');
     edit(find('[name="folder_name"]',form),'fixture-folder'); edit(find('[name="voting_enabled"]',form),true); edit(find('[name="show_filenames"]',form),true); edit(find('[name="count_badge_visibility"]',form),'hide'); advanced.open=false;

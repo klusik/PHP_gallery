@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.116';
+const CMS_VERSION = '0.117';
 ```
 
 Update-related code uses:
@@ -1595,7 +1595,7 @@ Aviation-related gallery features are intentionally modular.
 | Flight route maps | `flight_maps.php`, `exif.php` | `gallery_flight_maps`, `flight_map_nav_points`. |
 | Navigation data | `navigation_data.php`, `navigation_data.php` controller, navdata view | `navigation_data_cache`, `navigation_data_accounts`, bundled CSV data. |
 
-The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
+SimBrief drafts can be generated during gallery creation or from an existing gallery editor. The editable Markdown description uses the selected source language; when gallery translation storage is ready, maintained-language description fields are filled as well. Draft references remain private and session/admin-bound. Saving the gallery attaches the OFP and available route coordinates afterward, so an optional flight-data failure does not undo the gallery save. The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
 
 
 ## Admin Gallery Discovery

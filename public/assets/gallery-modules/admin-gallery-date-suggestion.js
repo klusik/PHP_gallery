@@ -32,7 +32,7 @@
  *   2026-09-02
  */
 
-import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 const APPLY_SELECTOR = '[data-admin-gallery-date-apply]';
 const SUGGESTION_SELECTOR = '[data-admin-gallery-date-suggestion]';
@@ -41,25 +41,33 @@ const SUGGESTION_SELECTOR = '[data-admin-gallery-date-suggestion]';
  * Return a JSON object from a fetch response, including useful diagnostics for HTML error pages.
  *
  * @param {Response} response Server response returned by fetch.
+ * @param {Element} contextElement Element owning this Admin request.
  * @return {Promise<Record<string, *>>} Parsed JSON response.
  */
-async function readJsonResponse(response) {
+async function readJsonResponse(response, contextElement) {
     const text = await response.text();
     try {
         return JSON.parse(text);
     } catch (error) {
         throw new Error(text.trim().startsWith('<')
-            ? i18n('admin.gallery_dates.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.')
-            : i18n('admin.gallery_dates.js_invalid_json', 'The server returned an invalid JSON response.'));
+            ? i18nForElement(contextElement, 'admin.gallery_dates.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.')
+            : i18nForElement(contextElement, 'admin.gallery_dates.js_invalid_json', 'The server returned an invalid JSON response.'));
     }
 }
 
 /**
  * Find or create the admin notice element used for in-place feedback.
  *
+ * @param {Element} contextElement Element owning this Admin interaction.
  * @return {HTMLElement} Notice container.
  */
-function ensureAdminNotice() {
+function ensureAdminNotice(contextElement) {
+    const panel = contextElement.closest('[data-admin-side-panel]');
+    const panelStatus = panel?.querySelector('[data-admin-side-panel-status]');
+    if (panelStatus instanceof HTMLElement) {
+        return panelStatus;
+    }
+
     const existing = document.querySelector('.notice');
     if (existing instanceof HTMLElement) {
         return existing;
@@ -84,11 +92,19 @@ function ensureAdminNotice() {
  * Show an admin notice without replacing the current editor page.
  *
  * @param {string} message Human-readable message returned by the server.
+ * @param {Element} contextElement Element owning this Admin interaction.
+ * @param {boolean} isError Whether the message reports an error.
+ * @return {void} Displays the message in the existing Admin notice region.
  */
-function showAdminNotice(message) {
-    const notice = ensureAdminNotice();
+function showAdminNotice(message, contextElement, isError = false) {
+    const notice = ensureAdminNotice(contextElement);
     notice.textContent = message;
     notice.hidden = false;
+    notice.classList.toggle('is-alert', isError);
+    if (notice.matches('[data-admin-side-panel-status]')) {
+        notice.classList.remove('visually-hidden');
+        notice.classList.add('notice');
+    }
 }
 
 /**
@@ -217,12 +233,15 @@ function dispatchDateSuggestionMutationResult(button, result) {
  *
  * @param {HTMLFormElement|null} form Gallery editor form, if the button belongs to one.
  * @param {HTMLButtonElement} button Suggestion apply button.
+ * @return {Promise<void>} Applies the suggestion and updates the editor feedback.
  */
 async function applyGalleryDateSuggestion(form, button) {
     const originalText = button.textContent || '';
     const panel = suggestionPanelForButton(button);
+    const panelContext = button.closest('[data-admin-side-panel]');
+    const noticeContext = panelContext instanceof HTMLElement ? panelContext : button;
     button.disabled = true;
-    button.textContent = i18n('admin.operations.working', 'Working...');
+    button.textContent = i18nForElement(button, 'admin.operations.working', 'Working...');
 
     try {
         const formData = new FormData();
@@ -248,9 +267,9 @@ async function applyGalleryDateSuggestion(form, button) {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const result = await readJsonResponse(response);
+        const result = await readJsonResponse(response, button);
         if (!response.ok || !result.ok) {
-            throw new Error(result.message || result.error || i18n('admin.gallery_dates.js_apply_failed', 'EXIF date suggestion could not be applied.'));
+            throw new Error(result.message || result.error || i18nForElement(button, 'admin.gallery_dates.js_apply_failed', 'The date could not be set from photos.'));
         }
 
         if (form instanceof HTMLFormElement) {
@@ -260,9 +279,9 @@ async function applyGalleryDateSuggestion(form, button) {
         // Dispatch before replacing the owning fragment so closest(side-panel) still resolves from the live button.
         dispatchDateSuggestionMutationResult(button, result);
         replaceSuggestionPanel(button, result.suggestion_html || '');
-        showAdminNotice(result.message || i18n('admin.gallery_dates.js_applied', 'EXIF date suggestion applied.'));
+        showAdminNotice(result.message || i18nForElement(noticeContext, 'admin.gallery_dates.js_applied', 'Date set from photos.'), noticeContext);
     } catch (error) {
-        showAdminNotice(error instanceof Error ? error.message : String(error));
+        showAdminNotice(error instanceof Error ? error.message : String(error), noticeContext, true);
         button.disabled = false;
         button.textContent = originalText;
     }
@@ -270,6 +289,7 @@ async function applyGalleryDateSuggestion(form, button) {
 
 /**
  * Initialize in-place EXIF date suggestion handling for gallery editor forms.
+ * @return {void} Installs delegated handlers for dynamically rendered suggestions.
  */
 export function setupAdminGalleryDateSuggestions() {
     if (document.body?.dataset.adminGalleryDateSuggestionsBound === '1') {

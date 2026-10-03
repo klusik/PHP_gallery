@@ -174,6 +174,10 @@ function view_admin_stylesheet_files(): array
         'assets/styles/admin-settings.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
+        'assets/styles/admin-gallery-api.css',
+        'assets/styles/admin-gallery-access.css',
+        'assets/styles/admin-gallery-display.css',
+        'assets/styles/admin-gallery-media.css',
     ];
 }
 
@@ -465,7 +469,8 @@ function view_browser_i18n_asset_url(bool $isAdminPage, string $language = 'en',
  *
  * Used by server-rendered view helpers.
  *
- * @return array Structured result data for the caller.
+ * @param array<string,string> $strings Prepared browser translation catalog.
+ * @return array<string,string> Browser messages with safe English fallbacks.
  */
 function view_cms_browser_i18n_strings(array $strings = []): array
 {
@@ -525,7 +530,7 @@ function view_cms_browser_i18n_strings(array $strings = []): array
         'admin.simbrief.js_generating' => view_browser_i18n_string($strings, 'admin.simbrief.js_generating', 'Fetching SimBrief data and generating draft...'),
         'admin.simbrief.js_failed' => view_browser_i18n_string($strings, 'admin.simbrief.js_failed', 'SimBrief generation failed.'),
         'admin.simbrief.js_empty' => view_browser_i18n_string($strings, 'admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'),
-        'admin.simbrief.js_generated' => view_browser_i18n_string($strings, 'admin.simbrief.js_generated', 'Draft generated. Review it, then save the gallery.'),
+        'admin.simbrief.js_generated' => view_browser_i18n_string($strings, 'admin.simbrief.js_generated', 'Descriptions are ready in every supported language. Review them; nothing is saved until you save the gallery.'),
         'admin.simbrief.js_invalid_json' => view_browser_i18n_string($strings, 'admin.simbrief.js_invalid_json', 'The server returned an invalid SimBrief response.'),
         'admin.simbrief.js_html_response' => view_browser_i18n_string($strings, 'admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => view_browser_i18n_string($strings, 'lightbox.no_gps_title', 'No GPS EXIF data'),
@@ -633,6 +638,7 @@ function view_render_footer(string $page = 'home', array $model = []): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-side-panel.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-grid-controls.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-date-picker.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-title-completion.js',
