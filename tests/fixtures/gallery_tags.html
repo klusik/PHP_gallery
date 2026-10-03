@@ -1,0 +1,448 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/gallery_tags.html
+Module Type: Browser Test Fixture
+Purpose: Check progressive gallery tag disclosure before and after module startup.
+Responsibilities: Measure server-rendered card geometry and exercise native details disclosure.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery tag rendering regression</title></head>
+<body class="public-page"><main><!-- PRODUCTION_GALLERY_TAGS_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+let assertions = 0;
+
+/**
+ * Require one browser-visible tag-layout invariant.
+ * @param {boolean} condition Expected invariant.
+ * @param {string} message Assertion context.
+ * @return {void} Counts passing checks or throws with the relevant state.
+ */
+function check(condition, message) {
+    if (!condition) throw new Error(message);
+    assertions++;
+}
+
+/**
+ * Resolve a promise after one animation frame.
+ * @param {function(): void} resolve Promise resolver.
+ * @return {void} Schedules resolution on the browser animation clock.
+ */
+function resolveAnimationFrame(resolve) {
+    requestAnimationFrame(resolve);
+}
+
+/**
+ * Let responsive layout and native disclosure events settle.
+ * @return {Promise<void>} Resolves after two animation frames.
+ */
+async function settle() {
+    await new Promise(resolveAnimationFrame);
+    await new Promise(resolveAnimationFrame);
+}
+
+/**
+ * Wait for the fixture's image and font resources before taking geometry baselines.
+ * @return {Promise<void>} Resolves after images, fonts, and responsive layout settle.
+ */
+async function waitForLayoutResources() {
+    for (const image of document.images) {
+        try {
+            await image.decode();
+        } catch {
+            // A failed inert data image should not hold the layout test open.
+        }
+    }
+    await document.fonts.ready;
+    await settle();
+}
+
+/**
+ * Round a browser geometry value to hundredths of a CSS pixel.
+ * @param {number} value Unrounded layout measurement.
+ * @return {number} Stable comparison value.
+ */
+function roundGeometry(value) {
+    return Math.round(value * 100) / 100;
+}
+
+/**
+ * Read an element rectangle relative to an owning layout element.
+ * @param {HTMLElement} element Measured element.
+ * @param {DOMRect} ownerRect Origin rectangle.
+ * @return {number[]} Rounded x, y, width, and height values.
+ */
+function relativeRect(element, ownerRect) {
+    const box = element.getBoundingClientRect();
+    return [box.x - ownerRect.x, box.y - ownerRect.y, box.width, box.height].map(roundGeometry);
+}
+
+/**
+ * Read absolute x, y, width, and height for one browser element.
+ * @param {HTMLElement} element Measured element.
+ * @return {number[]} Rounded absolute rectangle.
+ */
+function absoluteRect(element) {
+    const box = element.getBoundingClientRect();
+    return [box.x, box.y, box.width, box.height].map(roundGeometry);
+}
+
+/**
+ * Select visible anchor tags from an element collection.
+ * @param {HTMLElement[]} elements Candidate tag elements.
+ * @return {HTMLAnchorElement[]} Visible anchor tags only.
+ */
+function visibleTagAnchors(elements) {
+    const result = [];
+    for (const element of elements) {
+        if (element instanceof HTMLAnchorElement) result.push(element);
+    }
+    return result;
+}
+
+/**
+ * Return the smallest top coordinate in a rectangle list.
+ * @param {DOMRect[]} rectangles Measured child rectangles.
+ * @return {number} Minimum top coordinate.
+ */
+function minimumTop(rectangles) {
+    let result = Number.POSITIVE_INFINITY;
+    for (const rectangle of rectangles) result = Math.min(result, rectangle.top);
+    return result;
+}
+
+/**
+ * Return only tag elements that occupy layout space.
+ * @param {HTMLElement} list Tag-list container.
+ * @return {HTMLElement[]} Currently rendered tag elements.
+ */
+function visibleTags(list) {
+    const result = [];
+    for (const element of list.querySelectorAll('.tag')) {
+        if (element instanceof HTMLElement && element.getClientRects().length > 0) result.push(element);
+    }
+    return result;
+}
+
+/**
+ * Measure the visible tag labels and positions relative to an owner.
+ * @param {HTMLElement} list Tag-list container.
+ * @param {DOMRect} ownerRect Origin rectangle.
+ * @return {Array<[string, number, number, number, number]>} Visible label geometry.
+ */
+function tagGeometry(list, ownerRect) {
+    const result = [];
+    for (const element of visibleTags(list)) {
+        const position = relativeRect(element, ownerRect);
+        result.push([element.textContent.trim(), ...position]);
+    }
+    return result;
+}
+
+/**
+ * Capture stable outer geometry and visible tag order for one rendered gallery card.
+ * @param {string} selector Card selector.
+ * @return {{card: number[], tags: number[], list: number[], pills: Array<[string, number, number, number, number]>}} Rounded layout snapshot used to detect first-paint shifts.
+ */
+function snapshot(selector) {
+    const card = document.querySelector(selector);
+    const tags = card?.querySelector('.gallery-card-tags');
+    const list = tags?.querySelector('.tag-list');
+    if (!(card instanceof HTMLElement) || !(tags instanceof HTMLElement) || !(list instanceof HTMLElement)) throw new Error('Missing rendered gallery card or tag list: ' + selector);
+    const cardRect = card.getBoundingClientRect();
+    return {
+        card: [roundGeometry(cardRect.width), roundGeometry(cardRect.height)],
+        tags: relativeRect(tags, cardRect),
+        list: relativeRect(list, cardRect),
+        pills: tagGeometry(list, cardRect),
+    };
+}
+
+/**
+ * Snapshot the public gallery hero relative to its owning section.
+ * @return {{section: number[], root: number[], content: number[], list: number[], pills: Array<[string, number, number, number, number]>}} Hero geometry before or after module startup.
+ */
+function heroSnapshot() {
+    const section = document.querySelector('[data-fixture-case="hero-rows-one"]');
+    const root = section?.querySelector('.hero-tags');
+    const content = root?.querySelector('.hero-tags-content');
+    const list = content?.querySelector('.tag-list');
+    if (!(section instanceof HTMLElement) || !(root instanceof HTMLElement) || !(content instanceof HTMLElement) || !(list instanceof HTMLElement)) throw new Error('Missing server-rendered hero tag fixture');
+    const sectionRect = section.getBoundingClientRect();
+    return {
+        section: [roundGeometry(sectionRect.width), roundGeometry(sectionRect.height)],
+        root: relativeRect(root, sectionRect),
+        content: relativeRect(content, sectionRect),
+        list: relativeRect(list, sectionRect),
+        pills: tagGeometry(list, sectionRect),
+    };
+}
+
+/**
+ * Check whether every supplied tag is hidden from layout.
+ * @param {NodeListOf<HTMLAnchorElement>} tags Tag anchors to inspect.
+ * @return {boolean} True when none occupies layout space.
+ */
+function allTagsHidden(tags) {
+    for (const tag of tags) if (tag.getClientRects().length > 0) return false;
+    return true;
+}
+
+/**
+ * Check whether every supplied tag is visible in layout.
+ * @param {NodeListOf<HTMLAnchorElement>} tags Tag anchors to inspect.
+ * @return {boolean} True when all occupy layout space.
+ */
+function allTagsVisible(tags) {
+    for (const tag of tags) if (tag.getClientRects().length === 0) return false;
+    return true;
+}
+
+/**
+ * Return visible direct children of a tag-list flex container.
+ * @param {HTMLElement} list Tag-list container.
+ * @return {HTMLElement[]} Children with rendered layout boxes.
+ */
+function visibleChildren(list) {
+    const result = [];
+    for (const element of list.children) {
+        if (element instanceof HTMLElement && element.getClientRects().length > 0) result.push(element);
+    }
+    return result;
+}
+
+/**
+ * Collect rectangles for a set of visible flex children.
+ * @param {HTMLElement[]} elements Rendered flex children.
+ * @return {DOMRect[]} Their current rectangles.
+ */
+function childRects(elements) {
+    const result = [];
+    for (const element of elements) result.push(element.getBoundingClientRect());
+    return result;
+}
+
+/**
+ * Return whether visible tags retain single-line full-name text.
+ * @param {HTMLElement[]} tags Rendered tag pills.
+ * @return {boolean} True when each tag has a nowrap style and full title.
+ */
+function tagsKeepFullNames(tags) {
+    for (const tag of tags) {
+        if (getComputedStyle(tag).whiteSpace !== 'nowrap' || tag.title !== tag.textContent.trim()) return false;
+    }
+    return true;
+}
+
+/**
+ * Return tag names in their source order.
+ * @param {HTMLElement} list Tag-list container.
+ * @return {string[]} Text labels in DOM order.
+ */
+function tagNames(list) {
+    const result = [];
+    for (const tag of list.querySelectorAll('a.tag')) result.push(tag.textContent.trim());
+    return result;
+}
+
+/**
+ * Check a label's text, title, and collapsed-state visibility.
+ * @param {HTMLElement} list Tag-list container.
+ * @param {string} expected Full label expected in the markup.
+ * @return {boolean} True when the group label is visible and intact.
+ */
+function hasVisibleGroupLabel(list, expected) {
+    for (const label of list.querySelectorAll('.tag-list-label')) {
+        if (label instanceof HTMLElement && label.textContent.trim() === expected && label.title === expected && label.getClientRects().length > 0) return true;
+    }
+    return false;
+}
+
+/**
+ * Compare actual anchor order with an expected ordered label list.
+ * @param {HTMLElement} list Tag-list container.
+ * @param {string[]} expected Expected tag order.
+ * @return {boolean} True when every link appears in the expected position.
+ */
+function hasTagOrder(list, expected) {
+    const actual = tagNames(list);
+    if (actual.length !== expected.length) return false;
+    for (let index = 0; index < expected.length; index++) if (actual[index] !== expected[index]) return false;
+    return true;
+}
+
+/**
+ * Run the browser regression assertions against server-rendered markup.
+ * @return {Promise<void>} Resolves after publishing the bounded result summary.
+ */
+async function runFixture() {
+  try {
+    const viewport = await fetch('/__viewport?width=390');
+    check(viewport.ok, '390px viewport override succeeds');
+    await waitForLayoutResources();
+    const displayAll = document.querySelector('[data-fixture-case="display-all"]');
+    check(displayAll instanceof HTMLElement, 'display-all card exists before first-paint measurements');
+    displayAll.scrollIntoView({block: 'center'});
+    await settle();
+    const displayAllInitialStyle = getComputedStyle(displayAll);
+    const displayAllInitialContext = 'content-visibility=' + displayAllInitialStyle.contentVisibility + ' intrinsic-size=' + displayAllInitialStyle.containIntrinsicSize + ' scrollY=' + Math.round(window.scrollY);
+
+    const capped = document.querySelector('[data-fixture-case="rows-one"]');
+    const details = capped?.querySelector('details[data-hero-tags-disclosure]');
+    const summary = details?.querySelector('summary');
+    const cappedList = capped?.querySelector('.tag-list');
+    check(capped instanceof HTMLElement && details instanceof HTMLDetailsElement && summary instanceof HTMLElement && cappedList instanceof HTMLElement, 'row-one card uses native details disclosure');
+    check(!details.open && summary.textContent.includes('[...]'), 'native disclosure begins collapsed with the inline [...] control');
+    const tail = details.closest('.gallery-card-tag-tail');
+    const lastVisibleTag = tail?.querySelector(':scope > a.tag');
+    check(lastVisibleTag instanceof HTMLElement && tail.previousElementSibling?.matches('.tag') === true, 'non-wrapping tail starts with the final server-rendered visible tag');
+    const tailGeometry = {tag: absoluteRect(lastVisibleTag), summary: absoluteRect(summary), tail: absoluteRect(tail)};
+    const tagBottom = tailGeometry.tag[1] + tailGeometry.tag[3];
+    const summaryBottom = tailGeometry.summary[1] + tailGeometry.summary[3];
+    check(tailGeometry.summary[0] >= tailGeometry.tag[0] + tailGeometry.tag[2] - 1 && tailGeometry.summary[0] < tailGeometry.tag[0] + tailGeometry.tag[2] + 8 && tailGeometry.tag[1] <= summaryBottom && tailGeometry.summary[1] <= tagBottom, 'ellipsis stays beside and vertically overlaps the final visible tag inside the non-wrapping tail: ' + JSON.stringify(tailGeometry));
+    check(allTagsHidden(details.querySelectorAll('a.tag')), 'overflow tag links are hidden by native details before JavaScript starts');
+    const visibleBefore = visibleTagAnchors(visibleTags(cappedList));
+    check(visibleBefore.length === 4, 'configured visible tag count is already applied in first HTML paint');
+    const beforeInit = snapshot('[data-fixture-case="rows-one"]');
+    const responsiveBefore = snapshot('[data-fixture-case="rows-one-responsive"]');
+    const cappedContent = capped.querySelector('.gallery-card-tags-content');
+    const computedBefore = getComputedStyle(cappedContent);
+    check(computedBefore.overflowY === 'auto' && Number.parseFloat(computedBefore.maxHeight) > 0, 'one-row scrollbar cap is present in CSS before JavaScript');
+    check(cappedContent.scrollHeight > cappedContent.clientHeight + 1, 'one-row cap is exercised by wrapped first-paint content');
+    const contentRect = cappedContent.getBoundingClientRect();
+    const flexRects = childRects(visibleChildren(cappedList));
+    const firstRowTop = minimumTop(flexRects);
+    let firstRowBottom = firstRowTop;
+    let nextRowTop = Number.POSITIVE_INFINITY;
+    for (const rect of flexRects) {
+        if (Math.abs(rect.top - firstRowTop) <= 2) firstRowBottom = Math.max(firstRowBottom, rect.bottom);
+        else if (rect.top > firstRowTop + 2) nextRowTop = Math.min(nextRowTop, rect.top);
+    }
+    check(firstRowBottom <= contentRect.top + cappedContent.clientHeight + 1, 'all first-row pills and the disclosure control fit the one-row cap');
+    check(Number.isFinite(nextRowTop) && nextRowTop >= contentRect.top + cappedContent.clientHeight - 1, 'second visual row begins beyond the one-row cap');
+    check(tagsKeepFullNames(visibleBefore), 'long tag labels stay single-line while retaining their full title text');
+    check(document.querySelector('[data-fixture-case="rows-five"] details[data-hero-tags-disclosure]') instanceof HTMLDetailsElement, 'five-row card also has server-rendered disclosure');
+    const fiveBefore = snapshot('[data-fixture-case="rows-five"]');
+    const fiveContent = document.querySelector('[data-fixture-case="rows-five"] .gallery-card-tags-content');
+    check(getComputedStyle(fiveContent).overflowY === 'auto' && Number.parseFloat(getComputedStyle(fiveContent).maxHeight) > Number.parseFloat(computedBefore.maxHeight) && fiveContent.scrollHeight > fiveContent.clientHeight + 1, 'five-row CSS cap is larger and exercised by wrapped content before JavaScript');
+    const exactLimit = document.querySelector('[data-fixture-case="exact-limit"]');
+    const exactBefore = snapshot('[data-fixture-case="exact-limit"]');
+    check(exactLimit?.querySelector('[data-hero-tags-native="1"]') instanceof HTMLElement && exactLimit.querySelector('details[data-hero-tags-disclosure]') === null && exactLimit.querySelectorAll('a.tag').length === 4, 'exact-limit card has native ownership without an unnecessary disclosure');
+    const allBefore = snapshot('[data-fixture-case="display-all"]');
+    check(displayAll?.querySelector('details[data-hero-tags-disclosure]') === null && displayAll?.querySelectorAll('a.tag').length === 8, 'display-all setting emits every tag without a disclosure wrapper');
+    check(displayAll.querySelector('[data-hero-tags-native="1"]') instanceof HTMLElement, 'display-all card opts out of legacy JavaScript layout work');
+    const heroRoot = document.querySelector('[data-fixture-case="hero-rows-one"] .hero-tags');
+    const heroDetails = heroRoot?.querySelector('details[data-hero-tags-disclosure]');
+    const heroSummary = heroDetails?.querySelector('summary');
+    const heroContent = heroRoot?.querySelector('.hero-tags-content');
+    const heroList = heroContent?.querySelector('.tag-list');
+    check(heroRoot instanceof HTMLElement && heroRoot.dataset.heroTagsNative === '1' && heroDetails instanceof HTMLDetailsElement && heroSummary instanceof HTMLElement && heroContent instanceof HTMLElement && heroList instanceof HTMLElement, 'actual gallery hero uses the native server-rendered tag policy');
+    const heroPills = visibleTagAnchors(visibleTags(heroList));
+    check(heroPills.length === 4 && allTagsHidden(heroDetails.querySelectorAll('a.tag')), 'gallery hero applies its visible limit before module startup');
+    check(hasVisibleGroupLabel(heroList, 'Containing tags'), 'contained-tag group label remains visible with its full title before expansion');
+    const heroExpectedOrder = ['Urban wildlife', 'Long coast observation point tag', 'Blue hour photographs', 'Northern marsh habitat survey', 'Migrating birds near the eastern shoreline', 'Field notes from the old railway bridge', 'Aerial view of the wetlands after rainfall', 'Long exposure lights beside the river crossing', 'Distant mountain range beyond the forest', 'Seasonal color changes across the protected valley', 'Historic stone structures on the coastal trail', 'Wide landscape with changing afternoon clouds'];
+    check(hasTagOrder(heroList, heroExpectedOrder), 'direct and contained hero tags preserve their complete server order across the collapsed disclosure');
+    const heroContentRect = heroContent.getBoundingClientRect();
+    const heroComputed = getComputedStyle(heroContent);
+    check(heroComputed.overflowY === 'auto' && Number.parseFloat(heroComputed.maxHeight) > 0 && heroContent.scrollHeight > heroContent.clientHeight + 1, 'gallery hero row-one cap is present and exercised at first paint');
+    const heroRects = childRects(visibleChildren(heroList));
+    const heroFirstTop = minimumTop(heroRects);
+    let heroFirstBottom = heroFirstTop;
+    let heroNextTop = Number.POSITIVE_INFINITY;
+    for (const rect of heroRects) {
+        if (Math.abs(rect.top - heroFirstTop) <= 2) heroFirstBottom = Math.max(heroFirstBottom, rect.bottom);
+        else if (rect.top > heroFirstTop + 2) heroNextTop = Math.min(heroNextTop, rect.top);
+    }
+    check(heroFirstBottom <= heroContentRect.top + heroContent.clientHeight + 1, 'all first-row hero pills and disclosure fit inside its one-row cap');
+    check(Number.isFinite(heroNextTop) && heroNextTop >= heroContentRect.top + heroContent.clientHeight - 1, 'second hero row starts beyond the one-row cap');
+    const heroTail = heroDetails.closest('.gallery-card-tag-tail');
+    const heroLastTag = heroTail?.querySelector(':scope > a.tag');
+    check(heroLastTag instanceof HTMLElement && Math.abs(heroLastTag.getBoundingClientRect().top - heroSummary.getBoundingClientRect().top) <= 2, 'gallery hero keeps its summary with the final visible tag');
+    const heroBefore = heroSnapshot();
+
+    summary.focus({preventScroll: true});
+    const beforeModuleExpand = await fetch('/__key?key=Enter');
+    check(beforeModuleExpand.ok, 'trusted Enter key reaches the server-rendered native summary before disclosure module startup');
+    await settle();
+    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary exposes overflow links before disclosure module startup');
+    const expandedBeforeInit = snapshot('[data-fixture-case="rows-one"]');
+    check(JSON.stringify(expandedBeforeInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedBeforeInit.tags) === JSON.stringify(beforeInit.tags), 'expanded scroll disclosure preserves card and tag-container geometry: ' + JSON.stringify({before: {card: beforeInit.card, tags: beforeInit.tags, list: beforeInit.list}, expanded: {card: expandedBeforeInit.card, tags: expandedBeforeInit.tags, list: expandedBeforeInit.list}}));
+    const beforeModuleCollapse = await fetch('/__key?key=Enter');
+    check(beforeModuleCollapse.ok, 'second trusted Enter key reaches the server-rendered native summary before disclosure module startup');
+    await settle();
+    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native keyboard collapse restores pre-script geometry');
+
+    displayAll.scrollIntoView({block: 'center'});
+    await settle();
+    const displayAllBeforeModule = snapshot('[data-fixture-case="display-all"]');
+    const displayAllModuleStyle = getComputedStyle(displayAll);
+    const displayAllModuleContext = 'content-visibility=' + displayAllModuleStyle.contentVisibility + ' intrinsic-size=' + displayAllModuleStyle.containIntrinsicSize + ' scrollY=' + Math.round(window.scrollY);
+    const {setupHeroTagDisclosure} = await import('/public/assets/gallery-modules/hero-tags.js');
+    setupHeroTagDisclosure();
+    await settle();
+    const afterInit = snapshot('[data-fixture-case="rows-one"]');
+    const responsiveAfter = snapshot('[data-fixture-case="rows-one-responsive"]');
+    const fiveAfter = snapshot('[data-fixture-case="rows-five"]');
+    check(JSON.stringify(afterInit) === JSON.stringify(beforeInit), 'module startup preserves first-paint card, tag-container, and pill geometry');
+    check(JSON.stringify(responsiveAfter) === JSON.stringify(responsiveBefore), 'module startup preserves responsive-renderer card geometry');
+    check(JSON.stringify(fiveAfter) === JSON.stringify(fiveBefore), 'module startup preserves the five-row card geometry');
+    check(JSON.stringify(snapshot('[data-fixture-case="exact-limit"]')) === JSON.stringify(exactBefore), 'module startup preserves exact-limit card geometry');
+    const allAfter = snapshot('[data-fixture-case="display-all"]');
+    check(JSON.stringify(allAfter) === JSON.stringify(displayAllBeforeModule), 'module startup preserves display-all card geometry without intervening layout changes: ' + JSON.stringify({before: displayAllBeforeModule, after: allAfter}));
+    check(JSON.stringify(allAfter) === JSON.stringify(allBefore), 'module startup preserves the display-all card geometry measured in view at first paint');
+    let nativeRootsUntouched = true;
+    for (const root of document.querySelectorAll('[data-hero-tags-native="1"]')) {
+        if (root.hasAttribute('data-hero-tags-ready')) nativeRootsUntouched = false;
+    }
+    check(nativeRootsUntouched, 'module startup leaves every server-rendered native tag root free of legacy readiness mutations');
+    const heroAfter = heroSnapshot();
+    check(JSON.stringify(heroAfter) === JSON.stringify(heroBefore), 'module startup preserves actual gallery hero first-paint geometry');
+    heroSummary.click();
+    await settle();
+    check(heroDetails.open && allTagsVisible(heroDetails.querySelectorAll('a.tag')) && hasTagOrder(heroList, heroExpectedOrder), 'expanding the hero disclosure reveals contained links after direct tags in their original order');
+    check(hasVisibleGroupLabel(heroList, 'Containing tags'), 'contained-tag group label stays visible after expansion');
+    heroSummary.click();
+    await settle();
+    check(!heroDetails.open && JSON.stringify(heroSnapshot()) === JSON.stringify(heroBefore), 'collapsing the grouped hero disclosure restores its initial geometry');
+    setupHeroTagDisclosure();
+    await settle();
+    check(JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'repeated module initialization remains geometry-idempotent');
+
+    summary.click();
+    await settle();
+    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary click reveals every overflow link');
+    const expandedAfterInit = snapshot('[data-fixture-case="rows-one"]');
+    check(JSON.stringify(expandedAfterInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedAfterInit.tags) === JSON.stringify(beforeInit.tags), 'expanded scroll disclosure keeps the gallery card geometry fixed');
+    const expandedNames = tagNames(cappedList);
+    check(expandedNames.indexOf('Long coast observation point tag') < expandedNames.indexOf('Migrating birds near the eastern shoreline'), 'expanded long tags keep their server order');
+    summary.click();
+    await settle();
+    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native collapse restores the original inline card geometry');
+    summary.focus({preventScroll: true});
+    const keyboard = await fetch('/__key?key=Enter');
+    check(keyboard.ok, 'trusted Enter key reaches native summary');
+    await settle();
+    check(details.open, 'keyboard Enter expands details without JavaScript-owned disclosure logic');
+    const closeKeyboard = await fetch('/__key?key=Enter');
+    check(closeKeyboard.ok, 'second trusted Enter key reaches native summary');
+    await settle();
+    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'keyboard collapse restores the original card geometry');
+    check(document.documentElement.scrollWidth <= 390, 'narrow viewport has no horizontal page overflow');
+    document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + heroContent.clientHeight + 'px scroll=' + heroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
+  } catch (error) {
+      document.getElementById('results').textContent = 'BROWSER FAIL ' + error.message + '\n' + error.stack;
+  }
+}
+/**
+ * Display a bounded fixture failure without exposing application state.
+ * @param {Error} error Browser assertion failure.
+ * @return {void} Writes the failure and stack to the fixture result node.
+ */
+function displayFixtureError(error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL ' + error.message + '\n' + error.stack;
+}
+
+runFixture().catch(displayFixtureError);
+</script></body></html>

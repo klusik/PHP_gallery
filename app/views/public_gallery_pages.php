@@ -160,21 +160,14 @@ function view_render_public_gallery_hero(array $viewModel): void
     }
     echo '</div></div>';
 
-    $heroTagCount = max(0, (int) ($viewModel['tag_count'] ?? 0));
-    if ($heroTagCount > 0) {
-        $visibleLimit = max(0, (int) ($viewModel['tag_visible_limit'] ?? 0));
-        $displayAll = !empty($viewModel['tag_display_all']);
-        echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . (!empty($viewModel['tag_scrollbar_enabled']) ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . max(1, (int) ($viewModel['tag_scrollbar_rows'] ?? 1)) . '">';
-        echo '<div class="hero-tags-content" data-hero-tags-content>';
-        echo (string) ($viewModel['gallery_tags_html'] ?? '');
-        echo (string) ($viewModel['contained_tags_html'] ?? '');
-        echo '</div>';
-        if (!$displayAll && $heroTagCount > $visibleLimit) {
-            // The browser toggles visibility in-place. No navigation or server request is required to expose the complete collection.
-            echo '<div class="hero-tags-controls"><button type="button" class="button secondary hero-tags-toggle" data-hero-tags-toggle hidden data-show-all-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" data-show-fewer-label="' . e(t('gallery.show_fewer_tags', 'Show fewer tags')) . '" aria-expanded="false">' . e(t('gallery.show_all_tags', 'Display all tags')) . '</button></div>';
-        }
-        echo '</div>';
-    }
+    view_render_public_hero_tags([
+        'groups' => (array) ($viewModel['tag_groups'] ?? []),
+        'tag_count' => (int) ($viewModel['tag_count'] ?? 0),
+        'visible_limit' => (int) ($viewModel['tag_visible_limit'] ?? 20),
+        'display_all' => !empty($viewModel['tag_display_all']),
+        'scrollbar_enabled' => !empty($viewModel['tag_scrollbar_enabled']),
+        'scrollbar_rows' => (int) ($viewModel['tag_scrollbar_rows'] ?? 5),
+    ]);
     echo '</div></section>';
 }
 

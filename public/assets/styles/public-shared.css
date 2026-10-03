@@ -393,6 +393,112 @@
     display: none;
 }
 
+/* Native disclosure keeps the configured visible tag count stable before JavaScript. */
+.public-page .gallery-card-tags,
+.public-page .hero-tags {
+    --hero-tag-scrollbar-height: none;
+}
+
+.public-page .gallery-card-tags {
+    font-size: 0.78rem;
+}
+
+.public-page .hero-tags {
+    font-size: 0.76rem;
+}
+
+.public-page [data-hero-tags] .tag-list .tag,
+.public-page [data-hero-tags] .tag-list .tag-list-label {
+    line-height: 1.35;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.public-page .gallery-card-body .gallery-card-tags .tag-list {
+    margin: 0;
+}
+
+.public-page .hero-tag-disclosure {
+    display: contents;
+}
+
+.public-page .hero-tag-disclosure > summary {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    list-style: none;
+    cursor: pointer;
+    padding: 0.1rem 0.42em;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+.public-page .gallery-card-tags .hero-tag-disclosure > summary {
+    padding: 0.1rem 0.42em;
+}
+
+.public-page .hero-tag-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.public-page .hero-tag-disclosure > summary::marker {
+    content: "";
+}
+
+.public-page .hero-tag-disclosure:not([open]) > :not(summary) {
+    display: none;
+}
+
+.public-page .hero-tag-summary-expanded,
+.public-page .hero-tag-disclosure[open] .hero-tag-summary-label-collapsed,
+.public-page .hero-tag-disclosure:not([open]) .hero-tag-summary-label-expanded {
+    display: none;
+}
+
+.public-page .hero-tag-disclosure[open] .hero-tag-summary-expanded {
+    display: inline;
+}
+
+.public-page .hero-tag-disclosure[open] .hero-tag-summary-collapsed {
+    display: none;
+}
+
+.public-page .gallery-card-tag-tail {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    gap: 0.28rem;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.public-page .gallery-card-tag-tail:has(> .hero-tag-disclosure[open]) {
+    display: contents;
+}
+
+.public-page [data-hero-tags] .gallery-card-tag-tail > .tag {
+    max-width: calc(100% - 3.5rem);
+}
+
+.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] [data-hero-tags-content] {
+    max-height: var(--hero-tag-scrollbar-height);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+@media (max-width: 720px) {
+    .public-page .hero-tags {
+        font-size: 0.76rem;
+    }
+}
+
 .public-page .hero .tag-list {
     justify-content: flex-start;
     gap: 0.28rem;

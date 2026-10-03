@@ -400,13 +400,13 @@ function cms_gallery(): void
         'hero_tag_sort',
         static fn (): array => sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())
     );
-    // $heroTagVisibleLimit is the browser-side collapse boundary; every tag remains in the server HTML for no-JS access.
+    // $heroTagVisibleLimit is applied to the server-rendered native disclosure before the page's first paint.
     $heroTagVisibleLimit = theme_hero_tag_visible_limit();
-    // $heroTagDisplayAll disables the disclosure behavior while retaining the same server-rendered markup.
+    // $heroTagDisplayAll renders every tag immediately and omits the native disclosure.
     $heroTagDisplayAll = theme_hero_tag_display_all_enabled();
-    // $heroTagScrollbarEnabled allows the browser to constrain the content only when wrapping exceeds the configured row count.
+    // $heroTagScrollbarEnabled applies the server-prepared CSS row cap from the first paint.
     $heroTagScrollbarEnabled = theme_hero_tag_scrollbar_enabled();
-    // $heroTagScrollbarRows is interpreted as rendered visual rows after responsive wrapping, not as a fixed CSS height.
+    // $heroTagScrollbarRows maps to uniform single-line tag rows plus their flex gaps in the stylesheet.
     $heroTagScrollbarRows = theme_hero_tag_scrollbar_rows();
     // $heroTagCount determines whether an expand control is useful at all.
     $heroTagCount = count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
@@ -428,12 +428,10 @@ function cms_gallery(): void
     render_public_gallery_admin_edit_link($gallery, 'hero');
     render_public_gallery_admin_add_child_link($gallery, 'hero');
     $heroAdminActionsHtml = (string) ob_get_clean();
-    ob_start();
-    render_tag_list($heroTagGroups['gallery']);
-    $heroGalleryTagsHtml = (string) ob_get_clean();
-    ob_start();
-    render_tag_list($heroTagGroups['contained'], t('gallery.containing_tags', 'Containing tags'));
-    $heroContainedTagsHtml = (string) ob_get_clean();
+    $heroTagGroupsViewModels = [
+        tag_list_view_model($heroTagGroups['gallery']),
+        tag_list_view_model($heroTagGroups['contained'], t('gallery.containing_tags', 'Containing tags')),
+    ];
 
     $downloadsEnabled = feature_capability_effective_enabled('downloads');
     $legacyDownloadCapability = $downloadsEnabled
@@ -469,8 +467,7 @@ function cms_gallery(): void
         'tag_display_all' => $heroTagDisplayAll,
         'tag_scrollbar_enabled' => $heroTagScrollbarEnabled,
         'tag_scrollbar_rows' => $heroTagScrollbarRows,
-        'gallery_tags_html' => $heroGalleryTagsHtml,
-        'contained_tags_html' => $heroContainedTagsHtml,
+        'tag_groups' => $heroTagGroupsViewModels,
     ];
 
     ob_start();
