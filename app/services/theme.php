@@ -51,7 +51,7 @@ use InvalidArgumentException;
  * Theme settings are stored in the DB so the visual preset can be changed
  * without editing PHP or CSS files.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,string|int|bool> Theme values keyed by setting name, with normalized layout dimensions and switches.
  */
 function theme_settings(): array
 {
@@ -92,7 +92,7 @@ function theme_settings(): array
 /**
  * Normalize a public gallery-card information-panel animation duration.
  *
- * @param mixed $value Stored or submitted duration in milliseconds.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Stored or submitted duration in milliseconds; invalid types use the default.
  * @return int Duration clamped to the supported 0-800 ms range.
  */
 function theme_gallery_info_motion_ms_value(mixed $value): int
@@ -120,7 +120,7 @@ function theme_gallery_info_motion_ms(): int
 /**
  * Normalize the Admin side-panel animation duration.
  *
- * @param mixed $value Stored or submitted duration in milliseconds.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Stored or submitted duration in milliseconds; invalid types use the default.
  * @return int Duration clamped to the supported 0-800 ms range.
  */
 function theme_admin_side_panel_motion_ms_value(mixed $value): int
@@ -241,7 +241,7 @@ function theme_basic_appearance_save(string $id, mixed $value): void
 /**
  * Return only DB-backed theme overrides.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,non-empty-string> Nonempty persisted theme overrides keyed by setting name.
  */
 function theme_override_settings(): array
 {

@@ -313,7 +313,7 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
     $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'changed_files' => 0,
         'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0, 'doc_regressions' => 0, 'finding_count' => 0],
         'findings' => [], 'blocked' => [], 'coverage' => [
-            'scope' => 'Added/materially changed PHP, Python/PYW, JS/MJS/CJS, inline HTML script declarations and ordinary Bash/PowerShell functions; doc-only regressions. Unchanged legacy debt remains visible in the whole-tree inventory.',
+            'scope' => 'Added/materially changed named functions, methods and class-like declarations in PHP, Python/PYW, JS/MJS/CJS, inline HTML scripts and ordinary Bash/PowerShell functions; named-declaration doc-only regressions. Anonymous/variable-bound callbacks, arrows and properties need no docstrings. Native signature typing and parser coverage remain independent; unchanged legacy debt stays visible in the inventory.',
             'identity' => 'Namespace/containing declaration identity and executable-token fingerprints; no line-number identity or baseline.',
             'limitations' => 'Conservative JS/native-script lexers, aliases/complex types and semantic truthfulness require review. Native-script argument/result typing remains manual. Python lambdas cannot have native docstrings and are excluded. Unsupported script declarations, changed batch bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
         ]];

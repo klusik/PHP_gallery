@@ -1664,8 +1664,14 @@ remaining counts, not an accepted-debt baseline.
 
 Every quick/full/release audit scans the complete admitted source tree through
 `source-contract-inventory` and strictly checks added or materially changed
-declarations through `source-documentation-changed`. Documentation-only regressions
-also fail. The full inventory is advisory while existing debt is being repaired;
+named functions, methods, and classes (including interfaces, traits, and enums)
+through `source-documentation-changed`. Documentation-only regressions in those
+declarations also fail. Anonymous functions, closures, arrow functions, and callbacks
+have no docstring contract, including callbacks assigned to variables or object
+members. Variables, constants, and class properties also need no declaration
+docstring. Named functions or classes nested inside callbacks remain checked.
+File headers, native typing, operational-policy comments, and parser coverage
+are separate contracts. The full inventory is advisory while existing debt is being repaired;
 a passing inventory means discovery completed, not that every old function complies.
 No accepted-debt baseline or automatic fabricated descriptions are introduced.
 
@@ -1679,13 +1685,16 @@ function boundaries remain `BLOCKED`. Native-script argument/result typing and
 execution semantics remain manual; the whole-tree inventory still checks their
 headers only. Batch bodies remain outside declaration-parser coverage.
 
-The shared contract is a meaningful summary, one typed and described `@param` for
+For named functions and methods, the shared contract is a meaningful summary, one typed and described `@param` for
 each explicit parameter, and one typed `@return`/`@returns`. Missing, extra or duplicate
 parameter names, missing types/descriptions, duplicate returns and definite type
 disagreements are findings. Non-void returns require a description; `void`, `never`
 and Python `None` may omit it. PHP arrays and JavaScript objects/arrays must describe
 their members through shapes, generics or an explicit existing opaque contract.
-Nested JSDoc field entries must refer to a real signature parameter.
+Nested JSDoc field entries must refer to a real signature parameter. Class-like
+declarations require a meaningful summary. Put documentation above its declaration;
+do not insert docblocks inside argument lists or extract named helpers solely for
+documentation coverage.
 
 Use native syntax with the same contract:
 

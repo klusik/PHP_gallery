@@ -791,6 +791,7 @@ function i18n(key, fallback, parameters = {}) {
  * @param {number} maximum Highest accepted integer.
  * @param {number} fallback Value used when direct input is empty or invalid.
  * @param {string} displaySuffix Optional unit appended to the output value.
+ * @return {void} Binds synchronization handlers and initializes the paired controls.
  */
 function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displaySelector, minimum, maximum, fallback, displaySuffix = '') {
     const slider = form.querySelector(sliderSelector);
@@ -871,7 +872,7 @@ function setupThemeMotionDurationControls(form) {
         if (!(reset instanceof HTMLButtonElement) || !(number instanceof HTMLInputElement)) {
             return;
         }
-        /** Restore one animation duration and let the paired controls sync normally. */
+        // Restore one animation duration and let the paired controls sync normally.
         const restoreDefault = () => {
             number.value = reset.dataset.themeMotionDefault || '';
             number.dispatchEvent(new Event('input', { bubbles: true }));

@@ -317,7 +317,9 @@ function php_declarations(string $source): array
 }
 
 /**
- * Check substantive summaries, parameter agreement, returns, and loose array shapes.
+ * Check named-declaration documentation and independent native signature typing.
+ * Anonymous/variable-bound callbacks and properties have no docstring contract;
+ * named callables and class-like declarations retain substantive documentation checks.
  * Types are checked for presence; semantic subtype compatibility needs review.
  * @param array{kind:string,name:string,line:int,params?:list<array{name:string,type:string,tuple_arity?:int}>,return_type?:string,doc:string,language?:string} $record Declaration with optional fixed JavaScript tuple metadata or native-script summary-only coverage.
  * @return list<string> Stable findings; no source values or documentation text.
@@ -336,6 +338,9 @@ function declaration_issues(array $record): array
             $typing[] = 'typing.return_missing';
         }
     }
+    if (!in_array($record['kind'], ['callable', 'function', 'class', 'interface', 'trait', 'enum'], true)) {
+        return array_values(array_unique($typing));
+    }
     $doc = $record['doc'];
     if ($doc === '') {
         return array_merge(['documentation.missing'], $typing);
@@ -345,10 +350,6 @@ function declaration_issues(array $record): array
         $clean = preg_replace('/^\s*(?:<#|#>|#|\.SYNOPSIS)\s*/mi', '', $doc) ?? $doc;
     }
     $summary = trim(explode('@', $clean, 2)[0]);
-    if ($record['kind'] === 'property' && $summary === '') {
-        $propertyTags = documentation_tags($clean, 'var');
-        $summary = documentation_type_description($propertyTags[0] ?? '');
-    }
     $issues = $typing;
     if (strlen($summary) < 12 || preg_match('/^(?:handles? (?:this|the) operation|todo|fixme|documentation)\W*$/i', $summary) === 1
         || preg_match('/^Handles .+ logic for the gallery application\./i', $summary) === 1) {
@@ -360,15 +361,6 @@ function declaration_issues(array $record): array
         return $issues;
     }
     if (in_array($record['kind'], ['class', 'interface', 'trait', 'enum'], true)) {
-        return $issues;
-    }
-    if ($record['kind'] === 'property') {
-        $tags = documentation_tags($clean, 'var');
-        if ($tags === [] || trim($tags[0]) === '') {
-            $issues[] = 'property.type';
-        } elseif (unspecified_shape($tags[0])) {
-            $issues[] = 'shape.unspecified';
-        }
         return $issues;
     }
     $parameters = $record['params'];
