@@ -45,6 +45,11 @@ assert(source.includes("form.matches('[data-admin-upload-automation-token-form]'
 assert(source.match(/data-admin-panel-scan-images-form[\s\S]*submitAdminPanelAuxiliaryMutation\(form, event\.submitter/), 'Scan/import must use the shared auxiliary completion path.');
 assert(source.match(/data-admin-panel-ai-reprocess-form[\s\S]*submitAdminPanelAuxiliaryMutation\(form, event\.submitter/), 'AI reprocess must use the shared auxiliary completion path.');
 assert(source.includes('await completeCoreGalleryMutationInCurrentView(result);'), 'Auxiliary side-panel success must reach the canonical coordinator.');
+assert(source.includes("import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';"), 'The dynamically rendered Images editor interactions must be loaded by the side-panel owner with a cache-busted module URL.');
+assert(source.includes("form.matches('[data-admin-panel-bulk-form]')") && source.includes('await submitAdminPanelImageBulkForm(form, submitter);'), 'Image row actions must use the document-delegated side-panel bulk workflow after replacement.');
+assert(source.includes("/^(delete|cover|public|draft|private):(\\d+)$/"), 'Single image row actions must be recognized independently of checkbox selection.');
+assert(source.includes("body.append('image_ids[]', rowAction[2]);"), 'A row action must submit only its own image ID to the existing bulk endpoint.');
+assert(source.includes("source: 'gallery-image-bulk'") && source.includes('result,') && source.includes('reflectGalleryImageBulkInCurrentView(result)'), 'Image row mutations must preserve the canonical response envelope through the shared side-panel completion coordinator.');
 
 const completionPath = path.join(projectRoot, 'public/assets/gallery-modules/admin-mutation-completion.js');
 const completionSource = await fs.readFile(completionPath, 'utf8');

@@ -40,7 +40,7 @@ namespace Gallery\Controllers;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\gallery_shows_filenames;
+use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Views\view_render_admin_gallery_images_tab;
@@ -51,6 +51,7 @@ use function Gallery\Views\view_render_admin_gallery_images_tab;
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param array<int, array<string, mixed>> $images Images attached to this gallery.
  * @param string $activeEditTab Currently selected editor tab.
+ * @return void Render prepared compact image rows and their panel actions.
  */
 function admin_edit_gallery_render_images_tab(array $gallery, array $images, string $activeEditTab): void
 {
@@ -87,12 +88,6 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
     render_admin_image_bulk_toolbar($gallery);
     $bulkToolbarHtml = (string) ob_get_clean();
 
-    $filenameFlagHtml = render_admin_feature_flag(
-        gallery_shows_filenames($gallery),
-        '✓',
-        t('admin.gallery_editor.file_names_shown_for_gallery', 'File names are shown for this gallery')
-    );
-
     $imageRows = [];
     foreach ($images as $image) {
         $imageId = (int) $image['id'];
@@ -100,8 +95,10 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
         $imageRows[] = [
             'id' => $imageId,
             'relative_path' => $relativePath,
-            'visibility' => (string) $image['visibility'],
+            'visibility' => normalize_gallery_visibility((string) $image['visibility']),
             'thumbnail_url' => thumbnail_url($image, 300),
+            'preview_url' => thumbnail_url($image, 900),
+            'capture_date' => (string) ($image['exif_taken_at'] ?? ''),
             'move_aria' => t('admin.image_order.move_aria', 'Move {file}', ['file' => $relativePath]),
             'cover_label' => (int) ($gallery['cover_image_id'] ?? 0) === $imageId
                 ? t('admin.gallery_editor.title_picture_current', 'Title picture')
@@ -118,7 +115,6 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
         'bulk_action_url' => url_for('admin_bulk_images'),
         'reorder_url' => url_for('admin_reorder_images'),
         'bulk_toolbar_html' => $bulkToolbarHtml,
-        'filename_flag_html' => $filenameFlagHtml,
         'scan_action' => [
             'url' => url_for('admin_scan_images'),
             'label' => t('admin.gallery_editor.scan_import_images', 'Scan/import images'),
@@ -130,7 +126,7 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
         ],
         'images' => $imageRows,
         'labels' => [
-            'drag_help' => t('admin.gallery_editor.drag_photos_help', 'Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.'),
+            'drag_help' => t('admin.gallery_editor.drag_photos_help', 'Drag to reorder, or sort by filename or EXIF capture date. Photos without a capture date stay last. Each change is saved immediately.'),
             'order_unchanged' => t('admin.gallery_editor.order_unchanged', 'Order unchanged.'),
             'move' => t('admin.gallery_editor.move', 'Move'),
             'select' => t('admin.gallery_editor.select', 'Select'),
@@ -146,6 +142,14 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'edit_photo' => t('admin.gallery_editor.edit_photo', 'Edit photo'),
             'edit' => t('admin.gallery_editor.edit', 'Edit'),
             'delete' => t('admin.gallery_editor.delete', 'Delete'),
+            'show_names' => t('admin.gallery_editor.images_show_names', 'Show filenames'),
+            'save_names_default' => t('admin.gallery_editor.images_save_names_default', 'Use as default'),
+            'names_default_saved' => t('admin.gallery_editor.images_names_default_saved', 'Default saved for other gallery editors.'),
+            'names_unavailable' => t('admin.gallery_editor.images_names_unavailable', 'Browser storage is unavailable; this choice applies only to this editor session.'),
+            'capture_date' => t('admin.gallery_editor.images_capture_date', 'Date taken'),
+            'sort_capture_date' => t('admin.image_order.sort_capture_date_asc_aria', 'Sort photos by capture date from oldest to newest'),
+            'set_cover' => t('admin.gallery_editor.set_as_title_picture', 'Set as title picture'),
+            'close_preview' => t('admin.gallery_editor.images_close_preview', 'Close preview'),
         ],
     ]);
 }

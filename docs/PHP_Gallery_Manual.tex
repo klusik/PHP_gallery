@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.115.1}
+\newcommand{\version}{0.116}
 \newcommand{\manualdate}{3~October~2026}
 
 \hypersetup{
@@ -1037,7 +1037,9 @@ Bulk image operations are intentionally narrower than the~individual editor and~
   \item create thumbnails for~the~selected photographs.
 \end{itemize}
 
-Photo ordering can~be~changed by~dragging the~row handle, and~the~gallery can~be~sorted by~filename from~the~Name column. Changes are~saved through the~normal ordering route rather than~being a~browser-only arrangement.
+Photo ordering can~be~changed by~dragging the~row handle, and~the~gallery can~be~sorted by~filename or~EXIF capture date. Photos without a~capture date stay last, and~changes are~saved through the~normal ordering route.
+
+The~gallery editor's \ui{Images} tab keeps common photo work in~one compact list. Accessible thumbnail previews can~be~opened by~pointer, keyboard focus, or~click; row selection supports a~Shift-click range. Each row provides direct controls for~visibility, choosing the~gallery title picture, editing, and~deleting that photo. These actions continue to~use the~existing authenticated server workflows. The~\ui{Show file names} option changes only the~editor display; administrators can~save an~optional browser-wide default, while each gallery remembers its~choice for~the~current editor session.
 
 When the~optional \ui{Picture Manager} feature is~enabled, a~normal signed-in administrator can~select photographs and~direct physical subgalleries in~the~public gallery grid. Checkmarks select individual cards; Shift-click selects a~range; Ctrl-click or~Cmd-click toggles a~card; \ui{Select all}, \ui{Clear}, and~Ctrl/Cmd+A support larger visible-page selections. Smart Gallery cards are~not~part of~this file-based selection. Dragging an~unselected photo starts with that photo as~the~selection, while dragging an~existing photo selection moves the~selected photographs together. A~visible child-gallery card becomes a~drop target, and~dropping there performs the~same validated photo move as~the~destination picker. Physical gallery cards themselves are~not~drag sources.
 

@@ -249,14 +249,20 @@ function view_render_public_image_admin_edit_link(array $viewModel): void
  * Render the public-page photo delete form.
  *
  * @param array<string,mixed> $viewModel Controller-prepared photo-delete state.
+ * @return void Emits the public-card form or a row-action button for the image bulk form.
  */
 function view_render_public_image_admin_delete_form(array $viewModel): void
 {
     $name = (string) ($viewModel['name'] ?? 'photo');
+    $imageId = (int) ($viewModel['image_id'] ?? 0);
     $label = t('gallery.remove_photo_named', 'Remove photo {name} from CMS', ['name' => $name]);
+    if (!empty($viewModel['image_bulk'])) {
+        echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" name="action" value="delete:' . $imageId . '" data-admin-image-delete-single data-admin-image-row-action data-image-id="' . $imageId . '" data-image-name="' . e($name) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+        return;
+    }
     echo '<form class="public-admin-delete-form public-admin-delete-form-card public-admin-delete-form-photo" method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="photo">';
     echo (string) ($viewModel['csrf_html'] ?? '');
-    echo '<input type="hidden" name="image_id" value="' . (int) ($viewModel['image_id'] ?? 0) . '">';
+    echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo '<input type="hidden" name="action" value="delete">';
     echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
     echo '</form>';
@@ -265,7 +271,7 @@ function view_render_public_image_admin_delete_form(array $viewModel): void
 /**
  * Render the shared three-state visibility menu for a gallery or image card.
  *
- * @param array<string,mixed> $viewModel Prepared entity/state/URL/CSRF markup; optional embedded mode avoids nested forms.
+ * @param array<string,mixed> $viewModel Prepared entity/state/URL/CSRF markup; embedded and image-bulk modes avoid nested forms.
  * @return void
  */
 function view_render_public_admin_visibility_menu(array $viewModel): void
@@ -279,7 +285,8 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
     $visibility = (string) ($viewModel['visibility'] ?? 'unpublished');
     $visibility = in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
     $idField = $kind === 'gallery' ? 'gallery_id' : 'image_id';
-    $embedded = !empty($viewModel['embedded']);
+    $imageBulk = !empty($viewModel['image_bulk']) && $kind === 'image';
+    $embedded = !empty($viewModel['embedded']) || $imageBulk;
     $label = t('gallery.visibility.change_named', 'Change visibility for {name}', ['name' => $name]);
     $options = [
         'public' => ['public-admin-visibility-icon-public', t('gallery.visibility.public', 'Published')],
@@ -287,10 +294,15 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
         'private' => ['public-admin-visibility-icon-private', t('gallery.visibility.private', 'Private')],
     ];
 
-    echo '<details class="public-admin-visibility-menu ' . ($embedded ? 'public-admin-visibility-menu-embedded' : 'public-admin-visibility-menu-card') . '" data-public-admin-card-action data-public-admin-visibility-menu' . ($embedded ? ' data-admin-gallery-visibility data-action-url="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-gallery-id="' . $entityId . '" data-edit-revision="' . e((string) ($viewModel['edit_revision'] ?? '')) . '"' : '') . '>';
+    echo '<details class="public-admin-visibility-menu ' . ($embedded ? 'public-admin-visibility-menu-embedded' : 'public-admin-visibility-menu-card') . '" data-public-admin-card-action data-public-admin-visibility-menu' . ($imageBulk ? ' data-admin-image-row-visibility data-image-id="' . $entityId . '"' : ($embedded ? ' data-admin-gallery-visibility data-action-url="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-gallery-id="' . $entityId . '" data-edit-revision="' . e((string) ($viewModel['edit_revision'] ?? '')) . '"' : '')) . '>';
     echo '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="' . e($label) . '" title="' . e($label) . '"><span class="public-admin-visibility-icon ' . e($options[$visibility][0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($label) . '</span></summary>';
     echo '<div class="public-admin-visibility-options" role="group" aria-label="' . e($label) . '">';
     foreach ($options as $value => $option) {
+        if ($imageBulk) {
+            $bulkAction = $value === 'unpublished' ? 'draft' : $value;
+            echo '<button type="submit" name="action" value="' . e($bulkAction . ':' . $entityId) . '" data-admin-image-row-action data-image-id="' . $entityId . '" class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e((string) $option[1]) . '"><span class="public-admin-visibility-icon ' . e((string) $option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="admin-gallery-visibility-option-label">' . e((string) $option[1]) . '</span></button>';
+            continue;
+        }
         if (!$embedded) {
             echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . (string) ($viewModel['csrf_html'] ?? '');
             echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';

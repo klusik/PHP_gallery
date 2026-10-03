@@ -639,6 +639,7 @@ function view_render_footer(string $page = 'home', array $model = []): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-duplicate-photo-detector.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-compact-editor.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-images.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-report.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-maintenance-center.js',

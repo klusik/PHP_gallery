@@ -30,7 +30,7 @@
  *   2026-09-14
  */
 
-import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
+import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261003-images-v4';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
@@ -38,7 +38,8 @@ import { setupPictureManager, teardownPictureManager } from './picture-manager.j
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261002-overview-navigation-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
-import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260920-panel-lifecycle-v1';
+import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
+import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260920-operation-keys-v1';
@@ -678,6 +679,7 @@ export function setupAdminGallerySidePanel() {
         if (typeof event.stopImmediatePropagation === 'function') {
             event.stopImmediatePropagation();
         }
+        if (!confirmImageBulkSubmission(form, submitter)) return;
         await submitAdminPanelImageBulkForm(form, submitter);
     }, true);
 
@@ -980,6 +982,7 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
         prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
         prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
         setupAdminImageReordering();
+        setupAdminGalleryImages(body);
     } else if (workflow.name === 'image-edit') {
         const imageForm = body.querySelector('section.panel form.form-grid, form.form-grid');
         prepareAdminPanelEditForm(imageForm, workflow.name, sourceUrl);
@@ -1697,7 +1700,8 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
     if (submitter instanceof HTMLButtonElement && submitter.name === 'action' && submitter.value !== '') {
         action = submitter.value;
     }
-    if (selectedInputs.length === 0) {
+    const rowAction = /^(delete|cover|public|draft|private):(\d+)$/.exec(action);
+    if (!rowAction && selectedInputs.length === 0) {
         writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.select_photo_first', 'Select at least one photo first.'), true);
         return;
     }
@@ -1746,11 +1750,15 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
                 body.set('new_gallery_folder_name', newGalleryFolderName.value);
             }
         }
-        selectedInputs.forEach(/** Serialize only selected image identifiers from the original bulk form. @param {Element} input Checked image-ID control. @return {void} Appends the ID only when the candidate is an input. */ (input) => {
-            if (input instanceof HTMLInputElement) {
-                body.append('image_ids[]', input.value);
-            }
-        });
+        if (rowAction) {
+            body.append('image_ids[]', rowAction[2]);
+        } else {
+            selectedInputs.forEach(/** Serialize only selected image identifiers from the original bulk form. @param {Element} input Checked image-ID control. @return {void} Appends the ID only when the candidate is an input. */ (input) => {
+                if (input instanceof HTMLInputElement) {
+                    body.append('image_ids[]', input.value);
+                }
+            });
+        }
         body.set('action', action);
         body.set('ajax', '1');
         body.set('panel', '1');
@@ -2390,10 +2398,7 @@ function updateAdminImageRowsFromResult(imageId, result) {
         if (!(row instanceof HTMLElement)) {
             return;
         }
-        const statusCell = row.querySelector('td:nth-child(6)');
-        if (statusCell instanceof HTMLElement && result.image_visibility) {
-            statusCell.textContent = String(result.image_visibility);
-        }
+        // Visibility controls are server-rendered by the canonical completion refresh.
         const sortOrder = Number(result.image_sort_order || 0);
         if (Number.isFinite(sortOrder)) {
             row.dataset.imageSortOrder = String(sortOrder);

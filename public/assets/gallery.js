@@ -63,6 +63,7 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260925-compact-identifier-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20260925-compact-editor-v2';
+import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261003-images-v4';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
@@ -88,7 +89,7 @@ import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
-import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
+import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261003-images-v4';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
 import {
     setupAdminGalleryFilters,
@@ -109,7 +110,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261002-gallery-tree-v3';
+} from './gallery-modules/admin-operations.js?v=20261003-images-v4';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -175,6 +176,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminDatePickers();
     setupSimbriefDescriptionGenerator();
     setupAdminGalleryCompactEditor();
+    setupAdminGalleryImages();
     setupOpenAITextAssist();
     setupAdminGalleryMigration();
     setupAdminMediaRenamer();

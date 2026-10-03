@@ -34,6 +34,20 @@ import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY }
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
+// imageSortStates preserves the active header direction while canonical saves replace the editor fragment.
+const imageSortStates = new Map();
+
+/**
+ * Builds the session key for one gallery's image-order sort control.
+ *
+ * @param {string} galleryId Gallery identifier whose editor is being sorted.
+ * @param {'name'|'capture-date'} sortKey Sort column represented by the control.
+ * @return {string} Stable key scoped to the gallery and sort column.
+ */
+function imageSortStateKey(galleryId, sortKey) {
+    return `${galleryId}:${sortKey}`;
+}
+
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
  *
@@ -153,21 +167,126 @@ export function setupAdminImageReordering() {
     }
 
         /**
-     * Synchronizes visual and accessibility state of the Name sorting header.
+     * Synchronizes visual and accessibility state of an image sorting header.
      *
-     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {HTMLButtonElement} button Header button used to sort image rows.
      * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
      * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @return {void} Result value for the caller.
      */
     function updateNameSortHeader(button, nextDirection, activeDirection) {
         const sortHeader = button.closest('th');
         const arrow = button.querySelector('[aria-hidden="true"]');
+        const captureDateSort = button.matches('[data-admin-image-capture-date-sort]');
         button.dataset.sortDirection = nextDirection;
-        button.setAttribute('aria-label', nextDirection === 'asc' ? i18n('admin.image_order.sort_name_asc_aria', 'Sort photos by name from A to Z') : i18n('admin.image_order.sort_name_desc_aria', 'Sort photos by name from Z to A'));
+        const ascendingLabel = captureDateSort ? i18n('admin.image_order.sort_capture_date_asc_aria', 'Sort photos by capture date from oldest to newest') : i18n('admin.image_order.sort_name_asc_aria', 'Sort photos by name from A to Z');
+        const descendingLabel = captureDateSort ? i18n('admin.image_order.sort_capture_date_desc_aria', 'Sort photos by capture date from newest to oldest') : i18n('admin.image_order.sort_name_desc_aria', 'Sort photos by name from Z to A');
+        button.setAttribute('aria-label', nextDirection === 'asc' ? ascendingLabel : descendingLabel);
         sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
         if (arrow) {
             arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
         }
+    }
+
+        /**
+     * Restores the last active state for one sort control after a fragment refresh.
+     *
+     * @param {HTMLButtonElement} button Sort header being initialized.
+     * @param {'name'|'capture-date'} sortKey Sort column represented by the control.
+     * @return {void} Result value for the caller.
+     */
+    function restoreImageSortHeader(button, sortKey) {
+        const saved = imageSortStates.get(imageSortStateKey(galleryInput.value, sortKey));
+        if (saved) updateNameSortHeader(button, saved.nextDirection, saved.activeDirection);
+    }
+
+        /**
+     * Reads a capture timestamp stored from EXIF metadata on an image row.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @return {number|null} Parsed timestamp in milliseconds, or null when absent or invalid.
+     */
+    function sortableCaptureTimestamp(row) {
+        const value = (row.dataset.imageCapturedAt || '').trim();
+        if (value === '') {
+            return null;
+        }
+        const match = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/.exec(value);
+        if (!match) return null;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const hour = Number(match[4] || 0);
+        const minute = Number(match[5] || 0);
+        const second = Number(match[6] || 0);
+        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+        if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day
+            || hour > 23 || minute > 59 || second > 59) return null;
+        return date.getTime();
+    }
+
+        /**
+     * Sorts image rows using the selected key and persists the resulting order.
+     * Missing capture dates stay after dated images in both directions.
+     *
+     * @param {HTMLButtonElement} button Header button identifying the sort key.
+     * @param {'name'|'capture-date'} sortKey Key used to compare rows.
+     * @param {'asc'|'desc'} direction Direction applied to the current operation.
+     * @return {void} Result value for the caller.
+     */
+    function sortImageRows(button, sortKey, direction) {
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus(i18n('admin.image_order.sort_not_needed', 'There is only one image, so sorting is not needed.'), 'idle');
+            return;
+        }
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        /**
+         * Decorates one row with values used by stable image sorting.
+         *
+         * @param {HTMLTableRowElement} row Image table row.
+         * @param {number} index Current visual index used to keep ties stable.
+         * @return {{row: HTMLTableRowElement, index: number, name: string, capturedAt: number|null}} Sort record.
+         */
+        function decorateSortableRow(row, index) {
+            return {row, index, name: sortableImageName(row), capturedAt: sortableCaptureTimestamp(row)};
+        }
+        /**
+         * Compares two rows using the active key, direction, and stable tie order.
+         *
+         * @param {{row: HTMLTableRowElement, index: number, name: string, capturedAt: number|null}} left First sort record.
+         * @param {{row: HTMLTableRowElement, index: number, name: string, capturedAt: number|null}} right Second sort record.
+         * @return {number} Negative, zero, or positive comparator result.
+         */
+        function compareSortableRows(left, right) {
+            if (sortKey === 'capture-date') {
+                if (left.capturedAt === null && right.capturedAt !== null) return 1;
+                if (left.capturedAt !== null && right.capturedAt === null) return -1;
+                if (left.capturedAt !== null && right.capturedAt !== null && left.capturedAt !== right.capturedAt) {
+                    return (left.capturedAt - right.capturedAt) * multiplier;
+                }
+            } else {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) return compared * multiplier;
+            }
+            return left.index - right.index;
+        }
+        /**
+         * Appends one sorted row to the table body.
+         *
+         * @param {{row: HTMLTableRowElement, index: number, name: string, capturedAt: number|null}} entry Sorted row record.
+         * @return {void} Result value for the caller.
+         */
+        function appendSortedRow(entry) {
+            body.appendChild(entry.row);
+        }
+        rows.map(decorateSortableRow).sort(compareSortableRows).forEach(appendSortedRow);
+
+        const nextDirection = direction === 'asc' ? 'desc' : 'asc';
+        updateNameSortHeader(button, nextDirection, direction);
+        imageSortStates.set(imageSortStateKey(galleryInput.value, sortKey), {nextDirection, activeDirection: direction});
+        saveOrder();
     }
 
         /**
@@ -190,26 +309,21 @@ export function setupAdminImageReordering() {
             return;
         }
         const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
-        const multiplier = direction === 'asc' ? 1 : -1;
-        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
-        if (rows.length < 2) {
-            setStatus(i18n('admin.image_order.sort_not_needed', 'There is only one image, so sorting is not needed.'), 'idle');
-            return;
-        }
+        sortImageRows(button, 'name', direction);
+    }
 
-        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
-        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
-            .sort((left, right) => {
-                const compared = collator.compare(left.name, right.name);
-                if (compared !== 0) {
-                    return compared * multiplier;
-                }
-                return left.index - right.index;
-            })
-            .forEach((entry) => body.appendChild(entry.row));
-
-        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
-        saveOrder();
+        /**
+     * Handles clicks on the capture-date sort header.
+     *
+     * @param {MouseEvent} event Click event from the capture-date header button.
+     * @return {void} Result value for the caller.
+     */
+    function handleCaptureDateSortClick(event) {
+        if (draggedRow) return;
+        const button = event.currentTarget;
+        if (!(button instanceof HTMLButtonElement)) return;
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        sortImageRows(button, 'capture-date', direction);
     }
 
         /**
@@ -524,7 +638,16 @@ export function setupAdminImageReordering() {
         row.setAttribute('draggable', 'false');
     });
 
-    table.querySelector('[data-admin-image-name-sort]')?.addEventListener('click', handleNameSortClick);
+    const nameSortButton = toolbar.querySelector('[data-admin-image-name-sort]');
+    const captureDateSortButton = toolbar.querySelector('[data-admin-image-capture-date-sort]');
+    if (nameSortButton instanceof HTMLButtonElement) {
+        restoreImageSortHeader(nameSortButton, 'name');
+        nameSortButton.addEventListener('click', handleNameSortClick);
+    }
+    if (captureDateSortButton instanceof HTMLButtonElement) {
+        restoreImageSortHeader(captureDateSortButton, 'capture-date');
+        captureDateSortButton.addEventListener('click', handleCaptureDateSortClick);
+    }
 
     body.querySelectorAll('[data-admin-image-drag-handle]').forEach((handle) => {
         // Prevents the browser from selecting the arrow text or trying to create a native button drag image.

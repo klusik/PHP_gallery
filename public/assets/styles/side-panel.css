@@ -1404,7 +1404,219 @@ body.has-admin-side-panel {
     backdrop-filter: blur(16px);
 }
 .admin-side-panel .admin-image-order-table {
-    min-width: 56rem;
+    min-width: 0;
+}
+
+/* Compact Images rows keep the shared card controls aligned inside the drawer. */
+.admin-gallery-images .admin-tab-intro {
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+}
+.admin-gallery-images .admin-tab-intro h2 { font-size: 1.05rem; }
+.admin-gallery-images .admin-edit-image-toolbar {
+    margin-bottom: 0.4rem;
+    padding: 0.5rem;
+    border-radius: 9px;
+}
+.admin-gallery-images .admin-image-bulk-primary,
+.admin-gallery-images .admin-image-view-controls,
+.admin-gallery-images .admin-image-sort-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+.admin-gallery-images .admin-image-bulk-primary > label,
+.admin-gallery-images .admin-image-view-controls > label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    font-size: 0.78rem;
+}
+.admin-gallery-images input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; }
+.admin-gallery-images .admin-image-bulk-primary > label:has(select) {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+}
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-summary { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero { padding: 0.7rem 0.9rem; gap: 0.5rem; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero h1 { font-size: 1.15rem; margin: 0; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero p,
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero [aria-label="Page summary"] { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero .admin-hero-actions { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) #admin-edit-images { padding: 0.8rem; }
+.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-savebar { display: none; }
+.admin-gallery-images .admin-image-bulk-primary select { width: auto; max-width: 13rem; }
+.admin-gallery-images .admin-image-bulk-primary button,
+.admin-gallery-images .admin-image-bulk-primary select,
+.admin-gallery-images .admin-image-default-button {
+    min-height: 2rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 7px;
+    font-size: 0.78rem;
+}
+.admin-gallery-images .admin-image-selection-count {
+    min-height: 1.6rem;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+}
+.admin-gallery-images .admin-image-maintenance { position: relative; margin-left: auto; }
+.admin-gallery-images .admin-image-maintenance > summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 0.35rem;
+}
+.admin-gallery-images .admin-image-maintenance-options {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.6rem 0;
+}
+.admin-gallery-images .admin-image-order-toolbar {
+    gap: 0.45rem;
+    padding: 0.3rem 0;
+    margin: 0 0 0.3rem;
+    border: 0;
+    background: transparent;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+}
+.admin-gallery-images .admin-image-name-sort {
+    padding: 0.3rem 0.45rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+}
+.admin-gallery-images .admin-image-order-status { font-size: 0.72rem; }
+.admin-gallery-images .admin-image-order-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+.admin-gallery-images .admin-image-order-table th,
+.admin-gallery-images .admin-image-order-table td {
+    padding: 0.3rem 0.4rem;
+    vertical-align: middle;
+}
+.admin-gallery-images .admin-image-order-table th {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+.admin-gallery-images .admin-image-order-cell { width: 2rem; }
+.admin-gallery-images .admin-image-thumbnail-cell { width: 6.25rem; }
+.admin-gallery-images .admin-image-actions-cell { width: 10rem; }
+.admin-gallery-images .admin-image-drag-handle {
+    width: 1.8rem;
+    height: 1.8rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border-radius: 7px;
+}
+.admin-image-thumbnail { position: relative; width: 6.25rem; max-width: 100%; height: 3.6rem; }
+.admin-gallery-images .admin-image-preview-button {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #e2e8f0;
+}
+.admin-gallery-images .admin-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.admin-gallery-images .admin-image-select {
+    top: 0.18rem;
+    left: 0.18rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    margin: 0;
+    padding: 0;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.admin-image-select input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.admin-image-select span { opacity: 0.25; pointer-events: none; font-size: 0.82rem; }
+.admin-image-select:has(input:checked) { background: var(--accent); color: white; border-color: var(--accent-dark); }
+.admin-image-select:has(input:checked) span { opacity: 1; }
+.admin-image-select:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.admin-gallery-images tr.is-picture-manager-selected td { background: color-mix(in srgb, var(--accent) 12%, white); }
+.admin-gallery-images .admin-image-filename {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+.admin-gallery-images .is-filenames-hidden [data-admin-image-name-cell] { display: none; }
+.admin-image-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem; }
+.admin-image-row-actions .public-admin-edit-button,
+.admin-image-row-actions .public-admin-card-action-button {
+    position: static;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border-radius: 7px;
+    border-color: #d5dde7;
+    background: #f8fafc;
+    color: #334155;
+    box-shadow: none;
+    font-size: 0.9rem;
+}
+.admin-image-row-actions .public-admin-edit-button:hover,
+.admin-image-row-actions .public-admin-card-action-button:hover { background: #e2e8f0; color: #0f172a; }
+.admin-image-row-actions .public-admin-delete-button { color: #b42318; }
+.admin-image-row-actions .admin-image-cover-button.is-cover { color: #926000; background: #fff4c2; border-color: #ead28a; }
+.admin-image-row-actions .public-admin-visibility-menu { position: relative; }
+.admin-image-row-actions .public-admin-visibility-menu[open],
+.admin-image-row-actions .public-admin-visibility-menu:hover { z-index: 20; }
+.admin-image-row-actions .public-admin-visibility-options { left: auto; right: 0; }
+.admin-image-row-actions .public-admin-visibility-option { width: auto; gap: 0.3rem; padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+.admin-image-row-actions .admin-gallery-visibility-option-label { white-space: nowrap; }
+
+/* One bounded thumbnail preview floats above the drawer without loading originals. */
+.admin-image-preview-overlay {
+    position: fixed;
+    z-index: 10030;
+    width: min(25rem, calc(100vw - 1.5rem));
+    padding: 0.3rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.3);
+    pointer-events: none;
+}
+.admin-image-preview-overlay[hidden] { display: none; }
+.admin-image-preview-overlay.is-pinned { pointer-events: auto; }
+.admin-image-preview-overlay img { width: 100%; height: auto; max-height: min(20rem, calc(100vh - 2rem)); object-fit: contain; display: block; border-radius: 5px; }
+.admin-image-preview-overlay button { position: absolute; top: 0.5rem; right: 0.5rem; width: 1.8rem; height: 1.8rem; padding: 0; border-radius: 6px; background: #fff; color: #334155; }
+.admin-image-preview-overlay:not(.is-pinned) button { visibility: hidden; }
+@media (max-width: 480px) {
+    .admin-gallery-images .admin-image-thumbnail-cell { width: 4.25rem; }
+    .admin-gallery-images .admin-image-thumbnail { width: 4.25rem; height: 3rem; }
+    .admin-gallery-images .admin-image-actions-cell { width: 8.5rem; }
+    .admin-image-row-actions { gap: 0.15rem; }
+    .admin-image-row-actions .public-admin-edit-button,
+    .admin-image-row-actions .public-admin-card-action-button { width: 1.85rem; min-width: 1.85rem; }
 }
 .admin-side-panel .admin-side-panel-edit-workspace > .panel {
     margin: 0;
