@@ -220,19 +220,24 @@ assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme c
 
     $publicGallerySource = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery.php')
         . (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php')
-        . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php');
+        . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php')
+        . (string) file_get_contents(__DIR__ . '/../app/views/public_tags.php');
     assert_hero_tag_source_contains($publicGallerySource, 'sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())', 'public server-side hero sort');
-    assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags data-hero-tag-visible-limit=', 'public hero configuration markup');
-    assert_hero_tag_source_contains($publicGallerySource, "render_tag_list(\$heroTagGroups['gallery'])", 'direct tags remain server-rendered');
-    assert_hero_tag_source_contains($publicGallerySource, "render_tag_list(\$heroTagGroups['contained']", 'contained tags remain server-rendered');
-    assert_hero_tag_source_contains($publicGallerySource, "t('gallery.show_all_tags', 'Display all tags')", 'public disclosure translation');
+    assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit=', 'public hero server-first configuration markup');
+    assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags-disclosure', 'public hero native disclosure markup');
+    assert_hero_tag_source_contains($publicGallerySource, 'array_slice($items, 0, $visibleLimit)', 'visible hero tags are selected on the server');
+    assert_hero_tag_source_contains($publicGallerySource, "t('gallery.show_all_tags', 'Display all tags')", 'public native disclosure translation');
+    assert_hero_tag_source_contains($publicGallerySource, "t('gallery.show_fewer_tags', 'Show fewer tags')", 'public expanded-state translation');
 
     $heroTagBrowserSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/hero-tags.js');
     assert_hero_tag_source_contains($heroTagBrowserSource, 'export function setupHeroTagDisclosure()', 'hero browser setup export');
-    assert_hero_tag_source_contains($heroTagBrowserSource, 'tag.hidden = !expanded && index >= visibleLimit;', 'pure client-side tag visibility');
-    assert_hero_tag_source_contains($heroTagBrowserSource, "toggle.setAttribute('aria-expanded'", 'accessible disclosure state');
-    assert_hero_tag_source_contains($heroTagBrowserSource, "'ResizeObserver' in window", 'responsive row measurement');
-    assert_hero_tag_source_contains($heroTagBrowserSource, "content.classList.add('is-scrollable')", 'conditional scrollbar activation');
+    assert_hero_tag_source_contains($heroTagBrowserSource, "root.dataset.heroTagsNative === '1'", 'native roots bypass client-side layout changes');
+    assert_hero_tag_source_contains($heroTagBrowserSource, "if (root.dataset.heroTagsNative === '1') {", 'browser hook exits before legacy layout work for server-owned roots');
+    $nativeLayoutGuard = strpos($heroTagBrowserSource, "root.dataset.heroTagsNative === '1'");
+    $legacyVisibilityMutation = strpos($heroTagBrowserSource, 'tag.hidden = !expanded && index >= visibleLimit;');
+    if ($nativeLayoutGuard === false || $legacyVisibilityMutation === false || $nativeLayoutGuard > $legacyVisibilityMutation) {
+        throw new RuntimeException('Native tag roots must bypass the legacy visibility mutation before it can run.');
+    }
 
     $anonymousEntrypoint = (string) file_get_contents(__DIR__ . '/../public/assets/public-gallery.js');
     $adminEntrypoint = (string) file_get_contents(__DIR__ . '/../public/assets/gallery.js');
@@ -243,8 +248,14 @@ assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme c
         $cssSource = (string) file_get_contents(__DIR__ . '/../public/assets/styles/' . $stylesheet);
         assert_hero_tag_source_contains($cssSource, '.public-page .hero .tag-list {', $stylesheet . ' hero tag-list rule');
         assert_hero_tag_source_contains($cssSource, 'max-width: none;', $stylesheet . ' full-width hero tag override');
-        assert_hero_tag_source_contains($cssSource, '.public-page .hero-tags-content.is-scrollable {', $stylesheet . ' conditional hero scrollbar rule');
     }
+    $publicTagCss = (string) file_get_contents(__DIR__ . '/../public/assets/styles/public-shared.css');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page .hero-tag-disclosure {', 'native disclosure stays in the flex tag row');
+    assert_hero_tag_source_contains($publicTagCss, 'display: contents;', 'native disclosure children retain the shared wrapping layout');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] [data-hero-tags-content] {', 'server-configured scrollbar CSS');
+    assert_hero_tag_source_contains($publicTagCss, 'max-height: var(--hero-tag-scrollbar-height);', 'first-paint row cap uses server-computed geometry');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tag-tail:has(> .hero-tag-disclosure[open]) {', 'expanded native disclosure restores wrapping for overflow tags');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tags .tag-list {', 'gallery card tag margins are owned by the dedicated layout rule');
 
     foreach (['en', 'cs'] as $language) {
         $catalog = json_decode((string) file_get_contents(__DIR__ . '/../app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);

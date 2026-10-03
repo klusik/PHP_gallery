@@ -28,7 +28,7 @@ const browserStartupTimeoutMs = 15000;
 /** Chromium executable supplied by the central browser registry. */
 const executable = process.argv[2];
 /** Explicit fixture allowlist; alternate wrapper never exposes arbitrary repository files. */
-const fixtureName = ['admin_operation_keys.html', 'admin_cooperative_galleries.html', 'admin_update_jobs.html', 'admin_settings_workspace.html', 'admin_upload_workspace.html', 'admin_gallery_quick_access.html', 'admin_dashboard_workspace.html', 'admin_smart_galleries.html', 'public_home_creation.html', 'admin_trash_confirmation.html', 'admin_gallery_tree.html', 'admin_gallery_features.html', 'theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
+const fixtureName = ['admin_operation_keys.html', 'admin_cooperative_galleries.html', 'admin_update_jobs.html', 'admin_settings_workspace.html', 'admin_upload_workspace.html', 'admin_gallery_quick_access.html', 'admin_dashboard_workspace.html', 'admin_smart_galleries.html', 'public_home_creation.html', 'admin_trash_confirmation.html', 'admin_gallery_tree.html', 'admin_gallery_features.html', 'theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'gallery_tags.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
 if (!executable) {
     console.log('SKIP panel lifecycle browser: no Chromium executable supplied.');
     process.exit(0);
@@ -52,6 +52,9 @@ const publicCardMarkup = fixtureName === 'theme_appearance.html'
 /** Actual create-gallery page and panel output from disposable prepared models. */
 const creationMarkup = fixtureName === 'gallery_creation.html'
     ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/gallery_creation_render_fixture.php')], {encoding: 'utf8', windowsHide: true}) : '';
+/** Actual public gallery-tag card output from the isolated production view renderer. */
+const galleryTagsMarkup = fixtureName === 'gallery_tags.html'
+    ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/gallery_tags_render_fixture.php')], {encoding: 'utf8', windowsHide: true}) : '';
 /** @type {WebSocket|null} Owned Chromium debugging socket, never a user browser connection. */
 let debuggingSocket = null;
 /** @type {Promise<void>} Setup barrier for fixture keyboard requests. */
@@ -150,6 +153,19 @@ async function attachKeyboard(profilePath) {
  */
 async function serveFixture(request, response) {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname === '/__viewport' && fixtureName === 'gallery_tags.html') {
+        const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
+        if (width !== 390) { response.writeHead(400).end(); return; }
+        try { await browserReady; await setFixtureWidth(width); response.end('ok'); }
+        catch { response.writeHead(500).end('Viewport fixture unavailable'); }
+        return;
+    }
+    if (pathname === '/__key' && fixtureName === 'gallery_tags.html') {
+        if (new URL(request.url, 'http://localhost').searchParams.get('key') !== 'Enter') { response.writeHead(400).end(); return; }
+        try { await browserReady; await sendKey('Enter', false); response.end('ok'); }
+        catch { response.writeHead(500).end('Keyboard fixture unavailable'); }
+        return;
+    }
     if (pathname === '/__public_cards' && fixtureName === 'theme_appearance.html') {
         response.setHeader('Content-Type','text/html; charset=utf-8'); response.end(publicCardMarkup); return;
     }
@@ -173,7 +189,7 @@ async function serveFixture(request, response) {
     if (pathname === '/__key') {
         const parameters = new URL(request.url, 'http://localhost').searchParams;
         const key = parameters.get('key');
-        if (!['Tab', 'Escape'].includes(key) && !(fixtureName === 'gallery_creation.html' && key === 'Enter')) { response.writeHead(400).end(); return; }
+        if (!['Tab', 'Escape'].includes(key) && !(fixtureName === 'gallery_creation.html' && key === 'Enter') && !(fixtureName === 'gallery_tags.html' && key === 'Enter')) { response.writeHead(400).end(); return; }
         try {
             await browserReady;
             await sendKey(key, parameters.get('shift') === '1');
@@ -187,7 +203,7 @@ async function serveFixture(request, response) {
     try {
         response.setHeader('Content-Type', relative.endsWith('.html') ? 'text/html; charset=utf-8' : (relative.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8'));
         const bytes = await readFile(path.join(root, relative));
-        response.end(pathname === '/' && (galleryMarkup || themeMarkup || creationMarkup) ? bytes.toString().replace('<!-- PRODUCTION_GALLERY_MARKUP -->', galleryMarkup).replace('<!-- PRODUCTION_THEME_MARKUP -->', themeMarkup).replace('<!-- PRODUCTION_CREATION_MARKUP -->', creationMarkup) : bytes);
+        response.end(pathname === '/' && (galleryMarkup || themeMarkup || creationMarkup || galleryTagsMarkup) ? bytes.toString().replace('<!-- PRODUCTION_GALLERY_MARKUP -->', galleryMarkup).replace('<!-- PRODUCTION_THEME_MARKUP -->', themeMarkup).replace('<!-- PRODUCTION_CREATION_MARKUP -->', creationMarkup).replace('<!-- PRODUCTION_GALLERY_TAGS_MARKUP -->', galleryTagsMarkup) : bytes);
     } catch { response.writeHead(500).end(); }
 }
 

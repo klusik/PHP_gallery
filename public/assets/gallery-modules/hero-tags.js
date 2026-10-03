@@ -6,22 +6,20 @@
  * Module Type: Browser Module
  *
  * Purpose:
- *   Applies progressive disclosure and responsive row-based scrolling to the
- *   complete server-rendered tag collections in gallery headers and cards.
+ *   Preserves the server-rendered native disclosure in gallery headers and
+ *   cards while supporting older button-based tag markup during refreshes.
  *
  * Responsibilities:
- *   - Collapse large tag collections to the configured initial tag count
- *   - Expand and collapse all tags without navigation or network requests
- *   - Hide group labels when a collapsed group has no visible tags
- *   - Enable scrolling only after actual wrapped rows exceed the configured limit
- *   - Recalculate row wrapping when the hero width changes
+ *   - Leave native details-based disclosure and CSS row limits untouched
+ *   - Keep compatibility behavior for older button-based fragment markup
+ *   - Initialize newly inserted tag collections without duplicate handlers
  *
  * Author:
  *   Rudolf Klusal
  *
  * Notes:
- *   - All tags remain present in the server HTML. Without JavaScript the full
- *     collection stays visible and usable.
+ *   - Current PHP views emit the configured visible tags and native details
+ *     disclosure in the initial HTML, including when JavaScript is disabled.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -135,12 +133,17 @@ function syncInlineTagToggle(content, toggle, lastTag) {
 }
 
 /**
- * Initialize one server-rendered gallery header or card tag collection.
+ * Preserve native server-rendered disclosure or initialize legacy tag markup.
  *
  * @param {HTMLElement} root Hero tag root element.
- * @return {void} Binds disclosure controls and observes changes to the available width.
+ * @return {void} Leaves native roots untouched and enhances legacy markup only.
  */
 function setupHeroTagRoot(root) {
+    // Current server-rendered roots are already complete; avoid even a marker
+    // mutation because offscreen content-visibility cards use intrinsic size.
+    if (root.dataset.heroTagsNative === '1') {
+        return;
+    }
     if (root.dataset.heroTagsReady === '1') {
         return;
     }

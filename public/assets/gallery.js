@@ -53,7 +53,7 @@
  */
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261003-gallery-grid-v1';
-import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261003-shared-gallery-tags-v3';
+import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261003-native-gallery-tags-v1';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';

@@ -122,29 +122,136 @@ function view_render_tag_list(array $viewModel): void
         return;
     }
 
-    echo '<p class="tag-list">';
+    $inlineDisclosure = !empty($viewModel['inline_disclosure']);
+    $containerTag = $inlineDisclosure ? 'div' : 'p';
+    echo '<' . $containerTag . ' class="tag-list">';
     if (array_key_exists('label', $viewModel) && $viewModel['label'] !== null) {
-        echo '<span class="tag-list-label">' . e((string) $viewModel['label']) . '</span>';
+        $label = (string) $viewModel['label'];
+        echo '<span class="tag-list-label" title="' . e($label) . '">' . e($label) . '</span>';
     }
-    foreach ($items as $item) {
+    $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
+    $visibleItems = $inlineDisclosure ? array_slice($items, 0, $visibleLimit) : $items;
+    $overflowItems = $inlineDisclosure ? array_slice($items, $visibleLimit) : [];
+    $hasOverflow = $overflowItems !== [];
+    foreach ($visibleItems as $index => $item) {
+        if ($hasOverflow && $index === count($visibleItems) - 1) {
+            echo '<div class="gallery-card-tag-tail">';
+        }
         $href = $item['href'] ?? null;
+        $name = (string) ($item['name'] ?? '');
         if (is_string($href) && $href !== '') {
-            echo '<a class="tag" href="' . e($href) . '">' . e((string) ($item['name'] ?? '')) . '</a>';
+            echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
         } else {
-            echo '<span class="tag">' . e((string) ($item['name'] ?? '')) . '</span>';
+            echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
         }
     }
-    if (!empty($viewModel['inline_disclosure'])) {
-        echo '<button type="button" class="tag gallery-card-tags-toggle" data-hero-tags-toggle hidden data-show-all-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" data-show-fewer-label="' . e(t('gallery.show_fewer_tags', 'Show fewer tags')) . '" aria-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" aria-expanded="false">[...]</button>';
+    if ($overflowItems !== []) {
+        $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
+        $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
+        echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
+        echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
+        foreach ($overflowItems as $item) {
+            $href = $item['href'] ?? null;
+            $name = (string) ($item['name'] ?? '');
+            if (is_string($href) && $href !== '') {
+                echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+            } else {
+                echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+            }
+        }
+        echo '</details>';
+        echo '</div>';
     }
-    echo '</p>';
+    echo '</' . $containerTag . '>';
+}
+
+/**
+ * Render the gallery header's globally limited direct and contained tags.
+ *
+ * The native details element is present in the initial response, so the
+ * configured limit and inline disclosure do not depend on JavaScript startup.
+ *
+ * @param array<string, mixed> $viewModel Prepared groups and Theme settings.
+ * @return void Emits one ordered tag list and its native disclosure.
+ */
+function view_render_public_hero_tags(array $viewModel): void
+{
+    $groups = (array) ($viewModel['groups'] ?? []);
+    $tagCount = max(0, (int) ($viewModel['tag_count'] ?? 0));
+    if ($tagCount === 0) {
+        return;
+    }
+
+    $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
+    $displayAll = !empty($viewModel['display_all']);
+    $scrollbarEnabled = !empty($viewModel['scrollbar_enabled']);
+    $scrollbarRows = max(1, min(12, (int) ($viewModel['scrollbar_rows'] ?? 5)));
+    $rowHeight = [];
+    for ($row = 0; $row < $scrollbarRows; $row++) {
+        $rowHeight[] = '(1.35em + .2rem + 2px)';
+        if ($row < $scrollbarRows - 1) {
+            $rowHeight[] = '.28rem';
+        }
+    }
+    $scrollbarStyle = $scrollbarEnabled ? ' style="--hero-tag-scrollbar-height: calc(' . implode(' + ', $rowHeight) . ')"' : '';
+    echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($scrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $scrollbarRows . '"' . $scrollbarStyle . '>';
+    echo '<div class="hero-tags-content" data-hero-tags-content><div class="tag-list">';
+
+    $renderedTags = 0;
+    $disclosureOpened = false;
+    $tailOpened = false;
+    foreach ($groups as $group) {
+        $items = (array) ($group['items'] ?? []);
+        if ($items === []) {
+            continue;
+        }
+        if ($renderedTags >= $visibleLimit && !$displayAll && !$disclosureOpened) {
+            $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
+            $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
+            echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
+            echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
+            $disclosureOpened = true;
+        }
+        if (array_key_exists('label', $group) && $group['label'] !== null) {
+            $label = (string) $group['label'];
+            echo '<span class="tag-list-label" title="' . e($label) . '">' . e($label) . '</span>';
+        }
+        foreach ($items as $item) {
+            if (!$displayAll && !$tailOpened && $renderedTags + 1 === $visibleLimit && $renderedTags + 1 < $tagCount) {
+                echo '<div class="gallery-card-tag-tail">';
+                $tailOpened = true;
+            }
+            $href = $item['href'] ?? null;
+            $name = (string) ($item['name'] ?? '');
+            if (is_string($href) && $href !== '') {
+                echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+            } else {
+                echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+            }
+            $renderedTags++;
+            if (!$displayAll && !$disclosureOpened && $renderedTags === $visibleLimit && $renderedTags < $tagCount) {
+                $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
+                $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
+                echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
+                echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
+                $disclosureOpened = true;
+            }
+        }
+    }
+    if ($disclosureOpened) {
+        echo '</details>';
+    }
+    if ($tailOpened) {
+        echo '</div>';
+    }
+    echo '</div></div></div>';
 }
 
 /**
  * Render gallery-card tags using the shared gallery tag disclosure pipeline.
  *
- * All tags stay in server-rendered HTML; the existing browser module applies
- * the controller-prepared Theme limit, expansion, and responsive row scrolling.
+ * The server applies the Theme limit in native disclosure markup; CSS provides
+ * row scrolling before JavaScript starts and native HTML handles expansion.
  *
  * @param array<string, mixed> $viewModel Prepared tags and canonical Theme preferences.
  * @return void Emits the collection and its in-place expansion control.
@@ -158,7 +265,17 @@ function view_render_gallery_card_tags(array $viewModel): void
 
     $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
     $displayAll = !empty($viewModel['display_all']);
-    echo '<div class="gallery-card-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tag-inline-toggle="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . (!empty($viewModel['scrollbar_enabled']) ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . max(1, (int) ($viewModel['scrollbar_rows'] ?? 5)) . '">';
+    $scrollbarEnabled = !empty($viewModel['scrollbar_enabled']);
+    $scrollbarRows = max(1, min(12, (int) ($viewModel['scrollbar_rows'] ?? 5)));
+    $rowHeight = [];
+    for ($row = 0; $row < $scrollbarRows; $row++) {
+        $rowHeight[] = '(1.35em + .2rem + 2px)';
+        if ($row < $scrollbarRows - 1) {
+            $rowHeight[] = '.28rem';
+        }
+    }
+    $scrollbarStyle = $scrollbarEnabled ? ' style="--hero-tag-scrollbar-height: calc(' . implode(' + ', $rowHeight) . ')"' : '';
+    echo '<div class="gallery-card-tags' . ($scrollbarEnabled ? ' has-tag-scrollbar' : '') . '" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($scrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $scrollbarRows . '"' . $scrollbarStyle . '>';
     echo '<div class="gallery-card-tags-content" data-hero-tags-content>';
     $viewModel['inline_disclosure'] = !$displayAll && count($items) > $visibleLimit;
     view_render_tag_list($viewModel);

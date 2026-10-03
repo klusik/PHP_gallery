@@ -244,6 +244,11 @@ return [
             'php_argument' => true,
             'timeout' => 60,
         ],
+        'gallery_tags_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
         'admin_smart_galleries_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,

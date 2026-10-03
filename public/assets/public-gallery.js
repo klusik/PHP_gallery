@@ -40,7 +40,7 @@ const optionalPublicModules = {
     progressiveThumbnailRenderer: './gallery-modules/progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection',
     thumbnailRenderDiagnostics: './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1',
     thumbnailWarmup: './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1',
-    heroTags: './gallery-modules/hero-tags.js?v=20261003-shared-gallery-tags-v3',
+    heroTags: './gallery-modules/hero-tags.js?v=20261003-native-gallery-tags-v1',
     viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
 };
