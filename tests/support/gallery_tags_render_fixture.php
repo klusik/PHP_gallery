@@ -57,9 +57,6 @@ function gallery_tags_fixture_card(string $case, int $visibleLimit, int $rows, b
         'scrollbar_enabled' => true,
         'scrollbar_rows' => $rows,
     ];
-    ob_start();
-    \Gallery\Views\view_render_gallery_card_tags($tagModel);
-    $tagHtml = (string) ob_get_clean();
     static $galleryId = 1200;
     $galleryId++;
     ob_start();
@@ -69,8 +66,9 @@ function gallery_tags_fixture_card(string $case, int $visibleLimit, int $rows, b
         'url' => '#fixture-gallery-' . $case,
         'visibility' => 'public',
         'description_layout' => 'vertical',
+        'description' => 'A public description for ' . $case . '.',
         'cover_picture_html' => public_layout_picture($renderer),
-        'tag_list_html' => $tagHtml,
+        'tag_list_view_model' => $tagModel,
     ]);
     $cardHtml = (string) ob_get_clean();
     $cardHtml = str_replace('data-gallery-id="' . $galleryId . '"', 'data-gallery-id="' . $galleryId . '" data-fixture-case="' . \Gallery\Core\e($case) . '"' . (in_array($case, ['rows-one', 'rows-one-responsive', 'rows-five'], true) ? ' style="max-width:250px"' : ''), $cardHtml);

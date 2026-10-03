@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-10-03
  */
 
 declare(strict_types=1);
@@ -46,6 +46,7 @@ use function Gallery\Services\link_favicon_public_asset;
 use function Gallery\Services\theme_background_asset_url;
 use function Gallery\Services\theme_background_original_path;
 use function Gallery\Services\theme_background_served_path;
+use function Gallery\Services\theme_admin_side_panel_motion_ms_value;
 use function Gallery\Services\theme_branding_asset_abs_path;
 use function Gallery\Services\theme_branding_asset_kind;
 use function Gallery\Services\theme_branding_separator_height_value;
@@ -53,6 +54,7 @@ use function Gallery\Services\theme_branding_separator_stretch_enabled;
 use function Gallery\Services\theme_branding_separator_width_value;
 use function Gallery\Services\theme_gps_pin_background_size_value;
 use function Gallery\Services\theme_gps_pin_size_value;
+use function Gallery\Services\theme_gallery_info_motion_ms_value;
 use function Gallery\Services\theme_page_width_custom_value;
 use function Gallery\Services\theme_settings;
 
@@ -243,6 +245,8 @@ function cms_theme_css(): void
     $brandingSeparatorHeight = theme_branding_separator_height_value($theme['branding_separator_height'] ?? null);
     // $brandingSeparatorStretch stores whether the separator can ignore its native aspect ratio.
     $brandingSeparatorStretch = theme_branding_separator_stretch_enabled($theme['branding_separator_stretch'] ?? null);
+    $galleryInfoMotionMs = theme_gallery_info_motion_ms_value($theme['gallery_info_motion_ms'] ?? null);
+    $adminSidePanelMotionMs = theme_admin_side_panel_motion_ms_value($theme['admin_side_panel_motion_ms'] ?? null);
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';
     echo '--accent-dark:' . css_value((string) $theme['accent_dark']) . ';';
@@ -265,6 +269,8 @@ function cms_theme_css(): void
     echo '--gps-pin-background-enabled:' . $gpsPinBackgroundEnabled . ';';
     echo '--gps-pin-size:' . $gpsPinSize . ';';
     echo '--gps-pin-background-size:' . $gpsPinBackgroundSize . ';';
+    echo '--gallery-card-info-motion-duration:' . $galleryInfoMotionMs . 'ms;';
+    echo '--admin-side-panel-motion-duration:' . $adminSidePanelMotionMs . 'ms;';
     echo '}';
     echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);font-size:var(--type-body-size);line-height:var(--type-body-line-height);text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}';
     echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);font-size:var(--type-body-size);line-height:var(--type-body-line-height);position:relative;}';

@@ -1,0 +1,13 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ISSUE_TEMPLATE/config.yml
+# Module Type: GitHub Issue Picker Configuration
+# Purpose: Route general questions and installation help to GitHub Discussions.
+# Responsibilities: Enable blank issue creation and provide the project Discussions contact link.
+# Author: Rudolf Klusal
+
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and installation help
+    url: https://github.com/klusik/PHP_gallery/discussions
+    about: Ask general questions in GitHub Discussions.

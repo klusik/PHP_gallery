@@ -23,7 +23,7 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-03
  */
 
 /**
@@ -257,6 +257,7 @@ function setupHeroTagRoot(root) {
  * @return {void} Initializes existing roots and observes newly inserted collections.
  */
 export function setupHeroTagDisclosure() {
+    setupGalleryCardInfoPanels();
     document.querySelectorAll('[data-hero-tags]').forEach((root) => {
         if (root instanceof HTMLElement) {
             setupHeroTagRoot(root);
@@ -293,5 +294,317 @@ export function setupHeroTagDisclosure() {
     heroTagInsertionObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+/**
+ * Place an open public-info panel beside its card and keep it inside the viewport.
+ *
+ * @param {HTMLDetailsElement} details Open gallery-card information disclosure.
+ * @return {void} Positions the panel over surrounding content without changing card flow.
+ */
+function positionGalleryCardInfoPanel(details) {
+    const panel = details.querySelector('.gallery-card-public-info-panel');
+    const summary = details.querySelector('summary');
+    const root = details.closest('.gallery-card-tags');
+    if (!(panel instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+        return;
+    }
+
+    const rootRect = root.getBoundingClientRect();
+    const summaryRect = summary.getBoundingClientRect();
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.left = '0px';
+    panel.style.top = '0px';
+    panel.style.visibility = 'hidden';
+    const panelRect = panel.getBoundingClientRect();
+    const margin = 12;
+    const gap = 10;
+    let left = summaryRect.left - panelRect.width - gap;
+    if (left < margin) {
+        left = summaryRect.right + gap;
+    }
+    left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
+    let top = summaryRect.top + ((summaryRect.height - panelRect.height) / 2);
+    top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+    panel.style.left = `${Math.round(left - rootRect.left)}px`;
+    panel.style.top = `${Math.round(top - rootRect.top)}px`;
+    const positionedRect = panel.getBoundingClientRect();
+    const panelIsLeftOfSummary = positionedRect.right <= summaryRect.left;
+    const originY = Math.max(12, Math.min(positionedRect.height - 12, summaryRect.top + (summaryRect.height / 2) - positionedRect.top));
+    panel.style.transformOrigin = `${panelIsLeftOfSummary ? '100%' : '0%'} ${Math.round(originY)}px`;
+    panel.style.setProperty('--gallery-card-info-slide-x', panelIsLeftOfSummary ? '8px' : '-8px');
+    panel.style.visibility = '';
+}
+
+/**
+ * Reposition open public-information panels after viewport movement.
+ * @return {void} Updates panels that remain open after scrolling or resizing.
+ */
+function repositionOpenGalleryCardInfoPanels() {
+    document.querySelectorAll('[data-gallery-card-info-disclosure][open]').forEach(/**
+     * Reposition one open panel after a viewport change.
+     * @param {Element} details Candidate disclosure element.
+     * @return {void} Updates panel coordinates when the candidate is a details element.
+     */ (details) => {
+        if (details instanceof HTMLDetailsElement) {
+            positionGalleryCardInfoPanel(details);
+        }
+    });
+}
+
+/**
+ * Clear the fallback timer and transition listener for a panel that is closing.
+ *
+ * @param {HTMLDetailsElement} details Gallery-card information disclosure.
+ * @return {void} Removes any pending close completion work.
+ */
+function clearGalleryCardInfoCloseJob(details) {
+    const job = galleryCardInfoCloseJobs.get(details);
+    if (!job) {
+        return;
+    }
+    window.clearTimeout(job.timerId);
+    job.panel.removeEventListener('transitionend', job.onTransitionEnd);
+    galleryCardInfoCloseJobs.delete(details);
+}
+
+/**
+ * Finish a panel close after its CSS transition or bounded fallback timer.
+ *
+ * @param {HTMLDetailsElement} details Gallery-card information disclosure.
+ * @return {void} Closes the native disclosure when its close state is still current.
+ */
+function completeGalleryCardInfoPanelClose(details) {
+    if (!details.open || details.dataset.galleryCardInfoState !== 'closing') {
+        return;
+    }
+    clearGalleryCardInfoCloseJob(details);
+    details.open = false;
+    details.removeAttribute('data-gallery-card-info-state');
+}
+
+/**
+ * Convert one CSS transition time value to milliseconds.
+ *
+ * @param {string} value CSS duration or delay value.
+ * @return {number} Parsed milliseconds, or zero for an unsupported value.
+ */
+function galleryCardInfoTransitionTimeMs(value) {
+    if (value.endsWith('ms')) return Number.parseFloat(value);
+    if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
+    return 0;
+}
+
+/**
+ * Read the longest active transition on a panel, including its transition delay.
+ *
+ * @param {HTMLElement} panel Animated information panel.
+ * @return {number} Longest transition time in milliseconds.
+ */
+function galleryCardInfoTransitionDurationMs(panel) {
+    const style = window.getComputedStyle(panel);
+    const durations = style.transitionDuration.split(',');
+    const delays = style.transitionDelay.split(',');
+    let maximum = 0;
+    for (let index = 0; index < durations.length; index++) {
+        const duration = durations[index].trim();
+        const delay = (delays[index % Math.max(delays.length, 1)] || '0s').trim() || '0s';
+        const total = galleryCardInfoTransitionTimeMs(duration) + galleryCardInfoTransitionTimeMs(delay);
+        if (Number.isFinite(total)) maximum = Math.max(maximum, total);
+    }
+    return maximum;
+}
+
+/**
+ * Complete a card-info disclosure close when its panel opacity transition ends.
+ *
+ * @param {TransitionEvent} event Browser transition completion event.
+ * @return {void} Closes the disclosure only for its current panel opacity transition.
+ */
+function finishGalleryCardInfoPanelTransition(event) {
+    const panel = event.currentTarget;
+    if (!(panel instanceof HTMLElement) || event.target !== panel || event.propertyName !== 'opacity') {
+        return;
+    }
+    const details = panel.closest('[data-gallery-card-info-disclosure]');
+    if (details instanceof HTMLDetailsElement) {
+        completeGalleryCardInfoPanelClose(details);
+    }
+}
+
+/**
+ * Open one public information panel and animate it from its matching ellipsis control.
+ *
+ * @param {HTMLDetailsElement} details Gallery-card information disclosure to open.
+ * @return {void} Opens, positions, and animates the requested panel.
+ */
+function openGalleryCardInfoPanel(details) {
+    const state = details.dataset.galleryCardInfoState;
+    if (details.open && state === 'closing') {
+        clearGalleryCardInfoCloseJob(details);
+        details.dataset.galleryCardInfoState = 'open';
+        details.querySelector('summary')?.setAttribute('aria-expanded', 'true');
+        positionGalleryCardInfoPanel(details);
+        return;
+    }
+    if (details.open && state) {
+        return;
+    }
+    document.querySelectorAll('[data-gallery-card-info-disclosure][open]').forEach(/**
+     * Close any other card-info panel before opening the requested one.
+     * @param {Element} other Candidate disclosure that may already be open.
+     * @return {void} Starts its close animation when it is a different disclosure.
+     */ (other) => {
+        if (other instanceof HTMLDetailsElement && other !== details) {
+            closeGalleryCardInfoPanel(other);
+        }
+    });
+
+    details.open = true;
+    details.querySelector('summary')?.setAttribute('aria-expanded', 'true');
+    const panel = details.querySelector('.gallery-card-public-info-panel');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    details.dataset.galleryCardInfoState = reduceMotion ? 'open' : 'opening';
+    positionGalleryCardInfoPanel(details);
+    if (reduceMotion || !(panel instanceof HTMLElement)) {
+        return;
+    }
+    void panel.offsetWidth;
+    window.requestAnimationFrame(() => {
+        if (details.open && details.dataset.galleryCardInfoState === 'opening') {
+            details.dataset.galleryCardInfoState = 'open';
+        }
+    });
+}
+
+/**
+ * Animate a public information panel out before closing its native details element.
+ *
+ * @param {HTMLDetailsElement} details Gallery-card information disclosure to close.
+ * @return {void} Updates the accessible state and finishes closing after the animation.
+ */
+function closeGalleryCardInfoPanel(details) {
+    if (!details.open || details.dataset.galleryCardInfoState === 'closing') {
+        return;
+    }
+    const previousState = details.dataset.galleryCardInfoState;
+    details.dataset.galleryCardInfoState = 'closing';
+    details.querySelector('summary')?.setAttribute('aria-expanded', 'false');
+    const panel = details.querySelector('.gallery-card-public-info-panel');
+    if (!(panel instanceof HTMLElement) || previousState === 'opening' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        clearGalleryCardInfoCloseJob(details);
+        details.open = false;
+        details.removeAttribute('data-gallery-card-info-state');
+        return;
+    }
+    clearGalleryCardInfoCloseJob(details);
+    panel.addEventListener('transitionend', finishGalleryCardInfoPanelTransition);
+    const timerId = window.setTimeout(() => completeGalleryCardInfoPanelClose(details), galleryCardInfoTransitionDurationMs(panel));
+    galleryCardInfoCloseJobs.set(details, { onTransitionEnd: finishGalleryCardInfoPanelTransition, panel, timerId });
+}
+
+/**
+ * Bind native card-information disclosures once for current and future fragments.
+ *
+ * Native details remains the no-JavaScript fallback; these delegated handlers add
+ * viewport placement, Escape dismissal, and outside-click dismissal when available.
+ *
+ * @return {void} Installs one delegated interaction layer for gallery cards.
+ */
+function setupGalleryCardInfoPanels() {
+    if (galleryCardInfoHandlersReady || !document.body) {
+        return;
+    }
+    galleryCardInfoHandlersReady = true;
+
+    document.addEventListener('click', /**
+     * Route pointer and keyboard summary activation through the animated panel behavior.
+     * @param {MouseEvent} event Delegated click from a summary control.
+     * @return {void} Prevents the native toggle only when a managed panel summary was activated.
+     */ (event) => {
+        const target = event.target;
+        const summary = target instanceof Element ? target.closest('summary') : null;
+        const details = summary?.closest('[data-gallery-card-info-disclosure]');
+        if (!(summary instanceof HTMLElement) || !(details instanceof HTMLDetailsElement)) {
+            return;
+        }
+        event.preventDefault();
+        if (details.open && details.dataset.galleryCardInfoState !== 'closing') {
+            closeGalleryCardInfoPanel(details);
+        } else {
+            openGalleryCardInfoPanel(details);
+        }
+    }, true);
+
+    document.addEventListener('toggle', /**
+     * Synchronize native disclosure changes and move the opened panel into view.
+     * @param {Event} event Native details toggle event.
+     * @return {void} Applies viewport placement or clears stale positioning.
+     */ (event) => {
+        const details = event.target;
+        if (!(details instanceof HTMLDetailsElement) || !details.matches('[data-gallery-card-info-disclosure]')) {
+            return;
+        }
+        const summary = details.querySelector('summary');
+        summary?.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+        if (details.open) {
+            if (!details.dataset.galleryCardInfoState) {
+                openGalleryCardInfoPanel(details);
+                return;
+            }
+            positionGalleryCardInfoPanel(details);
+            return;
+        }
+        clearGalleryCardInfoCloseJob(details);
+        details.removeAttribute('data-gallery-card-info-state');
+        const panel = details.querySelector('.gallery-card-public-info-panel');
+        if (panel instanceof HTMLElement) {
+            panel.removeAttribute('style');
+        }
+    }, true);
+
+    document.addEventListener('pointerdown', /**
+     * Close a panel when a pointer press starts outside its disclosure.
+     * @param {PointerEvent} event Document-level pointer press.
+     * @return {void} Closes any open card-info panel outside the pointer target.
+     */ (event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest('[data-gallery-card-info-disclosure]')) {
+            return;
+        }
+        document.querySelectorAll('[data-gallery-card-info-disclosure][open]').forEach(/**
+         * Close each currently open card-info disclosure.
+         * @param {Element} details Candidate open disclosure.
+         * @return {void} Closes the candidate details element.
+         */ (details) => {
+            if (details instanceof HTMLDetailsElement) {
+                closeGalleryCardInfoPanel(details);
+            }
+        });
+    });
+
+    document.addEventListener('keydown', /**
+     * Close the open panel and restore focus when the visitor presses Escape.
+     * @param {KeyboardEvent} event Document-level key event.
+     * @return {void} Dismisses the open panel and returns focus to its summary.
+     */ (event) => {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        const details = document.querySelector('[data-gallery-card-info-disclosure][open]');
+        if (!(details instanceof HTMLDetailsElement)) {
+            return;
+        }
+        event.preventDefault();
+        const summary = details.querySelector('summary');
+        closeGalleryCardInfoPanel(details);
+        summary?.focus({ preventScroll: true });
+    });
+
+    window.addEventListener('resize', repositionOpenGalleryCardInfoPanels, { passive: true });
+    window.addEventListener('scroll', repositionOpenGalleryCardInfoPanels, { passive: true, capture: true });
+}
+
 // One observer per module keeps dynamically refreshed cards on the same tag pipeline.
 let heroTagInsertionObserver = null;
+let galleryCardInfoHandlersReady = false;
+const galleryCardInfoCloseJobs = new WeakMap();

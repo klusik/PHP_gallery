@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.117.1}
+\newcommand{\version}{0.118}
 \newcommand{\manualdate}{3~oktober~2026}
 
 \hypersetup{
@@ -1565,6 +1565,8 @@ Rekommenderade arbetssätt:
 
 Temaområdet styr webbplatsens identitet, färger, mått, sidbredd, bakgrunder, profilering, favicon-resurser, språk, gallerikortspresentation, standardvärden för ljuslådan, GPS-presentation, favoritnavigering och offentlig miniatyrbildsrendering. Inställningar använder normaliserade skalära värden eller avgränsade tjänstemodeller.
 
+Underfliken \ui{Animationer} ställer in öppnings- och stängningstiden för den offentliga informationsrutan på gallerikort och Admin-sidopanelen. Båda värdena kan vara 0--800~ms; 0 stänger av respektive rörelse. Standardvärdena är 320~ms respektive 260~ms. Den offentliga panelen innehåller galleriets titel, beskrivning, datum och hela tagglistan. Den inbyggda utfällningen fungerar även utan JavaScript; med JavaScript hålls panelen inom visningsområdet och kan stängas genom att klicka utanför eller trycka på Escape. Interaktionen följer webbläsarens inställning för minskad rörelse.
+
 Temaredigeraren använder ingen separat växel för ljust eller mörkt läge. I stället definierar sparade färgkontroller och ett valfritt utseende med Egen CSS direkt den offentliga färgpaletten. Den ställer också in layouter för gallerikort och undergallerier och kan konfigurera upp till tre genvägar i sidhuvudet. Varje genväg kan peka på startsidan, ett galleri eller förbli tom. Anonyma besökare ser bara konfigurerade gallerigenvägar som fortfarande är offentliga och listade; dubbla eller raderade gallerival tas bort när inställningarna sparas. Om alla tre platserna är tomma döljs dessa favoritgalleriknappar. Gallerikort kan också visa ett konfigurerbart märke för antalet ingående bilder. När märket gäller för ett galleri förblir samma grenantal synligt i huvudpanelen när galleriet öppnas, och räknar bilder i aktuellt galleri och dess åtkomliga undergallerier enligt samma offentlighets- och åtkomstregler som kortet. Presentation per galleri kan ärva webbplatsens standardvärden eller åsidosätta de val som galleriredigeraren erbjuder.
 
 \subsection{Referens för Temas kontroller}
@@ -1590,6 +1592,7 @@ Utseende & Offentlig sidbredd & \ui{Standard}, \ui{Bredare}, \ui{Full bredd} ell
 Utseende & GPS-markör & När GPS-kartfunktionen är~aktiverad kan bildkortens markörer och deras bakgrundsplatta visas eller döljas separat. Markörstorleken är 14--48~pixlar med 26 som standard. Bakgrundsplattans reglage visas som 0--48~pixlar, men aktuell servernormaliserare behandlar 0 eller ett annat icke-positivt värde som ej angivet och återställer 22~pixlar; använd den separata kryssrutan för att dölja bakgrunden.\\
 Utseende & Offentliga taggsidor & Särskilda kolumner och rader för taggsidor använder samma säkra maxgränser som andra offentliga rutnät: 1--12 kolumner och 1--50 rader. Taggresultatkort kan använda lodrät eller vågrät gallerikortsutformning oberoende av vanliga gallerilistor.\\
 Utseende & Taggar i galleriets huvudpanel & Sortera efter användning eller alfabetiskt. Visa antingen alla direkt eller 1--200 taggar före kontrollen för utökning på plats; standardtröskeln är 20. Valfri rullning använder 1--12 synliga rader, standard 5, och aktiveras endast när de visade taggarna faktiskt radbryts utöver konfigurerat antal rader.\\
+Utseende & Gränssnittsanimationer & Tiden för den offentliga informationspanelen på gallerikort är 0--800~ms (standard 320~ms) och tiden för Admin-sidopanelen 0--800~ms (standard 260~ms). Värdet 0 stänger av rörelsen.\\
 Layout & Genvägar i sidhuvudet & Tre ordnade platser. En plats kan vara tom, peka på startsidan eller ett galleri som hittas med galleriväljaren. Offentliga besökare ser bara offentliga och listade gallerimål.\\
 Utseende & Gallerikortsutformning & \ui{Lodrätt system} placerar bilden ovanför beskrivningen; \ui{Vågrätt system} bredvid den. Nyinstallationer börjar lodrätt; migreringen bevarar äldre installationers utseende. Ett fysiskt galleri kan ärva eller åsidosätta Temas val där presentationsschemat är tillgängligt.\\
 Layout & Bildantalsmärke & Det globala märket för ingående bilder är aktiverat som standard. Enskilda gallerier kan ärva det eller spara en åsidosättning. När det är aktiverat för det öppna galleriet visar huvudpanelen också aktuellt galleris grenantal för bilder, inklusive åtkomliga undergallerier.\\

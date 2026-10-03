@@ -1,0 +1,54 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ISSUE_TEMPLATE/bug_report.yml
+# Module Type: GitHub Issue Form
+# Purpose: Collect reproducible PHP Gallery bug reports with safe diagnostic context.
+# Responsibilities: Ask for the product version, relevant environment, observed behavior, reproduction steps, and redacted diagnostics.
+# Author: Rudolf Klusal
+
+name: Bug report
+description: Report a reproducible problem in PHP Gallery.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        For security vulnerabilities, do not use a public issue. Follow
+        [SECURITY policy](https://github.com/klusik/PHP_gallery/security/policy).
+  - type: input
+    id: version
+    attributes:
+      label: PHP Gallery version
+      description: Include the version shown by your installation.
+      placeholder: "0.117.1"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Relevant environment
+      description: PHP version, database and version, browser, or operating system as relevant.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest set of steps that reproduces the problem.
+      placeholder: |
+        1. Open ...
+        2. Choose ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics
+      description: Add a redacted error message or relevant audit summary. Remove credentials, tokens, private URLs, and personal data.
+      render: text

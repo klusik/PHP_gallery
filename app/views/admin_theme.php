@@ -30,7 +30,7 @@
  *   - Trusted HTML fragments must be prepared by project renderers in controllers before invocation.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-03
  */
 
 declare(strict_types=1);
@@ -72,6 +72,7 @@ function view_render_admin_theme_page(array $viewModel): void
 
     echo '<form id="admin-theme-form" method="post" enctype="multipart/form-data" class="form-grid admin-theme-form" data-theme-form>' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
+    echo '<input type="hidden" name="theme_active_tab" value="admin-theme-tab-appearance" data-theme-active-tab><input type="hidden" name="theme_active_appearance_subtab" value="admin-theme-appearance-subtab-colors" data-theme-active-appearance-subtab>';
 
     foreach (['appearance', 'media', 'layout', 'language', 'custom_css'] as $fragmentKey) {
         echo (string) ($tabFragments[$fragmentKey] ?? '');
@@ -520,6 +521,8 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     $heroTagScrollbarEnabled = !empty($viewModel['hero_tag_scrollbar_enabled']);
     $heroTagScrollbarRows = (int) ($viewModel['hero_tag_scrollbar_rows'] ?? 5);
     $heroTagSortMode = (string) ($viewModel['hero_tag_sort_mode'] ?? 'usage');
+    $galleryInfoMotionMs = (int) ($viewModel['gallery_info_motion_ms'] ?? 320);
+    $adminSidePanelMotionMs = (int) ($viewModel['admin_side_panel_motion_ms'] ?? 260);
     $siteName = (string) ($viewModel['site_name'] ?? '');
     $adminTagsUrl = (string) ($viewModel['admin_tags_url'] ?? '');
     $appearanceSubtab = (string) ($viewModel['active_subtab'] ?? 'admin-theme-appearance-subtab-colors');
@@ -536,6 +539,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
         ['id' => 'admin-theme-appearance-subtab-colors', 'label' => t('admin.theme.subtab_colors_identity', 'Colors & identity')],
         ['id' => 'admin-theme-appearance-subtab-width-map', 'label' => t('admin.theme.subtab_width_map', 'Width & map pin')],
         ['id' => 'admin-theme-appearance-subtab-gallery-tags', 'label' => t('admin.theme.subtab_cards_tags', 'Cards & tags')],
+        ['id' => 'admin-theme-appearance-subtab-animations', 'label' => t('admin.theme.subtab_animations', 'Animations')],
     ], $appearanceSubtab, t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
     ob_start();
     echo '<fieldset class="theme-appearance-group theme-appearance-identity"><legend>' . e(t('admin.theme.appearance.identity_legend', 'Site identity')) . '</legend>';
@@ -623,6 +627,13 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     echo '<div class="theme-appearance-inline-actions"><a class="button secondary" href="' . e($adminTagsUrl) . '">' . e(t('admin.theme.appearance.open_tag_metadata', 'Manage tag metadata')) . '</a></div></fieldset>';
     $appearanceGalleryTagsHtml = (string) ob_get_clean();
     render_admin_subtab_panel('admin-theme-appearance-subtab-gallery-tags', $appearanceGalleryTagsHtml, $appearanceSubtab === 'admin-theme-appearance-subtab-gallery-tags');
+
+    ob_start();
+    echo '<fieldset class="theme-appearance-group theme-appearance-motion-settings"><legend>' . e(t('admin.theme.appearance.motion_legend', 'Interface animations')) . '</legend><p class="theme-appearance-group-hint">' . e(t('admin.theme.appearance.motion_hint', 'Set the duration for each animation. Use 0 ms to turn that animation off.')) . '</p>';
+    echo '<div class="theme-motion-control"><div class="theme-motion-control-description"><label for="theme-gallery-info-motion-slider">' . e(t('admin.theme.appearance.gallery_info_motion_duration', 'Gallery tag panel')) . '</label><p class="theme-appearance-group-hint">' . e(t('admin.theme.appearance.gallery_info_motion_hint', 'Opening and closing speed for the public information panel on gallery cards.')) . '</p></div><input id="theme-gallery-info-motion-slider" type="range" min="0" max="800" step="10" value="' . $galleryInfoMotionMs . '" data-theme-override-control data-theme-gallery-info-motion-slider><div class="theme-motion-control-value"><input type="number" name="theme_gallery_info_motion_ms" min="0" max="800" step="10" value="' . $galleryInfoMotionMs . '" inputmode="numeric" aria-label="' . e(t('admin.theme.appearance.gallery_info_motion_duration', 'Gallery tag panel')) . '" data-theme-override-control data-theme-gallery-info-motion-number><span class="theme-motion-control-unit">ms</span><button type="button" class="button secondary small" data-theme-gallery-info-motion-reset data-theme-motion-default="320">' . e(t('admin.theme.appearance.motion_reset_default', 'Default (320 ms)', ['duration' => 320])) . '</button></div></div>';
+    echo '<div class="theme-motion-control"><div class="theme-motion-control-description"><label for="theme-admin-side-panel-motion-slider">' . e(t('admin.theme.appearance.admin_panel_motion_duration', 'Admin side panel')) . '</label><p class="theme-appearance-group-hint">' . e(t('admin.theme.appearance.admin_panel_motion_hint', 'Opening and closing speed for the Edit gallery and Add gallery side panel.')) . '</p></div><input id="theme-admin-side-panel-motion-slider" type="range" min="0" max="800" step="10" value="' . $adminSidePanelMotionMs . '" data-theme-override-control data-theme-admin-side-panel-motion-slider><div class="theme-motion-control-value"><input type="number" name="theme_admin_side_panel_motion_ms" min="0" max="800" step="10" value="' . $adminSidePanelMotionMs . '" inputmode="numeric" aria-label="' . e(t('admin.theme.appearance.admin_panel_motion_duration', 'Admin side panel')) . '" data-theme-override-control data-theme-admin-side-panel-motion-number><span class="theme-motion-control-unit">ms</span><button type="button" class="button secondary small" data-theme-admin-side-panel-motion-reset data-theme-motion-default="260">' . e(t('admin.theme.appearance.motion_reset_default', 'Default (260 ms)', ['duration' => 260])) . '</button></div></div></fieldset>';
+    $appearanceAnimationsHtml = (string) ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-animations', $appearanceAnimationsHtml, $appearanceSubtab === 'admin-theme-appearance-subtab-animations');
     // The keyboard-accessible separator is enabled only after its resize behavior is attached.
     echo '</div><div class="theme-appearance-resizer" data-theme-appearance-resizer hidden role="separator" aria-orientation="vertical" tabindex="0" aria-controls="admin-theme-appearance-settings admin-theme-appearance-subtab-preview" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" aria-label="' . e(t('admin.theme.appearance.resize_label', 'Resize settings and preview')) . '" title="' . e(t('admin.theme.appearance.resize_hint', 'Drag to resize. Use arrow keys, or double-click to reset.')) . '" data-theme-resize-value="' . e(t('admin.theme.appearance.resize_value', '{settings}% settings / {preview}% preview', ['settings' => '{settings}', 'preview' => '{preview}'])) . '"></div>';
     $previewGlobalDescriptionLayout = $globalDescriptionLayout;

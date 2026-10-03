@@ -1,0 +1,31 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ISSUE_TEMPLATE/feature_request.yml
+# Module Type: GitHub Issue Form
+# Purpose: Collect focused feature proposals with a clear user problem and outcome.
+# Responsibilities: Ask for the problem, desired behavior, alternatives, and relevant constraints.
+# Author: Rudolf Klusal
+
+name: Feature request
+description: Suggest a focused improvement to PHP Gallery.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+      description: Explain the use case and who is affected.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: Describe the behavior you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or additional context
+      description: Mention workarounds, constraints, or related features if useful.

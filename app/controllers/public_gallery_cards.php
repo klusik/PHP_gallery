@@ -319,7 +319,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     // Both card orientations consume the same saved Theme tag policy as opened galleries.
     $horizontalMetaHtml = '';
     $dateHtml = '';
-    $tagListHtml = '';
+    $tagListViewModel = [];
     if (!$isProtectedPublicCard) {
         ob_start();
         view_render_gallery_date(gallery_date_view_model($gallery), 'gallery-card-date');
@@ -331,9 +331,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         $cardTagViewModel['display_all'] = theme_hero_tag_display_all_enabled();
         $cardTagViewModel['scrollbar_enabled'] = theme_hero_tag_scrollbar_enabled();
         $cardTagViewModel['scrollbar_rows'] = theme_hero_tag_scrollbar_rows();
-        ob_start();
-        \Gallery\Views\view_render_gallery_card_tags($cardTagViewModel);
-        $tagListHtml = (string) ob_get_clean();
+        $tagListViewModel = $cardTagViewModel;
     }
 
     // $adminControlsHtml keeps card controls inside the card while each compatibility wrapper owns policy preparation.
@@ -364,7 +362,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         'collage_picture_html' => $collagePictureHtml,
         'horizontal_meta_html' => $horizontalMetaHtml,
         'date_html' => $dateHtml,
-        'tag_list_html' => $tagListHtml,
+        'tag_list_view_model' => $tagListViewModel,
         'admin_controls_html' => $adminControlsHtml,
     ]);
 }

@@ -737,6 +737,63 @@
     background: transparent;
 }
 
+.admin-page .theme-appearance-workspace .theme-appearance-motion-settings {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-page .theme-appearance-workspace .theme-motion-control {
+    display: grid;
+    grid-template-columns: minmax(190px, 0.8fr) minmax(120px, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem 1rem;
+    min-width: 0;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border);
+}
+
+.theme-motion-control-description {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.theme-motion-control-description > label {
+    font-weight: 650;
+}
+
+.theme-motion-control-description > p {
+    margin: 0;
+}
+
+.theme-appearance-workspace .theme-motion-control > input[type="range"] {
+    width: 100%;
+    min-width: 0;
+}
+
+.theme-motion-control-value {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+.theme-appearance-workspace .theme-motion-control-value input[type="number"] {
+    width: 76px;
+    text-align: right;
+}
+
+.theme-motion-control-unit {
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.theme-motion-control-value .button {
+    flex: 0 0 auto;
+}
+
 .theme-appearance-workspace .theme-number-slider-control > output {
     display: none;
 }
@@ -1100,11 +1157,44 @@
         grid-template-columns: minmax(0, 1fr) 76px auto;
     }
 
+    .admin-page .theme-appearance-workspace .theme-motion-control {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.6rem 0.8rem;
+    }
+
+    .theme-motion-control-description {
+        grid-column: 1 / -1;
+    }
+
+    .theme-appearance-workspace .theme-motion-control > input[type="range"] {
+        grid-column: 1;
+    }
+
+    .theme-motion-control-value {
+        grid-column: 2;
+    }
+
     .theme-appearance-palettes > :last-child {
         grid-column: auto;
     }
 
     .theme-appearance-help > p {
         width: min(220px, 100%);
+    }
+}
+
+@media (max-width: 460px) {
+    .admin-page .theme-appearance-workspace .theme-motion-control {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-motion-control-description,
+    .theme-appearance-workspace .theme-motion-control > input[type="range"],
+    .theme-motion-control-value {
+        grid-column: 1;
+    }
+
+    .theme-motion-control-value {
+        justify-content: flex-start;
     }
 }

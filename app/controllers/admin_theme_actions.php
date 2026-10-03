@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-03
  */
 
 declare(strict_types=1);
@@ -106,9 +106,11 @@ use function Gallery\Services\theme_branding_separator_stretch_enabled;
 use function Gallery\Services\theme_branding_separator_width_value;
 use function Gallery\Services\theme_favorite_gallery_ids;
 use function Gallery\Services\theme_gallery_description_layout;
+use function Gallery\Services\theme_gallery_info_motion_ms_value;
 use function Gallery\Services\theme_gps_pin_background_size_value;
 use function Gallery\Services\theme_gps_pin_size_value;
 use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\theme_admin_side_panel_motion_ms_value;
 use function Gallery\Services\theme_layout_safe_save;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
@@ -507,6 +509,8 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         set_app_setting('theme_hero_tag_scrollbar_enabled', $nextHeroTagSettings['scrollbar_enabled'] ? '1' : '0');
         set_app_setting('theme_hero_tag_scrollbar_rows', (string) $nextHeroTagSettings['scrollbar_rows']);
         set_app_setting('theme_hero_tag_sort_mode', $nextHeroTagSettings['sort_mode']);
+        set_app_setting('theme_gallery_info_motion_ms', (string) theme_gallery_info_motion_ms_value($_POST['theme_gallery_info_motion_ms'] ?? null));
+        set_app_setting('theme_admin_side_panel_motion_ms', (string) theme_admin_side_panel_motion_ms_value($_POST['theme_admin_side_panel_motion_ms'] ?? null));
         if ($nextHeroTagSettings !== $previousHeroTagSettings) {
             // Sorting changes server-rendered tag order while the remaining values change public disclosure metadata.
             set_app_setting('theme_public_content_revision', (string) time());
@@ -558,6 +562,28 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
         }
     }
-    redirect_to(url_for('admin_theme', ['saved' => 1]));
+    $activeThemeTab = (string) ($_POST['theme_active_tab'] ?? 'admin-theme-tab-appearance');
+    $allowedThemeTabs = [
+        'admin-theme-tab-appearance',
+        'admin-theme-tab-media',
+        'admin-theme-tab-layout',
+        'admin-theme-tab-language',
+        'admin-theme-tab-custom-css',
+    ];
+    if (!in_array($activeThemeTab, $allowedThemeTabs, true)) {
+        $activeThemeTab = 'admin-theme-tab-appearance';
+    }
+    $themeRedirectParams = ['saved' => 1];
+    $activeAppearanceSubtab = (string) ($_POST['theme_active_appearance_subtab'] ?? '');
+    $allowedAppearanceSubtabs = [
+        'admin-theme-appearance-subtab-colors',
+        'admin-theme-appearance-subtab-width-map',
+        'admin-theme-appearance-subtab-gallery-tags',
+        'admin-theme-appearance-subtab-animations',
+    ];
+    if ($activeThemeTab === 'admin-theme-tab-appearance' && in_array($activeAppearanceSubtab, $allowedAppearanceSubtabs, true)) {
+        $themeRedirectParams['appearance_subtab'] = $activeAppearanceSubtab;
+    }
+    redirect_to(url_for('admin_theme', $themeRedirectParams) . '#' . $activeThemeTab);
 
 }

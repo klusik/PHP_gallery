@@ -137,7 +137,15 @@ function view_render_public_gallery_card(array $viewModel): void
         if ($showCountBadge) {
             echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => $branchImageCount])) . '</p>';
         }
-        echo (string) ($viewModel['tag_list_html'] ?? '');
+        if (is_array($viewModel['tag_list_view_model'] ?? null)) {
+            $tagListViewModel = $viewModel['tag_list_view_model'];
+            $tagListViewModel['public_title'] = $title;
+            $tagListViewModel['public_description_html'] = $descriptionHtml;
+            $tagListViewModel['public_date_html'] = $dateHtml;
+            view_render_gallery_card_tags($tagListViewModel);
+        } else {
+            echo (string) ($viewModel['tag_list_html'] ?? '');
+        }
     }
     echo '</div>';
     echo (string) ($viewModel['admin_controls_html'] ?? '');

@@ -254,12 +254,14 @@ assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme c
     assert_hero_tag_source_contains($publicTagCss, 'display: contents;', 'native disclosure children retain the shared wrapping layout');
     assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] [data-hero-tags-content] {', 'server-configured scrollbar CSS');
     assert_hero_tag_source_contains($publicTagCss, 'max-height: var(--hero-tag-scrollbar-height);', 'first-paint row cap uses server-computed geometry');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tag-tail:has(> .hero-tag-disclosure[open]) {', 'expanded native disclosure restores wrapping for overflow tags');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-public-info-panel {', 'card tag disclosure opens a public-information overlay');
+    assert_hero_tag_source_contains($publicTagCss, 'position: absolute;', 'public-information overlay does not change card flow');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {', 'card overlay is not clipped by the configured tag scrollbar');
     assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tags .tag-list {', 'gallery card tag margins are owned by the dedicated layout rule');
 
     foreach (['en', 'cs'] as $language) {
         $catalog = json_decode((string) file_get_contents(__DIR__ . '/../app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
-        foreach (['gallery.show_all_tags', 'gallery.show_fewer_tags', 'admin.theme.appearance.hero_tag_sort_usage'] as $key) {
+        foreach (['gallery.show_all_tags', 'gallery.show_fewer_tags', 'gallery.public_info', 'gallery.all_tags', 'admin.theme.appearance.hero_tag_sort_usage'] as $key) {
             if (!isset($catalog[$key]) || trim((string) $catalog[$key]) === '') {
                 throw new RuntimeException($language . ' JSON catalog is missing ' . $key);
             }

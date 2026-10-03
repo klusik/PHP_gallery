@@ -160,8 +160,8 @@ async function serveFixture(request, response) {
         catch { response.writeHead(500).end('Viewport fixture unavailable'); }
         return;
     }
-    if (pathname === '/__key' && fixtureName === 'gallery_tags.html') {
-        if (new URL(request.url, 'http://localhost').searchParams.get('key') !== 'Enter') { response.writeHead(400).end(); return; }
+    if (pathname === '/__key' && fixtureName === 'gallery_tags.html'
+        && new URL(request.url, 'http://localhost').searchParams.get('key') === 'Enter') {
         try { await browserReady; await sendKey('Enter', false); response.end('ok'); }
         catch { response.writeHead(500).end('Keyboard fixture unavailable'); }
         return;

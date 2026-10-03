@@ -1,5 +1,68 @@
 # Patch notes
 
+## Version 0.118
+
+Version 0.118 adds adjustable motion for public gallery information panels and the Admin side panel, while improving how visitors open and dismiss a gallery card's public information. It also adds contributor, accessibility, issue-reporting, and security guidance to the project repository.
+
+### Highlights
+
+#### Theme animation controls
+
+- Added an Appearance > Animations section with separate durations for the public information panel on gallery cards and the Admin side panel.
+- Allowed each duration to be set from 0 to 800 ms, with a reset-to-default control; setting 0 disables that animation.
+- Kept the selected Theme tab and Appearance subsection visible after saving.
+
+#### Gallery card information
+
+- Replaced the overflow-tag disclosure with a compact ellipsis control that opens the gallery's public title, description, date, and complete tag list.
+- Kept the configured visible tag preview rendered on the server and the native disclosure usable without JavaScript.
+- Positioned the information panel beside its card when JavaScript is available, kept it inside the viewport, and added outside-click and Escape dismissal.
+- Honored the browser's reduced-motion preference.
+
+#### Project contribution guidance
+
+- Added repository guidance for accessibility reports, contribution workflow, responsible security reporting, and issue and pull request templates.
+
+### Technical Details
+
+#### Backend and settings
+
+- Added `theme_gallery_info_motion_ms` and `theme_admin_side_panel_motion_ms` to the existing Theme settings flow and Admin Settings registry. Values are normalized to 0–800 ms and default to 320 ms and 260 ms respectively.
+- Added the `admin-theme-appearance-subtab-animations` destination and restored the submitted Theme tab and Appearance subsection after a save.
+- Updated `app/controllers/theme_assets.php` to expose the normalized durations as CSS custom properties, and updated `app/services/theme.php`, `app/controllers/admin_theme_actions.php`, `app/controllers/admin_theme_appearance.php`, and `app/services/admin_settings_registry.php` to load, save, and discover the settings.
+
+#### Database
+
+- Added no database migration. Both values use the existing application settings storage.
+
+#### Frontend and presentation
+
+- Updated `app/views/admin_theme.php` and `app/views/public_tags.php` for the animation controls and public card information disclosure.
+- Updated `public/assets/gallery-modules/theme-form.js`, `public/assets/gallery-modules/admin-side-panel.js`, and `public/assets/gallery-modules/hero-tags.js` for synchronized duration inputs, tab retention, transition-aware closing, and the public information-panel interactions.
+- Updated `public/assets/styles/admin-theme-editor.css`, `public/assets/styles/admin-cinematic.css`, and `public/assets/styles/public-shared.css` for responsive controls and the two animated panels. Updated relevant gallery and Admin asset cache versions.
+- Updated `app/controllers/public_gallery_cards.php` and `app/views/public_gallery_cards.php` to prepare and render public title, description, date, and tag data for the card panel.
+- Added the new labels, help text, and example values to both PHP and JSON catalogs for English, Czech, German, and Swedish.
+
+### Tests
+
+- Updated `tests/fixtures/gallery_tags.html`, `tests/support/gallery_tags_render_fixture.php`, and `tests/hero_tag_theme_model_test.php` for the public information panel and duration normalization.
+- Updated `tests/theme_appearance_rendering_test.php`, `tests/frontend_operational_policy_test.mjs`, `tests/stage4_mutation_hardening_contract_test.php`, `tests/smart_gallery_high_priority_hardening_test.php`, `tests/admin_side_panel_created_gallery_refresh_test.mjs`, and `tests/admin_side_panel_gallery_refresh_test.mjs` for the added Appearance subsection and current cache-busting imports.
+- Added `ACCESSIBILITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/SECURITY.md`, issue templates under `.github/ISSUE_TEMPLATE/`, and `.github/PULL_REQUEST_TEMPLATE.md`; updated `README.md` with the project guidance links.
+- Synchronized all four administrator manual editions and rebuilt their PDFs for Version 0.118.
+
+### User Impact
+
+#### For visitors
+
+- The ellipsis on a gallery card opens its public description, date, and all tag links in a compact panel. The visible tag preview remains available on first paint, and the disclosure still works without JavaScript.
+- The panel can be dismissed by clicking elsewhere or pressing Escape when JavaScript is available. Its motion follows the browser's reduced-motion preference.
+
+#### For administrators
+
+- Theme > Appearance > Animations controls how quickly the public gallery information panel and Admin side panel open and close. Each setting supports 0–800 ms and can be reset to its default.
+- Saving Theme settings returns the administrator to the tab and Appearance subsection they were using.
+- Contributors can use the repository's new issue templates and accessibility, contribution, conduct, and security guidance.
+
 ## Version 0.117.1
 
 Version 0.117.1 fixes first-paint tag disclosure in public gallery headers and gallery cards. The configured visible tag limit, overflow control, and optional row cap now come from server-rendered markup and CSS, keeping card geometry stable before JavaScript runs.

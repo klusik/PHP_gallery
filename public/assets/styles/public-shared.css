@@ -345,6 +345,7 @@
 
 /* Cards use the same saved tag limit and measured row scrollbar as gallery headers. */
 .public-page .gallery-card-tags {
+    position: relative;
     display: grid;
     gap: .3rem;
     min-width: 0;
@@ -361,6 +362,10 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+}
+
+.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {
+    overflow: visible;
 }
 
 .public-page .gallery-card-tags .tag-list {
@@ -384,6 +389,22 @@
     font-weight: 600;
     line-height: 1.35;
     cursor: pointer;
+}
+
+.public-page .gallery-card-info-disclosure {
+    display: contents;
+}
+
+.public-page .gallery-card-info-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    height: auto;
+    padding: 0.1rem 0.42rem;
+    font-size: inherit;
+    line-height: 1.35;
+    text-decoration: none;
 }
 
 /* Explicit hiding also wins over the normal flex/inline tag presentation rules. */
@@ -479,6 +500,110 @@
 
 .public-page .gallery-card-tag-tail:has(> .hero-tag-disclosure[open]) {
     display: contents;
+}
+
+.public-page .gallery-card-public-info-panel {
+    position: absolute;
+    z-index: 60;
+    top: auto;
+    right: auto;
+    bottom: calc(100% + .55rem);
+    left: 0;
+    display: grid;
+    gap: .45rem;
+    width: min(24rem, calc(100vw - 2rem));
+    max-height: min(72vh, 36rem);
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: .85rem;
+    border: 1px solid var(--line);
+    border-radius: max(.7rem, calc(var(--radius, 16px) * .72));
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, .24);
+    color: var(--ink);
+    text-align: left;
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    transition: opacity var(--gallery-card-info-motion-duration, 320ms) ease-out, transform var(--gallery-card-info-motion-duration, 320ms) cubic-bezier(.2, .9, .25, 1.2);
+}
+
+.public-page [data-gallery-card-info-disclosure][data-gallery-card-info-state="opening"] .gallery-card-public-info-panel {
+    opacity: 0;
+    transform: translate3d(var(--gallery-card-info-slide-x, 8px), 0, 0);
+    transition: none;
+}
+
+.public-page [data-gallery-card-info-disclosure][data-gallery-card-info-state="open"] .gallery-card-public-info-panel {
+    opacity: 1;
+    transition: opacity var(--gallery-card-info-motion-duration, 320ms) ease-out, transform var(--gallery-card-info-motion-duration, 320ms) cubic-bezier(.2, .9, .25, 1.2);
+}
+
+.public-page [data-gallery-card-info-disclosure][data-gallery-card-info-state="closing"] .gallery-card-public-info-panel {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(var(--gallery-card-info-slide-x, 8px), 0, 0);
+    transition: opacity var(--gallery-card-info-motion-duration, 320ms) ease-in, transform var(--gallery-card-info-motion-duration, 320ms) ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-page .gallery-card-public-info-panel {
+        transition: none !important;
+    }
+}
+
+.public-page .gallery-card-public-info-panel h3,
+.public-page .gallery-card-public-info-panel h4,
+.public-page .gallery-card-public-info-panel p {
+    margin: 0;
+}
+
+.public-page .gallery-card-public-info-panel h3 {
+    font-size: .95rem;
+}
+
+.public-page .gallery-card-public-info-panel h4 {
+    font-size: .82rem;
+}
+
+.public-page .gallery-card-public-info-title {
+    font-weight: 700;
+}
+
+.public-page .gallery-card-public-info-description {
+    font-size: .82rem;
+    line-height: 1.4;
+}
+
+.public-page .gallery-card-public-info-date {
+    font-size: .76rem;
+}
+
+.public-page .gallery-card-public-info-tags {
+    display: grid;
+    gap: .35rem;
+    padding-top: .35rem;
+    border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.public-page .gallery-card-public-info-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+}
+
+.public-page .gallery-card-public-info-tag-list .tag {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.public-page .gallery-card:has(.gallery-card-info-disclosure[open]) {
+    position: relative;
+    z-index: 40;
+    overflow: visible;
+    transform: none;
 }
 
 .public-page [data-hero-tags] .gallery-card-tag-tail > .tag {
