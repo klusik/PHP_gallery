@@ -191,13 +191,19 @@ async () => {
          * @return {Promise<HTMLFormElement>} Dynamically replaced Images form after the canonical completion.
          */
         async function submitImageRowAction(action) {
-            const oldForm = doc.querySelector('[data-admin-image-bulk-form]');
+            // Fragment insertion precedes scoped translations and delegated form preparation.
+            const oldForm = await until(() => {
+                const current = doc.querySelector('[data-admin-image-bulk-form]');
+                const button = current?.querySelector('[data-admin-image-row-action][name="action"][value="' + action + ':' + imageId + '"]');
+                return current?.dataset.adminPanelBulkForm === 'true' && button && !button.disabled ? current : null;
+            });
             const oldButton = oldForm?.querySelector('[data-admin-image-row-action][name="action"][value="' + action + ':' + imageId + '"]');
             expect(oldButton && oldForm.querySelectorAll('input[name="image_ids[]"]:checked').length === 0);
             oldButton.click();
-            const replacement = await until(/** Wait for the coordinator to replace the owned Images fragment. @return {HTMLFormElement|null} New bulk form, or null while the original still owns the drawer. */ () => {
+            // Require the replacement to have completed the same panel-owned initialization.
+            const replacement = await until(() => {
                 const current = doc.querySelector('[data-admin-image-bulk-form]');
-                return current && current !== oldForm ? current : null;
+                return current && current !== oldForm && current.dataset.adminPanelBulkForm === 'true' ? current : null;
             });
             inPlace();
             const payload = imageMutationResponses.at(-1);

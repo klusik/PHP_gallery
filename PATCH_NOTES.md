@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.118.1
+
+Version 0.118.1 corrects the source-documentation checks so anonymous functions and callbacks do not require docstrings. Named functions, methods, and class-like declarations retain their documentation requirements. The update aligns contributor guidance and regression coverage without changing gallery behavior, settings, or database storage.
+
+### Highlights
+
+#### Declaration documentation
+
+- Exempted anonymous functions, closures, arrow functions, and inline or variable/member-bound callbacks from declaration-docstring requirements.
+- Exempted variables, constants, and class properties from declaration-docstring requirements.
+- Kept documentation checks for named functions, methods, classes, interfaces, traits, and enums, including named declarations nested inside anonymous callbacks.
+- Aligned the historical JavaScript documentation-presence check with the shared source-contract policy.
+
+### Technical Details
+
+#### Audit tooling
+
+- Updated `scripts/source_contracts/php.php` to apply docstring validation only to named callables and class-like declarations while retaining independent native PHP signature-typing checks.
+- Updated coverage descriptions in `scripts/check_source_documentation.php` and `scripts/source_contracts/changes.php` to state the anonymous-callback exemption and the separate typing and parser-coverage contracts.
+- Preserved file-attribution headers and operational-policy checks as independent requirements.
+
+#### Backend and frontend
+
+- Completed the return and value-shape documentation in `app/controllers/theme_assets.php`, `app/services/theme.php`, and `public/assets/gallery-modules/theme-form.js`.
+- Replaced the optional callback docblock in the Theme animation reset control with an ordinary explanatory comment. Kept runtime behavior and browser imports unchanged.
+
+#### Database and compatibility
+
+- Added no migration, setting, route, or storage change.
+- Kept visitor and administrator workflows compatible with Version 0.118 and preserved the independent Windows uploader version and installer.
+
+### Tests
+
+#### Documentation contracts and guidance
+
+- Updated `tests/function_documentation_test.php`, `tests/source_contract_inventory_test.php`, `tests/source_contract_changes_test.php`, and `tests/source_type_documentation_test.php` to cover callback and property exemptions, undocumented named declarations, nested named functions, native PHP typing, and removal of optional callback documentation.
+- Kept named-function parameter and return-contract coverage for JavaScript defaults, rest parameters, and destructured tuples.
+- Fixed `tests/support/gallery_workflow_browser.js` to wait for panel-owned form initialization after an Images fragment refresh before exercising its next row action; retained unchanged-URL, open-panel, canonical-response, and persistence assertions.
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, and `TESTING.md` with the same declaration-documentation rules.
+- Synchronized the English, Czech, German, and Swedish administrator manuals and rebuilt their PDFs for Version 0.118.1.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Preserved public gallery presentation, access rules, Theme animation controls, and existing administration workflows.
+
+#### For contributors
+
+- Removed false documentation findings for anonymous callbacks while keeping named-declaration documentation, signature typing, and parser coverage visible in the central audit.
+
 ## Version 0.118
 
 Version 0.118 adds adjustable motion for public gallery information panels and the Admin side panel, while improving how visitors open and dismiss a gallery card's public information. It also adds contributor, accessibility, issue-reporting, and security guidance to the project repository.
