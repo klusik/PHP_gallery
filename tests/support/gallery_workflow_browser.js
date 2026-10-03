@@ -44,17 +44,24 @@ async () => {
         const initialDocument = doc;
         let posts = 0;
         let lastMutationStatus = 0;
+        const imageMutationResponses = [];
         let holdNextEditorRefresh = false;
         let heldEditorRefresh = null;
         let heldEditorReturned = false;
         const originalFetch = win.fetch.bind(win);
+        /** Observe fixture workflow requests and retain image-action envelopes. @param {Parameters<typeof win.fetch>} args Original browser fetch arguments. @return {Promise<Response>} Original or deliberately gated network response. */
         win.fetch = async (...args) => {
             const route = new URL(String(args[0]), win.location.href).searchParams.get('page') || '';
             const isMutation = String(args[1]?.method || '').toUpperCase() === 'POST'
                 && ['admin_new_gallery', 'admin_edit_gallery'].includes(route);
+            const isImageMutation = String(args[1]?.method || '').toUpperCase() === 'POST' && route === 'admin_bulk_images';
             if (isMutation) posts++;
             const response = await originalFetch(...args);
             if (isMutation) lastMutationStatus = response.status;
+            if (isImageMutation) {
+                const payload = await response.clone().json();
+                imageMutationResponses.push(payload);
+            }
             if (holdNextEditorRefresh && route === 'admin_edit_gallery'
                 && new URL(String(args[0]), win.location.href).searchParams.has('_panel_refresh') && !isMutation) {
                 holdNextEditorRefresh = false;
@@ -179,6 +186,39 @@ async () => {
         inPlace();
         const imageId = Number(doc.querySelector('[data-admin-image-order-row][data-image-id]').dataset.imageId);
         expect(imageId > 0);
+        /** Submit one row-owned action and require its replacement control to remain usable in the open drawer.
+         * @param {string} action Direct row action value without its stable image ID.
+         * @return {Promise<HTMLFormElement>} Dynamically replaced Images form after the canonical completion.
+         */
+        async function submitImageRowAction(action) {
+            const oldForm = doc.querySelector('[data-admin-image-bulk-form]');
+            const oldButton = oldForm?.querySelector('[data-admin-image-row-action][name="action"][value="' + action + ':' + imageId + '"]');
+            expect(oldButton && oldForm.querySelectorAll('input[name="image_ids[]"]:checked').length === 0);
+            oldButton.click();
+            const replacement = await until(/** Wait for the coordinator to replace the owned Images fragment. @return {HTMLFormElement|null} New bulk form, or null while the original still owns the drawer. */ () => {
+                const current = doc.querySelector('[data-admin-image-bulk-form]');
+                return current && current !== oldForm ? current : null;
+            });
+            inPlace();
+            const payload = imageMutationResponses.at(-1);
+            const expectedEntityId = action === 'cover' ? galleryId : imageId;
+            expect(payload?.ok === true
+                && Object.keys(payload).slice(0, 6).join(',') === 'ok,message,mutation,panel,contexts,fallback'
+                && payload.mutation?.entity_ids?.length === 1
+                && Number(payload.mutation.entity_ids[0]) === expectedEntityId
+                && payload.panel?.keep_open === true
+                && Array.isArray(payload.contexts) && payload.fallback?.redirect_url);
+            return replacement;
+        }
+        stage = 'browser single-image cover action stays in the drawer';
+        let imageForm = await submitImageRowAction('cover');
+        expect(imageForm.querySelector('[data-admin-image-cover-cell]')?.textContent.trim() !== '');
+        stage = 'browser dynamically replaced row visibility action';
+        imageForm = await submitImageRowAction('draft');
+        expect(imageForm.querySelector('[data-admin-image-row-action][value="draft:' + imageId + '"]')?.getAttribute('aria-pressed') === 'true');
+        stage = 'browser dynamically replaced row visibility restore';
+        imageForm = await submitImageRowAction('public');
+        expect(imageForm.querySelector('[data-admin-image-row-action][value="public:' + imageId + '"]')?.getAttribute('aria-pressed') === 'true');
         for (const visibility of ['private', 'public']) {
             stage = 'browser visibility ' + visibility;
             const editor = doc.querySelector('[data-admin-panel-edit-form]');

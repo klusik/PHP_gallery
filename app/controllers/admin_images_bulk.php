@@ -63,7 +63,9 @@ use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Handles cms admin bulk images logic for the gallery application.
+ * Apply image selection or explicit row mutations with authentication and gallery ownership checks.
+ *
+ * @return void Apply selected or explicit row actions through the same authenticated mutation pipeline.
  */
 function cms_admin_bulk_images(): void
 {
@@ -91,14 +93,14 @@ function cms_admin_bulk_images(): void
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
-    // Variable $singleDeleteImageId stores the row-level delete button value, when used.
-    $singleDeleteImageId = 0;
-    if (preg_match('/^delete:(\d+)$/', $action, $deleteMatch) === 1) {
-        $singleDeleteImageId = (int) $deleteMatch[1];
-        $action = 'delete';
+    // Explicit row actions target only that photo, regardless of the bulk selection.
+    $singleImageId = 0;
+    if (preg_match('/^(delete|cover|public|draft|private):(\d+)$/', $action, $rowMatch) === 1) {
+        $singleImageId = (int) $rowMatch[2];
+        $action = $rowMatch[1];
     }
     // Variable $imageIds stores the selected images for this operation.
-    $imageIds = $singleDeleteImageId > 0 ? [$singleDeleteImageId] : $submittedImageIds;
+    $imageIds = $singleImageId > 0 ? [$singleImageId] : $submittedImageIds;
     // Variable $count stores this steps working value.
     $count = 0;
     if (!$imageIds) {

@@ -55,6 +55,16 @@ let failGet = false;
 let holdOrder = false;
 let holdOrganizer = false;
 let lastOrderDetail = null;
+const orderSubmissions = [];
+const imageOrders = new Map();
+const fixtureImages = [
+    {id: '11', name: 'Beta', capturedAt: '2020-01-02', preview: true},
+    {id: '12', name: 'Alpha', capturedAt: '2024-02-31'},
+    {id: '13', name: 'Gamma', capturedAt: '2020-01-01'},
+    {id: '14', name: 'Delta', capturedAt: '2020-01-02 00:00:00'},
+    {id: '15', name: 'Epsilon', capturedAt: ''},
+    {id: '16', name: 'Zeta', capturedAt: null},
+];
 let lastOrganizerDetail = null;
 let lastBulkParent = null;
 let revisionConflicts = 0;
@@ -125,14 +135,25 @@ function editor(id) {
  * @return {string} Minimal production-shaped tool fragments with independent forms.
  */
 function toolForms(id) {
-    return `<div data-admin-image-order-toolbar data-reorder-url="/fixture-order?id=${id}"><span data-admin-image-order-status></span></div>
-        <form data-admin-image-bulk-form action="/fixture-bulk?id=${id}">
+    const imageIds = imageOrders.get(String(id)) || ['11', '12', '13', '14', '15', '16'];
+    const imageRows = imageIds.map(/** Render a server-returned image order into current DOM order. @param {string} imageId Image identity from the fixture's persisted sequence. @return {string} Production-shaped row markup for one synthetic image. */ imageId => {
+        const image = fixtureImages.find(/** Locate static metadata for this fixture image. @param {{id: string, name: string, capturedAt: string|null, preview?: boolean}} candidate Candidate row metadata. @return {boolean} Whether the candidate matches this ordered identity. */ candidate => candidate.id === imageId);
+        if (!image) return '';
+        const captureDate = image.capturedAt === null ? '' : ` data-image-captured-at="${image.capturedAt}"`;
+        const preview = image.preview
+            ? '<button type="button" data-admin-image-preview data-preview-src="/preview/11.jpg" data-preview-name="Beta" data-preview-close-label="Close preview">Preview</button>'
+            : '';
+        return `<tr data-admin-image-order-row data-image-id="${image.id}" data-image-name="${image.name}"${captureDate}><td>${preview}<label class="picture-manager-select-button"><input type="checkbox" name="image_ids[]" value="${image.id}"${image.id === '16' ? ' checked' : ''}>${image.name}</label></td></tr>`;
+    }).join('');
+    return `<form data-admin-image-bulk-form action="/fixture-bulk?id=${id}">
         <input type="hidden" name="csrf_token" value="fixture-only"><input type="hidden" name="gallery_id" value="${id}">
         <input type="hidden" name="new_gallery_parent_id" value="999" disabled><input type="hidden" name="new_gallery_parent_id" value="42">
         <input name="new_gallery_title" value="New child"><input name="new_gallery_folder_name" value="new-child">
-        <table data-admin-image-order-table><thead><tr><th><button type="button" data-admin-image-name-sort>Name</button></th></tr></thead>
-        <tbody><tr data-admin-image-order-row data-image-id="11" data-image-name="Beta"><td><input type="checkbox" name="image_ids[]" value="11" checked>Beta</td></tr>
-        <tr data-admin-image-order-row data-image-id="12" data-image-name="Alpha"><td>Alpha</td></tr></tbody></table>
+        <div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="/fixture-order?id=${id}">
+        <div class="admin-image-view-controls"><label><input type="checkbox" data-admin-image-names-toggle checked> Show filenames</label><button type="button" data-admin-image-names-default data-saved-message="Default saved">Save names default</button><span data-admin-image-names-status role="status"></span></div>
+        <div class="admin-image-sort-controls"><button type="button" data-admin-image-name-sort>Name</button><button type="button" data-admin-image-capture-date-sort data-sort-direction="asc">Date taken</button><span data-admin-image-order-status></span></div></div>
+        <table data-admin-image-order-table><thead><tr><th>Name</th><th>Date taken</th></tr></thead>
+        <tbody>${imageRows}</tbody></table>
         <button name="action" value="move_new">Move to new child</button></form>
         <div data-admin-metadata-organizer><div data-admin-metadata-organizer-progress hidden><progress data-admin-metadata-organizer-progress-bar></progress><span data-admin-metadata-organizer-progress-text></span></div>
         <div data-admin-metadata-organizer-results><form data-admin-metadata-organizer-apply-form action="/fixture-organizer?id=${id}" data-candidate-count="1">
@@ -208,6 +229,11 @@ async function fetchPanelFixture(value, options = {}) {
         posts++;
         const payload = {...success(id), result: {done: true, remaining_after: 0, moved_images: 1, requested_images: 1}, bulk_action: 'move_new'};
         const response = {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Deliver the captured tool acknowledgment to JSON consumers. @return {Promise<typeof payload>} Original synthetic payload. */ json: async () => payload, /** Deliver the same tool acknowledgment to text parsers. @return {Promise<string>} Captured JSON representation. */ text: async () => JSON.stringify(payload)};
+        if (url.pathname === '/fixture-order') {
+            const imageIds = JSON.parse(options.body.get('image_order') || '[]');
+            imageOrders.set(String(id), imageIds);
+            orderSubmissions.push({url: `${url.pathname}${url.search}`, galleryId: options.body.get('gallery_id'), imageIds});
+        }
         if (url.pathname === '/fixture-bulk') lastBulkParent = options.body.get('new_gallery_parent_id');
         if (url.pathname === '/fixture-order' && holdOrder) return gated('order', id, options, response);
         if (url.pathname === '/fixture-organizer' && holdOrganizer) return gated('organizer', id, options, response);
@@ -284,6 +310,11 @@ function panel() { return document.querySelector('[data-admin-side-panel]'); }
  * @return {HTMLElement} Current node.
  */
 function field(selector = '[name="title"]') { return panel().querySelector(selector); }
+/**
+ * Read image identities in their current rendered row order.
+ * @return {string[]} Ordered image IDs from the active panel.
+ */
+function displayedImageIds() { return Array.from(field('[data-admin-image-order-table]').querySelectorAll('[data-admin-image-order-row]')).map(/** Read one row's stable identity. @param {HTMLTableRowElement} row Current image row. @return {string} Rendered ID or an empty string when omitted. */ row => row.dataset.imageId || ''); }
 /**
  * Enter ordinary text and dispatch the production delegated input event.
  * @param {HTMLElement} control Synthetic text input/textarea.
@@ -497,7 +528,55 @@ try {
     key(document.activeElement, 'Escape'); await wait(310);
     check(panel().hidden, 'Escape closes an error panel');
 
-    document.getElementById('open-a').click(); await wait(); holdOrder = true;
+    document.getElementById('open-a').click(); await wait();
+    const namesToggle = field('[data-admin-image-names-toggle]');
+    namesToggle.checked = false; namesToggle.dispatchEvent(new Event('change', {bubbles: true}));
+    check(field('[data-admin-image-order-table]').classList.contains('is-filenames-hidden'), 'Filename toggle hides names in the current editor');
+    field('[data-admin-image-names-default]').click();
+    check(localStorage.getItem('php-gallery.admin-image-names.default.v1') === 'hidden'
+        && field('[data-admin-image-names-status]').textContent === 'Default saved', 'Filename preference saves the remembered default');
+    const previewButton = field('[data-admin-image-preview]');
+    previewButton.dispatchEvent(new PointerEvent('pointerover', {bubbles: true, clientX: 30, clientY: 30}));
+    const preview = document.querySelector('.admin-image-preview-overlay');
+    check(preview && !preview.hidden && !preview.classList.contains('is-pinned'), 'Thumbnail hover opens a non-pinned preview');
+    previewButton.dispatchEvent(new PointerEvent('pointerout', {bubbles: true, relatedTarget: document.body}));
+    check(preview.hidden, 'Thumbnail hover preview dismisses when the pointer leaves');
+    previewButton.click();
+    check(preview && !preview.hidden && preview.querySelector('img').alt === 'Beta'
+        && preview.querySelector('button[data-admin-image-preview-close]').getAttribute('aria-label') === 'Close preview', 'Thumbnail click pins an accessible preview with its caller-provided close label');
+    check(key(previewButton, 'Escape') && preview.hidden && !panel().hidden && location.href === originalUrl, 'Escape dismisses the preview while leaving its owning panel open');
+    previewButton.click();
+    preview.querySelector('[data-admin-image-preview-close]').click();
+    check(preview.hidden && location.href === originalUrl, 'Preview closes in place without changing the browser URL');
+
+    let orderCount = orderSubmissions.length;
+    field('[data-admin-image-capture-date-sort]').click(); await wait(100);
+    check(JSON.stringify(displayedImageIds()) === JSON.stringify(['13', '11', '14', '12', '15', '16']), 'Capture-date ascending puts valid timestamps first, keeps ties stable, and leaves invalid or missing dates last');
+    check(orderSubmissions.length === orderCount + 1 && orderSubmissions.at(-1).url === '/fixture-order?id=1'
+        && orderSubmissions.at(-1).galleryId === '1'
+        && JSON.stringify(orderSubmissions.at(-1).imageIds) === JSON.stringify(['13', '11', '14', '12', '15', '16'])
+        && location.href === originalUrl, 'Ascending capture-date sort persists exactly once through the existing endpoint for the current gallery without navigation');
+    orderCount = orderSubmissions.length;
+    check(field('[data-admin-image-names-toggle]').checked === false
+        && field('[data-admin-image-order-table]').classList.contains('is-filenames-hidden'), 'Saved filename default survives panel re-render');
+    field('[data-admin-image-capture-date-sort]').click(); await wait(100);
+    check(JSON.stringify(displayedImageIds()) === JSON.stringify(['11', '14', '13', '12', '15', '16']), 'Capture-date descending keeps equal timestamps and invalid or missing dates in stable order');
+    check(orderSubmissions.length === orderCount + 1 && orderSubmissions.at(-1).url === '/fixture-order?id=1'
+        && orderSubmissions.at(-1).galleryId === '1'
+        && JSON.stringify(orderSubmissions.at(-1).imageIds) === JSON.stringify(['11', '14', '13', '12', '15', '16'])
+        && location.href === originalUrl, 'Descending capture-date sort persists exactly once through the same endpoint for the current gallery without navigation');
+
+    const outsideSelection = field('[data-admin-image-order-row][data-image-id="16"] input[name="image_ids[]"]');
+    const anchorSelection = field('[data-admin-image-order-row][data-image-id="11"] input[name="image_ids[]"]');
+    const rangeEndSelection = field('[data-admin-image-order-row][data-image-id="13"] input[name="image_ids[]"]');
+    anchorSelection.click();
+    rangeEndSelection.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, shiftKey: true})); await wait();
+    const selectedIds = Array.from(field('[data-admin-image-order-table]').querySelectorAll('input[name="image_ids[]"]:checked')).map(/** Collect one selected image ID. @param {HTMLInputElement} input Selected image control. @return {string} Submitted checkbox value. */ input => input.value);
+    check(JSON.stringify(selectedIds) === JSON.stringify(['11', '14', '13', '16']), 'Shift selection follows the current visual interval and preserves an unrelated selected image');
+    check(['11', '14', '13', '16'].every(/** Verify visual state for one expected row. @param {string} id Selected image identity. @return {boolean} Whether its row shows selection. */ id => field('[data-admin-image-order-row][data-image-id="' + id + '"]').classList.contains('is-picture-manager-selected'))
+        && outsideSelection.checked && location.href === originalUrl, 'Shift selection mirrors checkbox state to the row highlight without navigation');
+
+    holdOrder = true;
     field('[data-admin-image-name-sort]').click(); await wait();
     field('[data-gallery-side-panel-link]').click(); await wait();
     const orderReplacement = field('form'); const orderStatus = field('[data-admin-side-panel-status]').textContent;
@@ -639,7 +718,8 @@ try {
     check(clipboardValue === 'https://fixture.invalid/upload/2' && location.href === originalUrl && !panel().hidden, 'Re-rendered copy control keeps working in place');
     close(); await wait(310);
     check(location.href === originalUrl && document === originalDocument, 'All mutations and guards preserve URL and document');
-    check(localStorage.length === 0 && sessionStorage.length === 0, 'Drafts do not use persistent browser storage');
+    check(localStorage.length === 1 && localStorage.getItem('php-gallery.admin-image-names.default.v1') === 'hidden'
+        && sessionStorage.length === 0, 'Drafts do not use persistent browser storage beyond the separate filename preference');
     document.getElementById('results').textContent = `BROWSER PASS: ${assertions} lifecycle, draft, race and modal focus assertions including native Tab/Shift-Tab/Escape; ${posts} explicit fixture POSTs, ${refreshes} coordinator refreshes.`;
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL #' + (assertions + 1) + ': ' + error.message;

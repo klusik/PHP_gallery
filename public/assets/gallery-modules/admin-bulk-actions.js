@@ -424,94 +424,99 @@ export function setupImageBulkMoveFields() {
 }
 
 /**
- * Handle setup image bulk delete confirmation.
+ * Confirm the existing destructive image operations before their form is submitted.
  *
- * Used by browser-side gallery behavior.
+ * Row-action submitters take precedence over the toolbar select so an image visibility
+ * action is never mistaken for a bulk delete selected in the toolbar.
+ *
+ * @param {HTMLFormElement} form Existing image bulk form.
+ * @param {HTMLElement|null} submitter Actual submitter, when supplied by the browser or drawer.
+ * @return {boolean} True when submission may continue; false when validation or confirmation stops it.
+ */
+export function confirmImageBulkSubmission(form, submitter) {
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-image-bulk-form]')) {
+        return true;
+    }
+    const actionSelect = form.querySelector('select[name="action"]');
+    const rowAction = submitter instanceof HTMLElement && submitter.name === 'action'
+        ? submitter.value
+        : '';
+    const actionValue = rowAction || (actionSelect instanceof HTMLSelectElement ? actionSelect.value : '');
+    const isSingleDelete = actionValue.startsWith('delete:')
+        || (submitter instanceof HTMLElement && submitter.matches('[data-admin-image-delete-single]'));
+    const isBulkDelete = !rowAction && actionValue === 'delete';
+    const isBulkMove = !rowAction && (actionValue === 'move_existing' || actionValue === 'move_new');
+    if (!isSingleDelete && !isBulkDelete && !isBulkMove) {
+        return true;
+    }
+
+    let names = [];
+    if (isSingleDelete && submitter instanceof HTMLElement) {
+        names = [submitter.dataset.imageName || i18n('admin.bulk.selected_photo_fallback', 'Selected photo')];
+    } else {
+        names = Array.from(form.querySelectorAll('input[type="checkbox"][name="image_ids[]"]:checked'))
+            .map(/** Find the table row owning a selected image checkbox. @param {Element} checkbox Checked image selection control. @return {Element|null} Closest image row, when present. */ (checkbox) => checkbox.closest('[data-admin-image-order-row]'))
+            .filter(/** Keep rows with the image metadata needed for a useful prompt. @param {Element|null} row Candidate checkbox owner. @return {boolean} Whether the row is an HTML element. */ (row) => row instanceof HTMLElement)
+            .map(/** Resolve the image name shown in confirmation text. @param {HTMLElement} row Selected image row. @return {string} Row name or localized fallback. */ (row) => row.dataset.imageName || row.querySelector('[data-admin-image-name-cell]')?.textContent?.trim() || i18n('admin.bulk.image_fallback', 'Image {id}', {id: row.dataset.imageId || ''}).trim());
+    }
+
+    if (!names.length) {
+        window.alert(isBulkMove ? i18n('admin.bulk.select_photo_move', 'Select at least one photo to move.') : i18n('admin.bulk.select_photo_delete', 'Select at least one photo to delete.'));
+        return false;
+    }
+
+    if (isBulkMove) {
+        const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
+        const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
+        if (actionValue === 'move_existing' && (!(destinationInput instanceof HTMLInputElement) || (destinationInput.value === '' || destinationInput.value === '0'))) {
+            window.alert(i18n('admin.bulk.choose_destination', 'Choose the destination gallery.'));
+            return false;
+        }
+        if (actionValue === 'move_new' && (!(newGalleryTitle instanceof HTMLInputElement) || newGalleryTitle.value.trim() === '')) {
+            window.alert(i18n('admin.bulk.enter_new_gallery', 'Enter a title for the new gallery.'));
+            return false;
+        }
+        if (form.dataset.adminImageMoveConfirmed === '1') {
+            delete form.dataset.adminImageMoveConfirmed;
+            return true;
+        }
+        const moveMessage = [
+            names.length === 1 ? i18n('admin.bulk.move_photo_one', 'Move this photo?') : i18n('admin.bulk.move_photo_many', 'Move these photos?'),
+            '',
+            ...names.map(/** Format a selected image name for the move prompt. @param {string} name Image name. @return {string} Bulleted display line. */ (name) => `• ${name}`),
+            '',
+            i18n('admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.')
+        ].join('\n');
+        return window.confirm(moveMessage);
+    }
+
+    const message = [
+        names.length === 1 ? i18n('admin.bulk.delete_photo_one', 'Delete this photo from the gallery?') : i18n('admin.bulk.delete_photo_many', 'Delete these photos from the gallery?'),
+        '',
+        ...names.map(/** Format a selected image name for the delete prompt. @param {string} name Image name. @return {string} Bulleted display line. */ (name) => `• ${name}`),
+        '',
+        i18n('admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.')
+    ].join('\n');
+    return window.confirm(message);
+}
+
+/**
+ * Bind delegated image bulk delete and move confirmation handling.
+ *
+ * @return {void} Prevents submission only when the existing validation or confirmation policy rejects it.
  */
 export function setupImageBulkDeleteConfirmation() {
-    // Confirm destructive photo deletes and guard physical photo moves from the dedicated admin edit-gallery image table.
-    document.addEventListener('submit', (event) => {
-        // Variable `form` stores this steps working value.
+    document.addEventListener('submit', /** Enforce confirmation only for image bulk submissions not already owned by another handler. @param {SubmitEvent} event Delegated form submission event. @return {void} Prevents submission when the confirmation helper rejects it. */ (event) => {
         const form = event.target;
-        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-image-bulk-form]')) {
+        if (event.defaultPrevented || !(form instanceof HTMLFormElement) || !form.matches('[data-admin-image-bulk-form]')) {
             return;
         }
-        // Variable `submitter` stores this steps working value.
-        const submitter = event.submitter;
-        // Variable `action` stores this steps working value.
-        const action = form.querySelector('select[name="action"]');
-        // Variable `isSingleDelete` stores whether a row-level delete button submitted the form.
-        const isSingleDelete = submitter instanceof HTMLElement && submitter.matches('[data-admin-image-delete-single]');
-        // Variable `isBulkDelete` stores whether the toolbar selected the delete operation.
-        const isBulkDelete = action instanceof HTMLSelectElement && action.value === 'delete';
-        // Variable `isBulkMove` stores whether the staged toolbar selected a physical photo move operation.
-        const isBulkMove = action instanceof HTMLSelectElement && (action.value === 'move_existing' || action.value === 'move_new');
-        if (!isSingleDelete && !isBulkDelete && !isBulkMove) {
-            return;
-        }
-
-        // Variable `names` stores the selected photo names shown in the confirmation prompt.
-        let names = [];
-        if (isSingleDelete && submitter instanceof HTMLElement) {
-            names = [submitter.dataset.imageName || i18n('admin.bulk.selected_photo_fallback', 'Selected photo')];
-        } else {
-            names = Array.from(form.querySelectorAll('input[type="checkbox"][name="image_ids[]"]:checked'))
-                .map((checkbox) => checkbox.closest('[data-admin-image-order-row]'))
-                .filter((row) => row instanceof HTMLElement)
-                .map((row) => row.dataset.imageName || row.querySelector('[data-admin-image-name-cell]')?.textContent?.trim() || i18n('admin.bulk.image_fallback', 'Image {id}', {id: row.dataset.imageId || ''}).trim());
-        }
-
-        if (!names.length) {
-            event.preventDefault();
-            window.alert(isBulkMove ? i18n('admin.bulk.select_photo_move', 'Select at least one photo to move.') : i18n('admin.bulk.select_photo_delete', 'Select at least one photo to delete.'));
-            return;
-        }
-
-        if (isBulkMove) {
-            const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
-            const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
-            if (action.value === 'move_existing' && (!(destinationInput instanceof HTMLInputElement) || (destinationInput.value === '' || destinationInput.value === '0'))) {
-                event.preventDefault();
-                window.alert(i18n('admin.bulk.choose_destination', 'Choose the destination gallery.'));
-                return;
-            }
-            if (action.value === 'move_new' && (!(newGalleryTitle instanceof HTMLInputElement) || newGalleryTitle.value.trim() === '')) {
-                event.preventDefault();
-                window.alert(i18n('admin.bulk.enter_new_gallery', 'Enter the new gallery title.'));
-                return;
-            }
-            if (form.dataset.adminImageMoveConfirmed === '1') {
-                delete form.dataset.adminImageMoveConfirmed;
-                return;
-            }
-            // Variable `moveMessage` stores fallback confirmation text when the staged button was not used.
-            const moveMessage = [
-                names.length === 1 ? i18n('admin.bulk.move_photo_one', 'Move this photo?') : i18n('admin.bulk.move_photo_many', 'Move these photos?'),
-                '',
-                ...names.map((name) => `• ${name}`),
-                '',
-                i18n('admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.')
-            ].join('\n');
-            if (!window.confirm(moveMessage)) {
-                event.preventDefault();
-            }
-            return;
-        }
-
-        // Variable `message` stores the destructive action confirmation text.
-        const message = [
-            names.length === 1 ? i18n('admin.bulk.delete_photo_one', 'Delete this photo from the gallery?') : i18n('admin.bulk.delete_photo_many', 'Delete these photos from the gallery?'),
-            '',
-            ...names.map((name) => `• ${name}`),
-            '',
-            i18n('admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.')
-        ].join('\n');
-        if (!window.confirm(message)) {
+        const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+        if (!confirmImageBulkSubmission(form, submitter)) {
             event.preventDefault();
         }
     });
 }
-
 /**
  * Handle setup thumbnail cache delete confirmation.
  *
