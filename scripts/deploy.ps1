@@ -123,7 +123,8 @@ function Get-DeployRelativePath($Path) {
     return $fullPath.Substring($rootPath.Length).TrimStart('\', '/')
 }
 
-# Function `Should-Skip` handles this script step.
+# Exclude runtime files and the installation-owned stylesheet before applying include rules.
+# Path is an absolute candidate path; the result is true when deployment must omit it.
 function Should-Skip($Path) {
     if ($Mode -eq 'local' -and $script:DeployTarget) {
         # Variable $fullPath stores this scripts working value.

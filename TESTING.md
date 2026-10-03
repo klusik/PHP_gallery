@@ -1669,6 +1669,16 @@ also fail. The full inventory is advisory while existing debt is being repaired;
 a passing inventory means discovery completed, not that every old function complies.
 No accepted-debt baseline or automatic fabricated descriptions are introduced.
 
+The changed-source gate also recognizes ordinary brace-bodied Bash and PowerShell
+functions through a conservative, non-executing lexer. Added or changed functions
+need meaningful preceding hash comments or PowerShell comment-based help; removed
+comments fail even when the function body is unchanged. Quoted values, block
+comments and literal here-documents do not create declarations. Unsupported function
+forms, dynamic `eval`/`Invoke-Expression`, unterminated literals and unbalanced
+function boundaries remain `BLOCKED`. Native-script argument/result typing and
+execution semantics remain manual; the whole-tree inventory still checks their
+headers only. Batch bodies remain outside declaration-parser coverage.
+
 The shared contract is a meaningful summary, one typed and described `@param` for
 each explicit parameter, and one typed `@return`/`@returns`. Missing, extra or duplicate
 parameter names, missing types/descriptions, duplicate returns and definite type

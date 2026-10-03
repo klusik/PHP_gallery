@@ -256,14 +256,14 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
 }
 
 /**
- * Handles render gallery card logic for the gallery application.
+ * Emit one gallery card with its authorized cover, tags and optional controls.
  *
- * @param mixed $gallery Input used by this operation.
- * @param mixed $publicOnly Input used by this operation.
+ * @param array<string,mixed> $gallery Gallery row with its identity and presentation settings.
+ * @param bool $publicOnly Apply public access restrictions to cover and metadata selection.
  * @param bool $showPublicReorderHandle Show public reorder handle value.
  * @param bool $showSubgalleryBadge Show subgallery badge value.
- * @param mixed $cardIndex Input used by this operation.
- * @param array $cardContext Preloaded card rendering context.
+ * @param int $cardIndex Zero-based card position used to prioritize thumbnail loading.
+ * @param array<string,mixed> $cardContext Preloaded cover, layout and branch-count context.
  * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
  * @return void Emits the prepared gallery card.
  */
