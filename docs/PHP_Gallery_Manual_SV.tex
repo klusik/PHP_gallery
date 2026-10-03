@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.114.2}
-\newcommand{\manualdate}{2~oktober~2026}
+\newcommand{\version}{0.115}
+\newcommand{\manualdate}{3~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -709,7 +709,7 @@ EXIF kan berika ett fotografi med tagningsdatum, kamera, objektiv, exponering oc
 
 En offentlig portfolio gynnas av ett litet antal starka gallerier på högsta nivån, konsekventa omslag, korta beskrivningar och omsorgsfull ordning. Använd taggar för specialiteter som går över projektgränser. Håll originalarkiv i privata eller opublicerade grenar och kopiera utvalda arbeten till offentliga presentationsgallerier när arbetsflödet kräver ett separat urval.
 
-Testa portfolion på en telefon, en högupplöst skärm och en långsammare anslutning. Responsivt miniatyrbildsval ger standardbalansen. Progressiv skärpning kan visa små miniatyrbilder först i installationer som prioriterar tidig visuell respons.
+Testa portfolion på en telefon, en högupplöst skärm och en långsammare anslutning. Progressiv skärpning är standard och säker reserv för bildkort i det öppna galleriet; responsivt val förblir ett stött alternativ.
 
 \subsection{Privat familjearkiv}
 \index{f00074@familjearkiv}
@@ -868,6 +868,31 @@ Taggar ger en annan väg genom arkivet. Taggen \emph{nattfotografi} kan knyta sa
 \label{sec:admin}
 \index{a00002@administration}
 
+\subsection{Galleriöversikt och granskade ändringar}
+\index{galleri!funktionsplanering}
+Galleriytan visar direkta och underordnade fotografier, undergallerier samt på/av/blandade funktionslägen. Expandera en gren och förbered Kartor, Filnamn, Röstning eller Picture Game för roten och dess undergallerier. Förberedelsen sparar ingenting. Granska exakt omfattning och beroenden och tillämpa sedan den granskade planen. Överlappande avsikter behåller ordningen. Picture Game kräver röstning; avstängd röstning stänger också av spelet. Avbryt eller kasta utkastet för att behålla lagrade värden. Granska igen om en annan ändring gjort planen inaktuell.
+
+Snabbkontrollen för lösenord ändrar bara det aktuella galleriets eget lösenord. Ange ett nytt lösenord eller ta bort det egna. Token- och överordnat skydd, synlighet och övriga inställningar finns kvar. En gammal revision nekas. Vanliga formulär finns utan JavaScript; sidopanelens åtgärder slutförs på plats och panelen hålls öppen.
+
+Inloggade administratörer kan skapa ett rotgalleri på den offentliga startsidan. Uppmaningen om första galleri kräver en bekräftat tom katalog. Innehåll och plats/synlighet grupperas separat; sekundära val kan fällas ut. Innehållsspråk, taggar, SimBrief-utkast och sparade standardval finns kvar.
+
+\subsubsection{Uppladdningsinställningar och mobila anslutningar}
+Öppna \ui{Inställningar > Uppladdningar} för format, namnbyte, arbetare/gränser, ZIP-omgångar, källblock för miniatyrbilder och mobil WebDAV. Kopplade gränser normaliseras tillsammans; storlekar visas i MB. Aktivera äldre menylänkar vid behov. Dolda länkar stänger inte av befintliga adresser eller tjänster.
+
+Mobila åtgärder uppdaterar sin egen yta. Kopiera ett nytt engångslösenord genast. Om följande listläsning misslyckas förblir anslutningen sparad och lösenordet synligt i detta svar; försök läsa listan separat. Avstängda mobila uppladdningar läser inte anslutningslistan.
+
+\subsubsection{Utseende, språk och egna stilmallar}
+Utseende kombinerar grupperade fält med direkt förhandsvisning och en begränsad mus-/tangentbordsdelare på breda skärmar. Panelbredden är en lokal webbläsarinställning. Webbplatsbilder grupperar profil/bakgrund; Layout skiljer genvägar, rutnät, kort och bildvisarens standardval. Språk har Inställningar, Design, Redigerare och Diagnostik. Designprovet använder samma formulärs erbjudna språk och offentliga standardval och sparar ingenting självt.
+
+Lämna ersättningsvalet tomt för att behålla installerad CSS. Välj uttryckligen en mall eller ladda upp en giltig CSS-fil; uppladdning har företräde. Ersättning/återställning verifierar lagring först och återställer tidigare fil om markören inte kan sparas. Behåll tillgänglig kopia och följ den säkra vägledningen vid ofullständig återställning. Driftsättning bevarar installationens \filepath{public/assets/custom.css}.
+
+\subsubsection{Kortorientering och driftstatus}
+Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanliga orienteringsmigreringen bevarar tidigare utseende i inställningar, fysiska och Smarta Gallerier, sidecars, importerade metadata och Papperskorg. Säkerhetskopiera databas, gallerier och Papperskorg tillsammans. Lös rapporterat problem efter avbrott och försök igen; dokumentmarkörer hindrar dubbel omvandling. Nyinstallationer använder vertikalt standardval. Alla taggar finns utan JavaScript; expansion och rullning fungerar även på kort.
+
+Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
+
+Den fristående uppladdaren är fortfarande 0.3.2. Bygget levererar installationsfil och motsvarande genererade \filepath{winapp-update.json} tillsammans under \filepath{winapp/dist/0.3.2/}. Båda hör till samma publicerade utgåva. Bygget ersätter inte verifiering av installerad Windows-app eller simulator.
+
 \subsection{Administrationens arbetsyta}
 
 Efter inloggning ser administratören privata kontroller för översikten, gallerier, fotografier, tema, taggar, underhåll, uppdateringar, loggar och kontoinställningar. Många redigeringar öppnas i panelen till höger, så att galleriet förblir synligt medan ett objekt ändras och sparas.\footnote{En fullständig administrationssida finns kvar för arbetsflöden som behöver mer utrymme eller när webbläsarens utökade funktioner inte är tillgängliga.}
@@ -905,7 +930,7 @@ Med JavaScript laddas avsnitten när de öppnas och sparas på plats. En fast sp
 
 Ett Spotlight-liknande fält söker bland inställningar medan du skriver. Det matchar namn, beskrivningar, kategorier och tekniska namn, inklusive kontroller som ägs av specialiserade administrationssidor. När du väljer ett resultat öppnas relevant avsnitt eller specialsida och matchande kontroll får fokus. Piltangenter, Enter, Escape och rensningsknappen kan användas utan att lämna tangentbordet.
 
-Vanliga globala inställningar kan redigeras direkt från navet, däribland webbplatsnamn, offentligt språk, URL-omskrivning, offentlig sökning där den är tillgänglig, miniatyrbildsrendering, den globala standarden för EXIF/GPS-visning och utvecklingsdiagnostik. Andra inställningar stannar på sina specialsidor när de kräver mer sammanhang, inloggningsuppgifter, filuppladdningar, destruktiva åtgärder eller större redigerare. Exempel är Temas layout, uppladdningar, telemetri, kontosäkerhet, Google/OpenAI-konfiguration, egen CSS, profilering, språkpaket och databasunderhåll.
+Vanliga globala inställningar kan redigeras direkt från navet, däribland webbplatsnamn, offentligt språk, URL-omskrivning, offentlig sökning där den är tillgänglig, miniatyrbildsrendering, den globala standarden för EXIF/GPS-visning och utvecklingsdiagnostik. Andra inställningar stannar på sina specialsidor när de kräver mer sammanhang, inloggningsuppgifter, filuppladdningar, destruktiva åtgärder eller större redigerare. Exempel är Temas layout, galleribegränsade API-nycklar för uppladdning, telemetri, kontosäkerhet, Google/OpenAI-konfiguration, egen CSS, profilering, språkpaket och databasunderhåll.
 
 Navet tar inte bort befintligt arv. Taggsidors layout kan fortsätta ärva det globala rutnätet och kortutformningen, medan gallerispecifika val för kort, ljuslåda och EXIF/GPS stannar hos det galleri som äger dem. Sammanhangsspecifika galleri- och bildvärden blir inte globala inställningar.
 
@@ -1152,7 +1177,7 @@ Det exakta valet kan skilja sig mellan webbläsare och skärmar. Flexibiliteten 
 \index{s00232@srcset}
 \index{m00164@miniatyrbild!r00206@responsivt läge}
 
-\ui{Responsivt webbläsarval} är standardläget under \ui{Administration > Tema > Layout}. Sidan visar tillgängliga miniatyrbildskandidater omedelbart och webbläsaren väljer den som bäst matchar det renderade kortet och skärmens pixeltäthet. JavaScript behövs inte för detta val.\footnote{Den bakomliggande webbstandarden kallar kandidatlistan \emph{srcset}. Galleriägare kan förlita sig på det visuella beteendet utan att lära sig denna märkningsterm.}
+\ui{Responsivt webbläsarval} är det stödda äldre läget under \ui{Administration > Tema > Layout}. Sidan visar tillgängliga miniatyrbildskandidater omedelbart och webbläsaren väljer den som bäst matchar det renderade kortet och skärmens pixeltäthet. JavaScript behövs inte för detta val.\footnote{Den bakomliggande webbstandarden kallar kandidatlistan \emph{srcset}. Galleriägare kan förlita sig på det visuella beteendet utan att lära sig denna märkningsterm.}
 
 Responsivt val överför vanligen en vald miniatyrbild för varje inläst kort och är det vanliga valet när förutsägbart inbyggt webbläsarbeteende är viktigast.
 
@@ -1174,7 +1199,7 @@ Kopian på 300~pixlar fungerar som reserv när den finns. Dess närvaro tvingar 
 \index{p00194@progressiv skärpning}
 \index{m00164@miniatyrbild!p00195@progressivt läge}
 
-\ui{Progressiv skärpning av miniatyrbilder} är ett valfritt läge under \ui{Administration > Tema > Layout}. Galleriet visar först en liten miniatyrbild, vanligen 300~pixlar, och ersätter senare relevanta kort med större kopior. På långsammare anslutningar kan detta göra samlingen igenkännbar tidigare, till priset av att både den lilla och den ersättande miniatyrbilden kan överföras.
+\ui{Progressiv skärpning av miniatyrbilder} är standard och säker reserv under \ui{Administration > Tema > Layout}. Galleriet visar först en liten miniatyrbild, vanligen 300~pixlar, och ersätter senare relevanta kort med större kopior. På långsammare anslutningar kan detta göra samlingen igenkännbar tidigare, till priset av att både den lilla och den ersättande miniatyrbilden kan överföras.
 
 \subsubsection{Vad som händer på skärmen}
 
@@ -1186,7 +1211,7 @@ Kopian på 300~pixlar fungerar som reserv när den finns. Dess närvaro tvingar 
   \item Kortet ersätts när den större kopian är klar.
 \end{enumerate}
 
-Större uppgraderingar köas i stället för att startas för varje kort samtidigt, och synliga kort prioriteras framför avlägset innehåll. Det aktuella progressiva alternativet gäller bildkort i ett öppet galleri. Galleriomslag, kollagerutor, gallerikort på startsidan och administrationsbilder fortsätter använda responsivt webbläsarval. Administrationsgränssnittet märker progressiv skärpning som Beta.
+Större uppgraderingar köas i stället för att startas för varje kort samtidigt, och synliga kort prioriteras framför avlägset innehåll. Det aktuella progressiva alternativet gäller bildkort i ett öppet galleri. Galleriomslag, kollagerutor, gallerikort på startsidan och administrationsbilder fortsätter använda responsivt webbläsarval. Administrationsgränssnittet märker progressiv skärpning som standard och responsivt val som det stödda äldre alternativet.
 
 \subsubsection{Avvägningen i överföring}
 
@@ -1195,9 +1220,9 @@ Progressivt läge kan överföra två filer för ett fotografi: den första lill
 \subsection{Vilket läge bör ägaren välja?}
 \index{m00164@miniatyrbild!v00265@välja renderare}
 
-Välj \ui{Responsivt webbläsarval} för en tillförlitlig standard, ett effektivt inbyggt webbläsarval och vanligen en miniatyrbildsöverföring per inläst kort.
+Välj \ui{Responsivt webbläsarval} när effektivt inbyggt webbläsarval och vanligen en miniatyrbildsöverföring per inläst kort passar samlingen.
 
-Prova \ui{Progressiv skärpning av miniatyrbilder} när tidig sidrespons är särskilt viktig, många besökare använder långsamma anslutningar och en upplevelse med små bilder först passar galleriet. Testa med representativa gallerier och enheter innan du gör det till den vanliga presentationen.
+Behåll \ui{Progressiv skärpning av miniatyrbilder} för en liten första bild med efterföljande begränsade uppgraderingar av relevanta kort. Testa båda stödda renderarna med representativa gallerier och enheter när du väljer rätt presentation för besökarna.
 
 Användbara frågor:
 
@@ -1564,9 +1589,9 @@ Utseende & GPS-markör & När GPS-kartfunktionen är aktiverad kan bildkortens m
 Utseende & Offentliga taggsidor & Särskilda kolumner och rader för taggsidor använder samma säkra maxgränser som andra offentliga rutnät: 1--12 kolumner och 1--50 rader. Taggresultatkort kan använda lodrät eller vågrät gallerikortsutformning oberoende av vanliga gallerilistor.\\
 Utseende & Taggar i galleriets huvudpanel & Sortera efter användning eller alfabetiskt. Visa antingen alla direkt eller 1--200 taggar före kontrollen för utökning på plats; standardtröskeln är 20. Valfri rullning använder 1--12 synliga rader, standard 5, och aktiveras endast när de visade taggarna faktiskt radbryts utöver konfigurerat antal rader.\\
 Layout & Genvägar i sidhuvudet & Tre ordnade platser. En plats kan vara tom, peka på startsidan eller ett galleri som hittas med galleriväljaren. Offentliga besökare ser bara offentliga och listade gallerimål.\\
-Layout & Gallerikortsutformning & Global standard är \ui{Lodrätt system} eller \ui{Vågrätt system}. Ett fysiskt galleri kan ärva eller åsidosätta standarden där presentationsschemat är tillgängligt.\\
+Utseende & Gallerikortsutformning & \ui{Lodrätt system} placerar bilden ovanför beskrivningen; \ui{Vågrätt system} bredvid den. Nyinstallationer börjar lodrätt; migreringen bevarar äldre installationers utseende. Ett fysiskt galleri kan ärva eller åsidosätta Temas val där presentationsschemat är tillgängligt.\\
 Layout & Bildantalsmärke & Det globala märket för ingående bilder är aktiverat som standard. Enskilda gallerier kan ärva det eller spara en åsidosättning. När det är aktiverat för det öppna galleriet visar huvudpanelen också aktuellt galleris grenantal för bilder, inklusive åtkomliga undergallerier.\\
-Layout & Offentlig miniatyrbildsrenderare & \ui{Responsivt webbläsarval} är standard; \ui{Progressiv skärpning av miniatyrbilder} är det valfria betaläget för bildkort i ett öppet galleri. Galleriomslag och kollage fortsätter använda responsivt webbläsarval.\\
+Layout & Offentlig miniatyrbildsrenderare & \ui{Progressiv skärpning av miniatyrbilder} är standard och säker reserv. \ui{Responsivt webbläsarval} förblir det stödda äldre valet med fullständiga serverrenderade kandidater och beteende utan JavaScript. Omslag och kollage behåller sin responsiva pipeline.\\
 Layout & Paginering & Global paginering är avstängd som standard. Kolumner har standardvärdet 3 och begränsas till 1--12; rader har standardvärdet 3 och begränsas till 1--50. Effektivt antal objekt per sida är kolumner multiplicerat med rader.\\
 Layout & Startsiderutnät & Startsidan har eget rutnät med 1--12 kolumner och 1--50 rader. Det ändrar inte rutnäten i gallerier.\\
 Layout & Återställning av rutnät per galleri & \ui{Återställ alla egna gallerirutnät} rensar databasåsidosättningar, återställer standardtillståndet för undergalleriers arv och tar bort matchande rutnätsnycklar från \filepath{gallery.json}-sidofiler så att en senare upptäcktskörning inte kan återimportera gamla rutnätsinställningar.\\
@@ -1712,7 +1737,7 @@ Administratören väljer ett återanslutningsintervall från 5 till 300~sekunder
 \subsection{Mobil WebDAV-överföring}
 \index{w00271@WebDAV!m00168@mobil uppladdning}
 
-\ui{Gallerier > Mobila uppladdningar} skapar en WebDAV-kompatibel anslutning för ett valt galleri. Ange en igenkännbar etikett, välj galleriet, skapa anslutningen och kopiera genererad server-URL, användarnamn och lösenord till mobilappen. Lösenordet visas endast en gång och lagras som en hash. Befintliga rader visar senaste användningstid och kan raderas omedelbart från administrationen.
+\ui{Inställningar > Uppladdningar} skapar en WebDAV-kompatibel anslutning för ett valt galleri. Ange en igenkännbar etikett, välj galleriet, skapa anslutningen och kopiera genererad server-URL, användarnamn och lösenord till mobilappen. Lösenordet visas endast en gång och lagras som en hash. Befintliga rader visar senaste användningstid och kan raderas omedelbart från administrationen.
 
 Använd måltypen WebDAV i klienter som PhotoSync. Aktuell serverinläsning accepterar JPG, PNG, GIF och WebP, så aktivera HEIC-till-JPEG-konvertering i klienten där den finns. WebDAV-uppladdningar kringgår inte galleriets inläsningsregler: uppgiften är galleribegränsad, autentisering krävs vid varje skrivning, galleri- och bildschemat måste vara känt och accepterade medier skannas sedan, döps eventuellt om automatiskt och behandlas genom den vanliga miniatyrbildspipelinen.
 

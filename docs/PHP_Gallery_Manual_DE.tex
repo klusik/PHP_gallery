@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.114.2}
-\newcommand{\manualdate}{2.~Oktober~2026}
+\newcommand{\version}{0.115}
+\newcommand{\manualdate}{3.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -713,7 +713,7 @@ EXIF kann ein Foto um Aufnahmedatum, Kamera, Objektiv, Belichtung und GPS-Koordi
 
 Ein öffentliches Portfolio profitiert von wenigen starken Galerien auf oberster Ebene, einheitlichen Titelbildern, knappen Beschreibungen und sorgfältiger Reihenfolge. Verwenden Sie Schlagwörter für projektübergreifende Spezialgebiete. Halten Sie Quellarchive in privaten oder nicht veröffentlichten Zweigen und kopieren Sie ausgewählte Arbeiten in öffentliche Präsentationsgalerien, wenn der Ablauf eine getrennte Kuratierung verlangt.
 
-Testen Sie das Portfolio auf einem Telefon, einem hochauflösenden Display und einer langsameren Verbindung. Responsive Vorschaubildauswahl bietet das standardmäßige Gleichgewicht. Progressive Schärfung kann zunächst kleine Vorschaubilder anzeigen, wenn eine Installation eine frühe visuelle Rückmeldung priorisiert.
+Testen Sie das Portfolio auf einem Telefon, einem hochauflösenden Display und einer langsameren Verbindung. Progressive Schärfung ist Standard und sicherer Ersatz für Fotokarten in der geöffneten Galerie; responsive Auswahl bleibt eine unterstützte Alternative.
 
 \subsection{Privates Familienarchiv}
 \index{f00098@Familienarchiv}
@@ -872,6 +872,31 @@ Schlagwörter bieten einen weiteren Weg durch das Archiv. Ein Schlagwort \emph{N
 \label{sec:admin}
 \index{a00005@Administration}
 
+\subsection{Galerieübersicht und geprüfte Änderungen}
+\index{Galerie!Funktionsplanung}
+Der Galeriebereich zeigt direkte und untergeordnete Fotos, Untergalerien sowie eingeschaltete, ausgeschaltete und gemischte Funktionszustände. Klappen Sie einen Zweig auf und planen Sie Karten, Dateinamen, Abstimmung oder Picture Game für dessen Wurzel und Nachfolger. Die Planung speichert noch nichts. Prüfen Sie den genauen Umfang und die Abhängigkeiten und wenden Sie erst danach den geprüften Plan an. Überlappende Absichten behalten ihre Reihenfolge. Picture Game benötigt Abstimmung; deren Abschaltung deaktiviert auch das Spiel. Abbrechen oder Verwerfen ändert keine gespeicherten Werte. Nach zwischenzeitlichen Änderungen muss neu geprüft werden.
+
+Die schnelle Passwortaktion ändert ausschließlich das eigene Passwort der aktuellen Galerie. Geben Sie ein neues Passwort ein oder entfernen Sie das eigene Passwort. Token- und übergeordneter Schutz, Sichtbarkeit und andere Einstellungen bleiben erhalten. Veraltete Revisionen werden abgelehnt. Ohne JavaScript bleiben normale Formulare verfügbar; Seitenpanel-Aktionen werden vor Ort abgeschlossen und lassen das Panel geöffnet.
+
+Angemeldete Administratoren können auf der öffentlichen Startseite eine Wurzelgalerie erstellen. Der Hinweis auf die erste Galerie verlangt einen nachweislich leeren Katalog. Inhalt und Ort/Sichtbarkeit sind getrennt, weitere Optionen aufklappbar. Inhaltssprache, Tags, SimBrief-Entwürfe und gespeicherte Vorgaben bleiben verfügbar.
+
+\subsubsection{Upload-Einstellungen und mobile Verbindungen}
+Öffnen Sie \ui{Einstellungen > Uploads} für Formate, Umbenennung, Worker und Grenzen, ZIP-Stapel, Quelldatenblöcke für Miniaturen und mobile WebDAV-Verbindungen. Zusammengehörige Grenzen werden gemeinsam normalisiert; Größen erscheinen in MB. Die alten Menülinks können bei Bedarf eingeschaltet werden. Ausgeblendete Links deaktivieren keine bestehenden Routen oder Dienste.
+
+Mobile Aktionen aktualisieren ihren eigenen Bereich. Kopieren Sie ein neu ausgegebenes Einmalpasswort sofort. Scheitert die anschließende Listenabfrage, bleibt die Verbindung gespeichert und das Passwort in dieser Antwort sichtbar; aktualisieren Sie die Liste getrennt. Deaktivierte mobile Uploads lesen die Verbindungsliste nicht.
+
+\subsubsection{Darstellung, Sprache und eigene Stylesheets}
+Darstellung verbindet gruppierte Felder mit einer Live-Vorschau und einem begrenzten Maus-/Tastaturteiler auf breiten Bildschirmen. Seine Breite ist eine lokale Browserpräferenz. Website-Bilder gruppiert Branding/Hintergründe; Layout trennt Verknüpfungen, Raster, Karten und Viewer-Vorgaben. Sprache bietet Einstellungen, Design, Editor und Diagnose. Die Designvorschau verwendet die angebotenen Sprachen und die öffentliche Vorgabe desselben Formulars und speichert selbst nichts.
+
+Lassen Sie die Ersatzauswahl leer, um das installierte CSS zu behalten. Wählen Sie ausdrücklich eine Vorlage oder laden Sie eine gültige CSS-Datei hoch; der Upload hat Vorrang. Ersetzen/Zurücksetzen prüft zuerst den Speicher und stellt bei fehlgeschlagener Markerspeicherung die vorherige Datei wieder her. Bei unvollständiger Wiederherstellung behalten Sie die verfügbare Kopie und folgen dem sicheren Hinweis. Deployment erhält die installationsspezifische \filepath{public/assets/custom.css}.
+
+\subsubsection{Kartenorientierung und Betriebszustand}
+Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normale Orientierungsmigration erhält das frühere Aussehen von Einstellungen, physischen und Smart Galleries, Sidecars, importierten Metadaten und Papierkorb. Sichern Sie Datenbank, Galerien und Papierkorb gemeinsam. Beheben Sie nach Unterbrechung den gemeldeten Fehler und wiederholen Sie die Migration; Dokumentmarker verhindern doppelte Umwandlung. Neuinstallationen verwenden vertikale Karten. Alle Tags bleiben ohne JavaScript vorhanden; Aufklappen und Scrollen funktionieren auch auf Karten.
+
+Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
+
+Der unabhängige Uploader bleibt bei 0.3.2. Der Build liefert Installer und passende generierte \filepath{winapp-update.json} gemeinsam unter \filepath{winapp/dist/0.3.2/}. Beide gehören zu derselben Veröffentlichung. Der Build ersetzt keine Prüfung der installierten Windows-Anwendung oder des Simulators.
+
 \subsection{Administrativer Arbeitsbereich}
 
 Nach der Anmeldung sieht ein Administrator private Steuerungen für Übersicht, Galerien, Fotos, Design, Schlagwörter, Wartung, Aktualisierungen, Protokolle und Kontoeinstellungen. Viele Bearbeitungen öffnen sich im rechten Seitenbereich, sodass die Galerie sichtbar bleibt, während ein Eintrag geändert und gespeichert wird.\footnote{Eine vollständige Administrationsseite bleibt für Abläufe verfügbar, die mehr Platz benötigen, oder wenn die Browsererweiterung nicht verfügbar ist.}
@@ -909,7 +934,7 @@ Mit JavaScript werden Abschnitte beim Öffnen geladen und direkt gespeichert. Ei
 
 Ein Feld nach Spotlight-Art durchsucht Einstellungen während der Eingabe. Es gleicht Namen, Beschreibungen, Kategorien und technische Namen ab, einschließlich Steuerungen spezieller Administrationsseiten. Die Auswahl eines Ergebnisses öffnet den passenden Abschnitt oder die Spezialseite und fokussiert die entsprechende Steuerung. Pfeiltasten, Eingabetaste, Escape und die Löschschaltfläche sind ohne Maus nutzbar.
 
-Häufig verwendete globale Einstellungen lassen sich direkt in der Zentrale bearbeiten, darunter Websitename, öffentliche Sprache, URL-Umschreibung, öffentliche Suche, soweit verfügbar, Vorschaubilddarstellung, globale EXIF/GPS-Anzeigevorgabe und Entwicklungsdiagnose. Andere Einstellungen bleiben auf ihren Spezialseiten, wenn sie mehr Kontext, Zugangsdaten, Dateiuploads, destruktive Aktionen oder größere Editoren benötigen. Beispiele sind Designlayout, Uploads, Telemetrie, Kontosicherheit, Google-/OpenAI-Konfiguration, benutzerdefiniertes CSS, Branding, Sprachpakete und Datenbankwartung.
+Häufig verwendete globale Einstellungen lassen sich direkt in der Zentrale bearbeiten, darunter Websitename, öffentliche Sprache, URL-Umschreibung, öffentliche Suche, soweit verfügbar, Vorschaubilddarstellung, globale EXIF/GPS-Anzeigevorgabe und Entwicklungsdiagnose. Andere Einstellungen bleiben auf ihren Spezialseiten, wenn sie mehr Kontext, Zugangsdaten, Dateiuploads, destruktive Aktionen oder größere Editoren benötigen. Beispiele sind Designlayout, galeriegebundene Upload-API-Schlüssel, Telemetrie, Kontosicherheit, Google-/OpenAI-Konfiguration, benutzerdefiniertes CSS, Branding, Sprachpakete und Datenbankwartung.
 
 Die Zentrale hebt bestehende Vererbung nicht auf. Das Schlagwortseitenlayout kann weiterhin globales Raster und Kartendesign erben; galeriespezifische Karten-, Lightbox- und EXIF/GPS-Entscheidungen bleiben bei ihrer Galerie. Kontextbezogene Galerie- und Fotowerte werden nicht zu globalen Einstellungen.
 
@@ -1156,7 +1181,7 @@ Die genaue Auswahl kann sich zwischen Browsern und Bildschirmen unterscheiden. D
 \index{s00233@srcset}
 \index{v00261@Vorschaubild!r00204@responsiver Modus}
 
-\ui{Responsive Browserauswahl} ist der Standardmodus unter \ui{Administration > Design > Layout}. Die Seite stellt die verfügbaren Vorschaubildkandidaten sofort bereit, und der Browser wählt den am besten zur dargestellten Karte und Displaydichte passenden aus. JavaScript wird für diese Auswahl nicht benötigt.\footnote{Der zugrunde liegende Webstandard nennt die Kandidatenliste \emph{srcset}. Galeriebetreiber können sich auf das sichtbare Verhalten verlassen, ohne diesen Markupbegriff lernen zu müssen.}
+\ui{Responsive Browserauswahl} ist der unterstützte ältere Modus unter \ui{Administration > Design > Layout}. Die Seite stellt die verfügbaren Vorschaubildkandidaten sofort bereit, und der Browser wählt den am besten zur dargestellten Karte und Displaydichte passenden aus. JavaScript wird für diese Auswahl nicht benötigt.\footnote{Der zugrunde liegende Webstandard nennt die Kandidatenliste \emph{srcset}. Galeriebetreiber können sich auf das sichtbare Verhalten verlassen, ohne diesen Markupbegriff lernen zu müssen.}
 
 Responsive Auswahl überträgt gewöhnlich ein ausgewähltes Vorschaubild je geladener Karte und ist die normale Wahl, wenn vorhersehbares browsernatives Verhalten am wichtigsten ist.
 
@@ -1178,7 +1203,7 @@ Die 300-Pixel-Kopie dient als Ersatz, sofern verfügbar. Ihre Existenz zwingt ei
 \index{p00194@progressive Schärfung}
 \index{v00261@Vorschaubild!p00195@progressiver Modus}
 
-\ui{Progressive Vorschaubildschärfung} ist ein optionaler Modus unter \ui{Administration > Design > Layout}. Die Galerie zeigt zuerst ein kleines Vorschaubild, gewöhnlich 300~Pixel, und ersetzt relevante Karten später durch größere Kopien. Bei langsameren Verbindungen kann die Sammlung dadurch früher erkennbar werden; dafür werden möglicherweise sowohl das kleine als auch das ersetzende Vorschaubild übertragen.
+\ui{Progressive Vorschaubildschärfung} ist Standard und sicherer Ersatz unter \ui{Administration > Design > Layout}. Die Galerie zeigt zuerst ein kleines Vorschaubild, gewöhnlich 300~Pixel, und ersetzt relevante Karten später durch größere Kopien. Bei langsameren Verbindungen kann die Sammlung dadurch früher erkennbar werden; dafür werden möglicherweise sowohl das kleine als auch das ersetzende Vorschaubild übertragen.
 
 \subsubsection{Was auf dem Bildschirm geschieht}
 
@@ -1190,7 +1215,7 @@ Die 300-Pixel-Kopie dient als Ersatz, sofern verfügbar. Ihre Existenz zwingt ei
   \item Die Karte wird ersetzt, sobald die größere Kopie bereit ist.
 \end{enumerate}
 
-Größere Aktualisierungen werden eingereiht statt für jede Karte zugleich gestartet; sichtbare Karten haben Vorrang vor entfernten Inhalten. Die aktuelle progressive Option gilt für Fotokarten innerhalb einer geöffneten Galerie. Galerietitelbilder, Collagezellen, Galeriekarten auf der Startseite und Administrationsbilder verwenden weiterhin responsive Browserauswahl. Die Administrationsoberfläche kennzeichnet progressive Schärfung als Beta.
+Größere Aktualisierungen werden eingereiht statt für jede Karte zugleich gestartet; sichtbare Karten haben Vorrang vor entfernten Inhalten. Die aktuelle progressive Option gilt für Fotokarten innerhalb einer geöffneten Galerie. Galerietitelbilder, Collagezellen, Galeriekarten auf der Startseite und Administrationsbilder verwenden weiterhin responsive Browserauswahl. Die Administrationsoberfläche kennzeichnet progressive Schärfung als Standard und responsive Auswahl als unterstützte ältere Option.
 
 \subsubsection{Abwägung beim Datentransfer}
 
@@ -1199,9 +1224,9 @@ Der progressive Modus kann für ein Foto zwei Dateien übertragen: die erste kle
 \subsection{Welchen Modus sollte ein Betreiber wählen?}
 \index{v00261@Vorschaubild!r00203@Renderer wählen}
 
-Wählen Sie \ui{Responsive Browserauswahl} für eine verlässliche Vorgabe, effiziente browsernative Auswahl und gewöhnlich eine Vorschaubildübertragung je geladener Karte.
+Wählen Sie \ui{Responsive Browserauswahl}, wenn effiziente browsernative Auswahl und gewöhnlich eine Vorschaubildübertragung je geladener Karte zur Sammlung passen.
 
-Probieren Sie \ui{Progressive Vorschaubildschärfung}, wenn frühe Seitenreaktion besonders wichtig ist, viele Besucher langsame Verbindungen nutzen und eine zuerst kleine visuelle Darstellung zur Galerie passt. Testen Sie sie mit repräsentativen Galerien und Geräten, bevor Sie sie zur normalen Präsentation machen.
+Behalten Sie \ui{Progressive Vorschaubildschärfung} für ein kleines erstes Bild mit anschließenden begrenzten Steigerungen relevanter Karten bei. Testen Sie beide unterstützten Renderer mit repräsentativen Galerien und Geräten, wenn Sie die passende Präsentation für Ihre Besucher wählen.
 
 Nützliche Fragen sind:
 
@@ -1568,9 +1593,9 @@ Erscheinungsbild & GPS-Markierung & Bei aktivierter GPS-Kartenfunktion können F
 Erscheinungsbild & Öffentliche Schlagwortseiten & Eigene Spalten und Zeilen für Schlagwortseiten verwenden dieselben sicheren Höchstwerte wie andere öffentliche Raster: 1--12 Spalten und 1--50 Zeilen. Schlagwort-Ergebniskarten können unabhängig von normalen Galerielisten vertikales oder horizontales Galeriekartendesign verwenden.\\
 Erscheinungsbild & Galerie-Hero-Schlagwörter & Nach Nutzung oder alphabetisch sortieren. Entweder alle sofort zeigen oder 1--200 Schlagwörter vor der Erweiterungssteuerung; Standardschwelle 20. Optionales Scrollen verwendet 1--12 sichtbare Zeilen, Vorgabe 5, und aktiviert sich nur, wenn die dargestellten Schlagwörter tatsächlich mehr konfigurierte Zeilen belegen.\\
 Layout & Kopfzeilenverknüpfungen & Drei geordnete Plätze. Ein Platz kann leer sein, auf die Hauptseite oder eine per Galerieauswahl gefundene Galerie zeigen. Öffentliche Besucher sehen nur öffentliche/gelistete Galerieziele.\\
-Layout & Galeriekartendesign & Globale Vorgabe \ui{Vertikales System} oder \ui{Horizontales System}. Eine physische Galerie kann sie bei verfügbarem Präsentationsschema erben oder überschreiben.\\
+Erscheinungsbild & Galeriekartendesign & \ui{Vertikales System} zeigt das Foto über der Beschreibung; \ui{Horizontales System} daneben. Neuinstallationen beginnen vertikal; die Migration erhält das Aussehen älterer Installationen. Eine physische Galerie kann die Designvorgabe bei verfügbarem Präsentationsschema erben oder überschreiben.\\
 Layout & Bildanzahlkennzeichnung & Die globale Kennzeichnung enthaltener Bilder ist standardmäßig aktiviert. Einzelne Galerien können sie erben oder überschreiben. Bei Aktivierung für die geöffnete Galerie zeigt auch der Hero-Bereich deren Zweigbildanzahl einschließlich zugänglicher Untergalerien.\\
-Layout & Öffentlicher Vorschaubildrenderer & \ui{Responsive Browserauswahl} ist die Vorgabe; \ui{Progressive Vorschaubildschärfung} ist der optionale Betamodus für Fotokarten in einer geöffneten Galerie. Galerietitelbilder und Collagen verwenden weiterhin responsive Browserauswahl.\\
+Layout & Öffentlicher Vorschaubildrenderer & \ui{Progressive Vorschaubildschärfung} ist Standard und sicherer Ersatz. \ui{Responsive Browserauswahl} bleibt die unterstützte ältere Option mit vollständigen serverseitigen Kandidaten und Verhalten ohne JavaScript. Titelbilder und Collagen behalten ihre responsive Pipeline.\\
 Layout & Seitennavigation & Globale Seitennavigation ist standardmäßig aus. Spalten: Vorgabe 3, begrenzt auf 1--12; Zeilen: Vorgabe 3, begrenzt auf 1--50. Wirksame Einträge je Seite sind Spalten mal Zeilen.\\
 Layout & Hauptseitenraster & Die Startseite besitzt ein eigenes Raster mit 1--12 Spalten und 1--50 Zeilen. Raster innerhalb von Galerien bleiben unverändert.\\
 Layout & Galerieeigene Raster zurücksetzen & \ui{Alle benutzerdefinierten Galerieraster zurücksetzen} leert Datenbanküberschreibungen, stellt den standardmäßigen Untergalerie-Vererbungszustand wieder her und entfernt entsprechende Rasterschlüssel aus \filepath{gallery.json}-Begleitdateien, damit spätere Erkennung keine veralteten Rastereinstellungen erneut importiert.\\
@@ -1716,7 +1741,7 @@ Der Administrator wählt ein Wiederverbindungsintervall von 5 bis 300~Sekunden. 
 \subsection{Mobile WebDAV-Übertragung}
 \index{w00270@WebDAV!m00173@mobiler Upload}
 
-\ui{Galerien > Mobile Uploads} erstellt eine WebDAV-kompatible Verbindung für eine ausgewählte Galerie. Geben Sie eine erkennbare Bezeichnung an, wählen Sie die Galerie, erstellen Sie die Verbindung und kopieren Sie erzeugte Server-URL, Benutzername und Passwort in die mobile Anwendung. Das Passwort wird einmal angezeigt und als Hash gespeichert. Vorhandene Zeilen zeigen die letzte Nutzungszeit und können sofort in der Administration gelöscht werden.
+\ui{Einstellungen > Uploads} erstellt eine WebDAV-kompatible Verbindung für eine ausgewählte Galerie. Geben Sie eine erkennbare Bezeichnung an, wählen Sie die Galerie, erstellen Sie die Verbindung und kopieren Sie erzeugte Server-URL, Benutzername und Passwort in die mobile Anwendung. Das Passwort wird einmal angezeigt und als Hash gespeichert. Vorhandene Zeilen zeigen die letzte Nutzungszeit und können sofort in der Administration gelöscht werden.
 
 Verwenden Sie den Zieltyp WebDAV in Clients wie PhotoSync. Die aktuelle Serveraufnahme akzeptiert JPG, PNG, GIF und WebP; aktivieren Sie daher nach Möglichkeit HEIC-zu-JPEG-Konvertierung im Client. WebDAV-Uploads umgehen keine Galerieaufnahmeregeln: Zugangsdaten sind galeriegebunden, jede Schreibanfrage benötigt Authentifizierung, Galerie-/Bildschema muss bekannt sein, und angenommene Medien werden anschließend gescannt, optional automatisch umbenannt und durch die gewöhnliche Vorschaubildpipeline verarbeitet.
 

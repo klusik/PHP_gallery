@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.114.2';
+const CMS_VERSION = '0.115';
 ```
 
 Update-related code uses:
@@ -2254,3 +2254,28 @@ The central Settings workspace groups website identity/address, Admin/public lan
 The dashboard uses separately prepared `shell`, `overview` and `galleries` surfaces. Overview totals come from indexed metadata through the model, with effective gallery visibility counted in the service; they do not resolve covers or inventory files. The authenticated GET-only `admin_dashboard_fragment` endpoint releases the PHP session before reading its model, returns private/no-store JSON and bounds failed reads to a retryable 503. Dashboard workspace JavaScript loads the selected surface and handles retry; maintenance remains independently deferred.
 
 The frozen updater loads `version.dll`, `kernel32.dll` and `shell32.dll` explicitly with `LOAD_LIBRARY_SEARCH_SYSTEM32`, preventing bundled `VERSION` data from shadowing the native version library. Before Inno Setup, the build runs a copied executable's read-only `--self-update-smoke` path and requires its PE version to match bundled metadata. This path runs before configuration/logging/GUI initialization and performs no elevation or installation. Upgrading from 0.3.1 requires manual installer launch to avoid reusing that running version's copied old helper; subsequent updates launched by 0.3.2 use the corrected code.
+
+
+## Reviewed gallery workspace mutations
+
+Dashboard models supply one ordered inventory. Services aggregate direct/descendant images, subgallery counts and on/off/mixed features in reverse order; GPS inheritance reuses fetched ancestors. `admin-gallery-list.js` owns the tree. `admin-gallery-features.js` stages at most 256 chronological subtree intentions before authenticated/CSRF-protected plan/apply calls.
+
+`gallery_feature_plans.php` owns normalization, effective capability/schema preflight, dependency coupling and exact preview; its model owns SQL snapshots and transactions. Application acquires existing writer ownership, locks/rereads authoritative state and revalidates the fingerprint before changes. Picture Game ON couples voting ON; voting OFF couples game OFF. Stale or unavailable plans refuse persistence. Post-commit sidecar/refresh problems produce warnings rather than false persistence failures.
+
+`admin_gallery_password` delegates to `gallery_editor_quick_access.php` and existing editor revision/mutation/sidecar owners. Only own-password hash/access mode change; token, ancestor and unrelated state remain. HTTP returns bounded acknowledged row state. Dynamic fragments retain the shared canonical mutation envelope and coordinator.
+
+## Integrated upload and appearance workspaces
+
+Settings Uploads edits format/rename, worker/batch limits and thumbnail chunks through original setters. Coupled browser fields enter one canonical normalizer; MB controls map to bytes. The legacy-navigation preference affects menu links only. Embedded mobile fragments skip disabled inventory and preserve successful one-time credential display if the following list read fails.
+
+Theme consumes prepared Appearance/Media/Layout/Language/Custom CSS models. Appearance pane resizing is local and bounded. Language Settings/Design/Editor/Diagnostics retain separate language scopes and form-local preview ownership. Vertical cards place media above text; horizontal cards beside it. The replay-safe compatibility migration preserves explicit/inherited data and legacy imports/Trash. All tags remain in server markup and use shared browser disclosure. Search defaults on without rewriting saved preferences.
+
+Custom CSS verifies settings storage before file mutation, stages beside the target, verifies copies, preserves permissions and retains prior bytes until marker persistence succeeds. Failed persistence restores prior CSS; failed rollback retains recovery evidence and bounded guidance. Deployment excludes the installation-owned active file.
+
+## Bounded updater metadata and navigation imports
+
+Updates summary, selected/installed notes and API diagnostics refresh together. Ordinary notes merge cache/local history with installed notes authoritative. Explicit discovery alone fetches missing pending notes within its deadline, uses preferred-branch fallback, nonblocking cross-tab locking and an hourly due check. Async discovery releases the session; activation reconciles locally without a second HTTP check. Disabled auto updates prevent stale background resumption.
+
+The internal `flight_maps/navdata_update.php` part owns weekly OurAirports freshness, hourly failure backoff and nonblocking import ownership. The model batches at most 200 rows per statement in its transaction. Dashboard/panel/page share prepared state and AJAX handling. Presentation health contributes to action-required status through the existing lazy named registry.
+
+Windows build publishes paired EXE/JSON under `winapp/dist/<version>/`, hashes completed output and restores prior EXE on metadata publication failure. Older versions remain untouched; SimConnect and copied-helper verification precede Inno Setup.

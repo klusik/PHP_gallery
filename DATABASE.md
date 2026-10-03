@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.114.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.115. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -108,6 +108,7 @@ Current migration sequence:
 | `202609200002_gallery_edit_revision.php` | Adds unsigned `galleries.edit_revision` with default `1` for application-owned edit conflict detection. Uses ordinary column DDL only. |
 | `202609200003_admin_operation_keys.php` | Adds the actor/key-bound replay ledger for gallery creation and classic upload, including payload/owner hashes, lifecycle state, bounded original response, and pending-state index. |
 | `202609250001_gallery_creation_preferences.php` | Adds one user-owned row for optional SimBrief Pilot ID/name and gallery source-language defaults, with a foreign key that removes preferences when the administrator account is deleted. |
+| `202610020001_gallery_description_layout_semantics.php` | Replay-safe data/sidecar orientation conversion preserving legacy appearance, inheritance, Smart Gallery JSON and Trash snapshots; adds no table or column. |
 
 ## Entity Relationship Overview
 
@@ -278,7 +279,7 @@ Important columns:
 | `gps_map_enabled` | Nullable EXIF/GPS display override. `NULL` inherits `app_settings.exif_gps_maps_default_enabled`, `1` forces EXIF/GPS map and coordinate display on for the gallery branch, and `0` forces it off. |
 | `voting_enabled` | Enables image voting. |
 | `show_filenames` | Shows filenames in public UI. |
-| `description_layout` | `vertical` or `horizontal`, nullable for inherited/default behavior. |
+| `description_layout` | `vertical` (photo above text) or `horizontal` (photo beside text), nullable for inheritance; legacy explicit values are converted by the semantics migration. |
 | `count_badge_visibility` | `show` or `hide`, nullable for inherited/default behavior. |
 | `lightbox_browsing_mode` | `single`, `picture_strip`, or `3d_carousel`, nullable for inherited Theme behavior. |
 | `grid_columns`, `grid_rows` | Optional per-gallery grid dimensions. |
@@ -1386,3 +1387,12 @@ Local transactions lock pairing before peer; delivery runs after commit. Fresh p
 replaces a revoked lifecycle with a new invitation while retaining its numeric ID and
 increasing revisions. Minimal local revocation depends only on verified invitation mapping
 and peer identity/state/revision/inbound hash, not recovery ciphertext availability.
+
+
+## Gallery-card orientation compatibility
+
+The semantics migration delegates persistence to `app/models/gallery_description_layout_migration.php` and orchestration to `app/services/gallery_description_layout_compatibility.php`. Required `app_settings`, `galleries` (including revisions), Smart Gallery JSON and Trash snapshots are read before filesystem mutation; stored documents and sidecars are preflighted before replacement. Required storage failure refuses conversion rather than being treated as optional absence.
+
+Established installations swap explicit historical orientations and retain the old effective global default if none was saved. Nullable overrides remain inherited; fresh installs keep the corrected vertical default. The transactional `gallery_description_layout_semantics_version=2` checkpoint and independent document `description_layout_semantics_version` markers prevent double conversion on retry. Converted gallery values advance edit revisions and public content revision.
+
+Feature plans reuse existing feature/revision columns and locked snapshots; no plan table is created. Password quick access changes only existing password hash/access mode after verified schema/revision checks. `admin_legacy_upload_navigation_enabled` uses `app_settings`, default `0`. Uploads and mobile connections retain their original storage and distinct issuance/revocation policy.
