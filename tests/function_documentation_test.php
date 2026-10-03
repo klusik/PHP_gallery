@@ -12,9 +12,9 @@
  *
  * Responsibilities:
  *   - Require a PHPDoc block for every named PHP function and method
- *   - Require a JSDoc block for named JavaScript functions, methods, and arrow functions
+ *   - Require a JSDoc block for named JavaScript functions and methods
  *   - Report exact source locations for maintainers
- *   - Ignore anonymous inline callbacks that have no stable callable name
+ *   - Ignore anonymous functions and callbacks, including variable-bound arrows
   *
  * Author:
  *   Rudolf Klusal
@@ -48,7 +48,7 @@ function function_documentation_source_files(string $root, array $extensions): a
  *
  * @param string $root Repository root.
  * @param array<int,string> $files PHP source paths.
- * @return array{total:int,missing:array<int,string>}
+ * @return array{total:int,missing:array<int,string>} Count and source locations of undocumented named declarations.
  */
 function function_documentation_audit_php(string $root, array $files): array
 {
@@ -84,20 +84,19 @@ function function_documentation_js_has_docblock(string $source, int $offset): bo
 }
 
 /**
- * Find undocumented named JavaScript functions, methods, and arrow functions.
+ * Find undocumented named JavaScript functions and methods.
  *
- * The scanner intentionally targets stable names. Anonymous callbacks are excluded
- * because they are implementation expressions rather than reusable entry points.
+ * The scanner intentionally targets stable names. Anonymous callbacks and arrows are excluded
+ * even when assigned to variables or object members; they have no docstring contract.
  *
  * @param string $root Repository root.
  * @param array<int,string> $files JavaScript source paths.
- * @return array{total:int,missing:array<int,string>}
+ * @return array{total:int,missing:array<int,string>} Count and source locations of undocumented named declarations.
  */
 function function_documentation_audit_javascript(string $root, array $files): array
 {
     $patterns = [
         '/^[ \t]*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/m',
-        '/^[ \t]*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?(?:\(\s*(?:[A-Za-z_$][A-Za-z0-9_$]*(?:\s*,\s*[A-Za-z_$][A-Za-z0-9_$]*)*)?\s*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>/m',
         '/^[ \t]*(?:static\s+)?(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^\r\n;{}]*\)\s*\{/m',
     ];
     $reserved = array_fill_keys(['if', 'for', 'while', 'switch', 'catch', 'with', 'function'], true);
@@ -110,7 +109,7 @@ function function_documentation_audit_javascript(string $root, array $files): ar
             preg_match_all($pattern, $source, $matches, PREG_OFFSET_CAPTURE);
             foreach ($matches[1] ?? [] as $matchIndex => $nameMatch) {
                 $name = (string) $nameMatch[0];
-                if ($patternIndex === 2 && isset($reserved[$name])) {
+                if ($patternIndex === 1 && isset($reserved[$name])) {
                     continue;
                 }
                 $offset = (int) ($matches[0][$matchIndex][1] ?? 0);

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.118}
-\newcommand{\manualdate}{3~oktober~2026}
+\newcommand{\version}{0.118.1}
+\newcommand{\manualdate}{4~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2113,6 +2113,8 @@ winapp/ & Windows-specifika verktyg och integrationer.\\
 \subsection{Kodkonventioner}
 
 Nya PHP-filer använder strikta typer och indrag med fyra blanksteg. Kontroller samordnar begärandebeteende, medan tjänster ansvarar för återanvändbar logik. Ny JavaScript och CSS förblir utan ramverk och hör hemma bland offentliga resurser. Migreringar använder filnamn med tidsstämpelprefix. Befintliga förklarande kommentarer, dokumentationssträngar och PHPDoc bevaras och rättas när beteendet utvecklas.
+
+Dokumentationssträngar krävs för namngivna funktioner, metoder och klasser eller liknande deklarationer, inklusive gränssnitt, traits och uppräkningstyper. Placera dokumentationen omedelbart ovanför deklarationen. Namngivna funktioner och metoder behöver en saklig beskrivning av syftet, en typad och beskriven post för varje uttrycklig parameter samt en typad returpost, inklusive void. Klasser behöver en saklig beskrivning av syftet. Anonyma funktioner, closures, pilfunktioner, callbacks, variabler, konstanter och klassegenskaper kräver inga dokumentationssträngar för deklarationen; namngivna deklarationer inuti callbacks kontrolleras fortfarande. Filhuvuden med författaruppgifter, inbyggda signaturtyper, kommentarer om driftpolicy och parsertäckning förblir separata krav.
 
 Atomära moduler ska ansvara för ett sammanhängande område. Gemensamma kontrakt behöver normaliserade indata, uttryckliga utdata och riktade tester. Dynamiska administrationsfragment och offentliga fragment kräver livscykelsäker initiering och avveckling.
 

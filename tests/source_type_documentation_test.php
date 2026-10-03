@@ -87,14 +87,57 @@ $javascript = <<<'JS'
  * @param {...number} extra Additional selected counts.
  * @returns {number} Combined selected count.
  */
-const collect = (count = 1, ...extra) => count + extra.length;
+function collect(count = 1, ...extra) { return count + extra.length; }
 JS;
 $records = javascript_declarations($javascript);
-source_type_assert(count($records) === 1 && declaration_issues($records[0]) === [], 'JavaScript defaults/rest arrow contract must pass.');
+source_type_assert(count($records) === 1 && declaration_issues($records[0]) === [], 'Named JavaScript functions must support defaults and rest parameter documentation.');
 source_type_rules(javascript_declarations(str_replace('{number}', 'number', $javascript))[0], ['parameter.format', 'return.format']);
 source_type_rules(javascript_declarations(str_replace('@returns {number} Combined selected count.', '@returns {number Missing brace.', $javascript))[0], ['return.type']);
 source_type_rules(javascript_declarations(str_replace('@param {number} [count=1] Initial selected count.', '@param {list[int} count Broken container delimiter.', $javascript))[0], ['parameter.type:count']);
 source_type_rules(javascript_declarations(str_replace('@param {number} [count=1] Initial selected count.', "@param {number} [count=1] Initial selected count.\n * @param {number} bogus.child Undeclared nested root.", $javascript))[0], ['parameter.extra:bogus.child']);
+
+foreach ([
+    'consume(value => value.id);',
+    'const collect = (value) => value.id;',
+    'const collect = function (value) { return value.id; };',
+    'const options = { collect: (value) => value.id };',
+    'globalThis.collect = (value) => value.id;',
+    'consume(function (value) { return value.id; });',
+    'consume(/** Preserve a local value. */ value => value.id);',
+] as $callbackSource) {
+    $callbackRecords = javascript_declarations($callbackSource);
+    source_type_assert(count($callbackRecords) === 1 && declaration_issues($callbackRecords[0]) === [],
+        'Inline and variable/member-bound JavaScript callbacks must not require docstrings or type tags.');
+}
+foreach ([
+    '<?php consume(fn(int $value): int => $value);',
+    '<?php $collect = static fn(int $value): int => $value;',
+    '<?php $collect = function (int $value): int { return $value; };',
+    '<?php consume(/** Preserve a local value. */ function (int $value): int { return $value; });',
+] as $callbackSource) {
+    $callbackRecords = php_declarations($callbackSource);
+    source_type_assert(count($callbackRecords) === 1 && declaration_issues($callbackRecords[0]) === [],
+        'PHP closures and arrows must not require docstrings, even when bound to variables.');
+}
+source_type_rules(php_declarations('<?php $collect = function ($value) { return $value; };')[0],
+    ['typing.parameter_missing:value', 'typing.return_missing'], ['documentation.missing', 'return.missing']);
+source_type_rules(php_declarations('<?php class Fixture { public array $rows; }')[1], [],
+    ['documentation.missing', 'property.type']);
+foreach (javascript_declarations('class Fixture { collect(value) { return value; } }') as $record) {
+    source_type_rules($record, ['documentation.missing']);
+}
+source_type_rules(javascript_declarations('const options = { collect(value) { return value; } };')[0],
+    ['documentation.missing']);
+source_type_rules(javascript_declarations('function collect(value) { return value; }')[0], ['documentation.missing']);
+source_type_rules(javascript_declarations('consume(function collect(value) { return value; });')[0], ['documentation.missing']);
+$nested = changed_source_contracts('', 'consume(() => { function nested(value) { return value; } });', 'fixture.js');
+source_type_assert(array_column($nested['findings'], 'name') === ['nested'],
+    'Anonymous wrappers must not exempt named functions declared inside them.');
+$withoutCallbackDoc = 'const collect = value => value.id;';
+$callbackDoc = '/** Preserve a local value. */ ' . $withoutCallbackDoc;
+$comparison = changed_source_contracts($callbackDoc, $withoutCallbackDoc, 'fixture.js');
+source_type_assert($comparison['findings'] === [] && $comparison['doc_regressions'] === 0,
+    'Removing optional callback documentation must not count as a named-declaration documentation regression.');
 
 $python = <<<'PY'
 raise RuntimeError("SOURCE_MUST_NEVER_EXECUTE")

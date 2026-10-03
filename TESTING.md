@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.118. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.118.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -1664,8 +1664,14 @@ remaining counts, not an accepted-debt baseline.
 
 Every quick/full/release audit scans the complete admitted source tree through
 `source-contract-inventory` and strictly checks added or materially changed
-declarations through `source-documentation-changed`. Documentation-only regressions
-also fail. The full inventory is advisory while existing debt is being repaired;
+named functions, methods, and classes (including interfaces, traits, and enums)
+through `source-documentation-changed`. Documentation-only regressions in those
+declarations also fail. Anonymous functions, closures, arrow functions, and callbacks
+have no docstring contract, including callbacks assigned to variables or object
+members. Variables, constants, and class properties also need no declaration
+docstring. Named functions or classes nested inside callbacks remain checked.
+File headers, native typing, operational-policy comments, and parser coverage
+are separate contracts. The full inventory is advisory while existing debt is being repaired;
 a passing inventory means discovery completed, not that every old function complies.
 No accepted-debt baseline or automatic fabricated descriptions are introduced.
 
@@ -1679,13 +1685,16 @@ function boundaries remain `BLOCKED`. Native-script argument/result typing and
 execution semantics remain manual; the whole-tree inventory still checks their
 headers only. Batch bodies remain outside declaration-parser coverage.
 
-The shared contract is a meaningful summary, one typed and described `@param` for
+For named functions and methods, the shared contract is a meaningful summary, one typed and described `@param` for
 each explicit parameter, and one typed `@return`/`@returns`. Missing, extra or duplicate
 parameter names, missing types/descriptions, duplicate returns and definite type
 disagreements are findings. Non-void returns require a description; `void`, `never`
 and Python `None` may omit it. PHP arrays and JavaScript objects/arrays must describe
 their members through shapes, generics or an explicit existing opaque contract.
-Nested JSDoc field entries must refer to a real signature parameter.
+Nested JSDoc field entries must refer to a real signature parameter. Class-like
+declarations require a meaningful summary. Put documentation above its declaration;
+do not insert docblocks inside argument lists or extract named helpers solely for
+documentation coverage.
 
 Use native syntax with the same contract:
 

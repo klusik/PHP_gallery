@@ -212,6 +212,19 @@ try {
     $strictStatus = \PhpGallery\SourceContracts\documentation_main(['test', '--root=' . $root, '--path=missing.php', '--strict', '--json']);
     $strictOutput = (string) ob_get_clean();
     source_inventory_assert($strictStatus === 1 && json_decode($strictOutput, true)['summary']['finding_count'] > 0, 'Strict CLI must reject debt and preserve complete machine-readable evidence.');
+    $files[] = $root . '/callbacks.js';
+    file_put_contents($root . '/callbacks.js', source_inventory_fixture_header('callbacks.js', 'block')
+        . "const collect = value => value.id;\nconsume(value => value.id);\n");
+    $callbackReport = documentation_report($root, ['callbacks.js']);
+    source_inventory_assert($callbackReport['findings'] === [], 'Whole-tree documentation inventory must exempt anonymous and variable-bound callbacks.');
+    $callbackPresence = function_documentation_audit_javascript($root, [$root . '/callbacks.js']);
+    source_inventory_assert($callbackPresence['total'] === 0 && $callbackPresence['missing'] === [],
+        'The historical JavaScript presence gate must apply the same callback exemption.');
+    file_put_contents($root . '/callbacks.js', source_inventory_fixture_header('callbacks.js', 'block')
+        . "const anonymous = value => value.id;\nfunction collect(value) { return value.id; }\n");
+    $namedPresence = function_documentation_audit_javascript($root, [$root . '/callbacks.js']);
+    source_inventory_assert($namedPresence['total'] === 1 && count($namedPresence['missing']) === 1,
+        'Exempt callback bindings must not exempt undocumented named JavaScript functions.');
     $rejected = false;
     try {
         documentation_report($root, ['config.php']);

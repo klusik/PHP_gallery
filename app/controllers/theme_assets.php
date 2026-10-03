@@ -214,6 +214,8 @@ function cms_link_favicon_asset(): void
 
 /**
  * Render dynamic theme CSS without using HTML style attributes.
+ *
+ * @return void
  */
 function cms_theme_css(): void
 {

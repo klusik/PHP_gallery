@@ -32,6 +32,14 @@ Before adding a helper, search for the existing domain owner and extend/centrali
 
 `scripts/check_mvc_boundaries.php` is a mandatory audit suite. Existing violations are migration debt captured in `scripts/mvc_boundary_baseline.json`. Never add a new baseline entry to make a change pass. A migrated file should remove its resolved debt with `php scripts/check_mvc_boundaries.php --refresh-baseline`, which is designed to fail if new violations exist.
 
+## Declaration Documentation
+
+Docstrings (PHPDoc, JSDoc, and Python docstrings) are required only for named functions, methods, and classes or class-like declarations such as interfaces, traits, and enums. Place the documentation immediately above the declaration. Named functions and methods need a factual purpose summary, a typed and described `@param` for each explicit parameter, and a typed `@return`/`@returns` (including `void`); Python may use the equivalent typed Google-style docstring. Classes need a factual purpose summary.
+
+Anonymous functions, closures, arrow functions, and inline or variable-bound callbacks do not require docstrings, even when assigned to a named variable or object member. Variables, constants, and class properties do not require declaration docstrings either. Use ordinary comments for local reasoning when useful. Do not insert a docblock inside a call's argument list or extract a named helper solely to satisfy documentation checks. If an anonymous function contains a named function or class, that nested declaration still follows the named-declaration rule.
+
+File attribution headers, native signature typing, operational-policy comments, and parser coverage checks remain separate requirements. `scripts/check_source_documentation.php` and the historical named-function presence test must apply the same anonymous-function exemption.
+
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.118}
-\newcommand{\manualdate}{3.~října~2026}
+\newcommand{\version}{0.118.1}
+\newcommand{\manualdate}{4.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2111,6 +2111,8 @@ winapp/ & Nástroje a~integrace specifické pro Windows.\\
 \subsection{Pravidla kódování}
 
 Nové soubory PHP používají přísné typy a~odsazení čtyřmi mezerami. Řadiče koordinují chování požadavků, služby vlastní opakovaně použitelnou logiku. Nový JavaScript a~CSS zůstávají bez frameworku a~patří pod veřejné podklady. Migrace používají názvy souborů s~časovým razítkem na začátku. Existující vysvětlující komentáře, dokumentační řetězce a~PHPDoc se při vývoji chování zachovávají a~opravují.
+
+Dokumentační řetězce deklarací jsou povinné pro pojmenované funkce, metody a~deklarace tříd či obdobných struktur, včetně rozhraní, traitů a~výčtových typů. Dokumentaci umístěte bezprostředně nad deklaraci. Pojmenované funkce a~metody potřebují věcný popis účelu, typovaný a~popsaný záznam každého explicitního parametru a~typovaný záznam návratové hodnoty, včetně void. Třídy potřebují věcný popis účelu. Anonymní funkce, uzávěry, šipkové funkce, callbacky, proměnné, konstanty a~vlastnosti tříd dokumentační řetězce deklarací nevyžadují; pojmenované deklarace vnořené do callbacků se nadále kontrolují. Hlavičky s~autorstvím souborů, nativní typování signatur, komentáře provozních pravidel a~pokrytí parseru zůstávají samostatnými požadavky.
 
 Samostatné moduly by měly vlastnit jednu soudržnou odpovědnost. Společné kontrakty si zaslouží normalizované vstupy, výslovné výstupy a~cílené testy. Dynamické fragmenty administrace a~veřejnosti vyžadují bezpečnou inicializaci a~úklid podle životního cyklu.
 

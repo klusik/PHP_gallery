@@ -96,7 +96,7 @@ source_changes_assert(declaration_issues(php_declarations($multiline)[0]) === []
 $property = php_declarations('<?php class Fixture { /** @var array<string,string> Private child environment, never printed. */ public array $environment; }')[1];
 source_changes_assert(declaration_issues($property) === [], 'A typed var-tag description is a valid substantive property contract.');
 $bareProperty = php_declarations('<?php class Fixture { /** @var array<string,string> */ public array $environment; }')[1];
-source_changes_assert(in_array('documentation.summary', declaration_issues($bareProperty), true), 'A bare property type must still require its meaning.');
+source_changes_assert(declaration_issues($bareProperty) === [], 'Class properties have no required declaration-docstring contract.');
 $namespaces = '<?php namespace One; function same() {} namespace Two; function same() {}';
 $result = changed_source_contracts($namespaces, str_replace('namespace Two; function same() {}', 'namespace Two; function same() { return 1; }', $namespaces), 'fixture.php');
 source_changes_assert($result['unchanged'] === 1 && $result['changed'] === 1
@@ -130,10 +130,10 @@ $jsTyped = <<<'JS'
  * @param {{id:number,label:string}} value Prepared display record.
  * @return {string} Public label.
  */
-export const label = value => value.label;
+export function label(value) { return value.label; }
 JS;
 $result = changed_source_contracts('', $jsTyped, 'fixture.mjs');
-source_changes_assert($result['added'] === 1 && $result['findings'] === [], 'Nested braced JSDoc shapes must satisfy a bound-arrow contract.');
+source_changes_assert($result['added'] === 1 && $result['findings'] === [], 'Nested braced JSDoc shapes must satisfy a named-function contract.');
 $memberCallback = <<<'JS'
 /**
  * Format an isolated numeric fixture identity without changing global state.
@@ -145,10 +145,12 @@ JS;
 source_changes_assert(changed_source_contracts('', $memberCallback, 'fixture.mjs')['findings'] === [],
     'JSDoc above a static member assignment must attach to its actual callback declaration.');
 $tupleCallback = <<<'JS'
-pairs.forEach(/** Bind a control and display selector from a prepared pair.
+/** Bind a control and display selector from a prepared pair.
  * @param {[string, string]} selectors Tuple destructured into control and display selectors.
  * @return {void} Connects the isolated control and display.
- */ ([controlSelector, displaySelector]) => { bind(controlSelector, displaySelector); });
+ */
+function bindSelectors([controlSelector, displaySelector]) { bind(controlSelector, displaySelector); }
+pairs.forEach(bindSelectors);
 JS;
 source_changes_assert(changed_source_contracts('', $tupleCallback, 'fixture.js')['findings'] === [],
     'A positional fixed tuple contract must describe its aggregate input without rewriting runtime destructuring.');

@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.118';
+const CMS_VERSION = '0.118.1';
 ```
 
 Update-related code uses:
@@ -1945,7 +1945,9 @@ When adding logic-heavy services, prefer creating a direct test script that exer
 
 ### Comment and Docstring Rules
 
-Every PHP function or method should keep a short PHPDoc entry above it. The entry should start with one factual purpose sentence, then list every parameter with `@param`, a concrete type, and a short description. Add `@return` when the function returns data. Mention important caller context, dependencies, or downstream service calls only when that context helps maintenance.
+Docstrings are required only for named functions, methods, and classes or class-like declarations (interfaces, traits, and enums). Place PHPDoc, JSDoc, or the equivalent Python docstring directly at the declaration. Start with one factual purpose sentence; functions and methods list every explicit parameter with a concrete type and short description, plus a typed return contract including `void`. Mention important caller context, dependencies, or downstream service calls only when that context helps maintenance.
+
+Anonymous functions, closures, arrow functions, and callbacks do not require docstrings, including callbacks assigned to variables or object members. Variables, constants, and class properties also have no declaration-docstring requirement. Use ordinary comments for local reasoning instead of inserting docblocks into argument lists or extracting helpers solely for the documentation gate. Named declarations nested inside anonymous callbacks still require their own documentation. File attribution, native signature types, and operational-policy comments are separate contracts.
 
 Keep descriptions brief and factual. Do not remove existing file headers or function docstrings while editing unrelated logic. Prefer normal inline comments for local reasoning, avoid decorative separator lines, and keep comments near the code they explain.
 

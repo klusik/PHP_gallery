@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.118}
-\newcommand{\manualdate}{3.~Oktober~2026}
+\newcommand{\version}{0.118.1}
+\newcommand{\manualdate}{4.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2117,6 +2117,8 @@ winapp/ & Windows-spezifische Werkzeuge und Integrationen.\\
 \subsection{Codekonventionen}
 
 Neue PHP-Dateien verwenden strikte Typen und Einrückung mit vier Leerzeichen. Controller koordinieren Anfrageverhalten; Dienste besitzen wiederverwendbare Logik. Neues JavaScript und CSS bleiben frameworkfrei und gehören zu den öffentlichen Ressourcen. Migrationen verwenden Dateinamen mit Zeitstempelpräfix. Bestehende erklärende Kommentare, Docstrings und PHPDoc werden bei Verhaltensentwicklung erhalten und korrigiert.
+
+Docstrings sind für benannte Funktionen, Methoden und Klassen oder vergleichbare Deklarationen einschließlich Interfaces, Traits und Enums erforderlich. Die Dokumentation steht unmittelbar über der Deklaration. Benannte Funktionen und Methoden benötigen eine sachliche Zweckbeschreibung, einen typisierten und beschriebenen Eintrag für jeden expliziten Parameter sowie einen typisierten Rückgabeeintrag einschließlich void. Klassen benötigen eine sachliche Zweckbeschreibung. Anonyme Funktionen, Closures, Pfeilfunktionen, Callbacks, Variablen, Konstanten und Klasseneigenschaften benötigen keine Deklarations-Docstrings; benannte Deklarationen innerhalb von Callbacks werden weiterhin geprüft. Dateiköpfe mit Autorenangaben, native Signaturtypen, Kommentare zu Betriebsrichtlinien und Parserabdeckung bleiben eigenständige Anforderungen.
 
 Atomare Module sollten eine zusammenhängende Verantwortung besitzen. Gemeinsame Verträge verdienen normalisierte Eingaben, ausdrückliche Ausgaben und gezielte Tests. Dynamische administrative und öffentliche Fragmente benötigen lebenszyklussichere Einrichtung und Abbau.
 
