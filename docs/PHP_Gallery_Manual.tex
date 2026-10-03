@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118}
-\newcommand{\manualdate}{3 October 2026}
+\newcommand{\version}{0.118.1}
+\newcommand{\manualdate}{4 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2135,6 +2135,8 @@ winapp/ & Windows-specific tools and~integrations.\\
 \subsection{Coding conventions}
 
 New PHP files use strict types and~four-space indentation. Controllers coordinate request behavior, while services own reusable logic. New JavaScript and~CSS remain framework-free and~belong under public assets. Migrations use timestamp-prefixed filenames. Existing explanatory comments, docstrings, and~PHPDoc receive preservation and~correction as~behavior evolves.
+
+Declaration docstrings are~required for~named functions, methods, and~class-like declarations, including interfaces, traits, and~enums. Place documentation immediately above the~declaration. Named functions and~methods need a~factual purpose summary, a~typed and~described parameter entry for~each explicit parameter, and~a~typed return entry, including void. Classes need a~factual purpose summary. Anonymous functions, closures, arrow functions, callbacks, variables, constants, and~class properties do~not~require declaration docstrings; named declarations nested inside callbacks remain checked. File attribution, native signature typing, operational-policy comments, and~parser coverage remain separate requirements.
 
 Atomic modules should own one cohesive responsibility. Shared contracts deserve normalized inputs, explicit outputs, and~focused tests. Dynamic Admin and~public fragments require lifecycle-safe setup and~teardown.
 
