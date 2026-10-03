@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.115.1
+
+Version 0.115.1 fixes the source-documentation checks introduced in 0.115 and updates GitHub Actions to supported Node.js runtimes. It documents existing PHP and JavaScript contracts more precisely, adds bounded checks for changed Bash and PowerShell functions, and removes obsolete action-runtime warnings. Gallery behavior and the independent Windows uploader version remain unchanged.
+
+### Highlights
+
+#### Reliable source checks and CI
+
+- Fixed the CI documentation gate for the gallery-card renderer and hero-tag browser callbacks.
+- Added changed-function documentation checks for ordinary brace-bodied Bash and PowerShell functions without executing the inspected scripts.
+- Updated GitHub Actions to native Node.js 24 action runtimes while retaining Node.js 22 for the project's JavaScript tests.
+- Disabled automatic package-manager caching in `actions/setup-node` because this repository has no Node package build.
+
+### Technical Details
+
+#### Backend and developer tooling
+
+- Added `scripts/source_contracts/scripts.php` and integrated it with `scripts/check_source_documentation.php`, `scripts/source_contracts/changes.php`, and `scripts/source_contracts/php.php`.
+- Required meaningful preceding comments or comment-based help for new or changed supported script functions, and compared existing function bodies through stable fingerprints.
+- Refused unsupported or dynamic script forms with an explicit blocked result instead of reporting unchecked source as passing.
+- Updated the documentation for `render_gallery_card()` in `app/controllers/public_gallery_cards.php` and the existing deployment-script exclusion helpers.
+
+#### Frontend
+
+- Completed callback and return-type JSDoc in `public/assets/gallery-modules/hero-tags.js` without changing browser behavior.
+
+#### Database and compatibility
+
+- Retained the existing database schema and migration set; this patch adds no migration.
+- Retained installation-owned `custom.css` protection and WinApp 0.3.2 without rebuilding its installer.
+
+#### CI and documentation
+
+- Updated `.github/workflows/gallery-workflows.yml` to `actions/checkout@v7.0.1`, `actions/setup-node@v7.0.0`, and `actions/upload-artifact@v7.0.1` in both database jobs.
+- Updated `TESTING.md` and the source ownership map for the bounded script checks.
+- Updated the English, Czech, German, and Swedish manual editions and PDFs to 0.115.1.
+
+### Tests
+
+#### Source-contract regression coverage
+
+- Added `tests/source_contract_scripts_test.php` for Bash and PowerShell declarations, comments, lexical boundaries, fingerprints, and unsupported dynamic forms.
+- Covered strings, here-documents, here-strings, inline declarations, subshell bodies, and explicit refusal of unsafe or unsupported constructs.
+
+### User Impact
+
+#### For visitors
+
+- Preserved the public gallery, gallery-card, and hero-tag behavior from 0.115.
+
+#### For administrators and maintainers
+
+- Fixed release verification failures caused by incomplete source contracts and removed deprecated Node.js action-runtime warnings from CI.
+- Preserved existing administration workflows, stored settings, and the Windows uploader.
+
 ## Version 0.115
 
 Version 0.115 brings a broad administration refresh: a clearer gallery tree, reviewed feature changes across entire branches, narrow password controls, integrated upload settings and mobile connections, and redesigned appearance, language, maintenance and diagnostic workspaces. It also corrects gallery-card orientation terminology with a compatibility migration, preserves installation-owned custom stylesheets more reliably, reduces redundant updater and navigation-data work, and strengthens PHP, JavaScript and Python source contracts. The independent Windows uploader remains at 0.3.2; its build now produces an installer and matching update metadata together in a version directory.
