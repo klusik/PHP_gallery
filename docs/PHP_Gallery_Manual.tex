@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.116}
-\newcommand{\manualdate}{3~October~2026}
+\newcommand{\version}{0.117}
+\newcommand{\manualdate}{3 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -472,14 +472,14 @@ Each generated create or~classic-upload form also carries a~private operation id
 
 The~editor can~remember the~current SimBrief identifier and~source language for~the~signed-in administrator. Select the~nearby \ui{Remember for~future galleries} choice only for~a~value you~want to~reuse. Later galleries show that value already selected with a~small note saying it~came from~your saved defaults. The~value remains editable; leaving Remember unchecked preserves the~previous saved choice. Defaults belong to~one administrator and~do not~publish credentials or~copy access rules. The~normal migration action must apply \codeword{202609250001\_gallery\_creation\_preferences.php} before Remember can~save a~new default; gallery creation still works without that optional table.
 
-The~visible SimBrief field accepts a~Pilot ID or~pilot name. Digits alone are~treated as~a~Pilot ID, while other text is~treated as~a~name. On~the~direct creation form, \ui{Generate description draft} can~fetch the~latest OFP before a~gallery exists. Review and~edit the~proposed description before saving. The~import keeps a~private reference for~30~minutes, limited to~the~same administrator and~session; changing the~identifier invalidates that reference. The~OFP and~available route coordinates are~attached only after the~gallery has~been created. If~an~optional attachment or~default save fails after creation, the~gallery stays created and~the~panel reports the~specific warning. Re-import when the~draft expires or~the~session changes.
+The~visible SimBrief field accepts a~Pilot ID or~pilot name. Digits alone are~treated as~a~Pilot ID, while other text is~treated as~a~name. On~a~new or~existing gallery, \ui{Generate description draft} can~fetch the~latest OFP and~fill an~editable Markdown description in~the~selected content language. When gallery localization is~enabled and~its translation storage is~ready, the~draft also fills the~maintained-language description fields. Review and~edit the~description fields before saving. The~import keeps a~private reference for~30~minutes, limited to~the~same administrator and~session; changing the~identifier invalidates that reference. For~an~existing gallery, the~OFP and~available route coordinates are~attached only after you~save the~gallery. If~an~optional attachment fails, the~gallery remains saved and~the~panel reports a~warning. Re-import when the~draft expires or~the~session changes.
 
 \subsubsection{Working in~the~compact editor}
 \index{gallery editor!side panel}
 
 The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, and~\ui{Media}; image and~specialized tools follow as~available. The~right-side panel keeps \ui{Save gallery} visible at~its bottom while the~settings form scrolls. Changing tabs does~not~save automatically. Use the~button after editing, then reopen the~gallery if~you~want to~verify the~stored values. Longer explanations sit behind keyboard-accessible question-mark controls, and~less frequent choices sit under \ui{Advanced} disclosures. A~direct Admin editor follows the~same fields, while a~browser without JavaScript uses the~normal form submission.
 
-\ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds, and~flight-map text are~under \ui{Advanced display settings}.
+\ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds are~under \ui{Advanced display settings}; flight-route text is~available beside SimBrief under \ui{Identity}.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}

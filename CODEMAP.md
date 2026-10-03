@@ -346,7 +346,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Task | Files |
 | --- | --- |
 | SimBrief OFP fetch and parsing | `app/services/simbrief_descriptions.php` |
-| Pre-create OFP draft | `app/services/simbrief_description_drafts.php`, `app/controllers/admin_simbrief.php`, `public/assets/gallery-modules/admin-simbrief-description.js` | Private, session- and administrator-bound 30-minute OFP reference; the visible numeric/text identifier maps to the existing Pilot ID/name contract. Attach after gallery creation, with warnings for optional attachment failure. |
+| OFP description draft | `app/services/simbrief_description_drafts.php`, `app/controllers/admin_simbrief.php`, `public/assets/gallery-modules/admin-simbrief-description.js` | Private, session- and administrator-bound 30-minute OFP reference; the visible numeric/text identifier maps to the existing Pilot ID/name contract. Works during creation and for existing galleries. Localized drafts fill the selected description plus maintained-language fields when translation storage is ready; OFP and route data attach after the gallery save, with warnings for optional attachment failure. |
 | SimBrief admin endpoint | `app/controllers/admin_simbrief.php` |
 | SimBrief UI | `app/views/admin_gallery_forms.php`, `app/views/admin_gallery_edit_tabs.php`, `public/assets/gallery-modules/admin-simbrief-description.js` |
 | Flight map persistence | `app/services/flight_maps.php`, table `gallery_flight_maps` |
