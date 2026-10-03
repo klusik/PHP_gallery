@@ -54,8 +54,8 @@ export const ADMIN_PANEL_REVISION_LENGTH_LIMIT = 128;
 export const ADMIN_PANEL_SAVED_REVISION_PATTERN = Object.freeze(/^[1-9][0-9]{0,19}$/);
 
 /**
- * Explicit non-credential text fields owned by ordinary gallery create/edit forms.
- * @var {readonly string[]} Units: form-control names. Scope: recoverable gallery text.
+ * Explicit non-credential base text fields owned by ordinary gallery create/edit forms.
+ * @var {readonly string[]} Units: form-control names. Scope: recoverable gallery text plus the explicit translated-description hook.
  * Consumers: admin-panel-drafts.js.
  * Rationale: exclude files, authentication fields and access settings from text-only draft restoration.
  */

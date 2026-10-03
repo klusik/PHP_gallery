@@ -45,8 +45,7 @@ use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
-use function Gallery\Views\view_render_admin_hero;
-use function Gallery\Views\view_render_admin_metric_grid;
+use function Gallery\Views\view_render_admin_gallery_overview;
 use function Gallery\Views\view_render_admin_gallery_editor_notices;
 
 /**
@@ -133,72 +132,67 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
         $adminTabs[] = ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')];
     }
 
-    view_render_admin_hero([
-        'class' => 'admin-edit-gallery-hero',
-        'kicker' => t('admin.gallery_editor.kicker'),
-        'title' => (string) $gallery['title'],
-        'description' => t('admin.gallery_editor.intro'),
-        'actions_aria_label' => t('admin.gallery_editor.hero_actions_label'),
-        'actions' => [
-            [
-                'label' => t('admin.gallery_editor.upload_photos_here'),
-                'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
-                'class' => 'button',
-                'attributes' => [
-                    'data-gallery-side-panel-link' => true,
-                    'data-admin-side-panel-workflow' => 'upload',
-                    'data-admin-side-panel-kicker' => t('gallery.upload_workflow'),
-                    'data-admin-side-panel-title' => t('gallery.upload_photos'),
-                    'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+    view_render_admin_gallery_overview([
+        'hero' => [
+            'title' => (string) $gallery['title'],
+            'actions_aria_label' => t('admin.gallery_editor.hero_actions_label'),
+            'actions' => [
+                [
+                    'label' => t('admin.gallery_editor.upload_photos_here'),
+                    'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
+                    'class' => 'button',
+                    'attributes' => [
+                        'data-gallery-side-panel-link' => true,
+                        'data-admin-side-panel-workflow' => 'upload',
+                        'data-admin-side-panel-kicker' => t('gallery.upload_workflow'),
+                        'data-admin-side-panel-title' => t('gallery.upload_photos'),
+                        'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                    ],
                 ],
+                [
+                    'label' => t('admin.gallery_editor.create_gallery_here'),
+                    'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
+                    'class' => 'button secondary',
+                    'attributes' => [
+                        'data-gallery-side-panel-link' => true,
+                        'data-admin-side-panel-workflow' => 'create',
+                        'data-admin-side-panel-kicker' => t('gallery.workflow'),
+                        'data-admin-side-panel-title' => t('gallery.create_here'),
+                        'data-gallery-side-panel-url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
+                    ],
+                ],
+                ['label' => t('admin.gallery_editor.view_gallery'), 'url' => gallery_public_url($gallery), 'class' => 'button secondary', 'target' => '_blank'],
+                ['label' => t('admin.gallery_editor.back_to_galleries'), 'url' => url_for('admin'), 'class' => 'button secondary'],
+            ],
+        ],
+        'metrics' => [
+            [
+                'label' => t('admin.gallery_editor.metric_visibility'),
+                'value' => ucfirst($activeVisibility),
+                'help' => t('admin.gallery_editor.metric_visibility_help'),
+                'state' => $activeVisibility === 'public' ? 'ready' : 'care',
             ],
             [
-                'label' => t('admin.gallery_editor.create_gallery_here'),
-                'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
-                'class' => 'button secondary',
-                'attributes' => [
-                    'data-gallery-side-panel-link' => true,
-                    'data-admin-side-panel-workflow' => 'create',
-                    'data-admin-side-panel-kicker' => t('gallery.workflow'),
-                    'data-admin-side-panel-title' => t('gallery.create_here'),
-                    'data-gallery-side-panel-url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
-                ],
+                'label' => t('admin.gallery_editor.metric_images'),
+                'value' => (string) $imageCount,
+                'help' => t('admin.gallery_editor.metric_images_help'),
+                'state' => $imageCount > 0 ? 'ready' : 'neutral',
             ],
-            ['label' => t('admin.gallery_editor.view_gallery'), 'url' => gallery_public_url($gallery), 'class' => 'button secondary', 'target' => '_blank'],
-            ['label' => t('admin.gallery_editor.back_to_galleries'), 'url' => url_for('admin'), 'class' => 'button secondary'],
+            [
+                'label' => t('admin.gallery_editor.metric_folder'),
+                'value' => gallery_folder_name_from_path((string) $gallery['folder_path']),
+                'help' => t('admin.gallery_editor.metric_folder_help'),
+                'state' => 'neutral',
+            ],
+            [
+                'label' => t('admin.gallery_editor.metric_parent'),
+                'value' => ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')),
+                'help' => t('admin.gallery_editor.metric_parent_help'),
+                'state' => 'neutral',
+            ],
         ],
-        'meta' => [
-            ['value' => (string) $imageCount, 'label' => t('admin.gallery_editor.metric_images')],
-            ['value' => ucfirst($activeVisibility), 'label' => t('admin.gallery_editor.metric_visibility')],
-        ],
+        'summary_label' => t('admin.gallery_editor.summary_aria', 'Gallery summary'),
     ]);
-
-    view_render_admin_metric_grid([
-        [
-            'label' => t('admin.gallery_editor.metric_visibility'),
-            'value' => ucfirst($activeVisibility),
-            'help' => t('admin.gallery_editor.metric_visibility_help'),
-            'state' => $activeVisibility === 'public' ? 'ready' : 'care',
-        ],
-        [
-            'label' => t('admin.gallery_editor.metric_images'),
-            'value' => (string) $imageCount,
-            'help' => t('admin.gallery_editor.metric_images_help'),
-            'state' => $imageCount > 0 ? 'ready' : 'neutral',
-        ],
-        [
-            'label' => t('admin.gallery_editor.metric_folder'),
-            'value' => gallery_folder_name_from_path((string) $gallery['folder_path']),
-            'help' => t('admin.gallery_editor.metric_folder_help'),
-            'state' => 'neutral',
-        ],
-        [
-            'label' => t('admin.gallery_editor.metric_parent'),
-            'value' => ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')),
-            'help' => t('admin.gallery_editor.metric_parent_help'),
-            'state' => 'neutral',
-        ],
-    ], 'admin-metric-grid admin-edit-gallery-summary', t('admin.gallery_editor.summary_aria', 'Gallery summary'));
 
     render_admin_tabs($adminTabs, $activeEditTab);
 }

@@ -33,7 +33,7 @@ Author: Rudolf Klusal
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
 import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
 import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
-import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20260920-panel-lifecycle-v1';
+import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20261003-compact-tables-v1';
 import {ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT} from '/public/assets/gallery-modules/admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
 /** Millisecond pause used to deliver queued promises and close transitions in Chromium. */
@@ -66,6 +66,7 @@ const fixtureImages = [
     {id: '16', name: 'Zeta', capturedAt: null},
 ];
 let lastOrganizerDetail = null;
+let organizerResultTableAtCompletion = false;
 let lastBulkParent = null;
 let revisionConflicts = 0;
 let clipboardValue = '';
@@ -78,6 +79,7 @@ async function writeFixtureClipboard(value) { clipboardValue = value; }
 /** @type {Map<string, string>} Active form precondition observed as each editor GET starts. */
 const revisionAtRefreshStart = new Map();
 let posts = 0;
+let lastGalleryPostBody = null;
 let refreshes = 0;
 let assertions = 0;
 const originalUrl = location.href;
@@ -114,8 +116,12 @@ function editor(id) {
         </div></nav><form class="admin-edit-gallery-form" data-admin-gallery-settings-form>
         <input type="hidden" name="id" value="${id}"><input type="hidden" name="${revisionFieldNames[id] || 'expected_edit_revision'}" value="${revisions[id]}">
         <input type="hidden" name="csrf_token" value="fresh-fixture-csrf"><input type="hidden" name="return_tab" value="admin-edit-identity">
+        <input type="hidden" name="simbrief_draft_ref" data-simbrief-draft-ref value="">
         <section class="panel admin-tab-panel is-active" id="admin-edit-identity" role="tabpanel" aria-labelledby="admin-edit-identity-control" data-admin-tab-panel>
-        <input name="title" value="${titles[id]}"><textarea name="description">Server description</textarea><input type="password" name="password" value="">
+        <input name="title" value="${titles[id]}"><textarea name="description">Server description</textarea>
+        <select name="content_language" data-content-language-select><option value="">Not specified</option><option value="en">English</option><option value="cs" selected>Czech</option><option value="de">German</option><option value="sv">Swedish</option></select>
+        <textarea name="translations[en][description]" data-content-translation-description="en"></textarea><textarea name="translations[cs][description]" data-content-translation-description="cs"></textarea><textarea name="translations[de][description]" data-content-translation-description="de"></textarea><textarea name="translations[sv][description]" data-content-translation-description="sv"></textarea>
+        <input type="password" name="password" value="">
         <input name="share_token" value=""><input type="file" name="images[]"><input type="checkbox" name="visibility" value="private">
         <button name="action" value="save">Save</button><button type="button" hidden>Hidden</button><button type="button" disabled>Disabled</button>
         <fieldset disabled><button type="button">Disabled fieldset</button></fieldset></section>
@@ -228,6 +234,9 @@ async function fetchPanelFixture(value, options = {}) {
     if (options.method === 'POST' && ['/fixture-order', '/fixture-organizer', '/fixture-bulk'].includes(url.pathname)) {
         posts++;
         const payload = {...success(id), result: {done: true, remaining_after: 0, moved_images: 1, requested_images: 1}, bulk_action: 'move_new'};
+        if (url.pathname === '/fixture-organizer') {
+            payload.result.group_results = [{title: 'Fixture subgallery', date: '2026-10-03', destination_status: 'created', moved: 1}];
+        }
         const response = {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Deliver the captured tool acknowledgment to JSON consumers. @return {Promise<typeof payload>} Original synthetic payload. */ json: async () => payload, /** Deliver the same tool acknowledgment to text parsers. @return {Promise<string>} Captured JSON representation. */ text: async () => JSON.stringify(payload)};
         if (url.pathname === '/fixture-order') {
             const imageIds = JSON.parse(options.body.get('image_order') || '[]');
@@ -261,6 +270,7 @@ async function fetchPanelFixture(value, options = {}) {
             return {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Return the canonical create envelope used by the production transition. @return {Promise<string>} Serialized fixture result. */ text: async () => JSON.stringify(payload)};
         }
         if (failPost) return {ok: false, headers: new Headers({'Content-Type': 'application/json'}), /** Model an unsuccessful authenticated/validated save without modifying fixture state. @return {Promise<string>} Bounded synthetic refusal JSON. */ text: async () => JSON.stringify({ok: false, message: 'Authentication or validation failed'})};
+        if (url.pathname === '/fixture-editor') lastGalleryPostBody = options.body;
         const expectedRevision = options.body.get('edit_revision') || options.body.get('expected_edit_revision');
         if (url.pathname === '/fixture-editor' && expectedRevision !== String(revisions[id])) {
             revisionConflicts++;
@@ -382,7 +392,7 @@ try {
     setupAdminGalleryTitleCompletion();
     setupAdminMetadataOrganizer();
     document.addEventListener('php-gallery:admin-image-order-saved', /** Observe the real reorder emitter's captured owner. @param {CustomEvent} event Production result and panelOwner. @return {void} Retains only fixture event detail for assertions. */ event => { lastOrderDetail = event.detail; });
-    document.addEventListener('php-gallery:metadata-organizer-applied', /** Observe the real organizer emitter's captured owner. @param {CustomEvent} event Production result and panelOwner. @return {void} Retains only fixture event detail for assertions. */ event => { lastOrganizerDetail = event.detail; });
+    document.addEventListener('php-gallery:metadata-organizer-applied', /** Observe the real organizer emitter's captured owner and the just-rendered result before panel refresh. @param {CustomEvent} event Production result and panelOwner. @return {void} Retains fixture event detail and observes the result fragment. */ event => { lastOrganizerDetail = event.detail; organizerResultTableAtCompletion = Boolean(field('[data-admin-metadata-organizer-results] .admin-metadata-organizer-table-wrap table tbody tr')); }, true);
     held.add('1'); held.add('2');
     document.getElementById('open-a').click();
     check(field('[data-admin-side-panel-close]') === document.activeElement, 'Loading focuses visible Close immediately');
@@ -424,6 +434,10 @@ try {
     held.clear();
 
     type(field('[name="description"]'), 'Long local description '.repeat(80));
+    const localizedPanelDrafts = {en: 'Local English description', cs: 'Místní český popis', de: 'Lokale deutsche Beschreibung', sv: 'Lokal svensk beskrivning'};
+    for (const [language, value] of Object.entries(localizedPanelDrafts)) type(field(`[data-content-translation-description="${language}"]`), value);
+    const sourceLanguage = field('[data-content-language-select]'); sourceLanguage.value = 'de'; sourceLanguage.dispatchEvent(new Event('change', {bubbles: true}));
+    const simbriefDraftReference = field('[data-simbrief-draft-ref]'); simbriefDraftReference.value = 'a'.repeat(48); simbriefDraftReference.dispatchEvent(new Event('change', {bubbles: true}));
     type(field('[name="password"]'), 'fixture-secret-never-retain');
     type(field('[name="share_token"]'), 'fixture-token-never-retain');
     field('[name="visibility"]').checked = true;
@@ -435,9 +449,11 @@ try {
     close(); draftAction('keep-continue'); await wait(310);
     revisions[3]++;
     document.getElementById('open-c').click(); await wait();
-    check(field('[name="description"]').value === 'Server description' && field('[data-admin-panel-draft]').textContent.includes('revision'), 'Reopen offers explicit revision-aware restore');
+    check(field('[name="description"]').value === 'Server description' && field('[data-content-translation-description="cs"]').value === '' && field('[data-simbrief-draft-ref]').value === '' && field('[data-admin-panel-draft]').textContent.includes('revision'), 'Reopen offers explicit revision-aware restore with fresh server fields');
     draftAction('restore');
     check(field('[name="description"]').value === draftText, 'Long description restored explicitly');
+    for (const [language, value] of Object.entries(localizedPanelDrafts)) check(field(`[data-content-translation-description="${language}"]`).value === value, `Translated ${language} description is restored explicitly`);
+    check(field('[data-simbrief-draft-ref]').value === 'a'.repeat(48) && field('[data-content-language-select]').value === 'de', 'validated SimBrief draft reference and source language are restored with text');
     check(field('[name="password"]').value === '' && field('[name="share_token"]').value === '' && !field('[name="visibility"]').checked, 'Draft excludes secrets and access choices');
     check(field('[name="expected_edit_revision"]').value === String(revisions[3]) && field('[name="csrf_token"]').value === 'fresh-fixture-csrf', 'Restore preserves current server revision and CSRF');
     const dirtyForm = field('form');
@@ -450,9 +466,13 @@ try {
     check(posts === beforeFailure + 1 && field('[name="description"]').value === draftText, 'Authentication/validation refusal retains the only text copy');
 
     holdPost = true; save(); await wait();
+    check(lastGalleryPostBody instanceof FormData && lastGalleryPostBody.get('simbrief_draft_ref') === 'a'.repeat(48)
+        && lastGalleryPostBody.get('translations[cs][description]') === localizedPanelDrafts.cs
+        && lastGalleryPostBody.get('content_language') === 'de', 'gallery Save submits matching SimBrief ref, localized description and source language');
     type(field('[name="description"]'), 'Edited again while POST is pending');
     field('[name="visibility"]').checked = true;
     release('post', '3'); await wait(); holdPost = false;
+    check(field('[data-simbrief-draft-ref]').value === '', 'successful gallery Save clears the consumed SimBrief reference');
     check(field('[name="description"]').value === 'Edited again while POST is pending' && field('[data-admin-panel-draft]').textContent.includes('Unsaved'), 'Success clears only submitted text, preserves later typing');
     check(field('[name="expected_edit_revision"]').value === String(revisions[3]) && field('[name="visibility"]').checked, 'Owned acknowledgment advances only revision while in-flight text/privacy edits survive');
     close(); draftAction('discard-continue'); await wait(310);
@@ -594,6 +614,7 @@ try {
     check(field('form') === organizerReplacement && field('[data-admin-side-panel-status]').textContent === organizerStatus, 'Late organizer completion cannot redraw the replacement editor');
     submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(150);
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === true && field('form') !== organizerReplacement, 'Current organizer completion reaches the canonical panel refresh');
+    check(organizerResultTableAtCompletion && location.href === originalUrl && !panel().hidden && panel().classList.contains('is-open'), 'Organizer apply renders result rows in the scroll wrapper before refresh while keeping the panel open and URL unchanged');
 
     submitTool('[data-admin-panel-bulk-form]'); await wait();
     check(lastBulkParent === '42', 'Bulk move submits the enabled hidden parent and ignores disabled fallback');

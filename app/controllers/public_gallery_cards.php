@@ -100,6 +100,7 @@ use function Gallery\Services\gallery_trash_retention_days;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
 use function Gallery\Services\gallery_sort_row_has_start_date;
 use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
+use function Gallery\Services\translation_admin_language;
 use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
@@ -451,8 +452,9 @@ function public_gallery_admin_creation_view_model(?array $parentGallery = null, 
  * The link keeps the full admin edit route as its href while enhancing the click
  * into the existing side-panel workflow when JavaScript is available.
  *
- * @param mixed $gallery Input used by this operation.
- * @param mixed $placement Input used by this operation.
+ * @param array{id:int|string,title?:string} $gallery Gallery whose edit link is rendered.
+ * @param string $placement Public-page placement that selects the compact link style.
+ * @return void Outputs the gallery edit link when the current user may administer it.
  */
 function render_public_gallery_admin_edit_link(array $gallery, string $placement = 'card'): void
 {
@@ -464,6 +466,7 @@ function render_public_gallery_admin_edit_link(array $gallery, string $placement
         'title' => (string) ($gallery['title'] ?? ''),
         'url' => url_for('admin_edit_gallery', ['id' => $gallery['id']]),
         'panel_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1]),
+        'admin_i18n_language' => translation_admin_language(),
     ]);
 }
 

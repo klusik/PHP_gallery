@@ -1,0 +1,109 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/admin-gallery-display.css
+ * Module Type: Stylesheet
+ *
+ * Purpose:
+ *   Compact Display settings and the Identity route disclosure in the gallery editor.
+ *
+ * Responsibilities:
+ *   - Style compact Display tab controls
+ *   - Style the route disclosure within gallery Identity settings
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ */
+
+#admin-edit-display {
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+#admin-edit-display .admin-display-layout { gap: 0.5rem; }
+#admin-edit-display .admin-display-grid-primary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; padding: 0.45rem 0.6rem; }
+#admin-edit-display .admin-display-section-head { grid-column: 1; grid-row: 1; }
+#admin-edit-display .admin-display-section-head h3 { margin: 0; font-size: 0.9rem; }
+#admin-edit-display .checkbox-label { margin: 0; font-size: 0.85rem; }
+#admin-edit-display .admin-display-grid-mode { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem; min-width: 0; }
+#admin-edit-display [data-gallery-grid-status] { font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+#admin-edit-display [data-gallery-grid-reset] { min-height: 1.9rem; padding: 0.3rem 0.5rem; font-size: 0.76rem; white-space: nowrap; }
+#admin-edit-display .admin-display-grid-primary.is-grid-enhanced .admin-grid-override-fallback { display: none; }
+#admin-edit-display .admin-display-grid-mode .admin-grid-override-fallback { margin: 0; font-size: 0.78rem; }
+#admin-edit-display .admin-display-grid-primary .admin-edit-range-grid { grid-column: 1 / -1; gap: 0.25rem 0.75rem; }
+#admin-edit-display .admin-display-grid-primary .admin-edit-range-grid label { gap: 0.1rem; margin: 0; font-size: 0.85rem; }
+#admin-edit-display .admin-display-grid-primary .admin-edit-range-grid input { min-height: 1.2rem; margin: 0; }
+#admin-edit-display .admin-display-grid-primary .admin-display-grid-footer { grid-column: 1 / -1; gap: 0.45rem; margin-top: 0; font-size: 0.78rem; }
+#admin-edit-display .admin-inline-help > summary { width: 1.5rem; min-width: 1.5rem; height: 1.5rem; }
+#admin-edit-display .admin-display-grid-primary .muted { margin: 0; font-size: 0.76rem; line-height: 1.25; }
+#admin-edit-display .admin-display-quick-options { gap: 0.35rem 0.75rem; }
+#admin-edit-display .admin-display-quick-option { gap: 0.2rem; }
+#admin-edit-display .admin-display-advanced { margin-top: 0.1rem; }
+#admin-edit-display .admin-display-advanced > summary,
+#admin-edit-display .admin-display-subsection > summary { min-height: 2rem; padding: 0.35rem 0.55rem; font-size: 0.85rem; }
+#admin-edit-display .admin-inline-help > summary { width: 1.5rem; min-width: 1.5rem; height: 1.5rem; }
+#admin-edit-display .admin-display-advanced-content { padding: 0.5rem; }
+#admin-edit-display .admin-display-advanced-options { gap: 0.45rem; }
+#admin-edit-display .admin-display-option { gap: 0.2rem; padding: 0.45rem 0.55rem; }
+#admin-edit-display .admin-display-option > label { gap: 0.25rem; margin: 0; font-size: 0.82rem; }
+#admin-edit-display .admin-display-option > label select,
+#admin-edit-display .admin-display-option > label textarea { min-height: 2rem; padding: 0.35rem 0.5rem; font-size: 0.84rem; }
+#admin-edit-display .admin-display-feature-row { padding: 0.45rem 0.55rem; }
+#admin-edit-display .admin-display-subsection-content { gap: 0.4rem; padding: 0.5rem; }
+#admin-edit-display .admin-display-unavailable { margin: 0.2rem 0; font-size: 0.8rem; }
+
+.admin-gallery-identity-simbrief {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    min-width: 0;
+}
+.admin-gallery-identity-simbrief > [data-simbrief-description-tool] { flex: 1 1 0; min-width: 0; }
+.admin-gallery-identity-simbrief .admin-simbrief-description-main { grid-template-columns: minmax(0, 1fr) auto auto; }
+.admin-gallery-identity-simbrief .admin-simbrief-identifier { grid-column: 1; min-width: 0; }
+.admin-gallery-identity-simbrief .admin-simbrief-description-main > button { grid-column: 2; grid-row: 1; }
+.admin-gallery-route-disclosure { flex: 0 0 auto; align-self: end; position: relative; }
+.admin-gallery-route-disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    justify-content: center;
+    padding: 0.3rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    list-style: none;
+}
+.admin-gallery-route-disclosure > summary::-webkit-details-marker { display: none; }
+.admin-gallery-route-disclosure > summary svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.admin-gallery-route-content { position: absolute; z-index: 5; right: 0; top: calc(100% + 0.25rem); box-sizing: border-box; width: min(27rem, calc(100vw - 3rem)); padding: 0.6rem; border: 1px solid var(--admin-border, #d4dde7); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #17203324; }
+.admin-gallery-route-content label { display: grid; gap: 0.25rem; font-size: 0.82rem; }
+.admin-gallery-route-content textarea { min-height: 4.5rem; padding: 0.45rem; font: inherit; }
+.admin-gallery-route-content .admin-inline-help { margin-top: 0.35rem; }
+.admin-gallery-route-migration { margin: 0.3rem 0; font-size: 0.78rem; }
+
+@media (max-width: 760px) {
+    #admin-edit-display { padding: 0.35rem; }
+    #admin-edit-display .admin-display-grid-primary { grid-template-columns: minmax(0, 1fr); }
+    #admin-edit-display .admin-display-section-head,
+    #admin-edit-display .admin-display-grid-mode { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+}
+@container gallery-identity (max-width: 28rem) {
+    .admin-gallery-identity-simbrief { flex-wrap: wrap; }
+    .admin-gallery-identity-simbrief > [data-simbrief-description-tool] { flex-basis: 100%; }
+}

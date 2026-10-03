@@ -9,11 +9,14 @@ Responsibilities: Intercept native POST intent and synthetic gallery searches wi
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Layout regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Layout regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main>
+<form id="gallery-grid-form"><section class="admin-display-grid-primary" data-gallery-grid-primary><div class="admin-display-section-head"><h3>Display grid</h3></div><div class="admin-display-grid-mode" data-gallery-grid-mode data-default-columns="3" data-default-rows="4" data-default-label="Default settings" data-custom-label="Custom settings"><span data-gallery-grid-status aria-live="polite" hidden></span><button type="button" data-gallery-grid-reset hidden>Reset to default</button><label data-gallery-grid-override-fallback><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled>Use a custom grid</label></div><label>Columns <span data-gallery-grid-columns-display>3</span><input type="range" min="1" max="12" value="3" name="grid_columns" data-gallery-grid-columns></label><label>Rows <span data-gallery-grid-rows-display>4</span><input type="range" min="1" max="50" value="4" name="grid_rows" data-gallery-grid-rows></label></section></form>
+<pre id="results"></pre>
 <script type="module">
 import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupAdminGalleryGridControls} from '/public/assets/gallery-modules/admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
 import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
 let assertions=0, confirms=0, approve=false;
 const submits=[];
@@ -37,6 +40,19 @@ try {
     check(slots.length===3,'three actual shortcut rows');
     for(const slot of slots) check(slot.querySelector('[data-gallery-search-picker-value]').disabled,'initial server-rendered canonical picker ID stays disabled for no-JS fallback');
     setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupGallerySearchPickers();
+    const galleryGridForm=find('#gallery-grid-form'), gridStatus=find('[data-gallery-grid-status]'), gridColumns=find('[data-gallery-grid-columns]'), gridRows=find('[data-gallery-grid-rows]'), gridReset=find('[data-gallery-grid-reset]'), gridOverride=find('[data-gallery-grid-override-enabled]');
+    check(!gridStatus.hidden && gridStatus.textContent==='Default settings' && gridColumns.value==='3' && gridRows.value==='4','gallery grid initially shows inherited dimensions and Default settings');
+    edit(gridColumns,'6'); check(gridOverride.checked && gridStatus.textContent==='Custom settings','moving Columns marks the local grid custom');
+    edit(gridRows,'8'); check(gridOverride.checked && gridStatus.textContent==='Custom settings','moving Rows marks the local grid custom');
+    let galleryGridDraft=new FormData(galleryGridForm); check(galleryGridDraft.get('grid_override_enabled')==='1' && galleryGridDraft.get('grid_columns')==='6' && galleryGridDraft.get('grid_rows')==='8','custom grid draft submits both slider values and enabled state');
+    gridReset.click(); galleryGridDraft=new FormData(galleryGridForm);
+    check(!gridOverride.checked && gridStatus.textContent==='Default settings' && gridColumns.value==='3' && gridRows.value==='4','Reset restores inherited dimensions and unsets only the local override draft');
+    check(!galleryGridDraft.has('grid_override_enabled') && galleryGridDraft.get('grid_columns')==='3' && galleryGridDraft.get('grid_rows')==='4','default grid draft submits inherited values with the override checkbox cleared');
+    const dynamicGridForm=document.createElement('form'); dynamicGridForm.id='dynamic-gallery-grid-form'; dynamicGridForm.innerHTML='<section class="admin-display-grid-primary"><div class="admin-display-grid-mode" data-gallery-grid-mode data-default-columns="5" data-default-rows="2" data-default-label="Default settings" data-custom-label="Custom settings"><span data-gallery-grid-status aria-live="polite" hidden></span><button type="button" data-gallery-grid-reset hidden>Reset to default</button><label data-gallery-grid-override-fallback><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled>Use a custom grid</label></div><label>Columns <span data-gallery-grid-columns-display>5</span><input type="range" min="1" max="12" value="5" name="grid_columns" data-gallery-grid-columns></label><label>Rows <span data-gallery-grid-rows-display>2</span><input type="range" min="1" max="50" value="2" name="grid_rows" data-gallery-grid-rows></label></section>';
+    document.body.append(dynamicGridForm); setupAdminGalleryGridControls(dynamicGridForm);
+    const dynamicColumn=dynamicGridForm.querySelector('[data-gallery-grid-columns]'), dynamicOverride=dynamicGridForm.querySelector('[data-gallery-grid-override-enabled]'), dynamicStatus=dynamicGridForm.querySelector('[data-gallery-grid-status]');
+    edit(dynamicColumn,'7'); check(dynamicOverride.checked && dynamicStatus.textContent==='Custom settings','delegated gallery-grid handler intercepts slider edits in a newly injected panel fragment');
+    dynamicGridForm.querySelector('[data-gallery-grid-reset]').click(); check(!dynamicOverride.checked && dynamicColumn.value==='5' && dynamicStatus.textContent==='Default settings','newly injected panel Reset restores its own inherited state');
     const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
     form.addEventListener('submit',/** Capture native complete POST intent before preventing fixture navigation. @param {SubmitEvent} event Native submission event. @return {void} Records existing cancellation and successful controls without live writes. */ event=>{submits.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault();});
     find('[data-admin-tab-target="admin-theme-tab-layout"]').click();

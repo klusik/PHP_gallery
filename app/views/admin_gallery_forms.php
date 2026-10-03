@@ -51,16 +51,19 @@ use function Gallery\Services\t;
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<string,mixed> $entity Entity row being edited.
  * @param array<string,mixed> $formModel Prepared localization and saved-default presentation.
+ * @param string $section Presentation section: all, source, or translations.
  * @return void Emit the localization fields.
  */
-function view_render_content_localization_fields(string $entityType, array $entity, array $formModel = []): void
+function view_render_content_localization_fields(string $entityType, array $entity, array $formModel = [], string $section = 'all'): void
 {
     $localization = is_array($formModel['localization'] ?? null) ? $formModel['localization'] : [];
     if (empty($localization['enabled'])) {
         return;
     }
     if (empty($localization['schema_ready'])) {
-        echo '<p class="muted">' . e(t('admin.content_localization.migration_required', 'Other-language content will be available after the multilingual-content database migration is applied.')) . '</p>';
+        if ($section !== 'source') {
+            echo '<p class="muted">' . e(t('admin.content_localization.migration_required', 'Other-language content will be available after the multilingual-content database migration is applied.')) . '</p>';
+        }
         return;
     }
     $languages = (array) ($localization['languages'] ?? []);
@@ -71,30 +74,42 @@ function view_render_content_localization_fields(string $entityType, array $enti
     if ($usingSavedDefault) {
         $sourceLanguage = $savedLanguage;
     }
+    if ($sourceLanguage === '' && $entityType === 'gallery') {
+        $publicLanguage = (string) ($localization['default_source_language'] ?? '');
+        if (in_array($publicLanguage, $languages, true)) {
+            $sourceLanguage = $publicLanguage;
+        }
+    }
     $translations = (array) ($localization['translations'] ?? []);
 
-    echo '<div class="admin-content-localization" data-content-localization>';
-    echo '<div class="admin-content-source-row"><div class="admin-content-source-picker">';
-    echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><span class="admin-content-source-select">';
-    $selectedFlagAsset = trim((string) ($presentation[$sourceLanguage]['flag_asset'] ?? ''));
-    echo '<img data-content-language-flag' . ($selectedFlagAsset !== '' ? ' src="' . e(asset_url($selectedFlagAsset)) . '"' : '') . ' alt="" aria-hidden="true" width="24" height="18"' . ($selectedFlagAsset === '' ? ' hidden' : '') . '>';
-    echo '<select name="content_language" data-content-language-select>';
-    echo '<option value="">' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
-    foreach ($languages as $language) {
-        $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
-        $flagAsset = trim((string) ($presentation[$language]['flag_asset'] ?? ''));
-        echo '<option value="' . e((string) $language) . '" data-flag-src="' . e($flagAsset !== '' ? asset_url($flagAsset) : '') . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
+    if ($section === 'source') {
+        view_render_content_language_picker($languages, $presentation, $sourceLanguage, $usingSavedDefault, $formModel);
+        return;
     }
-    echo '</select></span></label>';
-    echo '<details class="admin-inline-help"><summary aria-label="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '" title="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</div></details>';
-    echo '</div>';
-    if ($entityType === 'gallery' && !empty($formModel['creation_preferences_available'])) {
-        echo '<label class="checkbox-label admin-content-remember"><input type="checkbox" name="remember_content_language" value="1"> ' . e(t('admin.gallery_editor.remember_language', 'Remember this as my default language')) . '</label>';
+    if ($section === 'all') {
+        echo '<div class="admin-content-localization" data-content-localization>';
+        echo '<div class="admin-content-source-row"><div class="admin-content-source-picker">';
+        echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><span class="admin-content-source-select">';
+        $selectedFlagAsset = trim((string) ($presentation[$sourceLanguage]['flag_asset'] ?? ''));
+        echo '<img data-content-language-flag' . ($selectedFlagAsset !== '' ? ' src="' . e(asset_url($selectedFlagAsset)) . '"' : '') . ' alt="" aria-hidden="true" width="24" height="18"' . ($selectedFlagAsset === '' ? ' hidden' : '') . '>';
+        echo '<select name="content_language" data-content-language-select>';
+        echo '<option value="">' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
+        foreach ($languages as $language) {
+            $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
+            $flagAsset = trim((string) ($presentation[$language]['flag_asset'] ?? ''));
+            echo '<option value="' . e((string) $language) . '" data-flag-src="' . e($flagAsset !== '' ? asset_url($flagAsset) : '') . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
+        }
+        echo '</select></span></label>';
+        echo '<details class="admin-inline-help"><summary aria-label="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '" title="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</div></details>';
+        echo '</div>';
+        if ($entityType === 'gallery' && !empty($formModel['creation_preferences_available'])) {
+            echo '<label class="checkbox-label admin-content-remember"><input type="checkbox" name="remember_content_language" value="1"> ' . e(t('admin.gallery_editor.remember_language', 'Remember this as my default language')) . '</label>';
+        }
+        if ($usingSavedDefault) {
+            echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
+        }
+        echo '</div>';
     }
-    if ($usingSavedDefault) {
-        echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
-    }
-    echo '</div>';
     echo '<details class="admin-content-translations"><summary><span aria-hidden="true">&#127760;</span><span>' . e(t('admin.content_localization.other_languages', 'Other languages')) . '</span></summary>';
     echo '<div class="admin-content-translation-list">';
     foreach ($languages as $language) {
@@ -107,7 +122,54 @@ function view_render_content_localization_fields(string $entityType, array $enti
         view_render_content_translation_suggestion_tool($entityType, $entity, (string) $language, 'description', $formModel);
         echo '<small class="muted">' . e(t('admin.content_localization.blank_fallback', 'Leave a field blank to use the source content for that field.')) . '</small></fieldset>';
     }
-    echo '</div></details></div>';
+    echo '</div></details>';
+    if ($section === 'all') {
+        echo '</div>';
+    }
+}
+
+/**
+ * Render a compact source-language picker beside the gallery title.
+ *
+ * @param list<string> $languages Enabled language codes.
+ * @param array<string,array{name:string,flag_asset:string}> $presentation Prepared language names and bundled flag assets.
+ * @param string $sourceLanguage Selected source language.
+ * @param bool $usingSavedDefault Whether the selected language came from saved defaults.
+ * @param array<string,mixed> $formModel Prepared saved-default availability.
+ * @return void Emit flag options with a native-select fallback.
+ */
+function view_render_content_language_picker(array $languages, array $presentation, string $sourceLanguage, bool $usingSavedDefault, array $formModel): void
+{
+    $label = t('admin.content_localization.source_language', 'Language of the current title and description');
+    $emptyLabel = t('admin.content_localization.not_specified', 'Not specified');
+    $flagAsset = trim((string) ($presentation[$sourceLanguage]['flag_asset'] ?? ''));
+    $selectedLabel = $sourceLanguage === '' ? $emptyLabel : (string) ($presentation[$sourceLanguage]['name'] ?? strtoupper($sourceLanguage));
+
+    echo '<div class="admin-content-language-control"><details class="admin-content-language-picker" data-content-language-picker><summary aria-label="' . e($label) . '" title="' . e($label) . '">';
+    echo '<img data-content-language-flag' . ($flagAsset !== '' ? ' src="' . e(asset_url($flagAsset)) . '"' : '') . ' alt="" aria-hidden="true" width="24" height="18"' . ($flagAsset === '' ? ' hidden' : '') . '><span data-content-language-empty aria-hidden="true"' . ($flagAsset !== '' ? ' hidden' : '') . '>🌐</span><span data-content-language-label>' . e($selectedLabel) . '</span><span aria-hidden="true">▾</span></summary>';
+    echo '<div class="admin-content-language-options"><p class="admin-content-language-caption">' . e($label) . '</p><label class="admin-content-language-native"><span>' . e($label) . '</span><select name="content_language" data-content-language-select>';
+    echo '<option value="">' . e($emptyLabel) . '</option>';
+    foreach ($languages as $language) {
+        $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
+        $asset = trim((string) ($presentation[$language]['flag_asset'] ?? ''));
+        echo '<option value="' . e((string) $language) . '" data-flag-src="' . e($asset !== '' ? asset_url($asset) : '') . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
+    }
+    echo '</select></label><div class="admin-content-language-choices">';
+    foreach (array_merge([''], $languages) as $language) {
+        $name = $language === '' ? $emptyLabel : (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
+        $asset = trim((string) ($presentation[$language]['flag_asset'] ?? ''));
+        echo '<button type="button" data-content-language-option data-content-language-value="' . e((string) $language) . '" aria-pressed="' . ($sourceLanguage === $language ? 'true' : 'false') . '">';
+        echo $asset !== '' ? '<img src="' . e(asset_url($asset)) . '" alt="" aria-hidden="true" width="24" height="18">' : '<span aria-hidden="true">🌐</span>';
+        echo '<span>' . e($name) . '</span></button>';
+    }
+    echo '</div>';
+    if (!empty($formModel['creation_preferences_available'])) {
+        echo '<label class="checkbox-label admin-content-remember"><input type="checkbox" name="remember_content_language" value="1"> ' . e(t('admin.gallery_editor.remember_language', 'Remember this as my default language')) . '</label>';
+    }
+    if ($usingSavedDefault) {
+        echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
+    }
+    echo '<p class="muted">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</p></div></details></div>';
 }
 
 /**
@@ -160,7 +222,9 @@ function view_render_gallery_description_formatting_hint(): void
 /**
  * Render the EXIF-derived date suggestion controls for one existing gallery.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $formModel Prepared EXIF suggestion and date presentation.
+ * @return void Emits the suggestion, its in-place apply action, and on-demand explanation.
  */
 function view_render_admin_gallery_date_exif_suggestion(array $gallery, array $formModel = []): void
 {
@@ -177,28 +241,26 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery, array $f
 
     // $suggestion stores the recursive EXIF date range for this gallery branch.
     $suggestion = is_array($dateModel['exif_suggestion'] ?? null) ? $dateModel['exif_suggestion'] : null;
+    $suggestionTitle = t('admin.gallery_editor.exif_date_automatic', 'From photos');
+    $suggestionHelp = $suggestion
+        ? t('admin.gallery_editor.exif_date_suggestion_help', 'Computed from {images} EXIF photo(s) in this gallery and all subgalleries. Applying it updates this gallery date range only; branch review can also update daily subgalleries.', [
+            'images' => (string) (int) ($suggestion['exif_image_count'] ?? 0),
+        ])
+        : t('admin.gallery_editor.exif_date_suggestion_empty', 'No scanned EXIF capture dates were found in this gallery branch yet. Scan/import images first if the files were imported before EXIF extraction existed.');
     echo '<div class="admin-date-range-suggestion" data-admin-gallery-date-suggestion data-admin-gallery-date-endpoint="' . e(url_for('admin_gallery_date_suggestion')) . '" data-admin-gallery-date-gallery-id="' . $galleryId . '" data-admin-gallery-date-csrf="' . e(csrf_token()) . '">';
-    echo '<div><strong>' . e(t('admin.gallery_editor.exif_date_suggestion_title', 'EXIF date suggestion')) . '</strong>';
-    if (!$suggestion) {
-        echo '<p class="muted">' . e(t('admin.gallery_editor.exif_date_suggestion_empty', 'No scanned EXIF capture dates were found in this gallery branch yet. Scan/import images first if the files were imported before EXIF extraction existed.')) . '</p></div>';
-        echo '<div class="admin-date-range-suggestion-actions"><a class="button secondary" href="' . e(url_for('admin_gallery_dates', ['gallery_id' => $galleryId])) . '">' . e(t('admin.gallery_editor.exif_date_review_branch', 'Review branch suggestions')) . '</a></div>';
-        echo '</div>';
-        return;
-    }
-
+    echo '<div class="admin-date-range-suggestion-copy"><strong>' . e($suggestionTitle) . '</strong>';
     // $suggestedLabel stores the visible From/To range suggested for this gallery branch.
     $suggestedLabel = (string) ($dateModel['exif_suggestion_label'] ?? '');
-    echo '<p>' . e(t('admin.gallery_editor.exif_date_suggestion_value', 'Suggested range: {range}', ['range' => $suggestedLabel])) . '</p>';
-    echo '<p class="muted">' . e(t('admin.gallery_editor.exif_date_suggestion_help', 'Computed from {images} EXIF photo(s) in this gallery and all subgalleries. Applying it updates this gallery date range only; branch review can also update daily subgalleries.', [
-        'images' => (string) (int) ($suggestion['exif_image_count'] ?? 0),
-    ])) . '</p></div>';
+    if ($suggestion) {
+        echo '<span class="admin-date-range-suggested-value">' . e($suggestedLabel) . '</span>';
+    }
+    echo '</div><details class="admin-inline-help"><summary aria-label="' . e($suggestionTitle) . '" title="' . e($suggestionTitle) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content"><p>' . e($suggestionHelp) . '</p><a href="' . e(url_for('admin_gallery_dates', ['gallery_id' => $galleryId])) . '">' . e(t('admin.gallery_editor.exif_date_review_branch', 'Review branch suggestions')) . '</a></div></details>';
     echo '<div class="admin-date-range-suggestion-actions">';
-    if (empty($suggestion['matches_current'])) {
-        echo '<button type="submit" name="action" value="apply_exif_date_suggestion" class="button secondary" formaction="' . e(url_for('admin_gallery_date_suggestion')) . '" formmethod="post" data-admin-gallery-date-apply>' . e(t('admin.gallery_editor.exif_date_apply_current', 'Apply to this gallery')) . '</button>';
-    } else {
+    if ($suggestion && empty($suggestion['matches_current'])) {
+        echo '<button type="submit" name="action" value="apply_exif_date_suggestion" class="button secondary" formaction="' . e(url_for('admin_gallery_date_suggestion')) . '" formmethod="post" data-admin-gallery-date-apply>' . e(t('admin.gallery_editor.exif_date_set_automatically', 'Set automatically')) . '</button>';
+    } elseif ($suggestion) {
         echo '<span class="admin-date-range-current">' . e(t('admin.gallery_dates.status_current', 'current')) . '</span>';
     }
-    echo '<a class="button secondary" href="' . e(url_for('admin_gallery_dates', ['gallery_id' => $galleryId])) . '">' . e(t('admin.gallery_editor.exif_date_review_branch', 'Review branch suggestions')) . '</a>';
     echo '</div></div>';
 }
 
@@ -207,8 +269,10 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery, array $f
 /**
  * Render gallery date or date-range fields for admin forms.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
  * @param bool $panelMode Panel mode value.
+ * @param array<string,mixed> $formModel Prepared date values and schema readiness.
+ * @return void Emits manual date fields with accessible on-demand guidance.
  */
 function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false, array $formModel = []): void
 {
@@ -244,11 +308,13 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
         return;
     }
 
-    echo '<fieldset class="admin-date-range-field"><legend>' . e(t('admin.gallery_editor.gallery_date_range', 'Date range')) . '</legend><div class="admin-date-range-inputs">';
+    $rangeLabel = t('admin.gallery_editor.gallery_date_range', 'Date range');
+    echo '<fieldset class="admin-date-range-field"><legend>' . e($rangeLabel) . '</legend><details class="admin-inline-help admin-date-range-help"><summary aria-label="' . e($rangeLabel) . '" title="' . e($rangeLabel) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.gallery_editor.gallery_date_range_help', 'Optional manual date range for an event, trip, or photo series. Leave To empty for a single date.')) . '</div></details><div class="admin-date-range-inputs">';
     echo '<label>' . e(t('admin.gallery_editor.gallery_date_from', 'From')) . '<input name="gallery_date" type="date" value="' . e($startValue) . '"></label>';
     echo '<label>' . e(t('admin.gallery_editor.gallery_date_to', 'To')) . '<input name="gallery_date_end" type="date" value="' . e($endValue) . '"></label>';
-    echo '</div><span class="muted">' . e(t('admin.gallery_editor.gallery_date_range_help', 'Optional manual date range for an event, trip, or photo series. Leave To empty for a single date.')) . '</span></fieldset>';
+    echo '</div>';
     view_render_admin_gallery_date_exif_suggestion($gallery, $formModel);
+    echo '</fieldset>';
 }
 
 /**
@@ -379,6 +445,12 @@ function view_render_admin_new_gallery_quick_fields(array $formModel, bool $pane
     $submitted = (array) ($formModel['submitted'] ?? []);
     $localization = (array) ($formModel['localization'] ?? []);
     $language = (string) ($submitted['content_language'] ?? $preferences['content_language'] ?? '');
+    if ($language === '' && !array_key_exists('content_language', $submitted)) {
+        $publicLanguage = (string) ($localization['default_source_language'] ?? '');
+        if (in_array($publicLanguage, (array) ($localization['languages'] ?? []), true)) {
+            $language = $publicLanguage;
+        }
+    }
     echo '<div class="admin-side-panel-card admin-side-panel-primary-card admin-gallery-create-quick">';
     echo '<label><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span>';
     view_render_admin_new_gallery_title_input($formModel);
@@ -391,7 +463,7 @@ function view_render_admin_new_gallery_quick_fields(array $formModel, bool $pane
     echo '<label class="gallery-create-tags"><span>' . e(t('admin.gallery_editor.tags', 'Tags')) . '</span><input name="tags" aria-label="' . e(t('admin.gallery_editor.tags', 'Tags')) . '" value="' . e((string) ($submitted['tags'] ?? '')) . '" list="tag-suggestions" data-tag-input' . (string) ($formModel['tag_suggestions_attribute'] ?? '') . '><small>' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</small></label>';
     echo (string) ($formModel['tag_datalist_html'] ?? '');
     if (!empty($localization['enabled']) && !empty($localization['schema_ready'])) {
-        echo '<div class="gallery-create-language"><label><span>' . e(t('admin.galleries.create_language', 'Content language')) . '</span><select name="content_language">';
+        echo '<div class="gallery-create-language"><label><span>' . e(t('admin.galleries.create_language', 'Content language')) . '</span><select name="content_language" data-content-language-select>';
         echo '<option value=""' . ($language === '' ? ' selected' : '') . '>' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
         foreach ((array) ($localization['languages'] ?? []) as $code) {
             $presentation = (array) (($localization['presentation'] ?? [])[$code] ?? []);
@@ -408,6 +480,7 @@ function view_render_admin_new_gallery_quick_fields(array $formModel, bool $pane
         view_render_admin_simbrief_description_tool(0, $formModel);
         echo '<input type="hidden" name="simbrief_draft_ref" value="' . e((string) ($submitted['simbrief_draft_ref'] ?? '')) . '" data-simbrief-draft-ref></details>';
     }
+    view_render_content_localization_fields('gallery', [], $formModel, 'translations');
     echo '</div>';
 }
 
@@ -477,9 +550,10 @@ function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $
  *
  * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $formModel Prepared creation defaults, if applicable.
+ * @param array<string,mixed> $flightMap Controller-prepared route-map state.
  * @return void Emit the SimBrief controls.
  */
-function view_render_admin_simbrief_description_tool(int $galleryId, array $formModel = []): void
+function view_render_admin_simbrief_description_tool(int $galleryId, array $formModel = [], array $flightMap = []): void
 {
     $preferences = (array) ($formModel['creation_preferences'] ?? []);
     $submitted = (array) ($formModel['submitted'] ?? []);
@@ -502,16 +576,43 @@ function view_render_admin_simbrief_description_tool(int $galleryId, array $form
     $rememberIdentifier = !empty($submitted['remember_simbrief_identifier'])
         || !empty($submitted['remember_simbrief_pilot_id']) || !empty($submitted['remember_simbrief_pilot_name']);
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
+    if ($galleryId > 0) {
+        echo '<input type="hidden" name="simbrief_draft_ref" value="' . e((string) ($submitted['simbrief_draft_ref'] ?? '')) . '" data-simbrief-draft-ref>';
+    }
     echo '<div class="admin-simbrief-description-heading"><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><details class="admin-inline-help"><summary aria-label="' . e(t('admin.simbrief.help_label', 'About SimBrief import')) . '" title="' . e(t('admin.simbrief.help_label', 'About SimBrief import')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</div></details></div>';
     echo '<div class="admin-simbrief-description-main"><label class="admin-simbrief-identifier"><span>' . e(t('admin.simbrief.identifier', 'Pilot ID or name')) . '</span><input name="simbrief_identifier" value="' . e($identifier) . '" autocomplete="off" data-simbrief-identifier></label>';
     if (!empty($formModel['creation_preferences_available'])) {
         echo '<label class="checkbox-label admin-simbrief-remember"><input type="checkbox" name="remember_simbrief_identifier" value="1"' . ($rememberIdentifier ? ' checked' : '') . '> ' . e(t('admin.simbrief.remember_identifier', 'Remember for future galleries')) . '</label>';
     }
-    echo '<button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button></div>';
+    echo '<button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button>';
+    view_render_admin_gallery_route_disclosure($flightMap);
+    echo '</div>';
     if ($prefilled) {
         echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
     }
     echo '<span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+}
+
+/**
+ * Render the compact route disclosure beside SimBrief generation.
+ *
+ * @param array<string, mixed> $flightMap Controller-prepared route-map state.
+ * @return void Emit the route control when ready or its migration notice.
+ */
+function view_render_admin_gallery_route_disclosure(array $flightMap): void
+{
+    if (($flightMap['state'] ?? 'hidden') === 'ready') {
+        $title = (string) ($flightMap['title'] ?? 'Flight route map');
+        echo '<details class="admin-gallery-route-disclosure"><summary aria-label="' . e($title) . '" title="' . e($title) . '"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 18c4 0 3-7 7-7s3 5 7 5 2-9 4-9" /></svg></summary><div class="admin-gallery-route-content"><label><span>' . e((string) ($flightMap['label'] ?? 'Route text')) . '</span><textarea name="flight_route_text" rows="3" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e((string) ($flightMap['route_text'] ?? '')) . '</textarea></label>';
+        echo '<p class="muted admin-gallery-route-status">' . e((string) ($flightMap['status'] ?? '')) . '</p>';
+        $help = (string) ($flightMap['help'] ?? '');
+        if (trim($help) !== '') {
+            echo '<details class="admin-inline-help"><summary aria-label="' . e(t('admin.gallery_editor.help_for', 'Help for {label}', ['label' => $title])) . '" title="' . e($title) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($help) . '</div></details>';
+        }
+        echo '</div></details>';
+    } elseif (($flightMap['state'] ?? 'hidden') === 'migration') {
+        echo '<p class="muted admin-gallery-route-migration">' . e((string) ($flightMap['migration_message'] ?? '')) . '</p>';
+    }
 }
 
 /**

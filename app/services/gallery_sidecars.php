@@ -711,8 +711,10 @@ function create_empty_gallery_owned(array $input): array
         throw new RuntimeException('Gallery tags are unavailable. Run pending database migrations.');
     }
     $contentLanguage = (string) ($input['content_language'] ?? '');
-    if ($contentLanguage !== '') {
-        if (!content_localization_enabled() || !in_array($contentLanguage, content_supported_languages(), true)
+    $translations = is_array($input['translations'] ?? null) ? $input['translations'] : [];
+    if ($contentLanguage !== '' || $translations !== []) {
+        if (!content_localization_enabled()
+            || ($contentLanguage !== '' && !in_array($contentLanguage, content_supported_languages(), true))
             || !schema_inspection_is_available(content_localization_schema_status('gallery'))) {
             throw new RuntimeException('The selected description language is unavailable.');
         }
@@ -813,8 +815,8 @@ function create_empty_gallery_owned(array $input): array
     }
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
-    if ($contentLanguage !== '') {
-        content_save_localizations('gallery', (int) $gallery['id'], $contentLanguage, []);
+    if ($contentLanguage !== '' || $translations !== []) {
+        content_save_localizations('gallery', (int) $gallery['id'], $contentLanguage, $translations);
         $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
     }
     if ($tags !== '') {

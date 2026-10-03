@@ -12,15 +12,17 @@
  * Document-lifetime recovery of explicitly allowlisted gallery text. Drafts never
  * serialize forms, credentials, file inputs, access settings or browser storage.
  */
-import {i18n} from './admin-core.js?v=20260614-upload-order-v2';
+import {i18nForElement} from './admin-core.js?v=20261003-scoped-i18n-v1';
 import {allowAdminOperationTransition} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
 import {ADMIN_PANEL_DRAFT_FIELDS, ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT, ADMIN_PANEL_REVISION_LENGTH_LIMIT, ADMIN_PANEL_SAVED_REVISION_PATTERN} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
 /**
  * @typedef {Object} GalleryTextDraft
  * @property {string} key Workflow plus validated gallery/parent identity.
- * @property {Object<string, string>} text Only title and description, in UTF-16 strings.
+ * @property {Object<string, string>} text Title, source description and translated descriptions.
  * @property {string} revision Bounded non-credential edit precondition, or empty for legacy forms.
+ * @property {string} simbriefDraftRef Validated short-lived user/session-bound SimBrief draft reference.
+ * @property {string} contentLanguage Validated source-language selection, or empty for unspecified.
  */
 /** @type {Map<string, GalleryTextDraft>} Bounded drafts, owned solely by this document. */
 const drafts = new Map();
@@ -29,6 +31,7 @@ const drafts = new Map();
  * @property {HTMLFormElement} form Current ordinary gallery form, never a serialized snapshot.
  * @property {string} key Opening workflow/entity context.
  * @property {Object<string, string>} baseline Last server/submitted title and description.
+ * @property {string} baselineLanguage Server-prepared source-language selection.
  * @property {string} revision Validated revision of that form.
  * @property {boolean} dirty Whether current allowlisted text differs from the baseline.
  * @property {boolean} retained Whether the whole current edit fits the memory budget.
@@ -77,7 +80,16 @@ function textControl(form, name) {
  * @return {Object<string, string>} Current editable text values.
  */
 function textValues(form) {
-    return Object.fromEntries(ADMIN_PANEL_DRAFT_FIELDS.map(/** Copy one permitted text value, never a secret or file control. @param {string} name Allowlisted text-control name. @return {[string, string]} Field name and current text. */ name => [name, textControl(form, name)?.value || '']));
+    const values = Object.fromEntries(ADMIN_PANEL_DRAFT_FIELDS.map(/** Copy one permitted text value, never a secret or file control. @param {string} name Allowlisted text-control name. @return {[string, string]} Field name and current text. */ name => [name, textControl(form, name)?.value || '']));
+    form.querySelectorAll('[data-content-translation-description]').forEach(/** Capture only allowlisted translated description textareas.
+     * @param {Element} field Candidate translation field.
+     * @return {void} Adds a valid language's current textarea value.
+     */ (field) => {
+        if (!(field instanceof HTMLTextAreaElement)) return;
+        const language = String(field.dataset.contentTranslationDescription || '');
+        if (/^[a-z]{2}$/.test(language)) values[`translation_description:${language}`] = field.value;
+    });
+    return values;
 }
 
 /**
@@ -87,7 +99,30 @@ function textValues(form) {
  * @return {boolean} Whether both field values agree.
  */
 function sameText(left, right) {
-    return ADMIN_PANEL_DRAFT_FIELDS.every(/** Compare one allowlisted text field exactly. @param {string} name Field name. @return {boolean} Whether both snapshots agree. */ name => left[name] === right[name]);
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    return Array.from(keys).every(/** Compare one allowlisted text field exactly. @param {string} name Field name. @return {boolean} Whether both snapshots agree. */ name => left[name] === right[name]);
+}
+
+/**
+ * Read only the exact opaque reference issued by the SimBrief draft endpoint.
+ * @param {HTMLFormElement} form Gallery editor form.
+ * @return {string} Validated document-lifetime reference, or empty.
+ */
+function simbriefDraftReference(form) {
+    const field = form.querySelector('input[type="hidden"][name="simbrief_draft_ref"][data-simbrief-draft-ref]');
+    const value = field instanceof HTMLInputElement ? field.value : '';
+    return /^[a-f0-9]{48}$/.test(value) ? value : '';
+}
+
+/**
+ * Read the selected source language without retaining any other form control.
+ * @param {HTMLFormElement} form Gallery editor form.
+ * @return {string} Supported two-letter control value, or empty when unspecified/unavailable.
+ */
+function contentLanguage(form) {
+    const field = form.querySelector('[data-content-language-select]');
+    const value = field instanceof HTMLSelectElement ? field.value : '';
+    return value === '' || /^[a-z]{2}$/.test(value) ? value : '';
 }
 
 /**
@@ -177,19 +212,21 @@ function addAction(region, action, label, callback) {
  */
 function retain(state) {
     const text = textValues(state.form);
-    state.dirty = !sameText(text, state.baseline);
+    const simbriefDraftRef = simbriefDraftReference(state.form);
+    const language = contentLanguage(state.form);
+    state.dirty = !sameText(text, state.baseline) || language !== state.baselineLanguage || simbriefDraftRef !== '';
     if (!state.dirty) {
         if (state.ownedDraft) drafts.delete(state.key);
         state.ownedDraft = false;
         return true;
     }
     state.ownedDraft = true;
-    let units = ADMIN_PANEL_DRAFT_FIELDS.reduce(/** Count this draft's UTF-16 text units. @param {number} sum Accumulated code units. @param {string} name Allowlisted field name. @return {number} Updated code-unit total. */ (sum, name) => sum + text[name].length, 0);
+    let units = Object.values(text).reduce(/** Count retained source and translated text. @param {number} sum Accumulated code units. @param {string} value One retained text value. @return {number} Updated code-unit total. */ (sum, value) => sum + value.length, 0) + simbriefDraftRef.length + language.length;
     for (const [key, draft] of drafts) {
-        if (key !== state.key) units += ADMIN_PANEL_DRAFT_FIELDS.reduce(/** Count another retained draft toward the shared text budget. @param {number} sum Accumulated UTF-16 code units. @param {string} name Allowlisted field name. @return {number} Updated code-unit total. */ (sum, name) => sum + draft.text[name].length, 0);
+        if (key !== state.key) units += Object.values(draft.text).reduce(/** Count another retained draft's text. @param {number} sum Accumulated code units. @param {string} value One retained text value. @return {number} Updated code-unit total. */ (sum, value) => sum + value.length, 0) + draft.simbriefDraftRef.length + draft.contentLanguage.length;
     }
     state.retained = units <= ADMIN_PANEL_DRAFT_TEXT_LIMIT && (drafts.has(state.key) || drafts.size < ADMIN_PANEL_DRAFT_LIMIT);
-    if (state.retained) drafts.set(state.key, {key: state.key, text, revision: state.revision});
+    if (state.retained) drafts.set(state.key, {key: state.key, text, revision: state.revision, simbriefDraftRef, contentLanguage: language});
     return state.retained;
 }
 
@@ -214,24 +251,46 @@ function renderDraft(panel) {
     if (region.hidden) return;
     const message = document.createElement('p');
     message.textContent = state.dirty
-        ? (state.retained ? i18n('admin.side_panel.draft_unsaved', 'Unsaved title or description. Text is kept only while this page remains open.')
-            : i18n('admin.side_panel.draft_capacity', 'Draft memory is full. Keep editing or explicitly discard before leaving this form.'))
+        ? (state.retained ? i18nForElement(region, 'admin.side_panel.draft_unsaved', 'Unsaved title or description. Text is kept only while this page remains open.')
+            : i18nForElement(region, 'admin.side_panel.draft_capacity', 'Draft memory is full. Keep editing or explicitly discard before leaving this form.'))
         : (saved.revision !== state.revision || !sameText(saved.text, state.baseline) && saved.revision === ''
-            ? i18n('admin.side_panel.draft_review', 'A text draft is available. Review the current server values before restoring; the server revision has changed or cannot be verified.')
-            : i18n('admin.side_panel.draft_available', 'A text draft is available for this gallery. Restore it only when ready to review and save.'));
+            ? i18nForElement(region, 'admin.side_panel.draft_review', 'A text draft is available. Review the current server values before restoring; the server revision has changed or cannot be verified.')
+            : i18nForElement(region, 'admin.side_panel.draft_available', 'A text draft is available for this gallery. Restore it only when ready to review and save.'));
     region.append(message);
     if (!state.dirty && saved) {
-        addAction(region, 'restore', i18n('admin.side_panel.draft_restore', 'Restore text for review'), /** Restore only text after an explicit user choice. @return {void} Preserves fresh revision/CSRF and focuses the title. */ () => {
-            for (const name of ADMIN_PANEL_DRAFT_FIELDS) {
-                const field = textControl(state.form, name);
-                if (field) field.value = saved.text[name];
+        addAction(region, 'restore', i18nForElement(region, 'admin.side_panel.draft_restore', 'Restore text for review'), /** Restore only text after an explicit user choice. @return {void} Preserves fresh revision/CSRF and focuses the title. */ () => {
+            for (const name of Object.keys(saved.text)) {
+                if (ADMIN_PANEL_DRAFT_FIELDS.includes(name)) {
+                    const field = textControl(state.form, name);
+                    if (field) field.value = saved.text[name];
+                    continue;
+                }
+                const language = name.startsWith('translation_description:') ? name.slice('translation_description:'.length) : '';
+                if (!/^[a-z]{2}$/.test(language)) continue;
+                const field = Array.from(state.form.querySelectorAll('[data-content-translation-description]'))
+                    .find(/** Locate the textarea matching the saved language key.
+                     * @param {Element} candidate Candidate translated-description field.
+                     * @return {boolean} Whether it is the matching language textarea.
+                     */ (candidate) => candidate instanceof HTMLTextAreaElement && candidate.dataset.contentTranslationDescription === language);
+                if (field instanceof HTMLTextAreaElement) field.value = saved.text[name];
+            }
+            const simbriefField = state.form.querySelector('input[type="hidden"][name="simbrief_draft_ref"][data-simbrief-draft-ref]');
+            if (simbriefField instanceof HTMLInputElement) simbriefField.value = saved.simbriefDraftRef;
+            const languageField = state.form.querySelector('[data-content-language-select]');
+            if (languageField instanceof HTMLSelectElement
+                && Array.from(languageField.options).some(/** Ensure the remembered source-language value is valid for this form.
+                 * @param {HTMLOptionElement} option Candidate source-language option.
+                 * @return {boolean} Whether the option matches the saved value.
+                 */ (option) => option.value === saved.contentLanguage)) {
+                languageField.value = saved.contentLanguage;
+                languageField.dispatchEvent(new Event('change', {bubbles: true}));
             }
             // The fresh CSRF and revision fields remain owned by the loaded form.
             retain(state);
             renderDraft(panel);
             textControl(state.form, 'title')?.focus({preventScroll: true});
         });
-        addAction(region, 'discard', i18n('admin.side_panel.draft_discard', 'Discard draft'), /** Discard this retained text after an explicit user choice. @return {void} Clears its recovery notice without submitting. */ () => {
+        addAction(region, 'discard', i18nForElement(region, 'admin.side_panel.draft_discard', 'Discard draft'), /** Discard this retained text after an explicit user choice. @return {void} Clears its recovery notice without submitting. */ () => {
             drafts.delete(state.key);
             renderDraft(panel);
             textControl(state.form, 'title')?.focus({preventScroll: true});
@@ -247,7 +306,7 @@ function renderDraft(panel) {
 export function prepareAdminPanelDrafts(panel) {
     const form = panel.querySelector('.admin-edit-gallery-form, [data-gallery-panel-create-form]');
     const key = form instanceof HTMLFormElement ? formKey(panel, form) : '';
-    const state = key ? {form, key, baseline: textValues(form), revision: formRevision(form), dirty: false, retained: true, ownedDraft: false, pending: null} : null;
+    const state = key ? {form, key, baseline: textValues(form), baselineLanguage: contentLanguage(form), revision: formRevision(form), dirty: false, retained: true, ownedDraft: false, pending: null} : null;
     mounted.set(panel, state);
     renderDraft(panel);
     if (!state) return;
@@ -281,14 +340,14 @@ export function allowAdminPanelTransition(panel, proceed) {
     state.pending = proceed;
     renderDraft(panel);
     const region = draftRegion(panel);
-    const keep = addAction(region, 'keep-editing', i18n('admin.side_panel.draft_keep_editing', 'Keep editing'), /** Cancel the pending context switch and restore editing focus. @return {void} Keeps all current form input in place. */ () => {
+    const keep = addAction(region, 'keep-editing', i18nForElement(region, 'admin.side_panel.draft_keep_editing', 'Keep editing'), /** Cancel the pending context switch and restore editing focus. @return {void} Keeps all current form input in place. */ () => {
         state.pending = null;
         renderDraft(panel);
         if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({preventScroll: true});
         else textControl(state.form, 'title')?.focus({preventScroll: true});
     });
     if (state.retained) {
-        addAction(region, 'keep-continue', i18n('admin.side_panel.draft_keep_continue', 'Keep draft and continue'), /** Retain complete text before allowing the requested context switch. @return {void} Refuses replacement if current text exceeds capacity. */ () => {
+        addAction(region, 'keep-continue', i18nForElement(region, 'admin.side_panel.draft_keep_continue', 'Keep draft and continue'), /** Retain complete text before allowing the requested context switch. @return {void} Refuses replacement if current text exceeds capacity. */ () => {
             if (!retain(state)) { allowAdminPanelTransition(panel, proceed); return; }
             state.pending = null;
             mounted.set(panel, null);
@@ -296,7 +355,7 @@ export function allowAdminPanelTransition(panel, proceed) {
             proceed();
         });
     }
-    addAction(region, 'discard-continue', i18n('admin.side_panel.draft_discard_continue', 'Discard and continue'), /** Discard this text explicitly and perform the requested context switch. @return {void} Clears only the originating draft and pending choice. */ () => {
+    addAction(region, 'discard-continue', i18nForElement(region, 'admin.side_panel.draft_discard_continue', 'Discard and continue'), /** Discard this text explicitly and perform the requested context switch. @return {void} Clears only the originating draft and pending choice. */ () => {
         drafts.delete(state.key);
         state.pending = null;
         mounted.set(panel, null);
@@ -331,7 +390,13 @@ export function submittedAdminPanelDraft(form) {
     const panel = form.closest('[data-admin-side-panel]');
     const state = mounted.get(panel);
     if (!state || state.form !== form || !retain(state)) return null;
-    return {key: state.key, text: textValues(form), revision: state.revision};
+    return {
+        key: state.key,
+        text: textValues(form),
+        revision: state.revision,
+        simbriefDraftRef: simbriefDraftReference(form),
+        contentLanguage: contentLanguage(form),
+    };
 }
 
 /**
@@ -406,10 +471,17 @@ export function acknowledgeAdminPanelDraft(panel, submitted, result, updateActiv
     if (submitted.key.startsWith('gallery-edit:')
         && !result.mutation.entity_ids?.map(String).includes(submitted.key.slice('gallery-edit:'.length))) return;
     const saved = drafts.get(submitted.key);
-    if (saved && saved.revision === submitted.revision && sameText(saved.text, submitted.text)) drafts.delete(submitted.key);
+    if (saved && saved.revision === submitted.revision && sameText(saved.text, submitted.text)
+        && saved.simbriefDraftRef === (submitted.simbriefDraftRef || '')
+        && saved.contentLanguage === (submitted.contentLanguage || '')) drafts.delete(submitted.key);
     const state = mounted.get(panel);
     if (updateActiveForm && state?.key === submitted.key && state.revision === submitted.revision) {
         state.baseline = submitted.text;
+        state.baselineLanguage = submitted.contentLanguage || '';
+        const simbriefField = state.form.querySelector('input[type="hidden"][name="simbrief_draft_ref"][data-simbrief-draft-ref]');
+        if (simbriefField instanceof HTMLInputElement && simbriefField.value === (submitted.simbriefDraftRef || '')) {
+            simbriefField.value = '';
+        }
         retain(state);
         if (!state.dirty) state.pending = null;
     }

@@ -92,7 +92,7 @@ function cms_admin_edit_gallery(): void
         'gallery_id' => (int) $gallery['id'],
         'edit_revision' => gallery_edit_revision($gallery),
     ]);
-    admin_edit_gallery_render_identity_tab($gallery, $activeEditTab);
+    admin_edit_gallery_render_identity_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_access_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_display_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_media_tab($gallery, $activeEditTab);

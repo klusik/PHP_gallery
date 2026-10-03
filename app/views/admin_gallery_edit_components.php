@@ -49,14 +49,18 @@ function view_render_admin_gallery_advanced_tools(string $label, string $content
     }
     echo '<details class="admin-editor-advanced-tools"><summary>' . e($label) . '</summary><div class="admin-editor-advanced-tools-content">' . $contentHtml . '</div></details>';
 }
-/** @param array<string,mixed> $viewModel Controller-prepared AI reprocess state. */
+/**
+ * Render gallery-scoped AI metadata regeneration controls.
+ *
+ * @param array<string,mixed> $viewModel Controller-prepared AI reprocess state.
+ * @return void Render the regeneration controls when enabled.
+ */
 function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
 {
     if (empty($viewModel['enabled'])) {
         return;
     }
-    echo '<div class="admin-edit-card is-wide admin-ai-reprocess-panel"><h3>' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '</h3>';
-    echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_help', 'Use this when photos were already processed with an older local analyzer and you want the Windows worker to generate fresh internal search metadata for this gallery. This resets queue/result rows on the server and immediately creates fresh queue jobs for the same model generation where possible. The heavy analysis still runs on the Windows app.')) . '</p>';
+    echo '<div class="admin-edit-card is-wide admin-ai-reprocess-panel"><div class="admin-gallery-api-tool-heading"><h3>' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '</h3><details class="admin-inline-help"><summary aria-label="' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '" title="' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.gallery_editor.ai_reprocess_help', 'Use this when photos were already processed with an older local analyzer and you want the Windows worker to generate fresh internal search metadata for this gallery. This resets queue/result rows on the server and immediately creates fresh queue jobs for the same model generation where possible. The heavy analysis still runs on the Windows app.')) . '</div></details></div>';
     if (empty($viewModel['schema_ready'])) {
         echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_migration_hidden', 'AI metadata regeneration will be available after the AI image-analysis migration is applied.')) . '</p></div>';
         return;
@@ -65,7 +69,7 @@ function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
     echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" class="admin-inline-form" data-admin-panel-ai-reprocess-form data-confirm="' . e($confirmMessage) . '" onsubmit="return confirm(' . e((string) ($viewModel['confirm_json'] ?? '')) . ');">' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><input type="hidden" name="return_tab" value="admin-edit-api">';
     echo '<button type="submit" name="action" value="force_ai_reprocess" class="secondary danger">' . e(t('admin.gallery_editor.ai_reprocess_button', 'Force AI metadata regeneration')) . '</button>';
-    echo '<span class="muted">' . e(t('admin.gallery_editor.ai_reprocess_note', 'After pressing this, keep or start the AI metadata worker with the backend and model version you want to use.')) . '</span></form></div>';
+    echo '<details class="admin-inline-help admin-gallery-api-tool-note"><summary aria-label="' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '" title="' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.gallery_editor.ai_reprocess_note', 'After pressing this, keep or start the AI metadata worker with the backend and model version you want to use.')) . '</div></details></form></div>';
 }
 
 /**
@@ -100,23 +104,32 @@ function view_render_admin_image_bulk_toolbar(array $viewModel): void
     echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>' . e(t('admin.gallery_editor.cancel')) . '</button><div><strong>' . e(t('admin.gallery_editor.move_summary')) . '</strong><p data-admin-image-move-summary>' . e(t('admin.gallery_editor.move_summary_empty')) . '</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>' . e(t('admin.gallery_editor.move_selected_now')) . '</button></div></section></div>';
 }
 
-/** @param array<string,mixed> $viewModel Controller-prepared gallery branding state. */
+/**
+ * Render optional gallery branding uploads, current assets, and contextual help.
+ *
+ * @param array<string,mixed> $viewModel Controller-prepared gallery branding state.
+ * @return void Emit the branding fieldset without discovering domain state.
+ */
 function view_render_admin_gallery_branding_fields(array $viewModel): void
 {
     if (empty($viewModel['schema_ready'])) {
         echo '<p class="muted">' . e(t('admin.gallery_editor.branding_migration_required', 'Gallery branding assets will be available after the branding migration is applied.')) . '</p>';
         return;
     }
-    echo '<fieldset class="form-grid admin-branding-assets"><legend>' . e(t('admin.gallery_editor.gallery_branding', 'Gallery branding')) . '</legend><p class="muted">' . e(t('admin.gallery_editor.branding_optional_help', 'All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.')) . '</p>';
+    $brandingHelp = t('admin.gallery_editor.branding_optional_help', 'All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.');
+    $brandingHelpLabel = t('admin.gallery_editor.help_for', 'Help for {label}', ['label' => t('admin.gallery_editor.gallery_branding', 'Gallery branding')]);
+    echo '<fieldset class="form-grid admin-branding-assets"><legend>' . e(t('admin.gallery_editor.gallery_branding', 'Gallery branding')) . '</legend><details class="admin-inline-help admin-gallery-branding-help"><summary aria-label="' . e($brandingHelpLabel) . '" title="' . e($brandingHelpLabel) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($brandingHelp) . '</div></details>';
     foreach ((array) ($viewModel['assets'] ?? []) as $asset) {
         $kind=(string)($asset['kind']??''); $label=(string)($asset['label']??''); $description=(string)($asset['description']??''); $assetUrl=(string)($asset['url']??'');
-        echo '<div class="admin-branding-asset"><div class="admin-branding-copy"><strong>' . e($label) . '</strong><span class="muted">' . e($description) . '</span></div>';
+        $assetHelpLabel = t('admin.gallery_editor.help_for', 'Help for {label}', ['label' => $label]);
+        echo '<div class="admin-branding-asset admin-gallery-branding-row"><div class="admin-branding-copy"><strong>' . e($label) . '</strong><details class="admin-inline-help admin-gallery-branding-row-help"><summary aria-label="' . e($assetHelpLabel) . '" title="' . e($assetHelpLabel) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($description) . '</div></details></div>';
         if ($assetUrl !== '') {
             echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-branding-preview-' . e($kind) . '" src="' . e($assetUrl) . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_' . e($kind) . '" value="1"> ' . e(t('admin.gallery_editor.branding_remove_current', 'Remove current {asset}', ['asset' => strtolower($label)])) . '</label></div>';
         } else {
-            echo '<p class="muted">' . e(t('admin.gallery_editor.branding_not_configured', 'No {asset} is configured.', ['asset' => strtolower($label)])) . '</p>';
+            echo '<p class="muted admin-gallery-branding-state">' . e(t('admin.gallery_editor.branding_not_configured', 'No {asset} is configured.', ['asset' => strtolower($label)])) . '</p>';
         }
-        echo '<label>' . e(t('admin.gallery_editor.branding_upload_replace', 'Upload or replace {asset}', ['asset' => strtolower($label)])) . '<input type="file" name="branding_' . e($kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"><span class="muted">' . e(t('admin.gallery_editor.branding_formats_help', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label></div>';
+        $formatHelp = t('admin.gallery_editor.branding_formats_help', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.');
+        echo '<div class="admin-gallery-branding-upload"><label>' . e(t('admin.gallery_editor.branding_upload_replace', 'Upload or replace {asset}', ['asset' => strtolower($label)])) . '<input type="file" name="branding_' . e($kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label><details class="admin-inline-help admin-gallery-branding-format-help"><summary aria-label="' . e($formatHelp) . '" title="' . e($formatHelp) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($formatHelp) . '</div></details></div></div>';
     }
     echo '</fieldset>';
 }

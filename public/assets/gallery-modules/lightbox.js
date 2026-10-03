@@ -63,7 +63,7 @@ function i18n(key, fallback, parameters = {}) {
     });
     return text;
 }
-export { setupTagSuggestions } from './tag-suggestions.js?v=20260528-tag-pills-v1';
+export { setupTagSuggestions } from './tag-suggestions.js?v=20261003-scoped-i18n-v2';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import {

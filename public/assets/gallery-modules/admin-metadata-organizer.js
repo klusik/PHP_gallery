@@ -681,7 +681,7 @@ function previewHeadingHtml(summary) {
  * @return {string} HTML fragment.
  */
 function previewTableHtml(rows) {
-    return `<table><thead><tr><th>${escapeHtmlText(i18n('admin.metadata_organizer.target_gallery', 'Target subgallery'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.status', 'Status'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.photos', 'Photos'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.sample', 'Sample'))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<div class="admin-metadata-organizer-table-wrap"><table><thead><tr><th>${escapeHtmlText(i18n('admin.metadata_organizer.target_gallery', 'Target subgallery'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.status', 'Status'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.photos', 'Photos'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.sample', 'Sample'))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /**
@@ -717,6 +717,7 @@ function applyFormHtml(sourceForm, aggregate) {
  *
  * @param {HTMLElement|null} root Organizer root.
  * @param {Record<string, *>} aggregate Apply aggregate.
+ * @return {void}
  */
 function renderApplySummary(root, aggregate) {
     const results = root?.querySelector('[data-admin-metadata-organizer-results]');
@@ -729,7 +730,7 @@ function renderApplySummary(root, aggregate) {
             : i18n('admin.metadata_organizer.status_existing_short', 'Existing gallery');
         return `<tr><td><strong>${escapeHtmlText(String(group.title || ''))}</strong><br><span class="muted">${escapeHtmlText(String(group.date || ''))}</span></td><td>${escapeHtmlText(status)}</td><td>${Number(group.moved || 0)}</td></tr>`;
     }).join('');
-    results.innerHTML = `<h3>${escapeHtmlText(i18n('admin.metadata_organizer.apply_done_title', 'Organizer applied'))}</h3><p class="muted">${escapeHtmlText(applySummaryText(aggregate))}</p>${rows ? `<table><thead><tr><th>${escapeHtmlText(i18n('admin.metadata_organizer.target_gallery', 'Target subgallery'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.status', 'Status'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.photos', 'Photos'))}</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
+    results.innerHTML = `<h3>${escapeHtmlText(i18n('admin.metadata_organizer.apply_done_title', 'Organizer applied'))}</h3><p class="muted">${escapeHtmlText(applySummaryText(aggregate))}</p>${rows ? `<div class="admin-metadata-organizer-table-wrap"><table><thead><tr><th>${escapeHtmlText(i18n('admin.metadata_organizer.target_gallery', 'Target subgallery'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.status', 'Status'))}</th><th>${escapeHtmlText(i18n('admin.metadata_organizer.photos', 'Photos'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
 }
 
 /**

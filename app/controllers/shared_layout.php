@@ -268,12 +268,15 @@ function shared_layout_browser_i18n_language(?string $language = null): string
  * Prepare merged dictionaries consumed by the pure browser-i18n View formatter.
  *
  * @param ?string $language Requested language code.
- * @return array{language:string,strings:array<string,mixed>}
+ * @param ?string $fallbackLanguage Additional fallback catalog, defaulting to the configured site language.
+ * @return array{language:string,strings:array<string,mixed>} Resolved language and merged browser translation catalog.
  */
-function shared_layout_browser_i18n_model(?string $language = null): array
+function shared_layout_browser_i18n_model(?string $language = null, ?string $fallbackLanguage = null): array
 {
     $resolvedLanguage = shared_layout_browser_i18n_language($language);
-    $defaultLanguage = translation_default_language();
+    $defaultLanguage = $fallbackLanguage !== null
+        ? shared_layout_browser_i18n_language($fallbackLanguage)
+        : translation_default_language();
     return [
         'language' => $resolvedLanguage,
         'strings' => array_merge(

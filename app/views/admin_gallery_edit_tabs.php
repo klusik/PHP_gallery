@@ -43,6 +43,7 @@ use function Gallery\Services\t;
  * Render the editable Media-tab field group.
  *
  * @param array<string, mixed> $viewModel Controller-prepared labels, state, and trusted option/branding fragments.
+ * @return void Emit Media controls and their compact help disclosures.
  */
 function view_render_admin_gallery_media_fields(array $viewModel): void
 {
@@ -53,29 +54,37 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
     $backgroundSourceSchemaReady = (bool) ($viewModel['background_source_schema_ready'] ?? false);
     $backgroundSource = $viewModel['background_source'] ?? null;
 
-    echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '<select name="cover_image_id"><option value="0">' . e((string) ($labels['automatic'] ?? 'Automatic')) . '</option>' . $coverOptionsHtml . '</select><span class="muted">' . e((string) ($labels['includes_subgallery_images'] ?? 'Includes images from subgalleries.')) . '</span></label>';
+    $mediaTitle = (string) ($labels['media_title'] ?? t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'));
+    $mediaHelp = (string) ($labels['media_help'] ?? t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'));
+    echo '<div class="admin-gallery-media-heading"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.media_kicker', 'Media')) . '</p><h2>' . e($mediaTitle) . '</h2></div>';
+    view_render_admin_gallery_display_help($mediaTitle, $mediaHelp);
+    echo '</div>';
+
+    echo '<div class="admin-edit-card-grid admin-gallery-media-workspace">';
+    $coverHelp = (string) ($labels['includes_subgallery_images'] ?? 'Includes images from subgalleries.');
+    echo '<section class="admin-edit-card admin-gallery-media-card admin-gallery-media-cover" aria-label="' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '"><div class="admin-gallery-media-field"><label>' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '<select name="cover_image_id"><option value="0">' . e((string) ($labels['automatic'] ?? 'Automatic')) . '</option>' . $coverOptionsHtml . '</select></label><details class="admin-inline-help admin-gallery-media-help"><summary aria-label="' . e($coverHelp) . '" title="' . e($coverHelp) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($coverHelp) . '</div></details></div>';
     if ($coverAssetSchemaReady) {
         echo '<label>' . e((string) ($labels['upload_gallery_thumbnail'] ?? 'Upload gallery thumbnail')) . '<input type="file" name="cover_upload" accept="image/*"><span class="muted">' . e((string) ($labels['gallery_thumbnail_upload_help'] ?? 'This is stored separately from gallery images.')) . '</span></label>';
     } else {
         echo '<p class="muted">' . e((string) ($labels['gallery_thumbnail_migration_hidden'] ?? 'Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.')) . '</p>';
     }
-    echo '</div>';
+    echo '</section>';
 
-    echo '<div class="admin-edit-card is-wide">' . $brandingFieldsHtml . '</div>';
+    echo '<section class="admin-edit-card admin-gallery-media-card admin-gallery-media-branding" aria-label="' . e(t('admin.gallery_editor.gallery_branding', 'Gallery branding')) . '">' . $brandingFieldsHtml . '</section>';
 
-    echo '<div class="admin-edit-card is-wide">';
+    echo '<section class="admin-edit-card admin-gallery-media-card admin-gallery-media-background" aria-label="' . e((string) ($labels['background_source'] ?? 'Background source')) . '">';
     if ($backgroundSourceSchemaReady) {
-        echo '<label>' . e((string) ($labels['background_source'] ?? 'Background source')) . '<select name="background_source">';
+        echo '<div class="admin-gallery-media-field"><label>' . e((string) ($labels['background_source'] ?? 'Background source')) . '<select name="background_source">';
         echo '<option value=""' . ($backgroundSource === null ? ' selected' : '') . '>' . e((string) ($labels['use_theme_background'] ?? 'Use theme background')) . '</option>';
         echo '<option value="upload"' . ($backgroundSource === 'upload' ? ' selected' : '') . '>' . e((string) ($labels['upload_new_image'] ?? 'Upload new image')) . '</option>';
         echo '<option value="existing"' . ($backgroundSource === 'existing' ? ' selected' : '') . '>' . e((string) ($labels['pick_existing_gallery_images'] ?? 'Pick from existing gallery images')) . '</option>';
         echo '<option value="collage"' . ($backgroundSource === 'collage' ? ' selected' : '') . '>' . e((string) ($labels['generate_collage_public'] ?? 'Generate collage from public galleries')) . '</option>';
-        echo '</select><span class="muted">' . e((string) ($labels['background_source_help'] ?? 'If unset, the gallery inherits the Theme background.')) . '</span></label>';
+        $backgroundHelp = (string) ($labels['background_source_help'] ?? 'If unset, the gallery inherits the Theme background.');
+        echo '</select></label><details class="admin-inline-help admin-gallery-media-help"><summary aria-label="' . e($backgroundHelp) . '" title="' . e($backgroundHelp) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($backgroundHelp) . '</div></details></div>';
     } else {
         echo '<p class="muted">' . e((string) ($labels['background_migration_hidden'] ?? 'Background source selection will be available after the background migration is applied.')) . '</p>';
     }
-    echo '</div></div>';
+    echo '</section></div>';
 }
 
 /**
@@ -109,7 +118,10 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     $accessUnavailableMessage = $viewModel['access_unavailable_message'] ?? null;
     $nsfwState = (string) ($viewModel['nsfw_state'] ?? 'missing');
 
-    echo '<div class="admin-access-compact"><div class="admin-access-main">';
+    $helpLabel = t('admin.gallery_editor.access_help_label', 'About visibility and protection');
+    echo '<div class="admin-access-compact">';
+    echo '<section class="admin-access-protection" aria-label="' . e($helpLabel) . '">';
+    echo '<div class="admin-access-main">';
     echo '<label>' . e((string) ($labels['visibility'] ?? 'Visibility')) . '<select name="visibility">' . (string) ($viewModel['visibility_options_html'] ?? '') . '</select></label>';
     if ($accessReady) {
         echo '<label>' . e((string) ($labels['password_lock'] ?? 'Password lock')) . '<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>' . e((string) ($labels['no_password'] ?? 'No password')) . '</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>' . e((string) ($labels['require_password'] ?? 'Require password')) . '</option></select></label>';
@@ -122,7 +134,7 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     if ($nsfwState === 'available') {
         echo '<input type="hidden" name="nsfw_field_present" value="1"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((bool) ($viewModel['nsfw_enabled'] ?? false) ? ' checked' : '') . '> ' . e((string) ($labels['mark_nsfw'] ?? 'Mark as NSFW / 18+')) . '</label>';
     }
-    echo '<details class="admin-inline-help"><summary aria-label="' . e(t('admin.gallery_editor.access_help_label', 'About visibility and protection')) . '" title="' . e(t('admin.gallery_editor.access_help_label', 'About visibility and protection')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content"><p>' . e((string) ($labels['visibility_help'] ?? '')) . '</p><p>' . e((string) ($labels['password_lock_help'] ?? '')) . '</p>';
+    echo '<details class="admin-inline-help"><summary aria-label="' . e($helpLabel) . '" title="' . e($helpLabel) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content"><p>' . e((string) ($labels['visibility_help'] ?? '')) . '</p><p>' . e((string) ($labels['password_lock_help'] ?? '')) . '</p>';
     if ($nsfwState === 'available') {
         echo '<p>' . e((string) ($labels['nsfw_help'] ?? '')) . '</p>';
     }
@@ -130,7 +142,7 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     if ($shareStorageMessage !== '') {
         echo '<p>' . e($shareStorageMessage) . '</p>';
     }
-    echo '</div></details></div>';
+    echo '</div></details></div></section>';
     if (!$accessReady && is_string($accessUnavailableMessage) && $accessUnavailableMessage !== '') {
         echo '<div class="notice">' . e($accessUnavailableMessage) . '</div>';
     }
@@ -139,7 +151,7 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     }
 
     if ($accessReady) {
-        echo '<div class="admin-access-share"><div class="admin-access-share-row"><label>' . e((string) ($labels['share_link_expiry'] ?? 'Share link expiry')) . '<input name="access_token_expires_at" type="datetime-local" value="' . e((string) ($viewModel['share_expiry_value'] ?? '')) . '"></label><div class="admin-access-share-actions">';
+        echo '<section class="admin-access-share" aria-label="' . e((string) ($labels['share_link_expiry'] ?? 'Share link expiry')) . '"><div class="admin-access-share-row"><label>' . e((string) ($labels['share_link_expiry'] ?? 'Share link expiry')) . '<input name="access_token_expires_at" type="datetime-local" value="' . e((string) ($viewModel['share_expiry_value'] ?? '')) . '"></label><div class="admin-access-share-actions">';
         if ($shareTokenReady) {
             echo '<button type="submit" class="secondary" name="access_action" value="generate_link">' . e((string) ($labels['generate_regenerate_share_link'] ?? 'Generate/regenerate share link')) . '</button>';
         }
@@ -157,9 +169,42 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
         if (!$shareTokenReady && $shareStorageMessage !== '') {
             echo '<div class="notice">' . e($shareStorageMessage) . '</div>';
         }
-        echo '</div>';
+        echo '</section>';
     }
     echo '</div>';
+}
+
+/**
+ * Render compact gallery context and secondary shortcuts above the editor tabs.
+ *
+ * @param array<string, mixed> $viewModel Controller-prepared gallery title, summary cards, labels, and action links.
+ * @return void Emits native disclosure menus that also work without JavaScript.
+ * @author Rudolf Klusal
+ */
+function view_render_admin_gallery_overview(array $viewModel): void
+{
+    $hero = (array) ($viewModel['hero'] ?? []);
+    $metrics = (array) ($viewModel['metrics'] ?? []);
+    $actions = (array) ($hero['actions'] ?? []);
+    $summaryLabel = (string) ($viewModel['summary_label'] ?? 'Gallery summary');
+    $actionsLabel = (string) ($hero['actions_aria_label'] ?? 'Gallery actions');
+
+    echo '<section class="admin-edit-gallery-hero admin-gallery-editor-overview"><h1>' . e((string) ($hero['title'] ?? '')) . '</h1><div class="admin-gallery-editor-menus admin-hero-actions">';
+    if ($actions !== []) {
+        echo '<details class="admin-gallery-editor-menu"><summary>' . e($actionsLabel) . '<span aria-hidden="true">&#9662;</span></summary><nav class="admin-gallery-editor-popover admin-gallery-editor-action-list" aria-label="' . e($actionsLabel) . '">';
+        foreach ($actions as $action) {
+            if (is_array($action)) {
+                echo view_admin_ui_action_link_html($action);
+            }
+        }
+        echo '</nav></details>';
+    }
+    if ($metrics !== []) {
+        echo '<details class="admin-gallery-editor-menu admin-gallery-editor-context"><summary aria-label="' . e($summaryLabel) . '" title="' . e($summaryLabel) . '"><span aria-hidden="true">&#9432;</span></summary><div class="admin-gallery-editor-popover">';
+        view_render_admin_metric_grid($metrics, 'admin-metric-grid admin-edit-gallery-summary', $summaryLabel);
+        echo '</div></details>';
+    }
+    echo '</div></section>';
 }
 
 /**
@@ -176,15 +221,14 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
     $smartAttachments = $viewModel['smart_attachments'] ?? null;
 
     ob_start();
-    echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>' . e((string) ($labels['title'] ?? 'Title')) . '<input name="title" value="' . e((string) ($gallery['title'] ?? '')) . '" autocomplete="off" required></label>';
+    echo '<div class="admin-edit-card-grid admin-gallery-identity-layout">';
+    echo '<div class="admin-edit-card is-wide admin-gallery-identity-card" data-content-localization><div class="admin-gallery-identity-text"><div class="admin-gallery-identity-title"><div class="admin-gallery-identity-title-heading"><label for="admin-gallery-title">' . e((string) ($labels['title'] ?? 'Title')) . '</label>' . (string) ($viewModel['source_language_html'] ?? '') . '</div><input id="admin-gallery-title" name="title" value="' . e((string) ($gallery['title'] ?? '')) . '" autocomplete="off" required></div>';
     echo '<div class="admin-editor-description-field"><label><span>' . e((string) ($labels['description'] ?? 'Description')) . '</span><textarea name="description" data-gallery-description-textarea data-openai-description-textarea>' . e((string) ($gallery['description'] ?? '')) . '</textarea></label>';
     echo (string) ($viewModel['description_hint_html'] ?? '') . '</div>';
-    echo '<div class="admin-editor-date">' . (string) ($viewModel['date_fields_html'] ?? '') . '</div>';
-    echo (string) ($viewModel['localization_html'] ?? '');
-    echo (string) ($viewModel['simbrief_html'] ?? '');
-    echo '<label>' . e((string) ($labels['tags'] ?? 'Tags')) . '<input name="tags" value="' . e((string) ($viewModel['tags'] ?? '')) . '" list="tag-suggestions" data-tag-input' . (string) ($viewModel['tag_suggestions_attribute'] ?? '') . '><span class="muted">' . e((string) ($labels['tags_help'] ?? '')) . '</span></label>';
-    echo '</div>';
+    echo '<label class="admin-gallery-identity-tags">' . e((string) ($labels['tags'] ?? 'Tags')) . '<input name="tags" value="' . e((string) ($viewModel['tags'] ?? '')) . '" list="tag-suggestions" data-tag-input' . (string) ($viewModel['tag_suggestions_attribute'] ?? '') . '><span class="muted">' . e((string) ($labels['tags_help'] ?? '')) . '</span></label></div>';
+    echo '<div class="admin-gallery-identity-tools"><div class="admin-editor-date">' . (string) ($viewModel['date_fields_html'] ?? '') . '</div><div class="admin-gallery-identity-simbrief">' . (string) ($viewModel['simbrief_html'] ?? '');
+    echo '</div></div>';
+    echo '<div class="admin-gallery-identity-language">' . (string) ($viewModel['localization_html'] ?? '') . '</div></div>';
 
     $advancedSummary = trim((string) ($gallery['slug'] ?? ''));
     $folderSummary = trim((string) ($viewModel['folder_name'] ?? ''));
@@ -193,8 +237,8 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
     }
     echo '<details class="admin-edit-card is-wide admin-gallery-advanced-settings"><summary>' . e(t('admin.gallery_editor.advanced_settings', 'Advanced gallery settings')) . ($advancedSummary !== '' ? ' <span class="muted admin-gallery-advanced-summary">' . e($advancedSummary) . '</span>' : '') . '</summary><div class="admin-edit-card-grid">';
     echo (string) ($viewModel['openai_html'] ?? '');
-    echo '<div class="admin-edit-card"><label>' . e((string) ($labels['slug'] ?? 'Slug')) . '<input name="slug" value="' . e((string) ($gallery['slug'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['slug_help'] ?? '')) . '</span></label><label>' . e((string) ($labels['folder_name'] ?? 'Folder name')) . '<input name="folder_name" value="' . e((string) ($viewModel['folder_name'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['folder_rename_help'] ?? '')) . '</span></label></div>';
-    echo '<div class="admin-edit-card"><div>' . e((string) ($labels['parent_gallery'] ?? 'Parent gallery')) . (string) ($viewModel['parent_picker_html'] ?? '') . '</div><label>' . e((string) ($labels['sort_order'] ?? 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) ($gallery['sort_order'] ?? 0) . '"></label></div>';
+    echo '<div class="admin-edit-card admin-gallery-advanced-identity"><label>' . e((string) ($labels['slug'] ?? 'Slug')) . '<input name="slug" value="' . e((string) ($gallery['slug'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['slug_help'] ?? '')) . '</span></label><label>' . e((string) ($labels['folder_name'] ?? 'Folder name')) . '<input name="folder_name" value="' . e((string) ($viewModel['folder_name'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['folder_rename_help'] ?? '')) . '</span></label></div>';
+    echo '<div class="admin-edit-card admin-gallery-advanced-placement"><div class="admin-gallery-advanced-parent"><span>' . e((string) ($labels['parent_gallery'] ?? 'Parent gallery')) . '</span>' . (string) ($viewModel['parent_picker_html'] ?? '') . '</div><label>' . e((string) ($labels['sort_order'] ?? 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) ($gallery['sort_order'] ?? 0) . '"></label></div>';
     if (is_array($smartAttachments)) {
         view_render_admin_gallery_smart_attachments($smartAttachments);
     }
@@ -212,6 +256,7 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
  * Render Smart Gallery attachment controls from controller-prepared rows.
  *
  * @param array<string, mixed> $viewModel Controller-prepared attachment state and labels.
+ * @return void Emit attachment groups and their editable placement controls.
  */
 function view_render_admin_gallery_smart_attachments(array $viewModel): void
 {
@@ -219,7 +264,8 @@ function view_render_admin_gallery_smart_attachments(array $viewModel): void
     $groups = (array) ($viewModel['groups'] ?? []);
     $definitions = (array) ($viewModel['definitions'] ?? []);
 
-    echo '<div class="admin-edit-card is-wide"><h3>' . e((string) ($labels['title'] ?? 'Smart Gallery attachments')) . '</h3><p class="muted">' . e((string) ($labels['help'] ?? '')) . '</p>';
+    $title = (string) ($labels['title'] ?? 'Smart Gallery attachments');
+    echo '<div class="admin-edit-card is-wide admin-gallery-advanced-smart"><div class="admin-gallery-advanced-section-heading"><h3>' . e($title) . '</h3><details class="admin-inline-help"><summary aria-label="' . e($title) . '" title="' . e($title) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e((string) ($labels['help'] ?? '')) . '</div></details></div>';
     if (!(bool) ($viewModel['metadata_ready'] ?? false)) {
         echo (string) ($viewModel['migration_notice_html'] ?? '');
     } elseif ($definitions === []) {
@@ -292,11 +338,11 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
     if ((bool) ($grid['ready'] ?? false)) {
         $gridTitle = (string) ($grid['title'] ?? 'Display grid');
         echo '<section class="admin-display-grid-primary"><div class="admin-display-section-head"><h3>' . e($gridTitle) . '</h3>';
-        view_render_admin_gallery_display_help($gridTitle, trim((string) ($grid['source_text'] ?? '') . ' ' . (string) ($grid['help'] ?? '')));
-        echo '</div><label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ((bool) ($grid['override_enabled'] ?? false) ? ' checked' : '') . '> ' . e((string) ($grid['override_label'] ?? '')) . '</label>';
+        view_render_admin_gallery_display_help($gridTitle, (string) ($grid['help'] ?? ''));
+        echo '</div><div class="admin-display-grid-mode" data-gallery-grid-mode data-default-columns="' . (int) ($grid['default_columns'] ?? $grid['columns'] ?? 1) . '" data-default-rows="' . (int) ($grid['default_rows'] ?? $grid['rows'] ?? 1) . '" data-default-label="' . e((string) ($grid['default_status_label'] ?? 'Default settings')) . '" data-custom-label="' . e((string) ($grid['custom_status_label'] ?? 'Custom settings')) . '"><span data-gallery-grid-status aria-live="polite" hidden></span><button type="button" class="button secondary" data-gallery-grid-reset hidden>' . e((string) ($grid['reset_default_label'] ?? 'Reset to default')) . '</button><label class="checkbox-label admin-grid-override-fallback" data-gallery-grid-override-fallback><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ((bool) ($grid['override_enabled'] ?? false) ? ' checked' : '') . '> ' . e((string) ($grid['override_label'] ?? '')) . '</label></div>';
         echo '<div class="admin-edit-range-grid"><label>' . e((string) ($grid['columns_label'] ?? '')) . ' <span class="muted" data-gallery-grid-columns-display>' . (int) ($grid['columns'] ?? 1) . '</span><input type="range" name="grid_columns" min="1" max="' . (int) ($grid['max_columns'] ?? 1) . '" value="' . (int) ($grid['columns'] ?? 1) . '" data-gallery-grid-columns></label>';
         echo '<label>' . e((string) ($grid['rows_label'] ?? '')) . ' <span class="muted" data-gallery-grid-rows-display>' . (int) ($grid['rows'] ?? 1) . '</span><input type="range" name="grid_rows" min="1" max="' . (int) ($grid['max_rows'] ?? 1) . '" value="' . (int) ($grid['rows'] ?? 1) . '" data-gallery-grid-rows></label></div>';
-        echo '<div class="admin-display-grid-footer"><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((bool) ($grid['use_for_subgalleries'] ?? true) ? ' checked' : '') . '> ' . e((string) ($grid['recursive_label'] ?? '')) . '</label><span class="muted">' . e((string) ($grid['source_text'] ?? '')) . '</span></div></section>';
+        echo '<div class="admin-display-grid-footer"><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((bool) ($grid['use_for_subgalleries'] ?? true) ? ' checked' : '') . '> ' . e((string) ($grid['recursive_label'] ?? '')) . '</label></div></section>';
     } else {
         echo '<div class="notice">' . e((string) ($grid['migration_message'] ?? '')) . '</div>';
     }
@@ -407,20 +453,6 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
         echo '</div></div></details>';
     } elseif (($thumbnailBounds['migration_message'] ?? '') !== '') {
         echo '<p class="muted admin-display-unavailable">' . e((string) $thumbnailBounds['migration_message']) . '</p>';
-    }
-
-    $flightMap = (array) ($viewModel['flight_map'] ?? []);
-    if (($flightMap['state'] ?? 'hidden') === 'ready') {
-        $title = (string) ($flightMap['title'] ?? 'Flight route map');
-        echo '<details class="admin-display-subsection"><summary>' . e($title);
-        if (trim((string) ($flightMap['route_text'] ?? '')) !== '') {
-            echo ' <span class="muted">' . e((string) ($flightMap['status'] ?? '')) . '</span>';
-        }
-        echo '</summary><div class="admin-display-subsection-content"><div class="admin-display-option admin-display-route-field"><label><span>' . e((string) ($flightMap['label'] ?? '')) . '</span><textarea name="flight_route_text" rows="3" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e((string) ($flightMap['route_text'] ?? '')) . '</textarea></label>';
-        view_render_admin_gallery_display_help($title, (string) ($flightMap['help'] ?? ''));
-        echo '</div></div></details>';
-    } elseif (($flightMap['state'] ?? 'hidden') === 'migration') {
-        echo '<p class="muted admin-display-unavailable">' . e((string) ($flightMap['migration_message'] ?? '')) . '</p>';
     }
 
     echo '</div></details></div>';

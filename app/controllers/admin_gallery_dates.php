@@ -157,6 +157,7 @@ function admin_gallery_date_suggestion_panel_html(array $gallery): string
  *
  * @param int $galleryId Gallery identifier.
  * @param string $returnUrl Return url URL.
+ * @return void Emits the canonical AJAX envelope or redirects the fallback request.
  */
 function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $returnUrl): void
 {
@@ -195,7 +196,7 @@ function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $retu
             'suggested_end' => (string) ($suggestion['suggested_end'] ?? ''),
             'exif_image_count' => (int) ($suggestion['exif_image_count'] ?? 0),
         ], ['category' => 'gallery']);
-        $message = t('admin.gallery_editor.exif_date_applied_notice', 'Applied EXIF date range {range} to this gallery.', ['range' => $rangeLabel]);
+        $message = t('admin.gallery_editor.exif_date_applied_notice', 'Gallery date set to {range} from photos.', ['range' => $rangeLabel]);
         if ($wantsJson) {
             // $updatedAt verifies both the current hero and the owning parent/root card against the persisted row.
             $updatedAt = trim((string) ($updatedGallery['updated_at'] ?? ''));

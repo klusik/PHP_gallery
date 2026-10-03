@@ -91,6 +91,7 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
  * Render the gallery-level Media Renamer panel.
  *
  * @param array<string,mixed> $viewModel Controller-prepared gallery-panel state.
+ * @return void Render the gallery-level Media Renamer panel.
  */
 function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
 {
@@ -99,7 +100,7 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.media_renamer.gallery_kicker', 'File maintenance')) . '</p><h2>' . e(t('admin.media_renamer.gallery_title', 'Rename files in this gallery')) . '</h2></div><p class="muted">' . e(t('admin.media_renamer.gallery_help', 'Generated names use this gallery folder context and the current image order. This physically renames files on disk.')) . '</p></div>';
+    echo '<div class="admin-media-renamer-heading"><p class="admin-kicker">' . e(t('admin.media_renamer.gallery_kicker', 'File maintenance')) . '</p><h2>' . e(t('admin.media_renamer.gallery_title', 'Rename files in this gallery')) . '</h2><details class="admin-inline-help"><summary aria-label="' . e(t('admin.media_renamer.gallery_title', 'Rename files in this gallery')) . '" title="' . e(t('admin.media_renamer.gallery_title', 'Rename files in this gallery')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.media_renamer.gallery_help', 'Generated names use this gallery folder context and the current image order. This physically renames files on disk.')) . '</div></details></div>';
     echo (string) ($viewModel['pattern_form_html'] ?? '');
 
     $error = (string) ($viewModel['error'] ?? '');
@@ -117,7 +118,7 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
     echo '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-renamer">';
     echo '<input type="hidden" name="renamer_pattern" value="' . e((string) ($viewModel['pattern'] ?? '')) . '">';
-    echo '<label class="checkbox-label"><input type="checkbox" name="confirm_media_rename" value="1"' . ($renameCount > 0 ? '' : ' disabled') . '> ' . e(t('admin.media_renamer.reviewed_checkbox', 'I reviewed the preview and want to rename files on disk.')) . '</label>';
+    echo '<label class="checkbox-label admin-media-renamer-confirm"><input type="checkbox" name="confirm_media_rename" value="1"' . ($renameCount > 0 ? '' : ' disabled') . '> ' . e(t('admin.media_renamer.reviewed_checkbox', 'I reviewed the preview and want to rename files on disk.')) . '</label>';
     echo '<button type="submit" name="action" value="rename_files" class="secondary danger"' . ($renameCount > 0 ? '' : ' disabled') . '>' . e(t('admin.media_renamer.apply_gallery_button', 'Apply rename to this gallery')) . '</button>';
     if ($renameCount <= 0) {
         echo '<span class="muted">' . e(t('admin.media_renamer.nothing_to_rename', 'No files currently need renaming.')) . '</span>';
@@ -130,6 +131,7 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
  * Render the gallery-level GET pattern preview form.
  *
  * @param array<string,mixed> $viewModel Controller-prepared pattern-form state.
+ * @return void Render the gallery-level GET pattern preview form.
  */
 function view_render_admin_media_renamer_pattern_preview_form(array $viewModel): void
 {
@@ -137,7 +139,8 @@ function view_render_admin_media_renamer_pattern_preview_form(array $viewModel):
     echo '<input type="hidden" name="page" value="admin_edit_gallery">';
     echo '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
     echo '<input type="hidden" name="tab" value="admin-edit-renamer">';
-    echo '<label>' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '<input type="text" name="renamer_pattern" value="' . e((string) ($viewModel['pattern'] ?? '')) . '" placeholder="' . e((string) ($viewModel['default_pattern'] ?? '')) . '"><span class="muted">' . e(t('admin.media_renamer.pattern_help', 'Wildcards: {wildcards}', ['wildcards' => (string) ($viewModel['pattern_help'] ?? '')])) . '</span></label>';
+    echo '<label>' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '<input type="text" name="renamer_pattern" value="' . e((string) ($viewModel['pattern'] ?? '')) . '" placeholder="' . e((string) ($viewModel['default_pattern'] ?? '')) . '"></label>';
+    echo '<details class="admin-inline-help admin-media-renamer-pattern-help"><summary aria-label="' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '" title="' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.media_renamer.pattern_help', 'Wildcards: {wildcards}', ['wildcards' => (string) ($viewModel['pattern_help'] ?? '')])) . '</div></details>';
     echo '<button type="submit" class="secondary">' . e(t('admin.media_renamer.update_preview_button', 'Update preview')) . '</button>';
     echo '</form>';
 }

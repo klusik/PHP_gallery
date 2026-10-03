@@ -32,6 +32,9 @@ $galleryPage = module_source($root . '/app/controllers/admin_galleries_edit_page
 $gallerySave = (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_actions.php');
 $imageEdit = (string) file_get_contents($root . '/app/controllers/admin_public_inline.php');
 $imageEditView = (string) file_get_contents($root . '/app/views/admin_public_inline.php');
+$creationController = (string) file_get_contents($root . '/app/controllers/admin_galleries_discovery.php');
+$creationService = strstr((string) file_get_contents($root . '/app/services/gallery_sidecars.php'), 'function create_empty_gallery_owned');
+$formModels = (string) file_get_contents($root . '/app/controllers/admin_gallery_form_models.php');
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');
 $openaiService = (string) file_get_contents($root . '/app/services/openai_text_assist.php');
 $openaiBrowser = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-openai-text-assist.js');
@@ -63,5 +66,12 @@ admin_content_assert(str_contains($view, 'view_render_content_translation_sugges
 admin_content_assert(str_contains($openaiService, "'translate_text' =>") && str_contains($openaiService, "'de' =>") && str_contains($openaiService, "'sv' =>"), 'OpenAI translation task does not cover all maintained languages.');
 admin_content_assert(str_contains($openaiBrowser, "task === 'translate_text' ? sourceText"), 'Translation suggestion does not send the source field.');
 admin_content_assert(str_contains($view, 'data-openai-status') && !str_contains($view, 'content_save_localizations('), 'Suggestion UI must remain draft-only.');
+
+admin_content_assert(str_contains($formModels, "'default_source_language' => \$entityType") && str_contains($formModels, '? translation_public_language()'), 'The default source language must come from configured public display language.');
+admin_content_assert(str_contains($view, "if (\$sourceLanguage === '' && \$entityType === 'gallery')") && str_contains($view, "['default_source_language']"), 'Only unspecified gallery source language may use the prepared public default.');
+
+admin_content_assert(str_contains($creationController, "'translations' => is_array(\$input['translations']") && str_contains($creationController, "\$formModel['localization']['translations'] = \$formModel['submitted']['translations'];"), 'Creation must preserve translated draft input and its validation retry.');
+admin_content_assert(str_contains($creationService, "content_save_localizations('gallery', (int) \$gallery['id'], \$contentLanguage, \$translations);"), 'Creation must persist all generated translation drafts through the shared localization owner.');
+admin_content_assert(strpos($creationService, "schema_inspection_is_available(content_localization_schema_status('gallery'))") < strpos($creationService, 'if (!mkdir(') && str_contains($creationService, "\$contentLanguage !== '' || \$translations !== []"), 'Source or translated creation content requires verified schema before a directory is created.');
 
 echo "Admin content localization checks passed.\n";

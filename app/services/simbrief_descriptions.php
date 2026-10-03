@@ -291,6 +291,182 @@ function simbrief_description_generate_for_identifier(string $pilotId, string $p
 }
 
 /**
+ * Build deterministic description drafts for the maintained content languages.
+ *
+ * @param array<string,mixed> $details Normalized SimBrief flight details.
+ * @param string $sourceLanguage Selected language for the main description field.
+ * @param array<int,string> $languages Languages whose translation fields are available.
+ * @return array{description:string,translations:array<string,string>,source_language:string} Drafts for the existing gallery form fields.
+ */
+function simbrief_description_localized_drafts(array $details, string $sourceLanguage, array $languages): array
+{
+    $supported = function_exists(__NAMESPACE__ . '\\content_supported_languages')
+        ? content_supported_languages()
+        : ['en'];
+    $languages = array_values(array_unique(array_filter(
+        $languages,
+        /** Keep translation fields limited to supported string language codes.
+         * @param scalar|null|array<array-key,mixed>|object|resource $language Candidate content-language value; only supported strings are accepted.
+         * @return bool Whether the language is supported.
+         */
+        static fn (mixed $language): bool => is_string($language) && in_array($language, $supported, true)
+    )));
+    $sourceLanguage = in_array($sourceLanguage, $supported, true) ? $sourceLanguage : 'en';
+    $translations = [];
+    foreach ($languages as $language) {
+        $translations[$language] = simbrief_description_build_localized_markdown($details, $language);
+    }
+
+    return [
+        'description' => simbrief_description_build_localized_markdown($details, $sourceLanguage),
+        'translations' => $translations,
+        'source_language' => $sourceLanguage,
+    ];
+}
+
+/**
+ * Build one language's stable prose around the normalized flight data.
+ *
+ * @param array<string,mixed> $details Normalized SimBrief flight details.
+ * @param string $language Maintained content language.
+ * @return string Editable Markdown description.
+ */
+function simbrief_description_build_localized_markdown(array $details, string $language): string
+{
+    if ($language === 'en') {
+        return simbrief_description_build_markdown($details);
+    }
+
+    $templates = [
+        'cs' => [
+            'opening' => '**{route}** je plánován jako let {aircraft} z letiště {origin} na letiště {destination}.',
+            'opening_empty_aircraft' => '**{route}** je plánován jako let v simulátoru z letiště {origin} na letiště {destination}.',
+            'flight' => 'let {value}', 'cruise' => 'plánovaná cestovní hladina `{value}`', 'ete' => 'odhadovaná doba letu {value}',
+            'context' => 'Letový plán uvádí {values}.', 'route' => 'SimBrief podal trasu `{value}`.',
+            'origin_runway' => 'odletovou dráhu {value}', 'destination_runway' => 'příletovou dráhu {value}',
+            'runways' => 'Plán uvádí také {values}.', 'alternate' => 'Záložním letištěm je `{value}`.',
+            'distance' => 'plánovanou vzdálenost {value}', 'passengers' => '{value} cestujících', 'fuel' => 'palivo {value}', 'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'Pro galerii tvoří letový plán přehledný záznam: ', 'dispatch_close' => '. Fotografie tak doplní plánovaný příběh letu.',
+        ],
+        'de' => [
+            'opening' => '**{route}** ist als Flug mit {aircraft} von {origin} nach {destination} geplant.',
+            'opening_empty_aircraft' => '**{route}** ist als Flugsimulationsflug von {origin} nach {destination} geplant.',
+            'flight' => 'Flug {value}', 'cruise' => 'geplante Reiseflughöhe `{value}`', 'ete' => 'voraussichtliche Flugzeit {value}',
+            'context' => 'Der OFP nennt {values}.', 'route' => 'SimBrief hat die Route als `{value}` eingereicht.',
+            'origin_runway' => 'Startbahn {value}', 'destination_runway' => 'Landebahn {value}',
+            'runways' => 'Der Plan nennt außerdem {values}.', 'alternate' => 'Der angegebene Ausweichflughafen ist `{value}`.',
+            'distance' => 'geplante Entfernung {value}', 'passengers' => '{value} Passagiere', 'fuel' => 'Treibstoff {value}', 'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'Für die Galerie bietet der Flug einen klaren Planungsrahmen: ', 'dispatch_close' => '. Die Fotos ergänzen so die geplante Fluggeschichte.',
+        ],
+        'sv' => [
+            'opening' => '**{route}** planerades som en flygning med {aircraft} från {origin} till {destination}.',
+            'opening_empty_aircraft' => '**{route}** planerades som en flygsimuleringsflygning från {origin} till {destination}.',
+            'flight' => 'flygning {value}', 'cruise' => 'planerad marschhöjd `{value}`', 'ete' => 'beräknad flygtid {value}',
+            'context' => 'OFP:n anger {values}.', 'route' => 'SimBrief lämnade rutten som `{value}`.',
+            'origin_runway' => 'startbana {value}', 'destination_runway' => 'landningsbana {value}',
+            'runways' => 'Planen anger även {values}.', 'alternate' => 'Alternativflygplatsen är `{value}`.',
+            'distance' => 'planerad distans {value}', 'passengers' => '{value} passagerare', 'fuel' => 'bränsle {value}', 'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'För galleriet ger detta en tydlig planeringsram: ', 'dispatch_close' => '. Bilderna kompletterar flygningens planerade berättelse.',
+        ],
+    ];
+    $template = $templates[$language] ?? $templates['sv'];
+    $originCode = simbrief_description_markdown_code($details['origin_code'] ?? '');
+    $destinationCode = simbrief_description_markdown_code($details['destination_code'] ?? '');
+    /** Replace a phrase's value placeholder with sanitized Markdown text.
+     * @param string $text Localized phrase template.
+     * @param string $value Sanitized phrase value.
+     * @return string Completed localized phrase.
+     */
+    $replace = static fn (string $text, string $value): string => str_replace('{value}', $value, $text);
+    $origin = simbrief_description_place_label((string) ($details['origin_name'] ?? ''), $originCode);
+    $destination = simbrief_description_place_label((string) ($details['destination_name'] ?? ''), $destinationCode);
+    $aircraft = simbrief_description_markdown_text((string) ($details['aircraft'] ?? ''));
+    $parameters = [
+        '{route}' => $originCode . ' → ' . $destinationCode,
+        '{aircraft}' => $aircraft,
+        '{origin}' => $origin,
+        '{destination}' => $destination,
+    ];
+    $opening = $aircraft === '' ? $template['opening_empty_aircraft'] : $template['opening'];
+    $paragraphs = [strtr($opening, $parameters)];
+    $context = [];
+    foreach (['flight_label' => 'flight', 'cruise' => 'cruise', 'ete' => 'ete'] as $field => $label) {
+        $value = $field === 'flight_label' || $field === 'cruise'
+            ? simbrief_description_markdown_code((string) ($details[$field] ?? ''))
+            : simbrief_description_markdown_text((string) ($details[$field] ?? ''));
+        if ($value !== '') {
+            $context[] = $replace($template[$label], $value);
+        }
+    }
+    if ($context !== []) {
+        $paragraphs[] = str_replace('{values}', simbrief_description_join_localized($context, $language), $template['context']);
+    }
+    $routeParts = [];
+    $route = simbrief_description_markdown_code(simbrief_description_shorten((string) ($details['route'] ?? ''), 300));
+    if ($route !== '') {
+        $routeParts[] = $replace($template['route'], $route);
+    }
+    $runways = [];
+    foreach (['origin_runway' => 'origin_runway', 'destination_runway' => 'destination_runway'] as $field => $label) {
+        $value = simbrief_description_markdown_text((string) ($details[$field] ?? ''));
+        if ($value !== '') {
+            $runways[] = $replace($template[$label], $value);
+        }
+    }
+    if ($runways !== []) {
+        $routeParts[] = str_replace('{values}', simbrief_description_join_localized($runways, $language), $template['runways']);
+    }
+    $alternate = simbrief_description_markdown_code((string) ($details['alternate_code'] ?? ''));
+    if ($alternate !== '') {
+        $routeParts[] = $replace($template['alternate'], $alternate);
+    }
+    if ($routeParts !== []) {
+        $paragraphs[] = implode(' ', $routeParts);
+    }
+    $dispatch = [];
+    foreach (['distance' => 'distance', 'passengers' => 'passengers', 'fuel' => 'fuel', 'airac' => 'airac'] as $field => $label) {
+        $value = simbrief_description_markdown_text((string) ($details[$field] ?? ''));
+        if ($value !== '') {
+            $dispatch[] = $replace($template[$label], $value);
+        }
+    }
+    if ($dispatch !== []) {
+        $paragraphs[] = $template['dispatch_open'] . simbrief_description_join_localized($dispatch, $language) . $template['dispatch_close'];
+    }
+    return trim(implode("\n\n", $paragraphs));
+}
+
+/**
+ * Join localized phrases without leaking English connective prose into drafts.
+ *
+ * @param array<int,string> $parts Non-empty phrases.
+ * @param string $language Maintained content language.
+ * @return string Joined localized phrases.
+ */
+function simbrief_description_join_localized(array $parts, string $language): string
+{
+    $parts = array_values(array_filter(
+        array_map('trim', $parts),
+        /** Omit blank localized phrases after trimming whitespace.
+         * @param string $part Candidate phrase.
+         * @return bool Whether the phrase should remain in the joined text.
+         */
+        static fn (string $part): bool => $part !== ''
+    ));
+    if (count($parts) < 2) {
+        return $parts[0] ?? '';
+    }
+    $conjunction = match ($language) {
+        'cs' => 'a',
+        'de' => 'und',
+        'sv' => 'och',
+        default => 'and',
+    };
+    $last = array_pop($parts);
+    return implode(', ', $parts) . ' ' . $conjunction . ' ' . $last;
+}
+
+/**
  * Extract the flight details used by the prose generator.
  *
  * @param array $payload Payload value.

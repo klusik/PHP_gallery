@@ -374,13 +374,15 @@ namespace {
 
     $themeSource = (string) file_get_contents($root . '/app/views/admin_theme.php');
     $wizardJavascript = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-setup-wizard.js');
+    $galleryJavascript = (string) file_get_contents($root . '/public/assets/gallery.js');
     $wizardStyles = (string) file_get_contents($root . '/public/assets/styles/admin-setup-wizard.css');
     admin_setup_wizard_render_assert(str_contains($wizardStyles, '.admin-setup-wizard-progress .is-active .wizard-progress-label') && str_contains($wizardStyles, 'display: none;'), 'Progress CSS must hide non-active labels while preserving numbered markers.');
     admin_setup_wizard_render_assert(!str_contains($wizardStyles, '.admin-setup-wizard-progress {\n    overflow-x: auto'), 'Progress bar must not reintroduce a horizontal scrollbar.');
     admin_setup_wizard_render_assert(str_contains($wizardStyles, '.admin-setup-wizard-progress-nav {') && str_contains($wizardStyles, 'overflow: hidden;'), 'Progress navigation must clip accidental horizontal overflow instead of exposing a scrollbar.');
     admin_setup_wizard_render_assert(substr_count($themeSource, 'data-theme-live-preview') === 1, 'Theme source must define preview markup only in the shared helper.');
     admin_setup_wizard_render_assert(str_contains($themeSource, 'view_render_admin_theme_live_preview(array_replace(') && str_contains($viewSource, 'view_render_admin_theme_live_preview($preview)'), 'Original Theme and wizard must call the same preview renderer with prepared presentation data.');
-    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20261002-theme-layout-v1"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
+    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20261003-gallery-grid-v1"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
+    admin_setup_wizard_render_assert(str_contains($galleryJavascript, "admin-setup-wizard.js?v=20261003-gallery-grid-v1"), 'Gallery entrypoint must version the changed setup wizard module.');
     admin_setup_wizard_render_assert(array_values(array_unique($GLOBALS['admin_setup_wizard_render_translation_calls'] ?? [])) !== [], 'Focused rendering must exercise only the explicit translation presentation boundary.');
 
     echo "Admin setup wizard rendering tests passed.\n";

@@ -57,8 +57,6 @@ use function Gallery\Services\gallery_effective_gps_map_enabled;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
 use function Gallery\Services\gallery_filename_display_schema_ready;
-use function Gallery\Services\gallery_flight_map_row;
-use function Gallery\Services\gallery_flight_map_unresolved_from_row;
 use function Gallery\Services\gallery_gps_map_storage_value;
 use function Gallery\Services\gallery_grid_form_columns;
 use function Gallery\Services\gallery_grid_form_rows;
@@ -85,34 +83,6 @@ use function Gallery\Views\render_admin_thumbnail_bound_slider;
  */
 function admin_edit_gallery_render_display_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
-    $flightMap = ['state' => 'hidden'];
-    if ($capabilities['flight_map_ready']) {
-        // $flightMapRow stores the existing route-map data shown in the editor.
-        $flightMapRow = gallery_flight_map_row((int) $gallery['id']);
-        // $flightRouteText stores the raw route text that will be resolved during save.
-        $flightRouteText = (string) ($flightMapRow['route_text'] ?? '');
-        // $flightPointCount stores how many route points are ready for display.
-        $flightPointCount = (int) ($flightMapRow['point_count'] ?? 0);
-        // $flightUnresolved stores unresolved diagnostics from the last save.
-        $flightUnresolved = $flightMapRow ? gallery_flight_map_unresolved_from_row($flightMapRow) : [];
-        $flightMap = [
-            'state' => 'ready',
-            'title' => t('admin.gallery_editor.flight_route_map', 'Flight route map'),
-            'label' => t('admin.gallery_editor.flight_route_label', 'Route text'),
-            'route_text' => $flightRouteText,
-            'help' => t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery stores one resolved route map. The SimBrief generator saves the latest OFP with the gallery and writes OFP coordinates here automatically. Manual routes still support local lookup and NAME@latitude,longitude entries.'),
-            'status' => t('admin.gallery_editor.flight_route_status', 'Resolved points: {points}. Unresolved skipped: {unresolved}.', [
-                'points' => (string) $flightPointCount,
-                'unresolved' => (string) count($flightUnresolved),
-            ]),
-        ];
-    } elseif ($capabilities['flight_map_feature_enabled']) {
-        $flightMap = [
-            'state' => 'migration',
-            'migration_message' => t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.'),
-        ];
-    }
-
     $gps = ['state' => 'hidden'];
     if ($capabilities['gps_map_override_ready']) {
         // $currentGpsMapOverride stores the explicit override saved on this gallery, or null for inherited behavior.
@@ -230,14 +200,26 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
         $galleryUsesCustomGrid = gallery_grid_has_explicit_override($gallery);
         // $effectiveGridSettings stores the grid currently affecting this gallery before any form edits.
         $effectiveGridSettings = gallery_effective_grid_settings($gallery);
-        // $gridColumns stores the form value. In inherit mode it previews the currently effective inherited/default value.
-        $gridColumns = gallery_grid_form_columns($gallery);
-        // $gridRows stores the form value. In inherit mode it previews the currently effective inherited/default value.
-        $gridRows = gallery_grid_form_rows($gallery);
+        // $inheritedGridSettings stores the nearest eligible parent grid or current global fallback.
+        $inheritedGridSettings = $effectiveGridSettings;
+        if ($galleryUsesCustomGrid) {
+            $inheritedGallery = $gallery;
+            $inheritedGallery['grid_columns'] = null;
+            $inheritedGallery['grid_rows'] = null;
+            $inheritedGridSettings = gallery_effective_grid_settings($inheritedGallery);
+        }
+        // $gridColumns/$gridRows preview the saved override or the inherited dimensions until edited.
+        $gridColumns = $galleryUsesCustomGrid ? gallery_grid_form_columns($gallery) : (int) ($inheritedGridSettings['columns'] ?? $effectiveGridSettings['columns']);
+        $gridRows = $galleryUsesCustomGrid ? gallery_grid_form_rows($gallery) : (int) ($inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']);
         $grid += [
             'title' => t('admin.gallery_editor.display_grid', 'Display grid'),
             'override_enabled' => $galleryUsesCustomGrid,
             'override_label' => t('admin.gallery_editor.use_custom_grid', 'Use a custom grid for this gallery'),
+            'default_status_label' => t('admin.gallery_editor.grid_default_status', 'Default settings'),
+            'custom_status_label' => t('admin.gallery_editor.grid_custom_status', 'Custom settings'),
+            'reset_default_label' => t('admin.gallery_editor.grid_reset_default', 'Reset to default'),
+            'default_columns' => (int) ($inheritedGridSettings['columns'] ?? $effectiveGridSettings['columns']),
+            'default_rows' => (int) ($inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']),
             'columns_label' => t('admin.gallery_editor.columns', 'Columns'),
             'rows_label' => t('admin.gallery_editor.rows', 'Rows'),
             'columns' => $gridColumns,
@@ -246,7 +228,6 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
             'max_rows' => CMS_PAGINATION_MAX_ROWS,
             'use_for_subgalleries' => (int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1,
             'recursive_label' => t('admin.gallery_editor.use_for_subgalleries', 'Use for subgalleries'),
-            'source_text' => t('admin.gallery_editor.current_source', 'Current source: {source}.', ['source' => (string) ($effectiveGridSettings['grid_source'] ?? 'global')]),
             'help' => t('admin.gallery_editor.grid_inheritance_help', 'If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.'),
         ];
     }
@@ -299,7 +280,6 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
             'help' => t('admin.gallery_editor.show_file_names_help', 'Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.'),
             'migration_message' => t('admin.gallery_editor.filename_display_migration_hidden', 'File name display control will be available after the database migration is applied.'),
         ],
-        'flight_map' => $flightMap,
         'gps' => $gps,
         'description_layout' => $descriptionLayout,
         'count_badge' => $countBadge,

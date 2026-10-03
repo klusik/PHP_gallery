@@ -8,11 +8,11 @@
  * Module Type: Service
  *
  * Purpose:
- *   Keep private short-lived OFP drafts for pre-create SimBrief previews.
+ *   Keep private short-lived OFP drafts for gallery editor previews.
  *
  * Responsibilities:
  *   - Bind bounded drafts to an administrator and session
- *   - Validate expiry and attach a previewed OFP after gallery creation
+ *   - Validate expiry and attach a previewed OFP after gallery save
  *
  * Author:
  *   Rudolf Klusal
@@ -35,7 +35,7 @@ use RuntimeException;
  * Bound the lifetime of a private pre-create OFP reference.
  * Type: int.
  * Units: seconds.
- * Scope: one administrator's pending gallery creation.
+ * Scope: one administrator's pending gallery editor session.
  * Consumers: draft creation, validation, and pruning.
  * Rationale: short expiry limits retained personal flight data.
  */
@@ -153,7 +153,7 @@ function simbrief_description_draft_prune(string $directory): void
 }
 
 /**
- * Attach a previously previewed OFP to the newly created gallery.
+ * Attach a previously previewed OFP to a persisted gallery.
  *
  * @param array<string,mixed> $gallery Persisted gallery row.
  * @param array<string,mixed> $draft Validated private draft.

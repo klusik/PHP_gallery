@@ -31,6 +31,7 @@
  */
 
 import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
+import { setupAdminGalleryGridControls } from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
 
 /**
  * Theme and pagination form helpers
@@ -314,34 +315,6 @@ function setupThemeDescriptionLayoutPicker(form) {
     select.addEventListener('change', syncPressedState);
     syncPressedState();
 }
-
-
-/**
- * Automatically enables a per-gallery grid override when the admin edits its sliders.
- *
- * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
- * form will persist those numbers as a custom gallery grid, instead of silently
- * treating the gallery as inherited because the override checkbox was forgotten.
- */
-function setupGalleryGridOverrideAutoEnable() {
-    // overrideControl stores the checkbox deciding whether this gallery owns a grid.
-    const overrideControl = document.querySelector('[data-gallery-grid-override-enabled]');
-    if (!overrideControl) {
-        return;
-    }
-
-    // gridControls stores the per-gallery sliders that imply an explicit override.
-    const gridControls = document.querySelectorAll('[data-gallery-grid-columns], [data-gallery-grid-rows]');
-    gridControls.forEach((control) => {
-        control.addEventListener('input', () => {
-            overrideControl.checked = true;
-        });
-        control.addEventListener('change', () => {
-            overrideControl.checked = true;
-        });
-    });
-}
-
 
 
 /**
@@ -991,7 +964,7 @@ export function setupThemeOverrideForm() {
     syncGridRangeDisplay('[data-home-grid-rows]', '[data-home-grid-rows-display]');
     syncGridRangeDisplay('[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]');
     syncGridRangeDisplay('[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]');
-    setupGalleryGridOverrideAutoEnable();
+    setupAdminGalleryGridControls(document);
     setupThumbnailBoundControls();
 
     // form stores state or configuration for the gallery front-end flow.

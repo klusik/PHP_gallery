@@ -498,7 +498,7 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
         'skipped' => number_format((int) ($flightNavdataStatus['last_skipped'] ?? 0)),
         'deleted' => number_format((int) ($flightNavdataStatus['last_deleted'] ?? 0)),
     ])) . '</p>';
-    echo '<p class="muted">' . e(t('admin.dashboard.flight_navdata_hybrid_status', 'Bundled fallback points: {bundled}. SimBrief OFPs are stored per gallery when imported.', [
+    echo '<p class="muted">' . e(t('admin.dashboard.flight_navdata_hybrid_status', 'Bundled fallback points: {bundled}. SimBrief OFPs are stored per gallery when the generated draft is saved.', [
         'bundled' => (int) ($hybridStatus['bundled_count'] ?? 0),
     ])) . '</p>';
     echo '<p class="muted">' . e(t('admin.navdata.refresh_schedule', 'When this widget is visible, data older than a week refreshes in the background.')) . '</p></details>';

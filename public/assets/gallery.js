@@ -52,7 +52,7 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
-import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261002-theme-layout-v1';
+import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261003-gallery-grid-v1';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261003-shared-gallery-tags-v3';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
@@ -60,22 +60,22 @@ import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
-import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
-import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260925-compact-identifier-v1';
-import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20260925-compact-editor-v2';
+import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
+import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261003-admin-language-scope-v1';
+import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261003-images-v4';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
-import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
+import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261002-upload-settings-v1';
 import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261002-gallery-tree-v3';
-import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261002-theme-layout-v1';
+import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261003-gallery-grid-v1';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20261002-update-notes-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
-import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260902-mutation-stage3-part6-v1';
+import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20261003-admin-scoped-i18n-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';
 import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20260927-cooperative-complete-v4';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
@@ -90,7 +90,7 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261003-images-v4';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261003-scoped-i18n-v2';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -110,7 +110,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261003-images-v4';
+} from './gallery-modules/admin-operations.js?v=20261003-compact-media-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
