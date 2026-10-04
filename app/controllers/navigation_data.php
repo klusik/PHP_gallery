@@ -43,8 +43,14 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Services\admin_dashboard_notice_messages;
 use function Gallery\Services\flight_map_navdata_status;
+use function Gallery\Services\flight_map_navdata_refresh;
+use function Gallery\Services\find_gallery;
 use function Gallery\Services\navigation_data_navigraph_authorization_url;
 use function Gallery\Services\navigation_data_navigraph_disconnect;
 use function Gallery\Services\navigation_data_navigraph_exchange_code;
@@ -83,6 +89,53 @@ function cms_admin_navdata(): void
         'navdata_status' => $navdataStatus,
         'notices' => admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice')),
     ]);
+}
+
+/**
+ * Refresh due local navigation data independently of a gallery editor save.
+ *
+ * @return void Emits canonical completion without replacing the editor or its draft.
+ */
+function cms_admin_route_navdata_refresh(): void
+{
+    require_admin();
+    header('Cache-Control: private, no-store');
+    if (request_method() !== 'POST') {
+        navigation_data_json_response(['ok' => false, 'message' => 'POST required.'], 405);
+        return;
+    }
+    verify_csrf();
+    $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
+    if ($galleryId > 0 && find_gallery($galleryId, true) === null) {
+        navigation_data_json_response(['ok' => false, 'message' => 'Gallery not found.'], 404);
+        return;
+    }
+    // Authenticate and validate CSRF first, then release the session for parallel saves.
+    session_write_close();
+    ignore_user_abort(true);
+    try {
+        $outcome = flight_map_navdata_refresh(true, $galleryId);
+        $contexts = [];
+        $gallery = !empty($outcome['route_updated']) ? find_gallery($galleryId, true) : null;
+        if (is_array($gallery)) {
+            $contexts[] = admin_mutation_public_gallery_context($galleryId, gallery_public_url($gallery));
+            $parentId = (int) ($gallery['parent_id'] ?? 0);
+            $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+            $contexts[] = admin_mutation_public_gallery_context($parentId, is_array($parent) ? gallery_public_url($parent) : url_for('home'));
+        }
+        $payload = admin_mutation_success_envelope('',
+            is_array($gallery)
+                ? admin_mutation_descriptor('gallery.flight_route_resolve', 'gallery', 'update', [$galleryId])
+                : admin_mutation_descriptor('navigation_data.refresh', 'navigation_data', 'refresh'),
+            null, $contexts, []);
+        $payload['state'] = $outcome['state'];
+        navigation_data_json_response($payload);
+    } catch (Throwable $exception) {
+        admin_log_event('warning', 'flight_map.route_navdata_failed', 'Background route navigation-data refresh failed.', [
+            'gallery_id' => $galleryId, 'exception_class' => $exception::class,
+        ]);
+        navigation_data_json_response(['ok' => false, 'message' => t('admin.dashboard.navdata_refresh_unavailable', 'Navigation data could not be refreshed. The gallery can still be saved.')], 503);
+    }
 }
 
 /**

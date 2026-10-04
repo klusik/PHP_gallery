@@ -153,6 +153,26 @@ export const ADMIN_NAVDATA_LOOKUP_MIN_CHARACTERS = 2;
 export const ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS = 250;
 
 /**
+ * Delay editor navdata checks while another request owns the installation import.
+ * @var {number}
+ * Units: milliseconds. Scope: background route navigation-data lock contention.
+ * Consumers: admin-route-navdata.js.
+ * Rationale: Avoid polling the database/import lock on every browser input task.
+ * Range: fixed positive integer; changes require review of the bounded busy retry budget.
+ */
+export const ADMIN_ROUTE_NAVDATA_BUSY_RETRY_MS = 1500;
+
+/**
+ * Bound retries waiting for an installation-wide navigation-data import.
+ * @var {number}
+ * Units: retry attempts. Scope: one background route freshness task.
+ * Consumers: admin-route-navdata.js.
+ * Rationale: Allow two minutes for an active importer without an indefinite browser polling loop.
+ * Range: fixed positive integer; changes require review together with the retry delay.
+ */
+export const ADMIN_ROUTE_NAVDATA_BUSY_RETRIES = 80;
+
+/**
  * Telemetry window used when the report selector is absent, empty or non-finite.
  * @var {number}
  * Units: days. Scope: report input fallback, not an override of a selected window.

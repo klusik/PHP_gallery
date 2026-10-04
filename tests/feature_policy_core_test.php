@@ -218,6 +218,20 @@ namespace {
     feature_policy_core_assert(feature_flag_for_route('download_all') === null, 'Legacy download_all must remain a core route outside the optional downloads capability.');
 
     $smartLightboxRequirement = feature_capability_route_requirement('smart_gallery_lightbox_data');
+    $routeNavdataRequirement = feature_capability_route_requirement('admin_route_navdata_refresh');
+    feature_policy_core_assert(
+        is_array($routeNavdataRequirement)
+            && $routeNavdataRequirement['type'] === 'all_of'
+            && $routeNavdataRequirement['capabilities'] === ['navigation_data', 'flight_maps']
+            && feature_flag_for_route('admin_route_navdata_refresh') === null,
+        'Background route freshness must require both Flight Maps and Navigation Data.'
+    );
+    foreach (['navigation_data', 'flight_maps'] as $requiredCapability) {
+        set_feature_capability_enabled($requiredCapability, false);
+        feature_policy_core_assert(!feature_flag_route_enabled('admin_route_navdata_refresh'), 'Either disabled capability must refuse route refresh: ' . $requiredCapability);
+        set_feature_capability_enabled($requiredCapability, true);
+    }
+    feature_policy_core_assert(feature_flag_route_enabled('admin_route_navdata_refresh'), 'Enabled route capabilities must expose the automatic refresh.');
     feature_policy_core_assert(
         is_array($smartLightboxRequirement)
             && ($smartLightboxRequirement['type'] ?? null) === 'all_of'

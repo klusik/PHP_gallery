@@ -32,6 +32,8 @@ namespace Gallery\Core {
     function flash_message(string $key, ?string $value = null): string { return ''; }
     /** Record the non-JavaScript destination. @param string $url Owned route. @return void Stores the fallback destination. */
     function redirect_to(string $url): void { $GLOBALS['nav_ui_redirect'] = $url; }
+    /** Return a confined public gallery URL. @param array<string,mixed> $gallery Fixture gallery. @return string Local render route. */
+    function gallery_public_url(array $gallery): string { return '/index.php?page=gallery&id=' . (int) $gallery['id']; }
 }
 
 namespace Gallery\Services {
@@ -50,9 +52,18 @@ namespace Gallery\Services {
     /** Return one prepared import/source snapshot. @return array<string,mixed> Offline status. */
     function flight_map_navdata_status(): array { $GLOBALS['nav_ui_status_reads']++; return $GLOBALS['nav_ui_status']; }
     /** Simulate a successful import without storage or HTTP.
-     * @param bool $onlyIfDue Whether this is a periodic check. @return array{state:string,result:array<string,int>} Fixture outcome.
+     * @param bool $onlyIfDue Whether this is a periodic check.
+     * @param int $galleryId Saved gallery identity for completion.
+     * @return array<string,mixed> Fixture outcome.
      */
-    function flight_map_navdata_refresh(bool $onlyIfDue = false): array { return ['state' => 'updated', 'result' => ['airports' => 100, 'navaids' => 20, 'skipped' => 2, 'deleted' => 3]]; }
+    function flight_map_navdata_refresh(bool $onlyIfDue = false, int $galleryId = 0): array {
+        $GLOBALS['nav_ui_refresh_args'] = [$onlyIfDue, $galleryId];
+        $GLOBALS['nav_ui_refresh_session'] = session_status();
+        if (!empty($GLOBALS['nav_ui_fail'])) throw new \RuntimeException('Private provider error');
+        return $GLOBALS['nav_ui_outcome'] ?? ['state' => 'updated', 'result' => ['airports' => 100, 'navaids' => 20, 'skipped' => 2, 'deleted' => 3]];
+    }
+    /** Find only disposable gallery identities. @param int $id Gallery identity. @param bool $refresh Fresh read request. @return ?array Fixture row or null. */
+    function find_gallery(int $id, bool $refresh = false): ?array { return in_array($id, [41, 42], true) ? ['id' => $id, 'slug' => 'fixture-' . $id, 'parent_id' => $id === 41 ? 42 : 0] : null; }
     /** Return prepared notices. @param array<string,mixed> $query Request query. @param string $flash Existing notice. @return list<string> Empty fixture notices. */
     function admin_dashboard_notice_messages(array $query, string $flash): array { return []; }
     /** Accept confined audit events. @param string $level Severity. @param string $event Event name. @param string $message Description. @param array<string,mixed> $details Metadata. @return void No external logging. */
@@ -65,6 +76,7 @@ namespace {
     require_once __DIR__ . '/../app/helpers_mutation.php';
     require_once __DIR__ . '/../app/views/admin_dashboard.php';
     require_once __DIR__ . '/../app/views/navigation_data.php';
+    require_once __DIR__ . '/../app/views/admin_gallery_forms.php';
     require_once __DIR__ . '/../app/controllers/admin_dashboard.php';
     require_once __DIR__ . '/../app/controllers/navigation_data.php';
     $GLOBALS['nav_ui_auth'] = $GLOBALS['nav_ui_csrf'] = $GLOBALS['nav_ui_status_reads'] = 0;
@@ -99,5 +111,28 @@ namespace {
         nav_ui_assert($GLOBALS['nav_ui_redirect'] === \Gallery\Core\url_for($expected), 'No-JavaScript POST returns to its owned surface.');
     }
     nav_ui_assert($GLOBALS['nav_ui_auth'] === 7 && $GLOBALS['nav_ui_csrf'] === 6, 'Every persistent request keeps authentication and CSRF checks.');
+    $GLOBALS['nav_ui_method'] = 'GET';
+    ob_start(); \Gallery\Controllers\cms_admin_route_navdata_refresh(); $refusal = json_decode((string) ob_get_clean(), true);
+    nav_ui_assert(http_response_code() === 405 && !$refusal['ok'], 'Editor freshness is never a mutating GET.');
+    $GLOBALS['nav_ui_method'] = 'POST';
+    $_POST = ['gallery_id' => 999, 'csrf_token' => 'fixture-csrf'];
+    ob_start(); \Gallery\Controllers\cms_admin_route_navdata_refresh(); $refusal = json_decode((string) ob_get_clean(), true);
+    nav_ui_assert(http_response_code() === 404 && !$refusal['ok'], 'Missing galleries refuse background work.');
+    foreach (['busy', 'current', 'updated'] as $state) {
+        $_POST = ['gallery_id' => 41, 'csrf_token' => 'fixture-csrf'];
+        $GLOBALS['nav_ui_outcome'] = ['state' => $state, 'result' => [], 'route_updated' => false];
+        ob_start(); \Gallery\Controllers\cms_admin_route_navdata_refresh(); $payload = json_decode((string) ob_get_clean(), true);
+        nav_ui_assert($payload['ok'] && $payload['state'] === $state && $payload['panel'] === null && $payload['contexts'] === [], 'Background freshness preserves the canonical envelope without replacing the editor.');
+        nav_ui_assert($GLOBALS['nav_ui_refresh_args'] === [true, 41] && $GLOBALS['nav_ui_refresh_session'] !== PHP_SESSION_ACTIVE, 'Background requests always respect due policy and release the session before downloads.');
+    }
+    $GLOBALS['nav_ui_outcome'] = ['state' => 'current', 'result' => [], 'route_updated' => true];
+    ob_start(); \Gallery\Controllers\cms_admin_route_navdata_refresh(); $payload = json_decode((string) ob_get_clean(), true);
+    nav_ui_assert($payload['mutation']['entity_ids'] === [41] && $payload['mutation']['type'] === 'gallery.flight_route_resolve' && array_column($payload['contexts'], 'gallery_id') === [41, 42], 'Completed saved routes identify the affected gallery and parent for canonical public refresh.');
+    $GLOBALS['nav_ui_fail'] = true;
+    ob_start(); \Gallery\Controllers\cms_admin_route_navdata_refresh(); $refusal = json_decode((string) ob_get_clean(), true);
+    nav_ui_assert(http_response_code() === 503 && !$refusal['ok'] && !str_contains(json_encode($refusal), 'Private provider error'), 'Import failures expose a safe error independently of Save.');
+    nav_ui_assert($GLOBALS['nav_ui_auth'] === 14 && $GLOBALS['nav_ui_csrf'] === 12, 'Background mutation retains authentication and CSRF on every POST.');
+    ob_start(); \Gallery\Views\view_render_admin_gallery_route_disclosure(['state' => 'ready', 'route_text' => 'LKPR EDDF'], ['route_navdata_url' => '/fixture-background']); $routeControl = (string) ob_get_clean();
+    nav_ui_assert(str_contains($routeControl, 'data-route-navdata-url="/fixture-background"') && str_contains($routeControl, 'name="flight_route_text"'), 'Manual route controls carry prepared refresh authority even without SimBrief.');
     echo "Admin navigation-data UI: PASS\n";
 }

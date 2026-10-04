@@ -332,6 +332,7 @@ return [
     'admin.updates.patch_notes_load_failed' => 'Poznámky k vydání se nepodařilo načíst. Zkuste to znovu.',
     'admin.dashboard.navdata_busy' => 'Navigační data se aktualizují v jiném požadavku.',
     'admin.dashboard.navdata_current' => 'Navigační data jsou aktuální.',
+    'admin.dashboard.navdata_refresh_unavailable' => 'Navigační data se nepodařilo aktualizovat. Galerii lze přesto uložit.',
     'admin.dashboard.navdata_update_in_progress' => 'Stahuji a importuji navigační data na pozadí. Ostatní stránky můžete používat.',
     'admin.dashboard.notice_navdata_updated' => 'Flight-map navdata aktualizována. Importováno {airports} identifikátorů letišť, {navaids} radionavigačních bodů, přeskočeno {skipped} řádků, odstraněno {deleted} zastaralých řádků.',
     'admin.dashboard.notice_navdata_failed' => 'Update flight-map navdata selhal: {error}',

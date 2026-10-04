@@ -118,6 +118,33 @@ function flight_maps_model_upsert(int $galleryId, string $sourceType, string $ro
 }
 
 /**
+ * Complete a captured route only while its stored payload still matches.
+ *
+ * @param array<string,mixed> $row Snapshot read before local route resolution.
+ * @param list<array<string,mixed>> $points Newly resolved coordinates.
+ * @param list<array<string,mixed>> $unresolved Remaining unresolved tokens.
+ * @param string $now Resolution timestamp.
+ * @return bool True when the snapshot was updated; false after an edit or deletion.
+ */
+function flight_maps_model_complete_route(array $row, array $points, array $unresolved, string $now): bool
+{
+    $stmt = db()->prepare('UPDATE gallery_flight_maps
+        SET resolved_points_json = ?, unresolved_points_json = ?, point_count = ?, resolved_at = ?, updated_at = ?
+        WHERE gallery_id = ? AND map_source_type = ?
+            AND BINARY route_text = BINARY ?
+            AND BINARY resolved_points_json = BINARY ?
+            AND BINARY unresolved_points_json = BINARY ? AND updated_at = ?');
+    $stmt->execute([
+        json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        json_encode(array_values($unresolved), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        count($points), $now, $now,
+        (int) $row['gallery_id'], (string) $row['map_source_type'], (string) $row['route_text'],
+        (string) $row['resolved_points_json'], (string) $row['unresolved_points_json'], (string) $row['updated_at'],
+    ]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
  * Return aggregate status for imported navigation data.
  *
  * @return array{total:int,by_kind:array<string,int>,by_source:array<string,int>} Aggregate navdata status.

@@ -337,6 +337,7 @@ return [
     'admin.updates.patch_notes_load_failed' => 'Could not load release notes. Please try again.',
     'admin.dashboard.navdata_busy' => 'Navigation data is being updated in another request.',
     'admin.dashboard.navdata_current' => 'Navigation data is current.',
+    'admin.dashboard.navdata_refresh_unavailable' => 'Navigation data could not be refreshed. The gallery can still be saved.',
     'admin.dashboard.navdata_update_in_progress' => 'Downloading and importing navigation data in the background. You can use other pages.',
     'admin.dashboard.notice_navdata_updated' => 'Updated flight-map navdata. Imported {airports} airport identifier(s), {navaids} navaid(s), skipped {skipped} row(s), removed {deleted} stale row(s).',
     'admin.dashboard.notice_navdata_failed' => 'Flight-map navdata update failed: {error}',

@@ -6415,6 +6415,7 @@
     "admin.updates.patch_notes_load_failed": "Versionsinformationen kunde inte hämtas. Försök igen.",
     "admin.dashboard.navdata_busy": "Navigationsdata uppdateras i en annan begäran.",
     "admin.dashboard.navdata_current": "Navigationsdata är aktuella.",
+    "admin.dashboard.navdata_refresh_unavailable": "Navigationsdata kunde inte uppdateras. Galleriet kan fortfarande sparas.",
     "admin.menu.legacy_upload_photos": "Ladda upp foton (äldre)",
     "admin.menu.legacy_upload_settings": "Uppladdningsinställningar (äldre)",
     "admin.menu.legacy_upload_mobile": "Mobiluppladdning (äldre)",

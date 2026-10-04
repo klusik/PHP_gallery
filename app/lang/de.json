@@ -6415,6 +6415,7 @@
     "admin.updates.patch_notes_load_failed": "Versionshinweise konnten nicht geladen werden. Bitte erneut versuchen.",
     "admin.dashboard.navdata_busy": "Navigationsdaten werden in einer anderen Anfrage aktualisiert.",
     "admin.dashboard.navdata_current": "Navigationsdaten sind aktuell.",
+    "admin.dashboard.navdata_refresh_unavailable": "Navigationsdaten konnten nicht aktualisiert werden. Die Galerie kann trotzdem gespeichert werden.",
     "admin.menu.legacy_upload_photos": "Fotos hochladen (bisherig)",
     "admin.menu.legacy_upload_settings": "Upload-Einstellungen (bisherig)",
     "admin.menu.legacy_upload_mobile": "Mobile Uploads (bisherig)",

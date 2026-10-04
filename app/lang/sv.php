@@ -274,6 +274,7 @@ return [
     'admin.updates.patch_notes_load_failed' => 'Versionsinformationen kunde inte hämtas. Försök igen.',
     'admin.dashboard.navdata_busy' => 'Navigationsdata uppdateras i en annan begäran.',
     'admin.dashboard.navdata_current' => 'Navigationsdata är aktuella.',
+    'admin.dashboard.navdata_refresh_unavailable' => 'Navigationsdata kunde inte uppdateras. Galleriet kan fortfarande sparas.',
     'admin.dashboard.navdata_update_in_progress' => 'Hämtar och importerar navigationsdata i bakgrunden. Du kan använda andra sidor.',
     'admin.dashboard.notice_navdata_updated' => 'Navigationsdata för flygkartor uppdaterades. Importerade {airports} flygplatsidentifierare, {navaids} navigationshjälpmedel, hoppade över {skipped} rad(er) och tog bort {deleted} inaktuella rad(er).',
     'admin.dashboard.notice_navdata_failed' => 'Uppdateringen av navigationsdata för flygkartor misslyckades: {error}',

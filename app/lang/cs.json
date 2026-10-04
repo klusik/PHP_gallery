@@ -6415,6 +6415,7 @@
     "admin.updates.patch_notes_load_failed": "Poznámky k vydání se nepodařilo načíst. Zkuste to znovu.",
     "admin.dashboard.navdata_busy": "Navigační data se aktualizují v jiném požadavku.",
     "admin.dashboard.navdata_current": "Navigační data jsou aktuální.",
+    "admin.dashboard.navdata_refresh_unavailable": "Navigační data se nepodařilo aktualizovat. Galerii lze přesto uložit.",
     "admin.menu.legacy_upload_photos": "Nahrát fotografie (původní)",
     "admin.menu.legacy_upload_settings": "Nastavení nahrávání (původní)",
     "admin.menu.legacy_upload_mobile": "Mobilní nahrávání (původní)",

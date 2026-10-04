@@ -154,6 +154,17 @@ $galleryEditActions = contract_file($root, 'app/controllers/admin_galleries_edit
 $publicInlineController = contract_file($root, 'app/controllers/admin_public_inline.php', $failures);
 $security = contract_file($root, 'app/security.php', $failures);
 $lightbox = contract_file($root, 'public/assets/gallery-modules/lightbox.js', $failures);
+$routeNavdata = contract_file($root, 'public/assets/gallery-modules/admin-route-navdata.js', $failures);
+$navigationController = contract_file($root, 'app/controllers/navigation_data.php', $failures);
+
+// Background route freshness uses the shared public completion coordinator and never owns editor navigation.
+contract_require($routeNavdata, 'await completeAdminMutation(payload)', 'Route navigation-data completion bypasses the canonical mutation coordinator.', $failures, $checks);
+contract_require($routeNavdata, "./admin-mutation-completion.js?v=20260902-create-delete-hotfix1", 'Route completion must share the active gallery editor coordinator instance for stale-response suppression.', $failures, $checks);
+contract_require($routeNavdata, "'php-gallery:side-panel-success'", 'Route navigation-data refresh no longer completes routes saved during an active import.', $failures, $checks);
+contract_forbid($routeNavdata, 'window.location.reload', 'Background route freshness must not reload the page.', $failures, $checks);
+contract_forbid($routeNavdata, 'window.location.href =', 'Background route freshness must not navigate the editor.', $failures, $checks);
+contract_require($navigationController, 'admin_mutation_success_envelope', 'Background navigation-data responses lost their canonical completion envelope.', $failures, $checks);
+contract_require($navigationController, 'admin_mutation_public_gallery_context', 'Completed routes no longer describe their affected public contexts.', $failures, $checks);
 
 // The coordinator must accept only the canonical successful envelope. Browser-side
 // synthesis from old top-level gallery/image/url fields would hide a broken server contract.

@@ -48,6 +48,10 @@ namespace Gallery\Services;
 function feature_capability_multi_route_requirements(): array
 {
     return [
+        'admin_route_navdata_refresh' => [
+            'type' => 'all_of',
+            'capabilities' => ['navigation_data', 'flight_maps'],
+        ],
         'gallery_map_data' => [
             'type' => 'any_of',
             'capabilities' => ['gallery_maps', 'flight_maps'],
