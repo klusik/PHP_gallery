@@ -41,14 +41,32 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Services\t;
 
-/** Safely encode browser bootstrap data without executable HTML sequences. */
-function view_maintenance_center_json(mixed $value): string
+/** Safely encode browser bootstrap data without executable HTML sequences.
+ *
+ * @param array<string, mixed>|null $value Persisted job state, localized browser strings, or null for no job.
+ * @return string Encoded JSON or an empty object when encoding fails.
+ */
+function view_maintenance_center_json(array|null $value): string
 {
     $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     return is_string($json) ? $json : '{}';
 }
 
-/** Render the dedicated Maintenance Center page. */
+/** Render the dedicated Maintenance Center page from server-prepared job state.
+ *
+ * @param array{
+ *   job?: array<string, mixed>|null,
+ *   endpoints?: array<string, string>,
+ *   dashboard?: array<string, mixed>,
+ *   available?: bool,
+ *   blocked_by_other_job?: bool,
+ *   installation_blocker?: array<string, mixed>|null,
+ *   csrf_token?: string,
+ *   storage_maintenance_url?: string,
+ *   dashboard_url?: string
+ * } $model Prepared workflow state, navigation URLs, CSRF token, and endpoints.
+ * @return void Outputs the Maintenance Center page.
+ */
 function view_render_admin_maintenance_center_page(array $model): void
 {
     $job = is_array($model['job'] ?? null) ? $model['job'] : null;
@@ -82,8 +100,8 @@ function view_render_admin_maintenance_center_page(array $model): void
         'work' => t('admin.maintenance_center.work', 'Work'),
         'unavailable' => t('admin.maintenance_center.unavailable', 'Unavailable'),
         'required' => t('admin.maintenance_center.required', 'Required'),
-        'optional' => t('admin.maintenance_center.optional', 'Optional'),
-        'no_work' => t('admin.maintenance_center.no_work', 'No work detected'),
+        'required_automatic' => t('admin.maintenance_center.required_automatic', 'Required · automatic'),
+        'no_work_count' => t('admin.maintenance_center.no_work_count', 'No work detected ({count})'),
         'estimated_rows' => t('admin.maintenance_center.estimated_rows', 'Estimated affected rows'),
         'estimated_bytes' => t('admin.maintenance_center.estimated_bytes', 'Estimated reclaimable bytes'),
         'estimated_units' => t('admin.maintenance_center.estimated_units', 'Estimated work units'),
@@ -140,9 +158,11 @@ function view_render_admin_maintenance_center_page(array $model): void
         'other_job_active' => t('admin.maintenance_center.other_job_active', 'Another administrator owns the active central maintenance job.'),
     ];
 
-    render_header(t('admin.maintenance_center.title', 'Maintenance Center'));
-    echo '<section class="hero admin-maintenance-center-hero"><div><p class="admin-kicker">' . e(t('admin.menu.maintenance', 'Maintenance')) . '</p><h1>' . e(t('admin.maintenance_center.title', 'Maintenance Center')) . '</h1><p>' . e(t('admin.maintenance_center.description', 'Analyze the installation first, review a concrete plan, then execute safe maintenance in bounded resumable steps.')) . '</p></div>';
-    echo '<nav class="nav"><a class="button secondary" href="' . e((string) ($model['dashboard_url'] ?? '')) . '">' . e(t('admin.common.dashboard', 'Dashboard')) . '</a></nav></section>';
+    $pageTitle = t('admin.maintenance_center.title', 'Maintenance Center');
+    $pageHelp = t('admin.maintenance_center.description', 'Analyze the installation first, review a concrete plan, then execute safe maintenance in bounded resumable steps.');
+    render_header($pageTitle);
+    echo '<section class="hero admin-maintenance-center-hero"><div><p class="admin-kicker">' . e(t('admin.menu.maintenance', 'Maintenance')) . '</p><div class="maintenance-center-title-row"><h1>' . e($pageTitle) . '</h1><details class="admin-inline-help"><summary aria-label="' . e($pageTitle) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($pageHelp) . '</div></details></div></div>';
+    echo '<nav class="nav maintenance-center-navigation"><a class="button secondary" href="' . e((string) ($model['storage_maintenance_url'] ?? '')) . '">' . e(t('admin.storage.tab_database_maintenance', 'DB maintenance')) . '</a><a class="button secondary" href="' . e((string) ($model['dashboard_url'] ?? '')) . '">' . e(t('admin.common.dashboard', 'Dashboard')) . '</a></nav></section>';
 
     if (!$available) {
         echo '<section class="panel notice warning"><h2>' . e(t('admin.maintenance_center.unavailable_title', 'Maintenance Center storage is not ready')) . '</h2><p>' . e(t('admin.maintenance_center.unavailable_help', 'Apply the pending Maintenance Center database migration before using this workflow. No maintenance action has been attempted.')) . '</p></section>';
@@ -181,25 +201,26 @@ function view_render_admin_maintenance_center_page(array $model): void
     echo '<script type="application/json" data-maintenance-center-i18n>' . view_maintenance_center_json($strings) . '</script>';
 
     echo '<section class="panel maintenance-center-status-card">';
-    echo '<div class="maintenance-center-status-heading"><div><p class="admin-kicker">' . e(t('admin.maintenance_center.workflow', 'Central workflow')) . '</p><h2 data-maintenance-status-title>' . e($job !== null ? (string) ($job['status'] ?? '') : $strings['idle']) . '</h2></div><span class="maintenance-center-status-badge" data-maintenance-status-badge>' . e($job !== null ? (string) ($job['status'] ?? '') : 'idle') . '</span></div>';
+    echo '<div class="maintenance-center-status-heading"><div><p class="admin-kicker">' . e(t('admin.maintenance_center.workflow', 'Central workflow')) . '</p><h2 data-maintenance-status-title>' . e($job !== null ? (string) ($job['status'] ?? '') : $strings['idle']) . '</h2></div><span class="maintenance-center-status-badge" data-maintenance-status-badge>' . e($job !== null ? (string) ($job['status'] ?? '') : 'idle') . '</span><div class="nav maintenance-center-actions" data-maintenance-actions></div></div>';
     echo '<div class="maintenance-center-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-maintenance-progress-shell><span data-maintenance-progress-bar></span></div>';
     echo '<div class="maintenance-center-progress-meta"><strong data-maintenance-progress-percent>0%</strong><span data-maintenance-progress-label></span></div>';
     echo '<div class="maintenance-center-current"><span>' . e(t('admin.maintenance_center.current_phase', 'Current phase')) . ': <strong data-maintenance-current-phase>—</strong></span><span>' . e(t('admin.maintenance_center.current_task', 'Current task')) . ': <strong data-maintenance-current-task>—</strong></span><span data-maintenance-current-subtask-wrap hidden>' . e(t('admin.maintenance_center.current_subtask', 'Subtask')) . ': <strong data-maintenance-current-subtask></strong></span></div>';
-    echo '<div class="nav maintenance-center-actions" data-maintenance-actions></div>';
     echo '<p class="muted maintenance-center-cancel-note" data-maintenance-cancel-note hidden>' . e($strings['cancel_note']) . '</p>';
     echo '<div class="notice warning" data-maintenance-browser-error hidden></div>';
     echo '</section>';
 
-    echo '<section class="panel maintenance-center-analysis-note"><strong>' . e(t('admin.maintenance_center.safety_title', 'Analyze before mutation')) . '</strong><p>' . e($strings['analysis_read_only']) . '</p></section>';
+    $showAnalysisNote = $job === null || in_array((string) ($job['status'] ?? ''), ['analyzing', 'ready'], true);
+    echo '<section class="panel maintenance-center-analysis-note" data-maintenance-analysis-note' . ($showAnalysisNote ? '' : ' hidden') . '><strong>' . e(t('admin.maintenance_center.safety_title', 'Analyze before mutation')) . '</strong><p>' . e($strings['analysis_read_only']) . '</p></section>';
 
-    echo '<section class="panel" data-maintenance-review hidden><div class="maintenance-center-section-heading"><div><p class="admin-kicker">' . e(t('admin.maintenance_center.phase_review', 'Review')) . '</p><h2>' . e($strings['review_title']) . '</h2></div><div class="maintenance-center-plan-totals" data-maintenance-plan-totals></div></div><div data-maintenance-plan-warnings></div><div class="maintenance-center-task-groups" data-maintenance-task-groups></div><label class="checkbox-row maintenance-center-full-optimize" data-maintenance-full-optimize-wrap><input type="checkbox" data-maintenance-full-optimize> ' . e($strings['full_optimize']) . '</label><p class="muted">' . e($strings['large_table_warning']) . '</p></section>';
+    echo '<section class="panel" data-maintenance-report hidden><div class="maintenance-center-section-heading"><div><p class="admin-kicker">' . e(t('admin.maintenance_center.phase_verify', 'Verify')) . '</p><h2>' . e($strings['result_title']) . '</h2></div></div><div class="metric-grid" data-maintenance-report-metrics></div><div data-maintenance-report-details></div></section>';
+
+    echo '<details class="panel maintenance-center-review" data-maintenance-review hidden><summary><span class="admin-kicker">' . e(t('admin.maintenance_center.phase_review', 'Review')) . '</span><strong>' . e($strings['review_title']) . '</strong></summary><div class="maintenance-center-review-content"><div class="maintenance-center-plan-totals" data-maintenance-plan-totals></div><div data-maintenance-plan-warnings></div><div class="maintenance-center-task-groups" data-maintenance-task-groups><div class="maintenance-center-full-optimize" data-maintenance-full-optimize-wrap hidden><label><input type="checkbox" data-maintenance-full-optimize> ' . e($strings['full_optimize']) . '</label><p class="muted">' . e($strings['large_table_warning']) . '</p></div></div><div class="nav maintenance-center-review-actions" data-maintenance-review-actions hidden></div></div></details>';
 
     echo '<section class="maintenance-center-lower-grid">';
     echo '<article class="panel"><h2>' . e($strings['recent_activity']) . '</h2><ol class="maintenance-center-activity" data-maintenance-activity><li class="muted">' . e(t('admin.maintenance_center.no_activity', 'No maintenance activity yet.')) . '</li></ol></article>';
     echo '<article class="panel"><h2>' . e(t('admin.maintenance_center.diagnostics', 'Warnings and errors')) . '</h2><div data-maintenance-diagnostics><p class="muted">' . e(t('admin.maintenance_center.no_diagnostics', 'No warnings or errors.')) . '</p></div></article>';
     echo '</section>';
 
-    echo '<section class="panel" data-maintenance-report hidden><div class="maintenance-center-section-heading"><div><p class="admin-kicker">' . e(t('admin.maintenance_center.phase_verify', 'Verify')) . '</p><h2>' . e($strings['result_title']) . '</h2></div></div><div class="metric-grid" data-maintenance-report-metrics></div><div data-maintenance-report-details></div></section>';
     echo '</div>';
 
     if ((string) ($dashboard['last_completed_at'] ?? '') !== '') {

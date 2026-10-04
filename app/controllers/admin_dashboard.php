@@ -64,6 +64,9 @@ use function Gallery\Services\admin_render_profile_span;
 use function Gallery\Services\admin_storage_statistics_cached_snapshot;
 use function Gallery\Services\admin_storage_statistics_process_job;
 use function Gallery\Services\admin_storage_statistics_start_job;
+use function Gallery\Services\admin_storage_refresh_all_start;
+use function Gallery\Services\admin_storage_refresh_all_step;
+use function Gallery\Services\admin_storage_refresh_error_payload;
 use function Gallery\Services\exif_gps_default_enabled;
 use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\dev_mode_enabled;
@@ -314,6 +317,8 @@ function cms_admin_storage_statistics(): void
 
 /**
  * Process browser-driven storage statistics update requests.
+ *
+ * @return void Emits bounded storage refresh progress as JSON.
  */
 function cms_admin_storage_statistics_update(): void
 {
@@ -325,23 +330,42 @@ function cms_admin_storage_statistics_update(): void
 
     $bufferLevel = ob_get_level();
     ob_start();
+    $action = (string) ($_POST['action'] ?? 'step');
     try {
         verify_csrf();
-        $action = (string) ($_POST['action'] ?? 'step');
-        if ($action === 'start') {
+        if ($action === 'all_start') {
+            $payload = admin_storage_refresh_all_start((int) (current_user()['id'] ?? 0));
+        } elseif ($action === 'all_step') {
+            $workflowId = strtolower(trim((string) ($_POST['workflow_id'] ?? '')));
+            $payload = admin_storage_refresh_all_step($workflowId, (int) (current_user()['id'] ?? 0));
+        } elseif ($action === 'start') {
             $state = admin_storage_statistics_start_job();
+            $payload = admin_storage_statistics_controller_payload($state);
         } else {
             $batchSize = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE)));
             $state = admin_storage_statistics_process_job($batchSize);
+            $payload = admin_storage_statistics_controller_payload($state);
         }
 
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
-        admin_storage_statistics_json_response(admin_storage_statistics_controller_payload($state));
+        admin_storage_statistics_json_response($payload);
     } catch (Throwable $exception) {
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
+        }
+        if (in_array($action, ['all_start', 'all_step'], true)) {
+            $diagnosticId = bin2hex(random_bytes(6));
+            admin_log_event('error', 'storage.refresh_all_request_failed', 'Admin storage refresh could not continue.', [
+                'action' => $action,
+                'exception_class' => $exception::class,
+                'diagnostic_id' => $diagnosticId,
+            ], ['category' => 'database', 'severity' => 'error']);
+            $payload = admin_storage_refresh_error_payload();
+            $payload['diagnostic_id'] = $diagnosticId;
+            admin_storage_statistics_json_response($payload);
+            return;
         }
         admin_log_event('error', 'storage_statistics.update_failed', 'Admin storage statistics update failed.', ['exception' => $exception->getMessage()]);
         admin_storage_statistics_json_response([
@@ -422,11 +446,13 @@ function admin_storage_statistics_controller_payload(array $state): array
 /**
  * Emit a JSON response for storage statistics endpoints.
  *
- * @param array $payload Payload value.
+ * @param array{ok?:bool,status?:string,processed?:int,total?:int,percent?:float,message?:string,workflow_id?:string,workflow_status?:string,phase?:string,phase_percent?:float,overall_percent?:float,stages?:list<array<string,mixed>>,html?:string,status_text?:string,error?:string,diagnostic_id?:string} $payload Storage update response fields in either workflow envelope.
+ * @return void Emits a no-store JSON response.
  */
 function admin_storage_statistics_json_response(array $payload): void
 {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, private, max-age=0');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 

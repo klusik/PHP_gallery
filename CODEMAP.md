@@ -227,6 +227,12 @@ When changing a feature master, first decide whether the behavior is a new capab
 | Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` | Core-file and deployment health checks. |
 | Database inspection and maintenance | `app/services/database_maintenance.php`, `app/controllers/admin_database_maintenance.php`, `app/views/admin_database_maintenance.php`, `public/assets/styles/admin-dashboard.css`, `database/migrations/202607250001_database_maintenance_schema_repair.php` | Explicit full-schema audit, scoped production/test SQL-reference evidence, cached JSON report, high-confidence bounded cleanup with transactional row-identifier audit, conditional schema repair, selected `ANALYZE TABLE`, and separately confirmed selected `OPTIMIZE TABLE`. |
 
+## Storage Statistics and Refresh
+
+| Task | Primary files | Notes |
+| --- | --- | --- |
+| Storage report and resumable Update all | `app/controllers/admin_dashboard.php`, `app/services/admin_storage_statistics.php`, `app/services/admin_storage_refresh.php`, `app/services/admin_database_usage.php`, `app/models/admin_storage_statistics.php`, `app/models/admin_database_usage.php`, `app/views/admin_storage_statistics.php`, `app/views/admin_database_usage.php`, `public/assets/gallery-modules/admin-storage-statistics.js`, `public/assets/styles/admin-dashboard.css`, `tests/admin_storage_refresh_test.php` | On-demand source/generated-media inventory and database usage; server-owned bounded file, `ANALYZE TABLE`, and read-only inspection stages with active-tab refresh. |
+
 ## Gallery Administration
 
 | Task | Primary files | Notes |

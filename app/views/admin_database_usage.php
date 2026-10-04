@@ -15,7 +15,7 @@
  *   - Display total database storage and gallery-content table storage
  *   - Render table-size charts using the shared Admin storage visual language
  *   - Handle unavailable information_schema metadata without breaking the page
- *   - Render explicit database-statistics recompute controls
+ *   - Present refreshed database statistics and accessible proportional table bars
  *
  * Author:
  *   Rudolf Klusal
@@ -31,23 +31,22 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-13
+ *   2026-10-04
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Views;
 
-use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
-use function Gallery\Core\url_for;
 use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
 
 /**
  * Render database usage statistics for the Admin storage page.
  *
- * @param ?array $usage Usage value.
+ * @param ?array<string, mixed> $usage Prepared database usage view model, or null when unavailable.
+ * @return void Outputs the database usage panel when data is available.
  */
 function view_render_admin_database_usage_panel(?array $usage): void
 {
@@ -56,8 +55,7 @@ function view_render_admin_database_usage_panel(?array $usage): void
     }
 
     echo '<section class="admin-storage-panel admin-database-usage-panel panel" aria-label="' . e(t('admin.database_usage.panel_aria', 'Database usage')) . '">';
-    echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.database_usage.kicker', 'Database')) . '</p><h2>' . e(t('admin.database_usage.title', 'Database usage')) . '</h2></div><p class="muted">' . e(t('admin.database_usage.description', 'Database table sizes are measured from MySQL/MariaDB table metadata and shown separately from picture files stored on disk.')) . '</p></div>';
-    view_render_admin_database_usage_recompute_form();
+    echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.database_usage.kicker', 'Database')) . '</p><h2>' . e(t('admin.database_usage.title', 'Database usage')) . '</h2></div><details class="admin-storage-help"><summary aria-label="' . e(t('admin.storage.chart_help_label', 'Chart explanations')) . '">?</summary><div><p>' . e(t('admin.database_usage.description', 'Database table sizes are measured from MySQL/MariaDB table metadata and shown separately from picture files stored on disk.')) . '</p><ul><li><strong>' . e(t('admin.database_usage.total_database', 'Total database')) . ':</strong> ' . e(t('admin.database_usage.total_database_hint', '{count} table(s), data plus indexes.', ['count' => (string) ($usage['table_count'] ?? 0)])) . '</li><li><strong>' . e(t('admin.database_usage.gallery_database', 'Gallery DB data')) . ':</strong> ' . e(t('admin.database_usage.gallery_database_hint', '{count} gallery/content table(s), {percent}% of DB.', ['count' => (string) ($usage['gallery_table_count'] ?? 0), 'percent' => number_format((float) ($usage['gallery_percent_of_database'] ?? 0.0), 1)])) . '</li><li><strong>' . e(t('admin.database_usage.sql_data_pages', 'SQL data pages')) . ':</strong> ' . e(t('admin.database_usage.sql_data_pages_hint', 'Table payload pages reported by the database engine.')) . '</li><li><strong>' . e(t('admin.database_usage.sql_indexes', 'SQL indexes')) . ':</strong> ' . e(t('admin.database_usage.sql_indexes_hint', 'Index pages reported by the database engine.')) . '</li><li><strong>' . e(t('admin.database_usage.all_tables_title', 'Largest DB tables')) . ':</strong> ' . e(t('admin.database_usage.all_tables_hint', 'Top tables by data plus index bytes.')) . '</li><li><strong>' . e(t('admin.database_usage.gallery_tables_title', 'Gallery DB tables')) . ':</strong> ' . e(t('admin.database_usage.gallery_tables_hint', 'Only tables classified as gallery content or gallery-derived metadata.')) . '</li></ul></div></details></div>';
 
     if (empty($usage['available'])) {
         view_render_admin_database_usage_unavailable($usage);
@@ -79,13 +77,15 @@ function view_render_admin_database_usage_panel(?array $usage): void
     $databaseName = (string) ($usage['database_name'] ?? '');
 
     echo '<div class="admin-storage-summary-grid admin-database-usage-summary-grid">';
-    view_render_admin_storage_summary_card(t('admin.database_usage.total_database', 'Total database'), format_bytes($totalBytes), t('admin.database_usage.total_database_hint', '{count} table(s), data plus indexes.', ['count' => (string) $tableCount]));
-    view_render_admin_storage_summary_card(t('admin.database_usage.gallery_database', 'Gallery DB data'), format_bytes($galleryBytes), t('admin.database_usage.gallery_database_hint', '{count} gallery/content table(s), {percent}% of DB.', ['count' => (string) $galleryTableCount, 'percent' => number_format($galleryPercent, 1)]));
-    view_render_admin_storage_summary_card(t('admin.database_usage.sql_data_pages', 'SQL data pages'), format_bytes($dataBytes), t('admin.database_usage.sql_data_pages_hint', 'Table payload pages reported by the database engine.'));
-    view_render_admin_storage_summary_card(t('admin.database_usage.sql_indexes', 'SQL indexes'), format_bytes($indexBytes), t('admin.database_usage.sql_indexes_hint', 'Index pages reported by the database engine.'));
+    view_render_admin_storage_summary_card(t('admin.database_usage.total_database', 'Total database'), format_bytes($totalBytes), t('admin.database_usage.total_database_hint', '{count} table(s), data plus indexes.', ['count' => (string) $tableCount]), 'overview');
+    view_render_admin_storage_summary_card(t('admin.database_usage.gallery_database', 'Gallery DB data'), format_bytes($galleryBytes), t('admin.database_usage.gallery_database_hint', '{count} gallery/content table(s), {percent}% of DB.', ['count' => (string) $galleryTableCount, 'percent' => number_format($galleryPercent, 1)]), 'galleries');
+    view_render_admin_storage_summary_card(t('admin.database_usage.sql_data_pages', 'SQL data pages'), format_bytes($dataBytes), t('admin.database_usage.sql_data_pages_hint', 'Table payload pages reported by the database engine.'), 'report');
+    view_render_admin_storage_summary_card(t('admin.database_usage.sql_indexes', 'SQL indexes'), format_bytes($indexBytes), t('admin.database_usage.sql_indexes_hint', 'Index pages reported by the database engine.'), 'settings');
     echo '</div>';
 
     echo '<div class="admin-storage-facts admin-database-usage-facts">';
+    echo '<span><strong>' . e(t('admin.database_usage.table_count', 'Tables')) . '</strong> ' . e(number_format($tableCount)) . '</span>';
+    echo '<span><strong>' . e(t('admin.database_usage.gallery_table_count', 'Gallery tables')) . '</strong> ' . e(number_format($galleryTableCount)) . '</span>';
     if ($databaseName !== '') {
         echo '<span><strong>' . e(t('admin.database_usage.database_name', 'Database')) . '</strong> ' . e($databaseName) . '</span>';
     }
@@ -105,23 +105,10 @@ function view_render_admin_database_usage_panel(?array $usage): void
 }
 
 /**
- * Render the explicit database usage recompute form.
- */
-function view_render_admin_database_usage_recompute_form(): void
-{
-    echo '<div class="admin-storage-update-shell admin-database-usage-recompute-shell">';
-    echo '<div><strong>' . e(t('admin.database_usage.recompute_title', 'Refresh database metadata')) . '</strong><p class="muted">' . e(t('admin.database_usage.recompute_hint', 'Runs ANALYZE TABLE for current database tables, then reloads MySQL/MariaDB size and row estimates. This does not rebuild tables or modify gallery data.')) . '</p></div>';
-    echo '<form method="post" action="' . e(url_for('admin_database_usage_recompute')) . '" class="inline-action-form">';
-    echo csrf_field();
-    echo '<button type="submit" class="button">' . e(t('admin.database_usage.recompute_button', 'Recompute DB metadata')) . '</button>';
-    echo '</form>';
-    echo '</div>';
-}
-
-/**
  * Render an unavailable database usage notice.
  *
- * @param array $usage Usage value.
+ * @param array<string, mixed> $usage Database usage model containing a bounded safe unavailability reason.
+ * @return void Outputs the unavailable-state message.
  */
 function view_render_admin_database_usage_unavailable(array $usage): void
 {
@@ -137,10 +124,11 @@ function view_render_admin_database_usage_unavailable(array $usage): void
 /**
  * Render one database usage chart.
  *
- * @param string $title Title value.
- * @param string $hint Hint value.
- * @param array $rows Rows to process.
- * @param string $emptyText Empty text value.
+ * @param string $title Visible chart title and accessible meter label prefix.
+ * @param string $hint Concise chart explanation available to the view.
+ * @param array<int, array<string, mixed>> $rows Prepared database table rows to render.
+ * @param string $emptyText Message displayed when no table rows are available.
+ * @return void Outputs a compact proportional database table chart.
  */
 function view_render_admin_database_usage_table_chart(string $title, string $hint, array $rows, string $emptyText): void
 {
@@ -174,7 +162,7 @@ function view_render_admin_database_usage_table_chart(string $title, string $hin
         }
         echo '<div class="admin-storage-bar-row">';
         echo '<div class="admin-storage-bar-meta"><span>' . e($label) . '</span><small>' . e($details) . '</small></div>';
-        echo '<div class="admin-storage-bar-track" aria-hidden="true"><span class="admin-storage-bar-fill" style="--admin-storage-bar: ' . e(number_format($percent, 1, '.', '')) . '%"></span></div>';
+        echo '<div class="admin-storage-bar-track" role="meter" aria-label="' . e($title . ': ' . $label) . '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . e(number_format($percent, 1, '.', '')) . '"><span class="admin-storage-bar-fill" aria-hidden="true" style="--admin-storage-bar: ' . e(number_format($percent, 1, '.', '')) . '%"></span></div>';
         echo '</div>';
     }
     echo '</div></article>';

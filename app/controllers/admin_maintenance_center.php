@@ -140,7 +140,10 @@ function admin_maintenance_center_json_action(callable $callback, ?string $mutat
     }
 }
 
-/** Render the dedicated Maintenance Center page. */
+/** Render the dedicated Maintenance Center page with prepared endpoints and navigation.
+ *
+ * @return void Outputs the dedicated Maintenance Center page.
+ */
 function cms_admin_maintenance_center(): void
 {
     require_admin();
@@ -148,6 +151,7 @@ function cms_admin_maintenance_center(): void
     $model = maintenance_center_page_model($actorId);
     $model['csrf_token'] = csrf_token();
     $model['dashboard_url'] = url_for('admin');
+    $model['storage_maintenance_url'] = url_for('admin_storage_statistics', ['tab' => 'maintenance']);
     $model['endpoints'] = [
         'status' => url_for('admin_maintenance_center_status'),
         'analyze_start' => url_for('admin_maintenance_center_analyze_start'),

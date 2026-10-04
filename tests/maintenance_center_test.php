@@ -166,7 +166,41 @@ namespace {
     foreach (['require_admin()', "request_method() !== 'POST'", 'verify_csrf(', 'admin_mutation_success_envelope(', 'admin_mutation_error_envelope('] as $httpContract) {
         maintenance_center_test_assert(str_contains($controllerSource, $httpContract), 'Maintenance Center mutation controller must preserve Admin HTTP/mutation contract: ' . $httpContract);
     }
+    maintenance_center_test_assert(str_contains($controllerSource, "url_for('admin_storage_statistics', ['tab' => 'maintenance'])"), 'Maintenance Center must prepare a direct URL back to Storage > DB maintenance.');
     maintenance_center_test_assert(!str_contains($controllerSource, 'OPTIMIZE TABLE') && !str_contains($controllerSource, 'ANALYZE TABLE'), 'Controller must never own SQL or physical-table statements.');
+
+    $maintenanceViewSource = maintenance_center_test_source($root, 'app/views/admin_maintenance_center.php');
+    maintenance_center_test_assert(str_contains($maintenanceViewSource, "'storage_maintenance_url'") && str_contains($maintenanceViewSource, "'admin.storage.tab_database_maintenance'"), 'Maintenance Center must expose its direct return link to the DB maintenance tab.');
+    $storageViewSource = maintenance_center_test_source($root, 'app/views/admin_storage_statistics.php');
+
+    $databaseMaintenanceViewSource = maintenance_center_test_source($root, 'app/views/admin_database_maintenance.php');
+    maintenance_center_test_assert(str_contains($databaseMaintenanceViewSource, "url_for('admin_maintenance_center')") && str_contains($databaseMaintenanceViewSource, "'admin.storage.open_maintenance_center'"), 'Storage > DB maintenance must link directly to the Maintenance Center with a localized label.');
+    $advancedDisclosureStart = strpos($databaseMaintenanceViewSource, '<details class="admin-database-section-disclosure admin-database-advanced-tools">');
+    $cleanupPanelCall = strpos($databaseMaintenanceViewSource, 'view_render_admin_database_cleanup_panel($cleanupState, $mutationsEnabled)');
+    $repairPanelCall = strpos($databaseMaintenanceViewSource, 'view_render_admin_database_schema_repair_panel($repairReadiness, $mutationsEnabled)');
+    $physicalPanelCall = strpos($databaseMaintenanceViewSource, 'view_render_admin_database_physical_operations_panel($tables, $mutationsEnabled)');
+    $advancedDisclosureEnd = strpos($databaseMaintenanceViewSource, "echo '</div></div></details>';", $advancedDisclosureStart === false ? 0 : $advancedDisclosureStart);
+    maintenance_center_test_assert($advancedDisclosureStart !== false && $cleanupPanelCall !== false && $repairPanelCall !== false && $physicalPanelCall !== false && $advancedDisclosureEnd !== false && $advancedDisclosureStart < $cleanupPanelCall && $cleanupPanelCall < $repairPanelCall && $repairPanelCall < $physicalPanelCall && $physicalPanelCall < $advancedDisclosureEnd, 'Logical cleanup, schema repair, ANALYZE, and OPTIMIZE panels must remain inside the collapsed native advanced-tools disclosure.');
+    maintenance_center_test_assert(str_contains($databaseMaintenanceViewSource, "t('admin.database_maintenance.advanced_tools_help_label'") && str_contains($databaseMaintenanceViewSource, "<details class=\"admin-inline-help\"><summary aria-label=\""), 'Advanced operation explanation must remain inside a keyboard-accessible native question-mark disclosure.');
+    maintenance_center_test_assert(str_contains($databaseMaintenanceViewSource, "t('admin.database_maintenance.report_timestamp'") && str_contains($databaseMaintenanceViewSource, "t('admin.database_maintenance.report_duration'"), 'The database report must keep a concise visible timestamp and move inspection duration into report help.');
+    maintenance_center_test_assert(str_contains($databaseMaintenanceViewSource, "if (\$candidateCount === 0 && \$legacyFindings === [] && \$inspectionErrorCount === 0)") && str_contains($databaseMaintenanceViewSource, "t('admin.database_maintenance.no_findings'"), 'The no-findings statement must describe only a completed report with no candidates, legacy findings, or inspection errors.');
+    foreach ([
+        "url_for('admin_database_maintenance_cleanup')",
+        "url_for('admin_database_maintenance_repair')",
+        "view_render_admin_database_table_selection_form('admin_database_maintenance_analyze', \$tables, false, \$mutationsEnabled)",
+        "view_render_admin_database_table_selection_form('admin_database_maintenance_optimize', \$tables, true, \$mutationsEnabled)",
+        "name=\"confirmation_text\" autocomplete=\"off\"",
+        "name=\"dry_run\" value=\"1\"",
+        "t('admin.database_maintenance.type_clean'",
+        "t('admin.database_maintenance.type_repair'",
+        "t('admin.database_maintenance.type_optimize'",
+        "t('admin.database_maintenance.optimize_warning'",
+        "t('admin.database_maintenance.cleanup_warning'",
+        "t('admin.database_maintenance.repair_ddl_warning'",
+        'csrf_field()',
+    ] as $advancedFormContract) {
+        maintenance_center_test_assert(str_contains($databaseMaintenanceViewSource, $advancedFormContract), 'Advanced database controls must preserve native POST, CSRF, dry-run, destructive confirmation, and visible warning behavior: ' . $advancedFormContract);
+    }
 
     $dispatchSource = maintenance_center_test_source($root, 'app/bootstrap/dispatch.php');
     foreach (['admin_maintenance_center', 'admin_maintenance_center_status', 'admin_maintenance_center_analyze_start', 'admin_maintenance_center_analyze_step', 'admin_maintenance_center_execute_start', 'admin_maintenance_center_execute_step', 'admin_maintenance_center_pause', 'admin_maintenance_center_cancel'] as $route) {
@@ -176,6 +210,15 @@ namespace {
     $javascriptSource = maintenance_center_test_source($root, 'public/assets/gallery-modules/admin-maintenance-center.js');
     maintenance_center_test_assert(str_contains($javascriptSource, 'window.setTimeout') && str_contains($javascriptSource, 'endpoints.analyzeStep') && str_contains($javascriptSource, 'endpoints.executeStep'), 'Browser orchestration must drive repeated bounded persisted steps without page navigation.');
     maintenance_center_test_assert(!str_contains($javascriptSource, 'location.reload('), 'Maintenance Center must not reload the page between bounded steps.');
+    maintenance_center_test_assert(str_contains($maintenanceViewSource, '<details class="panel maintenance-center-review" data-maintenance-review') && str_contains($maintenanceViewSource, 'data-maintenance-task-groups') && str_contains($maintenanceViewSource, 'data-maintenance-full-optimize'), 'Maintenance Center must keep the plan and full-optimization selection as native, accessible form controls.');
+    maintenance_center_test_assert(str_contains($maintenanceViewSource, "\$showAnalysisNote = \$job === null || in_array((string) (\$job['status'] ?? ''), ['analyzing', 'ready'], true)") && str_contains($javascriptSource, "analysisNote.hidden = Boolean(job) && !['analyzing', 'ready'].includes(status)"), 'The Analyze-before-mutation banner must be visible before a plan exists or while it is analyzing/ready, then hide during and after execution.');
+    maintenance_center_test_assert(str_contains($javascriptSource, "review.open = !['completed', 'failed', 'cancelled'].includes(status)") && str_contains($javascriptSource, "checkbox.disabled = !task.available || Boolean(task.required) || status !== 'ready'") && str_contains($javascriptSource, "fullOptimize.disabled = status !== 'ready'"), 'Plan selection must remain editable only at Ready and read-only during or after execution.');
+    maintenance_center_test_assert(str_contains($javascriptSource, 'task.available === true && !task.required && task.analysis?.has_work === false && !keepDiscoverable'), 'Only explicitly available optional tasks with a strict no-work result may move into the collapsed group.');
+    maintenance_center_test_assert(str_contains($javascriptSource, "task.key === 'media.deep_verify'") && str_contains($javascriptSource, "task.key === 'database.optimize' && task.analysis?.full_optimization_available === true"), 'Opt-in deep media verification and currently available full optimization must stay discoverable.');
+    maintenance_center_test_assert(str_contains($javascriptSource, "checkbox.checked = task.required || (executionStarted ? selectedPersisted.has(task.key) : Boolean(task.default_selected))") && str_contains($javascriptSource, "const executionStarted = ['running', 'paused', 'completed', 'failed', 'cancelled'].includes(status) && selectedPersisted.size > 0"), 'Redrawing the task groups must preserve required selections, server-persisted choices, and initial defaults.');
+    maintenance_center_test_assert(str_contains($javascriptSource, "previouslyExpandedNoWork = Boolean(taskGroups.querySelector('.maintenance-center-no-work')?.open)") && str_contains($javascriptSource, 'noWork.open = previouslyExpandedNoWork') && str_contains($javascriptSource, 'analysisFacts(task, strings)'), 'Rerendering must preserve the no-work disclosure state and retain every task analysis fact inside its group.');
+    maintenance_center_test_assert(str_contains($javascriptSource, 'strings.required_automatic') && str_contains($javascriptSource, 'strings.no_work_count'), 'Required automatic steps and collapsed no-work counts must use localized labels.');
+    maintenance_center_test_assert(str_contains($javascriptSource, "section.className = 'maintenance-center-report-detail'") && str_contains($javascriptSource, "document.createElement('details')") && str_contains($javascriptSource, 'heading.textContent = `${title} (${formatNumber(entries.length)})`'), 'Completed report breakdowns must remain collapsed count-labeled disclosures.');
 
     $dashboardSource = maintenance_center_test_source($root, 'app/views/admin_dashboard_sections.php');
     $navigationSource = maintenance_center_test_source($root, 'app/views/admin_chrome.php');

@@ -143,6 +143,8 @@ require_once __DIR__ . '/services/link_favicons.php';
 require_once __DIR__ . '/services/admin_gallery_discovery.php';
 // Load Admin storage statistics after path and derivative helpers are available.
 require_once __DIR__ . '/services/admin_storage_statistics.php';
+// Load the unified Admin storage refresh workflow after its file-statistics service is available.
+require_once __DIR__ . '/services/admin_storage_refresh.php';
 require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';

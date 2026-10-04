@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-07-25
+ *   2026-10-04
  */
 
 declare(strict_types=1);
@@ -51,18 +51,12 @@ use function Gallery\Services\t;
  * @param array<string, mixed> $cleanupState Latest resumable cleanup state.
  * @param array<string, mixed> $repairReadiness Dedicated repair migration state.
  * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
+ * @return void Outputs the database maintenance and audit panels.
  */
 function view_render_admin_database_maintenance_panel(?array $report, array $cleanupState, array $repairReadiness, bool $mutationsEnabled = false): void
 {
-    echo '<section class="panel admin-database-maintenance-intro">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.kicker', 'Database maintenance')) . '</p><h2>' . e(t('admin.database_maintenance.title', 'Inspect before changing anything')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.description', 'The full schema, migration, code-reference, cleanup, and storage audit runs only after this explicit request. Ordinary dashboard rendering remains fast.')) . '</p></div>';
-    echo '<form method="post" action="' . e(url_for('admin_database_maintenance_inspect')) . '" class="inline-action-form">';
-    echo csrf_field();
-    echo '<button type="submit" class="button">' . e(t('admin.database_maintenance.inspect_button', 'Inspect database')) . '</button>';
-    echo '</form></section>';
-
     if ($report === null || empty($report['ok'])) {
-        echo '<section class="panel"><p class="muted">' . e(t('admin.database_maintenance.no_report', 'No database audit report is cached yet. Inspection is read-only and must be started manually.')) . '</p></section>';
+        echo '<section class="panel admin-database-maintenance-summary"><div class="admin-database-report-header"><p class="muted">' . e(t('admin.database_maintenance.no_report', 'No database audit report is cached yet. Use Update all to refresh it; inspection is read-only.')) . '</p><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e(t('admin.storage.open_maintenance_center', 'Open Maintenance Center')) . '</a></div></section>';
         return;
     }
 
@@ -72,39 +66,113 @@ function view_render_admin_database_maintenance_panel(?array $report, array $cle
     $legacyFindings = (array) ($report['legacy_schema_findings'] ?? []);
     $tableSpecificAudit = (array) ($report['table_specific_audit'] ?? []);
     $candidateCount = array_sum(array_map(static fn (array $candidate): int => (int) ($candidate['candidate_count'] ?? 0), $candidates));
+    $inspectionErrorCount = count(array_filter($candidates, static fn (array $candidate): bool => (string) ($candidate['inspection_error'] ?? '') !== ''));
     $totalBytes = array_sum(array_map(static fn (array $table): int => (int) ($table['total_bytes'] ?? 0), $tables));
-    $reclaimableBytes = array_sum(array_map(static fn (array $table): int => (int) ($table['reclaimable_bytes_estimate'] ?? 0), $tables));
+    $generatedTimestamp = strtotime((string) ($report['generated_at_utc'] ?? ''));
+    $generatedLabel = $generatedTimestamp === false ? '' : gmdate('Y-m-d H:i', $generatedTimestamp) . ' UTC';
 
     echo '<section class="panel admin-database-maintenance-summary">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.report_kicker', 'Latest report')) . '</p><h2>' . e(t('admin.database_maintenance.report_title', 'Database audit summary')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.generated_at', 'Generated {time}; duration {seconds} seconds.', [
-        'time' => (string) ($report['generated_at_utc'] ?? ''),
-        'seconds' => number_format((float) ($report['duration_seconds'] ?? 0.0), 3),
-    ])) . '</p></div>';
-    echo '<div class="admin-storage-summary-grid">';
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.tables', 'Audited tables'), (string) count($tables), t('admin.database_maintenance.tables_hint', 'Every table dynamically discovered in the active schema.'));
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.total_size', 'Allocated database'), format_bytes($totalBytes), t('admin.database_maintenance.total_size_hint', 'Data plus indexes reported by information_schema.'));
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.candidates', 'Safe candidates'), number_format($candidateCount), t('admin.database_maintenance.candidates_hint', 'Rows matching explicit high-confidence cleanup rules.'));
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.data_free', 'Engine data_free'), format_bytes($reclaimableBytes), t('admin.database_maintenance.data_free_hint', 'Engine estimate only. Reclamation requires a separately confirmed physical operation.'));
+    $reportTitle = t('admin.database_maintenance.report_title', 'Database audit summary');
+    $reportHelp = t('admin.database_maintenance.description', 'The full schema, migration, code-reference, cleanup, and storage audit runs only after this explicit request. Ordinary dashboard rendering remains fast.')
+        . ' ' . t('admin.database_maintenance.report_duration', 'Inspection duration: {seconds} s.', ['seconds' => number_format((float) ($report['duration_seconds'] ?? 0.0), 3)])
+        . ' ' . t('admin.database_maintenance.thumbnail_hint', 'This table stores metadata only, never image bytes. Unsupported variants are reported for review and are not deleted automatically.');
+    echo '<div class="admin-database-report-header"><div class="admin-database-report-heading"><div class="admin-database-report-title"><h2>' . e($reportTitle) . '</h2><details class="admin-inline-help"><summary aria-label="' . e($reportTitle) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($reportHelp) . '</div></details></div><span class="muted">' . e(t('admin.database_maintenance.report_timestamp', 'Updated {time}', ['time' => $generatedLabel])) . '</span></div><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e(t('admin.storage.open_maintenance_center', 'Open Maintenance Center')) . '</a></div>';
+    echo '<div class="admin-database-audit-facts">';
+    echo '<span class="admin-database-audit-fact"><strong>' . e(number_format(count($tables))) . '</strong><small>' . e(t('admin.database_maintenance.tables', 'Audited tables')) . '</small></span>';
+    echo '<span class="admin-database-audit-fact"><strong>' . e(format_bytes($totalBytes)) . '</strong><small>' . e(t('admin.database_maintenance.total_size', 'Allocated database')) . '</small></span>';
     echo '</div>';
-    echo '<p class="muted">' . e((string) ($report['physical_optimization_note'] ?? '')) . '</p>';
     echo '</section>';
 
+    view_render_admin_database_findings_panel($candidates, $legacyFindings, $candidateCount, $inspectionErrorCount);
+    if (!empty($cleanupState['failed']) || (string) ($cleanupState['error'] ?? '') !== '') {
+        $cleanupError = (string) ($cleanupState['error'] ?? '');
+        echo '<p class="notice error">' . e($cleanupError !== '' ? $cleanupError : t('admin.database_maintenance.state_failed', 'The latest cleanup operation failed.')) . '</p>';
+    }
+    echo '<details class="admin-database-section-disclosure admin-database-finding-details admin-database-thumbnail-disclosure"><summary>' . e(t('admin.database_maintenance.thumbnail_kicker', 'Thumbnail metadata')) . '</summary>';
     view_render_admin_database_thumbnail_distribution_panel((array) ($tableSpecificAudit['image_thumbnail_variants'] ?? []));
-    view_render_admin_database_cleanup_panel($candidates, $cleanupState, $mutationsEnabled);
-    view_render_admin_database_schema_repair_panel($legacyFindings, $repairReadiness, $mutationsEnabled);
+    echo '</details>';
+    echo '<details class="admin-database-section-disclosure admin-database-advanced-tools"><summary>' . e(t('admin.database_maintenance.advanced_tools', 'Advanced database tools')) . '</summary>';
+    $advancedHelp = implode(' ', [
+        t('admin.database_maintenance.advanced_tools_hint', 'Logical cleanup, schema repair, selected-table ANALYZE, and OPTIMIZE are separate advanced operations. Each has its own safeguards; none runs automatically.'),
+        t('admin.database_maintenance.cleanup_hint', 'Only high-confidence orphan, deterministic duplicate, and explicitly expired temporary rows are eligible. Content, accounts, logs, telemetry, unknown tables, and filesystem files are protected.'),
+        t('admin.database_maintenance.dry_run_hint', 'Recounts every supported rule and records what would be removed. No DELETE statement runs.'),
+        t('admin.database_maintenance.live_cleanup_hint', 'Each request processes one bounded rule batch. Retry or continue safely until the persisted state reports completion.'),
+        t('admin.database_maintenance.schema_hint', 'The dedicated migration inspects every object before alteration, preserves source geometry first, and tolerates legacy, partial, and already repaired schemas. DDL may auto-commit.'),
+        t('admin.database_maintenance.physical_hint', 'ANALYZE refreshes optimizer metadata. OPTIMIZE may lock or rebuild tables and may be expensive on shared hosting. Neither action runs automatically.'),
+        t('admin.database_maintenance.inventory_hint', 'Open a table to inspect columns, keys, ownership, retention, duplicate handling, and physical-maintenance policy. Unknown tables remain protected.'),
+    ]);
+    echo '<div class="admin-database-advanced-content"><details class="admin-inline-help"><summary aria-label="' . e(t('admin.database_maintenance.advanced_tools_help_label', 'Advanced database tools help')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($advancedHelp) . '</div></details>';
+    echo '<div class="admin-database-advanced-grid">';
+    view_render_admin_database_cleanup_panel($cleanupState, $mutationsEnabled);
+    view_render_admin_database_schema_repair_panel($repairReadiness, $mutationsEnabled);
     view_render_admin_database_physical_operations_panel($tables, $mutationsEnabled);
     view_render_admin_database_inventory_panel($tables);
+    echo '</div></div></details>';
+}
+
+/**
+ * Render concise diagnostic findings and keep detailed evidence available on demand.
+ *
+ * @param array<int, array<string, mixed>> $candidates Cleanup candidate findings.
+ * @param array<int, array<string, mixed>> $legacyFindings Legacy schema findings.
+ * @param int $candidateCount Total eligible cleanup rows.
+ * @param int $inspectionErrorCount Number of cleanup-rule inspection errors.
+ * @return void Outputs visible readiness counts and collapsed finding tables.
+ */
+function view_render_admin_database_findings_panel(array $candidates, array $legacyFindings, int $candidateCount, int $inspectionErrorCount): void
+{
+    echo '<section class="panel admin-database-findings"><div class="admin-panel-heading"><h2>' . e(t('admin.database_maintenance.findings_title', 'Database findings')) . '</h2>';
+    if ($inspectionErrorCount > 0) {
+        echo '<p class="notice error">' . e(t('admin.database_maintenance.inspection_errors', 'Inspection errors: {count}', ['count' => number_format($inspectionErrorCount)])) . '</p>';
+    }
+    echo '</div><div class="admin-database-findings-list">';
+
+    if ($candidateCount > 0 || $inspectionErrorCount > 0) {
+        $visibleCandidates = array_values(array_filter($candidates, static fn (array $candidate): bool => (int) ($candidate['candidate_count'] ?? 0) > 0 || (string) ($candidate['inspection_error'] ?? '') !== ''));
+        $candidateSummary = $candidateCount > 0
+            ? t('admin.database_maintenance.candidates', 'Safe candidates') . ' (' . number_format($candidateCount) . ')'
+            : t('admin.database_maintenance.inspection_errors', 'Inspection errors: {count}', ['count' => number_format($inspectionErrorCount)]);
+        echo '<details class="admin-database-finding-details"><summary>' . e($candidateSummary) . '</summary>';
+        if ($visibleCandidates !== []) {
+            echo '<div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.table', 'Table')) . '</th><th>' . e(t('admin.database_maintenance.category', 'Category')) . '</th><th>' . e(t('admin.database_maintenance.reason', 'Reason')) . '</th><th>' . e(t('admin.database_maintenance.confidence', 'Confidence')) . '</th><th>' . e(t('admin.database_maintenance.rows', 'Rows')) . '</th></tr></thead><tbody>';
+            foreach ($visibleCandidates as $candidate) {
+                echo '<tr><td><code>' . e((string) ($candidate['table_name'] ?? '')) . '</code></td><td>' . e((string) ($candidate['category'] ?? '')) . '</td><td>' . e((string) (($candidate['inspection_error'] ?? '') !== '' ? $candidate['inspection_error'] : ($candidate['reason'] ?? ''))) . '</td><td>' . e((string) ($candidate['confidence'] ?? '')) . '</td><td>' . e(number_format((int) ($candidate['candidate_count'] ?? 0))) . '</td></tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        echo '</details>';
+    }
+
+    if ($legacyFindings !== []) {
+        $legacySummary = t('admin.database_maintenance.legacy_findings', 'Legacy schema findings') . ' (' . number_format(count($legacyFindings)) . ')';
+        echo '<details class="admin-database-finding-details"><summary>' . e($legacySummary) . '</summary><div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.object', 'Object')) . '</th><th>' . e(t('admin.database_maintenance.status', 'Status')) . '</th><th>' . e(t('admin.database_maintenance.confidence', 'Confidence')) . '</th><th>' . e(t('admin.database_maintenance.reason', 'Reason')) . '</th></tr></thead><tbody>';
+        foreach ($legacyFindings as $finding) {
+            echo '<tr><td><code>' . e((string) ($finding['table_name'] ?? '')) . '.' . e((string) ($finding['object_name'] ?? '')) . '</code><br><small>' . e((string) ($finding['object_type'] ?? '')) . '</small></td><td>' . e((string) ($finding['status'] ?? '')) . '</td><td>' . e((string) ($finding['confidence'] ?? '')) . '</td><td>' . e((string) ($finding['reason'] ?? '')) . '</td></tr>';
+        }
+        echo '</tbody></table></div></details>';
+    }
+    if ($candidateCount === 0 && $legacyFindings === [] && $inspectionErrorCount === 0) {
+        echo '<p class="admin-database-findings-empty">' . e(t('admin.database_maintenance.no_findings', 'No safe cleanup candidates or known legacy schema findings were found.')) . '</p>';
+    } else {
+        if ($candidateCount === 0 && $inspectionErrorCount === 0) {
+            echo '<span class="admin-database-findings-zero">' . e(t('admin.database_maintenance.candidates', 'Safe candidates')) . ' · 0</span>';
+        }
+        if ($legacyFindings === []) {
+            echo '<span class="admin-database-findings-zero">' . e(t('admin.database_maintenance.legacy_findings', 'Legacy schema findings')) . ' · 0</span>';
+        }
+    }
+    echo '</div></section>';
 }
 
 /**
  * Render the thumbnail metadata size, format, and status distribution.
  *
  * @param array<string, mixed> $audit Thumbnail-specific audit.
+ * @return void Outputs metadata facts and any available distribution rows.
  */
 function view_render_admin_database_thumbnail_distribution_panel(array $audit): void
 {
     echo '<section class="panel admin-database-thumbnail-distribution">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.thumbnail_kicker', 'Thumbnail metadata')) . '</p><h2>' . e(t('admin.database_maintenance.thumbnail_title', 'Variant size, format, and status distribution')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.thumbnail_hint', 'This table stores metadata only, never image bytes. Unsupported variants are reported for review and are not deleted automatically.')) . '</p></div>';
     if (empty($audit['available'])) {
         echo '<p class="muted">' . e((string) ($audit['reason'] ?? t('admin.database_maintenance.thumbnail_unavailable', 'Thumbnail distribution is unavailable.'))) . '</p></section>';
         return;
@@ -131,26 +199,15 @@ function view_render_admin_database_thumbnail_distribution_panel(array $audit): 
 /**
  * Render cleanup candidates and bounded cleanup controls.
  *
- * @param array<int, array<string, mixed>> $candidates Candidate rows.
  * @param array<string, mixed> $cleanupState Cleanup state.
  * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
+ * @return void Outputs logical-cleanup controls and prior operation state.
  */
-function view_render_admin_database_cleanup_panel(array $candidates, array $cleanupState, bool $mutationsEnabled): void
+function view_render_admin_database_cleanup_panel(array $cleanupState, bool $mutationsEnabled): void
 {
     echo '<section class="panel admin-database-cleanup-panel">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.cleanup_kicker', 'Logical cleanup')) . '</p><h2>' . e(t('admin.database_maintenance.cleanup_title', 'Clean safe database data')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.cleanup_hint', 'Only high-confidence orphan, deterministic duplicate, and explicitly expired temporary rows are eligible. Content, accounts, logs, telemetry, unknown tables, and filesystem files are protected.')) . '</p></div>';
-
-    $visibleCandidates = array_values(array_filter($candidates, static fn (array $candidate): bool => (int) ($candidate['candidate_count'] ?? 0) > 0 || (string) ($candidate['inspection_error'] ?? '') !== ''));
-    if ($visibleCandidates === []) {
-        echo '<p class="muted">' . e(t('admin.database_maintenance.no_cleanup_candidates', 'The latest inspection found no safe cleanup candidates.')) . '</p>';
-    } else {
-        echo '<div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.table', 'Table')) . '</th><th>' . e(t('admin.database_maintenance.category', 'Category')) . '</th><th>' . e(t('admin.database_maintenance.reason', 'Reason')) . '</th><th>' . e(t('admin.database_maintenance.confidence', 'Confidence')) . '</th><th>' . e(t('admin.database_maintenance.rows', 'Rows')) . '</th></tr></thead><tbody>';
-        foreach ($visibleCandidates as $candidate) {
-            echo '<tr><td><code>' . e((string) ($candidate['table_name'] ?? '')) . '</code></td><td>' . e((string) ($candidate['category'] ?? '')) . '</td><td>' . e((string) (($candidate['inspection_error'] ?? '') !== '' ? $candidate['inspection_error'] : ($candidate['reason'] ?? ''))) . '</td><td>' . e((string) ($candidate['confidence'] ?? '')) . '</td><td>' . e(number_format((int) ($candidate['candidate_count'] ?? 0))) . '</td></tr>';
-        }
-        echo '</tbody></table></div>';
-    }
-
+    echo '<div class="admin-panel-heading"><h2>' . e(t('admin.database_maintenance.cleanup_title', 'Clean safe database data')) . '</h2></div>';
+    echo '<p class="notice warning">' . e(t('admin.database_maintenance.cleanup_warning', 'Only high-confidence cleanup candidates are eligible; content, accounts, logs, telemetry, unknown tables and files stay protected.')) . '</p>';
     if ($cleanupState !== []) {
         $status = !empty($cleanupState['failed']) ? t('admin.database_maintenance.state_failed', 'failed') : (!empty($cleanupState['completed']) ? t('admin.database_maintenance.state_completed', 'completed') : t('admin.database_maintenance.state_resumable', 'resumable'));
         echo '<div class="admin-storage-facts">';
@@ -164,7 +221,7 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
         }
         $processedRules = (array) ($cleanupState['processed_rules'] ?? []);
         if ($processedRules !== []) {
-            echo '<div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.rule', 'Rule')) . '</th><th>' . e(t('admin.database_maintenance.table', 'Table')) . '</th><th>' . e(t('admin.database_maintenance.before', 'Before')) . '</th><th>' . e(t('admin.database_maintenance.deleted', 'Deleted')) . '</th><th>' . e(t('admin.database_maintenance.remaining', 'Remaining')) . '</th><th>' . e(t('admin.database_maintenance.result', 'Result')) . '</th></tr></thead><tbody>';
+            echo '<details class="admin-database-cleanup-history"><summary>' . e(t('admin.database_maintenance.processed_rules', 'Processed rules ({count})', ['count' => count($processedRules)])) . '</summary><div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.rule', 'Rule')) . '</th><th>' . e(t('admin.database_maintenance.table', 'Table')) . '</th><th>' . e(t('admin.database_maintenance.before', 'Before')) . '</th><th>' . e(t('admin.database_maintenance.deleted', 'Deleted')) . '</th><th>' . e(t('admin.database_maintenance.remaining', 'Remaining')) . '</th><th>' . e(t('admin.database_maintenance.result', 'Result')) . '</th></tr></thead><tbody>';
             foreach ($processedRules as $processedRule) {
                 $resultText = (string) ($processedRule['error'] ?? '');
                 if ($resultText === '') {
@@ -172,7 +229,7 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
                 }
                 echo '<tr><td><code>' . e((string) ($processedRule['key'] ?? '')) . '</code></td><td><code>' . e((string) ($processedRule['table_name'] ?? '')) . '</code></td><td>' . e(number_format((int) ($processedRule['candidate_count'] ?? 0))) . '</td><td>' . e(number_format((int) ($processedRule['deleted_count'] ?? 0))) . '</td><td>' . e(array_key_exists('remaining_count', $processedRule) ? number_format((int) $processedRule['remaining_count']) : 'n/a') . '</td><td>' . e($resultText) . '</td></tr>';
             }
-            echo '</tbody></table></div>';
+            echo '</tbody></table></div></details>';
         }
     }
 
@@ -199,24 +256,15 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
 /**
  * Render schema repair findings and confirmation control.
  *
- * @param array<int, array<string, mixed>> $findings Findings.
  * @param array<string, mixed> $readiness Migration readiness.
  * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
+ * @return void Outputs schema repair controls and safety state.
  */
-function view_render_admin_database_schema_repair_panel(array $findings, array $readiness, bool $mutationsEnabled): void
+function view_render_admin_database_schema_repair_panel(array $readiness, bool $mutationsEnabled): void
 {
     echo '<section class="panel admin-database-schema-repair-panel">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.schema_kicker', 'Legacy schema')) . '</p><h2>' . e(t('admin.database_maintenance.schema_title', 'Repair legacy schema')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.schema_hint', 'The dedicated migration inspects every object before alteration, preserves source geometry first, and tolerates legacy, partial, and already repaired schemas. DDL may auto-commit.')) . '</p></div>';
-
-    if ($findings === []) {
-        echo '<p class="muted">' . e(t('admin.database_maintenance.no_schema_findings', 'The inspected schema contains no known legacy thumbnail metadata objects.')) . '</p>';
-    } else {
-        echo '<div class="table-wrap"><table><thead><tr><th>' . e(t('admin.database_maintenance.object', 'Object')) . '</th><th>' . e(t('admin.database_maintenance.status', 'Status')) . '</th><th>' . e(t('admin.database_maintenance.confidence', 'Confidence')) . '</th><th>' . e(t('admin.database_maintenance.reason', 'Reason')) . '</th></tr></thead><tbody>';
-        foreach ($findings as $finding) {
-            echo '<tr><td><code>' . e((string) ($finding['table_name'] ?? '')) . '.' . e((string) ($finding['object_name'] ?? '')) . '</code><br><small>' . e((string) ($finding['object_type'] ?? '')) . '</small></td><td>' . e((string) ($finding['status'] ?? '')) . '</td><td>' . e((string) ($finding['confidence'] ?? '')) . '</td><td>' . e((string) ($finding['reason'] ?? '')) . '</td></tr>';
-        }
-        echo '</tbody></table></div>';
-    }
+    echo '<div class="admin-panel-heading"><h2>' . e(t('admin.database_maintenance.schema_title', 'Repair legacy schema')) . '</h2></div>';
+    echo '<p class="notice warning">' . e(t('admin.database_maintenance.repair_ddl_warning', 'DDL may auto-commit. Run the dry-run before confirming repair.')) . '</p>';
 
     echo '<form method="post" action="' . e(url_for('admin_database_maintenance_repair')) . '" class="inline-action-form">';
     echo csrf_field();
@@ -242,11 +290,12 @@ function view_render_admin_database_schema_repair_panel(array $findings, array $
  *
  * @param array<string, array<string, mixed>> $tables Inventory tables.
  * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
+ * @return void Outputs bounded ANALYZE and OPTIMIZE forms.
  */
 function view_render_admin_database_physical_operations_panel(array $tables, bool $mutationsEnabled): void
 {
     echo '<section class="panel admin-database-physical-panel">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.physical_kicker', 'Physical maintenance')) . '</p><h2>' . e(t('admin.database_maintenance.physical_title', 'Statistics and table space')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.physical_hint', 'ANALYZE refreshes optimizer metadata. OPTIMIZE may lock or rebuild tables and may be expensive on shared hosting. Neither action runs automatically.')) . '</p></div>';
+    echo '<div class="admin-panel-heading"><h2>' . e(t('admin.database_maintenance.physical_title', 'Statistics and table space')) . '</h2></div>';
 
     echo '<div class="admin-storage-chart-grid">';
     echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.analyze_title', 'Refresh database statistics')) . '</h3>';
@@ -268,16 +317,17 @@ function view_render_admin_database_physical_operations_panel(array $tables, boo
  * @param array<string, array<string, mixed>> $tables Inventory tables.
  * @param bool $requiresConfirmation Whether OPTIMIZE confirmation is required.
  * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
+ * @return void Outputs the selected-table mutation form.
  */
 function view_render_admin_database_table_selection_form(string $route, array $tables, bool $requiresConfirmation, bool $mutationsEnabled): void
 {
     echo '<form method="post" action="' . e(url_for($route)) . '">';
     echo csrf_field();
-    echo '<div class="admin-database-table-selection">';
+    echo '<details class="admin-database-table-selection-disclosure"><summary>' . e(t('admin.database_maintenance.select_tables', 'Select tables ({count})', ['count' => count($tables)])) . '</summary><div class="admin-database-table-selection">';
     foreach ($tables as $tableName => $table) {
         echo '<label><input type="checkbox" name="tables[]" value="' . e((string) $tableName) . '"> <code>' . e((string) $tableName) . '</code> <small>' . e(format_bytes((int) ($table['total_bytes'] ?? 0))) . ' · data_free ' . e(format_bytes((int) ($table['reclaimable_bytes_estimate'] ?? 0))) . '</small></label>';
     }
-    echo '</div>';
+    echo '</div></details>';
     if ($requiresConfirmation) {
         echo '<label>' . e(t('admin.database_maintenance.type_optimize', 'Type OPTIMIZE to confirm')) . '<input type="text" name="confirmation_text" autocomplete="off"></label>';
         echo '<div class="admin-database-operation-actions">';
@@ -296,11 +346,13 @@ function view_render_admin_database_table_selection_form(string $route, array $t
  * Render the complete table-centered schema and policy inventory.
  *
  * @param array<string, array<string, mixed>> $tables Inventory tables.
+ * @return void Outputs the collapsed inventory and its per-table details.
  */
 function view_render_admin_database_inventory_panel(array $tables): void
 {
     echo '<section class="panel admin-database-inventory-panel">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.inventory_kicker', 'Inventory')) . '</p><h2>' . e(t('admin.database_maintenance.inventory_title', 'Every discovered table')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.inventory_hint', 'Open a table to inspect columns, keys, ownership, retention, duplicate handling, and physical-maintenance policy. Unknown tables remain protected.')) . '</p></div>';
+    $inventorySummary = t('admin.database_maintenance.discovered_tables', 'Discovered tables ({count})', ['count' => count($tables)]);
+    echo '<details class="admin-database-inventory-list"><summary>' . e($inventorySummary) . '</summary><div class="admin-database-inventory-items" role="region" tabindex="0" aria-label="' . e($inventorySummary) . '">';
 
     foreach ($tables as $tableName => $table) {
         echo '<details class="admin-database-table-detail"><summary><code>' . e((string) $tableName) . '</code> <span>' . e((string) ($table['category'] ?? '')) . '</span><small>' . e(number_format((int) ($table['estimated_rows'] ?? 0))) . ' rows · ' . e(format_bytes((int) ($table['total_bytes'] ?? 0))) . '</small></summary>';
@@ -358,7 +410,7 @@ function view_render_admin_database_inventory_panel(array $tables): void
         echo '<strong>' . e(t('admin.database_maintenance.code_references', 'Code reference files')) . ':</strong> ' . e((string) count((array) ($table['code_reference_files'] ?? []))) . '; production SQL ' . e((string) count((array) ($table['production_sql_reference_files'] ?? []))) . '; test SQL ' . e((string) count((array) ($table['test_sql_reference_files'] ?? []))) . '</p>';
         echo '</details>';
     }
-    echo '</section>';
+    echo '</div></details></section>';
 }
 
 /**
