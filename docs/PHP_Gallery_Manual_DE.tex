@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.118.2}
-\newcommand{\manualdate}{4.~Oktober~2026}
+\newcommand{\version}{0.118.3}
+\newcommand{\manualdate}{5.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1343,6 +1343,10 @@ Die Auswahl von \ui{Foto öffnen} in einer Galeriekartenmarkierung öffnet diese
 Flugbezogene Sammlungen können die optionale SimBrief-Integration verwenden, um den neuesten operationellen Flugplan für eine Pilot ID oder einen Pilotennamen abzurufen. Der kompakte Editor akzeptiert eine sichtbare Kennung: Nur Ziffern wählen den Pilot-ID-Weg; anderer Text den Pilotennamenweg. Vorhandene Integrationen mit getrennten Feldern bleiben kompatibel; bei beiden Angaben wird die Pilot ID bevorzugt. Der Editor erstellt einen bearbeitbaren Markdown-Beschreibungsentwurf, speichert den OFP bei der Galerie und schreibt verfügbare Routenkoordinaten in deren Flugkartendatensatz. Eine fehlgeschlagene SimBrief-Anfrage lässt das normale Beschreibungsfeld und den manuellen Routeneditor verfügbar. Der Entwurf vor der Erstellung ist privat und vorübergehend, wie im Abschnitt zur Galerieerstellung beschrieben.
 
 Manueller Routentext wird vorrangig offline aufgelöst. Zuerst werden importierte OurAirports-Datenbankzeilen geprüft, dann die kleine mitgelieferte CSV-Ersatzquelle. Als Nächstes kann ein gültiges zwischengespeichertes Anbieterergebnis dienen; hat ein Administrator ein konfiguriertes Navigraph-Konto verknüpft und ist entfernte Suche erlaubt, kann eine unbekannte Kennung über Navigraph aufgelöst und unter dem bekannten AIRAC-Zyklus zwischengespeichert werden. Die Navigationsdatenverwaltung zeigt lokale Datenbank- und mitgelieferte Anzahlen, bietet einen Suchtester für Kennungen wie Flughäfen/Funkfeuer/Wegpunkte und kann den lokalen OurAirports-Flughafen-/Funkfeuerdatensatz aktualisieren. Navigraph-OAuth-/Kontospeicher ist optional und kann getrennt werden, ohne lokale Daten zu entfernen.
+
+Bei aktiviertem JavaScript prüft auch die Eingabe oder Fokussierung einer nicht leeren Route, das Anfordern eines SimBrief-Entwurfs oder das Speichern eines Formulars mit Route die Aktualität lokaler Navigationsdaten im Hintergrund. Sowohl \ui{Flugkarten} als auch \ui{Navigationsdaten} müssen aktiviert sein. OurAirports-Daten werden erneuert, wenn der letzte erfolgreiche Import mindestens eine Woche zurückliegt; zwischen fehlgeschlagenen Versuchen liegt eine Stunde. Das Speichern der Galerie wartet nicht auf diese Anfrage; Editorentwurf, geöffnetes Seitenpanel und Browseradresse bleiben erhalten. Auch bei fehlgeschlagener Aktualisierung kann die Galerie gespeichert werden.
+
+Nach der Prüfung können gespeicherte manuelle Routen fehlende Koordinaten aus aktuellen Navigationsdaten ergänzen. Vorhandene Koordinaten und SimBrief-OFP-Geometrie bleiben erhalten; eine neuere Routenänderung oder Löschung verhindert, dass das Hintergrundresultat diesen Zustand überschreibt. Nur gespeicherte Routen werden vervollständigt; ungespeicherter Browsertext wird mit der Aktualisierung nicht übertragen. Betroffene öffentliche Karten werden über den gemeinsamen Seitenpanel-Ablauf aktualisiert. Import und Routenschreibzugriffe benötigen verifizierten Datenbankspeicher; fehlender oder unklarer Speicher verhindert den optionalen Schreibzugriff, während gewöhnliche Galeriebearbeitung verfügbar bleibt.
 
 Die öffentliche Kartendarstellung ruft niemals SimBrief, Navigraph oder einen anderen aktiven Planungsdienst auf. Sie stellt nur bereits bei der Galerie gespeicherte Koordinaten dar. Gespeicherte SimBrief-OFP-Koordinaten bleiben daher nutzbar, selbst wenn der entfernte Anbieter später ausfällt. Manueller Routentext kann die Kennungssuche auch vollständig durch ausdrückliche \codeword{NAME@latitude,longitude}-Punkte umgehen.
 

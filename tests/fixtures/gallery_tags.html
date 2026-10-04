@@ -429,8 +429,9 @@ async function runFixture() {
     const expandedNames = tagNames(infoPanel);
     check(expandedNames[1] === 'Long coast observation point tag' && expandedNames[4] === 'Migrating birds near the eastern shoreline', 'all public tags retain their server order in the panel');
     summary.click();
+    const clickedCloseFinished = await waitForDisclosureClose(details);
     await settle();
-    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native collapse restores the original compact card geometry');
+    check(clickedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'animated summary collapse finishes and restores the original compact card geometry');
     summary.focus({preventScroll: true});
     const keyboard = await fetch('/__key?key=Enter');
     check(keyboard.ok, 'trusted Enter key reaches native summary');

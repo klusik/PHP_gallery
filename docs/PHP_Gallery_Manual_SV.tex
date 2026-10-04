@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.118.2}
-\newcommand{\manualdate}{4~oktober~2026}
+\newcommand{\version}{0.118.3}
+\newcommand{\manualdate}{5~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1339,6 +1339,10 @@ Att välja \ui{Öppna fotografi} i en gallerikartmarkör öppnar fotografiet i a
 Flyginriktade samlingar kan använda den valfria SimBrief-integrationen för att hämta senaste operativa färdplanen för ett~pilot-ID eller pilotnamn. Den kompakta redigeraren accepterar en synlig identifierare: enbart siffror väljer vägen för pilot-ID; annan text väljer vägen för pilotnamn. Befintliga integrationer som skickar separata fält förblir kompatibla, med pilot-ID som förstahandsval när båda anges. Redigeraren skapar ett redigerbart Markdown-beskrivningsutkast, sparar OFP med galleriet och skriver tillgängliga ruttkoordinater till galleriets flygkartspost. En misslyckad SimBrief-begäran lämnar det vanliga beskrivningsfältet och den manuella ruttredigeraren tillgängliga. Utkastet före skapande är privat och tillfälligt enligt avsnittet om galleriskapande.
 
 Manuell rutttext tolkas i första hand offline. Importerade OurAirports-databasrader kontrolleras först, sedan den lilla medföljande CSV-reserven. Ett giltigt cachelagrat leverantörsresultat kan användas därefter; när en administratör har kopplat ett konfigurerat Navigraph-konto och fjärrsökning är tillåten kan en okänd identifierare slås upp genom Navigraph och cachelagras under känd AIRAC-cykel. Hanteraren för Navigeringsdata visar antal i lokal databas och medföljande data, ger ett uppslagstest för identifierare såsom flygplatser, navigeringshjälpmedel och fixpunkter och kan uppdatera det lokala OurAirports-underlaget för flygplatser och navigeringshjälpmedel. Lagring för Navigraph OAuth och konton är valfri och kan kopplas bort utan att lokala data tas bort.
+
+Med JavaScript aktiverat kontrolleras lokala navigeringsdatas aktualitet i bakgrunden även när en rutt som inte är tom matas in eller får fokus, när ett SimBrief-utkast begärs eller när ett formulär med rutt sparas. Både \ui{Flygkartor} och \ui{Navigeringsdata} måste vara aktiverade. OurAirports-data uppdateras när den senaste lyckade importen är minst en vecka gammal, med en timme mellan misslyckade försök. Gallerisparandet väntar inte på denna begäran; redigeringsutkastet, den öppna sidopanelen och webbläsaradressen bevaras. Galleriet kan sparas även om uppdateringen misslyckas.
+
+Efter kontrollen kan sparade manuella rutter få saknade koordinater från aktuella navigeringsdata. Befintliga koordinater och SimBrief OFP-geometri bevaras, och en nyare ruttändring eller radering hindrar bakgrundsresultatet från att skriva över detta tillstånd. Endast sparade rutter kompletteras; osparad webbläsartext skickas inte med uppdateringen. Berörda offentliga kartor uppdateras genom det gemensamma sidopanelsflödet. Import och ruttskrivningar kräver verifierad databaslagring; saknad eller osäker lagring hindrar den valfria skrivningen medan vanlig galleriredigering förblir tillgänglig.
 
 Offentlig kartvisning anropar aldrig SimBrief, Navigraph eller någon annan aktiv planeringstjänst. Den visar endast koordinater som redan lagrats med galleriet. Sparade SimBrief OFP-koordinater förblir därför användbara även om fjärrleverantören senare är otillgänglig. Manuell rutttext kan också helt kringgå identifieraruppslag med uttryckliga \codeword{NAME@latitude,longitude}-punkter.
 

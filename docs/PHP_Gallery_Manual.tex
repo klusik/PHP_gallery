@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118.2}
-\newcommand{\manualdate}{4 October 2026}
+\newcommand{\version}{0.118.3}
+\newcommand{\manualdate}{5 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1349,6 +1349,10 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description draft, saves the~OFP with the~gallery, and~writes available route coordinates into the~gallery flight-map record. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
 
 Manual route text is~resolved offline-first. Imported OurAirports database rows are~checked first, then the~small bundled CSV fallback. A~valid cached provider result may~be~used next; when an~administrator has~linked a~configured Navigraph account and~remote lookup is~allowed, an~unknown identifier can~be~resolved through Navigraph and~cached under the~known AIRAC cycle. The~Navigation Data manager shows local database and~bundled counts, provides a~lookup tester for~identifiers such as~airports/navaids/fixes, and~can~refresh the~local OurAirports airport/navaid dataset. Navigraph OAuth/account storage is~optional and~can~be~disconnected without removing local data.
+
+With JavaScript enabled, entering or~focusing a~nonempty route, requesting a~SimBrief draft, or~saving route-bearing input also checks local navigation-data freshness in~the~background. Both \ui{Flight Maps} and~\ui{Navigation Data} must be~enabled. OurAirports data is~refreshed when the~last successful import is~at~least a~week old, with an~hour between failed attempts. Gallery saving does~not~wait for~this request; the~editor draft, open side panel, and~browser address stay in~place. A~refresh failure still allows the~gallery to~be~saved.
+
+After the~check, unresolved saved manual routes can~gain missing coordinates from~current navigation data. Existing coordinates and~SimBrief OFP geometry are~preserved, and~a~newer route edit or~deletion prevents the~background result from~overwriting that state. Only saved routes are~completed; unsaved browser text is~not~sent with the~refresh. Changed public map contexts are~refreshed through the~shared panel workflow. Import and~route writes require verified database storage; missing or~uncertain storage prevents the~optional write while ordinary gallery editing remains available.
 
 Public map rendering never calls SimBrief, Navigraph, or~another live planning service. It~renders only coordinates already stored with the~gallery. Saved SimBrief OFP coordinates therefore remain usable even if~the~remote provider is~later unavailable. Manual route text can~also bypass identifier lookup completely with explicit \codeword{NAME@latitude,longitude} points.
 

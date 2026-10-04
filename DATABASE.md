@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.118.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.118.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -1044,6 +1044,8 @@ Stores resolved route data for a gallery flight map.
 | `point_count` | Number of resolved points. |
 | `resolved_at` | Last route resolution time. |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+Background editor navigation-data checks can complete unresolved saved manual routes using the existing columns. The model updates only when the captured source type, route text, resolved/unresolved point JSON, and `updated_at` still match, so a newer edit or deletion survives. Completion preserves captured coordinates and SimBrief OFP geometry; writes require verified flight-map schema. This workflow adds no schema migration or storage field.
 
 ### `flight_map_nav_points`
 
