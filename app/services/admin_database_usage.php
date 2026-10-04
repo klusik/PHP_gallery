@@ -44,6 +44,15 @@ use function Gallery\Models\admin_database_usage_model_table_rows;
 use Throwable;
 use function Gallery\Core\cms_config;
 
+/** Set the default per-request database statistics batch size.
+ * @var int
+ * Units: tables passed to ANALYZE TABLE per request.
+ * Scope: direct recompute calls that omit the optional batch-size argument.
+ * Consumers: admin_database_usage_recompute_statistics_batch(); storage refresh passes its own explicit batch size.
+ * Rationale: five table operations provide a bounded default while explicit callers can choose their own safe limit.
+ */
+const ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE = 5;
+
 /**
  * Return table names that represent gallery content or gallery-derived metadata.
  *
@@ -193,6 +202,56 @@ function admin_database_usage_recompute_statistics(): array
     }
 
     return $report;
+}
+
+/**
+ * Recompute one bounded batch of database table statistics through ANALYZE TABLE.
+ *
+ * @param int $offset Zero-based position of the next table to analyze.
+ * @param int $batchSize Maximum number of tables to analyze in this request.
+ * @return array<string, mixed> Batch progress and bounded failure counts.
+ */
+function admin_database_usage_recompute_statistics_batch(int $offset, int $batchSize = ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE): array
+{
+    $databaseName = admin_database_usage_current_database_name();
+    if ($databaseName === '') {
+        throw new \RuntimeException('Current database name could not be detected.');
+    }
+
+    $rows = admin_database_usage_table_rows($databaseName);
+    $tableNames = admin_database_usage_recomputable_table_names($rows);
+    // ANALYZE can change size estimates, so use a stable name order for the browser cursor.
+    sort($tableNames, SORT_NATURAL | SORT_FLAG_CASE);
+    $total = count($tableNames);
+    $offset = max(0, min($total, $offset));
+    /**
+     * Purpose: Bound the number of metadata refresh operations in one request.
+     * @var int
+     * Units: database tables per ANALYZE request.
+     * Scope: resumable database usage recomputation batches.
+     * Consumers: admin_database_usage_recompute_statistics_batch().
+     * Rationale: cap request duration while allowing the persisted cursor to resume remaining tables.
+     */
+    $batchSize = max(1, min(ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE, $batchSize));
+    $batch = array_slice($tableNames, $offset, $batchSize);
+    $failed = 0;
+
+    foreach ($batch as $tableName) {
+        try {
+            admin_database_usage_model_analyze_table($tableName);
+        } catch (Throwable) {
+            $failed++;
+        }
+    }
+
+    $processed = $offset + count($batch);
+    return [
+        'ok' => true,
+        'processed' => $processed,
+        'total' => $total,
+        'failed_table_count' => $failed,
+        'complete' => $processed >= $total,
+    ];
 }
 
 /**

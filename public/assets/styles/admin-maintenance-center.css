@@ -37,22 +37,58 @@
     gap: 1rem;
 }
 
+.admin-maintenance-center-hero {
+    position: relative;
+}
+
+.admin-maintenance-center-hero > div:first-child .admin-inline-help {
+    position: static;
+}
+
+.admin-maintenance-center-hero .admin-inline-help-content {
+    right: auto;
+    left: 0;
+    box-sizing: border-box;
+    width: min(26rem, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
+}
+
 .admin-maintenance-center {
     display: grid;
-    gap: .65rem;
+    gap: .45rem;
     min-width: 0;
+}
+
+.admin-maintenance-center,
+.admin-maintenance-center * {
+    box-sizing: border-box;
+}
+
+.admin-maintenance-center [hidden] {
+    display: none !important;
+}
+
+.maintenance-center-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.maintenance-center-title-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
 }
 
 /* Override shared page-card spacing only inside this compact maintenance workspace. */
 .admin-page .admin-maintenance-center-hero,
 .admin-page .admin-maintenance-center .panel {
     margin: 0;
-    padding: .75rem .9rem;
+    padding: .55rem .75rem;
     min-width: 0;
 }
 
 .admin-page .admin-maintenance-center-hero {
-    margin-bottom: .65rem;
+    margin-bottom: .45rem;
     align-items: center;
 }
 
@@ -89,16 +125,31 @@
     overflow: hidden;
 }
 
+.maintenance-center-status-card > *,
+.maintenance-center-section-heading > *,
+.maintenance-center-task-group > *,
+.maintenance-center-report-breakdown > * {
+    min-width: 0;
+}
+
 .maintenance-center-status-badge {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--border-color, rgba(127, 127, 127, .32));
     border-radius: 999px;
-    padding: .35rem .7rem;
+    padding: .22rem .55rem;
     font-size: .78rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .04em;
+}
+
+.maintenance-center-status-heading {
+    align-items: center;
+}
+
+.maintenance-center-status-heading > div:first-child {
+    flex: 1 1 auto;
 }
 
 .maintenance-center-status-badge[data-status="running"],
@@ -112,7 +163,7 @@
 
 .maintenance-center-progress {
     height: .5rem;
-    margin-top: .65rem;
+    margin-top: .4rem;
     overflow: hidden;
     border-radius: 999px;
     background: color-mix(in srgb, currentColor 10%, transparent);
@@ -131,8 +182,8 @@
 .maintenance-center-current {
     display: flex;
     flex-wrap: wrap;
-    gap: .5rem 1.25rem;
-    margin-top: .4rem;
+    gap: .3rem .8rem;
+    margin-top: .25rem;
 }
 
 .maintenance-center-progress-meta {
@@ -140,14 +191,16 @@
 }
 
 .maintenance-center-current {
-    padding: .4rem 0;
+    padding: .3rem 0;
     font-size: .85rem;
     border-top: 1px solid var(--border-color, rgba(127, 127, 127, .2));
     border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .2));
 }
 
 .maintenance-center-actions {
-    margin-top: .5rem;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    margin-top: 0;
 }
 
 .maintenance-center-cancel-note {
@@ -157,8 +210,8 @@
 .maintenance-center-plan-totals {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: .4rem;
+    justify-content: flex-start;
+    gap: .3rem;
 }
 
 .maintenance-center-plan-totals > span,
@@ -171,22 +224,32 @@
     border-radius: .6rem;
 }
 
+.maintenance-center-plan-totals > span {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .25rem .4rem;
+    min-width: 0;
+    padding: .2rem .4rem;
+}
+
 .maintenance-center-plan-totals small,
 .maintenance-center-task-facts small {
     opacity: .72;
 }
 
 .maintenance-center-task-groups {
-    /* Read groups in plan order; aligned task rows separate names, state, and evidence. */
-    display: grid;
-    gap: .65rem;
-    margin-top: .65rem;
+    /* Independent columns avoid large empty CSS-grid row tracks between groups. */
+    columns: 2;
+    column-gap: .55rem;
+    margin-top: .45rem;
 }
 
 .maintenance-center-task-group {
-    display: grid;
-    align-content: start;
-    gap: 0;
+    display: inline-block;
+    width: 100%;
+    margin: 0 0 .5rem;
+    vertical-align: top;
+    break-inside: avoid;
     overflow: hidden;
     border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
     border-radius: .85rem;
@@ -194,7 +257,7 @@
 
 .maintenance-center-task-group h3 {
     margin: 0;
-    padding: .45rem .7rem;
+    padding: .35rem .55rem;
     font-size: .9rem;
     background: color-mix(in srgb, var(--admin-brand, currentColor) 7%, transparent);
     border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .22));
@@ -204,25 +267,25 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    gap: .45rem;
-    padding: .55rem .7rem;
+    gap: .35rem;
+    padding: .38rem .55rem;
     font-size: .85rem;
     line-height: 1.4;
     border-radius: 0;
     background: transparent;
 }
 
-.maintenance-center-task + .maintenance-center-task {
+.maintenance-center-task-item + .maintenance-center-task-item {
     border-top: 1px solid var(--border-color, rgba(127, 127, 127, .14));
 }
 
-.maintenance-center-task:has(input:enabled):hover,
+.maintenance-center-task-item:has(input:enabled):hover,
 .maintenance-center-task:focus-within {
     background: color-mix(in srgb, var(--admin-brand, currentColor) 5%, transparent);
 }
 
 .maintenance-center-task.is-unavailable {
-    opacity: .58;
+    opacity: 1;
 }
 
 .maintenance-center-task > input {
@@ -231,18 +294,34 @@
 
 .maintenance-center-task-body,
 .maintenance-center-task-facts,
-.maintenance-center-task-badges {
+.maintenance-center-task-heading {
     display: flex;
     flex-wrap: wrap;
     gap: .4rem;
 }
 
 .maintenance-center-task-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, 1.5fr);
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     min-width: 0;
-    gap: .5rem 1rem;
+    gap: .25rem;
+    overflow-wrap: anywhere;
+}
+
+.maintenance-center-task-heading {
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .2rem .5rem;
+}
+
+.maintenance-center-task-title,
+.maintenance-center-task-requirement,
+.maintenance-center-task-unavailable,
+.maintenance-center-task-facts,
+.maintenance-center-current,
+.maintenance-center-progress-label,
+.maintenance-center-activity li > span {
+    min-width: 0;
     overflow-wrap: anywhere;
 }
 
@@ -250,77 +329,190 @@
     font-weight: 700;
 }
 
-.maintenance-center-task-badges small {
-    padding: .15rem .45rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, currentColor 9%, transparent);
+.maintenance-center-task-requirement,
+.maintenance-center-task-unavailable {
+    flex: 0 0 auto;
+    font-size: .74rem;
+    font-weight: 700;
+}
+
+.maintenance-center-task-requirement {
+    color: var(--accent, currentColor);
+}
+
+.maintenance-center-task-unavailable {
+    color: var(--danger, #b42318);
 }
 
 .maintenance-center-task-facts > span {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: inline-flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: .4rem;
+    gap: .15rem .3rem;
     min-width: 0;
-    padding: .2rem .4rem;
+    padding: 0;
     border: 0;
-    border-radius: .25rem;
-    background: color-mix(in srgb, currentColor 4%, transparent);
+    border-radius: 0;
+    background: transparent;
 }
 
 .maintenance-center-task-facts small {
-    order: -1;
-    opacity: .85;
+    opacity: .72;
+    font-size: .76rem;
 }
 
 .maintenance-center-task-facts strong {
-    text-align: right;
+    text-align: left;
 }
 
 .maintenance-center-task-facts {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .2rem .5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .1rem .65rem;
 }
 
-/* On narrower workspaces, evidence follows the title and state instead of squeezing them. */
-@media (max-width: 1150px) {
-    .maintenance-center-task-body {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
+.maintenance-center-no-work {
+    display: block;
+    width: 100%;
+    margin: .15rem 0 .5rem;
+    padding: .45rem .6rem;
+    column-span: all;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
+    border-radius: .7rem;
+}
 
+.maintenance-center-no-work > summary {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 700;
+}
+
+.maintenance-center-no-work > summary::-webkit-details-marker {
+    display: none;
+}
+
+.maintenance-center-no-work > summary::before {
+    content: "▸";
+    flex: 0 0 auto;
+}
+
+.maintenance-center-no-work[open] > summary::before {
+    content: "▾";
+}
+
+.maintenance-center-no-work > summary:focus-visible {
+    outline: 2px solid var(--accent, currentColor);
+    outline-offset: 3px;
+}
+
+.maintenance-center-no-work-groups {
+    columns: 2;
+    column-gap: .55rem;
+    margin-top: .4rem;
+}
+
+.maintenance-center-no-work-group {
+    break-inside: avoid;
+}
+
+.maintenance-center-no-work-group .maintenance-center-task-item {
+    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .14));
+}
+
+.maintenance-center-review > summary {
+    display: flex;
+    align-items: baseline;
+    gap: .25rem .65rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.maintenance-center-review > summary::-webkit-details-marker {
+    display: none;
+}
+
+.maintenance-center-review > summary::before {
+    content: "▸";
+    flex: 0 0 auto;
+    font-size: 1.05em;
+    line-height: 1;
+}
+
+.maintenance-center-review[open] > summary::before {
+    content: "▾";
+}
+
+.maintenance-center-review > summary .admin-kicker {
+    margin: 0;
+}
+
+.maintenance-center-review-content {
+    margin-top: .5rem;
+}
+
+/* Keep evidence below the task name and availability state in narrower workspaces. */
+@media (max-width: 1150px) {
     .maintenance-center-task-facts {
         grid-column: 1 / -1;
     }
 }
 
 @media (max-width: 560px) {
-    .maintenance-center-task-body,
-    .maintenance-center-task-facts {
-        grid-template-columns: minmax(0, 1fr);
+    .maintenance-center-task-body {
+        min-width: 0;
     }
 
     .maintenance-center-task-facts {
-        grid-column: auto;
+        gap: .1rem .45rem;
+    }
+
+    .maintenance-center-no-work-groups {
+        columns: 1;
     }
 }
 
 .maintenance-center-full-optimize {
+    margin: .1rem .55rem .4rem 2.3rem;
+    padding: .35rem .5rem;
+    border-left: 2px solid var(--accent, currentColor);
+    background: color-mix(in srgb, var(--accent, currentColor) 5%, transparent);
+}
+
+.maintenance-center-full-optimize label {
+    display: flex;
+    align-items: flex-start;
+    gap: .4rem;
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.maintenance-center-full-optimize p {
+    margin: .2rem 0 0 1.35rem;
+    font-size: .78rem;
+}
+
+.maintenance-center-review-actions {
+    justify-content: flex-end;
     margin-top: .5rem;
+    padding-top: .45rem;
+    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .18));
 }
 
 .maintenance-center-lower-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr);
     align-items: start;
-    gap: .65rem;
+    gap: .45rem;
 }
 
 .maintenance-center-activity {
     display: grid;
-    gap: .4rem;
-    max-height: 13rem;
-    margin: .5rem 0 0;
+    gap: .2rem;
+    max-height: 9rem;
+    margin: .35rem 0 0;
     padding: 0;
     overflow: auto;
     list-style: none;
@@ -329,8 +521,8 @@
 .maintenance-center-activity li {
     display: grid;
     grid-template-columns: 5.4rem minmax(0, 1fr);
-    gap: .6rem;
-    padding: .42rem .5rem;
+    gap: .4rem;
+    padding: .25rem .35rem;
     border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .16));
 }
 
@@ -355,26 +547,37 @@
 .maintenance-center-report-breakdown {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    gap: .65rem;
-    margin-top: .65rem;
+    align-items: start;
+    gap: .45rem;
+    margin-top: .45rem;
 }
 
 /* Results stay scannable without giving each value a full dashboard-sized card. */
 .admin-maintenance-center .metric-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
-    gap: .5rem;
-    margin-top: .6rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .3rem;
+    margin-top: .4rem;
 }
 
 .admin-maintenance-center .metric-card {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .35rem;
     min-height: 0;
-    padding: .5rem .65rem;
-    gap: .2rem;
+    padding: .3rem .4rem;
 }
 
 .admin-maintenance-center .metric-card strong {
-    font-size: 1.1rem;
+    flex: 0 0 auto;
+    font-size: 1rem;
+}
+
+.admin-maintenance-center .metric-card span {
+    min-width: 0;
+    font-size: .78rem;
+    text-align: right;
 }
 
 .maintenance-center-report-breakdown ul {
@@ -392,6 +595,25 @@
     padding: .75rem;
     border: 1px solid var(--border-color, rgba(127, 127, 127, .2));
     border-radius: .7rem;
+}
+
+.maintenance-center-report-detail {
+    min-width: 0;
+    padding: .4rem .5rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .2));
+    border-radius: .7rem;
+}
+
+.maintenance-center-report-detail > summary {
+    cursor: pointer;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.maintenance-center-report-detail ul {
+    max-height: 12rem;
+    margin: .55rem 0 0;
+    overflow: auto;
 }
 
 .maintenance-center-report-breakdown h3 {
@@ -412,10 +634,40 @@
     }
 
     .maintenance-center-plan-totals {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        justify-content: stretch;
+    }
+
+    .admin-maintenance-center .metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .maintenance-center-status-heading .maintenance-center-actions {
         justify-content: flex-start;
     }
 
+    .maintenance-center-plan-totals > span {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .maintenance-center-plan-totals small {
+        overflow-wrap: anywhere;
+    }
+
     .maintenance-center-lower-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .maintenance-center-task-groups {
+        columns: 1;
+    }
+}
+
+@media (max-width: 420px) {
+    .admin-maintenance-center .metric-grid {
         grid-template-columns: 1fr;
     }
 }
