@@ -359,6 +359,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | EXIF and map data endpoint | `app/controllers/exif.php`, `app/services/exif.php` | Authorized map points include canonical photo-page URLs and stable image/gallery identifiers so marker actions can reuse the active lightbox and retain page navigation as fallback. |
 | Navigation lookup | `app/services/navigation_data.php`, `app/controllers/navigation_data.php` |
 | Navigation admin UI | `app/views/navigation_data.php` |
+| Background editor navdata refresh | `public/assets/gallery-modules/admin-route-navdata.js`, `app/controllers/navigation_data.php`, internal part `app/services/flight_maps/navdata_update.php`, `app/models/flight_maps.php` | Independent authenticated POST, due-import policy, saved-route completion with conditional persistence, and canonical affected gallery/parent refresh without replacing the editor. Requires effective Flight Maps and Navigation Data. |
 | Bundled navdata | `data/navdata/local_nav_points.csv` |
 | Navigation provider accounts | `navigation_data_accounts` |
 | Navigation cache | `navigation_data_cache` |
@@ -913,7 +914,7 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 | Integrated uploads | `app/controllers/admin_settings.php`, `app/services/admin_settings_registry.php`, `app/controllers/mobile_webdav.php` | Coupled normalization, embedded fragments, one-time credential retention. |
 | Appearance resize | `public/assets/gallery-modules/theme-appearance-resizer.js`, `public/assets/gallery-modules/theme-form.js` | Accessible browser-local pane size and draft preview. |
 | Update notes | `app/controllers/updates.php`, `app/services/updates_status.php`, `app/services/updates_patch_notes.php`, `public/assets/gallery-modules/admin-update-notes.js` | Passive notes and bounded explicit discovery. |
-| Navdata | `app/services/flight_maps.php`, internal part `app/services/flight_maps/navdata_update.php`, `app/models/flight_maps.php` | Weekly/backoff/lock policy and atomic 200-row batches. |
+| Navdata | `app/services/flight_maps.php`, internal part `app/services/flight_maps/navdata_update.php`, `app/models/flight_maps.php` | Weekly/backoff/lock policy, atomic 200-row import batches, and conditional completion of unresolved saved manual routes after independent editor refreshes. |
 | Python policies | `scripts/source_contracts/python.php`, `scripts/source_contracts/python_scan.py`, `scripts/check_python_import_policy.php` | Non-executing AST declarations and whole-tree import prohibition. |
 | Bash and PowerShell source contracts | `scripts/source_contracts/scripts.php`, `tests/source_contract_scripts_test.php` | Non-executing bounded parser for changed brace-bodied functions, preceding documentation, stable body fingerprints, and explicit refusal of unsupported forms. |
 | Windows release pair | `winapp/build_installer.py` | Version folder, exact JSON integrity and publication rollback. |

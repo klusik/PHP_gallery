@@ -1,5 +1,63 @@
 # Patch notes
 
+## Version 0.118.3
+
+Version 0.118.3 refreshes local navigation data in the background when administrators work with flight routes or import SimBrief drafts. Gallery saves remain available while the refresh runs, and unresolved saved manual routes can gain coordinates without overwriting a newer edit, existing coordinates, or SimBrief OFP geometry. The update adds no database migration.
+
+### Highlights
+
+#### Background route navigation data
+
+- Added automatic freshness checks when administrators enter or focus a nonempty route, request a SimBrief description draft, or save route-bearing input.
+- Kept the refresh independent of gallery saving and preserved the editor draft, open side panel, and browser URL.
+- Reused the weekly OurAirports refresh interval, one-hour failure backoff, and installation-wide import lock; coalesced checks and bounded retries when another request owns the import.
+- Completed unresolved saved manual routes only when additional coordinates were found, preserving captured points and leaving SimBrief OFP geometry intact.
+
+### Technical Details
+
+#### Backend
+
+- Added the authenticated, CSRF-protected `admin_route_navdata_refresh` POST in `app/controllers/navigation_data.php` and registered it in `app/bootstrap/dispatch.php`.
+- Released the PHP session before importing data so concurrent gallery saves can continue; requests contain the saved gallery identity rather than draft route text or pilot identifiers.
+- Extended `app/services/flight_maps/navdata_update.php` to complete saved routes after a due import or from already-current data. Used `app/models/flight_maps.php` to compare captured route text, point payloads, source type, and timestamp before writing, preserving concurrent edits and deletions.
+- Returned the canonical Admin mutation envelope with affected gallery and parent/root contexts when route coordinates changed, using the shared public refresh coordinator without replacing the editor.
+
+#### Database and capability policy
+
+- Added no migration, table, column, index, or setting. Reused existing navigation-data and flight-map storage and freshness settings.
+- Required both effective `navigation_data` and `flight_maps` capabilities for the new route and its editor endpoint. Disabling either prevents background requests without deleting stored data.
+- Required verified `available` import schema before downloads and writes. Confirmed `missing` or `unknown` import storage refuses refresh; unavailable flight-map storage prevents route completion, and a route write requires verified schema again before persistence. Optional refresh failures leave the ordinary gallery save available.
+- Kept failure responses translated and bounded; diagnostic context contains the gallery ID and exception class without returning raw provider or database exceptions. Added no System Health capability or group.
+
+#### Frontend and documentation
+
+- Added `public/assets/gallery-modules/admin-route-navdata.js` with delegated handling for dynamically replaced editors, coalesced requests, bounded busy retries, and a final pass after a successful gallery save or creation.
+- Updated `app/controllers/admin_gallery_form_models.php` and `app/views/admin_gallery_forms.php` to pass prepared refresh availability to manual-route and SimBrief controls, including when SimBrief is disabled.
+- Updated `public/assets/gallery.js` and the versioned interaction-policy import for the new module; synchronized the safe refresh-failure label across English, Czech, German, and Swedish PHP/JSON catalogs.
+- Updated `ARCHITECTURE.md`, `TESTING.md`, and `CODEMAP.md`, synchronized all four administrator manual editions, and rebuilt their PDFs for Version 0.118.3.
+
+### Tests
+
+#### Route refresh and panel contracts
+
+- Added `tests/route_navdata_background_test.php` for due imports, saved-route completion, coordinate/OFP preservation, conditional writes against concurrent edits and deletions, schema refusal, and busy/backoff behavior.
+- Extended `tests/admin_navigation_data_ui_test.php` for POST-only behavior, authentication, CSRF, session release, safe failure responses, and canonical affected contexts.
+- Extended `tests/feature_policy_core_test.php`, `tests/frontend_operational_policy_test.mjs`, and `scripts/check_admin_mutation_contracts.php` for compound capability ownership, retry policy, and shared mutation completion.
+- Extended the registered `tests/fixtures/admin_update_jobs.html` browser fixture to hold an import open while Save completes, verify the final pass and server-assigned gallery identity, and exercise dynamic controls, busy retries, disabled features, and failure isolation with an unchanged URL and open panel.
+- Fixed `tests/fixtures/gallery_tags.html` to wait for the summary-triggered closing animation before checking restored card geometry, retaining the bounded completion and exact layout assertions already used for Escape dismissal.
+
+### User Impact
+
+#### For visitors
+
+- Saved manual flight routes can display newly resolved points after an administrator's background refresh. Public rendering continues to use stored coordinates and existing media/access rules.
+
+#### For administrators
+
+- Working with a route or importing SimBrief can refresh local navigation data without a separate trip to Navigation Data or waiting before saving the gallery.
+- Refresh failures leave gallery editing available; saved coordinates and newer edits remain protected.
+- Preserved the independent Windows uploader version and installer because this release changes only CMS behavior, documentation, and tests.
+
 ## Version 0.118.2
 
 Version 0.118.2 streamlines Admin storage reporting with one resumable refresh for file statistics, database estimates, and read-only database inspection. It also makes storage details easier to scan and groups Maintenance Center tasks around the work found during analysis. The update adds no database migration and leaves public gallery behavior unchanged.
