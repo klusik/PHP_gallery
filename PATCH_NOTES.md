@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.118.2
+
+Version 0.118.2 streamlines Admin storage reporting with one resumable refresh for file statistics, database estimates, and read-only database inspection. It also makes storage details easier to scan and groups Maintenance Center tasks around the work found during analysis. The update adds no database migration and leaves public gallery behavior unchanged.
+
+### Highlights
+
+#### Unified storage refresh
+
+- Added an `Update all` action that refreshes file statistics, database table estimates, and the read-only database inspection in sequence.
+- Kept progress on the server and processed files and database tables in bounded requests, so an administrator can continue an active workflow without restarting completed stages.
+- Reported partial failures by stage and refreshed the selected Storage statistics view in place when processing finishes.
+- Kept the operation read-only with respect to gallery data: it does not clean records, repair schema, optimize tables, or execute a Maintenance Center plan.
+
+#### Storage reports and maintenance review
+
+- Reworked storage summary cards and charts with clearer grouping, concise chart help, file counts, and accessible chart meters.
+- Grouped Maintenance Center tasks by area and moved available optional tasks with no detected work into a collapsed disclosure.
+- Kept deep media verification and available full-table optimization visible in the plan review, and labeled required automatic tasks and unavailable tasks directly.
+
+### Technical Details
+
+#### Backend
+
+- Added `app/services/admin_storage_refresh.php` for the server-owned, administrator-bound refresh lifecycle, persisted progress, bounded stage transitions, and safe partial-result reporting.
+- Registered the service and extended `cms_admin_storage_statistics_update()` with start/step actions for the combined workflow.
+- Added `admin_database_usage_recompute_statistics_batch()` to run `ANALYZE TABLE` for at most five tables per request.
+
+#### Database
+
+- Added no migration, table, column, index, or setting. The workflow refreshes existing table metadata and runs the existing read-only database inspection.
+- Continued storing refresh progress in the application cache with a one-hour expiry; bounded diagnostic events record stage failures without returning exception details to the browser.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-storage-statistics.js` to show staged progress and replace only the active Storage statistics content after completion.
+- Updated `public/assets/gallery-modules/admin-maintenance-center.js` to group review tasks, preserve the no-work disclosure state during redraws, and retain discoverability of opt-in deep verification and full optimization.
+- Updated `public/assets/gallery.js` cache-busting versions for both changed Admin modules and synchronized the storage labels across all four language catalogs.
+- Updated `CODEMAP.md` with the storage-report and refresh service ownership.
+- Updated the English, Czech, German, and Swedish administrator manuals and rebuilt their PDFs for Version 0.118.2.
+
+### Tests
+
+- Added `tests/admin_storage_refresh_test.php` for server-side ownership, rotating workflow identities, bounded phase progression, retry behavior, partial failures, and safe browser responses.
+- Updated `tests/maintenance_center_test.php` for the revised review groups, collapsed no-work tasks, preserved task selections, and accessible database-maintenance disclosures.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery pages, access rules, and visitor workflows are unchanged.
+
+#### For administrators
+
+- One action now updates the file scan, database estimates, and database inspection while showing resumable progress and any incomplete stages.
+- Storage charts and Maintenance Center review present the available information more clearly without expanding work that analysis found unnecessary.
+
 ## Version 0.118.1
 
 Version 0.118.1 corrects the source-documentation checks so anonymous functions and callbacks do not require docstrings. Named functions, methods, and class-like declarations retain their documentation requirements. The update aligns contributor guidance and regression coverage without changing gallery behavior, settings, or database storage.
