@@ -12,6 +12,9 @@
 declare(strict_types=1);
 namespace Gallery\Services;
 
+use function Gallery\Core\now_sql;
+use function Gallery\Models\flight_maps_model_complete_route;
+
 /**
  * Purpose: Bound automatic navigation-data refresh frequency.
  * Units: seconds.
@@ -48,11 +51,12 @@ function flight_map_navdata_refresh_due(): bool
  * closure may disconnect feedback, but PHP can finish the atomic import.
  *
  * @param bool $onlyIfDue Whether a browser requested the periodic freshness check.
- * @return array{state:string,result:array<string,mixed>} Import outcome or passive skip.
+ * @param int $galleryId Optional saved route to complete after refreshing local data.
+ * @return array{state:string,result:array<string,mixed>,route_updated?:bool} Import outcome or passive skip.
  */
-function flight_map_navdata_refresh(bool $onlyIfDue = false): array
+function flight_map_navdata_refresh(bool $onlyIfDue = false, int $galleryId = 0): array
 {
-    if ($onlyIfDue && !flight_map_navdata_refresh_due()) {
+    if ($galleryId <= 0 && $onlyIfDue && !flight_map_navdata_refresh_due()) {
         return ['state' => 'current', 'result' => []];
     }
     $lock = @fopen(dirname(__DIR__, 3) . '/cache/navdata-update.lock', 'c');
@@ -62,14 +66,59 @@ function flight_map_navdata_refresh(bool $onlyIfDue = false): array
     }
     try {
         // Repeat the age decision after acquiring ownership across browser tabs.
-        if ($onlyIfDue && !flight_map_navdata_refresh_due()) {
-            return ['state' => 'current', 'result' => []];
+        $outcome = ['state' => 'current', 'result' => []];
+        if (!$onlyIfDue || flight_map_navdata_refresh_due()) {
+            presentation_schema_assert_write_available(presentation_flight_navdata_schema_status(), 'flight_navdata_import');
+            set_app_setting('flight_map_navdata_last_attempt', (string) time());
+            $outcome = ['state' => 'updated', 'result' => flight_map_update_navdata_from_ourairports()];
         }
-        presentation_schema_assert_write_available(presentation_flight_navdata_schema_status(), 'flight_navdata_import');
-        set_app_setting('flight_map_navdata_last_attempt', (string) time());
-        return ['state' => 'updated', 'result' => flight_map_update_navdata_from_ourairports()];
+        if ($galleryId > 0) {
+            $outcome['route_updated'] = flight_map_complete_saved_route($galleryId);
+        }
+        return $outcome;
     } finally {
         flock($lock, LOCK_UN);
         fclose($lock);
     }
+}
+
+/**
+ * Fill unresolved saved route points using current local data without replacing OFP geometry.
+ *
+ * @param int $galleryId Saved gallery identity, never an unsaved browser route.
+ * @return bool True after completing a still-current route snapshot.
+ */
+function flight_map_complete_saved_route(int $galleryId): bool
+{
+    if (!feature_capability_effective_enabled('flight_maps') || !flight_map_schema_ready()) {
+        return false;
+    }
+    $row = gallery_flight_map_row($galleryId);
+    if ($row === null || (string) ($row['map_source_type'] ?? '') !== GALLERY_MAP_SOURCE_FLIGHT_PATH
+        || trim((string) ($row['route_text'] ?? '')) === '' || gallery_flight_map_unresolved_from_row($row) === []) {
+        return false;
+    }
+    $oldPoints = gallery_flight_map_points_from_row($row);
+    if (flight_map_points_are_simbrief_ofp($oldPoints)) {
+        return false;
+    }
+    $resolved = resolve_flight_route_text((string) $row['route_text']);
+    // An incomplete provider must not remove previously captured coordinates.
+    if (count($resolved['points']) <= count($oldPoints)
+        || count($resolved['unresolved']) >= count(gallery_flight_map_unresolved_from_row($row))) {
+        return false;
+    }
+    foreach ($oldPoints as $oldPoint) {
+        $index = array_search((string) $oldPoint['name'], array_column($resolved['points'], 'name'), true);
+        if ($index === false) {
+            return false;
+        }
+        $resolved['points'][$index] = $oldPoint;
+    }
+    presentation_schema_assert_write_available(presentation_flight_map_schema_status(), 'flight_map_navdata_route_complete');
+    if (!flight_maps_model_complete_route($row, $resolved['points'], $resolved['unresolved'], now_sql())) {
+        return false;
+    }
+    flight_map_clear_runtime_cache();
+    return true;
 }

@@ -575,7 +575,7 @@ function view_render_admin_simbrief_description_tool(int $galleryId, array $form
     // Creation retries carry the controller's expanded preference flags; editors may retain the compact flag.
     $rememberIdentifier = !empty($submitted['remember_simbrief_identifier'])
         || !empty($submitted['remember_simbrief_pilot_id']) || !empty($submitted['remember_simbrief_pilot_name']);
-    echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
+    echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-route-navdata-url="' . e((string) ($formModel['route_navdata_url'] ?? '')) . '" data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
     if ($galleryId > 0) {
         echo '<input type="hidden" name="simbrief_draft_ref" value="' . e((string) ($submitted['simbrief_draft_ref'] ?? '')) . '" data-simbrief-draft-ref>';
     }
@@ -585,7 +585,7 @@ function view_render_admin_simbrief_description_tool(int $galleryId, array $form
         echo '<label class="checkbox-label admin-simbrief-remember"><input type="checkbox" name="remember_simbrief_identifier" value="1"' . ($rememberIdentifier ? ' checked' : '') . '> ' . e(t('admin.simbrief.remember_identifier', 'Remember for future galleries')) . '</label>';
     }
     echo '<button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button>';
-    view_render_admin_gallery_route_disclosure($flightMap);
+    view_render_admin_gallery_route_disclosure($flightMap, $formModel);
     echo '</div>';
     if ($prefilled) {
         echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
@@ -597,13 +597,14 @@ function view_render_admin_simbrief_description_tool(int $galleryId, array $form
  * Render the compact route disclosure beside SimBrief generation.
  *
  * @param array<string, mixed> $flightMap Controller-prepared route-map state.
+ * @param array<string, mixed> $formModel Prepared background refresh availability.
  * @return void Emit the route control when ready or its migration notice.
  */
-function view_render_admin_gallery_route_disclosure(array $flightMap): void
+function view_render_admin_gallery_route_disclosure(array $flightMap, array $formModel = []): void
 {
     if (($flightMap['state'] ?? 'hidden') === 'ready') {
         $title = (string) ($flightMap['title'] ?? 'Flight route map');
-        echo '<details class="admin-gallery-route-disclosure"><summary aria-label="' . e($title) . '" title="' . e($title) . '"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 18c4 0 3-7 7-7s3 5 7 5 2-9 4-9" /></svg></summary><div class="admin-gallery-route-content"><label><span>' . e((string) ($flightMap['label'] ?? 'Route text')) . '</span><textarea name="flight_route_text" rows="3" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e((string) ($flightMap['route_text'] ?? '')) . '</textarea></label>';
+        echo '<details class="admin-gallery-route-disclosure" data-route-navdata-url="' . e((string) ($formModel['route_navdata_url'] ?? '')) . '"><summary aria-label="' . e($title) . '" title="' . e($title) . '"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 18c4 0 3-7 7-7s3 5 7 5 2-9 4-9" /></svg></summary><div class="admin-gallery-route-content"><label><span>' . e((string) ($flightMap['label'] ?? 'Route text')) . '</span><textarea name="flight_route_text" rows="3" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e((string) ($flightMap['route_text'] ?? '')) . '</textarea></label>';
         echo '<p class="muted admin-gallery-route-status">' . e((string) ($flightMap['status'] ?? '')) . '</p>';
         $help = (string) ($flightMap['help'] ?? '');
         if (trim($help) !== '') {

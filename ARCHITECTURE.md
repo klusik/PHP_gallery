@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.118.2';
+const CMS_VERSION = '0.118.3';
 ```
 
 Update-related code uses:
@@ -2279,5 +2279,7 @@ Custom CSS verifies settings storage before file mutation, stages beside the tar
 Updates summary, selected/installed notes and API diagnostics refresh together. Ordinary notes merge cache/local history with installed notes authoritative. Explicit discovery alone fetches missing pending notes within its deadline, uses preferred-branch fallback, nonblocking cross-tab locking and an hourly due check. Async discovery releases the session; activation reconciles locally without a second HTTP check. Disabled auto updates prevent stale background resumption.
 
 The internal `flight_maps/navdata_update.php` part owns weekly OurAirports freshness, hourly failure backoff and nonblocking import ownership. The model batches at most 200 rows per statement in its transaction. Dashboard/panel/page share prepared state and AJAX handling. Presentation health contributes to action-required status through the existing lazy named registry.
+
+Gallery editors also request due OurAirports refreshes when entering a route, importing SimBrief or saving route-bearing input. `admin-route-navdata.js` uses a separate authenticated/CSRF-protected `admin_route_navdata_refresh` POST with session release and keepalive; saves never await the import. Requests carry only the saved gallery identity, not draft route text or pilot identifiers. The canonical route registry requires both Flight Maps and Navigation Data. Per-editor checks coalesce, a successful save queues a final pass after active imports, and bounded busy retries cover imports owned by other tabs. The service fills unresolved saved manual routes from local providers; the model compares captured route text, point JSON and timestamp before updating so newer edits/deletions survive. Existing coordinates and SimBrief OFP geometry remain intact. A changed route returns gallery/parent contexts through the canonical mutation envelope and shared public refresh coordinator without replacing the editor draft.
 
 Windows build publishes paired EXE/JSON under `winapp/dist/<version>/`, hashes completed output and restores prior EXE on metadata publication failure. Older versions remain untouched; SimConnect and copied-helper verification precede Inno Setup.

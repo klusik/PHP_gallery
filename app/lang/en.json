@@ -6415,6 +6415,7 @@
     "admin.updates.patch_notes_load_failed": "Could not load release notes. Please try again.",
     "admin.dashboard.navdata_busy": "Navigation data is being updated in another request.",
     "admin.dashboard.navdata_current": "Navigation data is current.",
+    "admin.dashboard.navdata_refresh_unavailable": "Navigation data could not be refreshed. The gallery can still be saved.",
     "admin.menu.legacy_upload_photos": "Upload photos (legacy)",
     "admin.menu.legacy_upload_settings": "Upload settings (legacy)",
     "admin.menu.legacy_upload_mobile": "Mobile uploads (legacy)",

@@ -239,6 +239,7 @@ function cms_dispatch_page(string $page): void
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',
         'admin_update_navdata' => '\\Gallery\\Controllers\\cms_admin_update_navdata',
         'admin_navdata' => '\\Gallery\\Controllers\\cms_admin_navdata',
+        'admin_route_navdata_refresh' => '\\Gallery\\Controllers\\cms_admin_route_navdata_refresh',
         'admin_navigraph_connect' => '\\Gallery\\Controllers\\cms_admin_navigraph_connect',
         'admin_navigraph_callback' => '\\Gallery\\Controllers\\cms_admin_navigraph_callback',
         'admin_navigraph_disconnect' => '\\Gallery\\Controllers\\cms_admin_navigraph_disconnect',

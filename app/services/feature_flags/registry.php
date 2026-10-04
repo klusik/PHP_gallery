@@ -164,6 +164,7 @@ function feature_capability_definitions(): array
             'routes' => [
                 'admin_navdata',
                 'admin_update_navdata',
+                'admin_route_navdata_refresh',
                 'navdata_lookup',
                 'admin_navigraph_connect',
                 'admin_navigraph_callback',
@@ -439,5 +440,4 @@ function feature_flag_setting_key(string $key): string
 {
     return FEATURE_FLAG_SETTING_PREFIX . feature_flag_normalize_key($key) . FEATURE_FLAG_SETTING_SUFFIX;
 }
-
 

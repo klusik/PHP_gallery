@@ -714,7 +714,7 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
 function render_admin_simbrief_description_tool(int $galleryId, array $formModel = [], array $flightMap = []): void
 {
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
-        view_render_admin_gallery_route_disclosure($flightMap);
+        view_render_admin_gallery_route_disclosure($flightMap, $formModel);
         return;
     }
     view_render_admin_simbrief_description_tool($galleryId, $formModel, $flightMap);

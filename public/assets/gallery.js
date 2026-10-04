@@ -62,6 +62,7 @@ import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261003-admin-language-scope-v1';
+import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261003-images-v4';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
@@ -212,6 +213,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminUpdateJobs();
 
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
+    runWhenDomReady(setupAdminRouteNavdata);
     runWhenDomReady(setupAdminNavigationDataPanel);
     runWhenDomReady(setupResponsiveThumbnailSizes);
     runWhenDomReady(setupProgressiveThumbnailRendererWhenPresent);

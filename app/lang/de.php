@@ -274,6 +274,7 @@ return [
     'admin.updates.patch_notes_load_failed' => 'Versionshinweise konnten nicht geladen werden. Bitte erneut versuchen.',
     'admin.dashboard.navdata_busy' => 'Navigationsdaten werden in einer anderen Anfrage aktualisiert.',
     'admin.dashboard.navdata_current' => 'Navigationsdaten sind aktuell.',
+    'admin.dashboard.navdata_refresh_unavailable' => 'Navigationsdaten konnten nicht aktualisiert werden. Die Galerie kann trotzdem gespeichert werden.',
     'admin.dashboard.navdata_update_in_progress' => 'Navigationsdaten werden im Hintergrund heruntergeladen und importiert. Sie können andere Seiten nutzen.',
     'admin.dashboard.notice_navdata_updated' => 'Navigationsdaten für Flugkarten aktualisiert. {airports} Flughafenkennung(en) und {navaids} Navigationshilfe(n) importiert, {skipped} Zeile(n) übersprungen und {deleted} veraltete Zeile(n) entfernt.',
     'admin.dashboard.notice_navdata_failed' => 'Aktualisierung der Navigationsdaten für Flugkarten fehlgeschlagen: {error}',

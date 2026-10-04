@@ -21,6 +21,7 @@ License: MIT
 <script type="module">
 import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261002-update-notes-v1';
 import {setupAdminNavdataUpdateFeedback} from '/public/assets/gallery-modules/admin-navdata-update.js?v=20261002-navdata-ajax-v1';
+import {setupAdminRouteNavdata} from '/public/assets/gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
 
 let assertions = 0;
@@ -36,6 +37,11 @@ let releaseNavdata;
 let navdataCalls = 0;
 let periodicChecks = 0;
 let forcedChecks = 0;
+let routeChecks = 0;
+let routeBusy = false;
+let routeFailure = false;
+let releaseRoute;
+let lastRouteGallery;
 const originalUrl = location.href;
 
 /** Require an observable browser behavior.
@@ -99,6 +105,15 @@ window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub 
  */ async (url, options = {}) => {
     const target = new URL(url, location.href);
     check(target.origin === location.origin, 'No fixture request leaves loopback');
+    if (target.pathname === '/fixture-route-navdata') {
+        routeChecks++;
+        lastRouteGallery = options.body.get('gallery_id');
+        check(options.body.get('csrf_token') === 'fixture-csrf' && options.body.get('ajax') === '1', 'Route refresh preserves CSRF and AJAX authority');
+        check(!options.body.has('flight_route_text') && !options.body.has('simbrief_identifier') && options.keepalive, 'Background check sends no draft or SimBrief identity and survives navigation');
+        if (routeFailure) return json({ok:false}, 503);
+        if (routeBusy) { routeBusy = false; return json({ok:true,state:'busy'}); }
+        return new Promise(resolve => { releaseRoute = () => resolve(json({ok:true, message:'', state:'current', mutation:{type:'navigation_data.refresh',entity:'navigation_data',action:'refresh',entity_ids:[]}, panel:null, contexts:[], fallback:{}})); });
+    }
     if (target.pathname === '/fixture-navdata') {
         navdataCalls++;
         check(options.body.get('csrf_token') === 'fixture-csrf' && options.body.get('ajax') === '1', 'Navdata AJAX retains authentication fields');
@@ -233,7 +248,64 @@ try {
         check(manager.querySelector('[name="navdata_return_page"]').value === 'admin_navdata', 'Manager context survives dynamically replaced import controls');
     }
     check(navdataCalls === 4 && location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Both navdata surfaces share AJAX behavior without disturbing the drawer or URL');
-    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' updater presentation assertions';
+    setupAdminRouteNavdata();
+    setupAdminRouteNavdata();
+    const editor = document.createElement('form');
+    editor.innerHTML = '<input name="csrf_token" value="fixture-csrf"><input name="id" value="41"><div data-route-navdata-url="/fixture-route-navdata"><textarea name="flight_route_text"></textarea><button type="button" data-simbrief-generate>SimBrief</button><button type="submit">Save route</button></div>';
+    panel.querySelector('[data-admin-side-panel-body]').append(editor);
+    const route = editor.querySelector('textarea');
+    route.value = 'LKPR DCT EDDF';
+    route.dispatchEvent(new Event('input', {bubbles:true}));
+    await until(() => typeof releaseRoute === 'function');
+    route.dispatchEvent(new Event('input', {bubbles:true}));
+    check(routeChecks === 1 && !editor.querySelector('[type="submit"]').disabled, 'Typing coalesces one import while Save stays available');
+    let saves = 0;
+    editor.addEventListener('submit', event => {
+        event.preventDefault();
+        saves++;
+        editor.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {bubbles:true,detail:{source:'gallery-edit',result:{ok:true,message:'Gallery saved',mutation:{type:'gallery.update',entity:'gallery',action:'update',entity_ids:[41]},panel:null,contexts:[],fallback:{}}}}));
+    });
+    editor.requestSubmit();
+    check(saves === 1 && routeChecks === 1 && location.href === originalUrl, 'Save completes before the active navdata request resolves');
+    releaseRoute(); releaseRoute = null;
+    await until(() => routeChecks === 2 && typeof releaseRoute === 'function');
+    check(panel.getAttribute('aria-hidden') === 'false' && route.value === 'LKPR DCT EDDF', 'Post-save pass keeps the drawer and unsaved route contents intact');
+    releaseRoute(); releaseRoute = null;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const replacementEditor = editor.cloneNode(true);
+    editor.replaceWith(replacementEditor);
+    routeBusy = true;
+    replacementEditor.querySelector('[data-simbrief-generate]').click();
+    await until(() => routeChecks === 4 && typeof releaseRoute === 'function');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Dynamic SimBrief editor retries an import owned by another request in place');
+    releaseRoute(); releaseRoute = null;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    routeFailure = true;
+    replacementEditor.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {bubbles:true,detail:{source:'gallery-edit',result:{ok:true,message:'Gallery saved',mutation:{type:'gallery.update',entity:'gallery',action:'update',entity_ids:[41]},panel:null,contexts:[],fallback:{}}}}));
+    await until(() => routeChecks === 5);
+    check(!replacementEditor.querySelector('[type="submit"]').disabled && location.href === originalUrl, 'Import failure never disables Save or navigates away');
+    const disabledEditor = replacementEditor.cloneNode(true);
+    disabledEditor.querySelector('[data-route-navdata-url]').dataset.routeNavdataUrl = '';
+    replacementEditor.replaceWith(disabledEditor);
+    disabledEditor.querySelector('textarea').dispatchEvent(new Event('input', {bubbles:true}));
+    disabledEditor.querySelector('[data-simbrief-generate]').click();
+    check(routeChecks === 5, 'Disabled navigation data causes no background request');
+    const newEditor = disabledEditor.cloneNode(true);
+    newEditor.querySelector('[data-route-navdata-url]').dataset.routeNavdataUrl = '/fixture-route-navdata';
+    newEditor.querySelector('[name="id"]').value = '0';
+    newEditor.querySelector('textarea').value = '';
+    disabledEditor.replaceWith(newEditor);
+    routeFailure = false;
+    newEditor.querySelector('[data-simbrief-generate]').click();
+    await until(() => routeChecks === 6 && typeof releaseRoute === 'function');
+    check(lastRouteGallery === '0', 'SimBrief checks navdata before an empty new-gallery draft has any saved identity');
+    releaseRoute(); releaseRoute = null;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    newEditor.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {bubbles:true,detail:{source:'gallery-edit',result:{ok:true,message:'Gallery created',mutation:{type:'gallery.create',entity:'gallery',action:'create',entity_ids:[77]},panel:null,contexts:[],fallback:{}}}}));
+    await until(() => routeChecks === 7 && typeof releaseRoute === 'function');
+    check(lastRouteGallery === '77' && !newEditor.querySelector('[type="submit"]').disabled, 'Post-create completion uses the server-assigned gallery identity independently of an empty route field');
+    releaseRoute(); releaseRoute = null;
+    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' updater and route-navdata assertions';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
 }

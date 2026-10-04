@@ -142,6 +142,10 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
             && \Gallery\Services\gallery_creation_preferences_available(),
         'simbrief_enabled' => $entityType === 'gallery'
             && feature_capability_effective_enabled('simbrief'),
+        'route_navdata_url' => $entityType === 'gallery'
+            && feature_capability_effective_enabled('flight_maps')
+            && feature_capability_effective_enabled('navigation_data')
+                ? url_for('admin_route_navdata_refresh') : '',
         'localization' => [
             'enabled' => $localizationEnabled,
             'schema_ready' => $localizationSchemaReady,
