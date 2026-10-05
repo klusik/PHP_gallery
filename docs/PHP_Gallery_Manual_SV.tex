@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.118.4}
+\newcommand{\version}{0.118.5}
 \newcommand{\manualdate}{5~oktober~2026}
 
 \hypersetup{
@@ -1714,11 +1714,11 @@ Underavsnittet \ui{Utseende > Galleritaggar} styr den kompakta taggsamlingen und
 
 Samma underavsnitt styr också den offentliga tagglandningssidan. \ui{Gallerier per rad} och \ui{Rader per sida} definierar taggresultatens gallerirutnät och sidkapacitet, medan \ui{Gallerikortsutformning} väljer lodrät eller vågrät kortpresentation för resultaten. Värdena påverkar offentliga sidor som öppnas via en tagg; de ändrar inte vanliga gallerisidor. Om de särskilda värdena inte har sparats förblir Temas globala rutnät och gallerikortsutformning reserv. Den globala pagineringsväxeln avgör fortfarande om ett långt taggresultat delas i sidor. Från \ui{Redigera taggar} öppnar \ui{Konfigurera taggvisning} detta underavsnitt direkt, och \ui{Hantera taggmetadata} ger den omvända sammanhangslänken.
 
-Som standard visar webbläsaren först 20 taggar. Gränsen kan ändras från 1 till 200 med antingen ett reglage eller ett exakt nummerfält. När fler taggar finns visas \ui{Visa alla taggar} och utökar de befintliga taggelementen på plats med JavaScript; ingen sidomladdning eller ytterligare serverbegäran används. Samma kontroll kan fälla ihop samlingen igen. Administratörer som inte vill ha stegvis visning kan aktivera \ui{Visa varje tagg direkt}. Alla taggar finns fortfarande i den serverrenderade HTML-koden i varje läge, så avstängt JavaScript lämnar hela taggsamlingen synlig och användbar i stället för att permanent dölja innehåll.
+Som standard visar den serverrenderade sidan direkt 20 taggar. Gränsen kan ändras från 1 till 200 med reglage eller exakt nummerfält. När fler taggar finns öppnar ellipskontrollen panelen \ui{Alla taggar} med samtliga direkta och ingående taggar i deras ursprungliga gruppordning. Panelen använder samma animation och stängningsbeteende som gallerikorten, behåller huvudområdets mått och radbryter långa namn. Med JavaScript stannar den inom fönstret; samma kontroll, ett klick utanför eller Escape stänger den. Escape återför fokus till kontrollen. Alla taggar finns redan i HTML, så öppningen kräver ingen serverbegäran. Utan JavaScript öppnar den inbyggda utfällningen panelen under huvudområdet och långa listor förblir nåbara genom sidrullning. \ui{Visa varje tagg direkt} visar alla redan i det första svaret; exakt nådd gräns behöver inte heller någon utfällningskontroll.
 
 Taggordning kan konfigureras som \ui{Mest använda först} eller \ui{Alfabetiskt}. \ui{Mest använda först} är standard. Användning är det totala antalet direkta taggtilldelningar till gallerier plus direkta taggtilldelningar till fotografier i installationen. Lika användningsantal faller tillbaka på naturlig skiftlägesokänslig alfabetisk ordning och därefter en stabil identifierarregel. Direkta galleritaggar sorteras inom sin grupp och ingående taggar inom sin grupp; grupperna blandas inte.
 
-Långa taggsamlingar kan också använda en responsiv intern rullningslist. Alternativet är aktiverat som standard och har fem synliga rader som standard. Radtröskeln kan konfigureras från 1 till 12 med ett reglage eller exakt nummerfält. Webbläsaren mäter raderna efter att taggarna faktiskt har radbrutits vid aktuell huvudpanelsbredd och aktiverar rullning endast när det uppmätta radantalet överstiger konfigurerad tröskel. Storleksändring av sidan räknar om måttet. Att stänga av rullningslistalternativet tar bort höjdbegränsningen och låter huvudpanelen växa naturligt.
+Taggförhandsvisningen kan använda en intern rullningslist. Den är aktiverad som standard med ett höjdtak på fem rader; radantalet kan ändras från 1 till 12 med reglage eller nummerfält. Servern anger taket i den första HTML-koden, så förhandsvisningen väntar inte på JavaScript och behåller sina mått när modulen startar. Radbrytningen följer tillgänglig bredd och rullning behövs endast när taket överskrids. Den öppna överlagrade panelen klipps inte av detta tak. Avstängd rullningslist låter förhandsvisningen växa naturligt.
 
 
 \section{Hämtningar, delning och överföring}
