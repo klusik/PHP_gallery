@@ -62,7 +62,7 @@ window.fetch=async(input,options={})=>{
         panelBodies.push(data); panelPosts++; const id=76+panelPosts;
         return new Response(JSON.stringify({ok:true,message:'Gallery created.',mutation:{type:'gallery.create',entity:'gallery',action:'create',entity_ids:[id]},panel:{workflow:'gallery-edit',refresh_url:'/fixture-editor?id='+id,keep_open:true},contexts:[],fallback:{redirect_url:'/fixture-editor?id='+id},gallery_id:id,gallery_title:data.get('title'),gallery_url:'/fixture-gallery?id='+id,edit_url:'/fixture-editor?id='+id,parent_gallery_id:Number(data.get('parent_id')),parent_gallery_url:'',created_gallery:true}),{headers:{'Content-Type':'application/json'}});
     }
-    if(url.pathname==='/fixture-editor-save') {
+    if(url.pathname==='/fixture-editor' && options.method==='POST') {
         check(options.method==='POST' && options.body.get('id')==='78' && options.body.get('simbrief_draft_ref')==='a'.repeat(48) && options.body.get('flight_route_text')===completeRoute,'panel save retains the staged complete route and private draft');
         editorSaves++; savedEditorRoute=options.body.get('flight_route_text');
         return new Response(JSON.stringify({ok:true,message:'Route saved.',mutation:{type:'gallery.update',entity:'gallery',action:'update',entity_ids:[78]},panel:{workflow:'gallery-edit',refresh_url:'/fixture-editor?id=78',keep_open:true},contexts:[],fallback:{redirect_url:'/fixture-editor?id=78'}}),{headers:{'Content-Type':'application/json'}});
@@ -139,6 +139,15 @@ try {
     const secondForm=find('[data-gallery-panel-create-form]',panel); check(secondForm!==firstForm && !firstForm.isConnected && find('[name="parent_id"]',secondForm).value==='0' && find('.gallery-create-destination',panel).textContent==='Top-level gallery','dynamic second form preserves root scope and destination without rebinding'); edit(find('[name="title"]',secondForm),'Second actual root'); secondForm.requestSubmit();
     await until(/** Observe canonical completion for the injected root form. @return {boolean} Whether the second mutation refreshed its editor. */ ()=>editorGets===2 && find('[data-fixture-editor]').textContent.includes('78'));
     check(panelPosts===2 && panelBodies[1].get('parent_id')==='0' && panel.getAttribute('aria-hidden')==='false' && location.href===originalUrl,'dynamic root completion remains in the open panel with unchanged URL');
+    const pendingEditor=find('[data-admin-gallery-settings-form]',panel);
+    holdSimbriefResponse=true;
+    find('[data-simbrief-generate]',pendingEditor).click();
+    await until(()=>simbriefRequests===4 && typeof releaseSimbriefResponse==='function');
+    edit(find('[name="flight_route_text"]',pendingEditor),'MANUAL ROUTE WHILE FETCHING');
+    releaseSimbriefResponse(); holdSimbriefResponse=false;
+    await until(()=>find('[data-simbrief-status]',pendingEditor).textContent.includes('form changed during import'));
+    check(find('[name="flight_route_text"]',pendingEditor).value==='MANUAL ROUTE WHILE FETCHING' && find('[data-simbrief-draft-ref]',pendingEditor).value==='' && find('[name="description"]',pendingEditor).value==='','route edits during import preserve the entered route and all prior draft fields');
+    edit(find('[name="flight_route_text"]',pendingEditor),'');
     for (let pass=1;pass<=2;pass++) {
         const editorForm=find('[data-admin-gallery-settings-form]',panel);
         find('[data-simbrief-generate]',editorForm).click();
