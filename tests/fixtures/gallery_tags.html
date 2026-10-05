@@ -349,7 +349,17 @@ async function runFixture() {
     check(heroPills.length === 4 && allTagsHidden(heroDetails.querySelectorAll('a.tag')), 'gallery hero applies its visible limit before module startup');
     check(hasVisibleGroupLabel(heroList, 'Containing tags'), 'contained-tag group label remains visible with its full title before expansion');
     const heroExpectedOrder = ['Urban wildlife', 'Long coast observation point tag', 'Blue hour photographs', 'Northern marsh habitat survey', 'Migrating birds near the eastern shoreline', 'Field notes from the old railway bridge', 'Aerial view of the wetlands after rainfall', 'Long exposure lights beside the river crossing', 'Distant mountain range beyond the forest', 'Seasonal color changes across the protected valley', 'Historic stone structures on the coastal trail', 'Wide landscape with changing afternoon clouds'];
-    check(hasTagOrder(heroList, heroExpectedOrder), 'direct and contained hero tags preserve their complete server order across the collapsed disclosure');
+    const heroPanel = heroDetails.querySelector('.gallery-card-public-info-panel');
+    check(heroDetails.hasAttribute('data-gallery-card-info-disclosure') && heroPanel instanceof HTMLElement, 'hero uses the same information panel as gallery cards');
+    check(hasTagOrder(heroPanel, heroExpectedOrder), 'hero panel preserves every direct and contained tag in server order');
+    check(heroPanel.querySelector('h4')?.textContent === 'Containing tags', 'hero panel retains the containing-tags heading');
+    const heroBoundary = document.querySelector('[data-fixture-case="hero-group-boundary"]');
+    check(heroBoundary.querySelectorAll('.hero-tags-content > .tag-list > a.tag').length === 2 && heroBoundary.querySelectorAll('.hero-tags-content > .tag-list > .tag-list-label').length === 0, 'group-boundary limit hides a group label when none of its tags are previewed');
+    check(hasTagOrder(heroBoundary.querySelector('.gallery-card-public-info-panel'), heroExpectedOrder) && heroBoundary.querySelector('.gallery-card-public-info-panel h4')?.textContent === 'Containing tags', 'group-boundary panel retains all groups and their complete tag order');
+    const heroExact = document.querySelector('[data-fixture-case="hero-exact-limit"]');
+    const heroAll = document.querySelector('[data-fixture-case="hero-display-all"]');
+    check(heroExact.querySelector('details') === null && heroExact.querySelectorAll('a.tag').length === 4, 'exact-limit hero omits an unnecessary information control');
+    check(heroAll.querySelector('details') === null && heroAll.querySelectorAll('a.tag').length === 8, 'display-all hero keeps the saved preference and every tag in initial HTML');
     const heroContentRect = heroContent.getBoundingClientRect();
     const heroComputed = getComputedStyle(heroContent);
     check(heroComputed.overflowY === 'auto' && Number.parseFloat(heroComputed.maxHeight) > 0 && heroContent.scrollHeight > heroContent.clientHeight + 1, 'gallery hero row-one cap is present and exercised at first paint');
@@ -363,10 +373,19 @@ async function runFixture() {
     }
     check(heroFirstBottom <= heroContentRect.top + heroContent.clientHeight + 1, 'all first-row hero pills and disclosure fit inside its one-row cap');
     check(Number.isFinite(heroNextTop) && heroNextTop >= heroContentRect.top + heroContent.clientHeight - 1, 'second hero row starts beyond the one-row cap');
-    const heroTail = heroDetails.closest('.gallery-card-tag-tail');
-    const heroLastTag = heroTail?.querySelector(':scope > a.tag');
-    check(heroLastTag instanceof HTMLElement && Math.abs(heroLastTag.getBoundingClientRect().top - heroSummary.getBoundingClientRect().top) <= 2, 'gallery hero keeps its summary with the final visible tag');
+    check(heroDetails.closest('.gallery-card-tag-tail') === null, 'hero panel does not inherit the old single-row overflow wrapper');
     const heroBefore = heroSnapshot();
+
+    heroSummary.focus({preventScroll: true});
+    const nativeHeroExpand = await fetch('/__key?key=Enter');
+    await settle();
+    check(nativeHeroExpand.ok && heroDetails.open && allTagsVisible(heroPanel.querySelectorAll('a.tag')), 'hero exposes every tag through the native no-JavaScript disclosure');
+    check(heroPanel.getBoundingClientRect().top >= heroRoot.getBoundingClientRect().bottom, 'native hero fallback opens below its root so long lists remain reachable by scrolling');
+    const nativeHeroExpanded = heroSnapshot();
+    check(JSON.stringify(nativeHeroExpanded.section) === JSON.stringify(heroBefore.section) && JSON.stringify(nativeHeroExpanded.root) === JSON.stringify(heroBefore.root), 'native hero panel keeps header geometry stable');
+    const nativeHeroCollapse = await fetch('/__key?key=Enter');
+    await settle();
+    check(nativeHeroCollapse.ok && !heroDetails.open, 'native hero summary also closes without the module');
 
     summary.focus({preventScroll: true});
     const beforeModuleExpand = await fetch('/__key?key=Enter');
@@ -406,13 +425,27 @@ async function runFixture() {
     check(nativeRootsUntouched, 'module startup leaves every server-rendered native tag root free of legacy readiness mutations');
     const heroAfter = heroSnapshot();
     check(JSON.stringify(heroAfter) === JSON.stringify(heroBefore), 'module startup preserves actual gallery hero first-paint geometry');
+    heroRoot.scrollIntoView({block: 'center'});
+    await settle();
     heroSummary.click();
     await settle();
-    check(heroDetails.open && allTagsVisible(heroDetails.querySelectorAll('a.tag')) && hasTagOrder(heroList, heroExpectedOrder), 'expanding the hero disclosure reveals contained links after direct tags in their original order');
+    check(heroDetails.open && allTagsVisible(heroPanel.querySelectorAll('a.tag')) && hasTagOrder(heroPanel, heroExpectedOrder), 'hero panel reveals every direct and contained tag in its original order');
     check(hasVisibleGroupLabel(heroList, 'Containing tags'), 'contained-tag group label stays visible after expansion');
+    const heroPanelRect = heroPanel.getBoundingClientRect();
+    check(heroPanelRect.left >= 0 && heroPanelRect.right <= window.innerWidth && heroPanelRect.top >= 0 && heroPanelRect.bottom <= window.innerHeight, 'hero panel stays inside the narrow viewport');
+    check(getComputedStyle(heroRoot.closest('.hero')).overflow === 'visible' && getComputedStyle(heroContent).overflow === 'visible', 'hero and row cap do not clip the open panel');
+    const heroExpanded = heroSnapshot();
+    check(JSON.stringify(heroExpanded.section) === JSON.stringify(heroBefore.section) && JSON.stringify(heroExpanded.root) === JSON.stringify(heroBefore.root), 'animated hero panel preserves header and tag-container dimensions');
+    check(getComputedStyle(heroPanel.querySelector('a.tag')).whiteSpace === 'normal', 'long panel tags wrap instead of remaining in the preview row');
+    heroSummary.click();
+    const heroCloseFinished = await waitForDisclosureClose(heroDetails);
+    await settle();
+    check(heroCloseFinished && JSON.stringify(heroSnapshot()) === JSON.stringify(heroBefore), 'animated hero close restores its initial geometry');
     heroSummary.click();
     await settle();
-    check(!heroDetails.open && JSON.stringify(heroSnapshot()) === JSON.stringify(heroBefore), 'collapsing the grouped hero disclosure restores its initial geometry');
+    const heroEscape = await fetch('/__key?key=Escape');
+    const heroEscapeFinished = await waitForDisclosureClose(heroDetails);
+    check(heroEscape.ok && heroEscapeFinished && document.activeElement === heroSummary, 'Escape closes the hero panel and restores focus to its summary');
     setupHeroTagDisclosure();
     await settle();
     check(JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'repeated module initialization remains geometry-idempotent');
@@ -443,8 +476,21 @@ async function runFixture() {
     check(details.dataset.galleryCardInfoState === 'closing', 'Escape starts closing the public-info panel immediately');
     const escapedCloseFinished = await waitForDisclosureClose(details);
     check(escapedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape finishes closing the public-info panel and restores the original card geometry');
+    const refreshedHero = heroRoot.cloneNode(true);
+    heroRoot.replaceWith(refreshedHero);
+    const refreshedHeroContent = refreshedHero.querySelector('.hero-tags-content');
+    const refreshedDetails = refreshedHero.querySelector('details');
+    refreshedDetails.querySelector('summary').click();
+    await settle();
+    check(refreshedDetails.open && refreshedDetails.dataset.galleryCardInfoState === 'open', 'dynamically replaced hero uses the shared delegated animation without rebinding');
+    summary.click();
+    const replacedHeroClosed = await waitForDisclosureClose(refreshedDetails);
+    check(replacedHeroClosed && details.open, 'opening a card panel dismisses the hero panel through the shared coordinator');
+    document.getElementById('results').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+    const outsideCloseFinished = await waitForDisclosureClose(details);
+    check(outsideCloseFinished, 'outside click dismisses the shared panel');
     check(document.documentElement.scrollWidth <= 390, 'narrow viewport has no horizontal page overflow');
-    document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + heroContent.clientHeight + 'px scroll=' + heroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
+    document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + refreshedHeroContent.clientHeight + 'px scroll=' + refreshedHeroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
   } catch (error) {
       document.getElementById('results').textContent = 'BROWSER FAIL ' + error.message + '\n' + error.stack;
   }

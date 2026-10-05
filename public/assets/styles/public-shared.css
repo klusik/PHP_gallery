@@ -295,6 +295,7 @@
 }
 
 .public-page .hero-tags {
+    position: relative;
     grid-column: 1 / -1;
     display: grid;
     justify-items: stretch;
@@ -365,6 +366,16 @@
 }
 
 .public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {
+    overflow: visible;
+}
+
+.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .hero-tags-content:has(.gallery-card-info-disclosure[open]) {
+    overflow: visible;
+}
+
+/* Lift the hero above neighboring content while its shared tag panel is open. */
+.public-page .hero:has(.gallery-card-info-disclosure[open]) {
+    z-index: 40;
     overflow: visible;
 }
 
@@ -593,7 +604,19 @@
     gap: .3rem;
 }
 
-.public-page .gallery-card-public-info-tag-list .tag {
+/* Without JavaScript, open below the header so long tag lists stay reachable. */
+.public-page .hero-tag-info-panel {
+    top: calc(100% + .55rem);
+    bottom: auto;
+}
+
+.public-page .hero-tag-info-panel .gallery-card-public-info-tags {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.public-page [data-hero-tags] .gallery-card-public-info-tag-list .tag {
+    min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
     white-space: normal;

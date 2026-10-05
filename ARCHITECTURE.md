@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.118.4';
+const CMS_VERSION = '0.118.5';
 ```
 
 Update-related code uses:
@@ -1153,7 +1153,7 @@ Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_i
 
 Gallery hero tag presentation also uses the existing `app_settings` table and therefore needs no schema migration. `app/services/theme.php` owns normalization and defaults for `theme_hero_tag_visible_limit` (default 20, range 1 to 200), `theme_hero_tag_display_all` (default off, so progressive disclosure is active), `theme_hero_tag_scrollbar_enabled` (default on), `theme_hero_tag_scrollbar_rows` (default 5, range 1 to 12), and `theme_hero_tag_sort_mode` (`usage` or `alphabetical`, default `usage`). `app/controllers/admin_theme.php` persists the values after the existing Admin and CSRF checks and bumps `theme_public_content_revision` when this public rendering policy changes.
 
-`app/services/tag_metadata.php` owns hero usage sorting. Usage is the sum of direct `gallery_tags` and `image_tags` assignments, restricted to tag IDs required by the current hero. The service sorts direct and contained tag groups independently, with usage descending and natural case-insensitive name ordering as the tie-break. The public controller prepares the groups and Theme settings; the view emits the configured visible tags plus a native `<details>` disclosure containing the remaining linked tags. Its `<summary>` is server-rendered beside the final visible card tag, so the initial card geometry does not depend on JavaScript. Native details keeps expansion available without JavaScript, and CSS applies a stable row-height cap using single-line tag pills. The browser module leaves these current roots untouched and retains compatibility behavior for older button-based markup.
+`app/services/tag_metadata.php` owns hero usage sorting. Usage is the sum of direct `gallery_tags` and `image_tags` assignments, restricted to tag IDs required by the current hero. The service sorts direct and contained groups independently, with usage descending and natural case-insensitive name ordering as the tie-break. The public controller prepares groups and Theme settings; `app/views/public_tags.php` renders the bounded preview across groups and calls `view_render_public_gallery_tag_info_panel()` for both cards and headers. Header panels contain every grouped tag; card panels also contain the prepared public title, description and date. Group labels appear in the preview only when at least one group tag is visible. Display-all and exact-limit headers omit disclosure. Native `<details>` markup and the CSS row cap apply from the first response; without JavaScript the header overlay opens below its root. The shared delegated browser coordinator animates and dismisses one panel, restores focus on Escape and handles replaced fragments. Positioning uses the document viewport width excluding a classic scrollbar; CSS lifts the open header and releases clipping without changing its dimensions. Both public entrypoints import `hero-tags.js?v=20261005-hero-info-panel-v2`.
 
 When adding a setting:
 

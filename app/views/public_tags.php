@@ -169,7 +169,7 @@ function view_render_tag_list(array $viewModel): void
  * Render the gallery header's globally limited direct and contained tags.
  *
  * The native details element is present in the initial response, so the
- * configured limit and inline disclosure do not depend on JavaScript startup.
+ * configured preview and shared information panel do not depend on JavaScript startup.
  *
  * @param array<string, mixed> $viewModel Prepared groups and Theme settings.
  * @return void Emits one ordered tag list and its native disclosure.
@@ -198,51 +198,24 @@ function view_render_public_hero_tags(array $viewModel): void
     echo '<div class="hero-tags-content" data-hero-tags-content><div class="tag-list">';
 
     $renderedTags = 0;
-    $disclosureOpened = false;
-    $tailOpened = false;
     foreach ($groups as $group) {
         $items = (array) ($group['items'] ?? []);
-        if ($items === []) {
+        $visibleItems = $displayAll ? $items : array_slice($items, 0, max(0, $visibleLimit - $renderedTags));
+        if ($visibleItems === []) {
             continue;
-        }
-        if ($renderedTags >= $visibleLimit && !$displayAll && !$disclosureOpened) {
-            $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
-            $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
-            echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
-            echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
-            $disclosureOpened = true;
         }
         if (array_key_exists('label', $group) && $group['label'] !== null) {
             $label = (string) $group['label'];
             echo '<span class="tag-list-label" title="' . e($label) . '">' . e($label) . '</span>';
         }
-        foreach ($items as $item) {
-            if (!$displayAll && !$tailOpened && $renderedTags + 1 === $visibleLimit && $renderedTags + 1 < $tagCount) {
-                echo '<div class="gallery-card-tag-tail">';
-                $tailOpened = true;
-            }
-            $href = $item['href'] ?? null;
-            $name = (string) ($item['name'] ?? '');
-            if (is_string($href) && $href !== '') {
-                echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
-            } else {
-                echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
-            }
-            $renderedTags++;
-            if (!$displayAll && !$disclosureOpened && $renderedTags === $visibleLimit && $renderedTags < $tagCount) {
-                $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
-                $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
-                echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
-                echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
-                $disclosureOpened = true;
-            }
-        }
+        view_render_public_gallery_card_tag_items($visibleItems);
+        $renderedTags += count($visibleItems);
     }
-    if ($disclosureOpened) {
-        echo '</details>';
-    }
-    if ($tailOpened) {
-        echo '</div>';
+    if (!$displayAll && $tagCount > $visibleLimit) {
+        view_render_public_gallery_tag_info_panel([
+            'groups' => $groups,
+            'tags_only' => true,
+        ]);
     }
     echo '</div></div></div>';
 }
@@ -269,9 +242,6 @@ function view_render_gallery_card_tags(array $viewModel): void
     $scrollbarRows = max(1, min(12, (int) ($viewModel['scrollbar_rows'] ?? 5)));
     $hasInfoPanel = !$displayAll && count($items) > $visibleLimit;
     $visibleItems = $displayAll ? $items : array_slice($items, 0, $visibleLimit);
-    $publicTitle = trim((string) ($viewModel['public_title'] ?? ''));
-    $publicDescriptionHtml = trim((string) ($viewModel['public_description_html'] ?? ''));
-    $publicDateHtml = trim((string) ($viewModel['public_date_html'] ?? ''));
     $rowHeight = [];
     for ($row = 0; $row < $scrollbarRows; $row++) {
         $rowHeight[] = '(1.35em + .2rem + 2px)';
@@ -284,26 +254,56 @@ function view_render_gallery_card_tags(array $viewModel): void
     echo '<div class="gallery-card-tags-content" data-hero-tags-content><div class="tag-list gallery-card-tag-preview">';
     view_render_public_gallery_card_tag_items($visibleItems);
     if ($hasInfoPanel) {
-        $infoLabel = e(t('gallery.public_info', 'Gallery information'));
-        echo '<details class="hero-tag-disclosure gallery-card-info-disclosure" data-hero-tags-disclosure data-gallery-card-info-disclosure>';
-        echo '<summary class="tag gallery-card-tags-toggle gallery-card-info-toggle" aria-label="' . $infoLabel . '" title="' . $infoLabel . '"><span aria-hidden="true">…</span><span class="visually-hidden">' . $infoLabel . '</span></summary>';
-        echo '<section class="gallery-card-public-info-panel" role="region" aria-label="' . $infoLabel . '">';
-        echo '<h3>' . $infoLabel . '</h3>';
-        if ($publicTitle !== '') {
-            echo '<h4 class="gallery-card-public-info-title">' . e($publicTitle) . '</h4>';
-        }
-        if ($publicDescriptionHtml !== '') {
-            echo '<div class="gallery-card-public-info-description">' . $publicDescriptionHtml . '</div>';
-        }
-        if ($publicDateHtml !== '') {
-            echo '<div class="gallery-card-public-info-date">' . $publicDateHtml . '</div>';
-        }
-        echo '<div class="gallery-card-public-info-tags"><h4>' . e(t('gallery.all_tags', 'All tags')) . '</h4><div class="gallery-card-public-info-tag-list">';
-        view_render_public_gallery_card_tag_items($items);
-        echo '</div></div></section></details>';
+        view_render_public_gallery_tag_info_panel($viewModel);
     }
     echo '</div></div>';
     echo '</div>';
+}
+
+/**
+ * Render the shared animated tag disclosure for gallery cards and headers.
+ *
+ * @param array<string, mixed> $viewModel Prepared tag groups and optional public card information.
+ * @return void Emits a native disclosure with every tag in a wrapping panel.
+ */
+function view_render_public_gallery_tag_info_panel(array $viewModel): void
+{
+    $tagsOnly = !empty($viewModel['tags_only']);
+    $infoLabel = e($tagsOnly ? t('gallery.all_tags', 'All tags') : t('gallery.public_info', 'Gallery information'));
+    $groups = (array) ($viewModel['groups'] ?? [['items' => (array) ($viewModel['items'] ?? [])]]);
+    $publicTitle = trim((string) ($viewModel['public_title'] ?? ''));
+    $publicDescriptionHtml = trim((string) ($viewModel['public_description_html'] ?? ''));
+    $publicDateHtml = trim((string) ($viewModel['public_date_html'] ?? ''));
+    echo '<details class="hero-tag-disclosure gallery-card-info-disclosure" data-hero-tags-disclosure data-gallery-card-info-disclosure>';
+    echo '<summary class="tag gallery-card-tags-toggle gallery-card-info-toggle" aria-label="' . $infoLabel . '" title="' . $infoLabel . '"><span aria-hidden="true">…</span><span class="visually-hidden">' . $infoLabel . '</span></summary>';
+    echo '<section class="gallery-card-public-info-panel' . ($tagsOnly ? ' hero-tag-info-panel' : '') . '" role="region" aria-label="' . $infoLabel . '">';
+    echo '<h3>' . $infoLabel . '</h3>';
+    if ($publicTitle !== '') {
+        echo '<h4 class="gallery-card-public-info-title">' . e($publicTitle) . '</h4>';
+    }
+    if ($publicDescriptionHtml !== '') {
+        echo '<div class="gallery-card-public-info-description">' . $publicDescriptionHtml . '</div>';
+    }
+    if ($publicDateHtml !== '') {
+        echo '<div class="gallery-card-public-info-date">' . $publicDateHtml . '</div>';
+    }
+    echo '<div class="gallery-card-public-info-tags">';
+    if (!$tagsOnly) {
+        echo '<h4>' . e(t('gallery.all_tags', 'All tags')) . '</h4>';
+    }
+    foreach ($groups as $group) {
+        $items = (array) ($group['items'] ?? []);
+        if ($items === []) {
+            continue;
+        }
+        if (isset($group['label'])) {
+            echo '<h4>' . e((string) $group['label']) . '</h4>';
+        }
+        echo '<div class="gallery-card-public-info-tag-list">';
+        view_render_public_gallery_card_tag_items($items);
+        echo '</div>';
+    }
+    echo '</div></section></details>';
 }
 
 /**

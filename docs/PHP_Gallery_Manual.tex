@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118.4}
-\newcommand{\manualdate}{5 October 2026}
+\newcommand{\version}{0.118.5}
+\newcommand{\manualdate}{5~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1727,11 +1727,11 @@ The~\ui{Appearance > Gallery tags} subsection controls the~compact tag collectio
 
 The~same subsection also controls the~public tag landing page. \ui{Galleries per~row} and~\ui{Rows per~page} define the~tag-result gallery grid and~its page capacity, while \ui{Gallery-card design} selects the~vertical or~horizontal card presentation for~those results. These values affect public pages opened through a~tag; they do~not~change ordinary gallery pages. If~the~dedicated values have not~been saved, the~global Theme grid and~gallery-card design remain the~fallback. The~global pagination switch still determines whether a~long tag result is~split into pages. From \ui{Edit tags}, \ui{Configure tag display} opens this subsection directly, and~\ui{Manage tag metadata} provides the~reverse contextual link.
 
-By~default, the~browser initially shows 20 tags. The~limit can~be~changed from 1 to 200 with either a~range slider or~an~exact number field. When more tags exist, \ui{Display all tags} appears and~expands the~existing tag elements in~place with JavaScript; no~page reload or~additional server request is~used. The~same control can~collapse the~collection again. Administrators who do~not~want progressive disclosure can~enable \ui{Display every tag immediately}. All tags are~still emitted in~the~server-rendered HTML in~every mode, so~disabling JavaScript leaves the~complete tag collection visible and~usable rather than hiding content permanently.
+By~default, the~initial server-rendered page shows 20 tags. The~limit can~be~changed from 1 to~200 with either a~range slider or~an~exact number field. When more tags exist, the~ellipsis control opens an~\ui{All tags} panel containing every direct and~contained tag in~its original group order. The~panel uses the~same animation and~dismissal behavior as~gallery cards, keeps the~header dimensions stable, and~wraps long names. With JavaScript, it~stays inside the~viewport and~can~be~closed through the~same control, an~outside click, or~Escape; Escape returns focus to~the~control. All tags are~already in~the~HTML, so~opening the~panel needs no~server request. Without JavaScript, native disclosure opens the~panel below the~header and~keeps long lists reachable by~scrolling. Enable \ui{Display every tag immediately} to~show every tag from the~first response; an~exact-limit collection also needs no~disclosure control.
 
 Tag ordering is~configurable as~\ui{Most used first} or~\ui{Alphabetical}. \ui{Most used first} is~the~default. Usage is~the~total number of~direct tag assignments to~galleries plus direct tag assignments to~photographs across the~installation. Equal usage counts fall back to~a~natural case-insensitive alphabetical order and~then a~stable identifier tie-break. Direct gallery tags are~sorted within their group and~contained tags are~sorted within their group; the~groups are~not~mixed together.
 
-Long tag collections can~also use a~responsive internal scrollbar. This option is~enabled by~default and~defaults to~five visible rows. The~row threshold can~be~configured from 1 to 12 with a~slider or~exact number field. The~browser measures the~rows after the~tags have actually wrapped at~the~current hero width, and~it~enables scrolling only when the~measured row count exceeds the~configured threshold. Resizing the~page causes the~measurement to~be~recalculated. Disabling the~scrollbar option removes the~height constraint and~allows the~hero to~grow naturally.
+The~tag preview can~also use an~internal scrollbar. This option is~enabled by~default with a~five-row height cap; the~row setting can~be~changed from 1 to~12 with a~slider or~exact number field. The~server supplies the~height cap in~the~initial markup, so~the~configured preview does not~wait for~JavaScript or~change geometry when the~module starts. Wrapping follows the~available width, and~scrolling is~needed only when the~preview exceeds the~cap. The~open overlay is~not~clipped by~this cap. Disabling the~scrollbar allows the~preview to~grow naturally.
 
 
 
