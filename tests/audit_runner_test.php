@@ -418,11 +418,12 @@ try {
     $requiredBrowserAudit = \PhpGallery\Audit\run_process(
         [PHP_BINARY, $root . '/scripts/audit.php', '--suite=browser-map', '--no-report'], $root, 20
     );
+    $requiredBrowserCount = count(array_filter($registry['node_tests'], static fn(array $definition): bool => !empty($definition['browser'])));
     audit_test_assert($requiredBrowserAudit['exit_code'] === 2
         && str_contains($requiredBrowserAudit['stdout'], 'Result: BLOCKED')
-        && str_contains($requiredBrowserAudit['stdout'], '25 blocked')
-        && !str_contains($requiredBrowserAudit['stdout'], '25 skip'),
-        'Required browser CLI must exit 2 with all 25 unavailable fixtures BLOCKED, never silently SKIP.');
+        && str_contains($requiredBrowserAudit['stdout'], $requiredBrowserCount . ' blocked')
+        && !str_contains($requiredBrowserAudit['stdout'], $requiredBrowserCount . ' skip'),
+        'Required browser CLI must exit 2 with every registered unavailable fixture BLOCKED, never silently SKIP.');
 } finally {
     putenv($previousBrowserRequired === false ? 'PHP_GALLERY_BROWSER_REQUIRED' : 'PHP_GALLERY_BROWSER_REQUIRED=' . $previousBrowserRequired);
     putenv($previousBrowser === false ? 'PHP_GALLERY_BROWSER' : 'PHP_GALLERY_BROWSER=' . $previousBrowser);

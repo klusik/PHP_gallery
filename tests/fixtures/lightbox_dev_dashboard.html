@@ -1,0 +1,160 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/lightbox_dev_dashboard.html
+Module Type: Browser Test Fixture
+Purpose: Validate diagnostic rendering and viewer ownership with isolated synthetic media.
+Responsibilities: Exercise optional setup, live updates, graph explanations, panel controls and cleanup.
+Author: Rudolf Klusal
+-->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightbox diagnostics fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/lightbox.css">
+<style>
+    [hidden] { display: none !important; }
+    body { margin: 0; background: #111827; color: white; font: 16px system-ui; }
+    #results { position: absolute; top: 0; left: 0; z-index: 20; }
+    .fixture-controls { position: fixed; top: 1rem; left: 1rem; z-index: 100; display: flex; gap: 0.5rem; }
+    .fixture-controls button { padding: 0.5rem; }
+    [data-lightbox] { position: fixed; inset: 0; background: #0b111c; padding: 5rem 1rem; }
+    [data-lightbox] figure { margin: 0; }
+    .lightbox-stage-link { display: block; position: relative; width: min(75vw, 700px); height: 460px; }
+    .lightbox-stage-link img { max-width: 100%; max-height: 100%; }
+    .lightbox-meta { max-width: 35rem; }
+    .fixture-controls { z-index: 2147483001; }
+</style>
+<body>
+<pre id="results">RUNNING</pre>
+<div id="cards"></div>
+<div class="lightbox" data-lightbox hidden data-lightbox-transition-ms="0" data-lightbox-maps-enabled="0">
+    <div class="fixture-controls">
+        <button data-lightbox-action="previous">Previous</button><button data-lightbox-action="next">Next</button>
+        <button data-lightbox-action="zoom-in">Zoom +</button><button data-lightbox-action="zoom-reset">100%</button>
+        <button data-lightbox-action="fullscreen">Fullscreen</button><button data-lightbox-action="close">Close</button>
+    </div>
+    <figure><a class="lightbox-stage-link" data-lightbox-stage data-lightbox-zoom-viewport><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
+    <div class="lightbox-meta"><h2 data-lightbox-title></h2><p data-lightbox-description></p><span data-lightbox-counter></span></div>
+</div>
+<script type="module" data-gallery-asset-revision="dev-dashboard-browser-current">
+    import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox.js';
+    const result = document.querySelector('#results');
+    const preview = new URLSearchParams(location.search).has('preview');
+    const errors = [];
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
+    if (preview) {
+        document.documentElement.lang = 'cs';
+        window.PHP_GALLERY_I18N = {language: 'cs', strings: await (await fetch('/app/lang/cs.json')).json()};
+        result.hidden = true;
+    }
+    const cards = [];
+    for (let id = 1; id <= 9; id += 1) {
+        const card = document.createElement('a');
+        card.href = `/photo/${id}`;
+        card.dataset.lightboxImage = '';
+        card.dataset.imageId = String(id); card.dataset.galleryId = '7';
+        card.dataset.title = `Photo ${id} · ${'long-file-name-'.repeat(8)}.jpg`;
+        card.dataset.imageWidth = '2700'; card.dataset.imageHeight = '1800';
+        card.dataset.previewSrc = `/media/preview-${id}.svg?token=SECRET_QUERY&signature=PRIVATE_SIGNATURE`;
+        card.dataset.fullSrc = id === 9 ? '/media/broken.svg?token=SECRET_QUERY' : `/media/full-${id}.svg?token=SECRET_QUERY`;
+        card.dataset.lightboxQualitySources = JSON.stringify([
+            {src: card.dataset.previewSrc, width: 900, height: 600, kind: 'preview'},
+            {src: card.dataset.fullSrc, width: 2700, height: 1800, kind: 'full'},
+        ]);
+        card.textContent = `Photo ${id}`;
+        document.querySelector('#cards').append(card); cards.push(card);
+    }
+    const overlay = document.querySelector('[data-lightbox]');
+    const next = overlay.querySelector('[data-lightbox-action="next"]');
+    const close = overlay.querySelector('[data-lightbox-action="close"]');
+    const value = (key) => overlay.querySelector(`[data-dev-value="${key}"]`)?.textContent || '';
+    /**
+     * Fail with a precise browser-contract message.
+     * @param {boolean} condition Assertion result.
+     * @param {string} message Failure explanation.
+     * @return {void} Throws on failure.
+     */
+    function check(condition, message) { if (!condition) throw new Error(message); }
+    /**
+     * Wait for observable browser state, keeping the test deadline bounded.
+     * @param {Function} predicate Read-only completion predicate.
+     * @param {string} message Timeout diagnostic.
+     * @return {Promise<void>} Resolves when the condition becomes true.
+     */
+    async function until(predicate, message) {
+        const deadline = performance.now() + 5000;
+        while (!predicate() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 35));
+        check(Boolean(predicate()), message);
+    }
+    try {
+        // Disabled DEV must neither create a dashboard nor fetch its presentation module.
+        setupGalleryLightbox(); cards[0].click();
+        await until(() => overlay.querySelector('[data-lightbox-img]')?.naturalWidth > 0, 'ordinary viewer opens');
+        check(!overlay.querySelector('.gallery-dev-overlay'), 'disabled dev mode creates no panel');
+        check(!performance.getEntriesByType('resource').some(entry => entry.name.includes('lightbox-dev-dashboard.js')), 'disabled dev mode does not fetch diagnostic module');
+        teardownGalleryLightbox();
+        const obsoleteDashboard = await import('/public/assets/gallery-modules/lightbox-dev-dashboard.js?v=20261005-dev-dashboard-v1');
+        check(obsoleteDashboard.obsoleteDashboardAsset, 'an immutable obsolete dashboard is seeded in the browser module cache');
+        document.body.dataset.devMode = '1';
+        setupGalleryLightbox(); cards[0].click();
+        await until(() => value('photo').includes('ID 1') && value('quality').includes(preview ? 'Zobrazeno' : 'Displayed'), 'live media identity appears');
+        if (!preview) {
+        const panel = overlay.querySelector('.gallery-dev-overlay');
+        check(performance.getEntriesByType('resource').some(entry => entry.name.includes('lightbox-dev-dashboard.js?v=dev-dashboard-browser-current')), 'dashboard follows the current application revision despite a warm obsolete cache');
+        check(panel.querySelectorAll('[data-dev-action]').length === 3, 'Freeze, Collapse and Expand are separate adjacent controls');
+        check(panel.querySelectorAll('[data-dev-section]').length === 5, 'grouped disclosures render');
+        panel.querySelector('[data-dev-action="expand"]').click();
+        check(panel.dataset.expanded === 'true', 'Expand enables detail pages');
+        check(![panel, ...panel.querySelectorAll('*')].some(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY) || ['auto', 'scroll'].includes(getComputedStyle(node).overflowX)), 'dashboard contains no scrollbar region');
+        panel.querySelector('[data-dev-tab="history"]').click();
+        for (const key of ['memory', 'cached', 'frame']) panel.querySelector(`[data-dev-graph-tab="${key}"]`).click();
+        check(panel.querySelectorAll('canvas[aria-label]').length === 3, 'graphs have accessible scale labels');
+        panel.querySelector('[data-dev-tab="active"]').click();
+        check(!panel.textContent.includes('SECRET_QUERY') && !panel.textContent.includes('PRIVATE_SIGNATURE'), 'URL query secrets are hidden');
+        check(value('source').includes('/media/'), 'safe source remains identifiable');
+        check(panel.querySelector('[data-dev-section="history"]').textContent.includes('Green:') && panel.textContent.includes('16.7 ms'), 'color legend and frame reference are explained');
+        const textNode = panel.querySelector('[data-dev-value="photo"]');
+        const disclosure = panel.querySelector('[data-dev-section="viewport"]');
+        panel.querySelector('[data-dev-tab="viewport"]').click();
+        next.click();
+        await until(() => value('photo').includes('ID 2'), 'navigation updates actual displayed photo');
+        check(textNode === panel.querySelector('[data-dev-value="photo"]') && !disclosure.hidden, 'updates preserve DOM identity and selected section');
+        const frozen = value('photo');
+        panel.querySelector('[data-dev-action="pause"]').click(); next.click();
+        await until(() => overlay.querySelector('[data-lightbox-img]').dataset.lightboxImageId === '3', 'navigation continues while frozen');
+        check(value('photo') === frozen && panel.dataset.paused === 'true', 'freeze stops values without stopping viewer');
+        panel.querySelector('[data-dev-action="pause"]').click();
+        await until(() => value('photo').includes('ID 3'), 'resume catches up to live state');
+        overlay.querySelector('[data-lightbox-action="zoom-in"]').click();
+        await until(() => value('quality').includes('Original') && value('source').includes('/full-3'), 'quality promotion reflects loaded full media');
+        overlay.querySelector('[data-lightbox-action="zoom-reset"]').click();
+        // Superseding navigation cannot overwrite the dashboard with an older prepared photo.
+        next.click(); next.click(); next.click();
+        await until(() => value('photo').includes('ID 6'), 'rapid navigation retains newest displayed owner');
+        check(value('target').includes('ID 6'), 'navigation target agrees after completion');
+        const resources = performance.getEntriesByType('resource').filter(entry => entry.name.includes('/media/')).length;
+        await new Promise(resolve => setTimeout(resolve, 800));
+        check(performance.getEntriesByType('resource').filter(entry => entry.name.includes('/media/')).length === resources, 'idle dashboard rendering creates no media requests');
+        overlay.classList.add('is-fullscreen');
+        check(panel.closest('[data-lightbox]') === overlay && panel.getBoundingClientRect().right <= innerWidth, 'fullscreen panel stays in owned subtree and viewport');
+        overlay.classList.remove('is-fullscreen');
+        close.click(); cards[8].click();
+        await until(() => value('photo').includes('ID 9'), 'broken-quality photo still shows preview');
+        overlay.querySelector('[data-lightbox-action="zoom-in"]').click();
+        await until(() => !panel.querySelector('[data-dev-warning]').hidden, 'failed quality produces a distinct warning');
+        check(!overlay.hidden, 'quality failure keeps viewer open');
+        close.click();
+        const frozenAfterClose = panel.textContent;
+        await new Promise(resolve => setTimeout(resolve, 450));
+        check(panel.textContent === frozenAfterClose, 'closed viewer stops diagnostic updates');
+        teardownGalleryLightbox();
+        check(!overlay.querySelector('.gallery-dev-overlay'), 'teardown removes diagnostic panel');
+        check(!errors.length, `runtime errors: ${errors.join('; ')}`);
+        result.textContent = 'BROWSER PASS: optional module, live identity, safe URLs, colored scales, stable disclosures, freeze/resume, quality, rapid navigation, no extra media requests, fullscreen, warning and teardown';
+        }
+    } catch (error) { result.textContent = `BROWSER FAIL: ${error.message}\n${errors.join('\n')}`; }
+</script>
+</html>

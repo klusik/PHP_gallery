@@ -298,6 +298,10 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'lightbox_dev_dashboard_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'lightbox_map_navigation_test.mjs' => [],
         'lightbox_preload_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
