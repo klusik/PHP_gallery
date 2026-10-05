@@ -402,7 +402,7 @@ function simbrief_description_build_localized_markdown(array $details, string $l
         $paragraphs[] = str_replace('{values}', simbrief_description_join_localized($context, $language), $template['context']);
     }
     $routeParts = [];
-    $route = simbrief_description_markdown_code(simbrief_description_shorten((string) ($details['route'] ?? ''), 300));
+    $route = simbrief_description_markdown_code((string) ($details['route'] ?? ''));
     if ($route !== '') {
         $routeParts[] = $replace($template['route'], $route);
     }
@@ -469,8 +469,8 @@ function simbrief_description_join_localized(array $parts, string $language): st
 /**
  * Extract the flight details used by the prose generator.
  *
- * @param array $payload Payload value.
- * @return array<string string> Normalized dispatch details.
+ * @param array<string,mixed> $payload Decoded SimBrief OFP fields.
+ * @return array<string,string> Normalized dispatch details with endpoint-complete route text.
  */
 function simbrief_description_extract_details(array $payload): array
 {
@@ -498,7 +498,11 @@ function simbrief_description_extract_details(array $payload): array
         'alternate_code' => simbrief_description_alternate_code($payload),
         'flight_label' => $flightLabel,
         'aircraft' => simbrief_description_aircraft_label($payload),
-        'route' => simbrief_description_first_text($payload, ['general.route', 'general.route_ifps', 'general.route_navigraph', 'params.route']),
+        'route' => simbrief_description_complete_route_text(
+            simbrief_description_first_text($payload, ['general.route', 'general.route_ifps', 'general.route_navigraph', 'params.route']),
+            $originCode,
+            $destinationCode
+        ),
         'cruise' => simbrief_description_altitude(simbrief_description_first_text($payload, ['general.initial_altitude', 'general.cruise_altitude', 'general.altitude'])),
         'ete' => simbrief_description_duration(simbrief_description_first_text($payload, ['times.est_time_enroute', 'times.ete', 'general.ete', 'general.est_time_enroute'])),
         'distance' => simbrief_description_distance(simbrief_description_first_text($payload, ['general.route_distance', 'general.air_distance', 'general.gc_distance'])),
@@ -1274,14 +1278,48 @@ function simbrief_description_route_point_duplicate(array $points, array $candid
 }
 
 /**
- * Build the human-readable route text shown in the gallery editor.
+ * Add the departure and arrival airports while retaining the filed route tokens.
  *
- * @param array $points Points value.
- * @param array $details Details value.
- * @return string Text result for the caller.
+ * @param string $route Filed route text, which may already contain endpoint airports.
+ * @param string $originCode Departure airport code.
+ * @param string $destinationCode Arrival airport code.
+ * @return string Complete route with each missing endpoint added once.
+ */
+function simbrief_description_complete_route_text(string $route, string $originCode, string $destinationCode): string
+{
+    $route = simbrief_description_plain_text($route);
+    $tokens = $route !== '' ? explode(' ', $route) : [];
+    $originCode = strtoupper(trim($originCode));
+    $destinationCode = strtoupper(trim($destinationCode));
+    // Airport/runway tokens already identify the endpoint and must stay intact.
+    $firstAirport = strtoupper(explode('/', $tokens[0] ?? '')[0]);
+    if ($originCode !== '' && $firstAirport !== $originCode) {
+        array_unshift($tokens, $originCode);
+    }
+    $lastAirport = strtoupper(explode('/', $tokens[count($tokens) - 1] ?? '')[0]);
+    if ($destinationCode !== '' && $lastAirport !== $destinationCode) {
+        $tokens[] = $destinationCode;
+    }
+    return implode(' ', $tokens);
+}
+
+/**
+ * Build editor route text from the filed route, using geometry names as a fallback.
+ *
+ * @param array<int,array<string,mixed>> $points Ordered OFP coordinate points.
+ * @param array<string,string> $details Normalized flight details and filed route.
+ * @return string Complete route text retaining filed tokens and endpoint airports.
  */
 function simbrief_description_route_text_from_points(array $points, array $details): string
 {
+    $route = simbrief_description_first_text($details, ['route']);
+    if ($route !== '') {
+        return simbrief_description_complete_route_text(
+            $route,
+            (string) ($details['origin_code'] ?? ''),
+            (string) ($details['destination_code'] ?? '')
+        );
+    }
     $names = [];
     foreach ($points as $point) {
         $name = strtoupper(trim((string) ($point['name'] ?? '')));
@@ -1290,18 +1328,17 @@ function simbrief_description_route_text_from_points(array $points, array $detai
         }
     }
 
-    $names = array_values(array_unique($names));
-    if (count($names) >= 2) {
-        return implode(' ', $names);
-    }
-
-    return simbrief_description_first_text($details, ['route']);
+    return simbrief_description_complete_route_text(
+        implode(' ', $names),
+        (string) ($details['origin_code'] ?? ''),
+        (string) ($details['destination_code'] ?? '')
+    );
 }
 
 /**
  * Build a safe Markdown description from extracted SimBrief fields.
  *
- * @param array $details Details value.
+ * @param array<string,string> $details Normalized flight details with the complete route.
  * @return string Editable Markdown description.
  */
 function simbrief_description_build_markdown(array $details): string
@@ -1341,7 +1378,7 @@ function simbrief_description_build_markdown(array $details): string
 
     $routeParts = [];
     if (($details['route'] ?? '') !== '') {
-        $routeParts[] = 'SimBrief filed the route as `' . simbrief_description_markdown_code(simbrief_description_shorten((string) $details['route'], 300)) . '`.';
+        $routeParts[] = 'SimBrief filed the route as `' . simbrief_description_markdown_code((string) $details['route']) . '`.';
     }
     $runwayParts = [];
     if (($details['origin_runway'] ?? '') !== '') {

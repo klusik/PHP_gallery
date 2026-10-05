@@ -39,6 +39,7 @@ declare(strict_types=1);
 use function Gallery\Services\simbrief_description_build_markdown;
 use function Gallery\Services\simbrief_description_localized_drafts;
 use function Gallery\Services\simbrief_description_coordinate_value;
+use function Gallery\Services\simbrief_description_complete_route_text;
 use function Gallery\Services\simbrief_description_extract_details;
 use function Gallery\Services\simbrief_description_expand_identifier_input;
 use function Gallery\Services\simbrief_description_extract_route_points;
@@ -185,7 +186,35 @@ assert_simbrief_description_same(4, count($routePoints), 'SimBrief route point c
 assert_simbrief_description_same('start', $routePoints[0]['role'], 'SimBrief route start role');
 assert_simbrief_description_same('via', $routePoints[1]['role'], 'SimBrief route via role');
 assert_simbrief_description_same('end', $routePoints[3]['role'], 'SimBrief route end role');
-assert_simbrief_description_same('LKPR OKL BODAL EDDM', simbrief_description_route_text_from_points($routePoints, $details), 'SimBrief route text from OFP points');
+assert_simbrief_description_same('LKPR DCT OKL DCT EDDM', simbrief_description_route_text_from_points($routePoints, $details), 'SimBrief route text preserves filed DCT tokens');
+assert_simbrief_description_same('LKPR OKL BODAL EDDM', simbrief_description_route_text_from_points($routePoints, array_replace($details, ['route' => ''])), 'coordinate-name fallback when the filed route is missing');
+
+$filedRoute = 'DCT TREEL DCT UQQ DCT YZT DCT PR DCT';
+$completeRoute = 'CYVR ' . $filedRoute . ' CYPR';
+assert_simbrief_description_same($completeRoute, simbrief_description_complete_route_text($filedRoute, 'CYVR', 'CYPR'), 'missing route airports are added');
+foreach ([$completeRoute, 'CYVR ' . $filedRoute, $filedRoute . ' CYPR'] as $partialRoute) {
+    assert_simbrief_description_same($completeRoute, simbrief_description_complete_route_text($partialRoute, 'CYVR', 'CYPR'), 'existing endpoint airports are not duplicated');
+}
+assert_simbrief_description_same('CYVR/08R DCT CYPR/13', simbrief_description_complete_route_text('CYVR/08R DCT CYPR/13', 'CYVR', 'CYPR'), 'airport runway tokens retain their endpoint identity');
+
+$endpointPayload = $payload;
+$endpointPayload['origin']['icao_code'] = 'CYVR';
+$endpointPayload['destination']['icao_code'] = 'CYPR';
+$endpointPayload['general']['route'] = $filedRoute;
+$endpointDetails = simbrief_description_extract_details($endpointPayload);
+assert_simbrief_description_same($completeRoute, $endpointDetails['route'], 'normalized flight details carry the complete route');
+foreach (simbrief_description_localized_drafts($endpointDetails, 'cs', ['en', 'cs', 'de', 'sv'])['translations'] as $language => $draft) {
+    assert_simbrief_description_contains('`' . $completeRoute . '`', $draft, $language . ' description includes the same complete route');
+}
+require_once __DIR__ . '/../app/views/simbrief_descriptions.php';
+assert_simbrief_description_contains('`' . $completeRoute . '`', \Gallery\Views\view_simbrief_description_markdown($endpointDetails), 'production English view includes both airports');
+
+$endpointPayload['general']['route'] = str_repeat('DCT TREEL ', 40) . 'DCT';
+$longRouteDetails = simbrief_description_extract_details($endpointPayload);
+foreach (simbrief_description_localized_drafts($longRouteDetails, 'cs', ['en', 'cs', 'de', 'sv'])['translations'] as $language => $draft) {
+    assert_simbrief_description_contains('`' . $longRouteDetails['route'] . '`', $draft, $language . ' long route retains the destination');
+}
+assert_simbrief_description_contains('`' . $longRouteDetails['route'] . '`', \Gallery\Views\view_simbrief_description_markdown($longRouteDetails), 'production English view retains the full long route');
 assert_simbrief_description_same(49.28, round((float) $routePoints[2]['latitude'], 2), 'compact latitude parsing');
 assert_simbrief_description_same(12.29, round((float) $routePoints[2]['longitude'], 2), 'compact longitude parsing');
 assert_simbrief_description_same(-2.72, round((float) simbrief_description_coordinate_value('W00243.2', 'lon'), 2), 'west compact longitude parsing');

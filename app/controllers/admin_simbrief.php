@@ -44,10 +44,12 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\simbrief_description_build_markdown;
 use function Gallery\Services\simbrief_description_extract_details;
+use function Gallery\Services\simbrief_description_extract_route_points;
 use function Gallery\Services\simbrief_description_fetch_latest_ofp;
 use function Gallery\Services\simbrief_description_identifier;
 use function Gallery\Services\simbrief_description_draft_create;
 use function Gallery\Services\simbrief_description_localized_drafts;
+use function Gallery\Services\simbrief_description_route_text_from_points;
 use function Gallery\Services\content_localization_enabled;
 use function Gallery\Services\content_localization_schema_ready;
 use function Gallery\Services\content_supported_languages;
@@ -61,6 +63,7 @@ use function Gallery\Services\admin_log_event;
  *
  * @param array $payload Payload value.
  * @param int $statusCode HTTP status code.
+ * @return void Emit the JSON response with the requested status.
  */
 function admin_simbrief_json_response(array $payload, int $statusCode = 200): void
 {
@@ -72,7 +75,7 @@ function admin_simbrief_json_response(array $payload, int $statusCode = 200): vo
 /**
  * Generate a gallery-description draft from the latest SimBrief OFP.
  *
- * @return void Send a JSON preview or saved-gallery result.
+ * @return void Send a private draft reference, localized descriptions and a route preview.
  */
 function cms_admin_simbrief_description(): void
 {
@@ -107,6 +110,7 @@ function cms_admin_simbrief_description(): void
         );
         $payload = simbrief_description_fetch_latest_ofp($identifier);
         $details = simbrief_description_extract_details($payload);
+        $routePoints = simbrief_description_extract_route_points($payload, $details);
         $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
             ? view_simbrief_description_markdown($details)
             : simbrief_description_build_markdown($details);
@@ -161,6 +165,11 @@ function cms_admin_simbrief_description(): void
             'translations' => (array) ($localizedDrafts['translations'] ?? []),
             'source_language' => (string) ($localizedDrafts['source_language'] ?? 'en'),
             'draft_ref' => $draftRef,
+            'route' => [
+                'saved' => false,
+                'route_text' => simbrief_description_route_text_from_points($routePoints, $details),
+                'point_count' => count($routePoints),
+            ],
             'message' => $draftMessage,
             'details' => $details,
         ]);

@@ -77,8 +77,19 @@ namespace {
      * @return array<string,mixed> Complete retry scenario values.
      */
     function creation_fixture_retry(): array { return ['submitted'=>['title'=>'Retry <safe>','description'=>'Keep <text> & description','tags'=>'flight, landscape','content_language'=>'en','remember_content_language'=>'1','simbrief_pilot_name'=>'Retry pilot','remember_simbrief_pilot_name'=>'1','simbrief_draft_ref'=>'fixture-draft','folder_name'=>'retry-folder','visibility'=>'private','voting_enabled'=>'1','show_filenames'=>'1','count_badge_visibility'=>'hide'],'date'=>['schema_ready'=>true,'range_schema_ready'=>true,'start_value'=>'2026-10-01','end_value'=>'2026-10-03']]; }
+    /** Render the real SimBrief and route controls inside a disposable editor save form.
+     * @return string Editor markup with synthetic identity and route replacement slots.
+     */
+    function creation_fixture_simbrief_editor(): string {
+        ob_start();
+        echo '<form action="/fixture-editor-save" method="post" data-admin-gallery-settings-form><input type="hidden" name="id" value="170"><input type="hidden" name="csrf_token" value="theme-fixture"><input type="hidden" name="expected_edit_revision" value="fixture-revision"><textarea name="description" data-gallery-description-textarea></textarea>';
+        \Gallery\Views\view_render_admin_simbrief_description_tool(170, creation_fixture_model(), ['state'=>'ready','title'=>'Flight route map','label'=>'Route text','route_text'=>'__ROUTE__']);
+        echo '<button type="submit">Save gallery</button></form>';
+        return (string) ob_get_clean();
+    }
     if(realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? ''))===__FILE__) {
         foreach(\Gallery\Views\view_admin_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
         echo '<div id="full-create">'.creation_fixture_page().'</div><template id="production-create-panel">'.creation_fixture_panel().'</template><template id="production-create-root-panel">'.creation_fixture_panel(0).'</template><template id="production-create-retry">'.creation_fixture_page(creation_fixture_retry(),'Validation <safe> failed').'</template>';
+        echo '<template id="production-simbrief-editor">'.creation_fixture_simbrief_editor().'</template>';
     }
 }
