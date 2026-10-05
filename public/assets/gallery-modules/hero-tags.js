@@ -295,7 +295,7 @@ export function setupHeroTagDisclosure() {
 }
 
 /**
- * Place an open public-info panel beside its card and keep it inside the viewport.
+ * Place an open public-info panel beside its card or hero control inside the viewport.
  *
  * @param {HTMLDetailsElement} details Open gallery-card information disclosure.
  * @return {void} Positions the panel over surrounding content without changing card flow.
@@ -303,26 +303,29 @@ export function setupHeroTagDisclosure() {
 function positionGalleryCardInfoPanel(details) {
     const panel = details.querySelector('.gallery-card-public-info-panel');
     const summary = details.querySelector('summary');
-    const root = details.closest('.gallery-card-tags');
+    const root = details.closest('[data-hero-tags]');
     if (!(panel instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(root instanceof HTMLElement)) {
         return;
     }
 
     const rootRect = root.getBoundingClientRect();
     const summaryRect = summary.getBoundingClientRect();
+    // Exclude a classic scrollbar so the overlay cannot widen the document.
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const margin = 12;
+    const gap = 10;
+    panel.style.maxWidth = `${Math.max(0, viewportWidth - (margin * 2))}px`;
     panel.style.right = 'auto';
     panel.style.bottom = 'auto';
     panel.style.left = '0px';
     panel.style.top = '0px';
     panel.style.visibility = 'hidden';
     const panelRect = panel.getBoundingClientRect();
-    const margin = 12;
-    const gap = 10;
     let left = summaryRect.left - panelRect.width - gap;
     if (left < margin) {
         left = summaryRect.right + gap;
     }
-    left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
+    left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin));
     let top = summaryRect.top + ((summaryRect.height - panelRect.height) / 2);
     top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
     panel.style.left = `${Math.round(left - rootRect.left)}px`;

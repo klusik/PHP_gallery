@@ -257,6 +257,7 @@ assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme c
     assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-public-info-panel {', 'card tag disclosure opens a public-information overlay');
     assert_hero_tag_source_contains($publicTagCss, 'position: absolute;', 'public-information overlay does not change card flow');
     assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {', 'card overlay is not clipped by the configured tag scrollbar');
+    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .hero-tags-content:has(.gallery-card-info-disclosure[open]) {', 'hero overlay is not clipped by the configured tag scrollbar');
     assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tags .tag-list {', 'gallery card tag margins are owned by the dedicated layout rule');
 
     foreach (['en', 'cs'] as $language) {

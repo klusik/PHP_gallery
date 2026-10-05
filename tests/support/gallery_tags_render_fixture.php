@@ -102,6 +102,22 @@ function gallery_tags_fixture_document(): void
         'scrollbar_rows' => 1,
     ]);
     echo '</section>';
+    foreach ([['case' => 'hero-group-boundary', 'limit' => 2, 'all' => false, 'count' => 12], ['case' => 'hero-exact-limit', 'limit' => 4, 'all' => false, 'count' => 4], ['case' => 'hero-display-all', 'limit' => 2, 'all' => true, 'count' => 8]] as $heroCase) {
+        $items = gallery_tags_fixture_items($heroCase['count']);
+        echo '<section class="hero" data-fixture-case="' . $heroCase['case'] . '" style="max-width:250px;min-width:0">';
+        \Gallery\Views\view_render_public_hero_tags([
+            'groups' => [
+                ['items' => array_slice($items, 0, 2)],
+                ['label' => 'Containing tags', 'items' => array_slice($items, 2)],
+            ],
+            'tag_count' => $heroCase['count'],
+            'visible_limit' => $heroCase['limit'],
+            'display_all' => $heroCase['all'],
+            'scrollbar_enabled' => true,
+            'scrollbar_rows' => 1,
+        ]);
+        echo '</section>';
+    }
     echo '</main></body></html>';
 }
 
