@@ -13,6 +13,8 @@
  * Responsibilities:
  *   - Keep every standalone Node regression script explicitly registered
  *   - Preserve quick/full/release profile composition
+ *   - Exercise bounded child scheduling, exclusive barriers and outcome normalization
+ *   - Keep the curated PHP feedback and isolated browser fixture registries consistent
  *   - Verify command-line parsing and SKIP classification helpers
  *   - Prevent accidental browser or slow-test inclusion in the quick profile
  *
@@ -30,7 +32,7 @@
  *   - This test intentionally validates registry coverage without executing the child suites recursively.
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-10-05
  */
 
 declare(strict_types=1);
@@ -41,10 +43,15 @@ $registry = require dirname(__DIR__) . '/scripts/audit_registry.php';
 use function PhpGallery\Audit\output_is_skip;
 use function PhpGallery\Audit\parse_python_unittest_summary;
 use function PhpGallery\Audit\parse_options;
+use function PhpGallery\Audit\performance_metric_problems;
 use function PhpGallery\Audit\python_command_is_usable;
 use function PhpGallery\Audit\relative_path;
 use function PhpGallery\Audit\resolve_python_command_from_candidates;
 use function PhpGallery\Audit\resolve_browser_executable;
+use function PhpGallery\Audit\browser_required;
+use function PhpGallery\Audit\process_status;
+use function PhpGallery\Audit\run_process_pool;
+use function PhpGallery\Audit\worker_count;
 
 /**
  * Throw when an audit-runner contract is not satisfied.
@@ -69,7 +76,13 @@ audit_test_assert($actualNodeNames === $registeredNodeNames, 'Every tests/*_test
 
 $profiles = $registry['profiles'] ?? [];
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
-audit_test_assert(in_array('php-regression', $profiles['quick'], true), 'Quick profile must retain the complete PHP regression suite.');
+audit_test_assert(in_array('php-fast', $profiles['quick'], true) && !in_array('php-regression', $profiles['quick'], true), 'Quick must use curated PHP feedback instead of the complete regression tree.');
+foreach (['full', 'release'] as $profile) {
+    audit_test_assert(in_array('php-regression', $profiles[$profile], true), 'Full and release must retain complete PHP regression coverage.');
+    audit_test_assert(in_array('source-contract-inventory', $profiles[$profile], true), 'Full and release must expose the complete source-contract inventory.');
+    audit_test_assert(in_array('winapp', $profiles[$profile], true), 'Full and release must retain WinApp regression coverage.');
+}
+audit_test_assert(!in_array('source-contract-inventory', $profiles['quick'], true) && !in_array('winapp', $profiles['quick'], true), 'Quick must avoid advisory tree scans and unrelated WinApp discovery.');
 audit_test_assert(in_array('node-fast', $profiles['quick'], true), 'Quick profile must use the fast Node suite.');
 audit_test_assert(in_array('node-full', $profiles['full'], true), 'Full profile must include slow deterministic Node coverage.');
 audit_test_assert(in_array('browser-map', $profiles['full'], true), 'Full handoff must exercise available Chromium fixtures.');
@@ -78,10 +91,41 @@ audit_test_assert(in_array('browser-map', $profiles['release'], true), 'Release 
 audit_test_assert(in_array('release-consistency', $profiles['release'], true), 'Release profile must verify release metadata and documentation consistency.');
 audit_test_assert(in_array('manifest', $profiles['release'], true), 'Release profile must verify the core manifest.');
 foreach (['quick', 'full', 'release'] as $profile) {
-    audit_test_assert(in_array('source-contract-inventory', $profiles[$profile], true), 'Every central profile must expose source documentation and policy debt.');
+    audit_test_assert(in_array('runtime-performance', $profiles[$profile], true), 'Every profile must enforce changed-source operational policy.');
     audit_test_assert(in_array('python-import-policy', $profiles[$profile], true), 'Every central profile must forbid future annotations across all admitted Python sources.');
     audit_test_assert(in_array('source-documentation-changed', $profiles[$profile], true), 'Every central profile must enforce added and materially changed declaration documentation.');
     audit_test_assert(in_array('source-policy-changed', $profiles[$profile], true), 'Every central profile must enforce recognized new or materially changed runtime policy sites.');
+}
+
+$phpRegistry = require dirname(__DIR__) . '/scripts/audit_php_registry.php';
+$quickTests = $phpRegistry['quick_tests'];
+audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= 40 && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
+foreach ($quickTests as $testName) {
+    audit_test_assert(basename($testName) === $testName && is_file(__DIR__ . '/' . $testName), 'Every curated PHP entry must identify an existing standalone test.');
+}
+foreach ($phpRegistry['serial_tests'] as $testName => $reason) {
+    audit_test_assert(is_file(__DIR__ . '/' . $testName) && trim($reason) !== '', 'Every exclusive PHP exception requires an existing test and a concrete reason.');
+}
+
+$harnessSource = file_get_contents(__DIR__ . '/admin_panel_lifecycle_browser_test.mjs') ?: '';
+preg_match("/const fixtureName = \[(.*?)\]\\.includes\\(process\\.argv\\[3\\]\\)/s", $harnessSource, $fixtureMatch);
+$harnessFixtures = [];
+if (isset($fixtureMatch[1])) {
+    preg_match_all("/'([^']+)'/", $fixtureMatch[1], $fixtureNames);
+    $harnessFixtures = $fixtureNames[1] ?? [];
+}
+foreach ($registry['node_tests'] as $nodeName => $nodeConfig) {
+    if (empty($nodeConfig['php_argument'])) {
+        continue;
+    }
+    $wrapperSource = file_get_contents(__DIR__ . '/' . $nodeName) ?: '';
+    if (!str_contains($wrapperSource, "admin_panel_lifecycle_browser_test.mjs")) {
+        continue;
+    }
+    audit_test_assert(preg_match("/process\\.argv\\[3\\]\\s*=\\s*'([^']+)'/", $wrapperSource, $wrapperMatch) === 1,
+        'PHP-rendered wrapper must select its harness fixture with a literal process.argv[3] assignment: ' . $nodeName);
+    audit_test_assert(in_array($wrapperMatch[1], $harnessFixtures, true),
+        'PHP-rendered wrapper fixture must be allowlisted by the shared browser harness: ' . $nodeName);
 }
 
 audit_test_assert(!empty($registry['node_tests']['gallery_download_zip64_test.mjs']['slow']), 'ZIP64 boundary coverage must stay classified as slow.');
@@ -170,6 +214,160 @@ audit_test_assert($launcherPython === ['py', '-3'], 'The Windows py -3 launcher 
 
 $root = dirname(__DIR__);
 audit_test_assert(relative_path($root . '/tests/audit_runner_test.php', $root) === 'tests/audit_runner_test.php', 'Repository-relative path normalization must remain stable.');
+$previousWorkerCount = getenv('PHP_GALLERY_AUDIT_WORKERS');
+try {
+    putenv('PHP_GALLERY_AUDIT_WORKERS');
+    audit_test_assert(worker_count() === 4, 'The process pool default must remain four workers.');
+    putenv('PHP_GALLERY_AUDIT_WORKERS=7');
+    audit_test_assert(worker_count() === 7 && worker_count('2') === 2 && worker_count() >= 1 && worker_count() <= 8,
+        'Worker count must honor the environment and explicit override within the bounded range.');
+    foreach (['0', '9', '1.5', 'many'] as $invalidWorkerCount) {
+        $invalidRejected = false;
+        try {
+            worker_count($invalidWorkerCount);
+        } catch (InvalidArgumentException) {
+            $invalidRejected = true;
+        }
+        audit_test_assert($invalidRejected, 'Invalid worker override must be rejected: ' . $invalidWorkerCount);
+    }
+} finally {
+    putenv($previousWorkerCount === false ? 'PHP_GALLERY_AUDIT_WORKERS' : 'PHP_GALLERY_AUDIT_WORKERS=' . $previousWorkerCount);
+}
+$previousBrowserRequired = getenv('PHP_GALLERY_BROWSER_REQUIRED');
+try {
+    putenv('PHP_GALLERY_BROWSER_REQUIRED=1');
+    audit_test_assert(browser_required(), 'The dedicated browser coverage switch must be recognized.');
+    putenv('PHP_GALLERY_BROWSER_REQUIRED=0');
+    audit_test_assert(!browser_required(), 'Other browser switch values must not require Chromium.');
+} finally {
+    putenv($previousBrowserRequired === false ? 'PHP_GALLERY_BROWSER_REQUIRED' : 'PHP_GALLERY_BROWSER_REQUIRED=' . $previousBrowserRequired);
+}
+audit_test_assert(process_status(['exit_code' => 0, 'stdout' => 'passed']) === 'PASS', 'A clean child must normalize to PASS.');
+audit_test_assert(process_status(['exit_code' => 1, 'stdout' => 'specific failure']) === 'FAIL', 'A nonzero child must normalize to FAIL.');
+audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP unavailable\n"]) === 'SKIP', 'Optional child skip must remain SKIP.');
+audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP Chromium unavailable\n"], true) === 'BLOCKED', 'Required child skip must become BLOCKED.');
+audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "BLOCKED missing runtime\n"]) === 'BLOCKED', 'Explicit blocked child output must remain BLOCKED.');
+audit_test_assert(process_status(['exit_code' => 124, 'timed_out' => true]) === 'FAIL', 'Timed out children must normalize to FAIL.');
+
+$fixtureDirectory = sys_get_temp_dir() . '/php-gallery-audit-' . bin2hex(random_bytes(6));
+mkdir($fixtureDirectory);
+$statePath = $fixtureDirectory . '/state.txt';
+$eventPath = $fixtureDirectory . '/events.txt';
+$lockPath = $fixtureDirectory . '/state.lock';
+try {
+    file_put_contents($statePath, "0,0\n");
+    $makeFixtureJob = static function (string $name, string $kind = 'parallel', int $delayMs = 120) use ($statePath, $eventPath, $lockPath): array {
+        $script = '$state=' . var_export($statePath, true) . ';$events=' . var_export($eventPath, true) . ';$lockPath=' . var_export($lockPath, true)
+            . ';$kind=' . var_export($kind, true) . ';$name=' . var_export($name, true) . ';$delay=' . $delayMs . ';'
+            . '$lock=fopen($lockPath,"c+");flock($lock,LOCK_EX);$state=file_get_contents(' . var_export($statePath, true) . ');[$active,$max]=array_map("intval",explode(",",trim($state)));$active++;$max=max($max,$active);'
+            . 'file_put_contents(' . var_export($statePath, true) . ',"$active,$max\n");if($kind==="serial"){file_put_contents($events,"serial-active:$active\n",FILE_APPEND);}flock($lock,LOCK_UN);fclose($lock);'
+            . 'usleep($delay*1000);$lock=fopen($lockPath,"c+");flock($lock,LOCK_EX);$state=file_get_contents(' . var_export($statePath, true) . ');[$active,$max]=array_map("intval",explode(",",trim($state)));$active--;file_put_contents(' . var_export($statePath, true) . ',"$active,$max\n");flock($lock,LOCK_UN);fclose($lock);echo ' . var_export($name, true) . ';';
+        return ['command' => [PHP_BINARY, '-r', $script], 'timeout' => 3, 'serial' => $kind === 'serial'];
+    };
+    $poolResults = run_process_pool([
+        $makeFixtureJob('first', 'parallel'),
+        $makeFixtureJob('second', 'parallel', 30),
+        $makeFixtureJob('exclusive', 'serial', 40),
+        $makeFixtureJob('fourth', 'parallel'),
+        $makeFixtureJob('fifth', 'parallel'),
+    ], $fixtureDirectory, 2);
+    $poolOutputs = array_map(static fn(array $result): string => trim($result['stdout']), $poolResults);
+    $stateValues = array_map('intval', explode(',', trim((string) file_get_contents($statePath))));
+    $events = file_get_contents($eventPath) ?: '';
+    audit_test_assert($poolOutputs === ['first', 'second', 'exclusive', 'fourth', 'fifth'], 'Concurrent process results must retain input order after out-of-order completion.');
+    audit_test_assert($stateValues[1] === 2 && str_contains($events, 'serial-active:1'), 'Parallel work must obey its bound and drain before an exclusive child starts.');
+    audit_test_assert(count(array_filter($poolResults, static fn(array $result): bool => process_status($result) === 'PASS')) === 5,
+        'All successful process-pool fixture children must retain independent result status.');
+    $invalidPoolRejected = false;
+    try {
+        run_process_pool([], $fixtureDirectory, 9);
+    } catch (InvalidArgumentException) {
+        $invalidPoolRejected = true;
+    }
+    audit_test_assert($invalidPoolRejected, 'The scheduler itself must reject worker limits outside the supported range.');
+    $failureResults = run_process_pool([
+        ['command' => [PHP_BINARY, '-r', 'fwrite(STDERR,"fixture-failure"); exit(7);'], 'timeout' => 2],
+        ['command' => ['php-gallery-command-that-does-not-exist'], 'timeout' => 2],
+    ], $fixtureDirectory, 2);
+    audit_test_assert(process_status($failureResults[0]) === 'FAIL' && $failureResults[0]['exit_code'] === 7
+        && str_contains($failureResults[0]['stderr'], 'fixture-failure'), 'Failure output and exit status must remain attributable to the corresponding child.');
+    audit_test_assert(process_status($failureResults[1]) === 'BLOCKED' && str_contains($failureResults[1]['stderr'], 'Unable to allocate capture streams'),
+        'Process spawn failure must produce a diagnostic BLOCKED result.');
+    $timeoutResults = run_process_pool([
+        ['command' => [PHP_BINARY, '-r', 'usleep(1100000); echo "preceding";'], 'timeout' => 3],
+        ['command' => [PHP_BINARY, '-r', 'echo "started-later";'], 'timeout' => 1],
+        ['command' => [PHP_BINARY, '-r', 'usleep(1300000); echo "must-time-out";'], 'timeout' => 1],
+        ['command' => [PHP_BINARY, '-r', 'echo "recovered";'], 'timeout' => 1],
+    ], $fixtureDirectory, 1);
+    audit_test_assert(process_status($timeoutResults[1]) === 'PASS' && trim($timeoutResults[1]['stdout']) === 'started-later'
+        && process_status($timeoutResults[2]) === 'FAIL' && $timeoutResults[2]['timed_out']
+        && process_status($timeoutResults[3]) === 'PASS',
+        'A queued child gets a fresh timeout after its actual start; a timed-out child does not prevent recovery.');
+
+    $treeFixtures = [
+        ['sentinel' => $fixtureDirectory . '/group-late-sentinel.txt', 'ready' => $fixtureDirectory . '/group-ready.txt', 'force_fallback' => false],
+    ];
+    if (DIRECTORY_SEPARATOR !== '\\') {
+        $treeFixtures[] = ['sentinel' => $fixtureDirectory . '/fallback-late-sentinel.txt', 'ready' => $fixtureDirectory . '/fallback-ready.txt', 'force_fallback' => true];
+    }
+    $treeActive = [];
+    try {
+        $nullDevice = DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null';
+        foreach ($treeFixtures as $index => $treeFixture) {
+            $grandchildReady = $fixtureDirectory . '/grandchild-' . $index . '-ready.txt';
+            $grandchildCode = '$ready=' . var_export($grandchildReady, true) . ';$sentinel=' . var_export($treeFixture['sentinel'], true)
+                . ';file_put_contents($ready,"ready");usleep(1500000);file_put_contents($sentinel,"survived");';
+            $rootCode = '$childCommand=' . var_export([PHP_BINARY, '-r', $grandchildCode], true) . ';$null=' . var_export($nullDevice, true)
+                . ';$pipes=[];$child=proc_open($childCommand,[0=>["file",$null,"r"],1=>["file",$null,"w"],2=>["file",$null,"w"]],$pipes,'
+                . var_export($root, true) . ',null,["bypass_shell"=>true]);if(!is_resource($child)){exit(31);} $deadline=microtime(true)+8;'
+                . 'while(!is_file(' . var_export($grandchildReady, true) . ')&&microtime(true)<$deadline){usleep(10000);}file_put_contents('
+                . var_export($treeFixture['ready'], true) . ',"ready");usleep(3000000);';
+            $activeTreeProcess = \PhpGallery\Audit\start_process(['command' => [PHP_BINARY, '-r', $rootCode], 'timeout' => 1], $root);
+            audit_test_assert(isset($activeTreeProcess['process']), 'Process-tree fixture root must start successfully.');
+            if ($treeFixture['force_fallback']) {
+                $activeTreeProcess['group'] = false;
+            }
+            $treeActive[$index] = $activeTreeProcess;
+        }
+        $readyDeadline = hrtime(true) / 1e9 + 8;
+        do {
+            $allReady = true;
+            foreach ($treeFixtures as $treeFixture) {
+                $allReady = $allReady && is_file($treeFixture['ready']);
+            }
+            if (!$allReady) {
+                usleep(10000);
+            }
+        } while (!$allReady && hrtime(true) / 1e9 < $readyDeadline);
+        audit_test_assert($allReady, 'Each process-tree fixture must confirm its grandchild started before cleanup.');
+        foreach ($treeActive as $index => $activeTreeProcess) {
+            // Set the monotonic start just beyond the registered one-second timeout after the fixture is ready.
+            $activeTreeProcess['started'] = hrtime(true) / 1e9 - 1.1;
+            \PhpGallery\Audit\terminate_process($activeTreeProcess);
+            $treeResults[$index] = \PhpGallery\Audit\finish_process(
+                $activeTreeProcess, proc_get_status($activeTreeProcess['process']), true
+            );
+            unset($treeActive[$index]);
+        }
+        audit_test_assert(count($treeResults ?? []) === count($treeFixtures)
+            && count(array_filter($treeResults, static fn(array $result): bool => $result['timed_out'] && $result['exit_code'] === 124)) === count($treeFixtures),
+            'Process-tree cleanup must return the same timeout result as an expired child deadline.');
+        usleep(1700000);
+        foreach ($treeFixtures as $treeFixture) {
+            audit_test_assert(!is_file($treeFixture['sentinel']), 'A killed child or grandchild must not write after its original delayed side effect deadline: ' . basename($treeFixture['sentinel']));
+        }
+    } finally {
+        foreach ($treeActive as $activeTreeProcess) {
+            \PhpGallery\Audit\terminate_process($activeTreeProcess);
+            \PhpGallery\Audit\finish_process($activeTreeProcess, proc_get_status($activeTreeProcess['process']), true);
+        }
+    }
+} finally {
+    foreach (glob($fixtureDirectory . '/*') ?: [] as $fixtureFile) {
+        unlink($fixtureFile);
+    }
+    rmdir($fixtureDirectory);
+}
 $noisyProcess = \PhpGallery\Audit\run_process(
     [PHP_BINARY, '-r', 'fwrite(STDERR, str_repeat("E", 262144)); fwrite(STDOUT, str_repeat("O", 262144));'], $root, 5
 );
@@ -178,6 +376,57 @@ audit_test_assert($noisyProcess['exit_code'] === 0 && strlen($noisyProcess['stdo
 $timedProcess = \PhpGallery\Audit\run_process([PHP_BINARY, '-r', 'usleep(3000000);'], $root, 1);
 audit_test_assert($timedProcess['timed_out'] && $timedProcess['exit_code'] === 124 && $timedProcess['duration'] < 2.5,
     'A silent child must still observe the hard process timeout.');
+
+$performanceRegistry = require $root . '/scripts/audit_performance_registry.php';
+audit_test_assert(array_keys($performanceRegistry) === ['early-runtime', 'application-bootstrap'],
+    'Both registered clean-process bootstrap probes must remain explicit.');
+foreach ($performanceRegistry as $probeId => $limits) {
+    $probeProcess = \PhpGallery\Audit\run_process([PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $probeId], $root, 15);
+    $metrics = json_decode($probeProcess['stdout'], true);
+    audit_test_assert($probeProcess['exit_code'] === 0 && is_array($metrics), 'Registered probe must emit valid JSON from a fresh PHP process: ' . $probeId);
+    audit_test_assert(performance_metric_problems($metrics, $probeId, $limits) === [], 'Registered clean-process metrics must satisfy their schema and deterministic limits: ' . $probeId);
+    audit_test_assert(count($metrics['included_paths']) === $metrics['included_php_files']
+        && !array_filter($metrics['included_paths'], static fn(string $path): bool => !str_starts_with($path, 'app/') || str_contains($path, 'audit_')),
+        'Probe include inventory must be application PHP only and match its count: ' . $probeId);
+
+    $observationalWall = $metrics;
+    $observationalWall['bootstrap_wall_ms'] = 9999999999.0;
+    audit_test_assert(performance_metric_problems($observationalWall, $probeId, $limits) === [],
+        'A large finite wall time must remain observational rather than failing deterministic guards.');
+    $includeOverLimit = $metrics;
+    $includeOverLimit['included_php_files'] = $limits['max_included_php_files'] + 1;
+    $includeOverLimit['included_paths'] = array_fill(0, $includeOverLimit['included_php_files'], 'app/performance_test_synthetic.php');
+    $includeProblems = performance_metric_problems($includeOverLimit, $probeId, $limits);
+    audit_test_assert(count($includeProblems) === 1 && str_contains($includeProblems[0], 'included_php_files'),
+        'Exceeding the included-file ceiling must produce a clear failure problem.');
+    $memoryOverLimit = $metrics;
+    $memoryOverLimit['peak_memory_bytes'] = $limits['max_peak_memory_bytes'] + 1;
+    $memoryProblems = performance_metric_problems($memoryOverLimit, $probeId, $limits);
+    audit_test_assert(count($memoryProblems) === 1 && str_contains($memoryProblems[0], 'peak_memory_bytes'),
+        'Exceeding the peak-memory ceiling must produce a clear failure problem.');
+    $malformedMetrics = $metrics;
+    unset($malformedMetrics['included_paths']);
+    audit_test_assert(performance_metric_problems($malformedMetrics, $probeId, $limits) !== [],
+        'Malformed performance output must fail schema validation.');
+}
+
+$previousBrowserRequired = getenv('PHP_GALLERY_BROWSER_REQUIRED');
+$previousBrowser = getenv('PHP_GALLERY_BROWSER');
+try {
+    putenv('PHP_GALLERY_BROWSER_REQUIRED=1');
+    putenv('PHP_GALLERY_BROWSER=disabled');
+    $requiredBrowserAudit = \PhpGallery\Audit\run_process(
+        [PHP_BINARY, $root . '/scripts/audit.php', '--suite=browser-map', '--no-report'], $root, 20
+    );
+    audit_test_assert($requiredBrowserAudit['exit_code'] === 2
+        && str_contains($requiredBrowserAudit['stdout'], 'Result: BLOCKED')
+        && str_contains($requiredBrowserAudit['stdout'], '25 blocked')
+        && !str_contains($requiredBrowserAudit['stdout'], '25 skip'),
+        'Required browser CLI must exit 2 with all 25 unavailable fixtures BLOCKED, never silently SKIP.');
+} finally {
+    putenv($previousBrowserRequired === false ? 'PHP_GALLERY_BROWSER_REQUIRED' : 'PHP_GALLERY_BROWSER_REQUIRED=' . $previousBrowserRequired);
+    putenv($previousBrowser === false ? 'PHP_GALLERY_BROWSER' : 'PHP_GALLERY_BROWSER=' . $previousBrowser);
+}
 
 $releaseTask = \PhpGallery\Audit\task_result(
     'release-consistency', 'Release consistency', 'PASS', 0.0, [], 'Consistent.'

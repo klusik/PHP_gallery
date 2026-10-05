@@ -222,14 +222,52 @@ namespace {
         }
     }
     $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml');
-    check(preg_match('/^env:\s*\n(?:[ \t]*#[^\n]*\n)*[ \t]+PHP_GALLERY_BROWSER: disabled\s*\n[ \t]+GALLERY_WORKFLOW_BROWSER: disabled\s*\n/m', $workflow) === 1,
-        'Both GitHub jobs must explicitly disable Chromium at workflow scope.');
-    check(!str_contains($workflow, 'Require installed Chromium') && !str_contains($workflow, 'command -v google-chrome')
-        && str_contains($workflow, 'php scripts/gallery_workflow_ci.php')
-        && str_contains($workflow, 'php scripts/audit.php --profile=full'),
-        'Chromium opt-out removed mandatory database/HTTP or full central audit coverage.');
+    $workflowHeader = strstr($workflow, "\njobs:", true);
+    check(is_string($workflowHeader) && !str_contains($workflowHeader, 'PHP_GALLERY_BROWSER: disabled')
+        && !str_contains($workflowHeader, 'GALLERY_WORKFLOW_BROWSER: disabled'),
+        'Workflow-global browser disablement would invalidate required Chromium coverage.');
+    $jobBlocks = [];
+    preg_match_all('/^  ([a-z][a-z0-9-]+):\s*\n(.*?)(?=^  [a-z][a-z0-9-]+:\s*\n|\z)/ms', $workflow, $jobMatches, PREG_SET_ORDER);
+    foreach ($jobMatches as $jobMatch) {
+        $jobBlocks[$jobMatch[1]] = $jobMatch[2];
+    }
+    foreach (['real-database-browser', 'runtime-compatibility'] as $jobName) {
+        $job = $jobBlocks[$jobName] ?? '';
+        check(preg_match('/^    env:\s*\n(?:(?:      #[^\n]*|      [^\n]+)\n)*?      PHP_GALLERY_BROWSER: disabled\s*\n      GALLERY_WORKFLOW_BROWSER: disabled/m', $job) === 1,
+            'Database/runtime jobs must explicitly disable redundant Chromium: ' . $jobName);
+        check(!str_contains($job, '--suite=browser-map'), 'Browser fixtures must not repeat across a runtime matrix.');
+    }
+    $browserJob = $jobBlocks['browser-tests'] ?? '';
+    check(str_contains($browserJob, "PHP_GALLERY_BROWSER_REQUIRED: '1'")
+        && !str_contains($browserJob, 'PHP_GALLERY_BROWSER: disabled')
+        && !str_contains($browserJob, 'matrix:')
+        && str_contains($browserJob, "php-version: '8.3'")
+        && str_contains($browserJob, "node-version: '22'"),
+        'Exactly one stable browser job must require Chromium independently of the runtime matrix.');
+    check(str_contains($browserJob, 'command -v "$candidate"')
+        && str_contains($browserJob, '"$browser_path" --version')
+        && str_contains($browserJob, 'PHP_GALLERY_BROWSER=%s')
+        && str_contains($browserJob, 'exit 1')
+        && !str_contains($browserJob, 'continue-on-error:')
+        && !str_contains($browserJob, '--no-report')
+        && substr_count($workflow, 'php scripts/audit.php --suite=browser-map') === 1,
+        'Required Chromium discovery must fail on absence and execute the central browser registry once.');
+    check(str_contains($workflow, 'php scripts/gallery_workflow_ci.php')
+        && str_contains($workflow, 'php scripts/audit.php --profile=full')
+        && !str_contains($browserJob, '--no-sandbox')
+        && !str_contains($browserJob, 'npm install'),
+        'Browser CI must preserve full database/source coverage, sandboxing and the existing dependency-free fixtures.');
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
+    foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
+        $launcher = (string) file_get_contents(dirname(__DIR__) . '/scripts/' . $launcherName);
+        $quickBranch = strpos($launcher, "if ((\$argv[1] ?? '') === '--quick')");
+        $supportLoad = strpos($launcher, "require_once __DIR__ . '/../tests/support/gallery_workflow_fixture.php'");
+        check($quickBranch !== false && $supportLoad !== false && $quickBranch < $supportLoad
+            && str_contains(substr($launcher, $quickBranch, $supportLoad - $quickBranch), "'--profile=quick'")
+            && str_contains(substr($launcher, $quickBranch, $supportLoad - $quickBranch), "require __DIR__ . '/audit.php'"),
+            'Quick workflow convenience must delegate before disposable provisioning.');
+    }
     $selectionStart = strpos($runner, '$requiredTests =');
     $selectionEnd = strpos($runner, 'foreach ($requiredTests as $test)', $selectionStart);
     check($selectionStart !== false && $selectionEnd !== false, 'Mandatory central workflow evidence selector missing.');

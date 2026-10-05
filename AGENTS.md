@@ -8,7 +8,7 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php -S localhost:8000 index.php` - alternate local run mode using the repository root router.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
-- `php scripts/audit.php --profile=quick` - run the normal edit-cycle audit with full PHP regression and fast cross-language checks.
+- `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
 
@@ -57,6 +57,12 @@ Use exactly this workflow unless the user explicitly requests something else:
 7. Never create a release commit, tag, push, hosted release, or publication merely because release preparation/audit passed. Perform those actions only when the user explicitly requests them.
 
 The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Deployment packages exclude `tests/` by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
+
+`quick` uses `php-fast`, the curated `quick_tests` registry in `scripts/audit_php_registry.php`; it does not execute the complete PHP regression tree, whole-tree advisory source inventory, WinApp suite, slow Node fixtures, or Chromium. `full` and `release` retain complete PHP regression, advisory inventory, and WinApp coverage. All profiles retain strict changed-source documentation/policy checks, the whole-tree Python import policy, MVC/mutation contracts, and clean-child include-phase probes. Those probes enforce included-file and peak-memory ceilings (1 file/16 MiB for early runtime; 560 files/64 MiB for application bootstrap) and report wall time as observation. A quick PASS is edit-cycle feedback, not full handoff evidence.
+
+PHP suites share a portable bounded worker pool: default four workers, configurable with `PHP_GALLERY_AUDIT_WORKERS=1` through `8`; invalid values block the suite. Explicit `serial_tests` reasons in `scripts/audit_php_registry.php` create exclusive barriers: active workers finish before a serial test starts, and no other test runs beside it. Add unsafe shared-resource, contention, or nested-process fixtures to that registry rather than encoding filenames in the scheduler. Each child retains separate captured stdout/stderr and a timeout measured from its own start; reports retain deterministic test order.
+
+The dedicated `browser-tests` CI job requires Chromium with `PHP_GALLERY_BROWSER_REQUIRED=1` and invokes `php scripts/audit.php --suite=browser-map`. Missing, unstartable, or silently skipped browser coverage must make this job nonzero. Database/runtime matrix jobs disable browsers explicitly at job scope. Local optional browser discovery and the separate disposable database browser journey remain supported; an isolated browser fixture PASS does not qualify a live installation.
 
 ### PHP Syntax Validation
 PHP syntax validation is mandatory, but agents normally satisfy it through the central audit. `quick` checks the appropriate changed-file syntax set when Git metadata is available and safely falls back when it is not; `full` validates the complete PHP/JavaScript source tree. Do not run a second manual `php -l` loop after a successful central audit merely to duplicate the same result.

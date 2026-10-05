@@ -16,6 +16,13 @@ if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit;
 }
+// Preserve the historical convenience flag without provisioning a database for
+// an edit-cycle profile that intentionally excludes real workflow qualification.
+if (($argv[1] ?? '') === '--quick') {
+    $argv = [__DIR__ . '/audit.php', '--profile=quick'];
+    require __DIR__ . '/audit.php';
+    exit;
+}
 if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_fixture.php')) {
     fwrite(STDERR, "BLOCKED gallery workflow source checkout with test support required\n");
     exit(1);
@@ -29,7 +36,7 @@ $fixture = null;
 $exit = 0;
 $stage = 'prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--quick', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     $fixture = new Fixture(dirname(__DIR__), getenv());
     $stage = 'provisioning';
     $fixture->start();
@@ -44,7 +51,6 @@ try {
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
         $profile = match ($argv[1]) {
             '--release' => 'release',
-            '--quick' => 'quick',
             default => 'full',
         };
         $stage = 'central ' . $profile . ' audit';
@@ -55,7 +61,7 @@ try {
         check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..'), 'Central regression evidence missing.');
         $evidence = (string) file_get_contents(dirname(__DIR__) . '/' . $logPath);
         // Only explicit Chromium disablement omits browser evidence. Every real
-        // database/HTTP and race PASS remains mandatory in all central profiles.
+        // database/HTTP and race PASS remains mandatory in both qualification profiles.
         $requiredTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
         if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
             $requiredTests[] = 'gallery_workflow_browser_test.php';

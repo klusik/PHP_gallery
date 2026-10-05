@@ -53,6 +53,10 @@ use function PhpGallery\Audit\resolve_browser_executable;
 use function PhpGallery\Audit\resolve_executable;
 use function PhpGallery\Audit\resolve_python_command;
 use function PhpGallery\Audit\run_process;
+use function PhpGallery\Audit\run_process_pool;
+use function PhpGallery\Audit\worker_count;
+use function PhpGallery\Audit\process_status;
+use function PhpGallery\Audit\browser_required;
 use function PhpGallery\Audit\task_result;
 use function PhpGallery\Audit\write_text_file;
 
@@ -102,9 +106,10 @@ Options:
 
 Environment overrides:
   PHP_GALLERY_NODE, PHP_GALLERY_PYTHON, PHP_GALLERY_GIT, PHP_GALLERY_BROWSER
+  PHP_GALLERY_AUDIT_WORKERS (1..8, default 4), PHP_GALLERY_BROWSER_REQUIRED=1
 
 Profiles:
-  quick    Full PHP regression plus fast Node/Python/contracts and changed-file syntax checks.
+  quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
 TEXT
@@ -136,6 +141,8 @@ if ($options['changed']) {
 
 $knownSuites = [
     'php-regression',
+    'php-fast',
+    'runtime-performance',
     'mvc-boundaries',
     'source-contract-inventory',
     'python-import-policy',
@@ -204,7 +211,7 @@ $environment = [
     ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
     ['component' => 'Python', 'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'],
     ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
-    ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : STATUS_SKIP, 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
+    ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP), 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
 ];
 
 $tasks = [];
@@ -260,31 +267,44 @@ function audit_process_output(array $process): string
 }
 
 /**
- * Run every standalone PHP regression script in an isolated process.
+ * Run complete or curated standalone PHP regressions through the isolated worker pool.
  *
- * @param array $registry Audit registry.
- * @return array Normalized task result.
+ * @param array<string,mixed> $registry Audit registry.
+ * @param string $suiteId Complete regression or explicit fast feedback suite.
+ * @return array<string,mixed> Normalized task result.
  */
-function audit_run_php_regression(array $registry): array
+function audit_run_php_regression(array $registry, string $suiteId = 'php-regression'): array
 {
     global $root;
     $started = microtime(true);
     $testDirectory = $root . '/tests';
+    $label = $suiteId === 'php-fast' ? 'PHP regression (fast)' : 'PHP regression';
     if (!is_dir($testDirectory)) {
-        return task_result('php-regression', 'PHP regression', STATUS_BLOCKED, 0.0, [], 'tests/ source tree is unavailable.', null, ['problems' => ['The tracked tests/ directory is required for source-tree regression coverage.']]);
+        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'tests/ source tree is unavailable.', null, ['problems' => ['The tracked tests/ directory is required for source-tree regression coverage.']]);
     }
 
-    $files = glob($testDirectory . '/*_test.php') ?: [];
+    $files = $suiteId === 'php-fast'
+        ? array_map(static fn(string $name): string => $testDirectory . '/' . $name, $registry['php_fast_tests'] ?? [])
+        : (glob($testDirectory . '/*_test.php') ?: []);
     sort($files, SORT_STRING);
     if ($files === []) {
-        return task_result('php-regression', 'PHP regression', STATUS_BLOCKED, 0.0, [], 'No *_test.php scripts were found.');
+        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No PHP tests were selected.');
+    }
+    try {
+        $workers = worker_count();
+    } catch (InvalidArgumentException $exception) {
+        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
     }
 
     $requirements = is_array($registry['php_test_requirements'] ?? null) ? $registry['php_test_requirements'] : [];
     $counts = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => count($files)];
     $problems = [];
     $gaps = [];
-    $log = ['PHP regression suite'];
+    $log = [$label . ' suite; worker limit=' . $workers];
+    $jobs = [];
+    $jobNames = [];
+    $results = [];
+    $serialCount = 0;
 
     foreach ($files as $file) {
         $name = basename($file);
@@ -295,49 +315,103 @@ function audit_run_php_regression(array $registry): array
                 $missingExtensions[] = (string) $extension;
             }
         }
-        if ($missingExtensions !== []) {
-            $counts['blocked']++;
-            $reason = (string) ($requirement['reason'] ?? ('Missing PHP extension(s): ' . implode(', ', $missingExtensions)));
-            $problems[] = $name . ': ' . $reason;
-            $gaps[] = $name . ': ' . $reason;
-            $log[] = '[BLOCKED] ' . $name . ' - ' . $reason;
+        if (!is_file($file) || $missingExtensions !== []) {
+            $reason = !is_file($file) ? 'Registered PHP test is missing.'
+                : (string) ($requirement['reason'] ?? ('Missing PHP extension(s): ' . implode(', ', $missingExtensions)));
+            $results[$name] = ['exit_code' => 127, 'blocked' => true, 'stdout' => '', 'stderr' => $reason, 'timed_out' => false, 'duration' => 0.0];
             continue;
         }
-
         $timeout = max(1, min(600, (int) ($requirement['timeout'] ?? 45)));
-        $process = run_process([PHP_BINARY, $file], $root, $timeout);
+        $serial = !empty($requirement['serial']);
+        $serialCount += $serial ? 1 : 0;
+        $jobs[] = ['command' => [PHP_BINARY, $file], 'timeout' => $timeout, 'serial' => $serial];
+        $jobNames[] = $name;
+    }
+    foreach (run_process_pool($jobs, $root, $workers) as $index => $process) {
+        $results[$jobNames[$index]] = $process;
+    }
+    // Reporting follows discovery order, never completion order; streams remain attributed to one child.
+    $testResults = [];
+    foreach ($files as $file) {
+        $name = basename($file);
+        $process = $results[$name];
+        $status = process_status($process);
         audit_record_slow_check('PHP ' . $name, (float) $process['duration']);
         $output = audit_process_output($process);
-        if ($process['timed_out']) {
-            $counts['failed']++;
-            $message = $name . ': timed out after ' . $timeout . ' seconds.';
-            $problems[] = $message;
-            $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' - timeout';
-            $log[] = $output;
-            continue;
+        $counter = match ($status) { STATUS_PASS => 'passed', STATUS_FAIL => 'failed', STATUS_SKIP => 'skipped', default => 'blocked' };
+        $counts[$counter]++;
+        $testResults[] = ['name' => $name, 'status' => $status, 'exit_code' => $process['exit_code'],
+            'timed_out' => $process['timed_out'], 'duration_seconds' => round((float) $process['duration'], 4),
+            'serial' => !empty($requirements[$name]['serial'])];
+        $log[] = '[' . $status . '] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
+        if (in_array($status, [STATUS_FAIL, STATUS_BLOCKED], true)) {
+            $reason = $process['timed_out'] ? 'timed out after ' . ($requirements[$name]['timeout'] ?? 45) . ' seconds' : 'exit code ' . $process['exit_code'];
+            $problems[] = $name . ': ' . $reason . '.' . ($status === STATUS_BLOCKED ? ' ' . trim($output) : '');
+            $log[] = '[stdout] ' . rtrim($process['stdout']);
+            $log[] = '[stderr] ' . rtrim($process['stderr']);
         }
-        if ((int) $process['exit_code'] !== 0) {
-            $counts['failed']++;
-            $problems[] = $name . ': exit code ' . $process['exit_code'] . '.';
-            $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
-            $log[] = $output;
-            continue;
+        if (in_array($status, [STATUS_SKIP, STATUS_BLOCKED], true)) {
+            $reason = preg_replace('/\s+/', ' ', trim($output));
+            $gaps[] = $name . ': ' . $reason;
+            $log[] = $reason;
         }
-        if (output_is_skip($output)) {
-            $counts['skipped']++;
-            $skipReason = $output !== '' ? preg_replace('/\s+/', ' ', trim($output)) : 'test reported SKIP';
-            $gaps[] = $name . ': ' . $skipReason;
-            $log[] = '[SKIP] ' . $name . ' ' . format_duration((float) $process['duration']) . ($output !== '' ? ' - ' . preg_replace('/\s+/', ' ', trim($output)) : '');
-            continue;
-        }
-        $counts['passed']++;
-        $log[] = '[PASS] ' . $name . ' ' . format_duration((float) $process['duration']);
     }
 
     $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
     $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
-    $logPath = audit_write_log('php-regression', $log);
-    return task_result('php-regression', 'PHP regression', $status, microtime(true) - $started, $counts, $summary, $logPath, ['problems' => $problems, 'gaps' => $gaps]);
+    $logPath = audit_write_log($suiteId, $log);
+    return task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
+        ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers, 'serial_tests' => $serialCount, 'tests' => $testResults]);
+}
+
+/**
+ * Measure the real bootstrap include phases without installation or request side effects.
+ *
+ * @param array<string,mixed> $registry Registered probes and deterministic regression ceilings.
+ * @return array<string,mixed> Normalized suite result with raw clean-process metrics.
+ */
+function audit_run_runtime_performance(array $registry): array
+{
+    global $root;
+    $started = microtime(true);
+    $definitions = $registry['performance_probes'] ?? [];
+    $metrics = [];
+    $problems = [];
+    $counts = ['passed' => 0, 'failed' => 0, 'blocked' => 0, 'total' => count($definitions)];
+    $log = ['Bootstrap include phases; cms_run(), database, session and route dispatch are not executed.'];
+    if ($definitions === []) {
+        return task_result('runtime-performance', 'Bootstrap performance probes', STATUS_BLOCKED, 0.0, [], 'No bootstrap performance probes registered.');
+    }
+    foreach ($definitions as $id => $definition) {
+        $process = run_process([PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $id], $root, 30);
+        $output = audit_process_output($process);
+        $metric = json_decode($process['stdout'], true);
+        $status = process_status($process);
+        if ($status !== STATUS_PASS || !is_array($metric)) {
+            $status = $status === STATUS_BLOCKED ? STATUS_BLOCKED : STATUS_FAIL;
+            $problems[] = $id . ': measurement failed, exit=' . $process['exit_code'] . ($process['timed_out'] ? ' (timeout)' : '') . '. ' . trim($output);
+        } else {
+            $errors = \PhpGallery\Audit\performance_metric_problems($metric, $id, $definition);
+            if ($errors !== []) {
+                $status = STATUS_FAIL;
+                foreach ($errors as $error) {
+                    $problems[] = $id . ': ' . $error;
+                }
+            }
+            // Persist valid-shaped measurements even when a ceiling fails, for later diagnosis.
+            if (isset($metric['included_php_files'], $metric['peak_memory_bytes'], $metric['bootstrap_wall_ms'])) {
+                $metric['limits'] = $definition;
+                $metrics[] = $metric;
+            }
+        }
+        $counts[match ($status) { STATUS_PASS => 'passed', STATUS_BLOCKED => 'blocked', default => 'failed' }]++;
+        $log[] = '[' . $status . '] ' . $id . ' exit=' . $process['exit_code'];
+        $log[] = $output;
+    }
+    $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
+    return task_result('runtime-performance', 'Bootstrap performance probes', $status, microtime(true) - $started, $counts,
+        $counts['passed'] . '/' . count($definitions) . ' include phases; wall time observational', audit_write_log('runtime-performance', $log),
+        ['problems' => $problems, 'metrics' => $metrics]);
 }
 
 /**
@@ -394,6 +468,7 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
     $problems = [];
     $gaps = [];
     $log = [$label];
+    $requiredBrowser = $suiteId === 'browser-map' && browser_required();
 
     foreach ($definitions as $name => $definition) {
         $file = $root . '/tests/' . $name;
@@ -412,11 +487,14 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         }
         if (!empty($definition['browser'])) {
             if ($browser === null) {
-                $counts['skipped']++;
+                $counts[$requiredBrowser ? 'blocked' : 'skipped']++;
                 $reason = trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled'
                     ? 'Chromium explicitly disabled by PHP_GALLERY_BROWSER' : 'no Chrome/Chromium/Edge executable detected';
                 $gaps[] = $name . ': ' . $reason;
-                $log[] = '[SKIP] ' . $name . ' - ' . $reason;
+                if ($requiredBrowser) {
+                    $problems[] = $name . ': Required Chromium dependency is unavailable. ' . $reason;
+                }
+                $log[] = '[' . ($requiredBrowser ? STATUS_BLOCKED : STATUS_SKIP) . '] ' . $name . ' - ' . $reason;
                 continue;
             }
             $command[] = $browser;
@@ -434,6 +512,14 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
             @unlink($temporaryOutput);
         }
 
+        if (process_status($process, $requiredBrowser) === STATUS_BLOCKED) {
+            $counts['blocked']++;
+            $problems[] = $name . ': required coverage could not execute (exit=' . $process['exit_code'] . '). ' . preg_replace('/\s+/', ' ', trim($output));
+            $gaps[] = end($problems);
+            $log[] = '[BLOCKED] ' . $name . ' exit=' . $process['exit_code'];
+            $log[] = $output;
+            continue;
+        }
         if ($process['timed_out']) {
             $counts['failed']++;
             $problems[] = $name . ': timed out after ' . $timeout . ' seconds.';
@@ -850,6 +936,8 @@ function audit_suite_console_label(string $suiteId): string
 {
     return match ($suiteId) {
         'php-regression' => 'PHP regression',
+        'php-fast' => 'PHP regression (fast)',
+        'runtime-performance' => 'Bootstrap performance probes',
         'mvc-boundaries' => 'MVC layer boundaries',
         'source-contract-inventory' => 'Source contract inventory',
         'python-import-policy' => 'Python import policy (all sources)',
@@ -899,6 +987,8 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
 
     $task = match ($suiteId) {
         'php-regression' => audit_run_php_regression($registry),
+        'php-fast' => audit_run_php_regression($registry, 'php-fast'),
+        'runtime-performance' => audit_run_runtime_performance($registry),
         'mvc-boundaries' => audit_run_mvc_boundaries(),
         'source-contract-inventory' => audit_run_source_contract_inventory(),
         'python-import-policy' => audit_run_source_contract('python-import-policy', 'Python import policy (all sources)', 'check_python_import_policy.php', 'python_import_policy_json', false),

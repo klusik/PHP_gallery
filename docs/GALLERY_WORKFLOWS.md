@@ -7,9 +7,15 @@ All sample photographs and credentials are generated for the run.
 
 ## Entry points
 
-The central audit remains the test orchestrator. The main audit discovers
+The central audit remains the test orchestrator. The full and release profiles,
+and the explicit `php-regression` suite, discover
 tests/gallery_workflow_safety_test.php, tests/gallery_workflow_integration_test.php,
 and tests/gallery_workflow_browser_test.php through PHP regression discovery.
+The quick profile uses its curated PHP subset and does not run these disposable
+database workflow fixtures. The historical `--quick` convenience flag on either
+workflow launcher delegates straight to the central quick profile without
+creating a database, application copy or daemon; use `--audit` or `--release`
+for workflow qualification.
 The browser PHP entry point launches tests/gallery_workflow_browser.mjs using the
 same standalone headless Chromium approach as the existing map fixture. It needs
 no browser tool runtime, npm install, Playwright, Selenium, or Composer dependency.
@@ -107,14 +113,18 @@ The fixed service bootstrap password is a disposable CI fixture value, not an
 installation credential. scripts/gallery_workflow_ci.php additionally requires
 GitHub Actions and verifies the service hostname before creating its restricted,
 random-password runner account. The root credential is removed from child
-environments. This GitHub workflow sets PHP_GALLERY_BROWSER=disabled and
-GALLERY_WORKFLOW_BROWSER=disabled at workflow scope, so both CI jobs skip Chromium
-without installing or discovering a browser. The full central audit remains in
-place, and the database/HTTP workflows, image-move crash recovery, and MySQL races
-still require PASS records from the central regression log. An absent, skipped or
-unregistered database/HTTP or concurrency test cannot qualify. Local browser
-discovery and explicit executable overrides retain their existing behavior unless
-the operator deliberately sets the same disabled value.
+environments. Database/runtime matrix jobs set PHP_GALLERY_BROWSER=disabled and
+GALLERY_WORKFLOW_BROWSER=disabled at job scope, so they do not duplicate Chromium
+work. A separate `browser-tests` job on PHP 8.3 and Node 22 discovers and versions
+Chrome/Chromium, sets PHP_GALLERY_BROWSER_REQUIRED=1, and runs
+`php scripts/audit.php --suite=browser-map`. Required mode fails when the browser
+is missing or cannot start, when browser fixtures are skipped, or when no browser
+fixture runs. The full central audit remains in place, and the database/HTTP
+workflows, image-move crash recovery, and MySQL races still require PASS records
+from the central regression log. An absent, skipped or unregistered database/HTTP
+or concurrency test cannot qualify. Local browser discovery and explicit
+executable overrides retain their existing behavior unless the operator
+deliberately sets the same disabled value.
 Only compact audit Markdown/JSON reports are uploaded as artifacts.
 
 After verifying the disposable service identity, the CI bootstrap creates the

@@ -49,7 +49,27 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 ```
 
-`quick` keeps the complete PHP regression suite but omits registered Node browser fixtures and intentionally slow Node work, and prefers Git-changed syntax targets. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. `full` runs all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures (map integration and actual title-completion DOM events). `release` adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is now Chromium browser integration.
+`quick` runs `php-fast`: the explicit `quick_tests` subset in `scripts/audit_php_registry.php`, selected for audit infrastructure, core/bootstrap/routing, security, and mutation contracts. It also runs MVC boundaries, the whole-tree Python import policy, strict changed-source documentation/policy checks, fast Node fixtures, mutation/version contracts, clean-child runtime performance probes, and changed PHP/JavaScript syntax checks. It excludes the complete PHP regression tree, whole-tree advisory source inventory, WinApp tests, slow Node work, and Chromium. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. A quick PASS does not replace full handoff verification.
+
+`full` retains the complete PHP regression tree, whole-tree advisory source inventory, WinApp tests, all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures. It also records runtime performance probes. `release` retains all full coverage and adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is Chromium browser integration. `php tests/run.php` still delegates to `--suite=php-regression --no-report` and always means the complete PHP suite.
+
+### Clean PHP include-phase probes
+
+Every profile starts `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. Both stop before `cms_run()`: they do not start a session, load installation configuration, access a database, dispatch a request, or invent route timings.
+
+Included PHP files and peak memory are hard ceilings: early runtime is 1 file and 16,777,216 bytes (16 MiB); application bootstrap has a baseline of 533 files, a ceiling of 560, and a 67,108,864-byte (64 MiB) ceiling. Wall time is observational and never compared to a machine-specific limit. Each entry in the audit report's `details.metrics` has `schema_version: 1`, `probe`, `scope: include-only-before-cms_run`, `php_version`, `php_int_size`, `included_php_files`, `included_paths`, `bootstrap_wall_ms`, `peak_memory_bytes`, and `limits`. The compact Markdown report prints raw file counts, byte counts, and wall milliseconds.
+
+### PHP worker scheduling
+
+Both `php-fast` and `php-regression` use the same portable `proc_open` worker scheduler. The default is four workers; set `PHP_GALLERY_AUDIT_WORKERS` to an integer from `1` through `8` to override it. Invalid values produce BLOCKED coverage. Parallel-safe tests run within this bound. Explicit `serial_tests` entries in `scripts/audit_php_registry.php` include their reason and are merged into central PHP requirement metadata as `serial`/`serial_reason`. Before each exclusive test, all active workers finish; no other test starts until that exclusive test finishes. Tests with contention, shared resources, servers or their own child processes must be reviewed for this policy when registered.
+
+Each child has isolated file-backed stdout/stderr captures, including on Windows. Its timeout starts when that child actually starts, and a timeout terminates that process, attributes FAIL to its test, and leaves other scheduled tests able to finish. Results and failure logs use deterministic input order rather than completion order. Failure details include the test name, exit code or timeout, and captured diagnostics. Full regression still discovers every `tests/*_test.php` entry; the fast subset is centrally curated rather than inferred from filename patterns.
+
+### Required Chromium CI
+
+`.github/workflows/gallery-workflows.yml` contains one `browser-tests` job on PHP 8.3 and Node 22. It explicitly discovers Chrome/Chromium, prints its version, exports the executable as `PHP_GALLERY_BROWSER`, sets `PHP_GALLERY_BROWSER_REQUIRED=1`, and runs `php scripts/audit.php --suite=browser-map`. This executes the registered Node entries marked `browser` through the existing confined headless Chromium fixtures. No npm install, Playwright, Selenium, or Composer stack is added. Missing/unstartable Chromium, skipped required fixtures, or zero executed browser coverage produce nonzero failure or BLOCKED coverage.
+
+Database/runtime matrix jobs set `PHP_GALLERY_BROWSER=disabled` and `GALLERY_WORKFLOW_BROWSER=disabled` in their own job environments to avoid redundant Chromium execution. Local browser coverage remains optional unless required mode is explicitly enabled. The dedicated job covers isolated DOM/runtime fixtures; the disposable migrated-database browser journey described in [GALLERY_WORKFLOWS.md](docs/GALLERY_WORKFLOWS.md) remains a separate opt-in path.
 
 ### Recovery, real workflows, and release evidence
 
@@ -1663,8 +1683,8 @@ remaining counts, not an accepted-debt baseline.
 
 ### Documentation and declaration types across PHP, JavaScript and Python
 
-Every quick/full/release audit scans the complete admitted source tree through
-`source-contract-inventory` and strictly checks added or materially changed
+Full and release audits scan the complete admitted source tree through
+`source-contract-inventory`. Every quick/full/release audit strictly checks added or materially changed
 named functions, methods, and classes (including interfaces, traits, and enums)
 through `source-documentation-changed`. Documentation-only regressions in those
 declarations also fail. Anonymous functions, closures, arrow functions, and callbacks

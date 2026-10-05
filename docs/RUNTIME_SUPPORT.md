@@ -82,7 +82,8 @@ An expired minimum produces an advisory; it never changes application access.
 ## CI coverage and evidence
 
 The existing `.github/workflows/gallery-workflows.yml` keeps central audit
-orchestration and defines four intentional environments:
+orchestration and defines four intentional environments plus a dedicated required
+Chromium job:
 
 | Job | PHP | Database | Title normalization | Verification owner |
 | --- | --- | --- | --- | --- |
@@ -90,6 +91,14 @@ orchestration and defines four intentional environments:
 | Newer maintained branch | 8.5 | Disposable MariaDB 11.4 | `intl` + `mbstring`: NFKC/lowercase | Existing workflow provisioner, central full audit |
 | Compatibility floor | 8.1 | No external database | `intl` + `mbstring`: NFKC/lowercase | Central full source audit |
 | Optional-extension fallback | 8.5 | No external database | `intl` disabled, `mbstring` present: ASCII only | Central full source audit |
+| Chromium browser fixtures | 8.3 | No external database | Node 22 and installed Chrome/Chromium | Required `browser-map` suite |
+
+The `browser-tests` job discovers Chrome/Chromium and prints its version before
+running `php scripts/audit.php --suite=browser-map` with
+`PHP_GALLERY_BROWSER_REQUIRED=1`. Missing or unstartable browser coverage and
+silently skipped browser fixtures fail the job. The database/runtime jobs disable
+browser discovery locally in their job environments, so browser fixtures run once
+rather than in each matrix combination.
 
 This is not the Cartesian product of every PHP/database/extension combination.
 In particular PHP 8.4 is not a separate CI job, and the source-only jobs do not

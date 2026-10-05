@@ -69,9 +69,12 @@ check(!is_dir($directory), 'Owned fixture cleanup incomplete.');
 $runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
 $mysqlSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_mysql.php');
 foreach ([$runnerSource, $mysqlSource] as $source) {
-    check(str_contains($source, "['--development', '--quick', '--audit', '--release']"), 'Explicit central profile modes missing.');
+    check(str_contains($source, "['--development', '--audit', '--release']")
+        && str_contains($source, "if ((\$argv[1] ?? '') === '--quick')")
+        && str_contains($source, "[__DIR__ . '/audit.php', '--profile=quick']"),
+        'Qualification modes and direct quick delegation must remain explicit.');
 }
-check(str_contains($runnerSource, "'--release' => 'release'") && str_contains($runnerSource, "'--quick' => 'quick'"),
+check(str_contains($runnerSource, "'--release' => 'release'") && !str_contains($runnerSource, "'--quick' => 'quick'"),
     'Release mode must select release without a preceding full audit.');
 check(str_contains($runnerSource, "'--profile=' . \$profile"),
     'Selected profile must flow to the authoritative audit.');

@@ -17,6 +17,12 @@ if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit;
 }
+// Quick feedback belongs to the central runner and needs no private daemon.
+if (($argv[1] ?? '') === '--quick') {
+    $argv = [__DIR__ . '/audit.php', '--profile=quick'];
+    require __DIR__ . '/audit.php';
+    exit;
+}
 if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_fixture.php')) {
     fwrite(STDERR, "BLOCKED gallery workflow source checkout with test support required\n");
     exit(1);
@@ -60,7 +66,7 @@ $serverVerified = false;
 $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--quick', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     check(getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only', 'Explicit disposable opt-in required.');
     $binary = (string) getenv('GALLERY_WORKFLOW_MYSQL_BIN');
     check(is_file($binary) && in_array(strtolower(basename($binary)), ['mysqld.exe', 'mysqld'], true), 'A MySQL 8 server executable is required.');

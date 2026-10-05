@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/gallery-workflows.yml
 # Module Type: Continuous Integration Workflow
-# Purpose: Run isolated database and HTTP workflows across supported runtime combinations.
+# Purpose: Run isolated database, HTTP, source and required Chromium coverage.
 # Responsibilities:
 #   - Provision disposable services and execute the central audit with required runtime capabilities.
 # Author: Rudolf Klusal
@@ -20,9 +20,6 @@ permissions:
 
 # The helper actions use Node 24; node-version below selects the separate test runtime.
 env:
-  # Chromium is explicitly disabled only in this GitHub workflow; local audits retain browser discovery.
-  PHP_GALLERY_BROWSER: disabled
-  GALLERY_WORKFLOW_BROWSER: disabled
   # PRs compare against the target SHA; pushes include every commit since the prior head.
   # Manual runs compare against the first parent. Missing history blocks the source audit.
   PHP_GALLERY_SOURCE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
@@ -51,6 +48,9 @@ jobs:
           - 13316:3306
         options: --hostname gallery-workflow-ci
     env:
+      # Browser coverage has one dedicated job instead of repeating across database variants.
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
       GALLERY_WORKFLOW_ENABLE: disposable-only
       GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
       GALLERY_WORKFLOW_DB_PORT: '13316'
@@ -106,6 +106,8 @@ jobs:
             normalization: ascii
             extensions: 'pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, :intl'
     env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
       GALLERY_RUNTIME_NORMALIZATION: ${{ matrix.normalization }}
       GALLERY_SESSION_REQUIRED: '1'
     steps:
@@ -137,5 +139,56 @@ jobs:
             cache/test-audit/**/source-documentation.json
             cache/test-audit/**/source-documentation-changed.json
             cache/test-audit/**/python-import-policy.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-tests:
+    name: Required Chromium fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PHP_GALLERY_BROWSER_REQUIRED: '1'
+      # The disposable database journey belongs to the database jobs; these fixtures use loopback assets.
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          ini-values: error_reporting=E_ALL, display_errors=On
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Discover and verify required Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser_path=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if browser_path="$(command -v "$candidate")"; then
+              break
+            fi
+          done
+          if [[ -z "$browser_path" || ! -x "$browser_path" ]]; then
+            echo 'BLOCKED required Chromium executable was not found on the runner.' >&2
+            exit 1
+          fi
+          "$browser_path" --version
+          printf 'PHP_GALLERY_BROWSER=%s\n' "$browser_path" >> "$GITHUB_ENV"
+      - name: Central required browser audit
+        run: php scripts/audit.php --suite=browser-map
+      - name: Upload compact browser audit reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: required-chromium
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
           if-no-files-found: ignore
           retention-days: 7

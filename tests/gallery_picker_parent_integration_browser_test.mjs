@@ -11,10 +11,11 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, rm} from 'node:fs/promises';
-import {execFileSync, spawn} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.argv[2];
@@ -71,38 +72,13 @@ const server = createServer(
 await new Promise(
     /** Wait for the isolated loopback listener before launching Chromium. @param {()=>void} resolve Listener-ready callback. @return {import('node:http').Server} The fixture server. */
     (resolve) => server.listen(0, '127.0.0.1', resolve));
-const cacheRoot = path.resolve(root, 'cache');
-const profile = await mkdtemp(path.join(cacheRoot, 'picker-parent-browser-'));
 try {
-    const browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-        '--disable-background-networking', '--disable-extensions', '--disable-component-update',
-        '--user-data-dir=' + profile, '--dump-dom', '--virtual-time-budget=15000',
-        'http://127.0.0.1:' + server.address().port + '/'], {windowsHide: true});
-    let output = '';
-    browser.stdout.on('data',
-        /** Collect Chromium's dumped fixture DOM for the result assertion. @param {Buffer} data Process output chunk. @return {void} Appends local output. */
-        (data) => { output += data; });
-    browser.stderr.on('data',
-        /** Drain incidental Chromium diagnostics without treating them as fixture results. @return {void} Keeps stderr from blocking the child. */
-        () => {});
-    const timer = setTimeout(
-        /** Stop an overlong private browser process. @return {boolean} Whether termination was requested. */
-        () => browser.kill(), 45000);
-    try {
-        const code = await new Promise(
-            /** Observe browser startup failure or its final process exit. @param {(code:number|null)=>void} resolve Exit receiver. @param {(error:Error)=>void} reject Spawn failure receiver. @return {void} Registers terminal process listeners. */
-            (resolve, reject) => { browser.on('error', reject); browser.on('close', resolve); });
-        const result = output.match(/<pre id="results"[^>]*>([^]*?)<\/pre>/)?.[1];
-        console.log(result || 'Browser fixture produced no result marker.');
-        assert.equal(code, 0);
-        assert.ok(result?.startsWith('BROWSER PASS:'), 'Current parent integration must pass in Chromium');
-    } finally { clearTimeout(timer); }
+    /** Read the result marker from the exact browser profile owned by this fixture. */
+    const {result, exitCode} = await runHeadlessBrowserFixture(executable,
+        'http://127.0.0.1:' + server.address().port + '/', 'picker-parent-browser-');
+    console.log(result || 'Browser fixture produced no result marker.');
+    assert.equal(exitCode, 0);
+    assert.ok(result?.startsWith('BROWSER PASS:'), 'Current parent integration must pass in Chromium');
 } finally {
     server.close();
-    const resolvedProfile = path.resolve(profile);
-    if (path.dirname(resolvedProfile) === cacheRoot && path.basename(resolvedProfile).startsWith('picker-parent-browser-')) {
-        await rm(resolvedProfile, {recursive: true, force: true, maxRetries: 3}).catch(
-            /** Leave a locked private profile recoverable without masking test results. @return {void} Ignores cleanup-only failure after the checked-path removal attempt. */
-            () => {});
-    }
 }
