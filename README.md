@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.118.3
+**Current Version:** 0.118.4
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -438,6 +438,8 @@ Supported values include the safe central Settings fields, basic Theme appearanc
 The direct Admin create page remains available without the side panel. It offers the title, SimBrief import, description, language, and tags up front, with folder, visibility, date, parent, voting, filename display, and count badge under **More options**. Its summary shows the chosen visibility and parent. The upload-and-create workflow still uses its dedicated upload form.
 
 SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a Pilot ID; other text is treated as a pilot name. An import into a new-gallery form creates an editable description preview and a private, 30-minute OFP draft bound to the current administrator session. The draft is attached only after gallery creation; a changed identifier invalidates it. If the remote request or optional attachment fails, the gallery can still be edited, and a successful creation reports any attachment warning. Saved creation defaults require migration `202609250001_gallery_creation_preferences.php`; when that storage is unavailable, ordinary name-first creation remains usable, while attempts to save new defaults are refused with migration guidance.
+
+SimBrief draft import also fills the existing route editor with the complete filed route, adding missing departure and arrival airports without duplicating endpoint or runway tokens. Descriptions in every maintained language retain the full route, including long routes. Importing stages the OFP and map points until the gallery is saved; editing the route, identifier, description, or source language during a request preserves the entered values and asks for another import. Saved maps retain the original OFP coordinates.
 
 #### Adding Images
 

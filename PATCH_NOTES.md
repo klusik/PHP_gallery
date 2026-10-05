@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.118.4
+
+Version 0.118.4 fixes SimBrief route import in gallery creation and editing. The description and route preview now retain the filed route, including departure and arrival airports, and long routes keep their destination. Imported OFP data remains a private draft until the gallery is saved, and an import response cannot overwrite route text changed while the request was running.
+
+### Highlights
+
+#### Complete SimBrief route previews
+
+- Added missing departure and arrival airports to the filed route without duplicating existing endpoint or airport/runway tokens.
+- Preserved filed route instructions such as `DCT`, repeated waypoints, and the full route in English, Czech, German, and Swedish description drafts instead of shortening it to 300 characters.
+- Filled the existing route editor from the draft response and showed that the OFP and available route-map points will attach when the gallery is saved.
+- Preserved descriptions, route text, and the previous private draft reference when an administrator changes the form during an import; the stale response asks for another import.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/admin_simbrief.php` to return a non-persistent `route` preview with `saved: false`, endpoint-complete `route_text`, and the OFP `point_count` alongside the existing private `draft_ref`.
+- Added `simbrief_description_complete_route_text()` in `app/services/simbrief_descriptions.php`; preferred the filed route over coordinate-point names, retaining ordered point names as a fallback when filed text is absent.
+- Removed the 300-character route shortening from localized description generation and `app/views/simbrief_descriptions.php`. Preserved original OFP coordinate geometry when the draft is attached after a gallery save.
+
+#### Database and compatibility
+
+- Added no migration, table, column, index, setting, or route. Kept the existing authenticated, CSRF-protected SimBrief endpoint and administrator/session-bound, 30-minute draft ownership.
+- Kept draft generation independent of optional map persistence. Verified `available` flight-map storage permits the existing attachment; confirmed `missing` or `unknown` storage cannot authorize a route-map write. Disabled capabilities retain their existing route/UI policy and stored data.
+- Added no System Health capability or diagnostic group. Preserved existing bounded failure responses and the independent Windows uploader version and installer.
+
+#### Frontend and documentation
+
+- Updated `public/assets/gallery-modules/admin-simbrief-description.js` to detect route edits made during the remote request before applying any draft fields, populate the existing route editor, and describe staged OFP/map data.
+- Added the live route-status element to `app/views/admin_gallery_forms.php`; showed map attachment status only when at least two coordinate points are available.
+- Updated the module import in `public/assets/gallery.js` to `20261005-simbrief-route-preview-v1`, ensuring deployed browsers load the corrected handler.
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, and `TESTING.md`; synchronized all four administrator manual editions and rebuilt their PDFs for Version 0.118.4.
+
+### Tests
+
+#### Route preview and draft persistence
+
+- Extended `tests/simbrief_description_model_test.php` for endpoint insertion without duplication, airport/runway tokens, filed-route preservation, coordinate-name fallback, and complete long routes in every maintained language and the production English view.
+- Added `tests/simbrief_route_preview_test.php` to exercise the production endpoint for both new and existing galleries, verify private draft ownership and original OFP preservation, refuse premature route persistence, and retain complete route text and OFP coordinates during attachment.
+- Extended `tests/fixtures/gallery_creation.html` and `tests/support/gallery_creation_render_fixture.php` to use the production editor form, import and save a complete route after dynamic editor replacement, preserve route edits during a delayed response, and assert that the panel remains open with an unchanged URL.
+- Corrected the fixture save endpoint to follow the side-panel workflow's actual POST URL while retaining staged-route, draft-reference, and repeated-import assertions.
+
+### User Impact
+
+#### For visitors
+
+- Saved descriptions retain the full filed route and endpoint airports; public flight maps continue to display stored OFP coordinates under the existing gallery access rules.
+
+#### For administrators
+
+- Importing SimBrief fills the route editor as well as the description and explains that OFP/map data attaches after saving the gallery.
+- Editing route text while an import is running preserves the entered form values and asks for a fresh import instead of applying a stale response.
+- Repeated imports and saves continue inside the existing side panel after its content refreshes.
+
 ## Version 0.118.3
 
 Version 0.118.3 refreshes local navigation data in the background when administrators work with flight routes or import SimBrief drafts. Gallery saves remain available while the refresh runs, and unresolved saved manual routes can gain coordinates without overwriting a newer edit, existing coordinates, or SimBrief OFP geometry. The update adds no database migration.

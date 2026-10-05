@@ -82,7 +82,7 @@ namespace {
      */
     function creation_fixture_simbrief_editor(): string {
         ob_start();
-        echo '<form action="/fixture-editor-save" method="post" data-admin-gallery-settings-form><input type="hidden" name="id" value="170"><input type="hidden" name="csrf_token" value="theme-fixture"><input type="hidden" name="expected_edit_revision" value="fixture-revision"><textarea name="description" data-gallery-description-textarea></textarea>';
+        echo '<form class="admin-edit-gallery-form" action="/fixture-editor-save" method="post" data-admin-gallery-settings-form><input type="hidden" name="id" value="170"><input type="hidden" name="csrf_token" value="theme-fixture"><input type="hidden" name="expected_edit_revision" value="fixture-revision"><textarea name="description" data-gallery-description-textarea></textarea>';
         \Gallery\Views\view_render_admin_simbrief_description_tool(170, creation_fixture_model(), ['state'=>'ready','title'=>'Flight route map','label'=>'Route text','route_text'=>'__ROUTE__']);
         echo '<button type="submit">Save gallery</button></form>';
         return (string) ob_get_clean();
