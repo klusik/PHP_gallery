@@ -150,6 +150,8 @@ async function generateSimbriefDescription(tool, button) {
     const sourceLanguageSelect = form.querySelector('[data-content-language-select]');
     const sourceLanguageBeforeRequest = sourceLanguageSelect instanceof HTMLSelectElement ? sourceLanguageSelect.value : '';
     const draftReference = form.querySelector('[data-simbrief-draft-ref]');
+    const routeTextarea = form.querySelector('textarea[name="flight_route_text"]');
+    const routeBeforeRequest = routeTextarea instanceof HTMLTextAreaElement ? routeTextarea.value : '';
 
     const endpoint = String(tool.dataset.simbriefEndpoint || '').trim();
     const csrfToken = String(form.querySelector('input[name="csrf_token"]')?.value || '').trim();
@@ -197,7 +199,8 @@ async function generateSimbriefDescription(tool, button) {
              */ ([field, value]) => field.value !== value);
         const sourceLanguageChanged = sourceLanguageSelect instanceof HTMLSelectElement
             && sourceLanguageBeforeRequest !== sourceLanguageSelect.value;
-        if (identifierChanged || descriptionsChanged || sourceLanguageChanged) {
+        const routeChanged = routeTextarea instanceof HTMLTextAreaElement && routeBeforeRequest !== routeTextarea.value;
+        if (identifierChanged || descriptionsChanged || sourceLanguageChanged || routeChanged) {
             throw new Error(i18nForElement(tool, 'admin.simbrief.js_input_changed', 'The form changed during import. Your text was kept; import the flight again.'));
         }
         textarea.value = description;
@@ -242,6 +245,7 @@ async function generateSimbriefDescription(tool, button) {
  *
  * @param {HTMLFormElement} form Gallery editor form.
  * @param {Record<string, *>} result Server response.
+ * @returns {void} Populate the staged route without saving the gallery.
  */
 function updateSimbriefRouteTextarea(form, result) {
     const routeText = String(result?.route?.route_text || '').trim();
@@ -273,12 +277,12 @@ function updateSimbriefRouteStatus(tool, result) {
     }
 
     const pointCount = Number(result?.route?.point_count || 0);
-    const ofpSaved = result?.ofp?.saved === true;
+    const ofpStaged = String(result?.draft_ref || '') !== '';
     const parts = [];
-    if (ofpSaved) {
+    if (ofpStaged) {
         parts.push(i18nForElement(tool, 'admin.simbrief.js_ofp_saved', 'OFP will be saved when you save the gallery.'));
     }
-    if (pointCount > 0) {
+    if (pointCount >= 2) {
         parts.push(i18nForElement(tool, 'admin.simbrief.js_route_saved', 'Route map will be updated with {points} OFP point(s) when you save the gallery.').replace('{points}', String(pointCount)));
     }
     status.textContent = parts.join(' ');
@@ -315,6 +319,7 @@ async function readSimbriefJson(response, tool) {
  * @param {HTMLElement} tool SimBrief tool root.
  * @param {string} message Status text.
  * @param {boolean} failed True when the status is an error.
+ * @returns {void} Update the visible import status.
  */
 function setSimbriefStatus(tool, message, failed) {
     const status = tool.querySelector('[data-simbrief-status]');

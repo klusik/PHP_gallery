@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.118.3}
+\newcommand{\version}{0.118.4}
 \newcommand{\manualdate}{5.~Oktober~2026}
 
 \hypersetup{
@@ -1340,7 +1340,9 @@ Die Auswahl von \ui{Foto öffnen} in einer Galeriekartenmarkierung öffnet diese
 \index{f00104@Flugkarten}
 \index{n00176@Navigationsdaten}
 
-Flugbezogene Sammlungen können die optionale SimBrief-Integration verwenden, um den neuesten operationellen Flugplan für eine Pilot ID oder einen Pilotennamen abzurufen. Der kompakte Editor akzeptiert eine sichtbare Kennung: Nur Ziffern wählen den Pilot-ID-Weg; anderer Text den Pilotennamenweg. Vorhandene Integrationen mit getrennten Feldern bleiben kompatibel; bei beiden Angaben wird die Pilot ID bevorzugt. Der Editor erstellt einen bearbeitbaren Markdown-Beschreibungsentwurf, speichert den OFP bei der Galerie und schreibt verfügbare Routenkoordinaten in deren Flugkartendatensatz. Eine fehlgeschlagene SimBrief-Anfrage lässt das normale Beschreibungsfeld und den manuellen Routeneditor verfügbar. Der Entwurf vor der Erstellung ist privat und vorübergehend, wie im Abschnitt zur Galerieerstellung beschrieben.
+Flugbezogene Sammlungen können die optionale SimBrief-Integration verwenden, um den neuesten operationellen Flugplan für eine Pilot ID oder einen Pilotennamen abzurufen. Der kompakte Editor akzeptiert eine sichtbare Kennung: Nur Ziffern wählen den Pilot-ID-Weg; anderer Text den Pilotennamenweg. Vorhandene Integrationen mit getrennten Feldern bleiben kompatibel; bei beiden Angaben wird die Pilot ID bevorzugt. Der Editor erstellt einen bearbeitbaren Markdown-Beschreibungs- und Routenentwurf; OFP und verfügbare Routenkoordinaten werden erst nach dem Speichern der Galerie angehängt. Eine fehlgeschlagene SimBrief-Anfrage lässt das normale Beschreibungsfeld und den manuellen Routeneditor verfügbar. Der Entwurf vor der Erstellung ist privat und vorübergehend, wie im Abschnitt zur Galerieerstellung beschrieben.
+
+Die SimBrief-Vorschau füllt den vorhandenen Routeneditor mit der vollständigen eingereichten Route. Fehlende Abflug- und Zielflughäfen werden jeweils einmal ergänzt; Routenanweisungen und Flughafen-/Pistenangaben bleiben erhalten. Beschreibungsentwürfe in allen gepflegten Sprachen behalten die gesamte Route einschließlich des Ziels bei langen Routen. Der Status erklärt, dass OFP und verfügbare Kartenpunkte beim Speichern der Galerie angehängt werden; der Import allein speichert sie nicht. Ändern Sie während der Anfrage Route, Kennung, Beschreibung oder Ausgangssprache, bleiben Ihre Formularwerte erhalten und die Antwort fordert einen neuen Import an. Nach dem Speichern behält die Karte die ursprünglichen OFP-Koordinaten.
 
 Manueller Routentext wird vorrangig offline aufgelöst. Zuerst werden importierte OurAirports-Datenbankzeilen geprüft, dann die kleine mitgelieferte CSV-Ersatzquelle. Als Nächstes kann ein gültiges zwischengespeichertes Anbieterergebnis dienen; hat ein Administrator ein konfiguriertes Navigraph-Konto verknüpft und ist entfernte Suche erlaubt, kann eine unbekannte Kennung über Navigraph aufgelöst und unter dem bekannten AIRAC-Zyklus zwischengespeichert werden. Die Navigationsdatenverwaltung zeigt lokale Datenbank- und mitgelieferte Anzahlen, bietet einen Suchtester für Kennungen wie Flughäfen/Funkfeuer/Wegpunkte und kann den lokalen OurAirports-Flughafen-/Funkfeuerdatensatz aktualisieren. Navigraph-OAuth-/Kontospeicher ist optional und kann getrennt werden, ohne lokale Daten zu entfernen.
 

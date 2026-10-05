@@ -94,7 +94,7 @@ function view_simbrief_description_markdown(array $details): string
 
     $routeParts = [];
     if (($details['route'] ?? '') !== '') {
-        $routeParts[] = 'SimBrief filed the route as `' . view_simbrief_markdown_code(view_simbrief_shorten((string) $details['route'], 300)) . '`.';
+        $routeParts[] = 'SimBrief filed the route as `' . view_simbrief_markdown_code((string) $details['route']) . '`.';
     }
     $runwayParts = [];
     if (($details['origin_runway'] ?? '') !== '') {

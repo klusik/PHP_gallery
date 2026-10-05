@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.118.3}
+\newcommand{\version}{0.118.4}
 \newcommand{\manualdate}{5.~října~2026}
 
 \hypersetup{
@@ -1336,7 +1336,9 @@ Výběr \ui{Otevřít fotografii} ve značce mapy galerie otevře fotografii v~a
 \index{l00074@letové mapy}
 \index{n00101@navigační data}
 
-Sbírky zaměřené na létání mohou využít volitelnou integraci SimBrief k~načtení nejnovějšího provozního letového plánu pro ID nebo jméno pilota. Kompaktní editor přijímá jediný viditelný identifikátor: samotné číslice vybírají postup ID pilota, ostatní text postup jména pilota. Stávající integrace odesílající oddělená pole zůstávají kompatibilní, přičemž při zadání obou má ID pilota přednost. Editor vytváří upravitelný návrh popisu Markdown, ukládá OFP s~galerií a~zapisuje dostupné souřadnice trasy do záznamu letové mapy galerie. Neúspěšný požadavek SimBrief ponechává běžné pole popisu i~ruční editor trasy dostupné. Návrh před vytvořením je soukromý a~dočasný, jak popisuje oddíl o~vytváření galerií.
+Sbírky zaměřené na létání mohou využít volitelnou integraci SimBrief k~načtení nejnovějšího provozního letového plánu pro ID nebo jméno pilota. Kompaktní editor přijímá jediný viditelný identifikátor: samotné číslice vybírají postup ID pilota, ostatní text postup jména pilota. Stávající integrace odesílající oddělená pole zůstávají kompatibilní, přičemž při zadání obou má ID pilota přednost. Editor vytváří upravitelný návrh popisu Markdown a~trasy; OFP i~dostupné souřadnice trasy se připojí až po uložení galerie. Neúspěšný požadavek SimBrief ponechává běžné pole popisu i~ruční editor trasy dostupné. Návrh před vytvořením je soukromý a~dočasný, jak popisuje oddíl o~vytváření galerií.
+
+Náhled SimBrief vyplní stávající editor trasy úplnou podanou trasou. Chybějící odletové a~cílové letiště doplní právě jednou a~zachová pokyny trasy i~zápis letiště s~dráhou. Návrhy popisu ve všech udržovaných jazycích obsahují celou trasu včetně cíle i~u~dlouhých tras. Stavová zpráva vysvětluje, že OFP a~dostupné body mapy se připojí při uložení galerie; samotný import je neukládá. Pokud během požadavku změníte trasu, identifikátor, popis nebo zdrojový jazyk, odpověď zachová hodnoty formuláře a~vyzve k~novému importu. Po uložení mapa zachovává původní souřadnice OFP.
 
 Ruční text trasy se vyhodnocuje přednostně offline. Nejprve se kontrolují importované databázové řádky OurAirports a~poté malý přibalený náhradní soubor CSV. Dále lze použít platný výsledek poskytovatele z~mezipaměti; pokud správce propojil nakonfigurovaný účet Navigraph a~vzdálené vyhledávání je povoleno, neznámý identifikátor lze vyřešit prostřednictvím Navigraph a~uložit do mezipaměti pod známým cyklem AIRAC. Správce navigačních dat ukazuje počty v~místní databázi a~přibalených datech, nabízí tester vyhledávání identifikátorů, například letišť, radionavigačních prostředků a~bodů, a~může obnovit místní sadu letišť a~radionavigačních prostředků OurAirports. Úložiště OAuth a~účtů Navigraph je volitelné a~lze je odpojit bez odstranění místních dat.
 

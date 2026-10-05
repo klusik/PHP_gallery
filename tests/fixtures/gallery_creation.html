@@ -17,6 +17,8 @@ import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchab
 import {setupTagSuggestions} from '/public/assets/gallery-modules/tag-suggestions.js';
 import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
 let assertions=0, panelPosts=0, panelGets=0, editorGets=0, simbriefRequests=0, holdSimbriefResponse=false, releaseSimbriefResponse=null;
+let editorSaves=0, savedEditorRoute='';
+const completeRoute='CYVR DCT TREEL DCT UQQ DCT YZT DCT PR DCT CYPR';
 const fullSubmissions=[], panelBodies=[], originalUrl=location.href, nativeFetch=window.fetch.bind(window);
 /** Require actual production behavior or geometry. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
 function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
@@ -36,9 +38,10 @@ window.fetch=async(input,options={})=>{
     if(url.pathname==='/fixture-parent-search') return new Response(JSON.stringify({ok:true,rows:[{id:'7',title:'Parent <safe>',path:'parent',label:'Parent <safe> / parent'},{id:'8',title:'Another parent',path:'second',label:'Another parent / second'}],next_after_id:null}),{headers:{'Content-Type':'application/json'}});
     if(url.pathname==='/fixture-title-completion') return new Response(JSON.stringify({ok:true,candidates:[{title:'Gallery fixture completion',parent_id:7}]}),{headers:{'Content-Type':'application/json'}});
     if(url.searchParams.get('page')==='admin_simbrief_description') {
-        check(options.method==='POST' && options.body.get('csrf_token')==='theme-fixture' && options.body.get('gallery_id')==='0' && options.body.get('simbrief_pilot_id')==='12345','actual SimBrief generator requests a protected unsaved draft');
+        const galleryId=options.body.get('gallery_id');
+        check(options.method==='POST' && options.body.get('csrf_token')==='theme-fixture' && ['0','78'].includes(galleryId) && options.body.get('simbrief_pilot_id')==='12345','actual SimBrief generator requests a protected unsaved draft');
         simbriefRequests++;
-        const payload={ok:true,description:'Disposable flight description',translations:{en:'English flight draft',cs:'Český návrh letu',de:'Deutscher Flugentwurf',sv:'Svenskt flygutkast'},source_language:'cs',draft_ref:'fixture-generated-draft',message:'Draft generated.'};
+        const payload={ok:true,description:'Disposable flight description',translations:{en:'English flight draft',cs:'Český návrh letu',de:'Deutscher Flugentwurf',sv:'Svenskt flygutkast'},source_language:'cs',draft_ref:galleryId==='0'?'fixture-generated-draft':'a'.repeat(48),message:'Draft generated.',route:{saved:false,route_text:completeRoute,point_count:7}};
         if(holdSimbriefResponse) {
             return new Promise(/** Hold a draft result until the pending-edit assertions are ready.
              * @param {function(Response): void} resolve Promise resolver for a synthetic response.
@@ -59,7 +62,16 @@ window.fetch=async(input,options={})=>{
         panelBodies.push(data); panelPosts++; const id=76+panelPosts;
         return new Response(JSON.stringify({ok:true,message:'Gallery created.',mutation:{type:'gallery.create',entity:'gallery',action:'create',entity_ids:[id]},panel:{workflow:'gallery-edit',refresh_url:'/fixture-editor?id='+id,keep_open:true},contexts:[],fallback:{redirect_url:'/fixture-editor?id='+id},gallery_id:id,gallery_title:data.get('title'),gallery_url:'/fixture-gallery?id='+id,edit_url:'/fixture-editor?id='+id,parent_gallery_id:Number(data.get('parent_id')),parent_gallery_url:'',created_gallery:true}),{headers:{'Content-Type':'application/json'}});
     }
-    if(url.pathname==='/fixture-editor') { check(!options.method || options.method==='GET','canonical editor refresh is read-only'); editorGets++; return new Response('<section data-admin-edit-panel-workspace="gallery-edit"><h2 data-fixture-editor>Gallery editor '+url.searchParams.get('id')+'</h2></section>',{headers:{'Content-Type':'text/html'}}); }
+    if(url.pathname==='/fixture-editor' && options.method==='POST') {
+        check(options.method==='POST' && options.body.get('id')==='78' && options.body.get('simbrief_draft_ref')==='a'.repeat(48) && options.body.get('flight_route_text')===completeRoute,'panel save retains the staged complete route and private draft');
+        editorSaves++; savedEditorRoute=options.body.get('flight_route_text');
+        return new Response(JSON.stringify({ok:true,message:'Route saved.',mutation:{type:'gallery.update',entity:'gallery',action:'update',entity_ids:[78]},panel:{workflow:'gallery-edit',refresh_url:'/fixture-editor?id=78',keep_open:true},contexts:[],fallback:{redirect_url:'/fixture-editor?id=78'}}),{headers:{'Content-Type':'application/json'}});
+    }
+    if(url.pathname==='/fixture-editor') {
+        check(!options.method || options.method==='GET','canonical editor refresh is read-only'); editorGets++;
+        const id=url.searchParams.get('id'), markup=find('#production-simbrief-editor').innerHTML.replaceAll('value="170"','value="'+id+'"').replaceAll('data-gallery-id="170"','data-gallery-id="'+id+'"').replace('__ROUTE__',savedEditorRoute);
+        return new Response('<section data-admin-edit-panel-workspace="gallery-edit"><h2 data-fixture-editor>Gallery editor '+id+'</h2>'+markup+'</section>',{headers:{'Content-Type':'text/html'}});
+    }
     throw new Error('Unexpected fixture request '+url.pathname);
 };
 try {
@@ -127,6 +139,25 @@ try {
     const secondForm=find('[data-gallery-panel-create-form]',panel); check(secondForm!==firstForm && !firstForm.isConnected && find('[name="parent_id"]',secondForm).value==='0' && find('.gallery-create-destination',panel).textContent==='Top-level gallery','dynamic second form preserves root scope and destination without rebinding'); edit(find('[name="title"]',secondForm),'Second actual root'); secondForm.requestSubmit();
     await until(/** Observe canonical completion for the injected root form. @return {boolean} Whether the second mutation refreshed its editor. */ ()=>editorGets===2 && find('[data-fixture-editor]').textContent.includes('78'));
     check(panelPosts===2 && panelBodies[1].get('parent_id')==='0' && panel.getAttribute('aria-hidden')==='false' && location.href===originalUrl,'dynamic root completion remains in the open panel with unchanged URL');
+    const pendingEditor=find('[data-admin-gallery-settings-form]',panel);
+    holdSimbriefResponse=true;
+    find('[data-simbrief-generate]',pendingEditor).click();
+    await until(()=>simbriefRequests===4 && typeof releaseSimbriefResponse==='function');
+    edit(find('[name="flight_route_text"]',pendingEditor),'MANUAL ROUTE WHILE FETCHING');
+    releaseSimbriefResponse(); holdSimbriefResponse=false;
+    await until(()=>find('[data-simbrief-status]',pendingEditor).textContent.includes('form changed during import'));
+    check(find('[name="flight_route_text"]',pendingEditor).value==='MANUAL ROUTE WHILE FETCHING' && find('[data-simbrief-draft-ref]',pendingEditor).value==='' && find('[name="description"]',pendingEditor).value==='','route edits during import preserve the entered route and all prior draft fields');
+    edit(find('[name="flight_route_text"]',pendingEditor),'');
+    for (let pass=1;pass<=2;pass++) {
+        const editorForm=find('[data-admin-gallery-settings-form]',panel);
+        find('[data-simbrief-generate]',editorForm).click();
+        await until(()=>find('[data-simbrief-draft-ref]',editorForm).value==='a'.repeat(48));
+        check(find('[name="flight_route_text"]',editorForm).value===completeRoute && !find('[data-simbrief-route-status]',editorForm).hidden,'SimBrief populates the actual route control and staged geometry status');
+        check(location.href===originalUrl && panel.getAttribute('aria-hidden')==='false','SimBrief import keeps the editor panel open with unchanged URL');
+        editorForm.requestSubmit();
+        await until(()=>editorSaves===pass && !editorForm.isConnected);
+        check(find('[name="flight_route_text"]',panel).value===completeRoute && panel.getAttribute('aria-hidden')==='false' && location.href===originalUrl,'saved complete route survives in-place panel refresh');
+    }
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' gallery creation assertions';
 } catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
 </script></body></html>

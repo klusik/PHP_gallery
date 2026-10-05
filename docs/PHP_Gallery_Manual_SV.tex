@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.118.3}
+\newcommand{\version}{0.118.4}
 \newcommand{\manualdate}{5~oktober~2026}
 
 \hypersetup{
@@ -1336,7 +1336,9 @@ Att välja \ui{Öppna fotografi} i en gallerikartmarkör öppnar fotografiet i a
 \index{f00081@flygkartor}
 \index{n00173@navigeringsdata}
 
-Flyginriktade samlingar kan använda den valfria SimBrief-integrationen för att hämta senaste operativa färdplanen för ett~pilot-ID eller pilotnamn. Den kompakta redigeraren accepterar en synlig identifierare: enbart siffror väljer vägen för pilot-ID; annan text väljer vägen för pilotnamn. Befintliga integrationer som skickar separata fält förblir kompatibla, med pilot-ID som förstahandsval när båda anges. Redigeraren skapar ett redigerbart Markdown-beskrivningsutkast, sparar OFP med galleriet och skriver tillgängliga ruttkoordinater till galleriets flygkartspost. En misslyckad SimBrief-begäran lämnar det vanliga beskrivningsfältet och den manuella ruttredigeraren tillgängliga. Utkastet före skapande är privat och tillfälligt enligt avsnittet om galleriskapande.
+Flyginriktade samlingar kan använda den valfria SimBrief-integrationen för att hämta senaste operativa färdplanen för ett~pilot-ID eller pilotnamn. Den kompakta redigeraren accepterar en synlig identifierare: enbart siffror väljer vägen för pilot-ID; annan text väljer vägen för pilotnamn. Befintliga integrationer som skickar separata fält förblir kompatibla, med pilot-ID som förstahandsval när båda anges. Redigeraren skapar ett redigerbart Markdown-beskrivnings- och ruttutkast; OFP och tillgängliga ruttkoordinater kopplas först efter att galleriet sparats. En misslyckad SimBrief-begäran lämnar det vanliga beskrivningsfältet och den manuella ruttredigeraren tillgängliga. Utkastet före skapande är privat och tillfälligt enligt avsnittet om galleriskapande.
+
+SimBrief-förhandsvisningen fyller den befintliga ruttredigeraren med hela den inlämnade rutten. Saknade avgångs- och ankomstflygplatser läggs till en gång vardera, medan ruttinstruktioner och flygplats-/banangivelser bevaras. Beskrivningsutkast på alla språk som underhålls behåller hela rutten, inklusive destinationen vid långa rutter. Statusen förklarar att OFP och tillgängliga kartpunkter kopplas när du sparar galleriet; själva importen sparar dem inte. Om du ändrar rutt, identifierare, beskrivning eller källspråk medan begäran pågår bevaras formulärvärdena och svaret ber dig importera igen. Efter sparandet behåller kartan de ursprungliga OFP-koordinaterna.
 
 Manuell rutttext tolkas i första hand offline. Importerade OurAirports-databasrader kontrolleras först, sedan den lilla medföljande CSV-reserven. Ett giltigt cachelagrat leverantörsresultat kan användas därefter; när en administratör har kopplat ett konfigurerat Navigraph-konto och fjärrsökning är tillåten kan en okänd identifierare slås upp genom Navigraph och cachelagras under känd AIRAC-cykel. Hanteraren för Navigeringsdata visar antal i lokal databas och medföljande data, ger ett uppslagstest för identifierare såsom flygplatser, navigeringshjälpmedel och fixpunkter och kan uppdatera det lokala OurAirports-underlaget för flygplatser och navigeringshjälpmedel. Lagring för Navigraph OAuth och konton är valfri och kan kopplas bort utan att lokala data tas bort.
 

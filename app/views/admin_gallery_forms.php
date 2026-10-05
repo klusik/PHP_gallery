@@ -590,7 +590,7 @@ function view_render_admin_simbrief_description_tool(int $galleryId, array $form
     if ($prefilled) {
         echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
     }
-    echo '<span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+    echo '<span class="muted" data-simbrief-status role="status" aria-live="polite"></span><span class="muted" data-simbrief-route-status role="status" aria-live="polite" hidden></span></div>';
 }
 
 /**

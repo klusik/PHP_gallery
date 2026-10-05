@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118.3}
+\newcommand{\version}{0.118.4}
 \newcommand{\manualdate}{5 October 2026}
 
 \hypersetup{
@@ -1346,7 +1346,9 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 \index{flight maps}
 \index{navigation data}
 
-Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description draft, saves the~OFP with the~gallery, and~writes available route coordinates into the~gallery flight-map record. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
+Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description and~route draft; the~OFP and~available route coordinates attach after the~gallery is~saved. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
+
+The~SimBrief preview fills the~existing route editor with the~complete filed route, adding missing departure and~arrival airports once while preserving route instructions and~airport/runway tokens. Description drafts in~all maintained languages keep the~complete route, including its destination on~long routes. The~status explains that the~OFP and~available map points will attach when you~save the~gallery; importing alone does~not~save them. If~you~change the~route, identifier, description, or~source language while the~request runs, the~response preserves your form values and~asks you~to~import again. After saving, the~map retains the~original OFP coordinates.
 
 Manual route text is~resolved offline-first. Imported OurAirports database rows are~checked first, then the~small bundled CSV fallback. A~valid cached provider result may~be~used next; when an~administrator has~linked a~configured Navigraph account and~remote lookup is~allowed, an~unknown identifier can~be~resolved through Navigraph and~cached under the~known AIRAC cycle. The~Navigation Data manager shows local database and~bundled counts, provides a~lookup tester for~identifiers such as~airports/navaids/fixes, and~can~refresh the~local OurAirports airport/navaid dataset. Navigraph OAuth/account storage is~optional and~can~be~disconnected without removing local data.
 
