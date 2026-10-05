@@ -43,6 +43,9 @@ const STATUS_FAIL = 'FAIL';
 const STATUS_SKIP = 'SKIP';
 const STATUS_BLOCKED = 'BLOCKED';
 
+require_once __DIR__ . '/audit_process.php';
+require_once __DIR__ . '/audit_performance.php';
+
 /**
  * Bind release consistency to the tree actually observed before and after tests.
  * Missing identity is blocked; content changing during a run is a release failure.
@@ -430,86 +433,14 @@ function resolve_browser_executable(): ?string
 /**
  * Execute a process with captured output and a hard timeout.
  *
- * @param array $command Executable followed by arguments.
+ * @param array<int,string> $command Executable followed by arguments.
  * @param string $cwd Working directory.
  * @param int $timeoutSeconds Timeout in seconds.
- * @return array Process result.
+ * @return array{exit_code:int,stdout:string,stderr:string,timed_out:bool,blocked?:bool,duration:float} Process result.
  */
 function run_process(array $command, string $cwd, int $timeoutSeconds = 30): array
 {
-    $started = microtime(true);
-    // Windows proc_open pipes cannot reliably become nonblocking. File-backed
-    // streams prevent a verbose stderr assertion from deadlocking stdout reads.
-    $stdoutStream = tmpfile();
-    $stderrStream = tmpfile();
-    if ($stdoutStream === false || $stderrStream === false) {
-        if (is_resource($stdoutStream)) {
-            fclose($stdoutStream);
-        }
-        if (is_resource($stderrStream)) {
-            fclose($stderrStream);
-        }
-        return ['exit_code' => 127, 'stdout' => '', 'stderr' => 'Unable to allocate process capture streams.',
-            'timed_out' => false, 'duration' => microtime(true) - $started];
-    }
-    $descriptors = [
-        0 => ['pipe', 'r'],
-        1 => $stdoutStream,
-        2 => $stderrStream,
-    ];
-    $pipes = [];
-    $process = @proc_open($command, $descriptors, $pipes, $cwd, null, ['bypass_shell' => true]);
-    if (!is_resource($process)) {
-        fclose($stdoutStream);
-        fclose($stderrStream);
-        return [
-            'exit_code' => 127,
-            'stdout' => '',
-            'stderr' => 'Unable to start process: ' . implode(' ', array_map('strval', $command)),
-            'timed_out' => false,
-            'duration' => microtime(true) - $started,
-        ];
-    }
-
-    fclose($pipes[0]);
-    $timedOut = false;
-    $lastExitCode = null;
-
-    while (true) {
-        $status = proc_get_status($process);
-        if (!$status['running']) {
-            $lastExitCode = (int) $status['exitcode'];
-            break;
-        }
-        if ((microtime(true) - $started) >= $timeoutSeconds) {
-            $timedOut = true;
-            proc_terminate($process);
-            usleep(150000);
-            $status = proc_get_status($process);
-            if ($status['running']) {
-                proc_terminate($process, 9);
-            }
-            break;
-        }
-        usleep(20000);
-    }
-
-    $closedCode = proc_close($process);
-    rewind($stdoutStream);
-    rewind($stderrStream);
-    $stdout = stream_get_contents($stdoutStream) ?: '';
-    $stderr = stream_get_contents($stderrStream) ?: '';
-    fclose($stdoutStream);
-    fclose($stderrStream);
-    $exitCode = $timedOut ? 124 : ($lastExitCode !== null && $lastExitCode >= 0 ? $lastExitCode : $closedCode);
-
-    return [
-        'exit_code' => (int) $exitCode,
-        'stdout' => $stdout,
-        'stderr' => $stderr,
-        'timed_out' => $timedOut,
-        'duration' => microtime(true) - $started,
-    ];
+    return run_process_pool([['command' => $command, 'timeout' => $timeoutSeconds]], $cwd, 1)[0];
 }
 
 /**
@@ -676,7 +607,7 @@ function write_text_file(string $path, string $contents): void
 /**
  * Return a compact Markdown report for the completed audit.
  *
- * @param array $report Structured audit report.
+ * @param array<string,mixed> $report Structured audit report.
  * @return string Markdown document.
  */
 function render_markdown_report(array $report): string
@@ -754,6 +685,21 @@ function render_markdown_report(array $report): string
             foreach (($task['details']['gaps'] ?? []) as $gap) {
                 $lines[] = '  - ' . $gap;
             }
+        }
+    }
+
+    foreach ($report['tasks'] as $task) {
+        if ($task['id'] !== 'runtime-performance' || empty($task['details']['metrics'])) {
+            continue;
+        }
+        $lines[] = '';
+        $lines[] = '## Bootstrap performance (include phase before cms_run)';
+        $lines[] = '';
+        $lines[] = '| Probe | PHP files / ceiling | Peak bytes / ceiling | Wall ms (observational) |';
+        $lines[] = '| --- | ---: | ---: | ---: |';
+        foreach ($task['details']['metrics'] as $metric) {
+            $lines[] = '| ' . markdown_cell($metric['probe']) . ' | ' . $metric['included_php_files'] . ' / ' . $metric['limits']['max_included_php_files']
+                . ' | ' . $metric['peak_memory_bytes'] . ' / ' . $metric['limits']['max_peak_memory_bytes'] . ' | ' . $metric['bootstrap_wall_ms'] . ' |';
         }
     }
 

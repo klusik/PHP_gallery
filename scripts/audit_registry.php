@@ -35,17 +35,18 @@
 
 declare(strict_types=1);
 
-return [
+$phpRegistry = require __DIR__ . '/audit_php_registry.php';
+
+$registry = [
     'profiles' => [
         'quick' => [
-            'php-regression',
+            'php-fast',
+            'runtime-performance',
             'mvc-boundaries',
-            'source-contract-inventory',
             'python-import-policy',
             'source-documentation-changed',
             'source-policy-changed',
             'node-fast',
-            'winapp',
             'mutation-contracts',
             'version-audit',
             'php-lint-changed',
@@ -53,6 +54,7 @@ return [
         ],
         'full' => [
             'php-regression',
+            'runtime-performance',
             'mvc-boundaries',
             'source-contract-inventory',
             'python-import-policy',
@@ -68,6 +70,7 @@ return [
         ],
         'release' => [
             'php-regression',
+            'runtime-performance',
             'mvc-boundaries',
             'source-contract-inventory',
             'python-import-policy',
@@ -306,3 +309,12 @@ return [
         'telemetry_cache_accounting_test.mjs' => [],
     ],
 ];
+
+$registry['php_fast_tests'] = $phpRegistry['quick_tests'];
+$registry['performance_probes'] = require __DIR__ . '/audit_performance_registry.php';
+foreach ($phpRegistry['serial_tests'] as $name => $reason) {
+    $registry['php_test_requirements'][$name] = array_replace($registry['php_test_requirements'][$name] ?? [],
+        ['serial' => true, 'serial_reason' => $reason]);
+}
+
+return $registry;

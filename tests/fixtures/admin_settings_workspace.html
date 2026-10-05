@@ -45,7 +45,7 @@ function formMarkup(section, value) {
     return `<form method="post" action="/fixture-save" data-admin-settings-form="${section}" data-changes-label="{count} changes" data-clean-label="Clean" data-saving-label="Saving" data-failed-label="Save failed" data-address-label="New address" data-language-label="Reload language">
         <input name="csrf_token" value="fixture-only" type="hidden"><input name="return_section" value="${section}" type="hidden">
         <div role="alert" data-admin-settings-errors hidden></div><div id="admin-setting-result-${id}"><label>${section}<input name="settings[${id}]" value="${value}"></label><span id="error-${id}" data-admin-settings-field-error hidden></span></div>
-        ${language}<div class="admin-settings-savebar" data-admin-settings-savebar><span data-admin-settings-changes></span><button type="button" data-admin-settings-reset hidden>Revert</button><button data-admin-settings-save>Save</button></div></form>`;
+        ${language}<div class="admin-settings-savebar" data-admin-settings-savebar><span role="status" aria-live="polite" data-admin-settings-changes></span><div><button type="button" class="secondary" data-admin-settings-reset hidden>Revert changes</button><button type="submit" data-admin-settings-save>Save changes</button></div></div></form>`;
 }
 /** Render one category with stable presentation containers. @param {string} section Category. @return {string} Panel HTML. */
 function panelMarkup(section) {
@@ -85,6 +85,8 @@ window.fetch = /** Confine mutations to this fixture. @param {string|URL} url En
 };
 
 try {
+    const viewportResponse = await fetch('/__viewport?width=1280');
+    check(viewportResponse.ok, 'Settings geometry starts at its explicit desktop viewport');
     document.querySelector('#workspace').innerHTML = '<div class="admin-settings-page" data-admin-settings-workspace><header class="admin-settings-toolbar"><h1>Settings</h1><div data-admin-settings-search data-results-label="matches" data-empty-label="Empty"><input data-admin-settings-search-input><button data-admin-settings-search-clear>Clear</button><div data-admin-settings-search-results><p data-admin-settings-search-status></p><a href="?section=general" data-admin-settings-search-result data-search-label="Viewer languages" data-search-text="viewer languages" data-search-section="general" data-search-target="admin-setting-result-public_language_selector_languages">Viewer languages</a><a href="/specialized" data-admin-settings-search-result data-search-label="Specialized" data-search-text="specialized" data-search-external="1">Specialized</a></div></div><a>Wizard</a></header>'
         + '<nav data-admin-settings-navigation><select data-admin-settings-category><option value="general">General</option><option value="media">Media</option></select><div role="tablist"><a href="?section=general" data-admin-tab-target="settings-general">General<span data-admin-settings-draft-badge="general" hidden></span></a><a href="?section=media" data-admin-tab-target="settings-media">Media<span data-admin-settings-draft-badge="media" hidden></span></a></div></nav>'
         + panelMarkup('general') + panelMarkup('media') + '</div>';

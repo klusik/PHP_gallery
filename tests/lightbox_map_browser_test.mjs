@@ -20,10 +20,11 @@
 /** Run the real lightbox module in an installed headless Chromium browser, with local synthetic media only. */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp} from 'node:fs/promises';
-import {spawn, execFileSync} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.argv[2];
@@ -54,21 +55,11 @@ const server = createServer(async (request, response) => {
     } catch { response.writeHead(404).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const profile = await mkdtemp(path.join(root, 'cache', 'map-browser-profile-'));
 const url = `http://127.0.0.1:${server.address().port}/`;
 try {
-    const browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-        '--disable-background-networking', '--disable-extensions', `--user-data-dir=${profile}`,
-        '--dump-dom', '--virtual-time-budget=15000', url], {windowsHide: true});
-    let output = ''; let errors = '';
-    browser.stdout.on('data', data => { output += data; });
-    browser.stderr.on('data', data => { errors += data; });
-    const timeout = setTimeout(() => browser.kill(), 45000);
-    try {
-        const exit = await new Promise((resolve, reject) => { browser.on('error', reject); browser.on('close', resolve); });
-        const result = output.match(/<pre id="results"[^>]*>([^]*?)<\/pre>/)?.[1];
-        console.log(result || errors.slice(-1500) || 'Browser left the fixture without a result.');
-        assert.equal(exit, 0, 'Browser process must finish successfully');
-        assert.ok(result?.includes('BROWSER PASS'), 'Browser fixture must complete all assertions');
-    } finally { clearTimeout(timeout); }
+    /** Run only this synthetic loopback page inside the runner's private Edge profile. */
+    const {result, exitCode} = await runHeadlessBrowserFixture(executable, url, 'map-browser-profile-');
+    console.log(result || 'Browser left the fixture without a result.');
+    assert.equal(exitCode, 0, 'Browser process must finish successfully');
+    assert.ok(result?.includes('BROWSER PASS'), 'Browser fixture must complete all assertions');
 } finally { server.close(); }

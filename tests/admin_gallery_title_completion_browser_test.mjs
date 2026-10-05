@@ -13,10 +13,10 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, rm} from 'node:fs/promises';
-import {spawn} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.argv[2];
@@ -39,27 +39,13 @@ const server = createServer(async (request, response) => {
     } catch { response.writeHead(500).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const profile = await mkdtemp(path.join(root, 'cache', 'title-browser-'));
 try {
-    const browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-        '--disable-background-networking', '--disable-extensions', '--disable-component-update',
-        '--user-data-dir=' + profile, '--dump-dom', '--virtual-time-budget=15000',
-        'http://127.0.0.1:' + server.address().port + '/'], {windowsHide: true});
-    let output = ''; let errors = '';
-    browser.stdout.on('data', data => { output += data; });
-    browser.stderr.on('data', data => { errors += data; });
-    const timer = setTimeout(() => browser.kill(), 45000);
-    try {
-        const code = await new Promise((resolve, reject) => { browser.on('error', reject); browser.on('close', resolve); });
-        const result = output.match(/<pre id="results"[^>]*>([^]*?)<\/pre>/)?.[1];
-        console.log(result || errors.slice(-1000));
-        assert.equal(code, 0);
-        assert.ok(result?.includes('BROWSER PASS'), 'Title event fixture must complete');
-    } finally { clearTimeout(timer); }
+    /** Keep browser storage in a unique profile that the shared runner removes after Edge closes. */
+    const {result, exitCode} = await runHeadlessBrowserFixture(executable,
+        'http://127.0.0.1:' + server.address().port + '/', 'title-browser-');
+    console.log(result || 'Title fixture did not produce a result marker.');
+    assert.equal(exitCode, 0);
+    assert.ok(result?.includes('BROWSER PASS'), 'Title event fixture must complete');
 } finally {
     server.close();
-    // Only the exact unique profile created above is disposable.
-    if (path.dirname(profile) === path.join(root, 'cache') && path.basename(profile).startsWith('title-browser-')) {
-        await rm(profile, {recursive: true, force: true, maxRetries: 3}).catch(() => {});
-    }
 }
