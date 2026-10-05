@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.118.5}
+\newcommand{\version}{0.118.6}
 \newcommand{\manualdate}{5.~Oktober~2026}
 
 \hypersetup{
@@ -2300,13 +2300,19 @@ Isolieren Sie vor Öffnen einer wiederhergestellten Installation E-Mail, geplant
 \index{v00254@Veröffentlichungsqualifikation}
 \index{t00241@Tests!v00258@verwerfbare Abläufe}
 
+Der zentrale Einstieg \filepath{scripts/audit.php} bietet drei Profile. \codeword{--profile=quick} verwendet eine ausdrückliche PHP-Testteilmenge, strenge Quell- und MVC-Verträge, die Python-Importrichtlinie, schnelle Node-Fixtures und Syntaxprüfung geänderter Dateien. Es lässt die vollständige PHP-Suite, das beratende Inventar, WinApp-Tests, langsame Node-Fixtures und Chromium aus. Verwenden Sie \codeword{--profile=full} für die vollständige Übergabeprüfung und \codeword{--profile=release} für die Veröffentlichungsvorbereitung; ein schnelles PASS ersetzt keines dieser Profile.
+
+PHP-Suiten verwenden standardmäßig vier Arbeitsprozesse. Setzen Sie \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} auf eine ganze Zahl von 1 bis 8; ungültige Werte blockieren die Ausführung. Registrierte exklusive Tests laufen allein, nachdem aktive Prozesse beendet sind. Jeder Kindprozess behält getrennte Diagnosen und eine ab seinem tatsächlichen Start gemessene Zeitgrenze; Ergebnisse bleiben in stabiler Eingabereihenfolge. Jedes Profil misst außerdem Include-Phasen in frischen Prozessen vor \codeword{cms\_run()}: die frühe Laufzeit erlaubt eine PHP-Datei und 16~MiB Spitzenverbrauch, der Anwendungsbootstrap 560 Dateien und 64~MiB. Die Laufzeit ist nur eine Beobachtung; diese Sonden führen keine Datenbank-, Sitzungs- oder Routingarbeit aus.
+
+CI führt erforderliche Chromium-Fixtures in einem eigenen Job mit \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1} aus; fehlende, nicht startbare oder übersprungene erforderliche Browserabdeckung lässt den Job fehlschlagen. Datenbank- und Laufzeitjobs deaktivieren Browser nur in ihrer eigenen Umgebung. Die lokale Browsererkennung bleibt optional. Die Option \codeword{--quick} der Workflow-Starter delegiert direkt an das schnelle Profil, ohne Datenbank oder Daemon anzulegen. Grenzen stehen in \filepath{TESTING.md}, isolierte Qualifizierung in \filepath{docs/GALLERY_WORKFLOWS.md}.
+
 Automatisierte Regression und betriebliche Abnahme beantworten unterschiedliche Fragen. Das zentrale Audit prüft Code, Verträge, Syntax, verfügbare Browserfixtures und Veröffentlichungskonsistenz. Die isolierte Ablauffixture ergänzt echte Datenbank-, HTTP- und Chromium-Abläufe mit erzeugten Fotos und Konten. Sie benötigt eine ausdrücklich ausschließlich verwerfbare Konfiguration und darf niemals Datenbank oder Medien der Installation verwenden. Folgen Sie \filepath{docs/GALLERY_WORKFLOWS.md} für Voraussetzungen; eine fehlende Umgebung ist eine Abdeckungslücke, kein Beweis einer funktionierenden Funktion.
 
-Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen Sie Quellcode und Dokumentation ab, erstellen und prüfen Sie dieses PDF neu, erzeugen Sie das Manifest und initialisieren Sie den Qualifikationsdatensatz. Führen Sie ein zentrales Veröffentlichungsaudit aus, keine Quick-/Full-/Release-Abfolge. Bei konfigurierten isolierten Voraussetzungen akzeptiert \filepath{scripts/gallery_workflow_mysql.php} die Option \codeword{--release}, um seine Fixture um dasselbe Veröffentlichungsaudit herum bereitzustellen.
+Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen Sie Quellcode und Dokumentation ab, erstellen Sie alle vier PDF-Handbücher neu und prüfen Sie die Compilerdiagnosen, erzeugen Sie das Manifest und initialisieren Sie den Qualifikationsdatensatz. Führen Sie ein zentrales Veröffentlichungsaudit aus, keine Quick-/Full-/Release-Abfolge. Bei konfigurierten isolierten Voraussetzungen akzeptiert \filepath{scripts/gallery_workflow_mysql.php} die Option \codeword{--release}, um seine Fixture um dasselbe Veröffentlichungsaudit herum bereitzustellen.
 
 Das Qualifikationswerkzeug \filepath{scripts/release_qualification.php} vermerkt den genauen Quellcode- und PDF-Fingerabdruck. Sein Befehl \codeword{render} erzeugt begrenzte Seitenvorschauen; Darstellung allein genehmigt deren Erscheinungsbild nicht. Der Befehl \codeword{record-audit} akzeptiert nur den passenden zentralen Veröffentlichungsbericht, kein älteres vollständiges Audit. Eine geänderte Quelldatei oder ein neu erstelltes PDF wählt neue ausstehende Nachweise, statt frühere Zustimmung still wiederzuverwenden.
 
-Prüfen Sie Titelseite, Inhaltsverzeichnis, Index, geänderte Seiten, interne Links und repräsentative Browserabläufe. Vermerken Sie, was tatsächlich von wem und mit welchem Ergebnis geprüft wurde. Halten Sie ungelöste Prüfungen ausstehend und den kurzen Aktualisierungsfunktionstest nach Veröffentlichung getrennt. Ein grüner automatisierter Bericht erlaubt keine Veröffentlichung; das Werkzeug erstellt niemals Commits oder Tags, lädt nicht hoch und veröffentlicht keine Version. Datensatzbefehle finden Sie in \filepath{docs/RELEASE_QUALIFICATION.md}.
+Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose eines konkreten Layoutproblems; optionale PDF-Prüffelder dürfen ausstehend bleiben. Prüfen Sie repräsentative Browserabläufe. Vermerken Sie, was tatsächlich von wem und mit welchem Ergebnis geprüft wurde. Halten Sie ungelöste Prüfungen ausstehend und den kurzen Aktualisierungsfunktionstest nach Veröffentlichung getrennt. Ein grüner automatisierter Bericht erlaubt keine Veröffentlichung; das Werkzeug erstellt niemals Commits oder Tags, lädt nicht hoch und veröffentlicht keine Version. Datensatzbefehle finden Sie in \filepath{docs/RELEASE_QUALIFICATION.md}.
 
 \section{Glossar}
 \label{sec:glossary}

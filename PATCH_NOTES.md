@@ -1,5 +1,67 @@
 # Patch notes
 
+## Version 0.118.6
+
+Version 0.118.6 shortens development feedback and improves automated verification. The quick audit uses an explicit PHP subset, complete audits share a bounded parallel worker pool, and CI now requires Chromium coverage in its own job. Fresh-process bootstrap probes detect unexpected include or memory growth without depending on workstation speed.
+
+### Highlights
+
+#### Faster and explicit audit coverage
+
+- Updated `quick` to run the curated `php-fast` subset alongside strict source, MVC, mutation, Python import, syntax and fast Node checks; retained complete PHP, WinApp, advisory inventory, slow Node and browser coverage in `full` and `release`.
+- Added a portable PHP worker pool with four workers by default and an explicit range of one through eight via `PHP_GALLERY_AUDIT_WORKERS`; invalid values block the suite.
+- Added documented exclusive barriers for shared-resource, contention and nested-process fixtures, independent output capture, per-child timeouts and deterministic result ordering.
+- Added fresh-child early-runtime and application-bootstrap measurements with file-count and peak-memory ceilings; recorded elapsed time as an observation.
+
+#### Required and isolated browser verification
+
+- Added a dedicated `browser-tests` CI job using PHP 8.3, Node 22 and discovered Chrome/Chromium with `PHP_GALLERY_BROWSER_REQUIRED=1`.
+- Made missing or unstartable browsers and skipped required browser fixtures produce nonzero coverage results; retained job-local browser opt-out for the database/runtime matrices.
+- Updated selected browser fixtures to use their own bounded DevTools session and close the actual browser before cleaning up its private profile, including Windows launcher behavior.
+- Updated the Settings fixture to match the production save bar and start geometry checks at an explicit desktop viewport.
+
+### Technical Details
+
+#### Audit backend and runtime probes
+
+- Added `scripts/audit_process.php` for worker scheduling, process status and bounded child/process-tree cleanup; updated `scripts/audit.php` and `scripts/audit_lib.php` to use it.
+- Added `scripts/audit_php_registry.php` for the explicit quick-test list and serial-test reasons, and updated profile and requirement registration in `scripts/audit_registry.php`.
+- Added `scripts/audit_performance.php`, `scripts/audit_performance_registry.php` and `scripts/audit_runtime_probe.php` for validated include-only metrics before `cms_run()`, without route dispatch, database access or sessions.
+- Set early-runtime ceilings to one included PHP file and 16 MiB peak memory; set application-bootstrap ceilings to 560 files and 64 MiB, with a documented 533-file baseline.
+- Updated `scripts/gallery_workflow_mysql.php` and `scripts/gallery_workflow_run.php` so `--quick` delegates directly to the central quick profile before creating a database, application copy or daemon; retained `--audit` and `--release` for disposable workflow qualification.
+
+#### Browser fixtures and CI
+
+- Added `tests/support/headless_browser_fixture.mjs` for confined loopback fixtures, unique profiles, bounded result polling and private DevTools browser shutdown.
+- Migrated `tests/admin_gallery_title_completion_browser_test.mjs`, `tests/gallery_picker_parent_integration_browser_test.mjs`, `tests/lightbox_map_browser_test.mjs` and `tests/gallery_workflow_browser.mjs` to the shared helper.
+- Updated `tests/admin_panel_lifecycle_browser_test.mjs` and `tests/fixtures/admin_settings_workspace.html` for the Settings viewport and current markup.
+- Updated `.github/workflows/gallery-workflows.yml` to run the required browser suite once and preserve existing database/HTTP and runtime coverage without adding npm, Composer, Playwright or Selenium dependencies.
+
+#### Database and compatibility
+
+- Added no migration, schema object, application route, setting or capability. Preserved runtime MVC, authorization and three-state schema policy; the bootstrap measurements stop before application execution.
+- Preserved PHP 8.1+ compatibility, optional local browser discovery and the complete `php tests/run.php` compatibility entrypoint. The shared DevTools helper requires Node with global WebSocket support, as provided by Node 22 in CI.
+- Preserved the independent Windows uploader version and installer because shipped WinApp code and build inputs did not change.
+
+#### Documentation and tests
+
+- Updated `README.md`, `ARCHITECTURE.md`, `TESTING.md`, `CODEMAP.md`, `AGENTS.md`, `docs/GALLERY_WORKFLOWS.md` and `docs/RUNTIME_SUPPORT.md` for profile coverage, scheduling, probe metrics and required browser CI.
+- Extended `tests/audit_runner_test.php` for worker bounds, exclusive barriers, child failures, timeout attribution and recovery, descendant cleanup, probe validation, report metrics and required-browser blocking.
+- Extended `tests/gallery_workflow_ci_trigger_policy_test.php` and `tests/gallery_workflow_safety_test.php` for job-scoped opt-out, mandatory Chromium discovery and quick delegation before disposable provisioning.
+- Aligned English, Czech, German and Swedish manual instructions and edition metadata; rebuilt all four PDFs for Version 0.118.6 and documented routine compiler checks with optional PDF visual review.
+
+### User Impact
+
+#### For visitors
+
+- Preserved public gallery behavior while strengthening automated browser regression coverage.
+
+#### For administrators and maintainers
+
+- Reduced edit-cycle verification work while retaining the complete handoff and release audit profiles.
+- Made PHP worker limits, exclusive fixtures, bootstrap growth and required browser coverage observable in the existing compact audit reports.
+- Kept automated audit evidence separate from manual browser acceptance and post-publication updater checks.
+
 ## Version 0.118.5
 
 Version 0.118.5 brings the gallery header's tag disclosure into the same animated overlay used by gallery cards. Visitors can inspect every direct and contained tag without expanding the header, while saved Theme limits, ordering and scrollbar preferences continue to apply from the first server-rendered response.

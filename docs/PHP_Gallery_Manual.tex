@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118.5}
+\newcommand{\version}{0.118.6}
 \newcommand{\manualdate}{5~October~2026}
 
 \hypersetup{
@@ -2334,6 +2334,32 @@ procedure. Updater file rollback still does~not~reverse database migrations.
 \index{release qualification}
 \index{testing!disposable workflows}
 
+The~central entry point \filepath{scripts/audit.php} provides three profiles.
+\codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
+contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax
+checks. It~omits the~complete PHP suite, advisory inventory, WinApp tests,
+slow Node fixtures, and~Chromium. Use \codeword{--profile=full} for~complete
+handoff verification and~\codeword{--profile=release} for~release preparation;
+a~quick PASS does~not~replace either.
+
+PHP suites run with four workers by~default. Set
+\codeword{PHP\_GALLERY\_AUDIT\_WORKERS} to~an~integer from~1 through~8;
+invalid values block execution. Registered exclusive tests run alone after
+active workers finish. Each child retains separate diagnostics and~a~timeout
+measured from~its actual start; results stay in~deterministic input order.
+Every profile also measures fresh-process include phases before
+\codeword{cms\_run()}: early runtime permits one PHP file and~16~MiB peak memory,
+and~application bootstrap permits 560 files and~64~MiB. Elapsed time is~observational;
+these probes perform no~database, session, or~route work.
+
+CI runs required Chromium fixtures in~one dedicated job with
+\codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; missing, unstartable, or~skipped
+required browser coverage fails the~job. Database and~runtime jobs disable browsers
+within their own environment. Local browser discovery remains optional.
+The~workflow launchers' \codeword{--quick} flag delegates directly to~the~quick
+profile without provisioning a~database or~daemon. See \filepath{TESTING.md}
+for~limits and~\filepath{docs/GALLERY_WORKFLOWS.md} for~isolated qualification.
+
 Automated regression and~operational acceptance answer different questions.
 The~central audit checks code, contracts, syntax, available browser fixtures,
 and~release consistency. The~isolated workflow fixture adds real database,
@@ -2344,7 +2370,7 @@ the~installation's database or~media. Follow
 is~a~coverage gap, not~proof of~a~working feature.
 
 For~release preparation, follow \filepath{RELEASE.md}: finish source
-and~documentation, rebuild and~inspect this PDF, generate the~manifest,
+and~documentation, rebuild all~four manual PDFs and~check compiler diagnostics, generate the~manifest,
 and~initialize the~qualification record. Run one central release audit,
 not~a~quick/full/release sequence. With the~isolated prerequisites configured,
 \filepath{scripts/gallery_workflow_mysql.php} accepts \codeword{--release}
@@ -2357,8 +2383,9 @@ The~\codeword{record-audit} command accepts only the~matching central release
 report, not~an~older full audit. A~changed source file or~rebuilt PDF selects
 new pending evidence rather than silently reusing earlier approval.
 
-Review the~title page, contents, index, changed pages, internal links,
-and~representative browser workflows. Record what was~actually checked,
+Visually review the~PDF only on~explicit request or~to~diagnose a~concrete
+layout problem; optional PDF review fields may~remain pending. Review
+representative browser workflows. Record what was~actually checked,
 by~whom, and~with what result. Keep unresolved checks pending and~post-publication
 updater smoke testing separate. A~green automated report is~not~permission
 to~publish, and~the~tool never commits, tags, uploads, or~publishes

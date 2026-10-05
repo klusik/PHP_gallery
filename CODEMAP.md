@@ -575,7 +575,9 @@ presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
 | Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
-| Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `tests/audit_runner_test.php`<br>Coordinates PHP/Node/Python regressions, syntax checks, contract utilities, release checks, timeout handling, normalized status, and compact Markdown/JSON reporting. |
+| Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `scripts/audit_php_registry.php`, `scripts/audit_process.php`, `tests/audit_runner_test.php`<br>Owns curated quick and complete PHP suites, bounded workers and exclusive barriers, child/process-tree cleanup, Node/Python coverage, contracts, syntax, release checks and compact reports. |
+| Include-phase performance probes | `scripts/audit_performance.php`, `scripts/audit_performance_registry.php`, `scripts/audit_runtime_probe.php`<br>Validates fresh-child early-runtime and application-bootstrap include counts and peak memory before `cms_run()`; records wall time observationally. |
+| Required browser fixtures | `.github/workflows/gallery-workflows.yml`, `scripts/audit_process.php`, `tests/support/headless_browser_fixture.mjs`<br>Owns required Chromium CI status and selected loopback fixtures with private DevTools result polling, browser shutdown and profile cleanup. |
 | Release preparation and consistency | `RELEASE.md`, `scripts/prepare_release.php`, `scripts/check_release.php`, `scripts/release_lib.php`, `tests/release_tooling_test.php`<br>Owns registered current-version markers, release metadata scaffolding, read-only cross-artifact consistency, and the release workflow contract. Release consistency is included in the central `release` audit profile. |
 | PHP regression compatibility entrypoint | `tests/run.php`, `tests/*_test.php`<br>Historical `php tests/run.php` delegates to the central audit runner's `php-regression` suite. |
 | Standalone JavaScript model tests | `tests/*_test.mjs` |

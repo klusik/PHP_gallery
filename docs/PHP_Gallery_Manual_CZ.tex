@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.118.5}
+\newcommand{\version}{0.118.6}
 \newcommand{\manualdate}{5.~října~2026}
 
 \hypersetup{
@@ -2294,13 +2294,19 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 \index{k00072@kvalifikace vydání}
 \index{t00234@testování!d00031@dočasné postupy}
 
+Centrální vstup \filepath{scripts/audit.php} nabízí tři profily. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, poradní inventář, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
+
+Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 560 souborů a~64~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
+
+CI spouští povinné testy Chromium v~jedné samostatné úloze s~\codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; chybějící, nespustitelné nebo přeskočené povinné pokrytí úlohu ukončí neúspěchem. Databázové a~běhové úlohy vypínají prohlížeče pouze ve vlastním prostředí. Místní vyhledání prohlížeče zůstává volitelné. Volba \codeword{--quick} spouštěčů pracovních postupů předává řízení přímo rychlému profilu bez vytváření databáze nebo démona. Limity najdete v~\filepath{TESTING.md}, izolovanou kvalifikaci v~\filepath{docs/GALLERY_WORKFLOWS.md}.
+
 Automatická regrese a~provozní přejímka odpovídají na odlišné otázky. Centrální audit kontroluje kód, kontrakty, syntaxi, dostupné testovací podklady prohlížeče a~konzistenci vydání. Izolované testovací prostředí přidává skutečné průchody databází, HTTP a~Chromium s~generovanými fotografiemi a~účty. Vyžaduje výslovnou konfiguraci určenou pouze pro dočasné testování a~nikdy nesmí používat databázi ani média instalace. Předpoklady najdete v~\filepath{docs/GALLERY_WORKFLOWS.md}; chybějící prostředí je mezerou pokrytí, nikoli důkazem fungující funkce.
 
-Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~dokumentaci, znovu sestavte a~prohlédněte toto PDF, vygenerujte manifest a~inicializujte kvalifikační záznam. Spusťte jeden centrální audit vydání, nikoli posloupnost quick/full/release. S~nastavenými izolovanými předpoklady přijímá \filepath{scripts/gallery_workflow_mysql.php} volbu \codeword{--release} pro vytvoření testovacího prostředí kolem stejného auditu vydání.
+Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~dokumentaci, znovu sestavte všechny čtyři příručky PDF a~zkontrolujte diagnostiku překladače, vygenerujte manifest a~inicializujte kvalifikační záznam. Spusťte jeden centrální audit vydání, nikoli posloupnost quick/full/release. S~nastavenými izolovanými předpoklady přijímá \filepath{scripts/gallery_workflow_mysql.php} volbu \codeword{--release} pro vytvoření testovacího prostředí kolem stejného auditu vydání.
 
 Kvalifikační nástroj \filepath{scripts/release_qualification.php} zaznamenává přesný otisk zdroje a~PDF. Jeho příkaz \codeword{render} vytváří omezené náhledy stránek; samotné vykreslení neschvaluje jejich vzhled. Příkaz \codeword{record-audit} přijímá pouze odpovídající centrální zprávu vydání, nikoli starší úplný audit. Změněný zdrojový soubor nebo znovu sestavené PDF vybírají nové čekající podklady místo tichého opětovného použití dřívějšího souhlasu.
 
-Prohlédněte titulní stránku, obsah, rejstřík, změněné stránky, interní odkazy a~reprezentativní postupy prohlížeče. Zaznamenejte, co bylo skutečně zkontrolováno, kým a~s~jakým výsledkem. Nevyřešené kontroly ponechte čekající a~základní test aktualizátoru po zveřejnění oddělený. Zelená automatická zpráva není svolením ke zveřejnění a~nástroj nikdy nevytváří commity ani tagy, nenahrává ani nepublikuje vydání. Příkazy záznamů najdete v~\filepath{docs/RELEASE_QUALIFICATION.md}.
+Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice konkrétního problému sazby; volitelná pole kontroly PDF mohou zůstat čekající. Ověřte reprezentativní postupy prohlížeče. Zaznamenejte, co bylo skutečně zkontrolováno, kým a~s~jakým výsledkem. Nevyřešené kontroly ponechte čekající a~základní test aktualizátoru po zveřejnění oddělený. Zelená automatická zpráva není svolením ke zveřejnění a~nástroj nikdy nevytváří commity ani tagy, nenahrává ani nepublikuje vydání. Příkazy záznamů najdete v~\filepath{docs/RELEASE_QUALIFICATION.md}.
 
 \section{Slovník}
 \label{sec:glossary}
