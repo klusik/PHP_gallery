@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.118.5
+
+Version 0.118.5 brings the gallery header's tag disclosure into the same animated overlay used by gallery cards. Visitors can inspect every direct and contained tag without expanding the header, while saved Theme limits, ordering and scrollbar preferences continue to apply from the first server-rendered response.
+
+### Highlights
+
+#### Shared gallery tag panel
+
+- Updated the header's ellipsis control to open an animated panel containing every tag, preserving direct and containing-tag groups and their order.
+- Kept header and card dimensions stable during opening and closing; long tag names wrap inside the panel.
+- Kept the enhanced panel within the viewport, including narrow screens with a classic scrollbar, and prevented header and tag-row clipping.
+- Preserved keyboard access, Escape with focus restoration, outside-click dismissal, shared single-panel behavior and dynamically replaced header controls.
+- Preserved native disclosure without JavaScript: the complete header tag panel opens below the header and remains reachable by scrolling.
+
+### Technical Details
+
+#### Backend and presentation
+
+- Added `view_render_public_gallery_tag_info_panel()` in `app/views/public_tags.php` as the shared presentation helper for gallery cards and headers, consuming prepared view-model data.
+- Updated `view_render_public_hero_tags()` to render the configured preview across groups, omit a group label when none of its tags are previewed, and render a tags-only panel only when the limit is exceeded.
+- Preserved card panels with public title, description, date and all tags; kept display-all and exact-limit headers free of an unnecessary disclosure control.
+
+#### Database and compatibility
+
+- Added no migration, table, column, index, setting, route, capability or System Health group. Reused existing Theme preferences and localized labels.
+- Preserved existing gallery/media authorization and schema policy; this presentation change introduces no persistence or schema inspection.
+- Preserved the independent Windows uploader version and installer.
+
+#### Frontend and documentation
+
+- Updated `public/assets/gallery-modules/hero-tags.js` to position the shared panel relative to any `data-hero-tags` root and calculate its width against the document viewport excluding a classic scrollbar.
+- Updated `public/assets/styles/public-shared.css` for header stacking, open-panel clipping relief, native below-header placement and wrapping tag pills.
+- Updated both `public/assets/gallery.js` and `public/assets/public-gallery.js` imports to `20261005-hero-info-panel-v2` for authenticated and anonymous public views.
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md` and `TESTING.md`; aligned all four administrator manuals and rebuilt their PDFs for Version 0.118.5.
+
+### Tests
+
+#### Tag preview and overlay behavior
+
+- Extended `tests/hero_tag_theme_model_test.php` to verify that an open header panel is not clipped by its configured scrollbar.
+- Extended `tests/support/gallery_tags_render_fixture.php` with group-boundary, exact-limit and display-all headers using production rendering.
+- Extended the registered `tests/fixtures/gallery_tags.html` browser fixture for complete grouped panel order, first-paint limits, native keyboard fallback, unchanged geometry, narrow-viewport bounds, wrapped tag names, animated closing and Escape focus restoration.
+- Added browser assertions for delegated handling after header replacement, cross-card/header dismissal and outside-click dismissal while retaining the existing gallery-card and no-overflow checks.
+
+### User Impact
+
+#### For visitors
+
+- All gallery header tags are available in a compact panel with the same interaction as gallery cards, without shifting the surrounding gallery content.
+- Native keyboard disclosure remains usable without JavaScript; the saved display-all preference still shows every tag immediately.
+
+#### For administrators
+
+- Existing Theme tag limits, sorting, scrollbar and public-panel animation preferences continue to control the presentation without new configuration or database changes.
+
 ## Version 0.118.4
 
 Version 0.118.4 fixes SimBrief route import in gallery creation and editing. The description and route preview now retain the filed route, including departure and arrival airports, and long routes keep their destination. Imported OFP data remains a private draft until the gallery is saved, and an import response cannot overwrite route text changed while the request was running.

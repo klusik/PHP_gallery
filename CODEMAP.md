@@ -88,7 +88,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Lightbox image zoom | `public/assets/gallery-modules/lightbox.js`, `public/assets/gallery-modules/lightbox-zoom-model.js` | Centered growing-frame geometry, cursor/pinch anchoring, pan and immediate active-original promotion. Server controls: `app/controllers/public_gallery_lightbox.php`; authorized quality candidates: `app/services/thumbnail_bundles.php`, `app/controllers/gallery_lightbox.php`; desktop/mobile styles and fullscreen clipping/HUD stacking: `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css`; dependency cache revision: `app/helpers_page_rendering.php`; focused contracts: `tests/lightbox_zoom_*` and `tests/lightbox_zoom_model_test.mjs`. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
-| Gallery hero tags | `app/controllers/public_gallery.php`, `app/services/tag_metadata.php` | Full-width server-rendered tag groups with usage/alphabetical sorting and browser disclosure. |
+| Gallery hero tags | `app/controllers/public_gallery.php`, `app/services/tag_metadata.php` | Server-rendered grouped preview with usage/alphabetical sorting and the shared animated card/header tag overlay in `app/views/public_tags.php`. |
 | Picture game | `app/controllers/picture_game.php` | `app/services/picture_game.php` |
 | Voting | `app/controllers/votes.php` | `app/services/votes.php`, `app/services/picture_game.php` |
 
@@ -299,7 +299,7 @@ Public tag-page grid and card overrides are implemented by app/controllers/publi
 | Tag suggestions | `app/services/tag_metadata.php`, `app/controllers/admin_gallery_renderers.php` |
 | Gallery/image tag relations | Tables `gallery_tags`, `image_tags` |
 | Hero tag usage sorting | `app/services/tag_metadata.php`, `app/controllers/public_gallery.php` |
-| Hero tag disclosure and row-based scrolling | `public/assets/gallery-modules/hero-tags.js`, `public/assets/styles/public-shared.css`, `public/assets/styles/admin-layout.css`, `public/assets/styles/admin.css` |
+| Shared card/header tag overlay and server-rendered row cap | `public/assets/gallery-modules/hero-tags.js`, `public/assets/styles/public-shared.css`, `public/assets/styles/admin-layout.css`, `public/assets/styles/admin.css` |
 
 ## Theme, Layout and Branding
 

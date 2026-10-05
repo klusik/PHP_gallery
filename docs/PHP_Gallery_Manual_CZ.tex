@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.118.4}
+\newcommand{\version}{0.118.5}
 \newcommand{\manualdate}{5.~října~2026}
 
 \hypersetup{
@@ -1714,11 +1714,11 @@ Pododdíl \ui{Vzhled > Štítky galerie} řídí kompaktní sbírku štítků po
 
 Stejný pododdíl také řídí veřejnou cílovou stránku štítku. \ui{Galerie na řádek} a~\ui{Řádky na stránku} určují mřížku galerií výsledků štítku a~kapacitu stránky, zatímco \ui{Návrh karty galerie} vybírá svislou nebo vodorovnou prezentaci karet těchto výsledků. Hodnoty ovlivňují veřejné stránky otevřené přes štítek; nemění běžné stránky galerií. Nejsou-li vlastní hodnoty uloženy, náhradou zůstává globální mřížka a~návrh karet Vzhledu. Globální přepínač stránkování nadále určuje, zda se dlouhý výsledek štítku rozdělí na stránky. Z~\ui{Upravit štítky} volba \ui{Nastavit zobrazení štítků} otevírá přímo tento pododdíl a~\ui{Spravovat metadata štítků} poskytuje zpětný kontextový odkaz.
 
-Ve výchozím stavu prohlížeč nejprve ukáže 20 štítků. Limit lze změnit od 1 do 200 posuvníkem nebo přesným číselným polem. Existuje-li více štítků, objeví se \ui{Zobrazit všechny štítky} a~pomocí JavaScriptu rozbalí existující prvky na místě; nepoužívá se opětovné načtení stránky ani dodatečný požadavek serveru. Stejný prvek může sbírku znovu sbalit. Správci, kteří nechtějí postupné odhalování, mohou povolit \ui{Zobrazit každý štítek okamžitě}. Všechny štítky jsou ve všech režimech nadále součástí serverem vykresleného HTML, takže vypnutí JavaScriptu ponechá úplnou sbírku viditelnou a~použitelnou místo trvalého skrytí obsahu.
+Ve výchozím stavu serverem vykreslená stránka ihned ukáže 20 štítků. Limit lze změnit od 1 do 200 posuvníkem nebo přesným číselným polem. Je-li štítků více, ovládání s~výpustkou otevře panel \ui{Všechny štítky} se všemi přímými i~obsaženými štítky v~původním pořadí skupin. Panel používá stejné animace a~zavírání jako karty galerií, nemění rozměry záhlaví a~zalamuje dlouhé názvy. S~JavaScriptem zůstává v~oblasti okna; zavře jej stejný ovládací prvek, kliknutí mimo panel nebo Escape, který vrátí zaměření na ovládací prvek. Všechny štítky jsou již v~HTML, takže otevření nevyžaduje požadavek serveru. Bez JavaScriptu nativní rozbalování otevře panel pod záhlavím a~dlouhé seznamy zůstávají dostupné posouváním stránky. Volba \ui{Zobrazit každý štítek okamžitě} zobrazí všechny již v~první odpovědi; ovládání se také nevytváří, pokud počet nepřekročí limit.
 
 Řazení štítků lze nastavit jako \ui{Nejpoužívanější první} nebo \ui{Abecedně}. Výchozí je \ui{Nejpoužívanější první}. Využití je celkový počet přímých přiřazení štítku galeriím a~fotografiím v~celé instalaci. Shodné počty využití se rozlišují přirozeným abecedním pořadím bez rozlišení velikosti písmen a~poté stabilním identifikátorem. Přímé štítky galerie se řadí uvnitř své skupiny a~obsažené štítky uvnitř své; skupiny se nemíchají.
 
-Dlouhé sbírky štítků mohou také používat responzivní vnitřní posuvník. Tato volba je ve výchozím stavu povolena a~má pět viditelných řádků. Práh řádků lze nastavit od 1 do 12 posuvníkem nebo přesným číselným polem. Prohlížeč změří řádky po skutečném zalomení štítků při aktuální šířce úvodního panelu a~povolí posouvání jen tehdy, když naměřený počet přesáhne nastavený práh. Změna velikosti stránky vyvolá nové měření. Vypnutí posuvníku odstraní omezení výšky a~umožní přirozený růst úvodního panelu.
+Náhled štítků může používat vnitřní posuvník. Ve výchozím stavu je zapnutý s~výškovým limitem pěti řádků; počet lze nastavit od 1 do 12 posuvníkem nebo číselným polem. Server dodá limit v~počátečním HTML, takže náhled nečeká na JavaScript a~při spuštění modulu nemění rozměry. Zalamování odpovídá dostupné šířce a~posouvání je potřeba jen při překročení limitu. Otevřený překryvný panel tímto limitem není oříznut. Vypnutí posuvníku umožní přirozený růst náhledu.
 \section{Stahování, sdílení a~přenos}
 \label{sec:sharing}
 \index{s00224@stahování}
