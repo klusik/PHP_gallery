@@ -1,5 +1,81 @@
 # Patch notes
 
+## Version 0.119
+
+Version 0.119 introduces a small request kernel that loads reviewed PHP modules for the selected route, restores saved route maps in galleries without photographs, and replaces the lightbox's development readout with a localized diagnostic dashboard. Existing procedural handlers, access rules and shared-hosting deployment remain supported.
+
+### Highlights
+
+#### Route-aware application runtime
+
+- Added a request-local `Gallery\Core` kernel with `Request`, `Router`, `RouteDefinition`, `RouteRegistry` and `ModuleLoader`; retained existing controller functions and the canonical security/route table in `app/bootstrap/dispatch.php`.
+- Replaced ordinary public-request umbrella loading with a checked-in module plan. Production requests load the selected logical modules without scanning application sources, compiling dependencies or falling back to loading the entire application.
+- Reduced the include-only bootstrap baseline from 533 PHP files to 24, with new audited ceilings of 40 files and 16 MiB; added bounded measurements for nine real route lifecycles.
+- Preserved an explicit `app/bootstrap_full.php` entrypoint for CLI and test consumers that need the complete procedural API, including the legacy umbrella ordering.
+
+#### Maps before the first photograph
+
+- Fixed gallery-map initialization when the page contains no photo cards or lightbox markup, so a saved flight route can be opened before photographs are uploaded.
+- Preserved lazy map loading, complete route geometry, route-point markers, viewport fitting and reset controls without adding synthetic photo markers.
+- Added map overlay cleanup for dynamically replaced pages and retained useful empty-map feedback when no stored coordinates are available.
+
+#### Lightbox development dashboard
+
+- Added an administrator-only compact overview and separate detail pages for displayed media and quality, preload/cache state, runtime graphs, zoom/viewport and navigation lifecycle.
+- Added adjacent Freeze/Resume, Collapse and Expand controls; preserved the selected page and existing DOM while values refresh, including native fullscreen.
+- Separated the currently displayed photograph from pending navigation and quality requests, and distinguished retained reusable cache entries from historical decode success.
+- Added individually labeled graphs for decoded-cache pixel estimates, cached images/active detached loads and animation-frame intervals, with units, explanatory legends and a 16.7 ms reference. Bounded history to 90 samples at 350 ms intervals.
+- Hid URL credentials, query parameters and fragments; kept diagnostics read-only without diagnostic image or metadata requests. Disabled DEV does not load the dashboard, closing stops monitoring, and teardown removes it.
+- Added English, Czech, German and Swedish dashboard labels and content-revision cache invalidation for the dynamically imported module.
+
+### Technical Details
+
+#### Backend and runtime loading
+
+- Added the six core classes, `app/runtime/autoload.php`, `app/runtime/bridge.php` and generated `app/runtime/modules.php`; updated bootstrap, request initialization, routing, maintenance and dispatch to preserve their established lifecycle and security order.
+- Added `scripts/runtime_dependencies.php`, `scripts/runtime_dynamic_dependencies.php`, `scripts/runtime_module_roots.php` and `scripts/generate_runtime_modules.php` for development-time compilation and explicit review of dynamic callback/class targets. Invalid modules, cycles, missing files and unsafe include paths fail explicitly.
+- Isolated automatic-update eligibility in `app/services/updates_request.php` and active-job lookup in `app/services/updates_job_lookup.php`. Preserved active-job continuation before request-method, preference and timer gates; loaded updater execution only for eligible active/due work.
+- Preserved due archive/site-maintenance execution at the existing shutdown boundary and front-controller ownership of optional early Admin Test Run instrumentation.
+- Updated CLI utilities and selected fixtures to request full compatibility loading explicitly. Updated updater archive preflight to require the new runtime files before activation, preserving recoverable staging and the existing activation gate.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/lightbox-dev-dashboard.js` and updated `lightbox.js` to prepare bounded read-only snapshots, source observations and lifecycle events from the existing viewer.
+- Updated `public/assets/styles/lightbox.css` for compact and expanded diagnostics, individual detail pages and viewport fitting; updated the shared/admin styles that embed the lightbox styling.
+- Updated `app/views/layout.php` asset revision inputs and the dashboard import to invalidate both cold and warm immutable browser caches after application updates.
+- Initialized Leaflet viewport/follow state before the no-photo early return and disposed the independently opened gallery map during teardown.
+
+#### Database, settings and compatibility
+
+- Added no database migration, table, column, index, application route, capability or System Health group. Reused the existing `dev_mode_enabled` setting and administrator restriction.
+- Preserved PHP 8.1 source compatibility and ordinary PHP/MySQL or MariaDB shared hosting without Composer, Node, npm, Python, SSH, Docker or a production build step.
+- Preserved authentication, CSRF, Viewer identity, gallery/password/NSFW/media authorization, three-state schema policy and both permanent thumbnail renderers. This release changes loading and diagnostic presentation rather than schema availability or mutation policy.
+- Preserved the independent WinApp 0.3.2 version and installer because shipped Windows companion inputs did not change.
+
+#### Verification tooling and documentation
+
+- Added `scripts/audit_route_probe_registry.php`, `scripts/audit_route_probe.php` and `scripts/audit_route_performance.php`; integrated their evidence into the central runtime-performance suite and disposable workflow launcher.
+- Registered robots, home, gallery, thumbnail, original media, authenticated Admin/telemetry and anonymous Admin/telemetry denial cases. Validated route identity, status/outcome, safe include inventory, finite metrics and semantic response evidence, so an HTTP 200 error page cannot count as a successful product response.
+- Set per-route ceilings of 160–300 included PHP files and 32–48 MiB peak memory. Kept wall time observational and reported actual-route coverage as SKIP when the owned disposable fixture is absent.
+- Added `tests/runtime_kernel_test.php`, `tests/runtime_dependencies_test.php`, `tests/runtime_module_plan_test.php`, `tests/runtime_route_probe_test.php` and their fixture/support owners; registered the runtime checks in the quick subset and isolated the nested module-plan worker pool.
+- Added the registered `tests/lightbox_dev_dashboard_browser_test.mjs` and `tests/fixtures/lightbox_dev_dashboard.html` for real-viewer diagnostics, warm immutable cache invalidation, sanitized URLs, selected-page persistence, Freeze/Resume, quality errors, fullscreen ownership, bounded layout and teardown.
+- Extended the production map browser fixture for route-only zero-photo pages with and without viewer markup, reset controls, unchanged URL, teardown/reinitialization and an empty payload.
+- Updated existing updater, session, include-boundary, diagnostics and workflow contracts for their current owners without weakening access assertions.
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `TESTING.md` and the Settings inventory; aligned all four administrator manuals and rebuilt their PDFs. Removed the completed temporary runtime implementation roadmap after incorporating permanent guidance.
+
+### User Impact
+
+#### For visitors
+
+- Saved gallery flight routes can be viewed before the first photograph is added, with existing map and access policy.
+- Ordinary requests load the modules needed for their route while retaining public navigation, authorized media and no-JavaScript behavior.
+
+#### For administrators and maintainers
+
+- Development diagnostics explain displayed quality, pending work, cache ownership and graph limits directly in the existing lightbox; the feature remains disabled during ordinary operation unless deliberately enabled.
+- New routes and dynamic dependencies require updates to the authored loading inputs and regeneration of the shipped plan; existing CLI consumers can retain full procedural loading explicitly.
+- Release qualification retains central automated evidence, explicit environment gaps, optional PDF review fields, manual browser acceptance and post-publication updater checks as separate records.
+
 ## Version 0.118.6
 
 Version 0.118.6 shortens development feedback and improves automated verification. The quick audit uses an explicit PHP subset, complete audits share a bounded parallel worker pool, and CI now requires Chromium coverage in its own job. Fresh-process bootstrap probes detect unexpected include or memory growth without depending on workstation speed.

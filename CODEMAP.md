@@ -578,6 +578,8 @@ Nearby lightbox preview scheduling belongs to
 retains foreground navigation, cache, media authorization inputs, quality, and
 presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 
+The lightbox development dashboard in `public/assets/gallery-modules/lightbox-dev-dashboard.js` consumes bounded read-only snapshots from `lightbox.js`. `public/assets/styles/lightbox.css` owns layout, `app/lang/{en,cs,de,sv}.json` owns labels, and `app/views/layout.php` includes it in the asset revision. Existing Admin DEV policy owns availability.
+
 | Task | Files |
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
@@ -646,9 +648,9 @@ presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 
 ### Add a public JSON endpoint
 
-1. Add route mapping in `cms_run()`.
+1. Add the canonical route and security boundary in `app/bootstrap/dispatch.php`; update the reviewed dependency/root inputs and regenerate `app/runtime/modules.php`.
 2. Add controller handler under `app/controllers/`.
-3. Put query or mutation logic in `app/services/`.
+3. Put reusable orchestration and validation in `app/services/`, and SQL/persistence in the existing domain owner under `app/models/`.
 4. Return a stable JSON shape.
 5. Check visibility and access before exposing records.
 

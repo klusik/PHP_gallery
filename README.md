@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.118.6
+**Current Version:** 0.119
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -19,6 +19,8 @@ Custom CSS remains installation-owned, is preserved by ordinary saves and is exc
 With Flight Maps and Navigation Data enabled, route input and SimBrief draft requests check local navigation-data freshness in the background. Gallery saves remain available during imports; unresolved saved manual routes can gain coordinates while preserving existing points, SimBrief OFP geometry, and newer edits. Side-panel completion keeps the editor draft, drawer, and browser URL in place.
 
 Gallery headers and cards share an animated tag panel. The server renders the saved tag preview and row cap immediately; the header panel preserves every direct and contained tag, wraps long names and keeps the header dimensions stable. Native disclosure remains available without JavaScript, and existing Theme limits, sorting, scrollbar and animation settings continue to apply.
+
+Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
 
 ## Product manuals
 

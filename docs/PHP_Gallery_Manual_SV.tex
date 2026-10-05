@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.118.6}
+\newcommand{\version}{0.119}
 \newcommand{\manualdate}{5~oktober~2026}
 
 \hypersetup{
@@ -1331,6 +1331,8 @@ Att välja \ui{Öppna fotografi} i en gallerikartmarkör öppnar fotografiet i a
 
 \securitynote{GPS-data kan avslöja känsliga platser. Administratörer bör granska ärvda kartinställningar, bildmetadata och offentlig åtkomst innan personliga fotografier publiceras.}
 
+Ett galleri med sparad flygrutt kan öppna kartan innan det första fotot laddas upp, även på sidor utan lightbox-markup. Kartan anpassas till alla sparade ruttpunkter och behåller vanliga återställningskontroller; ruttpunkter behandlas inte som fotomarkörer. Utan sparade koordinater visas det vanliga meddelandet om en tom karta. Galleriets åtkomstregler och effektiva kartinställningar gäller fortfarande; inläsning sker på begäran.
+
 \subsection{Flygkartor och navigeringsdata}
 \index{s00220@SimBrief}
 \index{f00081@flygkartor}
@@ -1866,6 +1868,10 @@ Samma avgränsade modell rapporterar beredskap för galleriets redigeringsrevisi
 
 Den separata växeln \ui{Utvecklingsdiagnostik} är endast för administratörer. När den aktiveras för en inloggad administratör lägger den till mätinstrumentering i visaren för förladdning, cache, minne, nätverk och bildrutetider i den offentliga upplevelsen, ljuslådan och helskärmen. Den aktiverar inte diagnostiken för vanliga anonyma besökare. Låt den vara avstängd vid vanlig drift om du inte undersöker rendering eller prestanda; galleriprestandatestet beror också på detta utvecklingsdiagnostiksammanhang.
 
+Lightboxens DEV-panel öppnas som en kompakt översikt. Frys och Återuppta styr observationerna; Fäll ihop behåller översikten och Utöka öppnar separata sidor för media, förladdning, diagram, visningsyta och livscykel. Sidorna ryms utan rullningslister, behåller vald sida vid uppdateringar och stannar inom visaren även i äkta helskärm. Mediasidan skiljer det visade fotografiet från ett väntande navigeringsmål och visar inlästa dimensioner samt visad och begärd kvalitet. Källetiketter döljer inloggningsuppgifter, frågeparametrar och URL-fragment.
+
+Tre diagram har egna märkta skalor: uppskattat pixelminne för behållna avkodade bilder, cacheposter och aktiva separata inläsningar samt animationsbildintervall med en referens på 16,7~ms. Högst 90 prov med 350~ms mellanrum omfattar ungefär 31 sekunder. Pixeluppskattningen utesluter den visade bilden, GPU-minne och webbläsarens heap; bildintervall omfattar även schemaläggning och begränsning i bakgrunden. Tidigare lyckad avkodning bevisar inte att visaren fortfarande behåller bilden. Mätningar som webbläsaren inte stöder markeras som otillgängliga. Diagnostiken observerar befintligt arbete utan extra media- eller metadataförfrågningar; stängning stoppar mätningen och avveckling tar bort panelen. När DEV är av laddas inte panelmodulen.
+
 Administrationens \ui{Integritet}-flöde kontrollerar integritetshanterade kärnfiler mot det installerade manifestet och hjälper till att identifiera ofullständiga eller oväntade driftsättningsändringar. Det är ett verifieringsverktyg vid körning; samordnade säkerhetskopior behövs fortfarande eftersom ett integritetsmanifest inte innehåller användarfotografier eller ersätter återställningsmedier.
 
 När utvecklingsdiagnostik är tillgänglig kan en inloggad administratör starta ett \ui{Prestandatest för offentlig galleriinläsning} för aktuellt galleri. Webbläsaren läser in galleriet flera gånger i en dold ram med samma ursprung och anonym förhandsvisning, kombinerar PHP-renderingsräknare med webbläsarens navigeringstider och erbjuder sedan testloggen som JSON. Använd samma galleri, presentationsläge och nätverks- och cacheförhållanden när du jämför två ändringar; testet är mest användbart som en före- och eftermätning snarare än ett universellt poängtal.
@@ -1982,6 +1988,8 @@ Samma tidiga körningsgräns omvandlar ohanterade och fångstbara fatala PHP-fel
 
 \important{Gör en samordnad säkerhetskopia före en programuppdatering. Behåll säkerhetskopian tills körningskontroller, migreringar, offentliga gallerier, skyddad åtkomst, uppladdningar och administrationsåtgärder har verifierats.}
 
+Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begärandekärnan och dess granskade modulplan. Ett ofullständigt arkiv avvisas medan förberedda filer ligger utanför den aktiva installationen. Behåll alla levererade körmiljöfiler tillsammans vid manuell distribution; att bara ersätta bootstrap skulle lämna programmet ofullständigt.
+
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}
 
@@ -2003,6 +2011,8 @@ Följande sidor beskriver den begärandeväg som programmet använder. De är fr
 
 Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index.php} i kodförrådets rot är en stödd kompatibilitetsingång för andra webbhotellsupplägg. Den offentliga ingången läser in \filepath{app/early\_runtime.php} före \filepath{app/bootstrap.php}, och sedan når båda uppläggen samma vanliga begärandepipeline.
 
+Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
+
 Uppstarten läser lokal konfiguration och etablerar begärans sammanhang: databasåtkomst där det krävs, språk, sessionstillstånd, säkerhetsförutsättningar och gemensamma körningstjänster. Dirigeringen översätter sedan inkommande URL eller frågesträngsreserv till en intern rutt med parametrar såsom gallerisökväg, sidnummer, mediestorlek eller delningstoken. Fördelningen anropar kontrollern som är registrerad för rutten.
 
 Ordningen är avsiktlig. En begäran måste klassificeras innan koden avgör hur den ska besvaras, och åtkomstkontroller måste köras innan skyddad utmatning sammanställs. En bild- eller miniatyrbilds-URL som ser direkt ut är därför ändå en programbegäran; mediekontrollern behörighetskontrollerar den innan byte returneras.
@@ -2011,8 +2021,9 @@ Ordningen är avsiktlig. En begäran måste klassificeras innan koden avgör hur
 browser request
   -> index.php or public/index.php
   -> app/bootstrap.php
-  -> cms_run()
-  -> cms_route_from_request()
+  -> cms_run() -> Gallery\Core\Kernel
+  -> Request -> Router -> RouteRegistry
+  -> ModuleLoader -> app/bootstrap/dispatch.php
   -> controller function
   -> service functions
   -> HTML, JSON, media, archive, or redirect response
@@ -2298,7 +2309,9 @@ Innan en återställd installation öppnas isolerar du e-post, schemalagda jobb,
 
 Den centrala ingången \filepath{scripts/audit.php} erbjuder tre profiler. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, den rådgivande inventeringen, WinApp-tester, långsamma Node-testfall och Chromium. Använd \codeword{--profile=full} för fullständig överlämningskontroll och \codeword{--profile=release} för utgåveförberedelse; ett snabbt PASS ersätter ingen av dessa profiler.
 
-PHP-sviter använder fyra arbetsprocesser som standard. Sätt \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} till ett heltal från 1 till 8; ogiltiga värden blockerar körningen. Registrerade exklusiva tester körs ensamma efter att aktiva processer har avslutats. Varje underprocess behåller egen diagnostik och en tidsgräns från sin verkliga start; resultaten behåller stabil indataordning. Varje profil mäter också inkluderingsfaser i nya processer före \codeword{cms\_run()}: den tidiga körmiljön tillåter en PHP-fil och 16~MiB toppminne, programbootstrap 560 filer och 64~MiB. Förfluten tid är endast en observation; sonderna utför inget databas-, sessions- eller ruttarbete.
+PHP-sviter använder fyra arbetsprocesser som standard. Sätt \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} till ett heltal från 1 till 8; ogiltiga värden blockerar körningen. Registrerade exklusiva tester körs ensamma efter att aktiva processer har avslutats. Varje underprocess behåller egen diagnostik och en tidsgräns från sin verkliga start; resultaten behåller stabil indataordning. Varje profil mäter också inkluderingsfaser i nya processer före \codeword{cms\_run()}: den tidiga körmiljön tillåter en PHP-fil och 16~MiB toppminne, programbootstrap 40 filer och 16~MiB. Förfluten tid är endast en observation; sonderna utför inget databas-, sessions- eller ruttarbete.
+
+Samma prestandasvit mäter nio riktiga rutter endast med en egen isolerad databas-/HTTP-testinstallation: robots, startsida, galleri, miniatyr, media, inloggad administration och telemetri samt båda anonyma administrationsavvisningarna. Ruttgränserna är 160--300 inkluderade filer och 32--48~MiB toppminne; verkliga produktsvar och avvisningar kontrolleras också. Utan installationen hoppas ruttmätningarna uttryckligen över. Körtid förblir en observation.
 
 CI kör obligatoriska Chromium-testfall i ett eget jobb med \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; saknad, ej startbar eller överhoppad obligatorisk webbläsartäckning får jobbet att misslyckas. Databas- och körmiljöjobb stänger av webbläsare endast i sin egen miljö. Lokal webbläsarupptäckt förblir valfri. Arbetsflödesstartarnas \codeword{--quick} delegerar direkt till snabbprofilen utan att skapa databas eller bakgrundsprocess. Se \filepath{TESTING.md} för gränser och \filepath{docs/GALLERY_WORKFLOWS.md} för isolerad kvalificering.
 
