@@ -152,6 +152,13 @@ export function setupGalleryLightbox() {
     );
     // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
     const lightboxGalleryMapPayloadPromises = new Map();
+
+    // Maps also run on pages with no photo viewer, so their state must exist before the early return.
+    // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
+    const galleryLeafletViewportState = new Map();
+
+    // Runtime-only follow-current-location preference. It starts disabled on every page load.
+    const galleryLeafletFollowCurrentLocationState = {enabled: false};
         /**
      * Normalize the browsing mode emitted by PHP before it drives DOM behavior.
      *
@@ -636,6 +643,19 @@ export function setupGalleryLightbox() {
             overlay.galleryLeafletMap.remove();
             overlay.galleryLeafletMap = null;
         }
+        const mapOverlay = document.querySelector('[data-map-overlay]');
+        if (mapOverlay?.galleryMapOverlayCloseController) {
+            mapOverlay.galleryMapOverlayCloseController.abort();
+            mapOverlay.galleryMapOverlayCloseController = null;
+        }
+        if (mapOverlay?.galleryLeafletMap) {
+            mapOverlay.galleryLeafletMap.remove();
+            mapOverlay.galleryLeafletMap = null;
+        }
+        if (mapOverlay instanceof HTMLElement) {
+            mapOverlay.hidden = true;
+        }
+        document.body.classList.remove('has-map-overlay');
     };
 
     if (!overlay || cards.length === 0) {
@@ -6427,12 +6447,6 @@ export function setupGalleryLightbox() {
 
         return window.galleryMapMarkerIcons[markerRole];
     }
-
-    // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
-    const galleryLeafletViewportState = new Map();
-
-    // Runtime-only follow-current-location preference. It starts disabled on every page load.
-    const galleryLeafletFollowCurrentLocationState = {enabled: false};
 
         /**
      * Build a stable runtime key for one map view.
