@@ -41,6 +41,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+// Keep active/last state lookups available without including worker state-machine parts.
+require_once __DIR__ . '/updates_job_lookup.php';
+
 // This module is split into focused part files under app/services/updates_jobs/.
 // Per-request time budget and runtime limit resolution.
 require_once __DIR__ . '/updates_jobs/budget.php';

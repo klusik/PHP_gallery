@@ -33,7 +33,7 @@ if (count($arguments) !== 1 || preg_match('/\A--group=([a-f0-9]{32})\z/', $argum
 // Match other maintenance CLIs: do not enter browser GET auto-update hooks.
 $_SERVER['REQUEST_METHOD'] = 'CLI';
 try {
-    require dirname(__DIR__) . '/app/bootstrap.php';
+    require dirname(__DIR__) . '/app/bootstrap_full.php';
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();
     }

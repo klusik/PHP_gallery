@@ -88,6 +88,7 @@ namespace {
             $GLOBALS['session_route_enter_path'] = $directory . '/enter-' . $scenario . '-' . $reader;
         }
         require $directory . '/app/bootstrap.php';
+        \Gallery\Core\cms_runtime_kernel()->load('request-diagnostics');
         $traceToken = (string) file_get_contents($directory . '/session-trace-token');
         check(preg_match('/^[a-f0-9]{32}$/D', $traceToken) === 1, 'Application trace ownership unavailable.');
         $_COOKIE[\Gallery\Services\ADMIN_TEST_RUN_COOKIE] = $traceToken;
@@ -119,6 +120,8 @@ namespace {
         }
 
         // Only private fixture controls use this short sequence; product requests use cms_run above.
+        \Gallery\Core\cms_runtime_kernel()->load('request-policy');
+        \Gallery\Core\cms_runtime_kernel()->load('viewer-identity');
         \Gallery\Core\cms_request_trace_begin();
         \Gallery\Core\cms_start_session(\Gallery\Core\cms_config());
         \Gallery\Core\cms_initialize_request();

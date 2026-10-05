@@ -55,9 +55,29 @@ php scripts/audit.php --profile=release
 
 ### Clean PHP include-phase probes
 
-Every profile starts `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. Both stop before `cms_run()`: they do not start a session, load installation configuration, access a database, dispatch a request, or invent route timings.
+Every profile starts `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. These include-only probes stop before `cms_run()` and do not start sessions, load installation configuration, access a database, or dispatch a request. The separate registered runtime-performance suite measures actual route lifecycles through the public entrypoint when the runner receives an owned disposable workflow fixture.
 
-Included PHP files and peak memory are hard ceilings: early runtime is 1 file and 16,777,216 bytes (16 MiB); application bootstrap has a baseline of 533 files, a ceiling of 560, and a 67,108,864-byte (64 MiB) ceiling. Wall time is observational and never compared to a machine-specific limit. Each entry in the audit report's `details.metrics` has `schema_version: 1`, `probe`, `scope: include-only-before-cms_run`, `php_version`, `php_int_size`, `included_php_files`, `included_paths`, `bootstrap_wall_ms`, `peak_memory_bytes`, and `limits`. The compact Markdown report prints raw file counts, byte counts, and wall milliseconds.
+Included PHP files and peak memory are hard ceilings: early runtime is 1 file and 16,777,216 bytes (16 MiB); application bootstrap has a 24-file baseline, a 40-file ceiling, and a 16,777,216-byte (16 MiB) ceiling. Wall time is observational and never compared to a machine-specific limit. Each include-probe entry in the audit report's `details.metrics` has `schema_version: 1`, `probe`, `scope: include-only-before-cms_run`, `php_version`, `php_int_size`, `included_php_files`, `included_paths`, `bootstrap_wall_ms`, `peak_memory_bytes`, and `limits`. The compact Markdown report prints raw file counts, byte counts, and wall milliseconds.
+
+### Route lifecycle performance probes
+
+The registered `runtime-performance` suite runs each route in a fresh isolated PHP child and exercises the real `public/index.php` request path through `cms_run()`. Its nine cases cover robots, home, a seeded public gallery, an authorized thumbnail, authorized media, authenticated Admin dashboard and telemetry, and anonymous denials for both Admin routes. The authenticated cases log in through the disposable fixture and use the session created by that real login. A successful route must return HTTP 2xx and a nonempty body that matches its registered content contract: robots directives, stable product-page markers, or recognized raster-image metadata. The child reports `response_contract_matches`, and a generic error page with HTTP 200 fails this guard. Content validation happens after capturing resource metrics. A denied Admin redirect may return HTTP 302 with an empty body. Route identity, authentication mode, expected and actual outcome, status, included application PHP paths/count, memory, response byte count/hash, content contract, and fatal status are validated in machine-readable JSON. Only included-file count and peak memory are regression ceilings; measured wall time remains observational.
+
+| Route case | Expected context | Maximum included PHP files | Peak-memory ceiling |
+| --- | --- | ---: | ---: |
+| `robots` | Anonymous success | 160 | 32 MiB |
+| `home` | Anonymous success | 230 | 40 MiB |
+| `gallery` | Anonymous success | 300 | 48 MiB |
+| `thumb` | Anonymous success | 200 | 40 MiB |
+| `media` | Anonymous success | 200 | 40 MiB |
+| `admin` | Authenticated success | 270 | 48 MiB |
+| `admin_telemetry` | Authenticated success | 200 | 40 MiB |
+| `admin_denied` | Anonymous denial; same route ceiling as Admin | 270 | 48 MiB |
+| `admin_telemetry_denied` | Anonymous denial; same route ceiling as telemetry | 200 | 40 MiB |
+
+These are in-process application lifecycle measurements, not HTTP-server, network, or TLS latency measurements. The child buffers the response to record body size and SHA-256; it does not retain page contents. When no owned `GALLERY_WORKFLOW_FIXTURE` is available, the route suite reports an explicit `SKIP` rather than treating include-only probes as route coverage.
+
+For local full qualification with a private MySQL server, use the existing disposable workflow wrapper. Set `GALLERY_WORKFLOW_ENABLE=disposable-only` and `GALLERY_WORKFLOW_MYSQL_BIN` to a MySQL 8 `mysqld` executable, then run `php scripts/gallery_workflow_mysql.php --audit`. The wrapper initializes a private data directory, creates a dedicated generated database account, starts the migrated application copy and HTTP fixture, and cleans up its owned resources afterward. The audit receives the fixture identity and runs the route matrix inside that same disposable environment. Never point this workflow at the active Gallery configuration or database. Without this wrapper, ordinary quick/full/release audit runs still execute the include probes and mark the real-route suite `SKIP` when the fixture is absent.
 
 ### PHP worker scheduling
 

@@ -70,9 +70,10 @@ function cms_route_is_read_only_media_asset(string $page): bool
  * Query-string routes remain compatible. Pretty URLs are a convenience layer
  * when Apache rewrite rules are available.
  *
- * @return array Structured result data for the caller.
+ * @return array{page:string,params:array<string,mixed>} Canonical route identifier and normalized URL parameters.
+ * @param callable|null $loadDependencies Optional kernel callback loading public-path dependencies before ambiguous lookups.
  */
-function cms_route_from_request(): array
+function cms_route_from_request(?callable $loadDependencies = null): array
 {
     if (isset($_GET['page'])) {
         return ['page' => (string) $_GET['page'], 'params' => []];
@@ -251,6 +252,9 @@ function cms_route_from_request(): array
             // $typedPageNumber stores an optional clean pagination page number.
             $typedPageNumber = (string) ($gallerySegments[count($gallerySegments) - 1] ?? '');
             if ($typedPageSegment === 'galleries' && preg_match('/^[0-9]+$/', $typedPageNumber) === 1) {
+                if ($loadDependencies !== null) {
+                    $loadDependencies('routing-paths');
+                }
                 // $fullPath stores the complete path so real child galleries keep priority over pagination suffixes.
                 $fullPath = rawurldecode(implode('/', $gallerySegments));
                 // $galleryPath stores the gallery path before the typed pagination suffix.
@@ -261,6 +265,9 @@ function cms_route_from_request(): array
             }
         }
         if (is_string($lastSegment) && preg_match('/^[0-9]+$/', $lastSegment) === 1) {
+            if ($loadDependencies !== null) {
+                $loadDependencies('routing-paths');
+            }
             // $fullPath stores the complete path so numeric image slugs or child galleries keep working.
             $fullPath = rawurldecode(implode('/', $gallerySegments));
             // $fullResolved stores any real image match so numeric image slugs keep working.

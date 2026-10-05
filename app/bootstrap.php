@@ -48,15 +48,13 @@ const CMS_VERSION = '0.118.6';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
+require_once __DIR__ . '/runtime/autoload.php';
+require_once __DIR__ . '/runtime/bridge.php';
+
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('configuration'); require __DIR__ . '/bootstrap/configuration.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('configuration');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('helpers'); require __DIR__ . '/helpers.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('helpers');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('database'); require __DIR__ . '/database.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('database');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('security'); require __DIR__ . '/security.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('security');
-function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('migrations'); require __DIR__ . '/migrations.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('migrations');
-function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('services'); require __DIR__ . '/services.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('services');
-function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('views'); require __DIR__ . '/views.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('views');
-function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('integrity'); require __DIR__ . '/integrity.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('integrity');
-function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('controllers'); require __DIR__ . '/controllers.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('controllers');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('routing_bootstrap'); require __DIR__ . '/bootstrap/routing.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('routing_bootstrap');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('session_bootstrap'); require __DIR__ . '/bootstrap/session.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('session_bootstrap');
 function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gallery\Diagnostics\admin_test_run_early_phase_start('request_bootstrap'); require __DIR__ . '/bootstrap/request.php'; function_exists('Gallery\Diagnostics\admin_test_run_early_phase_end') && \Gallery\Diagnostics\admin_test_run_early_phase_end('request_bootstrap');
@@ -68,37 +66,9 @@ function_exists('Gallery\Diagnostics\admin_test_run_early_phase_start') && \Gall
  *
  * The project intentionally uses a small route table instead of a framework so
  * it remains easy to run on shared hosting.
+ * @return void Delegates the request lifecycle to the request-local runtime kernel.
  */
 function cms_run(): void
 {
-    cms_request_trace_begin();
-    if (!cms_has_config()) {
-        cms_redirect_to_installer();
-    }
-
-    // Variable $config stores this steps working value.
-    cms_request_trace_mark('config_load_start');
-    $config = cms_config();
-    cms_request_trace_mark('config_load_end');
-    cms_start_session($config);
-    cms_request_trace_mark('request_initialize_start');
-    $page = cms_initialize_request();
-    cms_request_trace_mark('request_initialize_end', ['page' => $page]);
-    cms_release_read_only_media_session_lock($page);
-    cms_prime_read_only_media_schema_cache($page);
-    cms_request_trace_mark('request_maintenance_start', ['page' => $page]);
-    cms_run_request_maintenance($page);
-    cms_request_trace_mark('request_maintenance_end', ['page' => $page]);
-    if (function_exists('Gallery\Services\admin_test_run_register_final_shutdown_observer')) {
-        \Gallery\Services\admin_test_run_register_final_shutdown_observer();
-    }
-    cms_request_trace_mark('dispatch_start', ['page' => $page]);
-    cms_dispatch_page($page);
-    cms_request_trace_mark('dispatch_end', ['page' => $page]);
-    if (function_exists('Gallery\Services\admin_test_run_response_logical_finish')) {
-        apply_response_header_intents(\Gallery\Services\admin_test_run_response_logical_finish('cms_dispatch_returned', http_response_code() ?: 200));
-    }
-    if (function_exists('Gallery\\Services\\gallery_benchmark_record_request_completion')) {
-        \Gallery\Services\gallery_benchmark_record_request_completion($page);
-    }
+    cms_runtime_kernel()->run();
 }

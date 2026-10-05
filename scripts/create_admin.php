@@ -38,7 +38,7 @@ use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\run_migrations;
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 // Variable $username stores this steps working value.
 $username = $argv[1] ?? null;

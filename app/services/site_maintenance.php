@@ -939,9 +939,11 @@ function site_maintenance_queue_next_chained_slice(): bool
 /**
  * Register an after-response maintenance slice for suitable normal page requests.
  *
- * @param string $page Page number or page data.
+ * @param string $page Canonical route identifier.
+ * @param callable|null $loadDependencies Optional kernel callback for eligible shutdown work.
+ * @return void Registers the existing bounded maintenance callback when eligible.
  */
-function site_maintenance_register_request_trigger(string $page): void
+function site_maintenance_register_request_trigger(string $page, ?callable $loadDependencies = null): void
 {
     if (PHP_SAPI === 'cli') {
         return;
@@ -961,7 +963,7 @@ function site_maintenance_register_request_trigger(string $page): void
     if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
         admin_test_run_record_maintenance_event('site_maintenance', 'scheduled_after_response', ['source' => 'request_trigger_inline']);
     }
-    register_shutdown_function(static function (): void {
+    register_shutdown_function(static function () use ($loadDependencies): void {
         if (!site_maintenance_request_trigger_due()) {
             return;
         }
@@ -976,6 +978,9 @@ function site_maintenance_register_request_trigger(string $page): void
 
         ignore_user_abort(true);
         site_maintenance_finish_response_before_background_work();
+        if ($loadDependencies !== null) {
+            $loadDependencies('site-maintenance-work');
+        }
         site_maintenance_run([
             'source' => 'request_trigger_inline',
             'force' => false,

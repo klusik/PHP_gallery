@@ -49,6 +49,8 @@ use function Gallery\Core\cms_current_version;
 use function Gallery\Core\e;
 use function Gallery\Core\run_migrations;
 
+require_once __DIR__ . '/updates_request.php';
+
 /**
  * Application update service model.
  *
@@ -228,16 +230,6 @@ function application_update_pending(): bool
 }
 
 /**
- * Return true when the application is currently on a beta/manual commit install.
- *
- * @return bool True when the condition matches.
- */
-function application_update_beta_active(): bool
-{
-    return app_setting('application_update_channel', 'stable') === 'beta' && app_setting('application_update_beta_commit', '') !== '';
-}
-
-/**
  * Return the currently installed beta code, if any.
  *
  * @return string Text result for the caller.
@@ -245,26 +237,6 @@ function application_update_beta_active(): bool
 function application_update_beta_commit(): string
 {
     return (string) app_setting('application_update_beta_commit', '');
-}
-
-/**
- * Return true when automatic stable updates are enabled by admin settings.
- *
- * @return bool True when the condition matches.
- */
-function application_autoupdate_enabled(): bool
-{
-    return app_setting('application_autoupdate_enabled', '1') === '1';
-}
-
-/**
- * Persist the automatic stable update setting from the admin maintenance page.
- *
- * @param bool $enabled Enabled flag.
- */
-function set_application_autoupdate_enabled(bool $enabled): void
-{
-    set_app_setting('application_autoupdate_enabled', $enabled ? '1' : '0');
 }
 
 /**
@@ -348,73 +320,6 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
     // $days stores rounded-down elapsed days for stale checks.
     $days = intdiv($hours, 24);
     return t('admin.updates.autoupdate_relative_days', '{count} day(s) ago', ['count' => (string) $days]);
-}
-
-/**
- * Check and install a stable release automatically when the request-time timer allows it.
- *
- * This routine is intentionally conservative: it runs only on safe browser reads,
- * never changes the admin checkbox when beta code is active, and throttles remote
- * checks to one attempt per installation per configured interval.
- *
- * @param int $ttlSeconds Ttl seconds value.
- */
-function application_autoupdate_maybe_run(int $ttlSeconds = 3600, string $requestMethod = 'GET'): void
-{
-    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
-        return;
-    }
-
-    // Finish a previously started background job before considering a new remote check.
-    $activeJob = application_update_active_job();
-    if ($activeJob !== null) {
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_begin', ['budget_seconds' => 3.0]);
-        }
-        application_update_continue_background_job(3.0);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_end', ['budget_seconds' => 3.0]);
-        }
-        return;
-    }
-
-    // $ttlSeconds stores the minimum remote check interval. One hour is the default
-    // so shared hosting installations do not burn anonymous GitHub API quota on
-    // normal page traffic. Manual dry checks intentionally bypass this throttle.
-    $ttlSeconds = max(3600, $ttlSeconds);
-    // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
-    $method = strtoupper(trim($requestMethod));
-    if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {
-        return;
-    }
-
-    $now = time();
-    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
-    if ($lastCheckedAt > 0 && $now - $lastCheckedAt < $ttlSeconds) {
-        return;
-    }
-    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
-    if ($lockUntil > $now) {
-        return;
-    }
-
-    if (application_update_beta_active()) {
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'beta_dry_run']);
-        }
-        application_autoupdate_dry_run(false, $now);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'beta_dry_run']);
-        }
-        return;
-    }
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'stable_installing_check']);
-    }
-    application_autoupdate_run_installing_check(false, $now);
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'stable_installing_check']);
-    }
 }
 
 /**

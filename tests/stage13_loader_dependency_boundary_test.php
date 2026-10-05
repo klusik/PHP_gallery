@@ -55,13 +55,20 @@ foreach (\PhpGallery\MvcBoundary\scan_project($root) as $violation) {
 }
 
 $bootstrap = (string) file_get_contents($root . '/app/bootstrap.php');
-$servicesPos = strpos($bootstrap, "require __DIR__ . '/services.php'");
-$viewsPos = strpos($bootstrap, "require __DIR__ . '/views.php'");
-$controllersPos = strpos($bootstrap, "require __DIR__ . '/controllers.php'");
+$compatibility = (string) file_get_contents($root . '/app/bootstrap_full.php');
+$modelsPos = strpos($compatibility, "require_once __DIR__ . '/models.php'");
+$servicesPos = strpos($compatibility, "require_once __DIR__ . '/services.php'");
+$viewsPos = strpos($compatibility, "require_once __DIR__ . '/views.php'");
+$controllersPos = strpos($compatibility, "require_once __DIR__ . '/controllers.php'");
 $routingPos = strpos($bootstrap, "require __DIR__ . '/bootstrap/routing.php'");
-if ($servicesPos === false || $viewsPos === false || $controllersPos === false || $routingPos === false
-    || !($servicesPos < $viewsPos && $viewsPos < $controllersPos && $controllersPos < $routingPos)) {
-    $violations[] = 'Bootstrap layer order must be Services -> Views -> Controllers -> routing';
+if ($modelsPos === false || $servicesPos === false || $viewsPos === false || $controllersPos === false || $routingPos === false
+    || !($modelsPos < $servicesPos && $servicesPos < $viewsPos && $viewsPos < $controllersPos)) {
+    $violations[] = 'Explicit full compatibility layer order must be Models -> Services -> Views -> Controllers';
+}
+foreach (['models.php', 'services.php', 'views.php', 'controllers.php'] as $umbrella) {
+    if (str_contains($bootstrap, "'/" . $umbrella . "'")) {
+        $violations[] = 'Ordinary web bootstrap must not include umbrella: ' . $umbrella;
+    }
 }
 
 $servicesLoader = (string) file_get_contents($root . '/app/services.php');

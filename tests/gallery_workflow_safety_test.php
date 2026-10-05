@@ -69,7 +69,7 @@ check(!is_dir($directory), 'Owned fixture cleanup incomplete.');
 $runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
 $mysqlSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_mysql.php');
 foreach ([$runnerSource, $mysqlSource] as $source) {
-    check(str_contains($source, "['--development', '--audit', '--release']")
+    check(str_contains($source, "['--development', '--audit', '--release', '--route-probes']")
         && str_contains($source, "if ((\$argv[1] ?? '') === '--quick')")
         && str_contains($source, "[__DIR__ . '/audit.php', '--profile=quick']"),
         'Qualification modes and direct quick delegation must remain explicit.');
@@ -78,7 +78,7 @@ check(str_contains($runnerSource, "'--release' => 'release'") && !str_contains($
     'Release mode must select release without a preceding full audit.');
 check(str_contains($runnerSource, "'--profile=' . \$profile"),
     'Selected profile must flow to the authoritative audit.');
-check(str_contains($mysqlSource, "\$argv[1] === '--development' ? 480 : 1320"),
+check(str_contains($mysqlSource, "\$mode === '--development' ? 480 : 1320"),
     'Both central audit modes require the full timeout budget.');
 
 echo "PASS gallery workflow opt-in connection identity cleanup and audit-profile guards\n";

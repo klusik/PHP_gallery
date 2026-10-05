@@ -19,7 +19,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require dirname(__DIR__) . '/app/bootstrap.php';
+require dirname(__DIR__) . '/app/bootstrap_full.php';
 
 try {
     $arguments = array_slice($argv, 1);

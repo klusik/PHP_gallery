@@ -97,6 +97,21 @@ final class Http
         check($response['status'] === 302, 'Real administrator login failed.');
         return $this->token('/index.php?page=admin_new_gallery&panel=1');
     }
+
+    /** Return one cookie value from this loopback-only fixture client.
+     * @param string $name Exact cookie name captured from the isolated server.
+     * @return ?string Cookie value, or null when the fixture did not issue it.
+     */
+    public function cookieValue(string $name): ?string
+    {
+        foreach (curl_getinfo($this->handle, CURLINFO_COOKIELIST) ?: [] as $line) {
+            $fields = explode("\t", $line);
+            if (count($fields) >= 7 && $fields[5] === $name) {
+                return $fields[6];
+            }
+        }
+        return null;
+    }
 }
 
 /** Verify the completion envelope returned by the application, without printing its contents. */

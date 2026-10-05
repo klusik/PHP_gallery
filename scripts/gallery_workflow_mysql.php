@@ -33,7 +33,16 @@ use function GalleryWorkflow\check;
 use function GalleryWorkflow\freePort;
 use function GalleryWorkflow\removeFixture;
 
-/** Run one bounded child without forwarding potentially sensitive server diagnostics. */
+/**
+ * Run one bounded child without forwarding potentially sensitive server diagnostics.
+ *
+ * @param array<int,string> $command Argument vector for the child process.
+ * @param string $directory Owned temporary directory for private child diagnostics.
+ * @param array<string,string|false> $environment Environment passed only to this child.
+ * @param int $timeout Maximum child runtime in seconds.
+ * @param bool $reports Whether to print safe PASS/FAIL/SKIP/BLOCKED report lines.
+ * @return void Stops the workflow with an exception when the child fails or times out.
+ */
 function gallery_workflow_mysql_child(array $command, string $directory, array $environment, int $timeout, bool $reports = false): void
 {
     $stream = fopen($directory . '/command.log', 'w+b');
@@ -66,7 +75,13 @@ $serverVerified = false;
 $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    $mode = (string) ($argv[1] ?? '');
+    check(in_array($mode, ['--development', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
+    $routeProbeLabel = '';
+    if ($mode === '--route-probes') {
+        $routeProbeLabel = trim((string) ($argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE') ?: ''));
+        check(in_array($routeProbeLabel, ['phase3', 'phase4', 'phase5', 'after'], true), 'Route probe evidence label must be phase3, phase4, phase5, or after.');
+    }
     check(getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only', 'Explicit disposable opt-in required.');
     $binary = (string) getenv('GALLERY_WORKFLOW_MYSQL_BIN');
     check(is_file($binary) && in_array(strtolower(basename($binary)), ['mysqld.exe', 'mysqld'], true), 'A MySQL 8 server executable is required.');
@@ -106,9 +121,18 @@ try {
     $environment = array_merge(getenv(), ['GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1', 'GALLERY_WORKFLOW_DB_PORT' => (string) $port,
         'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner', 'GALLERY_WORKFLOW_DB_PASSWORD' => $password]);
     echo "PASS gallery workflow private MySQL initialized with dedicated account\n";
-    $stage = $argv[1] === '--development' ? 'new workflow development checks' : 'central audit with disposable database';
-    gallery_workflow_mysql_child([PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', $argv[1]], $directory, $environment,
-        $argv[1] === '--development' ? 480 : 1320, true);
+    $stage = match ($mode) {
+        '--development' => 'new workflow development checks',
+        '--route-probes' => 'route lifecycle probes with disposable database',
+        default => 'central audit with disposable database',
+    };
+    $childCommand = [PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', $mode];
+    if ($mode === '--route-probes') {
+        $childCommand[] = $routeProbeLabel;
+        $environment['PHP_GALLERY_ROUTE_PROBE_EVIDENCE'] = $routeProbeLabel;
+    }
+    gallery_workflow_mysql_child($childCommand, $directory, $environment,
+        $mode === '--development' ? 480 : 1320, true);
 } catch (Throwable $exception) {
     fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at line ' . $exception->getLine() . ' code ' . (string) $exception->getCode() . "\n");
     $exit = 1;

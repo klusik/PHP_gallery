@@ -320,6 +320,7 @@ $root = dirname(__DIR__);
 // The updater job service is split into part files; assert against the whole module.
 $jobsSource = module_source($root . '/app/services/updates_jobs.php');
 $installSource = (string) file_get_contents($root . '/app/services/updates_install.php');
+$requestSource = (string) file_get_contents($root . '/app/services/updates_request.php');
 $controllerSource = (string) file_get_contents($root . '/app/controllers/updates.php');
 $viewSource = (string) file_get_contents($root . '/app/views/admin_updates.php');
 $adminAuthSource = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
@@ -349,7 +350,7 @@ foreach (['install_application_update', 'install_application_beta', 'restore_app
     $snippet = substr($installSource, (int) $position, 700);
     assert_updater_resumable(str_contains($snippet, 'application_update_start_job('), 'Legacy updater entrypoint bypasses durable jobs: ' . $entrypoint);
 }
-assert_updater_resumable(str_contains($installSource, 'application_update_continue_background_job(3.0)'), 'Background request flow no longer advances bounded durable jobs.');
+assert_updater_resumable(str_contains($requestSource, 'application_update_continue_background_job(3.0)'), 'Background request flow no longer advances bounded durable jobs.');
 assert_updater_resumable(str_contains($jobsSource, "time() - (int) (\$job['updated_at'] ?? 0) < 60") && str_contains($jobsSource, "application_update_retry_job((string) \$job['id'])"), 'Background failure recovery bypasses safe retry cleanup or retry backoff.');
 assert_updater_resumable(str_contains($statusSource, 'float $requestedBudgetSeconds = 8.0') && str_contains($statusSource, '$branchDeadline'), 'Remote update discovery no longer has a per-request wall-clock budget shared across branches.');
 assert_updater_resumable(str_contains($patchNotesSource, 'application_update_remote_timeout_seconds($deadline, 5)'), 'Optional pending patch-note discovery must fit within the shared bounded timeout.');

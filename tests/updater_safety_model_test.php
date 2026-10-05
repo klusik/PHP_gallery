@@ -32,7 +32,7 @@ require_once __DIR__ . '/../app/services/updates.php';
 
 $updatesController = (string) file_get_contents(__DIR__ . '/../app/controllers/updates.php');
 $updatesView = (string) file_get_contents(__DIR__ . '/../app/views/admin_updates.php');
-if (!str_contains($updatesController, "$action === 'cleanup_malformed_root_files'") || !str_contains($updatesView, 'value="cleanup_malformed_root_files"')) {
+if (!str_contains($updatesController, "\$action === 'cleanup_malformed_root_files'") || !str_contains($updatesView, 'value="cleanup_malformed_root_files"')) {
     throw new RuntimeException('Advanced updater tools no longer expose malformed root-file cleanup.');
 }
 
@@ -64,8 +64,13 @@ foreach (['app/app', 'app/public', 'app/index.php'] as $knownWrongPath) {
 
 $tempRoot = sys_get_temp_dir() . '/php-gallery-incomplete-update-' . bin2hex(random_bytes(6));
 mkdir($tempRoot, 0775, true);
+$runtimePaths = ['app/bootstrap_full.php', 'app/runtime/autoload.php', 'app/runtime/bridge.php',
+    'app/runtime/modules.php', 'app/runtime/Kernel.php', 'app/runtime/ModuleLoader.php',
+    'app/runtime/Request.php', 'app/runtime/Router.php', 'app/runtime/RouteDefinition.php',
+    'app/runtime/RouteRegistry.php', 'app/services/updates_request.php',
+    'app/services/updates_job_lookup.php'];
 try {
-    foreach ([
+    foreach (array_merge($runtimePaths, [
         'index.php',
         'public/index.php',
         'app/bootstrap.php',
@@ -120,7 +125,7 @@ try {
         'app/views/layout.php',
         'app/lang/en.php',
         'public/assets/styles.css',
-    ] as $path) {
+    ]) as $path) {
         $absolute = $tempRoot . '/' . $path;
         $directory = dirname($absolute);
         if (!is_dir($directory)) {
@@ -137,6 +142,21 @@ try {
     }
     if (!$failedAsExpected) {
         throw new RuntimeException('Incomplete update snapshot was not rejected for missing app/views.php.');
+    }
+    file_put_contents($tempRoot . '/app/views.php', "<?php\n");
+    application_update_assert_source_root($tempRoot);
+    foreach ($runtimePaths as $path) {
+        unlink($tempRoot . '/' . $path);
+        $refused = false;
+        try {
+            application_update_assert_source_root($tempRoot);
+        } catch (RuntimeException $exception) {
+            $refused = str_contains($exception->getMessage(), $path);
+        }
+        file_put_contents($tempRoot . '/' . $path, "<?php\n");
+        if (!$refused) {
+            throw new RuntimeException('Updater accepted a snapshot missing required runtime file: ' . $path);
+        }
     }
 } finally {
     $iterator = new RecursiveIteratorIterator(

@@ -22,6 +22,10 @@ return [
     // Full/release still discover every standalone PHP regression test.
     'quick_tests' => [
         'audit_runner_test.php',
+        'runtime_kernel_test.php',
+        'runtime_dependencies_test.php',
+        'runtime_route_probe_test.php',
+        'runtime_module_plan_test.php',
         'module_split_path_resolution_test.php',
         'feature_policy_core_test.php',
         'feature_policy_adapters_test.php',
@@ -51,6 +55,7 @@ return [
     ],
     // Exclusive means drain active jobs, run alone, then resume parallel dispatch.
     'serial_tests' => [
+        'runtime_module_plan_test.php' => 'Compiles the dependency inventory and runs its own bounded four-worker module fixtures; exclusive execution avoids nested pool contention.',
         'audit_runner_test.php' => 'Runs its own bounded scheduler fixtures and timeout children; isolation prevents nested-pool oversubscription.',
         'session_contention_test.php' => 'Measures lock acquisition and request timing; concurrent regression CPU load changes its control measurements.',
         'session_route_contention_test.php' => 'Measures actual-route session contention and mutates the shared disposable workflow fixture.',

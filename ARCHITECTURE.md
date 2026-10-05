@@ -141,8 +141,10 @@ browser request
   -> app/early_runtime.php
   -> app/bootstrap.php
   -> cms_run()
-  -> cms_route_from_request()
-  -> route handler from cms_run() route table
+  -> Gallery\Core\Kernel
+  -> Request -> Router -> RouteRegistry
+  -> ModuleLoader loads the route's reviewed module plan
+  -> canonical route entry in app/bootstrap/dispatch.php
   -> controller function
   -> service functions
   -> view helpers or JSON/file response
@@ -164,30 +166,44 @@ Root-level operational files:
 
 ## Bootstrap Responsibilities
 
-`app/bootstrap.php` is the thin runtime coordinator. Focused modules under `app/bootstrap/` own configuration loading, request preparation, session startup, routing, maintenance scheduling, and dispatch while preserving the original entrypoint contract. The coordinator does the following:
+`app/bootstrap.php` is the compatibility bootstrap for the ordinary public request. It loads the small `Gallery\Core` runtime and the shared request, security, configuration, session, maintenance, and dispatch boundaries. `cms_run()` delegates to the request-local `Kernel`, which preserves the established request lifecycle while loading only the logical feature modules needed for the selected route.
 
-1. Defines application constants.
-2. Requires core files in a fixed order.
-3. Locates and loads `config.php`, falling back to `config.example.php` for tooling.
-4. Starts the admin session with durable cookie settings.
-5. Resolves query-string or pretty URL routing.
-6. Boots translations for the current request.
-7. Sends security headers.
-8. Runs lightweight automatic update checks when enabled.
-9. Dispatches the request to a controller function from the route table.
+The request kernel consists of `Request`, `Router`, `RouteDefinition`, `RouteRegistry`, `ModuleLoader`, and `Kernel` under `app/runtime/`. `app/runtime/bridge.php` connects existing procedural helpers and dispatch code to the kernel; `app/runtime/autoload.php` provides zero-install class loading. The canonical route table and its security preflights remain in `app/bootstrap/dispatch.php`. Existing procedural controller functions remain the handlers, so the kernel changes loading and lifecycle ownership without requiring a controller rewrite.
 
-Loaded core files:
+`app/runtime/modules.php` is a checked-in reviewed loading plan. Development tooling compiles it from `scripts/runtime_dependencies.php` and `scripts/runtime_module_roots.php`; `scripts/runtime_dynamic_dependencies.php` records reviewed dynamic-call targets. Compilation detects new or stale unreviewed dynamic callback/class-site signatures and requires explicit targets for those sites. Ordinary dynamic method calls are covered through their reviewed class closures. Production requests read the generated map; they do not scan source files, compile dependency graphs, or fall back to loading every controller, service, model, view, migration, and integrity module. PHP 8.1 remains sufficient and production installation requires no Composer or Node build. Public requests never load the umbrella files. `app/bootstrap_full.php` is an explicit convenience for CLI/test consumers that need the complete procedural API; existing consumers may continue to include individual compatibility umbrellas directly.
+
+Early Admin Test Run instrumentation in `app/diagnostics/admin_test_run_early.php` belongs to the public front controller, which includes and initializes it before bootstrap. Selective domain plans exclude this optional transport owner; direct bootstrap consumers retain the existing guarded hook behavior. ModuleLoader records the actual `runtime_module.<id>` include phases when early instrumentation is active.
+
+Automatic-update request eligibility lives in `app/services/updates_request.php`. Its active-job lookup uses `updates_job_lookup.php` before method, preference and timer gates. This eligibility path loads the `updater-work` module only for active or due work. Updater administration routes may also load their owned implementation. The legacy `updates_jobs.php` entrypoint requires the same lookup owner for compatibility.
+
+The bootstrap and request kernel retain this order:
+
+1. Bootstrap defines application constants and loads core primitives, the class autoloader, and procedural transport boundaries.
+2. `cms_run()` obtains the request-local kernel and calls `Kernel::run()`.
+3. The kernel loads database observers and opted-in diagnostics, checks configuration, loads mandatory request policy, and starts the Admin session.
+4. The existing query/pretty-URL parser creates a `Request` snapshot. Ambiguous numeric gallery paths explicitly load the path-lookup module before querying.
+5. The registry selects route metadata before feature controller loading. Request initialization retains schema observation, SEO policy, translation, Viewer identity restoration, and security headers; read-only media then releases its session lock.
+6. Update and maintenance triggers retain their eligibility and active-job ordering. Eligible updater work and scheduled shutdown work load their declared execution modules through the same kernel.
+7. Dispatch retains crawler headers, capability checks, and public visibility/access/NSFW preflight before the controller can act.
+8. The module loader validates and loads the selected domain plan, verifies the procedural handler, and dispatches it. Existing controllers keep HTML/JSON/file response ownership.
+
+Shared request-infrastructure files loaded before route selection:
 
 ```text
+app/runtime/autoload.php
+app/runtime/bridge.php
+app/bootstrap/configuration.php
 app/helpers.php
 app/database.php
 app/security.php
-app/migrations.php
-app/services.php
-app/views.php
-app/integrity.php
-app/controllers.php
+app/bootstrap/routing.php
+app/bootstrap/session.php
+app/bootstrap/request.php
+app/bootstrap/maintenance.php
+app/bootstrap/dispatch.php
 ```
+
+The full procedural umbrellas (`models.php`, `services.php`, `views.php`, `controllers.php`, `migrations.php`, and `integrity.php`) are not loaded by public requests. `app/bootstrap_full.php` is the explicit convenience for consumers that need them together; existing CLI/test consumers that include individual compatibility umbrellas remain supported. Feature modules are loaded on demand by `ModuleLoader` for web routes.
 
 
 ## Localization Model
@@ -218,7 +234,7 @@ Selector appearance is stored as one normalized `public_language_selector_design
 
 ## Routing Model
 
-Routing is intentionally simple. `cms_route_from_request()` converts the incoming request into a page name and parameter list. `cms_run()` maps the page name to a controller function.
+Routing keeps its established route inventory and transport rules. `cms_route_from_request()` normalizes query-string or pretty-path input, the `Router` resolves the resulting page through `RouteRegistry`, and the existing route entry in `app/bootstrap/dispatch.php` retains authorization and preflight ownership. The kernel loads the route's logical module plan and invokes the existing procedural controller function.
 
 Two routing styles are supported.
 
@@ -246,7 +262,7 @@ Pretty URL generation is controlled by URL rewrite settings in `app/services/app
 
 ## Main Route Groups
 
-The definitive route table and request dispatch live in `app/bootstrap/dispatch.php`, with path interpretation in `app/bootstrap/routing.php`. `cms_run()` remains the stable coordinator called by the public entrypoint. Important groups are listed here for orientation.
+The definitive route table and request dispatch live in `app/bootstrap/dispatch.php`, with path interpretation in `app/bootstrap/routing.php`. `cms_run()` remains the stable public compatibility entrypoint and delegates to `Gallery\Core\Kernel`. Important route groups are listed here for orientation.
 
 ### Public gallery routes
 
@@ -1916,7 +1932,7 @@ Tests live in `tests/`. Current tests are direct PHP scripts rather than a PHPUn
 
 `scripts/audit.php` is the canonical source-tree quality gate. The `quick` profile uses the curated `php-fast` subset from `scripts/audit_php_registry.php`; `full` and `release` retain the complete PHP regression suite, advisory source inventory, and WinApp coverage. `release` adds release checks. `scripts/audit_registry.php` owns suite/profile membership and exceptional invocations, while `scripts/audit_php_registry.php` owns the fast list and serial-test reasons. PHP suites use a portable bounded `proc_open` worker pool (default four, configurable from one through eight); exclusive entries drain the pool before running alone, and results remain in input order. Successful child stdout is collapsed into suite counts, while Markdown/JSON summaries and drill-down logs are written under `cache/test-audit/`. PASS/FAIL/SKIP/BLOCKED remain distinct so unavailable MySQL/browser/GD coverage cannot be misreported as a passing assertion. `tests/run.php` is a compatibility wrapper for the complete PHP-regression suite only. Deployment filtering still treats `tests/` as source-review material: it is excluded by default and may be included only in an explicitly opted-in local folder or ZIP, never an FTP deployment.
 
-Every profile also runs fresh-child probes for the actual early-runtime and application-bootstrap include phases. The early-runtime limits are one included PHP file and 16 MiB peak memory; the application-bootstrap baseline is 533 files with ceilings of 560 files and 64 MiB. Both stop before `cms_run()`, database work, sessions, or route dispatch. Wall time is recorded as an observation, not a host-dependent gate. The report schema and exact probes are documented in [TESTING.md](TESTING.md).
+Every profile runs fresh-child probes for the early-runtime and application-bootstrap include phases. The early-runtime ceiling is one included PHP file and 16 MiB peak memory. The small application-bootstrap phase has a baseline of 24 files and ceilings of 40 files and 16 MiB. These include-only probes stop before `cms_run()`. The registered runtime-performance suite also measures nine representative route lifecycles when an owned disposable database/HTTP fixture is available; without one, it reports an explicit SKIP. Route ceilings are 160 files/32 MiB for robots, 230/40 MiB for home, 300/48 MiB for gallery, 200/40 MiB for thumbnail and media, 270/48 MiB for Admin, and 200/40 MiB for Admin telemetry; anonymous Admin denials use their corresponding Admin ceilings. Wall time is observational in both suites. See [TESTING.md](TESTING.md) for fixture setup, schema, and measurement limits.
 
 Examples:
 

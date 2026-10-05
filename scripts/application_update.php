@@ -35,7 +35,7 @@ declare(strict_types=1);
 // Prevent bootstrap's browser-request auto-update hook from treating this CLI process as a GET request.
 $_SERVER['REQUEST_METHOD'] = 'CLI';
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 use function Gallery\Services\application_autoupdate_enabled;
 use function Gallery\Services\application_autoupdate_run_installing_check;

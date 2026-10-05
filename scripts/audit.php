@@ -71,6 +71,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/audit_lib.php';
+require_once __DIR__ . '/audit_route_performance.php';
 
 $registryPath = __DIR__ . '/audit_registry.php';
 if (!is_file($registryPath)) {
@@ -365,7 +366,7 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
 }
 
 /**
- * Measure the real bootstrap include phases without installation or request side effects.
+ * Measure include phases and real route lifecycles when an owned disposable fixture is supplied.
  *
  * @param array<string,mixed> $registry Registered probes and deterministic regression ceilings.
  * @return array<string,mixed> Normalized suite result with raw clean-process metrics.
@@ -377,10 +378,10 @@ function audit_run_runtime_performance(array $registry): array
     $definitions = $registry['performance_probes'] ?? [];
     $metrics = [];
     $problems = [];
-    $counts = ['passed' => 0, 'failed' => 0, 'blocked' => 0, 'total' => count($definitions)];
-    $log = ['Bootstrap include phases; cms_run(), database, session and route dispatch are not executed.'];
+    $counts = ['passed' => 0, 'failed' => 0, 'blocked' => 0, 'skipped' => 0, 'total' => count($definitions)];
+    $log = ['Fresh-child include-only bootstrap probes; route probes below execute cms_run() and use the owned disposable database/session when available.'];
     if ($definitions === []) {
-        return task_result('runtime-performance', 'Bootstrap performance probes', STATUS_BLOCKED, 0.0, [], 'No bootstrap performance probes registered.');
+        return task_result('runtime-performance', 'Runtime performance probes', STATUS_BLOCKED, 0.0, [], 'No bootstrap performance probes registered.');
     }
     foreach ($definitions as $id => $definition) {
         $process = run_process([PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $id], $root, 30);
@@ -408,9 +409,82 @@ function audit_run_runtime_performance(array $registry): array
         $log[] = '[' . $status . '] ' . $id . ' exit=' . $process['exit_code'];
         $log[] = $output;
     }
+    $expectedRouteIds = ['robots', 'home', 'gallery', 'thumb', 'media', 'admin', 'admin_telemetry', 'admin_denied', 'admin_telemetry_denied'];
+    $routeDefinitions = $registry['route_performance_probes'] ?? null;
+    $definitionIds = is_array($routeDefinitions) ? array_keys($routeDefinitions) : [];
+    $sortedDefinitionIds = $definitionIds;
+    $sortedExpectedIds = $expectedRouteIds;
+    sort($sortedDefinitionIds, SORT_STRING);
+    sort($sortedExpectedIds, SORT_STRING);
+    $validDefinitions = is_array($routeDefinitions) && $sortedDefinitionIds === $sortedExpectedIds;
+    if ($validDefinitions) {
+        foreach ($expectedRouteIds as $routeId) {
+            if (!is_array($routeDefinitions[$routeId] ?? null)) {
+                $validDefinitions = false;
+                break;
+            }
+        }
+    }
+    $counts['total'] += count($expectedRouteIds);
+    if (!$validDefinitions) {
+        $counts['failed'] += count($expectedRouteIds);
+        $problems[] = 'Route performance registry must define the complete expected route matrix.';
+        $log[] = '[FAIL] Route performance registry is missing, malformed, or incomplete.';
+    } elseif (getenv('GALLERY_WORKFLOW_FIXTURE') === false || getenv('GALLERY_WORKFLOW_FIXTURE') === '') {
+        $counts['skipped'] += count($expectedRouteIds);
+        $log[] = '[SKIP] All nine real route lifecycles require an explicitly owned disposable workflow fixture.';
+    } else {
+        $process = run_process([PHP_BINARY, $root . '/scripts/audit_route_performance.php'], $root, 600);
+        $report = json_decode($process['stdout'], true);
+        $routeMetrics = is_array($report) ? ($report['routes'] ?? null) : null;
+        $validEnvelope = is_array($report)
+            && ($report['schema_version'] ?? null) === 1
+            && ($report['scope'] ?? null) === 'disposable-mysql-cms-run-route-lifecycle'
+            && ($report['status'] ?? null) === 'PASS';
+        $validMatrix = process_status($process) === STATUS_PASS && $validEnvelope
+            && is_array($routeMetrics) && array_is_list($routeMetrics)
+            && count($routeMetrics) === count($expectedRouteIds);
+        if (!$validEnvelope) {
+            $problems[] = 'Real route matrix report envelope has an invalid schema, scope, or status.';
+        }
+        if (!is_array($routeMetrics) || !array_is_list($routeMetrics)) {
+            $problems[] = 'Real route matrix must contain a list of measurements.';
+        }
+        $seen = [];
+        foreach (is_array($routeMetrics) ? $routeMetrics : [] as $metric) {
+            $id = is_array($metric) ? ($metric['probe'] ?? '') : '';
+            if (!is_string($id) || isset($seen[$id]) || !isset($routeDefinitions[$id])) {
+                $validMatrix = false;
+                continue;
+            }
+            $seen[$id] = true;
+            $errors = \PhpGallery\Audit\route_metric_problems($metric, $id, $routeDefinitions[$id]);
+            if ($errors !== []) {
+                $validMatrix = false;
+                foreach ($errors as $error) $problems[] = $id . ': ' . $error;
+            }
+            $metric['limits'] = $routeDefinitions[$id];
+            $metrics[] = $metric;
+            $log[] = '[' . ($errors === [] ? STATUS_PASS : STATUS_FAIL) . '] route ' . $id
+                . ' files=' . ($metric['included_php_files'] ?? '?')
+                . ' peak=' . ($metric['peak_memory_bytes'] ?? '?')
+                . ' wall_ms=' . ($metric['wall_ms'] ?? '?');
+        }
+        if (count($seen) !== count($expectedRouteIds)) {
+            $validMatrix = false;
+        }
+        if (!$validMatrix) {
+            $counts['failed'] += count($expectedRouteIds);
+            $problems[] = 'Real route matrix failed, was incomplete, or contained invalid/duplicate identities.';
+            $log[] = audit_process_output($process);
+        } else {
+            $counts['passed'] += count($expectedRouteIds);
+        }
+    }
     $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
-    return task_result('runtime-performance', 'Bootstrap performance probes', $status, microtime(true) - $started, $counts,
-        $counts['passed'] . '/' . count($definitions) . ' include phases; wall time observational', audit_write_log('runtime-performance', $log),
+    return task_result('runtime-performance', 'Runtime performance probes', $status, microtime(true) - $started, $counts,
+        $counts['passed'] . '/' . $counts['total'] . ' measurements; ' . $counts['skipped']
+            . ' route cases skipped; wall time observational', audit_write_log('runtime-performance', $log),
         ['problems' => $problems, 'metrics' => $metrics]);
 }
 
@@ -937,7 +1011,7 @@ function audit_suite_console_label(string $suiteId): string
     return match ($suiteId) {
         'php-regression' => 'PHP regression',
         'php-fast' => 'PHP regression (fast)',
-        'runtime-performance' => 'Bootstrap performance probes',
+        'runtime-performance' => 'Runtime performance probes',
         'mvc-boundaries' => 'MVC layer boundaries',
         'source-contract-inventory' => 'Source contract inventory',
         'python-import-policy' => 'Python import policy (all sources)',

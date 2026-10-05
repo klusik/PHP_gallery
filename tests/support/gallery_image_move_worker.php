@@ -25,7 +25,7 @@ if (!preg_match('/^[a-f0-9]{24}$/D', $resultToken)) {
 }
 $resultPath = $directory . '/move-worker-result-' . $resultToken . '.json';
 chdir($directory);
-require $directory . '/app/bootstrap.php';
+require $directory . '/app/bootstrap_full.php';
 
 try {
     if (($argv[1] ?? '') === 'recover') {

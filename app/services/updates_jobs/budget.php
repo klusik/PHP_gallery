@@ -46,19 +46,6 @@ use ZipArchive;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
- * Return the update workspace used for jobs, archives, extracts, and rollback data.
- *
- * @return string Absolute filesystem path.
- */
-function application_update_jobs_root(): string
-{
-    $root = application_update_project_root() . '/cache/updates';
-    application_update_ensure_dir($root);
-    application_update_ensure_dir($root . '/jobs');
-    return $root;
-}
-
-/**
  * Return a conservative wall-clock budget for one update worker request.
  *
  * PHP's max_execution_time is only one possible limit. Reverse proxies, FastCGI,

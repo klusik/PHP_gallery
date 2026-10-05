@@ -150,12 +150,13 @@ foreach ([
 
 refactor_test_contains('scripts/generate_manifest.php', "'#^app/bootstrap/config\\.php$#'");
 
-$bootstrap = refactor_test_read('app/bootstrap.php');
+refactor_test_contains('app/bootstrap.php', 'cms_runtime_kernel()->run();');
+$bootstrap = refactor_test_read('app/runtime/Kernel.php');
 $orderedCalls = [
     'cms_start_session($config);',
-    '$page = cms_initialize_request();',
-    'cms_run_request_maintenance($page);',
-    'cms_dispatch_page($page);',
+    '$page = cms_initialize_request($request);',
+    'cms_run_request_maintenance($page, $this);',
+    'cms_dispatch_page($page, $this);',
 ];
 $lastPosition = -1;
 foreach ($orderedCalls as $call) {

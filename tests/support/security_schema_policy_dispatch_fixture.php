@@ -189,6 +189,7 @@ namespace {
     require_once $projectRoot . '/app/controllers/http_helpers.php';
     require_once $projectRoot . '/app/helpers_request.php';
     require_once $projectRoot . '/app/bootstrap/dispatch.php';
+    require_once __DIR__ . '/dispatch_kernel.php';
 
     use function Gallery\Core\cms_dispatch_page;
     use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
@@ -223,7 +224,7 @@ namespace {
 
     http_response_code(200);
     ob_start();
-    cms_dispatch_page($route);
+    cms_dispatch_page($route, \Gallery\Tests\dispatch_fixture_kernel());
     $body = (string) ob_get_clean();
 
     $result = [

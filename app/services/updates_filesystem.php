@@ -132,6 +132,7 @@ function application_update_assert_project_root(string $root): void
  * Validate that the extracted archive looks like a PHP Gallery repository snapshot.
  *
  * @param string $sourceRoot Source root value.
+ * @return void Refuses incomplete application archives before activation.
  */
 function application_update_assert_source_root(string $sourceRoot): void
 {
@@ -140,6 +141,16 @@ function application_update_assert_source_root(string $sourceRoot): void
         'index.php',
         'public/index.php',
         'app/bootstrap.php',
+        'app/bootstrap_full.php',
+        'app/runtime/autoload.php',
+        'app/runtime/bridge.php',
+        'app/runtime/modules.php',
+        'app/runtime/Kernel.php',
+        'app/runtime/ModuleLoader.php',
+        'app/runtime/Request.php',
+        'app/runtime/Router.php',
+        'app/runtime/RouteDefinition.php',
+        'app/runtime/RouteRegistry.php',
         'app/bootstrap/configuration.php',
         'app/bootstrap/dispatch.php',
         'app/bootstrap/maintenance.php',
@@ -184,6 +195,8 @@ function application_update_assert_source_root(string $sourceRoot): void
         'app/services/updates.php',
         'app/services/updates_filesystem.php',
         'app/services/updates_install.php',
+        'app/services/updates_request.php',
+        'app/services/updates_job_lookup.php',
         'app/services/updates_jobs.php',
         'app/services/updates_patch_notes.php',
         'app/services/updates_remote.php',
