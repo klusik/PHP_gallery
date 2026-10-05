@@ -36,20 +36,30 @@ $fixture = null;
 $exit = 0;
 $stage = 'prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    $mode = (string) ($argv[1] ?? '');
+    check(in_array($mode, ['--development', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
+    $routeProbeLabel = '';
+    if ($mode === '--route-probes') {
+        $routeProbeLabel = trim((string) ($argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE') ?: ''));
+        check(in_array($routeProbeLabel, ['phase3', 'phase4', 'phase5', 'after'], true), 'Route probe evidence label must be phase3, phase4, phase5, or after.');
+    }
     $fixture = new Fixture(dirname(__DIR__), getenv());
     $stage = 'provisioning';
     $fixture->start();
     echo "PASS gallery workflow disposable migrated database and isolated HTTP server\n";
-    if ($argv[1] === '--development') {
+    if ($mode === '--development') {
         $stage = 'HTTP development checks';
         $fixture->run([PHP_BINARY, dirname(__DIR__) . '/tests/gallery_workflow_integration_test.php'], 180, $stage, true);
         $stage = 'browser development checks';
         $fixture->run([PHP_BINARY, dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php'], 170, $stage, true);
+    } elseif ($mode === '--route-probes') {
+        $stage = 'route lifecycle probes';
+        $fixture->run([PHP_BINARY, dirname(__DIR__) . '/scripts/audit_route_performance.php', $routeProbeLabel], 600, $stage, true);
+        echo 'PASS gallery workflow route lifecycle probes captured (' . $routeProbeLabel . ")\n";
     } else {
         // The existing PHP regression suite discovers the PHP workflow tests and the real DB races.
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
-        $profile = match ($argv[1]) {
+        $profile = match ($mode) {
             '--release' => 'release',
             default => 'full',
         };

@@ -135,7 +135,7 @@ if (!str_contains($dispatchSource, 'feature_flag_disabled_route_decision(')
     || !str_contains($dispatchSource, 'cms_apply_feature_disabled_route_response(')) {
     $violations[] = 'Dispatch does not own feature-disabled HTTP response application';
 }
-if (!str_contains($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method())')) {
+if (!str_contains($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method(), $kernel')) {
     $violations[] = 'Maintenance bootstrap does not pass request method explicitly to updater policy';
 }
 

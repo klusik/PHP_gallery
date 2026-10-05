@@ -32,7 +32,7 @@ declare(strict_types=1);
 
 $sourcePath = dirname(__DIR__) . '/app/controllers/public_media.php';
 $source = file_get_contents($sourcePath);
-$bootstrapSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap.php');
+$bootstrapSource = file_get_contents(dirname(__DIR__) . '/app/runtime/Kernel.php');
 $sessionSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/session.php');
 $routingSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/routing.php');
 $maintenanceSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/maintenance.php');
@@ -63,10 +63,10 @@ media_session_assert(
         && str_contains($routingSource, "'gallery_branding_asset'"),
     'Read-only media route classification must cover protected thumbnail/media asset endpoints.'
 );
-$initializePosition = strpos($bootstrapSource, '$page = cms_initialize_request();');
+$initializePosition = strpos($bootstrapSource, '$page = cms_initialize_request($request);');
 $earlyReleasePosition = strpos($bootstrapSource, 'cms_release_read_only_media_session_lock($page);');
 $schemaPrimePosition = strpos($bootstrapSource, 'cms_prime_read_only_media_schema_cache($page);');
-$maintenancePosition = strpos($bootstrapSource, 'cms_run_request_maintenance($page);');
+$maintenancePosition = strpos($bootstrapSource, 'cms_run_request_maintenance($page, $this);');
 media_session_assert(
     $initializePosition !== false && $earlyReleasePosition !== false && $schemaPrimePosition !== false && $maintenancePosition !== false
         && $initializePosition < $earlyReleasePosition
@@ -82,7 +82,7 @@ media_session_assert(
     'Early media session release must preserve durable admin-login restoration before closing the writable session.'
 );
 $maintenanceSkip = strpos($maintenanceSource, 'cms_route_is_read_only_media_asset($page)');
-$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method());');
+$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method(), $kernel');
 media_session_assert(
     $maintenanceSkip !== false && $autoupdate !== false && $maintenanceSkip < $autoupdate,
     'Read-only media requests must skip request-triggered updater/maintenance work before it begins.'

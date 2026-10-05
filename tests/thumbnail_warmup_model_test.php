@@ -47,7 +47,7 @@ use function Gallery\Services\thumbnail_warmup_token_is_valid;
 use const Gallery\Services\THUMBNAIL_COMPATIBILITY_LEGACY;
 use const Gallery\Services\THUMBNAIL_COMPATIBILITY_MODERN;
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 /**
  * Assert a condition and stop the script with a readable message when it fails.

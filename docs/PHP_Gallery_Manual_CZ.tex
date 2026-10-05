@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.118.6}
+\newcommand{\version}{0.119}
 \newcommand{\manualdate}{5.~října~2026}
 
 \hypersetup{
@@ -1331,6 +1331,8 @@ Výběr \ui{Otevřít fotografii} ve značce mapy galerie otevře fotografii v~a
 
 \securitynote{Údaje GPS mohou odhalit citlivá místa. Před zveřejněním osobních fotografií by správci měli zkontrolovat zděděná nastavení map, metadata obrázků a~veřejný přístup.}
 
+Galerie s~uloženou letovou trasou může otevřít mapu ještě před nahráním první fotografie, i~na stránce bez lightboxu. Mapa přizpůsobí výřez všem uloženým bodům a~zachová běžné ovládání obnovení výřezu; body trasy nepovažuje za značky fotografií. Bez uložených souřadnic zobrazí běžnou zprávu prázdné mapy. Nadále platí přístupová pravidla galerie a~účinná nastavení map; načítání probíhá na vyžádání.
+
 \subsection{Letové mapy a~navigační data}
 \index{s00207@SimBrief}
 \index{l00074@letové mapy}
@@ -1864,6 +1866,10 @@ Stejný omezený model hlásí připravenost revizí úprav galerií a~nevyřeš
 
 Samostatný přepínač \ui{Vývojová diagnostika} je pouze pro správce. Při povolení pro přihlášeného správce přidává měřicí nástroje prohlížeče pro přednačítání, mezipaměť, paměť, síť a~časování snímků ve veřejném zobrazení, lightboxu a~celé obrazovce. Nezapíná diagnostiku běžným anonymním návštěvníkům. Při běžné správě jej ponechte vypnutý, pokud nezkoumáte vykreslování nebo výkon; měření galerie také závisí na tomto kontextu vývojové diagnostiky.
 
+Panel DEV v~lightboxu se otevře jako kompaktní přehled. Pozastavení a~pokračování ovládá měření, sbalení ponechá přehled a~rozbalení zpřístupní samostatné stránky pro média, přednačítání, grafy, rozměry a~životní cyklus. Stránky se vejdou do dostupného prostoru bez posuvníků, při aktualizaci zachovají vybranou stránku a~zůstávají uvnitř prohlížeče i~v~nativním celoobrazovkovém režimu. Média rozlišují právě zobrazenou fotografii od čekajícího cíle navigace a~uvádějí načtené rozměry, zobrazenou a~požadovanou kvalitu. Popisky zdrojů skrývají přihlašovací údaje, parametry dotazu a~fragmenty adres.
+
+Tři grafy mají samostatné popsané stupnice: odhad pixelové paměti uchovaných dekódovaných obrázků, počet položek mezipaměti a~aktivních oddělených načítání a~intervaly animačních snímků s~referencí 16,7~ms. Nejvýše 90 vzorků po 350~ms pokrývá přibližně 31 sekund. Odhad nezahrnuje živý obrázek, paměť GPU ani haldu prohlížeče; intervaly snímků zahrnují plánování a~omezování na pozadí, nikoli pouze cenu vykreslení. Dřívější úspěšné dekódování neprokazuje současné uchování v~mezipaměti. Nepodporované měření se označí jako nedostupné. Diagnostika pozoruje existující práci bez dalších požadavků na média či metadata; zavření zastaví měření a~úklid odstraní panel. Při vypnutém DEV se modul panelu nenačítá.
+
 Postup \ui{Integrita} v~administraci kontroluje soubory jádra spravované integritou proti instalovanému manifestu a~pomáhá určit neúplné či neočekávané změny nasazení. Jde o~ověřovací nástroj za běhu; souběžné zálohy jsou stále nutné, protože manifest integrity neobsahuje uživatelské fotografie ani nenahrazuje média obnovy.
 
 Je-li dostupná vývojová diagnostika, přihlášený správce může pro aktuální galerii zahájit \ui{Měření načítání veřejné galerie}. Prohlížeč několikrát načte galerii ve skrytém rámci stejného původu s~anonymním náhledem, spojí čítače vykreslování PHP s~časováním navigace prohlížeče a~poté nabídne protokol měření jako JSON. Při porovnávání dvou změn použijte stejnou galerii, režim prezentace a~podmínky sítě a~mezipaměti; měření je nejužitečnější pro porovnání před a~po, nikoli jako univerzální skóre.
@@ -1980,6 +1986,8 @@ Stejná časná běhová hranice převádí nezachycená a~zachytitelná fatáln
 
 \important{Před aktualizací aplikace proveďte souběžnou zálohu všech souvisejících částí. Ponechte ji dostupnou, dokud neověříte běhové kontroly, migrace, veřejné galerie, chráněný přístup, nahrávání a~operace administrace.}
 
+Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové jádro požadavků a~jeho revidovaný plán modulů. Neúplný archiv se odmítne a~připravené soubory zůstanou mimo aktivní instalaci. Při ručním nasazení zachovejte všechny dodávané soubory jádra pohromadě; výměna samotného bootstrapu by zanechala neúplnou aplikaci.
+
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}
 
@@ -2001,6 +2009,8 @@ Následující stránky popisují cestu požadavku používanou aplikací. Jsou 
 
 Běžné požadavky vstupují přes \filepath{public/index.php}; \filepath{index.php} v~kořeni repozitáře je podporovaný kompatibilní vstup pro jiná uspořádání hostingu. Veřejný vstup načítá \filepath{app/early\_runtime.php} před \filepath{app/bootstrap.php} a~obě uspořádání pak dosahují stejného běžného postupu zpracování požadavku.
 
+Malé jádro pro aktuální požadavek v~\filepath{app/runtime/} řídí existující životní cyklus pomocí Request, Router, RouteRegistry a~ModuleLoader a~poté volá procedurální kontroler. Kanonická tabulka tras a~zabezpečení zůstává v~\filepath{app/bootstrap/dispatch.php}. Revidovaný generovaný plán načítá logické moduly podle vybrané trasy; produkce neskenuje zdrojové soubory, nekompiluje závislosti a~nemá náhradní načtení celé aplikace. Stávající PHP~8.1 a~sdílený hosting zůstávají dostačující bez Composeru či sestavení pomocí Node. Starší CLI a~testy mohou pro úplné procedurální API používat \filepath{app/bootstrap\_full.php}.
+
 Inicializace čte místní konfiguraci a~ustavuje kontext požadavku: přístup k~databázi, kde je potřebný, jazyk, stav relace, bezpečnostní předpoklady a~sdílené běhové služby. Směrování poté převádí příchozí URL nebo náhradní podobu s~parametry dotazu na interní trasu a~parametry, například cestu galerie, číslo stránky, velikost média nebo token sdílení. Dispečer zavolá řadič registrovaný pro tuto trasu.
 
 Pořadí je záměrné. Požadavek musí být klasifikován před rozhodnutím kódu, jak jej obsloužit, a~kontroly přístupu musejí proběhnout před sestavením chráněného výstupu. Zdánlivě přímá URL obrázku či náhledu je tedy stále požadavkem aplikace; řadič médií jej před vrácením bajtů autorizuje.
@@ -2009,8 +2019,9 @@ Pořadí je záměrné. Požadavek musí být klasifikován před rozhodnutím k
 browser request
   -> index.php or public/index.php
   -> app/bootstrap.php
-  -> cms_run()
-  -> cms_route_from_request()
+  -> cms_run() -> Gallery\Core\Kernel
+  -> Request -> Router -> RouteRegistry
+  -> ModuleLoader -> app/bootstrap/dispatch.php
   -> controller function
   -> service functions
   -> HTML, JSON, media, archive, or redirect response
@@ -2296,7 +2307,9 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 
 Centrální vstup \filepath{scripts/audit.php} nabízí tři profily. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, poradní inventář, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
 
-Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 560 souborů a~64~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
+Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 40 souborů a~16~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
+
+Stejná sada měření běhového prostředí měří devět skutečných tras pouze s~vlastní izolovanou databázovou a~HTTP testovací instalací: robots, úvod, galerii, náhled, médium, přihlášenou administraci a~telemetrii a~obě odmítnutí anonymní administrace. Limity tras jsou 160--300 zahrnutých souborů a~32--48~MiB špičkové paměti; ověřují se také skutečné produktové odpovědi a~odmítnutí. Bez této instalace jsou měření tras výslovně přeskočena. Doba běhu zůstává pouze pozorováním.
 
 CI spouští povinné testy Chromium v~jedné samostatné úloze s~\codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; chybějící, nespustitelné nebo přeskočené povinné pokrytí úlohu ukončí neúspěchem. Databázové a~běhové úlohy vypínají prohlížeče pouze ve vlastním prostředí. Místní vyhledání prohlížeče zůstává volitelné. Volba \codeword{--quick} spouštěčů pracovních postupů předává řízení přímo rychlému profilu bez vytváření databáze nebo démona. Limity najdete v~\filepath{TESTING.md}, izolovanou kvalifikaci v~\filepath{docs/GALLERY_WORKFLOWS.md}.
 

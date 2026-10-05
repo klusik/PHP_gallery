@@ -1183,8 +1183,10 @@ function admin_log_archive_request_trigger_can_detach_response(): bool
  * Register one after-response archive maintenance cycle when the 24-hour counter is due.
  *
  * @param string $page Current route key.
+ * @param callable|null $loadDependencies Optional kernel callback for eligible shutdown archive work.
+ * @return void Registers the established archive callback after its eligibility checks.
  */
-function admin_log_archive_register_request_trigger(string $page): void
+function admin_log_archive_register_request_trigger(string $page, ?callable $loadDependencies = null): void
 {
     if (PHP_SAPI === 'cli') {
         return;
@@ -1200,7 +1202,7 @@ function admin_log_archive_register_request_trigger(string $page): void
     if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
         admin_test_run_record_maintenance_event('admin_log_archive', 'scheduled_after_response', ['source' => 'request_trigger']);
     }
-    register_shutdown_function(static function (): void {
+    register_shutdown_function(static function () use ($loadDependencies): void {
         if (!admin_log_archive_request_trigger_due()) {
             return;
         }
@@ -1212,6 +1214,9 @@ function admin_log_archive_register_request_trigger(string $page): void
         }
         ignore_user_abort(true);
         admin_log_archive_finish_response_before_background_work();
+        if ($loadDependencies !== null) {
+            $loadDependencies('archive-maintenance-work');
+        }
         admin_log_archive_maintenance_run([
             'source' => 'request_trigger',
             'force' => false,

@@ -42,13 +42,14 @@ function assert_autoupdate_request_latency_safety(bool $condition, string $label
     }
 }
 
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_install.php');
+$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_request.php')
+    . (string) file_get_contents(__DIR__ . '/../app/services/updates_install.php');
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap/maintenance.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/updates.php');
 $dispatchSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 
 assert_autoupdate_request_latency_safety(
-    str_contains($bootstrapSource, 'application_autoupdate_maybe_run(3600, request_method());'),
+    str_contains($bootstrapSource, 'application_autoupdate_maybe_run(3600, request_method(), $kernel'),
     'Request maintenance must use the established automatic-update entry point.'
 );
 
@@ -60,11 +61,20 @@ assert_autoupdate_request_latency_safety(
 );
 
 assert_autoupdate_request_latency_safety(
-    str_contains($serviceSource, "function application_autoupdate_maybe_run(int \$ttlSeconds = 3600, string \$requestMethod = 'GET'): void")
+    str_contains($serviceSource, 'function application_autoupdate_maybe_run(')
+        && str_contains($serviceSource, 'int $ttlSeconds = 3600,')
+        && str_contains($serviceSource, "string \$requestMethod = 'GET',")
+        && str_contains($serviceSource, '?callable $loadDependencies = null')
         && str_contains($serviceSource, 'application_update_continue_background_job(3.0);')
         && str_contains($serviceSource, '$ttlSeconds = max(3600, $ttlSeconds);')
         && str_contains($serviceSource, 'application_autoupdate_run_installing_check(false, $now);'),
     'The established hourly automatic-update throttle and bounded resumable job lifecycle must remain enabled.'
+);
+assert_autoupdate_request_latency_safety(
+    strpos($serviceSource, '$activeJob = application_update_active_job();')
+        < strpos($serviceSource, "if (!in_array(\$method, ['GET', 'HEAD'], true)")
+        && str_contains($serviceSource, "\$loadDependencies('updater-work');"),
+    'Active jobs must precede new-check guards and load their explicit execution dependencies.'
 );
 
 assert_autoupdate_request_latency_safety(

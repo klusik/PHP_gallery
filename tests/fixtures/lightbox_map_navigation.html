@@ -15,6 +15,7 @@ Author: Rudolf Klusal
     [data-lightbox] { position: fixed; inset: 0; background: white; }
     .lightbox-stage-link { display: block; width: 800px; height: 600px; }
     [data-lightbox-img] { max-width: 100%; max-height: 100%; }
+    .map-canvas { width: 800px; height: 500px; }
 </style>
 <body>
 <pre id="results">RUNNING</pre>
@@ -41,9 +42,15 @@ Author: Rudolf Klusal
     card.dataset.previewSrc = media; card.dataset.fullSrc = media;
     const pending = [];
     const requests = [];
+    let galleryMapPayload = null;
+    let galleryMapRequests = 0;
     const originalFetch = window.fetch;
     window.fetch = async (url, options = {}) => {
         const parsed = new URL(url, location.href);
+        if (parsed.pathname === '/route-map') {
+            galleryMapRequests += 1;
+            return new Response(JSON.stringify(galleryMapPayload), {headers: {'Content-Type': 'application/json'}});
+        }
         if (parsed.pathname !== '/metadata') return originalFetch(url, options);
         requests.push(parsed);
         if (parsed.searchParams.has('target_image_id')) {
@@ -119,8 +126,114 @@ Author: Rudolf Klusal
         check(pending.length === requestCount, 'close before deferred dispatch must prevent target fetch');
         check(location.pathname === '/', 'close before dispatch must prevent page fallback');
         teardownGalleryLightbox(); await tick();
+
+        // Record the Leaflet boundary without CDN/tile requests. Production setup, DOM events,
+        // layer selection, controls, viewport fitting, close, and teardown still execute in Chromium.
+        const maps = [];
+        const leafletStylesheet = document.createElement('link');
+        leafletStylesheet.dataset.galleryLeafletCss = 'true';
+        document.head.append(leafletStylesheet);
+        window.L = {
+            map: (canvas) => {
+                const map = {
+                    _container: canvas, _mapPane: {}, lines: [], markers: [], tileLayers: 0,
+                    bounds: null, center: null, zoom: 5,
+                    on: () => {}, invalidateSize: () => {},
+                    fitBounds: (bounds) => {
+                        map.bounds = bounds;
+                        map.center = {lat: bounds[0][0], lng: bounds[0][1]};
+                    },
+                    setView: (center, zoom) => { map.center = {lat: center[0], lng: center[1]}; map.zoom = zoom; },
+                    getCenter: () => map.center, getZoom: () => map.zoom,
+                    zoomIn: () => { map.zoom += 1; }, zoomOut: () => { map.zoom -= 1; },
+                    addControl: (control) => canvas.append(control.onAdd()),
+                    remove: () => { map._mapPane = null; },
+                };
+                maps.push(map);
+                return map;
+            },
+            tileLayer: () => ({addTo: (map) => { map.tileLayers += 1; }}),
+            polyline: (points) => ({addTo: (map) => map.lines.push(points)}),
+            marker: (position, options) => {
+                const marker = {position, options, bindPopup: () => {}};
+                return {addTo: (map) => { map.markers.push(marker); return marker; }};
+            },
+            divIcon: (options) => options,
+            Control: {extend: (definition) => function () { Object.assign(this, definition); }},
+            DomUtil: {create: (tag, className) => { const node = document.createElement(tag); node.className = className; return node; }},
+            DomEvent: {disableClickPropagation: () => {}, disableScrollPropagation: () => {}},
+        };
+        const routePoints = [
+            {id: 'flight-7-0', lat: 50.1008, lng: 14.2632, point_type: 'route_start', source_type: 'flight_path'},
+            {id: 'flight-7-1', lat: 49.95, lng: 12.85, point_type: 'route_via', source_type: 'flight_path'},
+            {id: 'flight-7-2', lat: 50.0379, lng: 8.5622, point_type: 'route_end', source_type: 'flight_path'},
+        ];
+        const routeCoordinates = routePoints.map(point => [point.lat, point.lng]);
+        const routePayload = {title: 'Empty flight gallery', source_type: 'flight_path', render_path: true,
+            points: routePoints, geometry: {type: 'polyline', points: routePoints}};
+        const mapButton = document.createElement('button');
+        mapButton.dataset.galleryMapUrl = '/route-map'; mapButton.textContent = 'Gallery map';
+        document.body.append(mapButton);
+        document.querySelector('[data-map-overlay]').remove();
+        const config = document.querySelector('[data-lightbox-config]');
+        card.remove(); config.dataset.lightboxTotal = '0';
+        const galleryUrl = location.href;
+        const openRecordedMap = async () => {
+            const countBefore = maps.length;
+            mapButton.click();
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+                await tick();
+                if (maps.length > countBefore && maps.at(-1).center) return maps.at(-1);
+                if (errors.length) break;
+            }
+            throw new Error(`Gallery map must render and initialize its viewport: ${errors.join('; ')}`);
+        };
+
+        // Both kinds of empty-page markup must initialize the independent route map.
+        for (const hasViewer of [false, true]) {
+            if (hasViewer) document.body.append(overlay); else overlay.remove();
+            galleryMapPayload = routePayload;
+            setupGalleryLightbox();
+            const map = await openRecordedMap();
+            const mapOverlay = document.querySelector('[data-map-overlay]');
+            check(!mapOverlay.hidden && map.tileLayers === 1, 'empty gallery must open a normal tiled map');
+            check(map.lines.length === 1 && JSON.stringify(map.lines[0]) === JSON.stringify(routeCoordinates), 'zero-photo gallery must render its complete route');
+            check(JSON.stringify(map.bounds) === JSON.stringify(routeCoordinates), 'zero-photo map must fit all route coordinates');
+            check(map.markers.length === 3 && map.markers.every(marker => !marker.options.icon.className.endsWith('--photo')), 'route points must not become synthetic photo markers');
+            const reset = mapOverlay.querySelector('button[title="Reset map zoom"]');
+            check(reset, 'route-only map must have working viewport controls'); reset.click();
+            mapOverlay.querySelector('[data-map-close]').click();
+            check(mapOverlay.hidden, 'route-only map close must work without a photo viewer');
+            const reopenedMap = await openRecordedMap();
+            check(map._mapPane === null, 'reopening must dispose the previous map');
+            teardownGalleryLightbox();
+            check(reopenedMap._mapPane === null && mapOverlay.hidden, 'empty-gallery teardown must dispose and hide its map');
+        }
+
+        // Reuse the same production gallery-map pipeline with real photo markers and without a route.
+        document.body.append(card); config.dataset.lightboxTotal = '200';
+        const photoPoint = {id: 1, gallery_id: 7, lat: 49.5, lng: 13, source_type: 'exif_point', point_type: 'photo_point'};
+        for (const withRoute of [true, false]) {
+            galleryMapPayload = withRoute ? {...routePayload, points: [...routePoints, photoPoint]}
+                : {title: 'Photo gallery', source_type: 'exif_points', points: [photoPoint]};
+            setupGalleryLightbox();
+            const map = await openRecordedMap();
+            check(map.lines.length === (withRoute ? 1 : 0), 'photo galleries must retain the optional route layer');
+            check(map.markers.filter(marker => marker.options.icon.className.endsWith('--photo')).length === 1, 'usable photo GPS must render exactly one photo marker');
+            check(withRoute ? map.bounds.length === 4 : map.zoom === 15, 'existing photo viewport fitting must remain available');
+            teardownGalleryLightbox();
+        }
+        card.remove(); config.dataset.lightboxTotal = '0';
+        galleryMapPayload = {title: 'Empty gallery', points: []};
+        setupGalleryLightbox();
+        const countBeforeEmpty = maps.length;
+        const requestsBeforeEmpty = galleryMapRequests;
+        mapButton.click(); await tick(); await tick();
+        check(galleryMapRequests === requestsBeforeEmpty + 1 && maps.length === countBeforeEmpty, 'no route and no usable GPS must retain the empty state');
+        check(document.querySelector('[data-map-overlay]').hidden, 'empty data must not open a misleading map');
+        check(location.href === galleryUrl, 'gallery map actions must preserve the URL');
         check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
-        result.textContent = 'BROWSER PASS: real module setup, card open, cross-page fetch, detached cache reuse, superseding clicks, CSS split persistence, split close, fullscreen-exit handler, ordinary next navigation, viewer close/reopen, close before dispatch, teardown, URL preservation.';
+        result.textContent = 'BROWSER PASS: real module setup, card open, cross-page fetch, detached cache reuse, superseding clicks, CSS split persistence, split close, fullscreen-exit handler, ordinary next navigation, viewer close/reopen, close before dispatch, teardown, URL preservation, zero-photo route with/without viewer markup, route bounds, no synthetic photos, map controls/close/reopen/teardown, photo and route layers, photo-only map, empty map data.';
     } catch (error) {
         result.textContent = `BROWSER FAIL: ${error.stack}\n${errors.join('\n')}`;
     } finally { teardownGalleryLightbox(); window.fetch = originalFetch; }

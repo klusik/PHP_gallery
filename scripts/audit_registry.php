@@ -298,6 +298,10 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'lightbox_dev_dashboard_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'lightbox_map_navigation_test.mjs' => [],
         'lightbox_preload_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
@@ -312,6 +316,7 @@ $registry = [
 
 $registry['php_fast_tests'] = $phpRegistry['quick_tests'];
 $registry['performance_probes'] = require __DIR__ . '/audit_performance_registry.php';
+$registry['route_performance_probes'] = require __DIR__ . '/audit_route_probe_registry.php';
 foreach ($phpRegistry['serial_tests'] as $name => $reason) {
     $registry['php_test_requirements'][$name] = array_replace($registry['php_test_requirements'][$name] ?? [],
         ['serial' => true, 'serial_reason' => $reason]);

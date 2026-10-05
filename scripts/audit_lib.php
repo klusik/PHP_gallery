@@ -693,13 +693,14 @@ function render_markdown_report(array $report): string
             continue;
         }
         $lines[] = '';
-        $lines[] = '## Bootstrap performance (include phase before cms_run)';
+        $lines[] = '## Runtime performance (include phases and available full route lifecycles)';
         $lines[] = '';
         $lines[] = '| Probe | PHP files / ceiling | Peak bytes / ceiling | Wall ms (observational) |';
         $lines[] = '| --- | ---: | ---: | ---: |';
         foreach ($task['details']['metrics'] as $metric) {
             $lines[] = '| ' . markdown_cell($metric['probe']) . ' | ' . $metric['included_php_files'] . ' / ' . $metric['limits']['max_included_php_files']
-                . ' | ' . $metric['peak_memory_bytes'] . ' / ' . $metric['limits']['max_peak_memory_bytes'] . ' | ' . $metric['bootstrap_wall_ms'] . ' |';
+                . ' | ' . $metric['peak_memory_bytes'] . ' / ' . $metric['limits']['max_peak_memory_bytes'] . ' | '
+                . ($metric['bootstrap_wall_ms'] ?? $metric['wall_ms']) . ' |';
         }
     }
 

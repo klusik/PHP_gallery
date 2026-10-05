@@ -19,7 +19,7 @@ use function GalleryWorkflow\validateFixture;
 
 try {
     $directory = validateFixture((string) ($argv[1] ?? ''), (string) ($argv[2] ?? ''));
-    require $directory . '/app/bootstrap.php';
+    require $directory . '/app/bootstrap_full.php';
     $migrations = \Gallery\Core\run_migrations();
     check(count($migrations) > 0, 'Fresh fixture must apply real migrations.');
     $pdo = \Gallery\Core\db();

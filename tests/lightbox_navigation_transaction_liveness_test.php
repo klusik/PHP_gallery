@@ -31,6 +31,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $source = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$dashboardSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-dev-dashboard.js');
 
 /**
  * Throw when a navigation transaction liveness contract fails.
@@ -145,7 +146,10 @@ lightbox_navigation_transaction_assert(
 lightbox_navigation_transaction_assert(
     str_contains($source, 'navigationStage')
         && str_contains($source, 'navigationFailure')
-        && str_contains($source, '`nav t${galleryDevModeState.navigationToken} target ${galleryDevModeState.navigationTarget'),
+        && str_contains($source, "const liveId = String(image?.dataset.lightboxImageId || '');")
+        && str_contains($source, 'token: activeLightboxImageToken, stage: galleryDevModeState.navigationStage')
+        && str_contains($dashboardSource, "set('target',")
+        && str_contains($dashboardSource, "set('photo',"),
     'DEV diagnostics must expose active navigation ownership and terminal stage separately from historical source readiness.'
 );
 

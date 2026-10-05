@@ -58,6 +58,8 @@ assert_admin_test_run_v11(
 
 $earlySource = (string) file_get_contents(__DIR__ . '/../app/diagnostics/admin_test_run_early.php');
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php');
+$kernelSource = (string) file_get_contents(__DIR__ . '/../app/runtime/Kernel.php');
+$loaderSource = (string) file_get_contents(__DIR__ . '/../app/runtime/ModuleLoader.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_test_runs.php');
 // These two services are split into part files; assert against the whole module.
 $serviceSource = module_source(__DIR__ . '/../app/services/admin_test_runs.php');
@@ -66,18 +68,25 @@ $thumbnailMaintenanceSource = (string) file_get_contents(__DIR__ . '/../app/serv
 $browserSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-test-run.js');
 $gallerySource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery.js');
 
-foreach (['entrypoint', 'configuration', 'helpers', 'database', 'security', 'migrations', 'services', 'views', 'integrity', 'controllers', 'routing_bootstrap', 'session_bootstrap', 'request_bootstrap', 'maintenance_bootstrap', 'dispatch_bootstrap'] as $phase) {
+foreach (['entrypoint', 'configuration', 'helpers', 'database', 'security', 'routing_bootstrap', 'session_bootstrap', 'request_bootstrap', 'maintenance_bootstrap', 'dispatch_bootstrap'] as $phase) {
     assert_admin_test_run_v11(
         str_contains($earlySource . $bootstrapSource, "'{$phase}'") || str_contains($bootstrapSource, "'{$phase}' =>"),
         "Missing early bootstrap phase {$phase}."
     );
 }
 assert_admin_test_run_v11(
+    str_contains($loaderSource, "'runtime_module.'")
+        && str_contains($loaderSource, 'admin_test_run_early_phase_start($phase)')
+        && str_contains($loaderSource, 'admin_test_run_early_phase_end($phase, false, $exception)')
+        && str_contains($loaderSource, 'admin_test_run_early_phase_end($phase);'),
+    'Selective module includes must retain early timing and failed-include diagnostics.'
+);
+assert_admin_test_run_v11(
     str_contains($controllerSource, "admin_test_run_request_begin_for_token(\$token, 'starter')")
         && str_contains($controllerSource, 'test_run_starter_request_id')
         && str_contains($serviceSource, "'name' => 'X-Gallery-Test-Request-ID'")
         && str_contains($serviceSource, "'name' => 'Server-Timing'")
-        && str_contains($controllerSource . $bootstrapSource, 'apply_response_header_intents'),
+        && str_contains($controllerSource . $kernelSource, 'apply_response_header_intents'),
     'Starter tracing and browser/PHP request correlation headers must be wired.'
 );
 assert_admin_test_run_v11(

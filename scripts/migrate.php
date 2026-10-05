@@ -36,7 +36,7 @@ declare(strict_types=1);
 
 use function Gallery\Core\run_migrations;
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 // Variable $ran stores this steps working value.
 $ran = run_migrations();

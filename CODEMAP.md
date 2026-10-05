@@ -15,10 +15,13 @@ This file maps features to source files. It is optimized for fast maintenance an
 Use this dependency direction when locating or adding application behavior:
 
 ```text
-Bootstrap / Router
+Bootstrap / Request Kernel
        |
        v
-   Controller -------> View
+Request -> Router -> RouteRegistry
+        |
+        v
+ModuleLoader -> existing Controller -------> View
        |
        v
     Service
@@ -38,7 +41,11 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 
 | Area | Files |
 | --- | --- |
-| Bootstrap coordinator and version constants | `app/bootstrap.php` |
+| Public bootstrap and version constants | `app/bootstrap.php` |
+| Request kernel and core types | `app/runtime/Request.php`, `Router.php`, `RouteDefinition.php`, `RouteRegistry.php`, `ModuleLoader.php`, `Kernel.php`; `autoload.php` and `bridge.php` preserve zero-install loading and procedural compatibility. |
+| Reviewed runtime module plan | `app/runtime/modules.php`; generated in development from `scripts/runtime_dependencies.php`, `scripts/runtime_dynamic_dependencies.php`, `scripts/runtime_module_roots.php`, and `scripts/generate_runtime_modules.php`. Runtime loading uses this checked-in plan and has no source-scan or load-all fallback. |
+| Full procedural compatibility umbrella | `app/bootstrap_full.php`; use only for legacy CLI/test consumers that require the full models/services/views/controllers/migrations/integrity surface. |
+| Lightweight request updater policy | `app/services/updates_request.php` and `updates_job_lookup.php`; active-job lookup precedes eligibility gates, and only active/due work requests the compiled updater worker module. |
 | Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
 | Configuration bootstrap | `app/bootstrap/configuration.php`, `app/configuration_defaults.php` for merged local config and centralized operational runtime-limit defaults |
 | Immutable runtime policy | `app/policy_constants.php`; documented protocol/security/format invariants, never administrator-editable defaults |
@@ -57,7 +64,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Complete-report operational limits | `app/policy_constants.php` supplies report batch ceilings, telemetry windows and bounded section rows; browser policy lives in `admin-interaction-policy.js` and does not override server batch defaults. |
 | Public-path and query routing | `app/bootstrap/routing.php` |
 | Scheduled-maintenance request hooks | `app/bootstrap/maintenance.php` |
-| Route table and controller dispatch | `app/bootstrap/dispatch.php` |
+| Canonical route table and controller dispatch | `app/bootstrap/dispatch.php`; `Gallery\Core\Kernel` loads the selected route plan then delegates to the existing procedural handler. |
 | Controller loader | `app/controllers.php` |
 | Service loader | `app/services.php` |
 | Split modules | `app/services/admin_dashboard/`, `app/services/admin_operation_keys/`, `app/services/admin_gallery_report/`, `app/services/admin_test_runs/`, `app/services/admin_test_run_analysis/`, `app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/` hold the part files of the module named by their directory; the same-named `.php` file beside each directory stays the entry point, loads shared immutable Core policy where required and owns the ordered `require_once` list. See "Split Modules" in `ARCHITECTURE.md`. |
@@ -571,12 +578,14 @@ Nearby lightbox preview scheduling belongs to
 retains foreground navigation, cache, media authorization inputs, quality, and
 presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 
+The lightbox development dashboard in `public/assets/gallery-modules/lightbox-dev-dashboard.js` consumes bounded read-only snapshots from `lightbox.js`. `public/assets/styles/lightbox.css` owns layout, `app/lang/{en,cs,de,sv}.json` owns labels, and `app/views/layout.php` includes it in the asset revision. Existing Admin DEV policy owns availability.
+
 | Task | Files |
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
 | Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
 | Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `scripts/audit_php_registry.php`, `scripts/audit_process.php`, `tests/audit_runner_test.php`<br>Owns curated quick and complete PHP suites, bounded workers and exclusive barriers, child/process-tree cleanup, Node/Python coverage, contracts, syntax, release checks and compact reports. |
-| Include-phase performance probes | `scripts/audit_performance.php`, `scripts/audit_performance_registry.php`, `scripts/audit_runtime_probe.php`<br>Validates fresh-child early-runtime and application-bootstrap include counts and peak memory before `cms_run()`; records wall time observationally. |
+| Include-phase and route performance probes | `scripts/audit_performance.php`, `scripts/audit_performance_registry.php`, `scripts/audit_runtime_probe.php`, `scripts/audit_route_probe_registry.php`, `scripts/audit_route_probe.php`, `scripts/audit_route_performance.php`<br>Checks early-runtime/bootstrap include counts and memory before `cms_run()`, then measures nine registered route lifecycles against an owned disposable workflow fixture when available; records wall time observationally. |
 | Required browser fixtures | `.github/workflows/gallery-workflows.yml`, `scripts/audit_process.php`, `tests/support/headless_browser_fixture.mjs`<br>Owns required Chromium CI status and selected loopback fixtures with private DevTools result polling, browser shutdown and profile cleanup. |
 | Release preparation and consistency | `RELEASE.md`, `scripts/prepare_release.php`, `scripts/check_release.php`, `scripts/release_lib.php`, `tests/release_tooling_test.php`<br>Owns registered current-version markers, release metadata scaffolding, read-only cross-artifact consistency, and the release workflow contract. Release consistency is included in the central `release` audit profile. |
 | PHP regression compatibility entrypoint | `tests/run.php`, `tests/*_test.php`<br>Historical `php tests/run.php` delegates to the central audit runner's `php-regression` suite. |
@@ -639,9 +648,9 @@ presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 
 ### Add a public JSON endpoint
 
-1. Add route mapping in `cms_run()`.
+1. Add the canonical route and security boundary in `app/bootstrap/dispatch.php`; update the reviewed dependency/root inputs and regenerate `app/runtime/modules.php`.
 2. Add controller handler under `app/controllers/`.
-3. Put query or mutation logic in `app/services/`.
+3. Put reusable orchestration and validation in `app/services/`, and SQL/persistence in the existing domain owner under `app/models/`.
 4. Return a stable JSON shape.
 5. Check visibility and access before exposing records.
 

@@ -152,6 +152,13 @@ export function setupGalleryLightbox() {
     );
     // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
     const lightboxGalleryMapPayloadPromises = new Map();
+
+    // Maps also run on pages with no photo viewer, so their state must exist before the early return.
+    // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
+    const galleryLeafletViewportState = new Map();
+
+    // Runtime-only follow-current-location preference. It starts disabled on every page load.
+    const galleryLeafletFollowCurrentLocationState = {enabled: false};
         /**
      * Normalize the browsing mode emitted by PHP before it drives DOM behavior.
      *
@@ -636,6 +643,19 @@ export function setupGalleryLightbox() {
             overlay.galleryLeafletMap.remove();
             overlay.galleryLeafletMap = null;
         }
+        const mapOverlay = document.querySelector('[data-map-overlay]');
+        if (mapOverlay?.galleryMapOverlayCloseController) {
+            mapOverlay.galleryMapOverlayCloseController.abort();
+            mapOverlay.galleryMapOverlayCloseController = null;
+        }
+        if (mapOverlay?.galleryLeafletMap) {
+            mapOverlay.galleryLeafletMap.remove();
+            mapOverlay.galleryLeafletMap = null;
+        }
+        if (mapOverlay instanceof HTMLElement) {
+            mapOverlay.hidden = true;
+        }
+        document.body.classList.remove('has-map-overlay');
     };
 
     if (!overlay || cards.length === 0) {
@@ -849,9 +869,7 @@ export function setupGalleryLightbox() {
     // galleryDevModeState stores state or configuration for the gallery front-end flow.
     const galleryDevModeState = {
         overlay: null,
-        text: null,
-        canvas: null,
-        canvasContext: null,
+        dashboard: null,
         startedAt: performance.now(),
         lastRenderAt: 0,
         currentIndex: -1,
@@ -1410,6 +1428,7 @@ export function setupGalleryLightbox() {
      * @param {number} token Navigation transaction token.
      * @param {string} stage Current navigation stage.
      * @param {string} reason Optional terminal or wait reason.
+     * @return {void} Updates bounded optional navigation observations.
      */
     function markLightboxNavigationDiagnostic(index, token, stage, reason = '') {
         const card = cards[index] || null;
@@ -1417,19 +1436,19 @@ export function setupGalleryLightbox() {
         galleryDevModeState.navigationTarget = String(card?.dataset.imageId || `index:${index}`);
         galleryDevModeState.navigationStage = String(stage || 'idle').slice(0, 32);
         galleryDevModeState.navigationFailure = String(reason || '').slice(0, 64);
+        devLog(`nav:t${token}:#${index + 1}:${stage}`);
     }
 
     /**
      * Return one bounded diagnostic label for a synchronous/asynchronous navigation exception.
      *
      * @param {string} phase Navigation phase that raised the exception.
-     * @param {*} error Thrown or rejected value.
+     * @param {Error|string|null|undefined} error Thrown or rejected value used only for its safe error class.
      * @return {string} Bounded diagnostic reason safe for the development overlay.
      */
     function lightboxNavigationExceptionReason(phase, error) {
         const errorName = error instanceof Error && error.name ? error.name : 'Error';
-        const errorMessage = error instanceof Error ? error.message : String(error || 'unknown');
-        return `${phase}:${errorName}:${errorMessage}`.replace(/\s+/g, ' ').slice(0, 64);
+        return `${phase}:${errorName}`.replace(/\s+/g, ' ').slice(0, 64);
     }
 
     /**
@@ -1532,37 +1551,34 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles setup gallery dev mode overlay behavior for the gallery UI.
+     * Load the presentation module only for the existing administrator development mode.
+     * @return {void} Starts guarded optional dashboard setup.
      */
     function setupGalleryDevModeOverlay() {
-        if (!galleryDevModeEnabled) {
-            return;
-        }
-        // shell stores state or configuration for the gallery front-end flow.
-        const shell = document.createElement('section');
-        shell.className = 'gallery-dev-overlay';
-        shell.setAttribute('aria-label', i18n('lightbox.dev_diagnostics_aria', 'Gallery dev mode diagnostics'));
-        shell.innerHTML = '<header><strong>DEV</strong><span data-dev-title>viewer diagnostics</span></header><pre data-dev-text></pre><canvas width="340" height="72" data-dev-canvas></canvas><footer><span>Drag disabled</span><span>admin only</span></footer>';
-        galleryDevModeState.overlay = shell;
-        galleryDevModeState.text = shell.querySelector('[data-dev-text]');
-        galleryDevModeState.canvas = shell.querySelector('[data-dev-canvas]');
-        galleryDevModeState.canvasContext = galleryDevModeState.canvas ? galleryDevModeState.canvas.getContext('2d') : null;
-        overlay.append(shell);
-        cards.forEach((card, index) => {
-            if (!card) {
-                return;
-            }
-            devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
-            devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
+        if (!galleryDevModeEnabled) return;
+        // JavaScript assets are immutable: this dependency must follow the same
+        // content revision as its parent so a cached intermediate dashboard retires.
+        const moduleUrl = new URL('./lightbox-dev-dashboard.js', import.meta.url);
+        const entrypointRevision = String(document.querySelector('script[data-gallery-asset-revision]')?.dataset.galleryAssetRevision || '').trim();
+        const parentRevision = new URL(import.meta.url).searchParams.get('v') || '';
+        moduleUrl.searchParams.set('v', entrypointRevision || parentRevision || '20261005-dev-dashboard-v2');
+        import(moduleUrl.href).then(({createLightboxDevDashboard}) => {
+            if (controller.signal.aborted) return;
+            const dashboard = createLightboxDevDashboard(overlay, controller.signal, renderGalleryDevModeOverlay);
+            galleryDevModeState.dashboard = dashboard;
+            galleryDevModeState.overlay = dashboard.element;
+            if (!overlay.hidden) startGalleryDevModeMonitoring();
+        }).catch(() => {
+            // Diagnostics are optional; a failed asset must never interrupt photo presentation.
         });
-        renderGalleryDevModeOverlay();
     }
 
     /**
      * Start development-only lightbox diagnostics while the viewer is active.
+     * @return {void} Updates optional diagnostic state.
      */
     function startGalleryDevModeMonitoring() {
-        if (!galleryDevModeEnabled || controller.signal.aborted) {
+        if (!galleryDevModeEnabled || controller.signal.aborted || !galleryDevModeState.dashboard) {
             return;
         }
         if (!galleryDevModeState.frameId) {
@@ -1577,6 +1593,7 @@ export function setupGalleryLightbox() {
 
     /**
      * Stop development-only diagnostics when the lightbox is not visible.
+     * @return {void} Updates optional diagnostic state.
      */
     function stopGalleryDevModeMonitoring() {
         if (galleryDevModeState.frameId) {
@@ -1593,13 +1610,14 @@ export function setupGalleryLightbox() {
         /**
      * Handles dev frame tick behavior for the gallery UI.
      *
-     * @param {*} timestamp Value supplied by the caller or event context.
+     * @param {number} timestamp Animation callback timestamp in milliseconds.
+     * @return {void} Updates optional diagnostic state.
      */
     function devFrameTick(timestamp) {
         if (!galleryDevModeEnabled || controller.signal.aborted) {
             return;
         }
-        if (galleryDevModeState.lastFrameAt > 0) {
+        if (galleryDevModeState.lastFrameAt > 0 && !document.hidden) {
             galleryDevModeState.frameMs = timestamp - galleryDevModeState.lastFrameAt;
         }
         galleryDevModeState.lastFrameAt = timestamp;
@@ -1609,11 +1627,11 @@ export function setupGalleryLightbox() {
         /**
      * Handles dev register source behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {*} kind Value supplied by the caller or event context.
-     * @param {*} index Value supplied by the caller or event context.
-     * @param {*} status Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @param {string} src Authorized source URL.
+     * @param {string} kind Source quality tier.
+     * @param {number} index Zero-based card index.
+     * @param {string} status Latest diagnostic lifecycle state.
+     * @return {Record<string, string|number>|null} Source observations when development mode is enabled.
      */
     function devRegisterSource(src, kind, index, status) {
         if (!galleryDevModeEnabled || !src) {
@@ -1641,11 +1659,16 @@ export function setupGalleryLightbox() {
             finishedAt: existing.finishedAt || 0,
             lastUsedAt: performance.now(),
             lastReason: existing.lastReason || '',
+            decodeMs: existing.decodeMs || 0,
         };
         if (existing.kind && existing.kind !== kind) {
             stat.kind = 'shared';
         }
         galleryDevModeState.sourceStats.set(src, stat);
+        if (galleryDevModeState.sourceStats.size > 256) {
+            const oldest = Array.from(galleryDevModeState.sourceStats.keys()).find((key) => !decodedLightboxImages.has(key) && key !== src);
+            if (oldest) galleryDevModeState.sourceStats.delete(oldest);
+        }
         return stat;
     }
 
@@ -1692,10 +1715,11 @@ export function setupGalleryLightbox() {
         /**
      * Handles dev mark source behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {*} status Value supplied by the caller or event context.
-     * @param {*} reason Value supplied by the caller or event context.
-     * @param {*} imageNode Value supplied by the caller or event context.
+     * @param {string} src Authorized source URL.
+     * @param {string} status Latest lifecycle state.
+     * @param {string} reason Bounded lifecycle reason.
+     * @param {HTMLImageElement|null} imageNode Optional decoded image supplying actual dimensions.
+     * @return {void} Updates optional diagnostic state.
      */
     function devMarkSource(src, status, reason, imageNode = null) {
         if (!galleryDevModeEnabled || !src) {
@@ -1710,13 +1734,17 @@ export function setupGalleryLightbox() {
         if (!stat) {
             return;
         }
+        if (reason.endsWith('-hit') && decodedLightboxImages.get(src)?.settled) status = 'ready';
         stat.status = status;
         stat.lastReason = reason || '';
         stat.lastUsedAt = performance.now();
         if (status === 'loading' || status === 'preloading') {
-            stat.startedAt = stat.startedAt || performance.now();
+            if (stat.finishedAt || !stat.startedAt) {
+                stat.startedAt = performance.now();
+                stat.finishedAt = 0;
+            }
         }
-        if (status === 'ready' || status === 'error') {
+        if ((status === 'ready' || status === 'error' || status === 'cancelled') && !stat.finishedAt) {
             stat.finishedAt = performance.now();
         }
         if (imageNode) {
@@ -1724,38 +1752,40 @@ export function setupGalleryLightbox() {
             stat.naturalHeight = imageNode.naturalHeight || stat.naturalHeight || 0;
         }
         galleryDevModeState.sourceStats.set(src, stat);
-        devLog(`${kind}:${status}:${reason || 'state'}`);
+        const elapsed = stat.finishedAt && stat.startedAt ? `:${Math.round(stat.finishedAt - stat.startedAt)}ms` : '';
+        devLog(`#${index + 1}:${kind}:${status}:${reason || 'state'}${elapsed}`);
     }
 
         /**
      * Handles dev log behavior for the gallery UI.
      *
-     * @param {*} message Value supplied by the caller or event context.
+     * @param {string} message Bounded non-secret diagnostic event.
+     * @return {void} Updates optional diagnostic state.
      */
     function devLog(message) {
         if (!galleryDevModeEnabled) {
             return;
         }
         galleryDevModeState.eventLog.unshift(`${formatDevTime(performance.now() - galleryDevModeState.startedAt)} ${message}`);
-        galleryDevModeState.eventLog = galleryDevModeState.eventLog.slice(0, 8);
+        galleryDevModeState.eventLog = galleryDevModeState.eventLog.slice(0, 20);
     }
 
         /**
      * Handles dev decoded memory bytes behavior for the gallery UI.
      *
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @return {number} Estimated bytes of retained decoded pixels, excluding other browser allocations.
      */
     function devDecodedMemoryBytes() {
         // total stores state or configuration for the gallery front-end flow.
         let total = 0;
         galleryDevModeState.sourceStats.forEach((stat, src) => {
-            if (!decodedLightboxImages.has(src) || stat.status !== 'ready') {
+            if (!decodedLightboxImages.get(src)?.settled) {
                 return;
             }
             // width stores state or configuration for the gallery front-end flow.
-            const width = stat.naturalWidth || stat.width || 0;
+            const width = stat.naturalWidth || 0;
             // height stores state or configuration for the gallery front-end flow.
-            const height = stat.naturalHeight || stat.height || 0;
+            const height = stat.naturalHeight || 0;
             if (width > 0 && height > 0) {
                 total += width * height * 4;
             }
@@ -1764,247 +1794,96 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles dev status counts behavior for the gallery UI.
-     *
-     * @return {*} Result of the UI operation, when a value is produced.
+     * Resolve current retained/prepared source state without confusing historical success with cache ownership.
+     * @param {string} src Protected source belonging to a nearby card.
+     * @return {string} Canonical diagnostic status.
      */
-    function devStatusCounts() {
-        // counts stores state or configuration for the gallery front-end flow.
-        const counts = {idle: 0, preloading: 0, loading: 0, ready: 0, error: 0};
-        galleryDevModeState.sourceStats.forEach((stat) => {
-            counts[stat.status] = (counts[stat.status] || 0) + 1;
-        });
-        return counts;
+    function devSourceState(src) {
+        if (!src) return 'unknown';
+        const entry = decodedLightboxImages.get(src);
+        if (entry) return entry.settled ? 'cached' : 'pending';
+        const stat = galleryDevModeState.sourceStats.get(src);
+        if (!stat) return 'idle';
+        if (stat.status === 'ready') return 'ready';
+        return stat.status;
     }
 
-        /**
-     * Handles dev current window summary behavior for the gallery UI.
-     *
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function devCurrentWindowSummary() {
-        if (galleryDevModeState.currentIndex < 0) {
-            return 'not open';
-        }
-        // rows stores state or configuration for the gallery front-end flow.
-        const rows = [];
-        // current stores state or configuration for the gallery front-end flow.
-        const current = galleryDevModeState.currentIndex;
-        for (let offset = -3; offset <= 3; offset += 1) {
-            // index stores state or configuration for the gallery front-end flow.
-            const index = (current + offset + cards.length) % cards.length;
-            // card stores state or configuration for the gallery front-end flow.
-            const card = cards[index];
-            // preview stores state or configuration for the gallery front-end flow.
-            const preview = galleryDevModeState.sourceStats.get(card?.dataset.previewSrc || '');
-            // full stores state or configuration for the gallery front-end flow.
-            const full = galleryDevModeState.sourceStats.get(card?.dataset.fullSrc || '');
-            // mark stores state or configuration for the gallery front-end flow.
-            const mark = offset === 0 ? '*' : (offset > 0 ? '+' : '');
-            rows.push(`${mark}${offset}:P${devShortStatus(preview)} F${devShortStatus(full)}`);
-        }
-        return rows.join(' ');
-    }
-
-        /**
-     * Handles dev short status behavior for the gallery UI.
-     *
-     * @param {*} stat Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function devShortStatus(stat) {
-        if (!stat) {
-            return '?';
-        }
-        return {idle: 'i', preloading: 'p', loading: 'l', ready: 'r', error: 'e'}[stat.status] || '?';
-    }
-
-        /**
-     * Handles dev browser memory line behavior for the gallery UI.
-     *
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function devBrowserMemoryLine() {
-        // memory stores state or configuration for the gallery front-end flow.
-        const memory = performance.memory;
-        if (memory && typeof memory.usedJSHeapSize === 'number') {
-            return `heap ${formatBytes(memory.usedJSHeapSize)} / ${formatBytes(memory.jsHeapSizeLimit)}`;
-        }
-        if (navigator.deviceMemory) {
-            return `deviceMemory ${navigator.deviceMemory} GB, heap unavailable`;
-        }
-        return 'heap unavailable';
-    }
-
-        /**
-     * Handles dev connection line behavior for the gallery UI.
-     *
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function devConnectionLine() {
-        // connection stores state or configuration for the gallery front-end flow.
-        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        if (!connection) {
-            return 'network hints unavailable';
-        }
-        // parts stores state or configuration for the gallery front-end flow.
-        const parts = [];
-        if (connection.effectiveType) {
-            parts.push(connection.effectiveType);
-        }
-        if (typeof connection.downlink === 'number') {
-            parts.push(`${connection.downlink} Mbps`);
-        }
-        if (connection.saveData) {
-            parts.push('save-data');
-        }
-        return parts.length ? parts.join(', ') : 'network hints unavailable';
-    }
-
-        /**
-     * Handles render gallery dev mode overlay behavior for the gallery UI.
+    /**
+     * Render a read-only snapshot of the actual viewer, keeping live media separate from navigation intent.
+     * @return {void} Refreshes optional diagnostic presentation only.
      */
     function renderGalleryDevModeOverlay() {
-        if (!galleryDevModeEnabled || !galleryDevModeState.overlay || !galleryDevModeState.text) {
-            return;
-        }
-        // now stores state or configuration for the gallery front-end flow.
-        const now = performance.now();
-        // counts stores state or configuration for the gallery front-end flow.
-        const counts = devStatusCounts();
-        // decodedBytes stores state or configuration for the gallery front-end flow.
-        const decodedBytes = devDecodedMemoryBytes();
-        // cacheLimit stores state or configuration for the gallery front-end flow.
-        const cacheLimit = activeLightboxDecodedImageCacheLimit();
-        // browserMode stores state or configuration for the gallery front-end flow.
-        const browserMode = isLightboxFullscreen() ? 'fullscreen' : (overlay.hidden ? 'closed' : 'normal');
-        // currentCard stores state or configuration for the gallery front-end flow.
-        const currentCard = cards[galleryDevModeState.currentIndex] || null;
-        // currentSize stores state or configuration for the gallery front-end flow.
-        const currentSize = currentCard ? `${currentCard.dataset.imageWidth || '?'}x${currentCard.dataset.imageHeight || '?'}` : 'n/a';
-        // historySample stores state or configuration for the gallery front-end flow.
-        const historySample = {
-            ready: counts.ready,
-            cached: decodedLightboxImages.size,
-            memory: decodedBytes,
-            frame: galleryDevModeState.frameMs,
-            time: now,
-        };
-        galleryDevModeState.samples.push(historySample);
-        galleryDevModeState.samples = galleryDevModeState.samples.slice(-90);
-        // lines stores state or configuration for the gallery front-end flow.
-        const lines = [
-            `mode ${browserMode} | image ${galleryDevModeState.currentIndex + 1 || 0}/${cards.length} | ${currentSize} | src ${galleryDevModeState.currentSourceKind || 'none'}`,
-            `preload radius P${lightboxPreviewPreloadRadius}/F${lightboxFullPreloadRadius} | cache ${decodedLightboxImages.size}/${cacheLimit} | known ${galleryDevModeState.sourceStats.size}`,
-            `state idle ${counts.idle} | pre ${counts.preloading} | load ${counts.loading} | ready ${counts.ready} | err ${counts.error}`,
-            `events preload ${galleryDevModeState.preloadStarted} | load ${galleryDevModeState.loadStarted} | hit ${galleryDevModeState.cacheHits} | miss ${galleryDevModeState.cacheMisses} | evict ${galleryDevModeState.evictions}`,
-            `decoded estimate ${formatBytes(decodedBytes)} | ${devBrowserMemoryLine()} | frame ${galleryDevModeState.frameMs.toFixed(1)} ms`,
-            `network ${devConnectionLine()} | active ${shortenDevUrl(galleryDevModeState.currentSource)}`,
-            `nav t${galleryDevModeState.navigationToken} target ${galleryDevModeState.navigationTarget || '-'} | ${galleryDevModeState.navigationStage}${galleryDevModeState.navigationFailure ? `:${galleryDevModeState.navigationFailure}` : ''}`,
-            `window ${devCurrentWindowSummary()}`,
-            `recent ${galleryDevModeState.eventLog.slice(0, 3).join(' | ') || 'none'}`,
-        ];
-        galleryDevModeState.text.textContent = lines.join('\n');
-        drawGalleryDevModeGraph();
-    }
-
-        /**
-     * Handles draw gallery dev mode graph behavior for the gallery UI.
-     */
-    function drawGalleryDevModeGraph() {
-        // canvas stores state or configuration for the gallery front-end flow.
-        const canvas = galleryDevModeState.canvas;
-        // context stores state or configuration for the gallery front-end flow.
-        const context = galleryDevModeState.canvasContext;
-        if (!canvas || !context) {
-            return;
-        }
-        // width stores state or configuration for the gallery front-end flow.
-        const width = canvas.width;
-        // height stores state or configuration for the gallery front-end flow.
-        const height = canvas.height;
-        context.clearRect(0, 0, width, height);
-        context.globalAlpha = 1;
-        context.fillStyle = 'rgba(0,0,0,0.42)';
-        context.fillRect(0, 0, width, height);
-        // samples stores state or configuration for the gallery front-end flow.
-        const samples = galleryDevModeState.samples;
-        if (samples.length < 2) {
-            return;
-        }
-        // maxMemory stores state or configuration for the gallery front-end flow.
-        const maxMemory = Math.max(1, ...samples.map((sample) => sample.memory));
-        // maxReady stores state or configuration for the gallery front-end flow.
-        const maxReady = Math.max(1, ...samples.map((sample) => sample.ready));
-        // maxFrame stores state or configuration for the gallery front-end flow.
-        const maxFrame = Math.max(16, ...samples.map((sample) => sample.frame));
-        drawDevLine(samples, (sample) => sample.memory / maxMemory, height, width);
-        drawDevLine(samples, (sample) => sample.ready / maxReady, height, width, 0.66);
-        drawDevLine(samples, (sample) => Math.min(1, sample.frame / maxFrame), height, width, 0.36);
-        context.globalAlpha = 0.8;
-        context.fillStyle = 'rgba(255,255,255,0.85)';
-        context.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-        context.fillText('memory / ready / frame', 8, 14);
-    }
-
-        /**
-     * Handles draw dev line behavior for the gallery UI.
-     *
-     * @param {*} samples Value supplied by the caller or event context.
-     * @param {*} selector Value supplied by the caller or event context.
-     * @param {*} height Value supplied by the caller or event context.
-     * @param {*} width Value supplied by the caller or event context.
-     * @param {*} alpha Value supplied by the caller or event context.
-     */
-    function drawDevLine(samples, selector, height, width, alpha = 1) {
-        // context stores state or configuration for the gallery front-end flow.
-        const context = galleryDevModeState.canvasContext;
-        if (!context) {
-            return;
-        }
-        context.beginPath();
-        samples.forEach((sample, index) => {
-            // x stores state or configuration for the gallery front-end flow.
-            const x = (index / Math.max(1, samples.length - 1)) * width;
-            // y stores state or configuration for the gallery front-end flow.
-            const y = height - (selector(sample) * (height - 18)) - 4;
-            if (index === 0) {
-                context.moveTo(x, y);
-            } else {
-                context.lineTo(x, y);
+        const dashboard = galleryDevModeState.dashboard;
+        if (!galleryDevModeEnabled || !dashboard || dashboard.isPaused() || overlay.hidden) return;
+        const liveId = String(image?.dataset.lightboxImageId || '');
+        const liveIndex = liveId ? cards.findIndex((card) => String(card?.dataset.imageId || '') === liveId) : -1;
+        const liveCard = cards[liveIndex] || null;
+        const src = image?.currentSrc || image?.getAttribute('src') || '';
+        const candidates = lightboxQualityCandidatesForCard(liveCard);
+        const liveCandidate = candidates.find((candidate) => urlsMatch(candidate.src, src));
+        const pendingCandidate = candidates.find((candidate) => candidate.src === pendingLightboxQualitySource);
+        const sourceStat = galleryDevModeState.sourceStats.get(liveCandidate?.src || src);
+        const timing = sourceStat?.finishedAt && sourceStat.startedAt ? {loadMs: sourceStat.finishedAt - sourceStat.startedAt, decodeMs: sourceStat.decodeMs} : null;
+        const stage = stageLink?.getBoundingClientRect();
+        const metrics = measureLightboxZoomMetrics();
+        const fittedWidth = metrics.imageWidth || 0;
+        const fittedHeight = metrics.imageHeight || 0;
+        const requiredWidth = lightboxZoomRequiredSourceWidth(fittedWidth, lightboxZoomState.scale, lightboxQualityDevicePixelRatio());
+        const neighbors = [];
+        for (let offset = -3; offset <= 3; offset += 1) {
+            const index = (currentIndex + offset + cards.length) % cards.length;
+            const card = cards[index];
+            // Do not duplicate a tiny gallery across the neighbor table.
+            if (Math.abs(offset) > Math.floor(cards.length / 2) || (cards.length % 2 === 0 && offset === -cards.length / 2)) {
+                neighbors.push(null);
+                continue;
             }
+            neighbors.push({offset, position: index + 1, preview: devSourceState(card?.dataset.previewSrc || ''), full: devSourceState(card?.dataset.fullSrc || '')});
+        }
+        const pending = [];
+        if (pendingLightboxQualityTimer) pending.push('quality debounce');
+        if (pendingLightboxQualitySource) pending.push('quality transfer / decode');
+        if (transitionImage?.isConnected) pending.push('cross-fade');
+        if (pendingLightboxNavigationTimer) pending.push('navigation indicator timer');
+        if (lightboxPendingWindows.size) pending.push(`metadata ×${lightboxPendingWindows.size}`);
+        const memory = performance.memory;
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const network = connection ? [connection.effectiveType, Number.isFinite(connection.downlink) ? `${connection.downlink} Mbps` : '', Number.isFinite(connection.rtt) ? `${connection.rtt} ms RTT` : '', connection.saveData ? 'Save-Data' : ''].filter(Boolean).join(' · ') : '';
+        dashboard.render({
+            time: performance.now(), total: cards.length,
+            media: {
+                id: liveId, position: liveIndex + 1, galleryId: liveCard?.dataset.galleryId || '',
+                name: liveCard?.dataset.title || image?.alt || '', src, timing,
+                kind: liveCandidate?.kind || devFindSourceKind(src),
+                loaded: Boolean(image?.complete && image.naturalWidth > 0),
+                width: image?.naturalWidth || 0, height: image?.naturalHeight || 0,
+                originalWidth: Number(liveCard?.dataset.imageWidth) || 0, originalHeight: Number(liveCard?.dataset.imageHeight) || 0,
+            },
+            quality: {
+                src: pendingLightboxQualitySource, kind: pendingCandidate?.kind || devFindSourceKind(pendingLightboxQualitySource),
+                token: activeLightboxQualityRequestToken,
+                progress: pendingLightboxQualitySource ? qualityProgressBytes?.textContent || '' : '',
+                failed: Array.from(failedLightboxQualitySources).some((key) => key.startsWith(`${liveId}:`)),
+            },
+            zoom: {scale: lightboxZoomState.scale, x: lightboxZoomState.translateX, y: lightboxZoomState.translateY,
+                stageWidth: stage?.width || 0, stageHeight: stage?.height || 0, fittedWidth, fittedHeight,
+                dpr: lightboxQualityDevicePixelRatio(), requiredWidth},
+            preload: {...lightboxPreloads.snapshot(), limit: lightboxPreloadConcurrency(),
+                previewRadius: lightboxActivePreviewPreloadRadius(), fullRadius: lightboxActiveFullPreloadRadius()},
+            cache: {entries: decodedLightboxImages.size, limit: activeLightboxDecodedImageCacheLimit(), bytes: devDecodedMemoryBytes(),
+                hits: galleryDevModeState.cacheHits, misses: galleryDevModeState.cacheMisses, evictions: galleryDevModeState.evictions},
+            neighbors, loads: activeDetachedLightboxImageLoads.size, frame: galleryDevModeState.frameMs,
+            mode: isLightboxFullscreen() ? 'fullscreen' : 'lightbox', visibility: document.visibilityState,
+            heap: memory ? {used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit} : null, network,
+            navigation: {position: currentIndex + 1, id: cards[currentIndex]?.dataset.imageId || '—',
+                token: activeLightboxImageToken, stage: galleryDevModeState.navigationStage,
+                failed: lightboxNavigationFailureToken === activeLightboxImageToken && lightboxNavigationFailureToken > 0},
+            pending, slideshow: lightboxSlideshowActive, slideDuration: lightboxSlideshowVisibleDuration,
+            errors: galleryDevModeState.decodeErrors, events: galleryDevModeState.eventLog,
         });
-        context.globalAlpha = alpha;
-        context.strokeStyle = 'rgba(255,255,255,0.92)';
-        context.lineWidth = 1.5;
-        context.stroke();
-        context.globalAlpha = 1;
     }
 
-        /**
-     * Handles format bytes behavior for the gallery UI.
-     *
-     * @param {*} bytes Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function formatBytes(bytes) {
-        if (!Number.isFinite(bytes) || bytes <= 0) {
-            return '0 B';
-        }
-        // units stores state or configuration for the gallery front-end flow.
-        const units = ['B', 'KB', 'MB', 'GB'];
-        // value stores state or configuration for the gallery front-end flow.
-        let value = bytes;
-        // unitIndex stores state or configuration for the gallery front-end flow.
-        let unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.length - 1) {
-            value /= 1024;
-            unitIndex += 1;
-        }
-        return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-    }
-
-        /**
+/**
      * Handles format dev time behavior for the gallery UI.
      *
      * @param {*} ms Value supplied by the caller or event context.
@@ -2017,8 +1896,8 @@ export function setupGalleryLightbox() {
         /**
      * Handles shorten dev url behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @param {string} src Authorized media URL.
+     * @return {string} Bounded filename label without URL query, credentials or inline payload.
      */
     function shortenDevUrl(src) {
         if (!src) {
@@ -2028,10 +1907,11 @@ export function setupGalleryLightbox() {
             // url stores state or configuration for the gallery front-end flow.
             const url = new URL(src, window.location.href);
             // last stores state or configuration for the gallery front-end flow.
+            if (!['http:', 'https:'].includes(url.protocol)) return 'inline-media';
             const last = url.pathname.split('/').filter(Boolean).pop() || url.pathname;
             return decodeURIComponent(last).slice(0, 46);
         } catch {
-            return src.slice(0, 46);
+            return 'unavailable';
         }
     }
 
@@ -2129,8 +2009,9 @@ export function setupGalleryLightbox() {
     /**
      * Handles load fresh decoded lightbox image behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @param {string} src Authorized source URL.
+     * @param {{priority?:string,signal?:AbortSignal|null,telemetryIndex?:number,telemetryToken?:number,telemetryCacheResult?:string}} options Existing request priority, cancellation and telemetry ownership.
+     * @return {Promise<HTMLImageElement>} Decoded detached source image.
      */
     function loadFreshDecodedLightboxImage(src, options = {}) {
         return new Promise((resolve, reject) => {
@@ -2174,6 +2055,7 @@ export function setupGalleryLightbox() {
                 settled = true;
                 cleanupLoad();
                 loadedImage.removeAttribute('src');
+                devMarkSource(src, 'cancelled', 'abort');
                 if (lightboxBenchmarkDiagnosticsEnabled) {
                     lightboxBenchmarkDiagnosticsState.detachedLoadsAborted += 1;
                     recordLightboxBenchmarkEvent('image_load_abort', {
@@ -2224,6 +2106,9 @@ export function setupGalleryLightbox() {
                         });
                     }
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
+                    if (galleryDevModeEnabled) {
+                        galleryDevModeState.sourceStats.get(src).decodeMs = performance.now() - decodeStartedAt;
+                    }
                     if (Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken)) {
                         const cacheResult = options.telemetryCacheResult || 'miss';
                         lightboxTelemetryCacheResults.set(loadedImage, cacheResult);
@@ -2700,9 +2585,10 @@ export function setupGalleryLightbox() {
         /**
      * Handles apply lightbox image source behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {*} altText Value supplied by the caller or event context.
+     * @param {string} src Authorized source URL.
+     * @param {string} altText Accessible photo description.
      * @param {string} imageId Stable active-photo identifier.
+     * @return {void} Updates the live image source and optional diagnostics.
      */
     function applyLightboxImageSource(src, altText, imageId) {
         image.dataset.lightboxImageId = imageId;
@@ -2713,7 +2599,7 @@ export function setupGalleryLightbox() {
         }
         activeLightboxQualitySource = src;
         galleryDevModeState.currentSource = src;
-        galleryDevModeState.currentSourceKind = devFindSourceKind(src);
+        if (galleryDevModeEnabled) galleryDevModeState.currentSourceKind = devFindSourceKind(src);
         devMarkSource(src, 'ready', 'display');
         if (image.getAttribute('src') === src) {
             image.alt = altText;
@@ -2775,7 +2661,7 @@ export function setupGalleryLightbox() {
         image = loadedImage;
         activeLightboxQualitySource = src;
         galleryDevModeState.currentSource = src;
-        galleryDevModeState.currentSourceKind = devFindSourceKind(src);
+        if (galleryDevModeEnabled) galleryDevModeState.currentSourceKind = devFindSourceKind(src);
         devMarkSource(src, 'ready', 'quality-display');
         applyLightboxZoomState(false, targetMetrics);
         loadedImage.getBoundingClientRect();
@@ -6427,12 +6313,6 @@ export function setupGalleryLightbox() {
 
         return window.galleryMapMarkerIcons[markerRole];
     }
-
-    // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
-    const galleryLeafletViewportState = new Map();
-
-    // Runtime-only follow-current-location preference. It starts disabled on every page load.
-    const galleryLeafletFollowCurrentLocationState = {enabled: false};
 
         /**
      * Build a stable runtime key for one map view.

@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.118.6
+**Current Version:** 0.119
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -19,6 +19,8 @@ Custom CSS remains installation-owned, is preserved by ordinary saves and is exc
 With Flight Maps and Navigation Data enabled, route input and SimBrief draft requests check local navigation-data freshness in the background. Gallery saves remain available during imports; unresolved saved manual routes can gain coordinates while preserving existing points, SimBrief OFP geometry, and newer edits. Side-panel completion keeps the editor draft, drawer, and browser URL in place.
 
 Gallery headers and cards share an animated tag panel. The server renders the saved tag preview and row cap immediately; the header panel preserves every direct and contained tag, wraps long names and keeps the header dimensions stable. Native disclosure remains available without JavaScript, and existing Theme limits, sorting, scrollbar and animation settings continue to apply.
+
+Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
 
 ## Product manuals
 
@@ -932,7 +934,7 @@ The codebase is organized for easy extension:
 
 1. **New controller** - Add file in `app/controllers/`
 2. **New service** - Add file in `app/services/` for business logic
-3. **New route** - Register it through the existing bootstrap/dispatcher routing structure
+3. **New route** - Add the canonical route and security boundary in `app/bootstrap/dispatch.php`, then update the reviewed runtime dependency inputs and regenerate `app/runtime/modules.php` with `php scripts/generate_runtime_modules.php`; keep existing procedural controllers as route handlers
 4. **Optional capability** - Before adding a new toggle, check `app/services/feature_flags/registry.php`. Reuse an existing master when the behavior belongs to the same subsystem. New masters must declare one canonical storage owner, dependencies, owned routes, non-destructive OFF behavior, and Admin/Settings metadata rather than adding controller-local settings.
 5. **New migration** - Add a dated file in `database/migrations/` only when persistence/schema actually changes
 6. **Translations** - Add the canonical key to `app/lang/en.json` and keep `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
@@ -954,7 +956,7 @@ Run the complete standalone regression suite:
 php scripts/audit.php --profile=full
 ```
 
-The tracked `tests/` tree is the authoritative framework-free suite, and `php scripts/audit.php` is its canonical orchestration entrypoint. `--profile=quick` uses the curated `php-fast` subset for edit-cycle feedback; it does not run the complete PHP regression tree, whole-tree advisory inventory, WinApp suite, slow Node fixtures, or Chromium. `--profile=full` retains complete PHP regression and source-tree coverage; `--profile=release` retains that coverage and adds release qualification. All profiles probe real early-runtime and application-bootstrap includes in fresh CLI children, enforcing file-count and peak-memory ceilings while recording wall time observationally. The application probe ends before `cms_run()`, so it measures no route, database, or session work. See [TESTING.md](TESTING.md) for exact limits and worker details. The runner also executes explicitly registered Node, WinApp Python, syntax, contract, and release-specific checks without streaming successful child output into the agent context. It writes a compact `cache/test-audit/latest.md`, a machine-readable `latest.json`, and per-suite drill-down logs. Direct focused PHP/Node commands are for diagnosis, not the default full-suite workflow. `php tests/run.php` remains a compatibility wrapper for the complete PHP regression suite. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
+The tracked `tests/` tree is the authoritative framework-free suite, and `php scripts/audit.php` is its canonical orchestration entrypoint. `--profile=quick` uses the curated `php-fast` subset for edit-cycle feedback; it does not run the complete PHP regression tree, whole-tree advisory inventory, WinApp suite, slow Node fixtures, or Chromium. `--profile=full` retains complete PHP regression and source-tree coverage; `--profile=release` retains that coverage and adds release qualification. All profiles probe early-runtime and small application-bootstrap includes in fresh CLI children, enforcing file-count and peak-memory ceilings, and run nine actual route-lifecycle probes when an owned disposable workflow fixture is available. Without that fixture, route coverage is an explicit SKIP. Wall time is observational. See [TESTING.md](TESTING.md) for exact limits and the private-MySQL workflow. The runner also executes explicitly registered Node, WinApp Python, syntax, contract, and release-specific checks without streaming successful child output into the agent context. It writes a compact `cache/test-audit/latest.md`, a machine-readable `latest.json`, and per-suite drill-down logs. Direct focused PHP/Node commands are for diagnosis, not the default full-suite workflow. `php tests/run.php` remains a compatibility wrapper for the complete PHP regression suite. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
 
 ### Release preparation
 

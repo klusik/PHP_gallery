@@ -38,7 +38,7 @@ declare(strict_types=1);
 use function Gallery\Services\site_maintenance_run;
 use function Gallery\Services\site_maintenance_time_budget_seconds;
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 /**
  * Return a CLI option value from --name=value arguments.

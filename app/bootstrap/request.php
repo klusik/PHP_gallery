@@ -46,12 +46,13 @@ use function Gallery\Core\viewer_identity_remember_restore_request;
 /**
  * Resolve the route and initialize request-scoped behavior in the legacy startup order.
  *
+ * @param Request|null $request Route snapshot already normalized by the kernel, or legacy direct-call input.
  * @return string Resolved page identifier.
  */
-function cms_initialize_request(): string
+function cms_initialize_request(?Request $request = null): string
 {
     // Variable $route stores this steps working value.
-    $route = cms_route_from_request();
+    $route = $request !== null ? $request->routeData() : cms_route_from_request();
     // Variable $page stores this steps working value.
     $page = $route['page'];
     $_GET['page'] = $page;

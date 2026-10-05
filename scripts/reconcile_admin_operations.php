@@ -58,7 +58,7 @@ if ($mode === '' || ($mode === 'complete' && $evidencePath === '')) {
 }
 
 try {
-    require dirname(__DIR__) . '/app/bootstrap.php';
+    require dirname(__DIR__) . '/app/bootstrap_full.php';
     if ($mode === 'list') {
         $result = \Gallery\Services\admin_operation_pending_report($cursor);
     } elseif ($mode === 'inspect') {

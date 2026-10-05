@@ -49,12 +49,11 @@ use function Gallery\Views\view_render_feature_disabled_admin;
 use function Gallery\Views\view_render_not_found;
 
 /**
- * Dispatch a resolved page identifier to the existing controller route table.
+ * Return canonical procedural handlers without loading their implementations.
  *
- * @param string $page Resolved page identifier.
- * @return void Runs the route's preflight and controller, or emits the centralized refusal/not-found response.
+ * @return array<string,string> Existing page-to-handler route map.
  */
-function cms_dispatch_page(string $page): void
+function cms_route_handlers(): array
 {
     // Variable $routes stores this steps working value.
     $routes = [
@@ -286,6 +285,22 @@ function cms_dispatch_page(string $page): void
         'setup' => '\\Gallery\\Controllers\\cms_setup',
     ];
 
+    return $routes;
+}
+
+/**
+ * Dispatch a resolved page identifier to the existing controller route table.
+ *
+ * @param string $page Resolved page identifier.
+ * @param Kernel|null $kernel Optional injected kernel for isolated transport-policy tests.
+ * @return void Runs the route's preflight and controller, or emits the centralized refusal/not-found response.
+ */
+function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
+{
+    $kernel ??= cms_runtime_kernel();
+    $route = $kernel->resolve(new Request($page));
+    $kernel->load('request-policy');
+
     // Download endpoints are crawler-excluded independently of authorization, feature state, and response type.
     $robotsDirective = seo_request_guard_route_robots_header_value($page);
     if ($robotsDirective !== null && !headers_sent()) {
@@ -301,22 +316,23 @@ function cms_dispatch_page(string $page): void
             || str_contains($contentType, 'application/json')
             || (string) ($_GET['ajax'] ?? $_POST['ajax'] ?? '') !== '';
         cms_apply_feature_disabled_route_response(
-            feature_flag_disabled_route_decision($page, $wantsJson, $isAdmin)
+            feature_flag_disabled_route_decision($page, $wantsJson, $isAdmin),
+            $kernel
         );
         return;
     }
 
-    // Variable $handler stores this steps working value.
-    $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
         if (in_array($page, ['cooperative_gallery', 'cooperative_content_api', 'cooperative_metadata_api', 'cooperative_media', 'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
+            $kernel->load('public-policy');
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
             nsfw_guard_assert_public_policy_available();
         }
-        $handler();
+        $kernel->dispatch($route);
     } catch (PublicSchemaPolicyUnavailableException $exception) {
+        $kernel->load('schema-unavailable-response');
         cms_public_schema_unavailable($page, $exception->feature(), $exception->schemaState(), $exception->errorCode());
     }
 
@@ -326,9 +342,12 @@ function cms_dispatch_page(string $page): void
  * Apply one disabled-feature decision at the HTTP dispatch boundary.
  *
  * @param array{status:int,representation:string,headers:array<string,string>,payload:array<string,mixed>,title:string,message:string,admin:bool} $decision Disabled-route decision.
+ * @param Kernel|null $kernel Optional request coordinator already selected by dispatch.
+ * @return void Emits the existing disabled-feature representation.
  */
-function cms_apply_feature_disabled_route_response(array $decision): void
+function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $kernel = null): void
 {
+    ($kernel ?? cms_runtime_kernel())->load('feature-disabled-response');
     http_response_code((int) ($decision['status'] ?? 404));
     if (!headers_sent()) {
         foreach (($decision['headers'] ?? []) as $name => $value) {

@@ -41,7 +41,7 @@
 
 use function Gallery\Services\telemetry_run_maintenance;
 
-require __DIR__ . '/../app/bootstrap.php';
+require __DIR__ . '/../app/bootstrap_full.php';
 
 try {
     // $result stores the rollup and retention cleanup summary.

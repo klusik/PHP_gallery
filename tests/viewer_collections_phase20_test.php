@@ -139,7 +139,7 @@ viewer_phase20_assert(str_contains($controller, "viewer_collection_positive_id")
 viewer_phase20_assert(str_contains($service, 'viewer_collection_title_validate($title)'), 'Create/rename must use canonical title validation.');
 viewer_phase20_assert(str_contains($content, "'max_characters' => 120") && str_contains($content, "preg_match('//u'") && str_contains($content, 'ascii_control'), 'Existing title length/UTF-8/control policy must remain authoritative.');
 viewer_phase20_assert(str_contains($collectionView, "e((string) (\$collection['title'] ?? ''))") && !str_contains($collectionView, 'innerHTML'), 'Collection titles must render through HTML escaping in the view and never innerHTML.');
-require_once $root . '/app/bootstrap.php';
+require_once $root . '/app/bootstrap_full.php';
 foreach ([
     '<script>alert(1)</script>',
     '"><img src=x onerror=alert(1)>',

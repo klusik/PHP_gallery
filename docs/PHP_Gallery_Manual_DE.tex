@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.118.6}
+\newcommand{\version}{0.119}
 \newcommand{\manualdate}{5.~Oktober~2026}
 
 \hypersetup{
@@ -1335,6 +1335,8 @@ Die Auswahl von \ui{Foto öffnen} in einer Galeriekartenmarkierung öffnet diese
 
 \securitynote{GPS-Daten können sensible Orte offenlegen. Administratoren sollten geerbte Karteneinstellungen, Bildmetadaten und öffentlichen Zugriff prüfen, bevor sie persönliche Fotos veröffentlichen.}
 
+Eine Galerie mit gespeicherter Flugroute kann ihre Karte bereits vor dem ersten Fotoupload öffnen, auch auf Seiten ohne Lightbox-Markup. Die Karte umfasst alle gespeicherten Routenpunkte und behält die normalen Zurücksetzen-Steuerelemente; Routenpunkte werden nicht als Fotomarker behandelt. Ohne gespeicherte Koordinaten erscheint die normale Leerkartenmeldung. Galeriezugriff und wirksame Karteneinstellungen gelten weiter; die Karte lädt auf Anforderung.
+
 \subsection{Flugkarten und Navigationsdaten}
 \index{s00224@SimBrief}
 \index{f00104@Flugkarten}
@@ -1870,6 +1872,10 @@ Dasselbe begrenzte Modell meldet Bereitschaft der Galeriebearbeitungsrevision un
 
 Der getrennte Schalter \ui{Entwicklungsdiagnose} ist nur für Administratoren. Bei Aktivierung für einen angemeldeten Administrator ergänzt er Betrachterinstrumentierung für Vorladen, Cache, Speicher, Netzwerk und Bildzeitmessung im öffentlichen/Lightbox-/Vollbilderlebnis. Er aktiviert diese Diagnosen nicht für gewöhnliche anonyme Besucher. Lassen Sie ihn im normalen Betrieb aus, außer zur Untersuchung von Darstellungs- oder Leistungsverhalten; der Galeriebenchmark hängt ebenfalls von diesem Entwicklungsdiagnosekontext ab.
 
+Das DEV-Dashboard im Lightbox-Betrachter öffnet eine kompakte Übersicht. Einfrieren und Fortsetzen steuern die Beobachtung; Einklappen behält die Übersicht und Erweitern öffnet einzelne Seiten für Medien, Vorladen, Diagramme, Ansichtsgröße und Lebenszyklus. Die Seiten passen ohne Scrollleisten in den verfügbaren Platz, behalten die Auswahl bei Aktualisierungen und bleiben auch im nativen Vollbild innerhalb des Betrachters. Die Medienseite unterscheidet das angezeigte Foto vom noch ausstehenden Navigationsziel und zeigt geladene Abmessungen sowie angezeigte und angeforderte Qualität. Quellbeschriftungen verbergen Zugangsdaten, Abfrageparameter und URL-Fragmente.
+
+Drei Diagramme besitzen eigene beschriftete Skalen: geschätzter Pixelspeicher gehaltener dekodierter Bilder, Cacheeinträge und aktive separate Ladevorgänge sowie Animationsbildintervalle mit einer 16,7~ms-Referenz. Höchstens 90 Messpunkte im Abstand von 350~ms umfassen ungefähr 31 Sekunden. Die Pixelschätzung schließt das aktive Bild, GPU-Speicher und den Browserheap aus; Bildintervalle enthalten auch Ablaufplanung und Hintergrunddrosselung. Früheres erfolgreiches Dekodieren beweist keinen aktuellen Cachebesitz. Nicht unterstützte Messungen erscheinen als nicht verfügbar. Die Diagnose beobachtet vorhandene Arbeit ohne zusätzliche Medien- oder Metadatenanfragen; Schließen stoppt die Beobachtung und Aufräumen entfernt das Dashboard. Bei ausgeschaltetem DEV wird dessen Modul nicht geladen.
+
 Der administrative Ablauf \ui{Integrität} prüft integritätsverwaltete Kerndateien gegen das installierte Manifest und hilft, unvollständige oder unerwartete Bereitstellungsänderungen zu erkennen. Er ist ein Laufzeitprüfwerkzeug; abgestimmte Sicherungen bleiben erforderlich, weil ein Integritätsmanifest keine Benutzerfotos enthält und keine Wiederherstellungsmedien ersetzt.
 
 Bei verfügbarer Entwicklungsdiagnose kann ein angemeldeter Administrator für die aktuelle Galerie einen \ui{Benchmark zum Laden der öffentlichen Galerie} starten. Der Browser lädt die Galerie mehrfach in einem verborgenen Frame desselben Ursprungs mit anonymer Vorschau, kombiniert PHP-Darstellungszähler mit Browsernavigationstiming und bietet anschließend das Benchmarkprotokoll als JSON an. Verwenden Sie zum Vergleich zweier Änderungen dieselbe Galerie, denselben Präsentationsmodus und dieselben Netzwerk-/Cachebedingungen; der Benchmark ist als Vorher-/Nachhermessung nützlicher denn als universelle Punktzahl.
@@ -1986,6 +1992,8 @@ Dieselbe frühe Laufzeitgrenze wandelt nicht abgefangene und abfangbare fatale P
 
 \important{Erstellen Sie vor einer Anwendungsaktualisierung eine abgestimmte Sicherung. Halten Sie sie verfügbar, bis Laufzeitprüfungen, Migrationen, öffentliche Galerien, geschützter Zugriff, Uploads und administrative Vorgänge geprüft wurden.}
 
+Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den vollständigen neuen Anfragekernel und seinen geprüften Modulplan. Ein unvollständiges Archiv wird abgelehnt, während vorbereitete Dateien außerhalb der aktiven Installation bleiben. Halten Sie bei manueller Bereitstellung alle ausgelieferten Laufzeitdateien zusammen; ein Austausch nur des Bootstrap würde eine unvollständige Anwendung hinterlassen.
+
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}
 
@@ -2007,6 +2015,8 @@ Die folgenden Seiten beschreiben den Anfrageweg der Anwendung. Sie betreffen hau
 
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
+Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
 Die Initialisierung liest lokale Konfiguration und stellt den Anfragekontext her: Datenbankzugriff bei Bedarf, Sprache, Sitzungszustand, Sicherheitsvoraussetzungen und gemeinsame Laufzeitdienste. Routing übersetzt anschließend die eingehende URL oder den Ersatzweg mit Abfrageparametern in eine interne Route mit Parametern wie Galeriepfad, Seitennummer, Mediengröße oder Freigabetoken. Dispatch ruft den für diese Route registrierten Controller auf.
 
 Die Reihenfolge ist bewusst gewählt. Eine Anfrage muss klassifiziert werden, bevor Code über ihre Bedienung entscheidet; Zugriffsprüfungen müssen vor Zusammenstellung geschützter Ausgaben laufen. Eine direkt wirkende Bild- oder Vorschaubild-URL ist daher weiterhin eine Anwendungsanfrage; der Mediencontroller autorisiert sie vor Ausgabe von Bytes.
@@ -2015,8 +2025,9 @@ Die Reihenfolge ist bewusst gewählt. Eine Anfrage muss klassifiziert werden, be
 browser request
   -> index.php or public/index.php
   -> app/bootstrap.php
-  -> cms_run()
-  -> cms_route_from_request()
+  -> cms_run() -> Gallery\Core\Kernel
+  -> Request -> Router -> RouteRegistry
+  -> ModuleLoader -> app/bootstrap/dispatch.php
   -> controller function
   -> service functions
   -> HTML, JSON, media, archive, or redirect response
@@ -2302,7 +2313,9 @@ Isolieren Sie vor Öffnen einer wiederhergestellten Installation E-Mail, geplant
 
 Der zentrale Einstieg \filepath{scripts/audit.php} bietet drei Profile. \codeword{--profile=quick} verwendet eine ausdrückliche PHP-Testteilmenge, strenge Quell- und MVC-Verträge, die Python-Importrichtlinie, schnelle Node-Fixtures und Syntaxprüfung geänderter Dateien. Es lässt die vollständige PHP-Suite, das beratende Inventar, WinApp-Tests, langsame Node-Fixtures und Chromium aus. Verwenden Sie \codeword{--profile=full} für die vollständige Übergabeprüfung und \codeword{--profile=release} für die Veröffentlichungsvorbereitung; ein schnelles PASS ersetzt keines dieser Profile.
 
-PHP-Suiten verwenden standardmäßig vier Arbeitsprozesse. Setzen Sie \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} auf eine ganze Zahl von 1 bis 8; ungültige Werte blockieren die Ausführung. Registrierte exklusive Tests laufen allein, nachdem aktive Prozesse beendet sind. Jeder Kindprozess behält getrennte Diagnosen und eine ab seinem tatsächlichen Start gemessene Zeitgrenze; Ergebnisse bleiben in stabiler Eingabereihenfolge. Jedes Profil misst außerdem Include-Phasen in frischen Prozessen vor \codeword{cms\_run()}: die frühe Laufzeit erlaubt eine PHP-Datei und 16~MiB Spitzenverbrauch, der Anwendungsbootstrap 560 Dateien und 64~MiB. Die Laufzeit ist nur eine Beobachtung; diese Sonden führen keine Datenbank-, Sitzungs- oder Routingarbeit aus.
+PHP-Suiten verwenden standardmäßig vier Arbeitsprozesse. Setzen Sie \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} auf eine ganze Zahl von 1 bis 8; ungültige Werte blockieren die Ausführung. Registrierte exklusive Tests laufen allein, nachdem aktive Prozesse beendet sind. Jeder Kindprozess behält getrennte Diagnosen und eine ab seinem tatsächlichen Start gemessene Zeitgrenze; Ergebnisse bleiben in stabiler Eingabereihenfolge. Jedes Profil misst außerdem Include-Phasen in frischen Prozessen vor \codeword{cms\_run()}: die frühe Laufzeit erlaubt eine PHP-Datei und 16~MiB Spitzenverbrauch, der Anwendungsbootstrap 40 Dateien und 16~MiB. Die Laufzeit ist nur eine Beobachtung; diese Sonden führen keine Datenbank-, Sitzungs- oder Routingarbeit aus.
+
+Dieselbe Laufzeit-Leistungssuite misst neun echte Routen nur mit einer eigenen isolierten Datenbank-/HTTP-Testinstallation: robots, Startseite, Galerie, Vorschaubild, Medium, angemeldete Administration und Telemetrie sowie beide anonymen Administrationsverweigerungen. Routenlimits liegen bei 160--300 eingebundenen Dateien und 32--48~MiB Spitzenspeicher; echte Produktantworten und Verweigerungen werden ebenfalls geprüft. Ohne diese Installation werden Routenmessungen ausdrücklich übersprungen. Laufzeit bleibt eine Beobachtung.
 
 CI führt erforderliche Chromium-Fixtures in einem eigenen Job mit \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1} aus; fehlende, nicht startbare oder übersprungene erforderliche Browserabdeckung lässt den Job fehlschlagen. Datenbank- und Laufzeitjobs deaktivieren Browser nur in ihrer eigenen Umgebung. Die lokale Browsererkennung bleibt optional. Die Option \codeword{--quick} der Workflow-Starter delegiert direkt an das schnelle Profil, ohne Datenbank oder Daemon anzulegen. Grenzen stehen in \filepath{TESTING.md}, isolierte Qualifizierung in \filepath{docs/GALLERY_WORKFLOWS.md}.
 

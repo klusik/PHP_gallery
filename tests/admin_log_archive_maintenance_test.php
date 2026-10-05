@@ -133,7 +133,7 @@ assert_admin_log_archive_maintenance(
     'Automatic archive maintenance must use a non-blocking cross-request lock and lightweight daily/backlog counter.'
 );
 assert_admin_log_archive_maintenance(
-    str_contains($bootstrapSource, 'admin_log_archive_register_request_trigger($page)')
+    str_contains($bootstrapSource, 'admin_log_archive_register_request_trigger($page, $kernel')
         && str_contains($archiveServiceSource, "['admin', 'admin_logs']")
         && str_contains($archiveServiceSource, 'register_shutdown_function'),
     'Only authenticated Admin page loads may register due archive work, and it must execute after response.'

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.118.6}
+\newcommand{\version}{0.119}
 \newcommand{\manualdate}{5~October~2026}
 
 \hypersetup{
@@ -1341,6 +1341,8 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 
 \securitynote{GPS data can~reveal sensitive locations. Administrators should review inherited map settings, image metadata, and~public access before publishing personal photographs.}
 
+A~gallery with a~saved flight route can~open its map before the~first photograph is~uploaded, including pages with no~lightbox markup. The~map fits all stored route points and~retains ordinary reset controls without treating route points as~photo markers. Without stored coordinates it~shows the~normal empty-map message. Gallery access and~effective map settings still apply; loading remains on~demand.
+
 \subsection{Flight maps and~navigation data}
 \index{SimBrief}
 \index{flight maps}
@@ -1884,6 +1886,10 @@ The~same bounded model reports gallery edit-revision readiness and~unresolved im
 
 The~separate \ui{Development diagnostics} switch is~administrator-only. When enabled for~a~signed-in administrator it~adds viewer instrumentation for~preload, cache, memory, network, and~frame-timing work in~the~public/lightbox/fullscreen experience. It~does not~turn those diagnostics on~for~ordinary anonymous visitors. Keep it~off during normal ownership unless you~are~investigating rendering or~performance behavior; the~gallery benchmark also depends on~this development-diagnostics context.
 
+The~lightbox DEV dashboard opens as~a~compact overview. Use Freeze or~Resume to~hold or~continue observations, Collapse to~keep the~overview, and~Expand to~open separate pages for~media, preloading, graphs, viewport, and~lifecycle details. Pages fit the~available viewport without scrollbars, preserve your selected page during updates, and~remain within the~viewer in~native fullscreen. The~media page distinguishes the~displayed photograph from~a~pending navigation target and~shows loaded dimensions, displayed quality, and~requested quality. Source labels omit credentials, query parameters, and~fragments.
+
+The~three graphs have separate labeled scales: retained decoded-cache pixel estimates, cache entries and~active detached loads, and~animation-frame intervals with a~16.7~ms reference. Up~to~90 samples at~350~ms intervals cover about 31 seconds. The~pixel estimate excludes the~live image, GPU allocations, and~browser heap; frame intervals include scheduling and~background throttling rather than measuring render cost alone. A~past successful decode does~not~prove that the~viewer still retains that image. Unsupported browser measurements show an~unavailable marker. Diagnostics observe existing work without requesting extra media or~metadata; closing stops monitoring and~teardown removes the~panel. When DEV is~off, the~dashboard module is~not~loaded.
+
 The~Admin \ui{Integrity} workflow checks integrity-managed core files against the~installed manifest and~helps identify incomplete or~unexpected deployment changes. It~is~a~runtime verification tool; coordinated backups are~still required because an~integrity manifest does~not~contain user photographs or~replace recovery media.
 
 When development diagnostics are~available, a~signed-in administrator can~start a~\ui{Public gallery load benchmark} for~the~current gallery. The~browser loads the~gallery several times in~a~hidden same-origin frame using an~anonymous preview, combines PHP render counters with browser navigation timing, and~then offers the~benchmark log as~JSON. Use the~same gallery, presentation mode, and~network/cache conditions when comparing two changes; the~benchmark is~most useful as~a~before/after measurement rather than~as~a~universal score.
@@ -2003,6 +2009,8 @@ The~same early runtime boundary converts uncaught and~catchable fatal PHP failur
 
 \important{Run a~coordinated backup before an~application update. Keep the~backup available until runtime checks, migrations, public galleries, protected access, uploads, and~Admin operations have been verified.}
 
+Before activation, updater archive validation also requires the~complete new request runtime and~its reviewed module plan. A~partial archive is~refused while prepared files remain outside the~active installation. Keep all shipped runtime files together during manual deployment; replacing only the~bootstrap would leave an~incomplete application.
+
 \subsection{Integrity manifest}
 \index{core manifest}
 
@@ -2025,6 +2033,8 @@ The~following pages describe the~request path used by~the~application. They are~
 
 Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
+The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
+
 Bootstrap reads local configuration and~establishes the~request context: database access where required, language, session state, security prerequisites, and~shared runtime services. Routing then translates the~incoming URL or~query-style fallback into an~internal route plus parameters such as~a~gallery path, page number, media size, or~share token. Dispatch calls the~controller registered for~that route.
 
 The~ordering is~deliberate. A~request must~be~classified before code decides how to~serve it, and~access checks must run before protected output is~assembled. A~direct-looking image or~thumbnail URL is~therefore still an~application request; the~media controller authorizes it~before returning bytes.
@@ -2033,8 +2043,9 @@ The~ordering is~deliberate. A~request must~be~classified before code decides how
 browser request
   -> index.php or public/index.php
   -> app/bootstrap.php
-  -> cms_run()
-  -> cms_route_from_request()
+  -> cms_run() -> Gallery\Core\Kernel
+  -> Request -> Router -> RouteRegistry
+  -> ModuleLoader -> app/bootstrap/dispatch.php
   -> controller function
   -> service functions
   -> HTML, JSON, media, archive, or redirect response
@@ -2349,8 +2360,10 @@ active workers finish. Each child retains separate diagnostics and~a~timeout
 measured from~its actual start; results stay in~deterministic input order.
 Every profile also measures fresh-process include phases before
 \codeword{cms\_run()}: early runtime permits one PHP file and~16~MiB peak memory,
-and~application bootstrap permits 560 files and~64~MiB. Elapsed time is~observational;
+and~application bootstrap permits 40 files and~16~MiB. Elapsed time is~observational;
 these probes perform no~database, session, or~route work.
+
+The~same runtime-performance suite measures nine real routes only with an~owned disposable database/HTTP fixture: robots, home, gallery, thumbnail, media, authenticated Admin and~telemetry, and~both anonymous Admin denials. Route ceilings range from~160--300 included files and~32--48~MiB peak memory; valid product responses and~denials are~checked as~well. Without that fixture route measurements are~explicitly skipped. Wall time remains observational.
 
 CI runs required Chromium fixtures in~one dedicated job with
 \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; missing, unstartable, or~skipped

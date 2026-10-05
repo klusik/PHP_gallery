@@ -116,65 +116,6 @@ function application_update_write_json_atomic(string $path, array $payload): voi
 }
 
 /**
- * Load a persisted JSON state file.
- *
- * @param string $path JSON path.
- * @return array<string,mixed> Decoded payload or an empty array.
- */
-function application_update_read_json(string $path): array
-{
-    if (!is_file($path)) {
-        return [];
-    }
-    $json = file_get_contents($path);
-    if ($json === false || trim($json) === '') {
-        return [];
-    }
-    $decoded = json_decode($json, true);
-    return is_array($decoded) ? $decoded : [];
-}
-
-/**
- * Return the private directory for one job identifier.
- *
- * @param string $jobId Job identifier.
- * @return string Absolute directory path.
- */
-function application_update_job_dir(string $jobId): string
-{
-    if (!preg_match('/^[0-9]{14}-[a-f0-9]{12}$/', $jobId)) {
-        throw new RuntimeException('Invalid update job identifier.');
-    }
-    return application_update_jobs_root() . '/jobs/' . $jobId;
-}
-
-/**
- * Return the durable state path for one update job.
- *
- * @param string $jobId Job identifier.
- * @return string Absolute state path.
- */
-function application_update_job_state_path(string $jobId): string
-{
-    return application_update_job_dir($jobId) . '/job.json';
-}
-
-/**
- * Load one durable update job.
- *
- * @param string $jobId Job identifier.
- * @return array<string,mixed> Job state.
- */
-function application_update_load_job(string $jobId): array
-{
-    $job = application_update_read_json(application_update_job_state_path($jobId));
-    if ($job === [] || (string) ($job['id'] ?? '') !== $jobId) {
-        throw new RuntimeException('Update job state was not found.');
-    }
-    return $job;
-}
-
-/**
  * Persist a durable update job checkpoint.
  *
  * @param array $job Job state.
@@ -187,66 +128,6 @@ function application_update_save_job(array $job): void
     }
     $job['updated_at'] = time();
     application_update_write_json_atomic(application_update_job_state_path($jobId), $job);
-}
-
-/**
- * Return true when a job no longer requires worker execution.
- *
- * @param array $job Job state.
- * @return bool True for completed or permanently failed states.
- */
-function application_update_job_terminal(array $job): bool
-{
-    return in_array((string) ($job['status'] ?? ''), ['completed', 'cancelled'], true);
-}
-
-/**
- * Return the active update job when one exists.
- *
- * @return array<string,mixed>|null Active job state.
- */
-function application_update_active_job(): ?array
-{
-    $pointerPath = application_update_jobs_root() . '/active-job.json';
-    $pointer = application_update_read_json($pointerPath);
-    $jobId = (string) ($pointer['job_id'] ?? '');
-    if ($jobId === '') {
-        return null;
-    }
-
-    try {
-        $job = application_update_load_job($jobId);
-    } catch (Throwable) {
-        @unlink($pointerPath);
-        return null;
-    }
-
-    if (application_update_job_terminal($job)) {
-        @unlink($pointerPath);
-        return null;
-    }
-    return $job;
-}
-
-/**
- * Return the last completed update job for optional rollback controls.
- *
- * @return array<string,mixed>|null Last completed job state.
- */
-function application_update_last_job(): ?array
-{
-    $pointerPath = application_update_jobs_root() . '/last-job.json';
-    $pointer = application_update_read_json($pointerPath);
-    $jobId = (string) ($pointer['job_id'] ?? '');
-    if ($jobId === '') {
-        return null;
-    }
-    try {
-        return application_update_load_job($jobId);
-    } catch (Throwable) {
-        @unlink($pointerPath);
-        return null;
-    }
 }
 
 /**
