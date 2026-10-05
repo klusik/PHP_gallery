@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.118.6';
+const CMS_VERSION = '0.119';
 ```
 
 Update-related code uses:
@@ -126,6 +126,8 @@ The shared editor form renders Identity, API, Access and Display controls with c
 Dynamic tab binding in `public/assets/gallery-modules/admin-tabs.js` resolves panels within the current injected drawer body, not by global ID across a public page that may contain another editor fragment. Its sticky offset follows the measured header height, including wrapped titles. The gallery form's fixed Save gallery bar remains visible across the settings tabs after the drawer animation settles. Panel setup and save completion continue through the canonical mutation coordinator, with versioned imports in `public/assets/gallery.js` and `admin-operations.js` to replace cached handlers after deployment. Browser fixture coverage exercises physical tab hit targets, save-bar position during scrolling, fragment replacement and unchanged public URL.
 
 The single lightbox delegates nearby-preview queue scheduling, generation, concurrency and cancellation to `lightbox-preload-lifecycle.js`. Authorized source selection, decoding/cache ownership, foreground navigation, zoom and presentation stay with the existing viewer. The setup controller disposes the queue; close/navigation reset it according to the documented [lifecycle contract](docs/BROWSER_LIFECYCLE.md). This is not a second viewer or refresh coordinator.
+
+Gallery route maps also initialize on pages with no photographs or lightbox markup. Their Leaflet viewport and follow-location state is created before the no-viewer early return; lazy payload loading, route markers, fit/reset controls and existing access policy remain shared with ordinary maps. Teardown aborts the independent map close handler, removes its Leaflet instance, hides the overlay and clears the body state before replacement.
 
 The existing administrator DEV switch optionally loads `lightbox-dev-dashboard.js`. Its URL follows the content revision from `data-gallery-asset-revision`, with the parent module revision and a versioned direct-import fallback, so immutable browser caches cannot keep an earlier dashboard after an application update. The viewer prepares read-only snapshots of its live image, navigation target, quality request, canonical zoom geometry, preload queue and retained decoded cache. The dashboard owns presentation only: a compact overview, adjacent Freeze/Collapse/Expand controls, and separate pages for media, preloading, graphs, viewport and lifecycle details without scrollbars. It preserves selected pages and DOM nodes during updates. Three colored graphs have separate labeled scales, units and explanatory legends; cache count and active detached loads share one count scale, and frame intervals include a 16.7 ms reference. History is capped at 90 samples; recent source observations and events are bounded. Historical decode success does not imply current cache ownership, and pixel memory estimates exclude other browser allocations. URL credentials, query strings and fragments are omitted. Disabled DEV does not load this module; closing stops monitoring and setup teardown removes the panel. Diagnostics never initiate media or metadata requests.
 

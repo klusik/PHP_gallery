@@ -164,7 +164,7 @@ The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_fo
 | `telemetry_daily_retention_days` | `telemetry_settings.php`; Telemetry | UI 30..3650, service-owned effective normalization | 730 | retention maintenance | Specialized | Telemetry | privacy |
 | `seo_request_guard_enabled` | `seo_request_guard.php`; Dashboard Maintenance | boolean | `1` | affects public request rejection | Summary | Dashboard Maintenance | security |
 | `seo_request_guard_logging_enabled` | `seo_request_guard.php`; Dashboard Maintenance | boolean | `1` | controls sampled Admin log writes | Summary | Dashboard Maintenance | security |
-| `dev_mode_enabled` | `app_settings.php`; Dashboard Maintenance | boolean | `0` | enables Admin-only diagnostics/instrumentation | Edit | Dashboard Maintenance | diagnostic |
+| `dev_mode_enabled` | `app_settings.php`; Dashboard Maintenance | boolean | `0` | enables Admin-only diagnostics/instrumentation, including the localized read-only lightbox dashboard; retains the existing storage owner | Edit | Dashboard Maintenance | diagnostic |
 | `site_maintenance_enabled` | `site_maintenance.php`; Dashboard Maintenance | boolean | `1` | controls schedule eligibility | Summary | Dashboard Maintenance | operational |
 | `site_maintenance_utc_time` | `site_maintenance.php`; Dashboard Maintenance | normalized `HH:MM` UTC | `00:00` | schedule only | Specialized | Dashboard Maintenance | operational |
 | `site_maintenance_batch_size` | `site_maintenance.php`; Dashboard Maintenance | integer 1..50 | 20 | bounds work per internal batch | Specialized | Dashboard Maintenance | operational |
