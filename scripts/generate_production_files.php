@@ -148,15 +148,16 @@ function production_files_git_index(string $root): array
 }
 
 /**
- * Build the deterministic production and source-review path arrays from the Git index.
+ * Build deterministic CMS, companion and source-review path arrays from the Git index.
  *
  * @param string $root Project root.
- * @return array{schema_version:int,production_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Refreshed inventory.
+ * @return array{schema_version:int,production_files:list<string>,companion_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Refreshed inventory.
  * @throws RuntimeException When an approved path is missing or is a symlink/submodule.
  */
 function production_files_build_inventory(string $root): array
 {
     $production = [];
+    $companion = [];
     $updater = [];
     $sourceReview = [];
     foreach (production_files_git_index($root) as $record) {
@@ -188,28 +189,36 @@ function production_files_build_inventory(string $root): array
             throw new RuntimeException('Production inventory cannot contain symlinks or submodules.');
         }
         $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-            if (is_link($absolute) || !is_file($absolute) || !is_readable($absolute)
-                || !\Gallery\Core\release_file_policy_resolves_to_expected_path($root, $relative, $absolute)) {
+        if (is_link($absolute) || !is_file($absolute) || !is_readable($absolute)
+            || !\Gallery\Core\release_file_policy_resolves_to_expected_path($root, $relative, $absolute)) {
             throw new RuntimeException('A tracked production file is missing, unreadable, or unsafe: ' . $relative);
         }
-        $production[] = $relative;
+        // Keep the schema-1 base readable by installed CMS updaters with the older allowlist.
+        if (\Gallery\Core\release_file_policy_is_winapp_source_path($relative)) {
+            $companion[] = $relative;
+        } else {
+            $production[] = $relative;
+        }
         if (production_files_is_updater_owned($relative)) {
             $updater[] = $relative;
         }
     }
 
     sort($production, SORT_STRING);
+    sort($companion, SORT_STRING);
     sort($updater, SORT_STRING);
     sort($sourceReview, SORT_STRING);
     $production = \Gallery\Core\release_file_policy_validate_path_list($production);
+    $companion = \Gallery\Core\release_file_policy_validate_path_list($companion);
     $updater = \Gallery\Core\release_file_policy_validate_path_list($updater);
     $sourceReview = \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
-    $all = array_merge($production, $sourceReview);
+    $all = array_merge($production, $companion, $sourceReview);
     sort($all, SORT_STRING);
     \Gallery\Core\release_file_policy_validate_path_list($all);
     return [
         'schema_version' => 1,
         'production_files' => array_values(array_unique($production)),
+        'companion_files' => array_values(array_unique($companion)),
         'updater_files' => array_values(array_unique($updater)),
         'source_review_files' => array_values(array_unique($sourceReview)),
     ];
@@ -256,7 +265,8 @@ try {
     if (file_put_contents($output, $content, LOCK_EX) === false) {
         throw new RuntimeException('Could not write app/production-files.json.');
     }
-    echo 'Wrote app/production-files.json (' . count($inventory['production_files']) . ' production files, '
+    echo 'Wrote app/production-files.json (' . (count($inventory['production_files']) + count($inventory['companion_files'])) . ' production files including '
+        . count($inventory['companion_files']) . ' companion files, '
         . count($inventory['source_review_files']) . " source-review files).\n";
 } catch (RuntimeException $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");

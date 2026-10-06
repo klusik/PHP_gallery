@@ -3,17 +3,22 @@
 /**
  * Project: PHP Gallery
  * Repository: https://github.com/klusik/PHP_gallery
- * File: app/release_file_policy.php
- * Module Type: Core Policy Module
- * Purpose: Read and validate the checked-in production file inventory for packaging and updates.
- * Responsibilities: Resolve fixed production paths, validate safe relative paths and compare staged trees.
+ * File: tests/fixtures/updater_inventory_before_winapp.php
+ * Module Type: Frozen Compatibility Fixture
+ * Purpose: Preserve the installed pre-WinApp inventory reader and archive validation contract.
+ * Responsibilities: Exercise incoming releases with trusted validator code from commit ffe5b5d.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
+ *
+ * Frozen from app/release_file_policy.php at ffe5b5d (CMS_VERSION 0.119).
+ * Only the namespace and this attribution header differ; each reachable function is copied verbatim.
+ * Keep this fixture independent of the current policy so later allowlist changes cannot hide regressions.
+ * Archive PHP code is never loaded: this is trusted checked-in test code, not an incoming package.
  */
 
 declare(strict_types=1);
 
-namespace Gallery\Core;
+namespace Gallery\Tests\LegacyUpdatePolicy;
 
 use RuntimeException;
 
@@ -37,7 +42,7 @@ function release_file_policy_root(string $rootPath): string
  * Read and validate the static production file inventory.
  *
  * @param string $rootPath Application root containing app/production-files.json.
- * @return array{schema_version:int,production_files:list<string>,companion_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Validated inventory.
+ * @return array{schema_version:int,production_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Validated inventory.
  * @throws RuntimeException When the inventory is missing, malformed, unsafe, duplicated, or unsorted.
  */
 function release_file_policy_read(string $rootPath): array
@@ -56,17 +61,14 @@ function release_file_policy_read(string $rootPath): array
         || !isset($manifest['production_files'], $manifest['updater_files'], $manifest['source_review_files'])
         || !is_array($manifest['production_files'])
         || !is_array($manifest['updater_files'])
-        || !is_array($manifest['source_review_files'])
-        || (array_key_exists('companion_files', $manifest) && !is_array($manifest['companion_files']))) {
+        || !is_array($manifest['source_review_files'])) {
         throw new RuntimeException('Production file inventory has an unsupported or invalid schema.');
     }
 
     $productionFiles = release_file_policy_validate_path_list($manifest['production_files']);
-    // Schema-1 readers shipped before companion distribution ignore this additive field.
-    $companionFiles = release_file_policy_validate_path_list($manifest['companion_files'] ?? []);
     $updaterFiles = release_file_policy_validate_path_list($manifest['updater_files']);
     $sourceReviewFiles = release_file_policy_validate_path_list($manifest['source_review_files']);
-    $allPackagePaths = array_merge($productionFiles, $companionFiles, $sourceReviewFiles);
+    $allPackagePaths = array_merge($productionFiles, $sourceReviewFiles);
     sort($allPackagePaths, SORT_STRING);
     release_file_policy_validate_path_list($allPackagePaths);
     $productionSet = array_fill_keys($productionFiles, true);
@@ -74,12 +76,6 @@ function release_file_policy_read(string $rootPath): array
     foreach ($productionFiles as $path) {
         if (!release_file_policy_is_production_path($path)) {
             throw new RuntimeException('Production inventory contains a private or unapproved path.');
-        }
-    }
-    foreach ($companionFiles as $path) {
-        if (!release_file_policy_is_production_path($path)
-            || !release_file_policy_is_winapp_source_path($path) || release_file_policy_is_updater_path($path)) {
-            throw new RuntimeException('Companion inventory entries must be approved non-updater WinApp files.');
         }
     }
     foreach ($updaterFiles as $path) {
@@ -102,7 +98,6 @@ function release_file_policy_read(string $rootPath): array
     return [
         'schema_version' => 1,
         'production_files' => $productionFiles,
-        'companion_files' => $companionFiles,
         'updater_files' => $updaterFiles,
         'source_review_files' => $sourceReviewFiles,
     ];
@@ -141,31 +136,7 @@ function release_file_policy_is_production_path(string $relativePath): bool
         || str_starts_with($relativePath, 'scripts/')
         || str_starts_with($relativePath, 'docs/')
         || (str_starts_with($relativePath, 'database/migrations/'))
-        || release_file_policy_is_winapp_source_path($relativePath)
         || (str_starts_with($relativePath, 'custom_css/') && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'css');
-}
-
-/**
- * Identify distributable WinApp sources and required runtime assets without local build state.
- *
- * @param string $relativePath Project-relative candidate using forward slashes.
- * @return bool True for reviewed WinApp entry points, tooling, assets, and Python modules.
- */
-function release_file_policy_is_winapp_source_path(string $relativePath): bool
-{
-    if (in_array($relativePath, [
-        'winapp/README.md', 'winapp/VERSION', 'winapp/SimConnect.dll',
-        'winapp/build.bat', 'winapp/build_installer.py', 'winapp/installer.iss',
-        'winapp/gallery_http_monitor.py', 'winapp/gallery_watch_upload.pyw',
-        'winapp/install.bat', 'winapp/run_gallery_watcher.bat',
-        'winapp/requirements.txt', 'winapp/requirements-build.txt',
-        'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
-    ], true)) {
-        return true;
-    }
-
-    return str_starts_with($relativePath, 'winapp/uploader/')
-        && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'py';
 }
 
 /**
@@ -219,19 +190,6 @@ function release_file_policy_portable_path_key(string $relativePath): string
 }
 
 /**
- * Return a path-comparison key that follows the active installation filesystem rules.
- *
- * @param string $relativePath Validated project-relative path.
- * @return string Exact key on case-sensitive hosts or Windows-compatible key on Windows.
- */
-function release_file_policy_path_comparison_key(string $relativePath): string
-{
-    return DIRECTORY_SEPARATOR === '\\'
-        ? release_file_policy_portable_path_key($relativePath)
-        : $relativePath;
-}
-
-/**
  * Return whether a path is a safe canonical project-relative file name.
  *
  * @param string $relativePath Candidate relative path.
@@ -282,12 +240,11 @@ function release_file_policy_paths(string $rootPath, string $profile = 'producti
 {
     $inventory = release_file_policy_read($rootPath);
     if ($profile === 'production') {
-        $paths = array_merge($inventory['production_files'], $inventory['companion_files']);
-        sort($paths, SORT_STRING);
+        $paths = $inventory['production_files'];
     } elseif ($profile === 'updater') {
         $paths = $inventory['updater_files'];
     } elseif ($profile === 'source-review') {
-        $paths = array_merge($inventory['production_files'], $inventory['companion_files'], $inventory['source_review_files']);
+        $paths = array_merge($inventory['production_files'], $inventory['source_review_files']);
         sort($paths, SORT_STRING);
     } else {
         throw new RuntimeException('Unknown production file inventory profile.');
@@ -345,77 +302,6 @@ function release_file_policy_is_updater_path(string $relativePath): bool
         'index.php', 'install.php', 'reset.php', 'setup-gallery.php', 'deploy.bat',
         'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'config.example.php',
     ], true);
-}
-
-/**
- * Return whether an updater or rollback operation must preserve installation-owned state.
- *
- * The explicit server guard allowlist takes precedence, so protected data/cache roots may
- * still restore their reviewed .htaccess files.
- *
- * @param string $relativePath Candidate project-relative path.
- * @return bool True when updater cleanup or rollback must preserve the path.
- */
-function release_file_policy_is_protected_path(string $relativePath): bool
-{
-    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
-    if (in_array($relativePath, release_file_policy_server_paths(), true)) {
-        return false;
-    }
-    $portablePath = strtolower($relativePath);
-    if (in_array($portablePath, [
-        'config.php', 'app/bootstrap/config.php', 'public/assets/custom.css',
-        '.user.ini', 'php.ini', 'robots.txt',
-    ], true)) {
-        return true;
-    }
-    foreach ([
-        '.git', '.well-known', 'cache', 'data', 'galleries', 'logs', 'tmp', 'custom_css', '_for_codex',
-        'app/_for_codex',
-    ] as $directory) {
-        $portableDirectory = strtolower($directory);
-        if ($portablePath === $portableDirectory || str_starts_with($portablePath, $portableDirectory . '/')) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Return whether a production path belongs in core-manifest.json integrity hashes.
- *
- * This preserves the original hash extension/root contract while applying the
- * reviewed static production inventory as the positive membership boundary.
- *
- * @param string $relativePath Candidate project-relative path.
- * @return bool True when the integrity manifest should hash the path.
- */
-function release_file_policy_is_integrity_path(string $relativePath): bool
-{
-    $relativePath = str_replace('\\', '/', ltrim($relativePath, '/'));
-    if ($relativePath === ''
-        || $relativePath === 'app/core-manifest.json'
-        || $relativePath === 'config.php'
-        || $relativePath === 'app/bootstrap/config.php'
-        || $relativePath === 'public/assets/custom.css'
-        || str_starts_with($relativePath, 'app/_for_codex/')
-        || preg_match('#^(cache|data|galleries|custom_css|\.git|\.idea|\.vscode)/#', $relativePath) === 1
-        || preg_match('#(^|/)(\.DS_Store|Thumbs\.db|error_log)$#', $relativePath) === 1) {
-        return false;
-    }
-    $rootFiles = [
-        '.htaccess', 'index.php', 'install.php', 'reset.php', 'setup-gallery.php',
-        'config.example.php', 'deploy.bat', 'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md',
-    ];
-    if (in_array($relativePath, $rootFiles, true)) {
-        return true;
-    }
-    if (!preg_match('#^(app|database|public|scripts)/#', $relativePath)) {
-        return false;
-    }
-    $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
-    return basename($relativePath) === '.htaccess'
-        || in_array($extension, ['php', 'js', 'css', 'svg', 'md', 'bat', 'ps1', 'sh', 'json', 'htaccess'], true);
 }
 
 /**
@@ -479,115 +365,6 @@ function release_file_policy_archive_updater_paths(string $sourceRoot): array
         throw new RuntimeException('Legacy update archive does not contain updater-managed files.');
     }
     return ['files' => $files, 'legacy' => true];
-}
-
-/**
- * Read paths known to belong to the currently installed updater generation.
- *
- * Invalid or absent inventories return an empty set so normal updates never infer
- * ownership of unknown installation files. Legacy ownership comes from core-manifest.
- *
- * @param string $installationRoot Active installation root.
- * @return list<string> Sorted previously managed paths, or an empty list if untrusted.
- */
-function release_file_policy_prior_updater_paths(string $installationRoot): array
-{
-    $root = release_file_policy_root($installationRoot);
-    $sidecar = $root . '/app/production-files.json';
-    if (is_file($sidecar) && !is_link($sidecar)) {
-        try {
-            return release_file_policy_read($root)['updater_files'];
-        } catch (RuntimeException $exception) {
-            return [];
-        }
-    }
-    $manifestPath = $root . '/app/core-manifest.json';
-    if (is_link($manifestPath) || !is_file($manifestPath) || !is_readable($manifestPath)) {
-        return [];
-    }
-    $manifest = json_decode((string) file_get_contents($manifestPath), true);
-    if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest['files'])) {
-        return [];
-    }
-    $files = [];
-    foreach (array_keys($manifest['files']) as $path) {
-        if (is_string($path) && release_file_policy_is_safe_relative_path($path) && release_file_policy_is_updater_path($path)) {
-            $files[] = $path;
-        }
-    }
-    foreach (release_file_policy_server_paths() as $path) {
-        $absolute = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $path);
-        if (is_file($absolute) && !is_link($absolute)) {
-            $files[] = $path;
-        }
-    }
-    $files = array_values(array_unique($files));
-    sort($files, SORT_STRING);
-    return release_file_policy_validate_path_list($files);
-}
-
-/**
- * List files in a local rollback snapshot using its server-written backup index.
- *
- * The snapshot is intentionally partial, unlike a release ZIP. Only actual files
- * named by its activation/obsolete checkpoint may be restored.
- *
- * @param string $snapshotRoot Directory containing the original rollback files.
- * @param list<string> $indexedPaths Trusted activation and obsolete paths from rollback metadata.
- * @return list<string> Sorted present snapshot files authorized by the trusted backup index.
- * @throws RuntimeException When the index or snapshot contains an unsafe or unindexed path.
- */
-function release_file_policy_rollback_snapshot_paths(string $snapshotRoot, array $indexedPaths): array
-{
-    $root = release_file_policy_root($snapshotRoot);
-    $allowedFiles = [];
-    $allowedDirectories = [];
-    foreach ($indexedPaths as $path) {
-        if (!is_string($path) || !release_file_policy_is_safe_relative_path($path)
-            || release_file_policy_is_protected_path($path)) {
-            throw new RuntimeException('Rollback metadata contains an unsafe or protected path.');
-        }
-        $key = release_file_policy_path_comparison_key($path);
-        $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path);
-        if (is_link($absolute)) {
-            throw new RuntimeException('Rollback metadata points through a symbolic link.');
-        }
-        if (file_exists($absolute)) {
-            if (!release_file_policy_resolves_to_expected_path($root, $path, $absolute)) {
-                throw new RuntimeException('Rollback metadata points through a redirected directory.');
-            }
-            if (is_dir($absolute)) {
-                $allowedDirectories[$key] = true;
-            } elseif (is_file($absolute)) {
-                $allowedFiles[$key] = true;
-            } else {
-                throw new RuntimeException('Rollback metadata points to a non-regular path.');
-            }
-        }
-    }
-
-    $files = release_file_policy_enumerate_files($root);
-    foreach ($files as $path) {
-        if (release_file_policy_is_protected_path($path)) {
-            throw new RuntimeException('Rollback snapshot contains an installation-owned or protected path.');
-        }
-        $key = release_file_policy_path_comparison_key($path);
-        $indexed = isset($allowedFiles[$key]);
-        $segments = explode('/', $path);
-        array_pop($segments);
-        $prefix = '';
-        foreach ($segments as $segment) {
-            $prefix = $prefix === '' ? $segment : $prefix . '/' . $segment;
-            if (isset($allowedDirectories[release_file_policy_path_comparison_key($prefix)])) {
-                $indexed = true;
-                break;
-            }
-        }
-        if (!$indexed) {
-            throw new RuntimeException('Rollback snapshot contains a path absent from its trusted backup index.');
-        }
-    }
-    return $files;
 }
 
 /**
@@ -789,34 +566,4 @@ function release_file_policy_assert_paths_exist(string $rootPath, array $paths):
             throw new RuntimeException('A production file path resolves outside the project root.');
         }
     }
-}
-
-/**
- * Compare a staged package tree against the exact static policy profile.
- *
- * @param string $stageRoot Directory containing a completed package.
- * @param string $sourceRoot Source checkout used only to resolve an explicit media opt-in.
- * @param string $profile Production, updater, or source-review package profile.
- * @param bool $includeMedia Whether explicitly selected source galleries are part of the package.
- * @return array{expected_count:int,actual_count:int,unexpected:list<string>,missing:list<string>} Exact comparison result.
- * @throws RuntimeException When a staged path is unsafe or cannot be enumerated.
- */
-function release_file_policy_verify_tree(
-    string $stageRoot,
-    string $sourceRoot,
-    string $profile = 'production',
-    bool $includeMedia = false
-): array {
-    $root = release_file_policy_root($stageRoot);
-    $expected = release_file_policy_paths($sourceRoot, $profile, $includeMedia);
-    $actual = release_file_policy_enumerate_files($root);
-    $unexpected = array_values(array_diff($actual, $expected));
-    $missing = array_values(array_diff($expected, $actual));
-
-    return [
-        'expected_count' => count($expected),
-        'actual_count' => count($actual),
-        'unexpected' => $unexpected,
-        'missing' => $missing,
-    ];
 }

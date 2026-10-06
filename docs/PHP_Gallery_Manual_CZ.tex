@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.120}
+\newcommand{\version}{0.120.1}
 \newcommand{\manualdate}{6.~října~2026}
 
 \hypersetup{
@@ -1994,7 +1994,9 @@ Stejná časná běhová hranice převádí nezachycená a~zachytitelná fatáln
 
 Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové jádro požadavků a~jeho revidovaný plán modulů. Neúplný archiv se odmítne a~připravené soubory zůstanou mimo aktivní instalaci. Při ručním nasazení zachovejte všechny dodávané soubory jádra pohromadě; výměna samotného bootstrapu by zanechala neúplnou aplikaci.
 
-Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčního seznamu. Starší zdrojové archivy bez tohoto seznamu zachovávají omezenou kompatibilní cestu podle svého vlastněného manifestu; poškozený přítomný seznam se odmítne. Odstranění zastaralých souborů vyžaduje důkaz předchozího vlastnictví a~zachovává neznámé místní soubory. Návrat souborů používá serverem zapsaný index zálohy a~odmítá neindexované soubory i~cesty přesměrované symbolickými odkazy nebo junctions ve Windows. Tato ochrana souborů nevrací databázové migrace.
+Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčního seznamu. Seznam příchozího vydání uvádí zdroje WinApp odděleně, aby jej starší nainstalovaný updater mohl ověřit před instalací nového čtecího kódu. Updater CMS tyto zdroje neinstaluje. Starší zdrojové archivy bez tohoto seznamu zachovávají omezenou kompatibilní cestu podle svého vlastněného manifestu; poškozený přítomný seznam se odmítne. Odstranění zastaralých souborů vyžaduje důkaz předchozího vlastnictví a~zachovává neznámé místní soubory. Návrat souborů používá serverem zapsaný index zálohy a~odmítá neindexované soubory i~cesty přesměrované symbolickými odkazy nebo junctions ve Windows. Tato ochrana souborů nevrací databázové migrace.
+
+Pokud aktualizace skončila před aktivací, zrušte starou úlohu, vynuťte novou kontrolu vydání a~spusťte novou stabilní aktualizaci, jakmile je opravené vydání dostupné. Opakování úlohy může zachovat její původní cílovou verzi.
 
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}

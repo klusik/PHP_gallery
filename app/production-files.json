@@ -934,7 +934,9 @@
         "setup-gallery.php",
         "tests/.htaccess",
         "tmp/.htaccess",
-        "winapp/.htaccess",
+        "winapp/.htaccess"
+    ],
+    "companion_files": [
         "winapp/README.md",
         "winapp/SimConnect.dll",
         "winapp/VERSION",
@@ -1987,6 +1989,7 @@
         "tests/fixtures/theme_language.html",
         "tests/fixtures/theme_layout.html",
         "tests/fixtures/theme_media.html",
+        "tests/fixtures/updater_inventory_before_winapp.php",
         "tests/frontend_operational_policy_test.mjs",
         "tests/function_documentation_test.php",
         "tests/gallery_access_schema_policy_test.php",
@@ -2263,6 +2266,7 @@
         "tests/thumbnail_source_identity_test.php",
         "tests/thumbnail_warmup_model_test.php",
         "tests/translation_catalog_consistency_test.php",
+        "tests/updater_inventory_compatibility_test.php",
         "tests/updater_metadata_budget_test.php",
         "tests/updater_resumable_state_machine_test.php",
         "tests/updater_safety_model_test.php",

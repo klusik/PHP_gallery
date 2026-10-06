@@ -117,6 +117,34 @@ not a source parser or a commitment to remove anything on a calendar date.
   valid positive inventory. Do not substitute a calendar date for the
   supported-upgrade floor.
 
+### UPD-2 — Incoming schema-1 companion membership for installed readers
+
+- **Reason / protected scenario:** The installed pre-WinApp reader validates
+  every incoming production path before the replacement reader is activated.
+  Listing newly distributed WinApp sources in the base list prevents those
+  installations from updating. The additive `companion_files` field keeps the
+  base readable while current packaging includes the reviewed companions;
+  neither reader grants CMS updater ownership to companion files.
+- **Era / owner:** The pre-WinApp contract is evidenced by commit `ffe5b5d`
+  (CMS version 0.119); the compatible split is introduced in 0.120.1.
+  Owner: `app/release_file_policy.php` and
+  `scripts/generate_production_files.php`.
+- **Evidence / tests:** `tests/updater_inventory_compatibility_test.php` uses
+  trusted frozen installed-reader functions to reproduce error reference
+  `385BCD5058D6`, validate the real incoming inventory and compare archive
+  activation scopes. `tests/production_file_policy_test.php` covers both
+  schema-1 layouts, optional-field validation, disjoint package lists and
+  private-state/updater-ownership refusal; real deploy regression retains
+  companion sources in folder/ZIP packages.
+- **Usage:** Supported installed-reader adoption is unknown. One supplied
+  online failure reports version 0.119; this is not an aggregate usage metric.
+- **Earliest safe retirement:** Only after the supported installed-updater
+  floor explicitly excludes the old reader, deployments have a verified
+  migration path and incoming archive qualification covers that new floor.
+  Existing archives without the optional field remain readable. Never obtain
+  compatibility by executing PHP supplied in an incoming archive or granting
+  companions authority over installation-owned state.
+
 ## Translations and language preference
 
 ### I18N-1 — PHP catalogs when a language JSON pack is absent

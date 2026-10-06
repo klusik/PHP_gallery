@@ -103,6 +103,8 @@ try {
         'docs/manual.pdf',
         'public/assets/styles.css',
         'tests/.htaccess',
+    ];
+    $companion = [
         'winapp/SimConnect.dll',
         'winapp/assets/tray-icon.ico',
         'winapp/gallery_watch_upload.pyw',
@@ -110,7 +112,9 @@ try {
     ];
     $updater = ['app/.htaccess', 'app/example.php', 'app/production-files.json', 'public/assets/styles.css', 'tests/.htaccess'];
     $sourceReview = ['tests/policy_fixture.php'];
-    foreach (array_merge($production, $sourceReview) as $relative) {
+    $packagePaths = array_merge($production, $companion);
+    sort($packagePaths, SORT_STRING);
+    foreach (array_merge($packagePaths, $sourceReview) as $relative) {
         production_file_policy_mkdir(dirname($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative)));
         file_put_contents($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative), "fixture\n");
     }
@@ -118,11 +122,16 @@ try {
     file_put_contents($source . DIRECTORY_SEPARATOR . 'app/production-files.json', json_encode([
         'schema_version' => 1,
         'production_files' => $production,
+        'companion_files' => $companion,
         'updater_files' => $updater,
         'source_review_files' => $sourceReview,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 
-    production_file_policy_assert(release_file_policy_paths($source) === $production, 'Production profile did not return the canonical inventory.');
+    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths, 'Production profile omitted canonical CMS or companion inventory.');
+    $reviewPaths = array_merge($packagePaths, $sourceReview);
+    sort($reviewPaths, SORT_STRING);
+    production_file_policy_assert(release_file_policy_paths($source, 'source-review') === $reviewPaths,
+        'Source-review profile omitted companion or test files.');
     production_file_policy_assert(release_file_policy_is_integrity_path('app/example.json'), 'Integrity selector rejected an application JSON file.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('docs/manual.pdf'), 'Integrity selector accepted a distribution PDF.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('custom_css/preset.css'), 'Integrity selector accepted a user CSS preset.');
@@ -157,6 +166,42 @@ try {
     $inventoryPath = $source . '/app/production-files.json';
     $inventoryBytes = file_get_contents($inventoryPath);
     production_file_policy_assert(is_string($inventoryBytes), 'Fixture inventory bytes are unavailable.');
+    $original = json_decode($inventoryBytes, true, 512, JSON_THROW_ON_ERROR);
+    $oldInventory = $original;
+    unset($oldInventory['companion_files']);
+    $oldInventory['production_files'] = $packagePaths;
+    file_put_contents($inventoryPath, json_encode($oldInventory, JSON_THROW_ON_ERROR));
+    production_file_policy_assert(release_file_policy_read($source)['companion_files'] === [],
+        'An already-published schema-1 inventory without companion_files was refused.');
+    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths,
+        'Already-published WinApp membership was lost when reading an older sidecar.');
+    foreach ([null, 'winapp/SimConnect.dll', false] as $invalidList) {
+        $tampered = $original;
+        $tampered['companion_files'] = $invalidList;
+        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+        production_file_policy_expect_refusal(static function () use ($source): void {
+            release_file_policy_read($source);
+        }, 'A malformed present companion list silently behaved as an absent optional field.');
+    }
+    foreach (['app/example.php', 'tests/policy_fixture.php', 'winapp/SimConnect.dll', 'WINAPP/SimConnect.dll',
+        'winapp/../config.php', 'winapp/settings.json', 'winapp/build/generated.py',
+        'winapp/uploader/.private.py', 'winapp/uploader/.state/private.py',
+        'winapp/dist/0.3.2/Setup.exe', 'winapp/tests/local_test.py'] as $invalidCompanion) {
+        $tampered = $original;
+        $tampered['companion_files'][] = $invalidCompanion;
+        sort($tampered['companion_files'], SORT_STRING);
+        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+        production_file_policy_expect_refusal(static function () use ($source): void {
+            release_file_policy_read($source);
+        }, 'A companion inventory could claim private state or colliding membership: ' . $invalidCompanion);
+    }
+    $tampered = $original;
+    $tampered['updater_files'][] = $companion[0];
+    sort($tampered['updater_files'], SORT_STRING);
+    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+    production_file_policy_expect_refusal(static function () use ($source): void {
+        release_file_policy_read($source);
+    }, 'A companion path entered CMS replacement or obsolete-deletion ownership.');
     foreach (['config.php', 'public/assets/custom.css', 'cache/private.txt', 'data/private.txt', 'app/_for_codex/private.txt',
         'winapp/dist/0.3.2/Setup.exe', 'winapp/build/generated.py', 'winapp/settings.json',
         'winapp/tests/local_test.py', 'winapp/http_monitor_logs/private.txt'] as $protected) {
@@ -221,7 +266,7 @@ try {
         }, 'Rollback metadata could claim protected installation state: ' . $protected);
     }
 
-    foreach ($production as $relative) {
+    foreach ($packagePaths as $relative) {
         $destination = $stage . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         production_file_policy_mkdir(dirname($destination));
         copy($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative), $destination);

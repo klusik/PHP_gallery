@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.120.1
+
+Version 0.120.1 fixes incoming release inventory compatibility so installations with the older CMS updater can install the stable release through Admin without first uploading a replacement validator. Reviewed WinApp sources remain available in deployment packages while CMS updater ownership stays unchanged.
+
+### Highlights
+
+#### Automatic update compatibility
+
+- Fixed the `package_validate` refusal with error reference `385BCD5058D6` when an installed pre-WinApp inventory reader encountered companion sources in a newer production list. Ref: [#70](https://github.com/klusik/PHP_gallery/issues/70).
+- Moved reviewed WinApp sources and assets into an additive `companion_files` list within schema 1. Older readers can validate the CMS inventory before the updated reader is installed.
+- Preserved the complete reviewed file set for deploy folders, ZIPs, FTP and source-review packages, alongside the independent WinApp 0.3.2 version and installer.
+
+### Technical Details
+
+#### Backend and compatibility
+
+- Updated `app/release_file_policy.php` to validate optional companion membership separately and combine it with the base list for production and source-review packaging. CMS updater activation and obsolete-file ownership continue to use only `updater_files`.
+- Updated `scripts/generate_production_files.php` and regenerated `app/production-files.json` with the older-reader-compatible base list. New readers still accept already-published schema-1 inventories without the optional field, including prior WinApp production entries.
+- Kept malformed present fields, unsafe or colliding paths, private WinApp state, and companion updater claims as explicit refusals. Incoming archive PHP is never executed to obtain a newer validator.
+- Recorded the supported installed-reader bridge, its owner, unknown adoption and retirement conditions in `docs/COMPATIBILITY_LIFECYCLE.md`.
+
+#### Database and frontend
+
+- Added no migration, schema change, setting, capability or browser interaction. Existing protected installation state, media authorization, resumable checkpoints and rollback behavior retain their owners.
+
+#### Tests and documentation
+
+- Added `tests/updater_inventory_compatibility_test.php` with a frozen trusted pre-WinApp validator from commit `ffe5b5d` (CMS version 0.119). It reproduces the reported error reference, validates the real incoming inventory, and proves old/current archive readers select the same CMS files while still refusing unlisted application files.
+- Extended `tests/production_file_policy_test.php` for both inventory layouts, complete package profiles, malformed optional fields, private companion state, cross-list collisions and excluded updater ownership.
+- Updated permanent packaging, architecture and test guidance, and aligned all four manual editions and rebuilt PDFs.
+
+### User Impact
+
+#### For administrators
+
+- Enabled older inventory-aware installations to receive the corrected release through the existing updater without a manual validator upload.
+- Documented recovery when a previous job stopped before activation: cancel that job, force a fresh release check and start a new stable update once the corrected source is available on the stable branch. A retry may retain the earlier job's target version.
+
+#### For visitors
+
+- Preserved public gallery behavior and existing installation-owned files throughout the normal update workflow.
+
 ## Version 0.120
 
 Version 0.120 hardens internal HTTP boundaries, deployment packaging and updater file ownership, separates lightbox navigation and resource lifecycles, and makes runtime dependencies and source-contract debt measurable. The database support policy now names directly tested MySQL and MariaDB representatives while preserving existing gallery, media and administration workflows.
