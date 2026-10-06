@@ -2019,6 +2019,7 @@
         "tests/gallery_creation_safety_test.php",
         "tests/gallery_dates_model_test.php",
         "tests/gallery_description_layout_compatibility_test.php",
+        "tests/gallery_description_links_render_test.php",
         "tests/gallery_discovery_job_context_test.php",
         "tests/gallery_display_editor_layout_test.php",
         "tests/gallery_download_client_test.mjs",

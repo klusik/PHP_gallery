@@ -237,6 +237,25 @@ function production_files_print_usage(): void
     echo "  --check  Compare the checked-in inventory with Git-index membership without writing.\n";
 }
 
+/**
+ * Compare generated inventory text while ignoring only checkout line-ending conversion.
+ *
+ * @param ?string $current Current checked-in inventory contents.
+ * @param string $expected Canonical generated inventory contents with LF endings.
+ * @return bool True when contents match after CRLF normalization.
+ */
+function production_files_inventory_content_matches(?string $current, string $expected): bool
+{
+    if ($current === null) {
+        return false;
+    }
+    return str_replace("\r\n", "\n", $current) === $expected;
+}
+
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) !== __FILE__) {
+    return;
+}
+
 if (production_files_has_flag('--help') || production_files_has_flag('-h')) {
     production_files_print_usage();
     exit(0);
@@ -254,7 +273,8 @@ try {
 
     if (production_files_has_flag('--check')) {
         $current = is_file($output) && !is_link($output) ? file_get_contents($output) : false;
-        if ($current !== $content) {
+        // Ignore checkout EOL conversion while retaining the full deterministic content comparison.
+        if (!production_files_inventory_content_matches(is_string($current) ? $current : null, $content)) {
             fwrite(STDERR, "Production file inventory is stale. Run php scripts/generate_production_files.php after staging intended production files.\n");
             exit(1);
         }
