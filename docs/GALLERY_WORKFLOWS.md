@@ -38,6 +38,11 @@ Chromium as root without a working sandbox is unsupported.
 
 ## Local disposable MySQL
 
+The authored-content language fixture selects `sample-1.jpg` and `sample-2.jpg`
+by filename and sets their photo order explicitly. Filesystem scan order and
+auto-increment IDs must not choose which photo exercises untranslated source
+fallback or the translated social-preview caption outside the selected page.
+
 Set GALLERY_WORKFLOW_ENABLE to the exact value disposable-only,
 GALLERY_WORKFLOW_MYSQL_BIN to an existing MySQL 8 mysqld executable, and
 GALLERY_WORKFLOW_BROWSER to an installed Chromium executable. An optional

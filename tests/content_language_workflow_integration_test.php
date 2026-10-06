@@ -94,11 +94,14 @@ try {
     // the first one-item page, then restore its original ordering in finally.
     $firstSiblingOrder = (int) row($pdo, 'SELECT COALESCE(MIN(sort_order), 0) AS sort_order FROM galleries WHERE parent_id=?', [$rootId])['sort_order'];
     $pdo->prepare('UPDATE galleries SET sort_order=? WHERE id=?')->execute([$firstSiblingOrder - 10, $childId]);
-    $images = $pdo->query('SELECT id FROM images WHERE gallery_id=' . $rootId . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
-    check(count($images) >= 2, 'Localization fixture requires two seeded photos.');
-    foreach ($images as $id) {
-        $pdo->prepare("UPDATE images SET title=?, description=?, content_language='en', gps_lat=50.0, gps_lng=14.0, updated_at=NOW() WHERE id=?")
-            ->execute(['93 source photo ' . $id, '93 source caption ' . $id, $id]);
+    // Scan order and auto-increment IDs differ across filesystems. Select the
+    // known originals by filename and explicitly place the 300x200 preview on
+    // page two; the first 48x32 photo must exercise untranslated source fallback.
+    $images = $pdo->query("SELECT id FROM images WHERE gallery_id=" . $rootId . " AND filename IN ('sample-1.jpg', 'sample-2.jpg') ORDER BY filename")->fetchAll(PDO::FETCH_COLUMN);
+    check(count($images) === 2, 'Localization fixture requires both named seeded photos.');
+    foreach ($images as $position => $id) {
+        $pdo->prepare("UPDATE images SET title=?, description=?, content_language='en', gps_lat=50.0, gps_lng=14.0, sort_order=?, updated_at=NOW() WHERE id=?")
+            ->execute(['93 source photo ' . $id, '93 source caption ' . $id, $position, $id]);
     }
     foreach (['cs', 'de', 'sv'] as $language) {
         $pdo->prepare('INSERT INTO image_translations (image_id, language_code, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE title=VALUES(title), description=VALUES(description)')
