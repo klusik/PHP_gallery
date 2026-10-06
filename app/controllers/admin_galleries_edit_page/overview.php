@@ -114,6 +114,8 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
  */
 function admin_edit_gallery_render_overview(array $gallery, int $imageCount, string $activeEditTab, array $capabilities): void
 {
+    // Only the heading receives an overlay; the editor still owns source fields.
+    $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
     // $activeVisibility stores the normalized gallery visibility label for summary cards.
     $activeVisibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
     // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.

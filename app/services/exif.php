@@ -697,7 +697,7 @@ function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursi
  * change. This gives the map cache deterministic invalidation without requiring
  * every upload, edit, delete, and move workflow to remember a separate cache call.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row with canonical identity and map policy.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
  * @return string Text result for the caller.
@@ -721,6 +721,11 @@ function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $r
         'gallery_id' => (int) $gallery['id'],
         // Version 3 adds canonical photo-page URLs and gallery IDs to marker payloads.
         'payload_version' => 3,
+        // Translated marker text belongs to one effective request language and
+        // must not survive an authored-content OFF or unavailable-schema state.
+        'content_language' => translation_active_language(),
+        'gallery_localization' => content_localization_enabled() && content_localization_schema_ready('gallery'),
+        'image_localization' => content_localization_enabled() && content_localization_schema_ready('image'),
         'public_only' => $publicOnly,
         'recursive' => $recursive,
         'point_count' => (int) ($row['point_count'] ?? 0),
@@ -836,13 +841,14 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  * represents the whole simflying gallery. When GPS photo points are available,
  * they are layered onto the route without changing the stored route geometry.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row with canonical identity and map policy.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Localized gallery title, authorized map points and optional route geometry.
  */
 function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
+    $gallery = content_localize_entity('gallery', $gallery);
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && feature_capability_effective_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_flight_map_payload')) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
@@ -871,10 +877,10 @@ function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive =
 /**
  * Return GPS map points for one gallery, optionally including subgalleries.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row with canonical identity and map policy.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
- * @return array Structured result data for the caller.
+ * @return list<array<string,mixed>> Authorized localized photo markers in canonical map order.
  */
 function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
@@ -909,8 +915,7 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
 
         // $galleryCache stores looked-up gallery records while building this map payload.
         $galleryCache = [(int) $gallery['id'] => $gallery];
-        // $points stores the marker payload consumed by the browser map overlay.
-        $points = [];
+        $visibleImages = [];
         foreach ($rows as $image) {
             $imageGalleryId = (int) $image['gallery_id'];
             if (!array_key_exists($imageGalleryId, $galleryCache)) {
@@ -920,7 +925,15 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
             if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !public_image_visible_to_current_visitor($image, $imageGallery))) {
                 continue;
             }
-            $points[] = image_map_point($image, $imageGallery, true);
+            $visibleImages[] = $image;
+        }
+
+        // Resolve both metadata owners in batches only after map/access policy
+        // has selected the visible rows; source lookup caches remain untouched.
+        $localizedGalleries = array_column(content_localize_entities('gallery', array_values($galleryCache)), null, 'id');
+        $points = [];
+        foreach (content_localize_entities('image', $visibleImages) as $image) {
+            $points[] = image_map_point($image, $localizedGalleries[(int) $image['gallery_id']], true);
         }
 
         if (is_dir(gallery_map_cache_dir())) {
@@ -930,4 +943,3 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
         return $points;
     });
 }
-

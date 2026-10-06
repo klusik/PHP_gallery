@@ -36,7 +36,8 @@ try {
         ->execute([password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT), $protected['id']]);
     foreach ([$root, $protected] as $gallery) {
         for ($index = 1; $index <= 2; $index++) {
-            $image = imagecreatetruecolor(48, 32);
+            // Keep sample-1 upload contracts small; sample-2 also qualifies a real social preview.
+            $image = imagecreatetruecolor($index === 1 ? 48 : 300, $index === 1 ? 32 : 200);
             imagefill($image, 0, 0, imagecolorallocate($image, $index * 60, 80, 130));
             imagejpeg($image, $directory . '/galleries/' . $gallery['folder_path'] . '/sample-' . $index . '.jpg');
             unset($image);

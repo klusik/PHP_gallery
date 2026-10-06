@@ -69,7 +69,7 @@ final class Fixture
             'google_login' => ['enabled' => false],
             'password_reset' => ['enabled' => false],
             'viewer_accounts' => ['enabled' => false],
-            'language' => ['default' => 'en', 'available' => ['en']],
+            'language' => ['default' => 'en', 'available' => ['en', 'cs', 'de', 'sv']],
         ];
         file_put_contents($this->directory . '/config.php', "<?php\nreturn " . var_export($configuration, true) . ";\n");
         @chmod($this->directory . '/config.php', 0600);

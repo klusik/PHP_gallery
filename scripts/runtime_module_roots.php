@@ -40,6 +40,12 @@ return [
             'Gallery\\Services\\breadcrumb_view_model',
             'Gallery\\Services\\breadcrumb_style_picker_options',
         ],
+        // Authored overlays are shared by public cards/navigation and Admin
+        // presentation; keep their storage files out of duplicated route owners.
+        'content-localization' => [
+            'Gallery\\Services\\content_localize_entity',
+            'Gallery\\Services\\content_localize_entities',
+        ],
         'breadcrumb-presentation' => [
             'Gallery\\Services\\breadcrumb_view_model',
             'Gallery\\Views\\view_render_breadcrumbs',
@@ -90,7 +96,7 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation'],
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization'],
     'module_dependencies' => [
         'updater-work' => ['request-maintenance'],
         // Rendering follows view-model preparation and reuses its shared Core dependencies.

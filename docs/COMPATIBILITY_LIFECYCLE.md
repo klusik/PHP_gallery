@@ -26,6 +26,24 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Database and migrations
 
+### UI-2 — Authored metadata language and source-field compatibility
+
+- **Reason / protected scenario:** Existing galleries and photos may have no
+  translation row or source-language tag. Gallery fields fall back independently;
+  an existing photo translation retains blank caption fields. Admin source
+  editors must never save a presentation overlay as canonical text.
+- **Owner:** `app/services/content_localization.php` and request language policy
+  in `app/services/translations.php`. Admin and public browser preferences stay
+  independent; explicit language arguments remain supported for existing callers.
+- **Evidence / tests:** `content_request_language_test.php`,
+  `content_localization_model_test.php`, and
+  `content_language_workflow_integration_test.php`; investigation scope is in
+  `docs/ISSUE_93_LOCALIZATION.md`.
+- **Usage:** Missing authored translations and legacy cookie adoption are unknown.
+- **Support rationale:** Source fallback and explicit language arguments are
+  permanent compatibility contracts. Legacy cookie removal would require an
+  accepted migration of persisted browser preferences and regression proof.
+
 ### UI-1 — Breadcrumb preferences missing on upgraded installations
 
 - **Reason / protected scenario:** Existing galleries and installations have no

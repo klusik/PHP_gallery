@@ -86,6 +86,7 @@ return [
         'gallery_workflow_browser_test.php' => 'Browser journeys mutate the externally supplied shared disposable HTTP/database fixture.',
         'gallery_workflow_integration_test.php' => 'Authenticated workflows mutate the externally supplied shared disposable HTTP/database fixture.',
         'breadcrumb_workflow_integration_test.php' => 'Breadcrumb Theme/gallery saves and Trash restore mutate the shared disposable HTTP/database fixture.',
+        'content_language_workflow_integration_test.php' => 'Language, translation, and favorite-navigation assertions temporarily mutate the shared disposable HTTP/database fixture.',
         'viewer_phase07_mysql_concurrency_test.php' => 'Runs nested writers against the common explicitly supplied MySQL test database.',
     ],
 ];
