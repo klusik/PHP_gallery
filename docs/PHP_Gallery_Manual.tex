@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.121.1}
-\newcommand{\manualdate}{6~October~2026}
+\newcommand{\version}{0.121.2}
+\newcommand{\manualdate}{6 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -994,6 +994,8 @@ A~disabled feature is~hidden from~normal navigation and~its guarded routes refus
 Gallery administration covers the~full life of~a~collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and~eventual deletion. A~child gallery can~inherit useful choices from its parent. For~example, every gallery inside a~private family branch can~follow the~parent's protection, and~an~individual child can~use its own presentation choice where the~editor offers an~override. The~bulk gallery screen provides corresponding multi-gallery operations where the~same change is~appropriate for~several collections at~once.
 
 Gallery descriptions can~present safe external links written as~ordinary Markdown links, \codeword{[link=URL]label[/link]}, \codeword{[url=URL]label[/url]}, or~the~short forms whose visible text is~also the~target. Only HTTP and~HTTPS targets are~linked; other schemes remain inert text. Recognized services use bundled local brand symbols. For~other public hosts, saving the~gallery can~retrieve a~small validated favicon into the~local gallery cache. Retrieval is~hostname-deduplicated, bounded by~size, time, redirect, and~retry limits, rejects private or~reserved network destinations, and~never occurs while a~visitor renders the~public description. If~the~cache or~its database table is~unavailable, the~link remains usable without an~icon.
+
+Link targets retain underscores and~query parameters. Emphasis in~labels and~literal inline code remain intact, and~links stay in~the~surrounding paragraph.
 
 When clean public-path storage is~available, \ui{Regenerate clean public paths} rebuilds the~stored gallery and~image paths from~the~current hierarchy and~reports separate gallery/image counts. Reordering and~selected editor saves also refresh paths when their changes require it. This maintenance action is~useful after hierarchy repair, migration, or~older imports; it~does not~turn URL rewriting on~by~itself, so~query-string routing remains the~fallback when rewriting is~disabled or~unsupported by~the~host.
 
@@ -2374,6 +2376,8 @@ PHP suites run with four workers by~default. Set
 invalid values block execution. Registered exclusive tests run alone after
 active workers finish. Each child retains separate diagnostics and~a~timeout
 measured from~its actual start; results stay in~deterministic input order.
+
+PHP and~JavaScript syntax checks and~independent Node/Chromium fixtures use the~same worker limit. Parallel PHP tests are~grouped before exclusive fixtures, so~the~pool drains once; reports retain their original order. Syntax checking never executes the~source. Complete database and~contention qualification remains dependent on~fixture cost and~machine performance. Production inventory checks accept LF and~CRLF checkout line endings but~still refuse content or~membership changes. The~MVC checker resolves namespace and~import contexts once per~file, preserving alias and~PDO checks without rescanning preceding tokens for~each call. The~complete compiler and~composed/legacy loading matrix for~every module runs in~full and~release profiles. Quick feedback retains dependency, graph, kernel, and~bootstrap contracts without starting every module twice.
 Every profile also measures fresh-process include phases before
 \codeword{cms\_run()}: early runtime permits one PHP file and~16~MiB peak memory,
 and~application bootstrap permits 40 files and~16~MiB. Elapsed time is~observational;

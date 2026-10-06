@@ -501,12 +501,31 @@ function class_scope_for_token(array $tokens, int $targetIndex): ?array
  */
 function source_symbol_context(array $tokens, int $targetIndex): array
 {
+    $selected = ['namespace' => '', 'class_aliases' => [], 'function_aliases' => []];
+    foreach (source_symbol_contexts($tokens) as $index => $context) {
+        if ($index > $targetIndex) {
+            break;
+        }
+        $selected = $context;
+    }
+    return $selected;
+}
+
+/**
+ * Index namespace and import context changes in one pass over a source stream.
+ *
+ * @param array<int, array|string> $tokens Token stream owned by one source scan.
+ * @return array<int,array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>}> Contexts keyed by the first token index where each applies.
+ */
+function source_symbol_contexts(array $tokens): array
+{
     $namespace = '';
     $braceDepth = 0;
     $namespaceBodyDepth = 0;
     $classAliases = [];
     $functionAliases = [];
-    for ($index = 0; $index < $targetIndex; $index++) {
+    $contexts = [0 => ['namespace' => '', 'class_aliases' => [], 'function_aliases' => []]];
+    for ($index = 0, $count = count($tokens); $index < $count; $index++) {
         $token = $tokens[$index];
         if (is_array($token) && $token[0] === T_NAMESPACE) {
             $name = '';
@@ -526,6 +545,7 @@ function source_symbol_context(array $tokens, int $targetIndex): array
                 $name .= is_array($part) ? (string) $part[1] : $part;
             }
             $namespace = strtolower(ltrim(trim($name), '\\'));
+            $contexts[$index + 1] = ['namespace' => $namespace, 'class_aliases' => $classAliases, 'function_aliases' => $functionAliases];
             continue;
         }
         if (is_array($token) && $token[0] === T_USE && $braceDepth === $namespaceBodyDepth) {
@@ -554,6 +574,7 @@ function source_symbol_context(array $tokens, int $targetIndex): array
                 } else {
                     $classAliases[$alias] = $imported;
                 }
+                $contexts[$index + 1] = ['namespace' => $namespace, 'class_aliases' => $classAliases, 'function_aliases' => $functionAliases];
             }
         }
         if ($token === '{') {
@@ -562,11 +583,7 @@ function source_symbol_context(array $tokens, int $targetIndex): array
             $braceDepth--;
         }
     }
-    return [
-        'namespace' => $namespace,
-        'class_aliases' => $classAliases,
-        'function_aliases' => $functionAliases,
-    ];
+    return $contexts;
 }
 
 /**
@@ -1021,11 +1038,14 @@ function core_persistence_boundary_path(string $relativePath): bool
 function scan_core_persistence_source(string $source, string $relativePath): array
 {
     $tokens = token_get_all($source);
+    $symbolContexts = source_symbol_contexts($tokens);
+    $symbolContext = $symbolContexts[0];
     $lines = source_lines($source);
     $violations = [];
     $pdoMethods = ['prepare', 'query', 'exec', 'begintransaction', 'commit', 'rollback'];
     $securityFilesystemMutations = ['file_put_contents', 'unlink', 'rename', 'copy', 'mkdir', 'rmdir', 'chmod', 'chown', 'touch', 'symlink', 'link', 'move_uploaded_file'];
     foreach ($tokens as $index => $token) {
+        $symbolContext = $symbolContexts[$index] ?? $symbolContext;
         if (!is_array($token)) {
             continue;
         }
@@ -1048,14 +1068,14 @@ function scan_core_persistence_source(string $source, string $relativePath): arr
             }
             if (in_array($id, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
                 && !$memberAccess && token_is_function_call($tokens, $index)
-                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
+                && resolves_to_core_db($value, $symbolContext)) {
                 add_violation($violations, $relativePath, 'core.direct_db', $line, $lines[$line] ?? '');
             }
-            if ($previousId === T_NEW && resolves_to_pdo($value, source_symbol_context($tokens, $index))) {
+            if ($previousId === T_NEW && resolves_to_pdo($value, $symbolContext)) {
                 add_violation($violations, $relativePath, 'core.pdo_construction', $line, $lines[$line] ?? '');
             }
             if ($memberAccess && in_array($name, $pdoMethods, true) && token_is_function_call($tokens, $index)
-                && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
+                && is_pdo_method_call($tokens, $index, $symbolContext)) {
                 add_violation($violations, $relativePath, 'core.pdo_method', $line, $lines[$line] ?? '');
             }
         }
@@ -1085,6 +1105,8 @@ function scan_source(string $source, string $relativePath): array
     }
 
     $tokens = token_get_all($source);
+    $symbolContexts = source_symbol_contexts($tokens);
+    $symbolContext = $symbolContexts[0];
     $lines = source_lines($source);
     $violations = [];
     $requestGlobals = ['$_GET', '$_POST', '$_REQUEST', '$_FILES', '$_COOKIE', '$_SERVER'];
@@ -1095,6 +1117,7 @@ function scan_source(string $source, string $relativePath): array
     $line = 1;
 
     foreach ($tokens as $index => $token) {
+        $symbolContext = $symbolContexts[$index] ?? $symbolContext;
         if (!is_array($token)) {
             continue;
         }
@@ -1147,7 +1170,7 @@ function scan_source(string $source, string $relativePath): array
             $name = strtolower($value);
             if (($layer === 'services' || $layer === 'controllers' || $layer === 'views')
                 && in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
-                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
+                && resolves_to_core_db($value, $symbolContext)) {
                 add_violation($violations, $relativePath, $layer . '.direct_db', $line, $snippet);
             }
             if (($layer === 'models' || $layer === 'services' || $layer === 'views') && in_array($name, $responseFunctions, true)
@@ -1160,7 +1183,7 @@ function scan_source(string $source, string $relativePath): array
         }
 
         if ($tokenId === T_STRING && in_array(strtolower($value), array_map('strtolower', $pdoMethods), true)
-            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
+            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, $symbolContext)) {
             for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
                 $previous = $tokens[$cursor];
                 if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
@@ -1488,6 +1511,8 @@ function architecture_accepted_boundaries(array $record): array
 function scan_architecture_source(string $source, string $relativePath): array
 {
     $tokens = token_get_all($source);
+    $symbolContexts = source_symbol_contexts($tokens);
+    $symbolContext = $symbolContexts[0];
     $lines = source_lines($source);
     $signals = [];
     $requestGlobals = ['$_GET', '$_POST', '$_REQUEST', '$_FILES', '$_COOKIE', '$_SERVER'];
@@ -1503,6 +1528,7 @@ function scan_architecture_source(string $source, string $relativePath): array
     }
 
     foreach ($tokens as $index => $token) {
+        $symbolContext = $symbolContexts[$index] ?? $symbolContext;
         if (!is_array($token)) {
             continue;
         }
@@ -1521,7 +1547,7 @@ function scan_architecture_source(string $source, string $relativePath): array
             && token_is_function_call($tokens, $index)) {
             $name = strtolower($value);
             if (in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
-                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
+                && resolves_to_core_db($value, $symbolContext)) {
                 record_architecture_signal($signals, 'direct_db', $line, $snippet);
             }
             if (in_array($name, $responseFunctions, true)) {
@@ -1536,7 +1562,7 @@ function scan_architecture_source(string $source, string $relativePath): array
         }
 
         if ($tokenId === T_STRING && in_array(strtolower($value), $pdoMethods, true)
-            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
+            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, $symbolContext)) {
             for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
                 $previous = $tokens[$cursor];
                 if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {

@@ -58,9 +58,10 @@ function source_without_header(string $source, string $extension): string
  * renumbering when a new sibling is inserted.
  * @param string $source PHP or JavaScript source, never executed.
  * @param string $extension Supported PHP/JS module extension.
+ * @param bool $withBodies Whether to hash executable bodies; policy ownership needs only identities and records.
  * @return list<array{identity:string,fingerprint:string,record:array<string,mixed>,uncertain:bool}> Internal records; no source values are printed.
  */
-function declaration_snapshots(string $source, string $extension): array
+function declaration_snapshots(string $source, string $extension, bool $withBodies = true): array
 {
     $php = $extension === 'php';
     $tokens = $php ? php_tokens($source) : javascript_tokens($source);
@@ -92,7 +93,7 @@ function declaration_snapshots(string $source, string $extension): array
         $identity = ($owner === '' ? '' : $owner . '/') . $record['kind'] . ':' . $record['name'];
         $executable = [];
         $uncertain = false;
-        for ($index = $record['start_token']; $index <= $record['end_token'] && isset($tokens[$index]); $index++) {
+        for ($index = $record['start_token']; $withBodies && $index <= $record['end_token'] && isset($tokens[$index]); $index++) {
             $token = $tokens[$index];
             if (in_array($token['id'], [T_COMMENT, T_DOC_COMMENT], true)) {
                 continue;

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.121.1}
+\newcommand{\version}{0.121.2}
 \newcommand{\manualdate}{6.~října~2026}
 
 \hypersetup{
@@ -988,6 +988,8 @@ Vypnutá funkce je skrytá z~běžné navigace a~její chráněné trasy odmíta
 Správa galerií pokrývá celý život sbírky: vytvoření, vyhledání, pojmenování, popis, data, štítky, soukromí, hesla, vlastní značku, titulní obrázky, rozvržení, pořadí, přesun a~pozdější odstranění. Podřízená galerie může dědit užitečné volby od rodiče. Například každá galerie v~soukromé rodinné větvi může následovat ochranu rodiče a~jednotlivý potomek může používat vlastní volbu prezentace tam, kde editor nabízí přepsání. Obrazovka hromadné správy galerií poskytuje odpovídající operace s~více galeriemi, pokud je stejná změna vhodná pro několik sbírek najednou.
 
 Popisy galerií mohou zobrazovat bezpečné externí odkazy zapsané jako běžné odkazy Markdown, \codeword{[link=URL]label[/link]}, \codeword{[url=URL]label[/url]} nebo zkrácené podoby, jejichž viditelný text je zároveň cílem. Odkazují se pouze cíle HTTP a~HTTPS; ostatní schémata zůstávají neaktivním textem. Rozpoznané služby používají přibalené místní symboly značek. U~ostatních veřejných hostitelů může uložení galerie načíst malou ověřenou ikonu webu do místní mezipaměti galerie. Načítání odstraňuje opakování podle názvu hostitele, má limity velikosti, času, přesměrování a~opakovaných pokusů, odmítá soukromé nebo vyhrazené síťové cíle a~nikdy neprobíhá při vykreslování veřejného popisu návštěvníkovi. Pokud mezipaměť nebo její databázová tabulka nejsou dostupné, odkaz zůstává použitelný bez ikony.
+
+Cíle odkazů zachovávají podtržítka i~parametry dotazu. Formátované popisky a~doslovný kód zůstávají zachované a~odkazy zůstávají uvnitř okolního odstavce.
 
 Je-li dostupné úložiště čistých veřejných cest, volba \ui{Znovu vygenerovat čisté veřejné cesty} přestaví uložené cesty galerií a~obrázků podle aktuální hierarchie a~oznámí samostatné počty galerií a~obrázků. Změna pořadí a~vybraná uložení editoru také obnovují cesty, pokud to jejich změny vyžadují. Tato akce údržby je užitečná po opravě hierarchie, migraci nebo starších importech; sama nezapíná přepisování URL, takže při vypnutém nebo hostingem nepodporovaném přepisování zůstává náhradou směrování pomocí parametrů dotazu.
 \subsection{Organizátor metadat}
@@ -2326,6 +2328,8 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 Centrální vstup \filepath{scripts/audit.php} nabízí tři profily. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, poradní inventář, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
 
 Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 40 souborů a~16~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
+
+Kontroly syntaxe PHP a~JavaScriptu i~nezávislé testy Node/Chromium používají stejný limit procesů. Souběžné testy PHP běží před výhradními testy, takže se fond vyprázdní pouze jednou; zprávy zachovávají původní pořadí. Kontrola syntaxe zdrojový kód nespouští. Úplná kvalifikace databáze a~souběžného přístupu stále závisí na náročnosti testovací instalace a~výkonu počítače. Kontroly produkčního seznamu přijímají konce řádků LF i~CRLF při převodu pracovního stromu, ale stále odmítají změny obsahu nebo členství souborů. Kontrola MVC určuje kontext jmenných prostorů a~importů jednou pro každý soubor; zachovává kontroly aliasů a~PDO bez opakovaného procházení předchozích tokenů při každém volání. Úplná kompilace a~matice načítání každého modulu složeným i~původním způsobem běží v~profilech full a~release. Rychlá kontrola zachovává kontrakty závislostí, grafu, jádra a~bootstrapu bez dvojího spouštění každého modulu.
 
 Stejná sada měření běhového prostředí měří devět skutečných tras pouze s~vlastní izolovanou databázovou a~HTTP testovací instalací: robots, úvod, galerii, náhled, médium, přihlášenou administraci a~telemetrii a~obě odmítnutí anonymní administrace. Limity tras jsou 160--300 zahrnutých souborů a~32--48~MiB špičkové paměti; ověřují se také skutečné produktové odpovědi a~odmítnutí. Bez této instalace jsou měření tras výslovně přeskočena. Doba běhu zůstává pouze pozorováním.
 

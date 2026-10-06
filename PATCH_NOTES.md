@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.121.2
+
+Version 0.121.2 fixes inline links and code in gallery descriptions, accepts Windows checkout line endings in production-inventory checks, and reduces avoidable sequential work in the central audit.
+
+### Highlights
+
+#### Gallery description links
+
+- Fixed Markdown and BBCode links containing underscores and query parameters by protecting destinations before emphasis formatting.
+- Preserved formatted link captions, literal inline code, safe fallback text for rejected targets, and links within the surrounding paragraph.
+
+#### Faster verification
+
+- Updated PHP and JavaScript syntax checks and independent Node/Chromium fixtures to use the existing bounded process pool instead of launching every check sequentially.
+- Reserved the complete runtime-module compilation and composed/legacy loading matrix for `full`/`release`. Quick feedback retains dependency and graph contracts plus clean-process bootstrap probes without starting every module twice.
+- Grouped parallel PHP regressions before exclusive fixtures, retaining exclusive isolation and deterministic report order.
+- Replaced repeated namespace/import scans in `scripts/check_mvc_boundaries.php` with one context index per source file, preserving source-position aliases, PDO provenance and all strict/architecture findings.
+- Removed unused enclosing-body fingerprint work from runtime-policy ownership scans without changing declaration identities or policy-site enforcement.
+
+### Technical Details
+
+#### Backend and tooling
+
+- Updated `app/views/gallery_descriptions.php` to protect rendered link and code fragments while parsing surrounding inline formatting.
+- Updated `scripts/generate_production_files.php` to normalize CRLF checkout conversion only; real inventory content and membership differences still fail.
+- Added `run_file_checks()` in `scripts/audit_lib.php` and reused the existing scheduler in `scripts/audit.php`. PHP lint parses with `-n`, avoiding extension/configuration startup while regression children retain their normal runtime.
+- Kept `PHP_GALLERY_AUDIT_WORKERS` at four by default with the existing one-to-eight range. Invalid worker values block syntax and Node suites as well as PHP regression. Browser required-mode failures, per-child deadlines, separate captures and failure attribution remain enforced.
+- Updated `scripts/source_contracts/changes.php` and `scripts/source_contracts/policy_scan.php` so policy ownership reads declaration identities and records without hashing their bodies. Declaration comparisons continue hashing bodies by default.
+
+#### Database, frontend and compatibility
+
+- Added no migration, schema change, setting, capability or browser asset change. Existing MVC, media authorization and link-target validation remain in force.
+- Retained permanent CRLF/LF checkout support in the production-inventory generator for Windows Git installations. Only checkout newline conversion is normalized; retirement would require ending support for those checkout environments. Usage is unknown.
+- Preserved the independent WinApp 0.3.2 version and existing installer.
+
+#### Tests and documentation
+
+- Added `tests/gallery_description_links_render_test.php` coverage for Markdown/BBCode destinations, query strings, formatted captions, inline code, unsafe targets and paragraph flow; registered it in the quick PHP subset.
+- Canonicalized the temporary root in `tests/thumbnail_source_identity_test.php` so macOS temporary-directory symlinks do not produce a false path-containment failure; production path-safety checks remain strict.
+- Extended `tests/production_file_policy_test.php` to accept CRLF inventory text while refusing altered content.
+- Extended `tests/audit_runner_test.php` with concurrent syntax success/failure attribution, literal paths with spaces and proof that lint never executes source.
+- Extended `tests/mvc_pdo_provenance_test.php` with bracketed namespace changes and source-position import aliases across strict, Core and architecture scans.
+- Extended `tests/policy_constants_changes_test.php` to compare ownership records and identities for PHP namespaces/classes/methods and nested JavaScript callbacks with and without body fingerprints.
+- Updated audit guidance, all four manual editions and PDFs, release metadata and `app/core-manifest.json`.
+
+### User Impact
+
+#### For visitors
+
+- Fixed gallery-description links that could previously acquire a damaged destination when URL punctuation was interpreted as text formatting.
+
+#### For administrators and maintainers
+
+- Improved Windows inventory verification and reduced idle/sequential audit work while retaining full release coverage.
+- Kept exclusive database, recovery and session-contention scenarios isolated; their complete qualification still depends on fixture cost and machine performance.
+
 ## Version 0.121.1
 
 Version 0.121.1 corrects Windows packaging CI failure propagation and makes the viewer-language workflow fixture deterministic across filesystems and database ID allocation. It also completes release inventory membership for the localization documentation and regression tests shipped with Version 0.121.

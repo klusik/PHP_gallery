@@ -30,6 +30,20 @@ function mvc_pdo_rule_count(array $findings, string $rule): int
 // Each independent source has exactly one prepare/query/transaction call under test.
 // No fixture executes a connection or SQL; the architecture scanner only reads tokens.
 $fixtures = [
+    'bracketed namespace transitions' => [1, <<<'PHP'
+namespace Gallery\Core {
+    function first(string $sql): void { db()->prepare($sql); }
+}
+namespace Foreign {
+    function second(string $sql): void { db()->prepare($sql); }
+}
+PHP],
+    'import context follows its source position' => [1, <<<'PHP'
+namespace Gallery\Services;
+function first(string $sql): void { storage()->prepare($sql); }
+use function Gallery\Core\db as storage;
+function second(string $sql): void { storage()->prepare($sql); }
+PHP],
     'typed parameter alias' => [1, <<<'PHP'
 namespace Gallery\Services;
 function run(\PDO $connection, string $sql): void {
