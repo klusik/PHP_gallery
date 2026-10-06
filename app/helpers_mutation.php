@@ -38,6 +38,8 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
+require_once __DIR__ . '/request_data.php';
+
 /**
  * Return whether the current Admin mutation request expects a JSON response.
  *
@@ -49,12 +51,15 @@ namespace Gallery\Core;
  */
 function admin_wants_json(): bool
 {
-    return !empty($_POST['ajax'])
-        || !empty($_GET['ajax'])
-        || !empty($_POST['panel'])
-        || !empty($_GET['panel'])
-        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+    $post = request_data('post');
+    $query = request_data('query');
+    $server = request_data('server');
+    return !empty($post['ajax'])
+        || !empty($query['ajax'])
+        || !empty($post['panel'])
+        || !empty($query['panel'])
+        || strtolower((string) ($server['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string) ($server['HTTP_ACCEPT'] ?? '')), 'application/json');
 }
 
 /**

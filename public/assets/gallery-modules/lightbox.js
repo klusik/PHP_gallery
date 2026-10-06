@@ -34,9 +34,11 @@
  * Public gallery tag suggestions, lightbox viewer, map overlays, and viewer dev diagnostics.
  *
  * The lightbox, fullscreen handling, GPS split-map handling, and dev overlay
- * share one coherent viewer state. Nearby-preview queue scheduling, concurrency,
- * and cancellation belong to lightbox-preload-lifecycle.js; media selection,
- * decoding, and foreground request ownership remain here.
+ * share one coherent viewer presentation. Navigation target/generation ownership
+ * belongs to lightbox-navigation-lifecycle.js; decoded-resource cache, detached
+ * loads, and idle cleanup belong to lightbox-resource-lifecycle.js. Nearby-preview
+ * queue scheduling, concurrency, and cancellation belong to lightbox-preload-lifecycle.js.
+ * Media selection, quality requests, and DOM presentation remain here.
  *
  * Example usage from the gallery entrypoint:
  *
@@ -66,6 +68,8 @@ function i18n(key, fallback, parameters = {}) {
 export { setupTagSuggestions } from './tag-suggestions.js?v=20261003-scoped-i18n-v2';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
+import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
+import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261006-resource-lifecycle-v1';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
@@ -115,13 +119,13 @@ export function setupGalleryLightbox() {
     const controller = new AbortController();
     galleryLightboxState.controller = controller;
 
-    // lightboxHiddenCleanupTimer must exist before cleanup registration because this setup may
-    // return early on gallery-list views that contain no lightbox-capable photo cards. A later
-    // fragment refresh still tears down that setup instance and therefore executes its cleanup.
-    let lightboxHiddenCleanupTimer = 0;
+    // Owner construction waits for viewer markup and device policy; early route-only cleanup is safe.
+    let lightboxResources = null;
 
     // cards stores the authoritative image order for the viewer.
     let cards = [];
+    // Canonical navigation target and generation; view code reads its accessors without mirroring state.
+    const lightboxNavigation = createLightboxNavigationLifecycle();
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
     // lightboxConfig stores the server-rendered async metadata settings.
@@ -628,8 +632,9 @@ export function setupGalleryLightbox() {
 
     galleryLightboxState.cleanup = () => {
         cancelLightboxMetadataRequests();
-        clearLightboxHiddenCleanupTimer();
         controller.abort();
+        lightboxNavigation.dispose();
+        lightboxResources?.dispose();
         cards = [];
         if (overlay?.galleryLeafletSplitResizeObserver) {
             overlay.galleryLeafletSplitResizeObserver.disconnect();
@@ -732,12 +737,16 @@ export function setupGalleryLightbox() {
     const lightboxFullPreloadRadius = 0;
     // lightboxQualityUpgradeDelay coalesces passive viewport/layout quality checks; explicit zoom requests promote immediately.
     const lightboxQualityUpgradeDelay = 140;
-    // lightboxDecodedImageCacheDesktopLimit keeps a modest reusable decoded working set on desktop.
-    const lightboxDecodedImageCacheDesktopLimit = 12;
-    // lightboxDecodedImageCacheMobileLimit reduces reusable decoded retention on memory-constrained touch devices.
-    const lightboxDecodedImageCacheMobileLimit = 6;
-    // lightboxDecodedImageCacheIdleMs makes settled reusable images disposable after one minute without use.
-    const lightboxDecodedImageCacheIdleMs = 60000;
+    /**
+     * Delay navigation busy UI until a cold image load outlasts a brief cache hit.
+     * Type: number
+     * Units: Milliseconds.
+     * Scope: One lightbox setup instance.
+     * Consumers: scheduleLightboxNavigationPending().
+     * Rationale: Delay transient busy UI so cache-hot navigation does not flash a spinner.
+     * @var {number}
+     */
+    const lightboxNavigationPendingDelay = 140;
     // transitionImage stores state or configuration for the gallery front-end flow.
     let transitionImage = null;
     // activeLightboxTransitionToken stores state or configuration for the gallery front-end flow.
@@ -756,10 +765,6 @@ export function setupGalleryLightbox() {
     const failedLightboxQualitySources = new Set();
     // pendingLightboxNavigationTimer delays the busy indicator so hot cached images do not flash a spinner.
     let pendingLightboxNavigationTimer = 0;
-    // pendingLightboxNavigationToken owns the delayed busy indicator for the latest requested image.
-    let pendingLightboxNavigationToken = 0;
-    // lightboxNavigationFailureToken owns the recoverable presentation-failure notice for the current navigation.
-    let lightboxNavigationFailureToken = 0;
     // Variable `title` stores this steps working value.
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
@@ -799,8 +804,6 @@ export function setupGalleryLightbox() {
     let pictureStripAnimationToken = 0;
     // pictureStripLastIndex stores the last rendered center index so the animation direction can be inferred.
     let pictureStripLastIndex = -1;
-    // Variable `currentIndex` stores this steps working value.
-    let currentIndex = 0;
     // lightboxReturnUrl stores state or configuration for the gallery front-end flow.
     let lightboxReturnUrl = window.location.href;
     // lightboxHistoryActive stores state or configuration for the gallery front-end flow.
@@ -809,17 +812,14 @@ export function setupGalleryLightbox() {
     let initialLightboxLoadActive = false;
     // preloadedSources is bounded diagnostic bookkeeping for the current nearby/slideshow preload generation.
     const preloadedSources = new Set();
-    // decodedLightboxImages stores reusable decoded entries keyed by source URL.
-    const decodedLightboxImages = new Map();
-    // lightboxTelemetryCacheResults keeps the bounded application-cache result attached to detached decoded nodes.
-    const lightboxTelemetryCacheResults = new WeakMap();
+    // lightboxResources owns reusable decoded entries and detached image operations.
     const lightboxPreloads = createLightboxPreloadLifecycle({
         signal: controller.signal,
         scheduler: window,
         concurrency: lightboxPreloadConcurrency,
         preload: (src, options, reason) => {
             devMarkSource(src, 'preloading', reason);
-            return preloadDecodedLightboxImage(src, options);
+            return lightboxResources ? lightboxResources.preload(src, {...options, reason}) : Promise.resolve(null);
         },
         onError: (error, src) => {
             if (galleryDevModeEnabled) {
@@ -828,8 +828,6 @@ export function setupGalleryLightbox() {
             }
         },
     });
-    // activeDetachedLightboxImageLoads contains cancellation callbacks for detached image requests that have not settled yet.
-    const activeDetachedLightboxImageLoads = new Set();
     // lastLightboxNavigationRequestedAt stores the last manual navigation timestamp.
     let lastLightboxNavigationRequestedAt = 0;
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
@@ -872,13 +870,8 @@ export function setupGalleryLightbox() {
         dashboard: null,
         startedAt: performance.now(),
         lastRenderAt: 0,
-        currentIndex: -1,
         currentSource: '',
         currentSourceKind: '',
-        navigationToken: 0,
-        navigationTarget: '',
-        navigationStage: 'idle',
-        navigationFailure: '',
         sourceStats: new Map(),
         eventLog: [],
         samples: [],
@@ -893,6 +886,101 @@ export function setupGalleryLightbox() {
         frameId: 0,
         intervalId: 0,
     };
+    lightboxResources = createLightboxResourceLifecycle({
+        signal: controller.signal,
+        scheduler: window,
+        mobile: isMobileTouchDevice,
+        createImage: () => new Image(),
+        decodeImage: (loadedImage) => decodeLoadedImage(loadedImage),
+        fetchImpl: (...args) => fetch(...args),
+        onCacheEvent: (event) => {
+            if (event.name === 'inserted' && lightboxBenchmarkDiagnosticsEnabled) {
+                lightboxBenchmarkDiagnosticsState.decodedCacheInsertions += 1;
+                lightboxBenchmarkDiagnosticsState.lastDecodedCacheInsertionReason = String(event.reason || 'unknown');
+                const afterClose = typeof lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs === 'number' && overlay.hidden;
+                if (afterClose) {
+                    lightboxBenchmarkDiagnosticsState.decodedCacheInsertionsAfterClose += 1;
+                }
+                recordLightboxBenchmarkEvent(afterClose ? 'decoded_cache_insert_after_close' : 'decoded_cache_insert', {
+                    source: benchmarkSourceLabel(event.src),
+                    reason: String(event.reason || 'unknown'),
+                    cache_size: lightboxResources.snapshot().entries,
+                    since_close_ms: afterClose ? Math.max(0, performance.now() - lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs) : null,
+                    preload_generation: lightboxPreloads.generation,
+                });
+            }
+            if (event.name !== 'evicted') {
+                return;
+            }
+            const telemetryIndex = devFindSourceIndex(event.src);
+            if (telemetryIndex >= 0) {
+                telemetryLightboxCacheEvent('cache.lightbox.evicted', telemetryIndex);
+            }
+            if (galleryDevModeEnabled) {
+                galleryDevModeState.evictions += 1;
+                devLog(`evict:${event.reason}:${shortenDevUrl(event.src)}`);
+            }
+        },
+        onLoadEvent: (event) => {
+            if (event.name === 'started') {
+                galleryDevModeState.loadStarted += galleryDevModeEnabled ? 1 : 0;
+                devMarkSource(event.src, 'loading', 'fresh');
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsStarted += 1;
+                    lightboxBenchmarkDiagnosticsState.detachedLoadSequence += 1;
+                    recordLightboxBenchmarkEvent('image_load_start', {
+                        load_id: lightboxBenchmarkDiagnosticsState.detachedLoadSequence,
+                        source: benchmarkSourceLabel(event.src),
+                        priority: event.priority,
+                        preload_generation: lightboxPreloads.generation,
+                    });
+                }
+                return;
+            }
+            if (event.name === 'completed') {
+                devMarkSource(event.src, 'ready', 'decoded');
+                if (galleryDevModeEnabled) {
+                    const sourceStat = galleryDevModeState.sourceStats.get(event.src);
+                    if (sourceStat?.startedAt) {
+                        sourceStat.decodeMs = Math.max(0, performance.now() - sourceStat.startedAt);
+                    }
+                }
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsCompleted += 1;
+                    recordLightboxBenchmarkEvent('image_load_complete', {
+                        source: benchmarkSourceLabel(event.src),
+                        width: event.width,
+                        height: event.height,
+                        preload_generation: lightboxPreloads.generation,
+                    });
+                }
+                return;
+            }
+            if (event.name === 'aborted') {
+                devMarkSource(event.src, 'cancelled', 'abort');
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsAborted += 1;
+                    recordLightboxBenchmarkEvent('image_load_abort', {
+                        source: benchmarkSourceLabel(event.src),
+                        preload_generation: lightboxPreloads.generation,
+                    });
+                }
+                return;
+            }
+            if (event.name === 'failed') {
+                galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
+                devMarkSource(event.src, 'error', 'load');
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsFailed += 1;
+                    recordLightboxBenchmarkEvent('image_load_error', {
+                        source: benchmarkSourceLabel(event.src),
+                        preload_generation: lightboxPreloads.generation,
+                    });
+                }
+            }
+        },
+    });
+    lightboxResources.setHidden(document.hidden, !overlay.hidden);
     setupGalleryDevModeOverlay();
     // supportsPointerGestures stores state or configuration for the gallery front-end flow.
     const supportsPointerGestures = Boolean(window.PointerEvent);
@@ -920,23 +1008,26 @@ export function setupGalleryLightbox() {
         const currentImage = image instanceof HTMLImageElement ? image : null;
         const memory = performance && performance.memory ? performance.memory : null;
         const preloads = lightboxPreloads.snapshot();
+        const resources = lightboxResources.snapshot();
         return {
             recorded_at_ms: performance.now(),
             overlay_hidden: Boolean(overlay.hidden),
             overlay_classes: Array.from(overlay.classList),
-            current_index: currentIndex,
+            current_index: lightboxNavigation.index,
             cards_total: cards.length,
             cards_loaded: cards.reduce((count, card) => count + (card ? 1 : 0), 0),
             pending_metadata_windows: lightboxPendingWindows.size,
             pending_metadata_keys: Array.from(lightboxPendingWindows.keys()).slice(0, 20),
             metadata_generation: lightboxMetadataGeneration,
             metadata_abort_controller_active: Boolean(lightboxMetadataAbortController && !lightboxMetadataAbortController.signal.aborted),
-            decoded_image_cache_size: decodedLightboxImages.size,
+            decoded_image_cache_size: resources.entries,
             preloaded_sources_size: preloadedSources.size,
             preload_queue_length: preloads.queued,
             queued_sources_size: preloads.queuedSources,
             active_preloads: preloads.active,
-            detached_image_loads: activeDetachedLightboxImageLoads.size,
+            detached_image_loads: resources.activeDetachedImageLoads,
+            tracked_loads: resources.activeTrackedLoads,
+            fetch_transfers: resources.activeFetchTransfers,
             preload_generation: lightboxPreloads.generation,
             slideshow_active: lightboxSlideshowActive,
             fullscreen_active: document.fullscreenElement === overlay || overlay.classList.contains('is-mobile-fullscreen'),
@@ -992,12 +1083,13 @@ export function setupGalleryLightbox() {
     galleryLightboxState.cleanup = () => {
         cancelLightboxMetadataRequests();
         controller.abort();
+        lightboxNavigation.dispose();
+        lightboxResources?.dispose();
         cards = [];
         clearPendingLightboxQualityUpgrade();
         qualityProgress?.remove();
         clearLightboxNavigationPending();
         clearLightboxHudTimer();
-        activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearLightboxNavigationPending();
         clearLightboxNavigationFailure();
@@ -1006,9 +1098,7 @@ export function setupGalleryLightbox() {
         removeTransitionImage();
         preloadedSources.clear();
         resetLightboxPreloadQueue();
-        cancelActiveDetachedLightboxImageLoads();
         lightboxGalleryMapPayloadPromises.clear();
-        decodedLightboxImages.clear();
         failedLightboxQualitySources.clear();
         stopGalleryDevModeMonitoring();
         if (galleryDevModeState.overlay) {
@@ -1101,9 +1191,6 @@ export function setupGalleryLightbox() {
             stageLink.blur();
         }
     }
-
-    // activeLightboxImageToken stores state or configuration for the gallery front-end flow.
-    let activeLightboxImageToken = 0;
 
     /**
      * Cancel pending quality evaluation and invalidate any background decode.
@@ -1320,27 +1407,27 @@ export function setupGalleryLightbox() {
      * Report whether an async lightbox image request still belongs to the active photo.
      *
      * @param {number} index Requested lightbox index.
-     * @param {number} token Request token captured when the navigation started.
+     * @param {number} token Generation captured when the navigation started.
      * @return {boolean} True when the request may still update the visible image.
      */
     function isCurrentLightboxImageRequest(index, token) {
-        return !controller.signal.aborted && currentIndex === index && activeLightboxImageToken === token;
+        return !controller.signal.aborted && lightboxNavigation.isCurrent(index, token);
     }
 
         /**
      * Clear the delayed busy state used while a fast navigation waits for decoding.
      *
-     * @param {number|null} token Optional request token that must own the pending state.
+     * @param {number|null} token Optional navigation generation that must still be current.
+     * @return {void} Clears the owned navigation timer and busy state.
      */
     function clearLightboxNavigationPending(token = null) {
-        if (token !== null && pendingLightboxNavigationToken !== token) {
+        if (token !== null && lightboxNavigation.generation !== token) {
             return;
         }
         if (pendingLightboxNavigationTimer) {
             window.clearTimeout(pendingLightboxNavigationTimer);
             pendingLightboxNavigationTimer = 0;
         }
-        pendingLightboxNavigationToken = 0;
         setLightboxNavigationLoading(false);
     }
 
@@ -1348,16 +1435,19 @@ export function setupGalleryLightbox() {
      * Show a subtle busy state only when a requested image is not ready quickly.
      *
      * @param {number} index Requested lightbox index.
-     * @param {number} token Request token captured when the navigation started.
+     * @param {number} token Navigation generation captured when the request started.
      * @param {string} targetSrc Image URL expected to appear first.
+     * @return {void} Schedules the owner-checked delayed busy state.
      */
     function scheduleLightboxNavigationPending(index, token, targetSrc) {
         clearLightboxNavigationPending();
-        pendingLightboxNavigationToken = token;
         if (targetSrc && image.getAttribute('src') === targetSrc) {
             return;
         }
-        pendingLightboxNavigationTimer = window.setTimeout(() => {
+        const timer = window.setTimeout(() => {
+            if (pendingLightboxNavigationTimer !== timer) {
+                return;
+            }
             pendingLightboxNavigationTimer = 0;
             if (
                 isCurrentLightboxImageRequest(index, token)
@@ -1365,19 +1455,20 @@ export function setupGalleryLightbox() {
             ) {
                 setLightboxNavigationLoading(true);
             }
-        }, 140);
+        }, lightboxNavigationPendingDelay);
+        pendingLightboxNavigationTimer = timer;
     }
 
     /**
      * Clear a recoverable navigation failure only when the caller owns it.
      *
-     * @param {number|null} token Optional navigation token that must own the failure state.
+     * @param {number|null} token Optional navigation generation that must still be current.
+     * @return {void} Clears recoverable failure presentation for the current generation.
      */
     function clearLightboxNavigationFailure(token = null) {
-        if (token !== null && lightboxNavigationFailureToken !== token) {
+        if (token !== null && lightboxNavigation.generation !== token) {
             return;
         }
-        lightboxNavigationFailureToken = 0;
         overlay.classList.remove('is-navigation-error');
         if (!overlay.classList.contains('is-navigation-loading') && !overlay.classList.contains('is-quality-loading')) {
             if (qualityProgress instanceof HTMLElement) {
@@ -1391,14 +1482,14 @@ export function setupGalleryLightbox() {
      * Expose a terminal image-presentation failure without blocking later navigation.
      *
      * @param {number} index Requested lightbox index.
-     * @param {number} token Navigation token that owns the failure.
+     * @param {number} token Navigation generation that owns the failure.
      * @param {string} reason Bounded diagnostic reason.
+     * @return {void} Shows failure only while the captured navigation remains current.
      */
     function showLightboxNavigationFailure(index, token, reason) {
         if (!isCurrentLightboxImageRequest(index, token)) {
             return;
         }
-        lightboxNavigationFailureToken = token;
         overlay.classList.add('is-navigation-error');
         const label = i18n('lightbox.image_load_failed', 'Lightbox image load failed.');
         if (qualityProgress instanceof HTMLElement) {
@@ -1425,17 +1516,20 @@ export function setupGalleryLightbox() {
      * Record compact ownership state for the DEV overlay without treating historical source readiness as current presentation success.
      *
      * @param {number} index Requested lightbox index.
-     * @param {number} token Navigation transaction token.
+     * @param {number} token Navigation generation returned by the lifecycle owner.
      * @param {string} stage Current navigation stage.
      * @param {string} reason Optional terminal or wait reason.
-     * @return {void} Updates bounded optional navigation observations.
+     * @return {void} Updates the canonical phase and bounded optional diagnostic log.
      */
     function markLightboxNavigationDiagnostic(index, token, stage, reason = '') {
-        const card = cards[index] || null;
-        galleryDevModeState.navigationToken = Number(token) || 0;
-        galleryDevModeState.navigationTarget = String(card?.dataset.imageId || `index:${index}`);
-        galleryDevModeState.navigationStage = String(stage || 'idle').slice(0, 32);
-        galleryDevModeState.navigationFailure = String(reason || '').slice(0, 64);
+        const isTerminal = stage === 'displayed' || stage === 'failed';
+        const snapshot = isTerminal ? lightboxNavigation.snapshot() : null;
+        const accepted = isTerminal
+            ? lightboxNavigation.isCurrent(index, token) && snapshot.phase === stage
+            : lightboxNavigation.setPhase(index, token, stage, reason);
+        if (!accepted) {
+            return;
+        }
         devLog(`nav:t${token}:#${index + 1}:${stage}`);
     }
 
@@ -1455,12 +1549,13 @@ export function setupGalleryLightbox() {
      * Start one navigation transaction before metadata, image, transition, or quality work can become stale.
      *
      * @param {number} index Requested lightbox index.
-     * @return {number} Navigation token owned by this intent.
+     * @return {number} Navigation generation owned by this intent, or -1 after disposal.
      */
     function beginLightboxNavigationTransaction(index) {
-        currentIndex = index;
-        galleryDevModeState.currentIndex = index;
-        activeLightboxImageToken += 1;
+        const transaction = lightboxNavigation.begin(index, String(cards[index]?.dataset.imageId || ''));
+        if (!transaction) {
+            return -1;
+        }
         activeLightboxTransitionToken += 1;
         clearLightboxNavigationPending();
         clearLightboxNavigationFailure();
@@ -1469,16 +1564,16 @@ export function setupGalleryLightbox() {
         removeTransitionImage();
         // Drop stale queued neighbors, but keep already-running nearby previews alive.
         resetLightboxPreloadQueue({abortActive: false});
-        sweepDecodedLightboxImageCache();
-        markLightboxNavigationDiagnostic(index, activeLightboxImageToken, 'intent');
-        return activeLightboxImageToken;
+        lightboxResources.sweep();
+        markLightboxNavigationDiagnostic(index, transaction.generation, 'intent');
+        return transaction.generation;
     }
 
     /**
      * Terminate the current preview/main transaction on every settled outcome.
      *
      * @param {number} index Requested lightbox index.
-     * @param {number} token Navigation transaction token.
+     * @param {number} token Navigation generation owned by the lifecycle owner.
      * @param {boolean} wasDisplayed Whether target pixels became the live image.
      * @param {string} failureReason Diagnostic reason used only when presentation failed.
      * @return {boolean} True when the current transaction displayed successfully.
@@ -1487,6 +1582,7 @@ export function setupGalleryLightbox() {
         if (!isCurrentLightboxImageRequest(index, token)) {
             return false;
         }
+        lightboxNavigation.settle(index, token, wasDisplayed ? 'displayed' : 'failed', wasDisplayed ? '' : failureReason);
         clearLightboxNavigationPending(token);
         hideInitialLightboxLoader();
         if (!wasDisplayed) {
@@ -1666,7 +1762,7 @@ export function setupGalleryLightbox() {
         }
         galleryDevModeState.sourceStats.set(src, stat);
         if (galleryDevModeState.sourceStats.size > 256) {
-            const oldest = Array.from(galleryDevModeState.sourceStats.keys()).find((key) => !decodedLightboxImages.has(key) && key !== src);
+            const oldest = Array.from(galleryDevModeState.sourceStats.keys()).find((key) => lightboxResources.cacheStatus(key) === null && key !== src);
             if (oldest) galleryDevModeState.sourceStats.delete(oldest);
         }
         return stat;
@@ -1734,7 +1830,7 @@ export function setupGalleryLightbox() {
         if (!stat) {
             return;
         }
-        if (reason.endsWith('-hit') && decodedLightboxImages.get(src)?.settled) status = 'ready';
+        if (reason.endsWith('-hit') && lightboxResources.cacheStatus(src) === 'cached') status = 'ready';
         stat.status = status;
         stat.lastReason = reason || '';
         stat.lastUsedAt = performance.now();
@@ -1779,7 +1875,7 @@ export function setupGalleryLightbox() {
         // total stores state or configuration for the gallery front-end flow.
         let total = 0;
         galleryDevModeState.sourceStats.forEach((stat, src) => {
-            if (!decodedLightboxImages.get(src)?.settled) {
+            if (lightboxResources.cacheStatus(src) !== 'cached') {
                 return;
             }
             // width stores state or configuration for the gallery front-end flow.
@@ -1800,8 +1896,8 @@ export function setupGalleryLightbox() {
      */
     function devSourceState(src) {
         if (!src) return 'unknown';
-        const entry = decodedLightboxImages.get(src);
-        if (entry) return entry.settled ? 'cached' : 'pending';
+        const cacheStatus = lightboxResources.cacheStatus(src);
+        if (cacheStatus !== null) return cacheStatus;
         const stat = galleryDevModeState.sourceStats.get(src);
         if (!stat) return 'idle';
         if (stat.status === 'ready') return 'ready';
@@ -1816,6 +1912,8 @@ export function setupGalleryLightbox() {
         const dashboard = galleryDevModeState.dashboard;
         if (!galleryDevModeEnabled || !dashboard || dashboard.isPaused() || overlay.hidden) return;
         const liveId = String(image?.dataset.lightboxImageId || '');
+        const navigationSnapshot = lightboxNavigation.snapshot();
+        const resourceSnapshot = lightboxResources.snapshot();
         const liveIndex = liveId ? cards.findIndex((card) => String(card?.dataset.imageId || '') === liveId) : -1;
         const liveCard = cards[liveIndex] || null;
         const src = image?.currentSrc || image?.getAttribute('src') || '';
@@ -1831,7 +1929,7 @@ export function setupGalleryLightbox() {
         const requiredWidth = lightboxZoomRequiredSourceWidth(fittedWidth, lightboxZoomState.scale, lightboxQualityDevicePixelRatio());
         const neighbors = [];
         for (let offset = -3; offset <= 3; offset += 1) {
-            const index = (currentIndex + offset + cards.length) % cards.length;
+            const index = (lightboxNavigation.index + offset + cards.length) % cards.length;
             const card = cards[index];
             // Do not duplicate a tiny gallery across the neighbor table.
             if (Math.abs(offset) > Math.floor(cards.length / 2) || (cards.length % 2 === 0 && offset === -cards.length / 2)) {
@@ -1870,14 +1968,17 @@ export function setupGalleryLightbox() {
                 dpr: lightboxQualityDevicePixelRatio(), requiredWidth},
             preload: {...lightboxPreloads.snapshot(), limit: lightboxPreloadConcurrency(),
                 previewRadius: lightboxActivePreviewPreloadRadius(), fullRadius: lightboxActiveFullPreloadRadius()},
-            cache: {entries: decodedLightboxImages.size, limit: activeLightboxDecodedImageCacheLimit(), bytes: devDecodedMemoryBytes(),
+            cache: {entries: resourceSnapshot.entries, limit: resourceSnapshot.limit, bytes: devDecodedMemoryBytes(),
                 hits: galleryDevModeState.cacheHits, misses: galleryDevModeState.cacheMisses, evictions: galleryDevModeState.evictions},
-            neighbors, loads: activeDetachedLightboxImageLoads.size, frame: galleryDevModeState.frameMs,
+            neighbors, loads: resourceSnapshot.activeDetachedImageLoads,
+            trackedLoads: resourceSnapshot.activeTrackedLoads,
+            fetchTransfers: resourceSnapshot.activeFetchTransfers,
+            frame: galleryDevModeState.frameMs,
             mode: isLightboxFullscreen() ? 'fullscreen' : 'lightbox', visibility: document.visibilityState,
             heap: memory ? {used: memory.usedJSHeapSize, limit: memory.jsHeapSizeLimit} : null, network,
-            navigation: {position: currentIndex + 1, id: cards[currentIndex]?.dataset.imageId || '—',
-                token: activeLightboxImageToken, stage: galleryDevModeState.navigationStage,
-                failed: lightboxNavigationFailureToken === activeLightboxImageToken && lightboxNavigationFailureToken > 0},
+            navigation: {position: navigationSnapshot.index + 1, id: navigationSnapshot.imageId || '—',
+                token: navigationSnapshot.generation, stage: navigationSnapshot.phase,
+                failed: navigationSnapshot.phase === 'failed'},
             pending, slideshow: lightboxSlideshowActive, slideDuration: lightboxSlideshowVisibleDuration,
             errors: galleryDevModeState.decodeErrors, events: galleryDevModeState.eventLog,
         });
@@ -1934,413 +2035,114 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Prime the browser HTTP cache while reporting the real response-byte progress.
-     *
-     * The protected media routes emit Content-Length and cacheable responses. Reading
-     * the Fetch body here therefore provides accurate progress without changing media
-     * authorization, while the subsequent Image decode reuses the freshly cached URL.
+     * Load one active-photo quality source through the resource owner's tracked transfer.
      *
      * @param {string} src Authorized image source URL.
-     * @param {object} options Optional transfer controls.
-     * @param {AbortSignal|null} options.signal Cancellation signal for navigation or close.
-     * @param {string} options.priority Fetch priority hint.
-     * @param {Function|null} options.onProgress Callback receiving loaded and total bytes.
-     * @return {Promise<void>} Resolves after the response body has been fully consumed.
-     */
-    async function primeLightboxImageCacheWithProgress(src, options = {}) {
-        if (!src) {
-            throw new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.'));
-        }
-        const requestOptions = {
-            method: 'GET',
-            credentials: 'same-origin',
-            cache: 'default',
-            signal: options.signal || undefined,
-        };
-        if (options.priority) {
-            requestOptions.priority = options.priority;
-        }
-        const response = await fetch(src, requestOptions);
-        if (!response.ok) {
-            throw new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.'));
-        }
-        const declaredTotal = Math.max(0, Number.parseInt(response.headers.get('Content-Length') || '0', 10) || 0);
-        let loaded = 0;
-        const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
-        reportProgress?.(0, declaredTotal);
-
-        if (!response.body || typeof response.body.getReader !== 'function') {
-            const body = await response.blob();
-            loaded = Math.max(0, body.size || 0);
-            reportProgress?.(loaded, declaredTotal || loaded);
-            return;
-        }
-
-        const reader = response.body.getReader();
-        try {
-            while (true) {
-                const result = await reader.read();
-                if (result.done) {
-                    break;
-                }
-                loaded += result.value?.byteLength || 0;
-                reportProgress?.(loaded, declaredTotal);
-            }
-        } finally {
-            reader.releaseLock();
-        }
-        reportProgress?.(loaded, declaredTotal || loaded);
-    }
-
-    /**
-     * Download one active-photo quality source with real byte progress, then decode it.
-     *
-     * @param {string} src Authorized image source URL.
-     * @param {object} options Optional transfer and decode controls.
+     * @param {Record<string, unknown>} options Quality cancellation, priority, and byte-progress controls.
      * @return {Promise<HTMLImageElement>} Fully decoded image node.
      */
     function loadTrackedDecodedLightboxImage(src, options = {}) {
-        return primeLightboxImageCacheWithProgress(src, options).then(() => loadFreshDecodedLightboxImage(src, {
+        return lightboxResources.loadTracked(src, {
             priority: options.priority || 'high',
             signal: options.signal || null,
-        }));
-    }
-
-    /**
-     * Handles load fresh decoded lightbox image behavior for the gallery UI.
-     *
-     * @param {string} src Authorized source URL.
-     * @param {{priority?:string,signal?:AbortSignal|null,telemetryIndex?:number,telemetryToken?:number,telemetryCacheResult?:string}} options Existing request priority, cancellation and telemetry ownership.
-     * @return {Promise<HTMLImageElement>} Decoded detached source image.
-     */
-    function loadFreshDecodedLightboxImage(src, options = {}) {
-        return new Promise((resolve, reject) => {
-            if (!src) {
-                reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
-                return;
-            }
-            galleryDevModeState.loadStarted += galleryDevModeEnabled ? 1 : 0;
-            devMarkSource(src, 'loading', 'fresh');
-            const benchmarkLoadId = lightboxBenchmarkDiagnosticsEnabled ? ++lightboxBenchmarkDiagnosticsState.detachedLoadSequence : 0;
-            if (lightboxBenchmarkDiagnosticsEnabled) {
-                lightboxBenchmarkDiagnosticsState.detachedLoadsStarted += 1;
-                recordLightboxBenchmarkEvent('image_load_start', {
-                    load_id: benchmarkLoadId,
-                    source: benchmarkSourceLabel(src),
-                    priority: String(options.priority || ''),
-                    preload_generation: lightboxPreloads.generation,
-                });
-            }
-            // loadedImage stores state or configuration for the gallery front-end flow.
-            const loadedImage = new Image();
-            // signal optionally lets nearby-image or slideshow lifecycle code cancel this detached request.
-            const signal = options.signal && typeof options.signal.addEventListener === 'function' ? options.signal : null;
-            let settled = false;
-
-            /** Remove request listeners and release this detached load from the active registry. */
-            const cleanupLoad = () => {
-                loadedImage.onload = null;
-                loadedImage.onerror = null;
-                if (signal) {
-                    signal.removeEventListener('abort', cancelLoad);
-                }
-                activeDetachedLightboxImageLoads.delete(cancelLoad);
-            };
-
-            /** Cancel an unfinished detached image request and reject it as an abort. */
-            const cancelLoad = () => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                cleanupLoad();
-                loadedImage.removeAttribute('src');
-                devMarkSource(src, 'cancelled', 'abort');
-                if (lightboxBenchmarkDiagnosticsEnabled) {
-                    lightboxBenchmarkDiagnosticsState.detachedLoadsAborted += 1;
-                    recordLightboxBenchmarkEvent('image_load_abort', {
-                        load_id: benchmarkLoadId,
-                        source: benchmarkSourceLabel(src),
-                        preload_generation: lightboxPreloads.generation,
-                    });
-                }
-                const error = new Error('Lightbox image load cancelled.');
-                error.name = 'AbortError';
-                reject(error);
-            };
-
-            activeDetachedLightboxImageLoads.add(cancelLoad);
-            if (signal) {
-                if (signal.aborted) {
-                    cancelLoad();
-                    return;
-                }
-                signal.addEventListener('abort', cancelLoad, {once: true});
-            }
-
-            loadedImage.decoding = 'async';
-            loadedImage.loading = 'eager';
-            if ('fetchPriority' in loadedImage && options.priority) {
-                loadedImage.fetchPriority = options.priority;
-            }
-            loadedImage.onload = () => {
-                const decodeStartedAt = performance.now();
-                decodeLoadedImage(loadedImage).then(() => {
-                    if (settled) {
-                        return;
-                    }
-                    if (signal?.aborted) {
-                        cancelLoad();
-                        return;
-                    }
-                    settled = true;
-                    cleanupLoad();
-                    if (lightboxBenchmarkDiagnosticsEnabled) {
-                        lightboxBenchmarkDiagnosticsState.detachedLoadsCompleted += 1;
-                        recordLightboxBenchmarkEvent('image_load_complete', {
-                            load_id: benchmarkLoadId,
-                            source: benchmarkSourceLabel(src),
-                            width: loadedImage.naturalWidth,
-                            height: loadedImage.naturalHeight,
-                            preload_generation: lightboxPreloads.generation,
-                        });
-                    }
-                    devMarkSource(src, 'ready', 'decoded', loadedImage);
-                    if (galleryDevModeEnabled) {
-                        galleryDevModeState.sourceStats.get(src).decodeMs = performance.now() - decodeStartedAt;
-                    }
-                    if (Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken)) {
-                        const cacheResult = options.telemetryCacheResult || 'miss';
-                        lightboxTelemetryCacheResults.set(loadedImage, cacheResult);
-                        telemetryVisibleImageDecoded(
-                            options.telemetryIndex,
-                            options.telemetryToken,
-                            src,
-                            loadedImage,
-                            performance.now() - decodeStartedAt,
-                            cacheResult
-                        );
-                    }
-                    resolve(loadedImage);
-                });
-            };
-            loadedImage.onerror = () => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                cleanupLoad();
-                if (lightboxBenchmarkDiagnosticsEnabled) {
-                    lightboxBenchmarkDiagnosticsState.detachedLoadsFailed += 1;
-                    recordLightboxBenchmarkEvent('image_load_error', {
-                        load_id: benchmarkLoadId,
-                        source: benchmarkSourceLabel(src),
-                        preload_generation: lightboxPreloads.generation,
-                    });
-                }
-                galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
-                devMarkSource(src, 'error', 'load');
-                reject(new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.')));
-            };
-            loadedImage.src = src;
+            onProgress: options.onProgress,
+            cacheResult: options.cacheResult || 'miss',
         });
     }
 
     /**
-     * Cancel every unfinished detached image request owned by the lightbox.
+     * Warm one authorized nearby image through the resource owner's shared cache.
      *
-     * This is used when the viewer closes or is torn down so decoded-image work
-     * cannot continue consuming bandwidth and memory after the gallery is visible.
-     */
-    function cancelActiveDetachedLightboxImageLoads() {
-        Array.from(activeDetachedLightboxImageLoads).forEach((cancelLoad) => {
-            try {
-                cancelLoad();
-            } catch {
-                // A late browser cancellation must never break viewer teardown.
-            }
-        });
-        activeDetachedLightboxImageLoads.clear();
-    }
-
-    /**
-     * Return the reusable decoded-image cache limit for this browser context.
-     *
-     * @return {number} Maximum settled reusable entries to retain.
-     */
-    function activeLightboxDecodedImageCacheLimit() {
-        return isMobileTouchDevice ? lightboxDecodedImageCacheMobileLimit : lightboxDecodedImageCacheDesktopLimit;
-    }
-
-    /**
-     * Delete one settled reusable decoded entry and record the eviction in development mode.
-     *
-     * @param {string} src Image source key to remove.
-     * @param {string} reason Short diagnostic reason for the eviction.
-     * @return {boolean} True when a cache entry was removed.
-     */
-    function evictSettledDecodedLightboxImage(src, reason) {
-        const entry = decodedLightboxImages.get(src);
-        if (!entry?.settled) {
-            return false;
-        }
-        decodedLightboxImages.delete(src);
-        const telemetryIndex = devFindSourceIndex(src);
-        if (telemetryIndex >= 0) {
-            telemetryLightboxCacheEvent('cache.lightbox.evicted', telemetryIndex);
-        }
-        if (galleryDevModeEnabled) {
-            galleryDevModeState.evictions += 1;
-            devLog(`evict:${reason}:${shortenDevUrl(src)}`);
-        }
-        return true;
-    }
-
-    /**
-     * Remove settled decoded entries that exceeded idle age and enforce the active count limit.
-     *
-     * Unsettled promises remain mapped until their existing cancellation or settlement
-     * lifecycle completes, so cleanup never hides active work and causes duplicate loads.
-     *
-     * @param {object} options Optional cleanup controls.
-     * @param {boolean} options.releaseAllSettled Release every settled reusable entry.
-     */
-    function sweepDecodedLightboxImageCache(options = {}) {
-        const releaseAllSettled = options.releaseAllSettled === true;
-        const now = performance.now();
-        decodedLightboxImages.forEach((entry, src) => {
-            if (!entry?.settled) {
-                return;
-            }
-            if (releaseAllSettled || now - entry.lastUsedAt >= lightboxDecodedImageCacheIdleMs) {
-                evictSettledDecodedLightboxImage(src, releaseAllSettled ? 'hidden' : 'idle');
-            }
-        });
-        trimDecodedLightboxImageCache();
-    }
-
-    /**
-     * Return one reusable decoded cache entry while refreshing its last-use time and LRU position.
-     *
-     * @param {string} src Image source key.
-     * @return {{promise: Promise<*>, lastUsedAt: number, settled: boolean}|null} Reusable cache entry.
-     */
-    function useDecodedLightboxImageCacheEntry(src) {
-        sweepDecodedLightboxImageCache();
-        const entry = decodedLightboxImages.get(src);
-        if (!entry) {
-            return null;
-        }
-        entry.lastUsedAt = performance.now();
-        decodedLightboxImages.delete(src);
-        decodedLightboxImages.set(src, entry);
-        return entry;
-    }
-
-    /**
-     * Remember one reusable decoded image promise with settlement and last-use metadata.
-     *
-     * @param {string} src Image source key.
-     * @param {Promise<*>} preloadPromise Promise resolving to a decoded detached image or null.
-     * @param {string} reason Diagnostic insertion reason.
-     * @return {Promise<*>} The supplied reusable promise.
-     */
-    function rememberDecodedLightboxImage(src, preloadPromise, reason = 'unknown') {
-        sweepDecodedLightboxImageCache();
-        if (decodedLightboxImages.has(src)) {
-            decodedLightboxImages.delete(src);
-        }
-        const entry = {
-            promise: preloadPromise,
-            lastUsedAt: performance.now(),
-            settled: false,
-        };
-        decodedLightboxImages.set(src, entry);
-        preloadPromise.then(
-            () => {
-                if (decodedLightboxImages.get(src) !== entry) {
-                    return;
-                }
-                entry.settled = true;
-                sweepDecodedLightboxImageCache();
-            },
-            () => {
-                if (decodedLightboxImages.get(src) !== entry) {
-                    return;
-                }
-                entry.settled = true;
-                sweepDecodedLightboxImageCache();
-            }
-        );
-        if (lightboxBenchmarkDiagnosticsEnabled) {
-            lightboxBenchmarkDiagnosticsState.decodedCacheInsertions += 1;
-            lightboxBenchmarkDiagnosticsState.lastDecodedCacheInsertionReason = String(reason || 'unknown');
-            const afterClose = typeof lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs === 'number' && overlay.hidden;
-            if (afterClose) {
-                lightboxBenchmarkDiagnosticsState.decodedCacheInsertionsAfterClose += 1;
-            }
-            recordLightboxBenchmarkEvent(afterClose ? 'decoded_cache_insert_after_close' : 'decoded_cache_insert', {
-                source: benchmarkSourceLabel(src),
-                reason: String(reason || 'unknown'),
-                cache_size: decodedLightboxImages.size,
-                since_close_ms: afterClose ? Math.max(0, performance.now() - lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs) : null,
-                preload_generation: lightboxPreloads.generation,
-            });
-        }
-        trimDecodedLightboxImageCache();
-        return preloadPromise;
-    }
-
-    /**
-     * Enforce the active LRU entry-count limit without orphaning unresolved image work.
-     */
-    function trimDecodedLightboxImageCache() {
-        const cacheLimit = activeLightboxDecodedImageCacheLimit();
-        while (decodedLightboxImages.size > cacheLimit) {
-            const oldestSettledKey = Array.from(decodedLightboxImages.entries())
-                .find(([, entry]) => entry?.settled)?.[0];
-            if (!oldestSettledKey) {
-                return;
-            }
-            evictSettledDecodedLightboxImage(oldestSettledKey, 'limit');
-        }
-    }
-
-        /**
-     * Handles preload decoded lightbox image behavior for the gallery UI.
-     *
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {object} options Optional preload lifecycle controls.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @param {string} src Authorized image source URL.
+     * @param {Record<string, unknown>} options Queue-owned cancellation, priority, and diagnostic reason.
+     * @return {Promise<HTMLImageElement|null>} Reusable decoded image or null when preview loading fails.
      */
     function preloadDecodedLightboxImage(src, options = {}) {
-        if (!src) {
+        if (!src || !lightboxResources) {
             return Promise.resolve(null);
         }
-        const cachedEntry = useDecodedLightboxImageCacheEntry(src);
-        if (cachedEntry) {
+        const cached = lightboxResources.cacheStatus(src) !== null;
+        if (cached) {
             galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'preloading', 'preload-hit');
-            return cachedEntry.promise;
+        } else {
+            galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
+            galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
+            devMarkSource(src, 'preloading', 'preload-miss');
         }
-        galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
-        galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
-        devMarkSource(src, 'preloading', 'preload-miss');
-        // preloadPromise stores state or configuration for the gallery front-end flow.
-        const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low', signal: options.signal}).catch(() => null);
-        rememberDecodedLightboxImage(src, preloadPromise, 'preload');
-        preloadPromise.finally(() => {
-            if (options.signal?.aborted && decodedLightboxImages.get(src)?.promise === preloadPromise) {
-                decodedLightboxImages.delete(src);
-            }
+        return lightboxResources.preload(src, {
+            priority: options.priority || 'low',
+            signal: options.signal || null,
+            reason: options.reason || 'preload',
         });
-        return preloadPromise;
     }
 
-        /**
-     * Return how many background lightbox preview preloads may run at once.
+    /**
+     * Add one authorized low-priority preview to the independent nearby queue.
      *
-     * @return {number} Safe concurrent preload count for the current browser context.
+     * @param {string} src Authorized preview URL to warm.
+     * @param {string} reason Bounded queue diagnostic reason.
+     * @param {number} generation Queue generation that owns this work item.
+     * @return {void} Resolves cache hits directly or enqueues an absent source.
+     */
+    function queueDecodedLightboxPreload(src, reason, generation) {
+        if (!src || controller.signal.aborted) {
+            return;
+        }
+        if (lightboxResources?.hasCached(src)) {
+            preloadDecodedLightboxImage(src, {reason});
+            return;
+        }
+        lightboxPreloads.enqueue(src, reason, generation);
+    }
+
+    /**
+     * Load one authorized source through the shared decoded cache without navigation cancellation.
+     *
+     * @param {string} src Authorized source URL selected by the active card.
+     * @param {Record<string, unknown>} options Priority and optional active-navigation telemetry identity.
+     * @return {Promise<HTMLImageElement>} Decoded image or a rejected foreground load.
+     */
+    function loadDecodedLightboxImage(src, options = {}) {
+        if (!src) {
+            return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
+        }
+        if (!lightboxResources) {
+            return Promise.reject(new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.')));
+        }
+        const telemetryOwned = Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken);
+        const startedAt = performance.now();
+        return lightboxResources.loadDecoded(src, {
+            priority: options.priority || 'high',
+            onCacheResult: (result) => {
+                if (result === 'hit') {
+                    galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
+                } else {
+                    galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
+                }
+                if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
+                    telemetryLightboxCacheEvent(`cache.lightbox.${result}`, options.telemetryIndex, src);
+                }
+            },
+        }).then((loadedImage) => {
+            devMarkSource(src, 'ready', 'decoded', loadedImage);
+            if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
+                const cacheResult = lightboxResources.cacheResultFor(loadedImage);
+                telemetryVisibleImageDecoded(
+                    options.telemetryIndex,
+                    options.telemetryToken,
+                    src,
+                    loadedImage,
+                    Math.max(0, performance.now() - startedAt),
+                    cacheResult
+                );
+            }
+            return loadedImage;
+        });
+    }
+    /**
+     * Bound nearby-preview concurrency by touch and connection policy.
+     * @return {number} One slot for constrained clients, otherwise two slots.
      */
     function lightboxPreloadConcurrency() {
         if (shouldLimitLightboxPreloading()) {
@@ -2362,112 +2164,18 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Cancel the one-shot decoded-cache cleanup owned by a hidden document state.
-     */
-    function clearLightboxHiddenCleanupTimer() {
-        if (!lightboxHiddenCleanupTimer) {
-            return;
-        }
-        window.clearTimeout(lightboxHiddenCleanupTimer);
-        lightboxHiddenCleanupTimer = 0;
-    }
-
-    /**
-     * Shed low-priority lightbox resources while the page remains backgrounded.
+     * Apply hidden-page retention policy while leaving queue cancellation with its owner.
      *
-     * A hidden page immediately cancels nearby preview work. Settled reusable
-     * decoded entries are released only after the page stays hidden for the
-     * normal idle-age threshold, while the live displayed image remains intact.
+     * @return {void} Informs the resource owner and cancels queued nearby previews when hidden.
      */
     function handleLightboxVisibilityChange() {
-        if (document.hidden) {
-            clearLightboxHiddenCleanupTimer();
-            if (overlay.hidden) {
-                return;
-            }
+        const hidden = document.hidden;
+        lightboxResources?.setHidden(hidden, !overlay.hidden);
+        if (hidden) {
             resetLightboxPreloadQueue();
-            lightboxHiddenCleanupTimer = window.setTimeout(() => {
-                lightboxHiddenCleanupTimer = 0;
-                if (!document.hidden || controller.signal.aborted) {
-                    return;
-                }
-                sweepDecodedLightboxImageCache({releaseAllSettled: true});
-            }, lightboxDecodedImageCacheIdleMs);
-            return;
         }
-        clearLightboxHiddenCleanupTimer();
-        sweepDecodedLightboxImageCache();
     }
-
-        /**
-     * Add one low-priority nearby-image preload to the queue.
-     *
-     * @param {string} src Image URL to warm.
-     * @param {string} reason Diagnostic reason shown in dev mode.
-     * @param {number} generation Queue generation that owns this work item.
-     */
-    function queueDecodedLightboxPreload(src, reason, generation) {
-        if (!src || controller.signal.aborted) {
-            return;
-        }
-        if (decodedLightboxImages.has(src)) {
-            preloadDecodedLightboxImage(src);
-            return;
-        }
-        lightboxPreloads.enqueue(src, reason, generation);
-    }
-
-        /**
-     * Handles load decoded lightbox image behavior for the gallery UI.
-     *
-     * @param {string} src Authorized source URL.
-     * @param {Object<string, unknown>} options Decode controls and optional navigation ownership.
-     * @return {Promise<HTMLImageElement>} A decoded image or a rejected source load.
-     */
-    function loadDecodedLightboxImage(src, options = {}) {
-        if (!src) {
-            return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
-        }
-        const cachedEntry = useDecodedLightboxImageCacheEntry(src);
-        const telemetryOwned = Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken);
-        if (cachedEntry) {
-            devMarkSource(src, 'loading', 'load-hit');
-            return cachedEntry.promise.then(
-                /**
-                 * Count only a resolved usable cache image for the active navigation.
-                 * @param {HTMLImageElement|null} preloadedImage Decoded image or a failed preload sentinel.
-                 * @return {HTMLImageElement|Promise<HTMLImageElement>} Cached image or a fresh recovery load.
-                 */
-                (preloadedImage) => {
-                if (preloadedImage) {
-                    galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
-                    if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
-                        telemetryLightboxCacheEvent('cache.lightbox.hit', options.telemetryIndex, src);
-                    }
-                    lightboxTelemetryCacheResults.set(preloadedImage, 'hit');
-                    return preloadedImage;
-                }
-                if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
-                    telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex, src);
-                }
-                galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
-                // freshPromise stores state or configuration for the gallery front-end flow.
-                const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
-                rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-cache-retry');
-                return freshPromise;
-            });
-        }
-        galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
-        if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
-            telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex, src);
-        }
-        // freshPromise stores state or configuration for the gallery front-end flow.
-        const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
-        rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-fresh');
-        return freshPromise;
-    }
-
-        /**
+    /**
      * Handles remove transition image behavior for the gallery UI.
      *
      * @param {*} node Value supplied by the caller or event context.
@@ -3154,13 +2862,14 @@ export function setupGalleryLightbox() {
      * Debounce passive active-photo quality evaluation after open or viewport changes.
      *
      * @param {number} delay Delay in milliseconds; zero schedules after the current task.
+     * @return {void} Schedules quality evaluation for the canonical current target/generation.
      */
     function scheduleLightboxQualityUpgrade(delay = lightboxQualityUpgradeDelay) {
         if (pendingLightboxQualityTimer) {
             window.clearTimeout(pendingLightboxQualityTimer);
         }
-        const index = currentIndex;
-        const imageToken = activeLightboxImageToken;
+        const index = lightboxNavigation.index;
+        const imageToken = lightboxNavigation.generation;
         pendingLightboxQualityTimer = window.setTimeout(() => {
             pendingLightboxQualityTimer = 0;
             promoteLightboxQualityIfNeeded(index, imageToken);
@@ -3175,22 +2884,33 @@ export function setupGalleryLightbox() {
      * place. After the response body is cached and decoded, the same stable zoom-surface
      * installation path promotes it without a second visible layout transition.
      *
-     * A failed original request keeps the authorized preview. Navigation and close
-     * abort the transfer and invalidate its token so late completion cannot alter the
-     * next photograph.
+     * The authorized original is assigned to the live image synchronously before
+     * enlarged geometry is rendered. A failed tracked request restores the saved
+     * protected preview only while this image, navigation, and quality request still
+     * own the live node. A native live-image error restores that same preview and
+     * aborts the tracked transfer without waiting for detached decode settlement.
+     * Navigation and close abort the transfer and invalidate its token so late
+     * completion cannot alter the next photograph.
      *
-     * @return {boolean} True when an original-quality request was started.
+     * @return {boolean} True when a current original-quality request was started.
      */
     function requestLightboxQualityUpgradeNow() {
-        if (lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE || overlay.hidden || currentIndex < 0) {
+        if (lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE || overlay.hidden || lightboxNavigation.index < 0) {
             return false;
         }
-        const card = cards[currentIndex];
-        const imageId = String(card?.dataset.imageId || currentIndex);
+        const card = cards[lightboxNavigation.index];
+        const imageId = String(card?.dataset.imageId || lightboxNavigation.index);
         const fullSrc = String(card?.dataset.fullSrc || '').trim();
         if (!(card instanceof HTMLElement) || !(image instanceof HTMLImageElement) || !fullSrc) {
             return false;
         }
+
+        const liveSrc = image.getAttribute('src') || '';
+        const alreadyShowingDecodedOriginal = activeLightboxQualitySource === fullSrc && liveSrc === fullSrc;
+        if (alreadyShowingDecodedOriginal) {
+            return false;
+        }
+        const protectedPreviewSrc = String(card.dataset.previewSrc || liveSrc).trim();
 
         activeLightboxTransitionToken += 1;
         removeTransitionImage();
@@ -3201,27 +2921,64 @@ export function setupGalleryLightbox() {
             pendingLightboxQualityTimer = 0;
         }
 
-        if (activeLightboxQualitySource === fullSrc || pendingLightboxQualitySource === fullSrc) {
+        if (
+            pendingLightboxQualitySource === fullSrc
+            && activeLightboxQualityAbortController
+            && !activeLightboxQualityAbortController.signal.aborted
+            && image.dataset.lightboxExplicitZoomQuality === imageId
+        ) {
+            if (image.getAttribute('src') !== fullSrc) {
+                image.src = fullSrc;
+            }
             return false;
         }
 
         const failureKey = `${imageId}:${fullSrc}`;
-        if (failedLightboxQualitySources.has(failureKey)) {
-            return false;
-        }
 
         activeLightboxQualityRequestToken += 1;
         const qualityToken = activeLightboxQualityRequestToken;
-        const index = currentIndex;
-        const imageToken = activeLightboxImageToken;
+        const index = lightboxNavigation.index;
+        const imageToken = lightboxNavigation.generation;
+        const requestImage = image;
         if (activeLightboxQualityAbortController) {
             activeLightboxQualityAbortController.abort();
         }
         const qualityAbortController = new AbortController();
         activeLightboxQualityAbortController = qualityAbortController;
+        const restoreProtectedPreviewIfCurrent = () => {
+            if (
+                !isCurrentLightboxImageRequest(index, imageToken)
+                || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)
+                || image !== requestImage
+                || requestImage.dataset.lightboxImageId !== imageId
+                || requestImage.dataset.lightboxExplicitZoomQuality !== imageId
+                || requestImage.getAttribute('src') !== fullSrc
+                || !protectedPreviewSrc
+                || protectedPreviewSrc === fullSrc
+            ) {
+                return false;
+            }
+            requestImage.src = protectedPreviewSrc;
+            activeLightboxQualitySource = '';
+            return true;
+        };
+        const onLiveQualityImageError = () => {
+            if (!restoreProtectedPreviewIfCurrent()) {
+                return;
+            }
+            failedLightboxQualitySources.add(failureKey);
+            delete requestImage.dataset.lightboxExplicitZoomQuality;
+            qualityAbortController.abort();
+            finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
+        };
+        requestImage.addEventListener('error', onLiveQualityImageError, {once: true, signal: qualityAbortController.signal});
 
         pendingLightboxQualitySource = fullSrc;
-        image.dataset.lightboxExplicitZoomQuality = imageId;
+        requestImage.dataset.lightboxExplicitZoomQuality = imageId;
+        // Deliberate zoom must promote the live node in this input task. Fetch/decode
+        // below still owns progress and decoded-node installation, but cannot delay
+        // the browser's authorized full-source request until that work completes.
+        requestImage.src = fullSrc;
         setLightboxQualityLoading(true);
         setLightboxQualityProgress(0, 0);
         devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');
@@ -3242,8 +2999,10 @@ export function setupGalleryLightbox() {
             if (
                 !isCurrentLightboxImageRequest(index, imageToken)
                 || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)
-                || image.dataset.lightboxImageId !== imageId
+                || image !== requestImage
+                || requestImage.dataset.lightboxImageId !== imageId
             ) {
+                requestImage.removeEventListener('error', onLiveQualityImageError);
                 finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
                 return false;
             }
@@ -3252,11 +3011,13 @@ export function setupGalleryLightbox() {
                     !installed
                     || !isCurrentLightboxImageRequest(index, imageToken)
                     || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)
-                    || image.dataset.lightboxImageId !== imageId
+                    || requestImage.dataset.lightboxImageId !== imageId
                 ) {
+                    requestImage.removeEventListener('error', onLiveQualityImageError);
                     finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
                     return false;
                 }
+                requestImage.removeEventListener('error', onLiveQualityImageError);
                 image.dataset.lightboxExplicitZoomQuality = imageId;
                 updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
                 applyLightboxZoomState(false);
@@ -3268,7 +3029,9 @@ export function setupGalleryLightbox() {
             if (!ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)) {
                 return;
             }
-            delete image.dataset.lightboxExplicitZoomQuality;
+            requestImage.removeEventListener('error', onLiveQualityImageError);
+            restoreProtectedPreviewIfCurrent();
+            delete requestImage.dataset.lightboxExplicitZoomQuality;
             if (error?.name !== 'AbortError') {
                 failedLightboxQualitySources.add(failureKey);
             }
@@ -3392,6 +3155,7 @@ export function setupGalleryLightbox() {
      * those items arrive. The function never changes the authoritative order.
      *
      * @param {number} centerIndex Active lightbox index.
+     * @return {void} Requests missing nearby metadata and refreshes the strip while this center remains active.
      */
     function fetchPictureStripNeighbors(centerIndex) {
         if (!lightboxNeighborBrowserEnabled || cards.length <= 0) {
@@ -3402,7 +3166,7 @@ export function setupGalleryLightbox() {
             const neighborIndex = normalizeLightboxIndex(centerIndex + offset);
             if (neighborIndex >= 0 && !cards[neighborIndex]) {
                 fetchLightboxWindowAround(neighborIndex).then((loaded) => {
-                    if (loaded && !controller.signal.aborted && currentIndex === centerIndex) {
+                    if (loaded && !controller.signal.aborted && lightboxNavigation.index === centerIndex) {
                         renderPictureStrip(centerIndex, false);
                     }
                 });
@@ -3670,6 +3434,7 @@ export function setupGalleryLightbox() {
      * @param {string} src Authorized image source URL.
      * @param {HTMLImageElement} decodedImage Decoded detached image.
      * @param {number} elapsedMs Presentation duration in milliseconds.
+     * @return {void} Emits display telemetry only for the current navigation.
      */
     function telemetryVisibleImageDisplayed(index, token, src, decodedImage, elapsedMs) {
         if (!isCurrentLightboxImageRequest(index, token) || !window.PHPGalleryTelemetryImageDisplayed) {
@@ -3681,7 +3446,7 @@ export function setupGalleryLightbox() {
             Number(card?.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
             elapsedMs,
             telemetryLightboxMediaVariant(index, src),
-            lightboxTelemetryCacheResults.get(decodedImage) || 'unknown',
+            lightboxResources.cacheResultFor(decodedImage),
             Math.max(0, Number(image?.clientWidth || stageLink?.clientWidth || window.innerWidth || 0)),
             Math.max(0, Number(decodedImage?.naturalWidth || 0))
         );
@@ -3872,6 +3637,8 @@ export function setupGalleryLightbox() {
 
     /**
      * Recalculate stage size and clamp zoom after fullscreen or split-layout changes settle.
+     *
+     * @return {void} Schedules stage remeasurement for the canonical current target.
      */
     function scheduleLightboxZoomReclamp() {
         cancelLightboxZoomReclamp();
@@ -3880,7 +3647,7 @@ export function setupGalleryLightbox() {
             if (controller.signal.aborted || overlay.hidden) {
                 return;
             }
-            updateNormalLightboxStageSize(cards[currentIndex]);
+            updateNormalLightboxStageSize(cards[lightboxNavigation.index]);
             applyLightboxZoomState(false);
             scheduleLightboxQualityUpgrade();
         });
@@ -4457,7 +4224,8 @@ export function setupGalleryLightbox() {
      * Open the lightbox at a specific index.
      *
      * @param {number} index Zero-based image index.
-     * @param {object} options Optional behavior flags.
+     * @param {Record<string, unknown>} options Navigation and presentation options.
+     * @return {void} Opens the selected card or resumes its sparse-metadata transaction.
      */
     function openAt(index, options = {}) {
         // Keyboard, strip, slideshow, and direct-card navigation supersede a pending popup selection.
@@ -4474,7 +4242,7 @@ export function setupGalleryLightbox() {
             }
             recordLightboxBenchmarkEvent(overlay.hidden ? 'open' : 'navigate', {
                 requested_index: index,
-                current_index: currentIndex,
+                current_index: lightboxNavigation.index,
                 cards_loaded: cards.reduce((count, card) => count + (card ? 1 : 0), 0),
             });
         }
@@ -4493,8 +4261,15 @@ export function setupGalleryLightbox() {
         const imageToken = resumesCurrentNavigation
             ? requestedResumeToken
             : beginLightboxNavigationTransaction(normalizedIndex);
+        if (imageToken < 0) {
+            return;
+        }
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
+        if (card && !lightboxNavigation.bindImageId(normalizedIndex, imageToken, String(card.dataset.imageId || ''))) {
+            finalizeLightboxNavigationTransaction(normalizedIndex, imageToken, false, 'metadata-target-mismatch');
+            return;
+        }
         const isInitialPhotoOpen = overlay.hidden || !image.getAttribute('src') || overlay.classList.contains('is-initial-loading');
         if (isInitialPhotoOpen) {
             showInitialLightboxLoader(normalizedIndex, estimateInitialLightboxProgress(normalizedIndex));
@@ -4708,14 +4483,15 @@ export function setupGalleryLightbox() {
      * Handles step behavior for the gallery UI.
      *
      * @param {number} offset Relative image offset.
-     * @param {object} options Optional behavior flags.
+     * @param {Record<string, unknown>} options Navigation and presentation options.
+     * @return {void} Opens the previous or next canonical target.
      */
     function step(offset, options = {}) {
         if (cards.length === 0) {
             return;
         }
         // nextIndex stores state or configuration for the gallery front-end flow.
-        const nextIndex = ((currentIndex + offset) % cards.length + cards.length) % cards.length;
+        const nextIndex = ((lightboxNavigation.index + offset) % cards.length + cards.length) % cards.length;
         openAt(nextIndex, options);
     }
 
@@ -4784,7 +4560,7 @@ export function setupGalleryLightbox() {
             }
             preloadedSources.add(fullSrc);
             devMarkSource(fullSrc, 'preloading', 'slideshow-full');
-            return loadFreshDecodedLightboxImage(fullSrc, {priority: 'high', signal})
+            return lightboxResources.loadFresh(fullSrc, {priority: 'high', signal})
                 .then((loadedImage) => loadedImage instanceof HTMLImageElement
                     ? {index: normalizedIndex, src: fullSrc, image: loadedImage}
                     : null)
@@ -4812,13 +4588,15 @@ export function setupGalleryLightbox() {
      * The stable display timer and the next full-size image preload begin together.
      * If the image decodes first, it waits for the timer. If the timer expires first,
      * the current photo stays visible until the full image has finished decoding.
+     *
+     * @return {void} Schedules one slideshow step against the current target index.
      */
     function scheduleLightboxSlideshowNext() {
         clearLightboxSlideshowTimer();
         if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1) {
             return;
         }
-        const scheduledFromIndex = currentIndex;
+        const scheduledFromIndex = lightboxNavigation.index;
         const nextIndex = (scheduledFromIndex + 1) % cards.length;
         const scheduleToken = lightboxSlideshowScheduleToken;
         const preloadController = new AbortController();
@@ -4835,7 +4613,7 @@ export function setupGalleryLightbox() {
                     scheduleToken !== lightboxSlideshowScheduleToken
                     || !lightboxSlideshowActive
                     || overlay.hidden
-                    || currentIndex !== scheduledFromIndex
+                    || lightboxNavigation.index !== scheduledFromIndex
                 ) {
                     return;
                 }
@@ -4934,29 +4712,33 @@ export function setupGalleryLightbox() {
         }
     }
 
-    // Function `close` executes this focused behavior.
     /**
-     * Close close.
+     * Close the active viewer and invalidate callbacks for its current target.
+     *
+     * @return {void} Clears active presentation and reusable resources while retaining the selected index.
      */
     function close() {
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.closeCalls += 1;
+            const resourceSnapshot = lightboxResources.snapshot();
             recordLightboxBenchmarkEvent('close_begin', {
-                current_index: currentIndex,
+                current_index: lightboxNavigation.index,
                 pending_metadata: lightboxPendingWindows.size,
-                decoded_cache: decodedLightboxImages.size,
+                decoded_cache: resourceSnapshot.entries,
                 preload_queue: lightboxPreloads.snapshot().queued,
                 active_preloads: lightboxPreloads.snapshot().active,
-                detached_loads: activeDetachedLightboxImageLoads.size,
+                detached_loads: resourceSnapshot.activeDetachedImageLoads,
+                tracked_loads: resourceSnapshot.activeTrackedLoads,
+                fetch_transfers: resourceSnapshot.activeFetchTransfers,
             });
         }
         telemetryPhotoClosed();
+        lightboxNavigation.invalidate();
         resetLightboxZoom(false);
         stopLightboxSlideshow();
         hideLightboxHelpPanel();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
-        activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearLightboxNavigationPending();
         clearLightboxNavigationFailure();
@@ -4975,11 +4757,9 @@ export function setupGalleryLightbox() {
         clearPendingLightboxQualityUpgrade();
         removeTransitionImage();
         image.removeAttribute('src');
-        clearLightboxHiddenCleanupTimer();
         preloadedSources.clear();
         resetLightboxPreloadQueue();
-        cancelActiveDetachedLightboxImageLoads();
-        decodedLightboxImages.clear();
+        lightboxResources.clear();
         cancelLightboxMetadataRequests();
         refreshLightboxOrderFromDom();
         lightboxGalleryMapPayloadPromises.clear();
@@ -4988,11 +4768,6 @@ export function setupGalleryLightbox() {
         stopGalleryDevModeMonitoring();
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
-        galleryDevModeState.currentIndex = -1;
-        galleryDevModeState.navigationToken = 0;
-        galleryDevModeState.navigationTarget = '';
-        galleryDevModeState.navigationStage = 'idle';
-        galleryDevModeState.navigationFailure = '';
         document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
@@ -5001,12 +4776,15 @@ export function setupGalleryLightbox() {
         lightboxHistoryActive = false;
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs = performance.now();
+            const resourceSnapshot = lightboxResources.snapshot();
             recordLightboxBenchmarkEvent('close_end', {
                 pending_metadata: lightboxPendingWindows.size,
-                decoded_cache: decodedLightboxImages.size,
+                decoded_cache: resourceSnapshot.entries,
                 preload_queue: lightboxPreloads.snapshot().queued,
                 active_preloads: lightboxPreloads.snapshot().active,
-                detached_loads: activeDetachedLightboxImageLoads.size,
+                detached_loads: resourceSnapshot.activeDetachedImageLoads,
+                tracked_loads: resourceSnapshot.activeTrackedLoads,
+                fetch_transfers: resourceSnapshot.activeFetchTransfers,
             });
         }
     }
@@ -5149,8 +4927,6 @@ export function setupGalleryLightbox() {
     }
 
     document.addEventListener('visibilitychange', handleLightboxVisibilityChange, {signal: controller.signal});
-    controller.signal.addEventListener('abort', clearLightboxHiddenCleanupTimer, {once: true});
-
     resetLightboxZoom(false);
 
     document.addEventListener('click', (event) => {
@@ -5341,13 +5117,13 @@ export function setupGalleryLightbox() {
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     window.addEventListener('resize', () => {
-        if (controller.signal.aborted || overlay.hidden || currentIndex < 0) {
+        if (controller.signal.aborted || overlay.hidden || lightboxNavigation.index < 0) {
             return;
         }
         updateMobileLightboxViewport();
-        updateNormalLightboxStageSize(cards[currentIndex]);
-        renderPictureStrip(currentIndex, false);
-        updateFullscreenMapImageFit(cards[currentIndex]);
+        updateNormalLightboxStageSize(cards[lightboxNavigation.index]);
+        renderPictureStrip(lightboxNavigation.index, false);
+        updateFullscreenMapImageFit(cards[lightboxNavigation.index]);
         applyLightboxZoomState(false);
         scheduleLightboxQualityUpgrade();
     }, {signal: controller.signal});
@@ -5608,7 +5384,7 @@ export function setupGalleryLightbox() {
             return explicitTitle;
         }
         const galleryTitle = currentLightboxGalleryMapTitle('').trim();
-        const counterText = currentIndex >= 0 && cards.length > 0 ? `${currentIndex + 1} / ${cards.length}` : '';
+        const counterText = lightboxNavigation.index >= 0 && cards.length > 0 ? `${lightboxNavigation.index + 1} / ${cards.length}` : '';
         if (galleryTitle && counterText) {
             return `${galleryTitle}, ${counterText}`;
         }
@@ -7028,7 +6804,8 @@ export function setupGalleryLightbox() {
         /**
      * Show the fullscreen map pane as unavailable for a photo without GPS EXIF.
      *
-     * @param {string} title Current photo title.
+     * @param {string} title Current photo title shown in the split-map header.
+     * @return {void} Keeps the split pane open with an explanatory unavailable state.
      */
     function openLightboxMapUnavailable(title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
@@ -7044,13 +6821,14 @@ export function setupGalleryLightbox() {
             lightboxMapSplitTitle.textContent = title || i18n('lightbox.map', 'Map');
         }
         lightboxMapSplitCanvas.innerHTML = `<div class="lightbox-map-unavailable" role="status"><strong>${escapeHtml(i18n('lightbox.no_gps_title', 'No GPS EXIF data'))}</strong><span>${escapeHtml(i18n('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'))}</span></div>`;
-        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[lightboxNavigation.index] || null));
     }
 
         /**
-     * Handles toggle current lightbox map behavior for the gallery UI.
+     * Toggle the current photo's map or gallery map in the appropriate viewer surface.
      *
-     * @param {*} json Value supplied by the caller or event context.
+     * @param {string} json Serialized map-point payload supplied by the active control, when present.
+     * @return {Promise<void>} Opens or closes the selected map presentation and updates the HUD.
      */
     async function toggleCurrentLightboxMap(json = '') {
         if (!sharedLightboxMapUiAvailable()) {
@@ -7059,7 +6837,7 @@ export function setupGalleryLightbox() {
             return;
         }
         // card stores state or configuration for the gallery front-end flow.
-        const card = cards[currentIndex] || null;
+        const card = cards[lightboxNavigation.index] || null;
         // mapPoint stores the active photo marker payload when one is available.
         const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
@@ -7173,10 +6951,11 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles open lightbox map split behavior for the gallery UI.
+     * Render a normalized photo or gallery map in the fullscreen split pane.
      *
-     * @param {*} json Value supplied by the caller or event context.
-     * @param {*} title Value supplied by the caller or event context.
+     * @param {string} json Serialized map payload to normalize and render.
+     * @param {string} title Accessible and visible split-map title.
+     * @return {Promise<void>} Loads the map runtime and renders its points when the payload is usable.
      */
     async function openLightboxMapSplit(json, title) {
         if (!sharedLightboxMapUiAvailable()) {
@@ -7197,7 +6976,7 @@ export function setupGalleryLightbox() {
         overlay.classList.add('is-map-split');
         overlay.classList.remove('is-map-split-disabled');
         scheduleLightboxZoomReclamp();
-        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[lightboxNavigation.index] || null));
         await waitForElementSize(lightboxMapSplitCanvas);
         lightboxMapSplitCanvas.innerHTML = '';
         // map stores state or configuration for the gallery front-end flow.
@@ -7232,7 +7011,7 @@ export function setupGalleryLightbox() {
         overlay.galleryLeafletSplitResizeObserver.observe(lightboxMapSplitCanvas);
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                updateFullscreenMapImageFit(cards[currentIndex] || null);
+                updateFullscreenMapImageFit(cards[lightboxNavigation.index] || null);
                 if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                     overlay.galleryLeafletSplitMap.invalidateSize(false);
                 }
@@ -7456,7 +7235,7 @@ export function setupGalleryLightbox() {
             if (imageId > 0 && overlay instanceof HTMLElement && (!overlay.hidden || smartGalleryTarget)) {
                 // cards owns both visible and detached metadata for the active ordered result set.
                 targetIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
-                const activeGalleryId = Number.parseInt(String(cards[currentIndex]?.dataset.galleryId || '0'), 10);
+                const activeGalleryId = Number.parseInt(String(cards[lightboxNavigation.index]?.dataset.galleryId || '0'), 10);
                 if (targetIndex < 0 && (smartGalleryTarget || (galleryId > 0 && activeGalleryId === galleryId))) {
                     targetIndex = await fetchLightboxTargetIndex(imageId, navigation.signal);
                 }
@@ -7473,7 +7252,7 @@ export function setupGalleryLightbox() {
         }
         try {
             if (targetIndex >= 0 && cards[targetIndex]?.dataset.imageId === String(imageId)) {
-                if (targetIndex !== currentIndex) {
+                if (targetIndex !== lightboxNavigation.index) {
                     openAt(targetIndex, {
                         forceImmediateSwap: target.preserveMapSplit === true,
                         preserveMapSplit: target.preserveMapSplit === true,

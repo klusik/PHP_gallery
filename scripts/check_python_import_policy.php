@@ -15,6 +15,9 @@ declare(strict_types=1);
 
 namespace PhpGallery\SourceContracts;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 require_once __DIR__ . '/source_contracts/inventory.php';
 require_once __DIR__ . '/source_contracts/python.php';
 
@@ -101,6 +104,6 @@ function python_import_policy_main(array $argv): int
     return match ($report['status']) { 'PASS' => 0, 'FAIL' => 1, default => 2 };
 }
 
-if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     exit(python_import_policy_main($argv));
 }

@@ -28,10 +28,8 @@
 
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 require_once __DIR__ . '/release_qualification_lib.php';
 

@@ -148,18 +148,23 @@ try {
     file_put_contents($root . '/config.php', 'private-config-sentinel');
     $head = ['app/fixture.php' => $legacy, 'app/deleted.php' => $explained, 'config.php' => 'private-head-sentinel'];
     $verbs = [];
+    $requestedBases = [];
     /**
      * Provide immutable Git metadata without staging, commits or checkout operations.
      * @param list<string> $arguments Requested read-only Git operation.
      * @param string $directory Disposable repository root.
-     * @return array{status:int,stdout:string} Synthetic HEAD data or bounded failure.
+     * @return array{status:int,stdout:string} Synthetic comparison-base data or bounded failure.
      */
-    $git = static function (array $arguments, string $directory) use (&$head, &$verbs): array {
+    $git = static function (array $arguments, string $directory) use (&$head, &$verbs, &$requestedBases): array {
         $verbs[] = $arguments[0];
         if ($arguments[0] === 'rev-parse') {
             return ['status' => 0, 'stdout' => $directory . "\n"];
         }
         if ($arguments[0] === 'ls-tree') {
+            $requestedBases[] = $arguments[3];
+            if ($arguments[3] !== 'HEAD') {
+                return ['status' => 1, 'stdout' => ''];
+            }
             $tree = '';
             foreach (array_keys($head) as $path) {
                 $tree .= '100644 blob ' . str_repeat('a', 40) . "\t" . $path . "\0";
@@ -167,10 +172,15 @@ try {
             return ['status' => 0, 'stdout' => $tree];
         }
         if ($arguments[0] === 'diff') {
+            $requestedBases[] = $arguments[5];
+            if ($arguments[5] !== 'HEAD') {
+                return ['status' => 1, 'stdout' => ''];
+            }
             return ['status' => 0, 'stdout' => implode("\0", array_keys($head)) . "\0"];
         }
         if ($arguments[0] === 'cat-file') {
-            $path = substr($arguments[2], strlen('HEAD:'));
+            [$base, $path] = explode(':', $arguments[2], 2);
+            $requestedBases[] = $base;
             policy_changes_assert($path !== 'config.php', 'Private HEAD content must never be requested.');
             return isset($head[$path]) ? ['status' => 0, 'stdout' => $head[$path]] : ['status' => 1, 'stdout' => ''];
         }
@@ -180,6 +190,8 @@ try {
     policy_changes_assert($report['status'] === 'PASS' && $report['summary']['moved'] === 1
         && $report['summary']['coverage_review_count'] === 4, 'Whole fixture scope must match moves and explicitly disclose map, native-format and tooling gaps.');
     policy_changes_assert(array_diff($verbs, ['rev-parse', 'ls-tree', 'diff', 'cat-file']) === [], 'Policy gate must not write Git state.');
+    policy_changes_assert($requestedBases !== [] && array_unique($requestedBases) === ['HEAD'],
+        'The default policy comparison base must remain HEAD across tree, diff and blob reads.');
     policy_changes_assert(!str_contains(json_encode($report, JSON_THROW_ON_ERROR), 'private-'), 'No private worktree or HEAD values may enter artifacts.');
     file_put_contents($root . '/app/new.php', '<?php const NEW_LIMIT = 5;');
     $report = changed_policy_report($root, ['app/new.php'], $git);
@@ -203,6 +215,76 @@ try {
     policy_changes_assert($blocked['status'] === 'BLOCKED' && !str_contains(json_encode($blocked, JSON_THROW_ON_ERROR), 'untrusted-git-sentinel'),
         'Unavailable Git must block rather than pass or disclose transport output.');
     policy_changes_assert(changed_policy_report($root, ['config.php'], $git)['status'] === 'BLOCKED', 'Focused paths cannot override discovery privacy.');
+    file_put_contents($root . '/app/new.php', '<?php const NEW_LIMIT = 5;');
+    $baseTree = [
+        'HEAD' => ['app/new.php' => '<?php const NEW_LIMIT = 5;'],
+        'HEAD^' => [],
+        'refs/heads/unreadable' => ['app/new.php' => '<?php const OLDER_LIMIT = 3;'],
+    ];
+    $baseRequests = [];
+    $baseAwareGit = static function (array $arguments, string $directory) use (&$baseTree, &$baseRequests): array {
+        if ($arguments[0] === 'rev-parse') {
+            return ['status' => 0, 'stdout' => $directory . "\n"];
+        }
+        if ($arguments[0] === 'ls-tree') {
+            $base = $arguments[3];
+            $baseRequests[] = $base;
+            if (!array_key_exists($base, $baseTree)) {
+                return ['status' => 1, 'stdout' => ''];
+            }
+            $tree = '';
+            foreach (array_keys($baseTree[$base]) as $path) {
+                $tree .= '100644 blob ' . str_repeat('b', 40) . "\t" . $path . "\0";
+            }
+            return ['status' => 0, 'stdout' => $tree];
+        }
+        if ($arguments[0] === 'diff') {
+            $base = $arguments[5];
+            $baseRequests[] = $base;
+            return array_key_exists($base, $baseTree)
+                ? ['status' => 0, 'stdout' => implode("\0", array_keys($baseTree[$base])) . "\0"]
+                : ['status' => 1, 'stdout' => ''];
+        }
+        if ($arguments[0] === 'cat-file') {
+            [$base, $path] = explode(':', $arguments[2], 2);
+            $baseRequests[] = $base;
+            if ($base === 'refs/heads/unreadable') {
+                return ['status' => 1, 'stdout' => ''];
+            }
+            return isset($baseTree[$base][$path])
+                ? ['status' => 0, 'stdout' => $baseTree[$base][$path]]
+                : ['status' => 1, 'stdout' => ''];
+        }
+        throw new RuntimeException('Unexpected base-aware Git operation.');
+    };
+    $againstHead = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'HEAD');
+    $againstParent = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'HEAD^');
+    policy_changes_assert($againstHead['summary']['base'] === 'HEAD' && $againstHead['status'] === 'PASS'
+        && $againstParent['summary']['base'] === 'HEAD^' && $againstParent['status'] === 'FAIL',
+        'The same worktree source must compare differently against HEAD and its earlier parent when its policy site was introduced there.');
+    policy_changes_assert(array_values(array_unique($baseRequests)) === ['HEAD', 'HEAD^'],
+        'Tree and delta reads must use only the explicitly selected immutable base.');
+    $callsForMalformed = 0;
+    $countingGit = static function (array $arguments, string $directory) use (&$callsForMalformed): array {
+        $callsForMalformed++;
+        return ['status' => 1, 'stdout' => ''];
+    };
+    $malformed = changed_policy_report($root, ['app/new.php'], $countingGit, '--upload-pack=evil');
+    policy_changes_assert($malformed['status'] === 'BLOCKED' && $callsForMalformed === 0,
+        'Malformed comparison refs must block before invoking Git.');
+    $unavailableBase = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'refs/heads/missing');
+    policy_changes_assert($unavailableBase['status'] === 'BLOCKED'
+        && end($baseRequests) === 'refs/heads/missing'
+        && !in_array('HEAD', array_slice($baseRequests, -2), true),
+        'An unavailable selected base must block without retrying against HEAD.');
+    $unreadableBlob = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'refs/heads/unreadable');
+    policy_changes_assert($unreadableBlob['status'] === 'BLOCKED'
+        && array_slice($baseRequests, -3) === [
+            'refs/heads/unreadable',
+            'refs/heads/unreadable',
+            'refs/heads/unreadable',
+        ],
+        'An unreadable source blob at a valid selected base must block without retrying against HEAD.');
     ob_start();
     $status = PhpGallery\SourceContracts\policy_main(['fixture', '--changed', '--json', '--root=' . $root]);
     $cli = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
@@ -216,4 +298,4 @@ try {
     }
     rmdir($root);
 }
-echo "PASS policy_constants_changes: semantic sites, explanations, HEAD matching, privacy and coverage gaps.\n";
+echo "PASS policy_constants_changes: semantic sites, explanations, selected-base matching, privacy and coverage gaps.\n";

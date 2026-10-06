@@ -32,6 +32,9 @@ namespace Gallery\Recovery;
 
 use Throwable;
 
+require_once dirname(__DIR__) . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/fixture.php';
 

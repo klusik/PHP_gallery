@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: scripts/source_contracts/policy_changes.php
  * Module Type: Changed Runtime Policy Gate
- * Purpose: Enforce newly unexplained runtime policy sites against immutable Git HEAD.
+ * Purpose: Enforce newly unexplained runtime policy sites against an immutable Git comparison base.
  * Responsibilities:
  *   - Keep whole-tree policy inventory and scoped change enforcement separate.
  *   - Report unsupported coverage without reading private configuration or printing values.
@@ -19,7 +19,7 @@ require_once __DIR__ . '/policy_scan.php';
 
 /**
  * Compare runtime policy sites using the declaration gate's move/copy multiset rules.
- * @param string $before Immutable HEAD source; empty for a new source file.
+ * @param string $before Immutable comparison-base source; empty for a new source file.
  * @param string $after Current PHP or JavaScript runtime source.
  * @param string $path Relative source identity, also used by disposable fixtures.
  * @return array<string,mixed> Added/changed/unchanged sites and value-free contract findings.
@@ -32,21 +32,22 @@ function changed_policy_source(string $before, string $after, string $path): arr
 }
 
 /**
- * Enforce the bounded runtime policy slice without Git writes or legacy baselines.
+ * Enforce the bounded runtime policy slice against the selected immutable Git base.
  * @param string $root Exact repository root or disposable fixture root.
  * @param list<string> $paths Optional exact discovered sources; privacy exclusions cannot be overridden.
  * @param callable(list<string>,string):array{status:int,stdout:string}|null $git Read-only Git transport, replaceable only by fixtures.
+ * @param string $base Immutable Git comparison ref; defaults to the local HEAD.
  * @return array<string,mixed> Scoped status, counters, findings, explicit review gaps and safe blockers.
  */
-function changed_policy_report(string $root, array $paths = [], ?callable $git = null): array
+function changed_policy_report(string $root, array $paths = [], ?callable $git = null, string $base = 'HEAD'): array
 {
-    $report = ['status' => 'BLOCKED', 'summary' => ['base' => 'HEAD', 'source_files' => 0, 'runtime_files' => 0,
+    $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'runtime_files' => 0,
         'changed_files' => 0, 'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0,
         'doc_regressions' => 0, 'finding_count' => 0, 'sites_with_findings' => 0, 'coverage_review_count' => 0],
         'findings' => [], 'blocked' => [], 'coverage_review' => [], 'coverage' => [
             'scope' => 'Only app/, public/ and root index.php PHP/JS/MJS/CJS policy sites. PASS means these recognized change rules passed, not complete policy compliance.',
             'rules' => 'Uppercase const/static-name define and JS const/let/var definitions; operationally named direct numeric assignments; direct sleep/usleep/set_time_limit and global setTimeout/setInterval numeric arguments.',
-            'matching' => 'Read-only HEAD, scope identities and site-token fingerprints. Header/formatting and unrelated body edits preserve unchanged legacy sites. Exact moves are matched after same-path originals; copies remain additions.',
+            'matching' => 'Read-only selected comparison base, scope identities and site-token fingerprints. Header/formatting and unrelated body edits preserve unchanged legacy sites. Exact moves are matched after same-path originals; copies remain additions.',
             'legacy' => 'Unchanged legacy explanation debt is not enforced here; check_policy_constants.php without --changed remains its separate whole-tree advisory inventory.',
             'maps' => 'Configurable-map and object-property policy entries are counted for review, not enforced or silently declared compliant. configuration_defaults.php remains the tunable owner; policy_constants.php remains immutable.',
             'languages' => 'PHP/JS source only. Embedded scripts, CSS, Python, shell, PowerShell and other formats retain explicit review gaps. Private/generated/vendor content is never read.',
@@ -62,14 +63,17 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
         }
         $report['summary']['source_files'] = count($selected);
         $git ??= __NAMESPACE__ . '\\source_git_read';
+        if ($base === '' || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/^.~{}@-]*$/D', $base) !== 1) {
+            throw new \RuntimeException('Unsupported Git comparison ref.');
+        }
         $top = $git(['rev-parse', '--show-toplevel'], $root);
         if ($top['status'] !== 0 || strcasecmp(str_replace('\\', '/', trim($top['stdout'])), str_replace('\\', '/', $root)) !== 0) {
             throw new \RuntimeException('Git root unavailable.');
         }
-        $tree = $git(['ls-tree', '-r', '-z', 'HEAD'], $root);
-        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', 'HEAD', '--'], $root);
+        $tree = $git(['ls-tree', '-r', '-z', $base], $root);
+        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', $base, '--'], $root);
         if ($tree['status'] !== 0 || $delta['status'] !== 0) {
-            throw new \RuntimeException('Git HEAD/change list unavailable.');
+            throw new \RuntimeException('Git comparison base/change list unavailable.');
         }
         $tracked = [];
         foreach (explode("\0", $tree['stdout']) as $entry) {
@@ -98,14 +102,14 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
             $before = '';
             if (isset($tracked[$path])) {
                 if (!in_array($tracked[$path], ['100644', '100755'], true)) {
-                    throw new \RuntimeException('Unsupported HEAD source mode.');
+                    throw new \RuntimeException('Unsupported comparison-base source mode.');
                 }
                 if (!isset($changedPaths[$path])) {
                     $before = $after; // Git confirms no byte change; still consume original sites before copy matching.
                 } else {
-                    $blob = $git(['cat-file', 'blob', 'HEAD:' . $path], $root);
+                    $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                     if ($blob['status'] !== 0) {
-                        throw new \RuntimeException('Required HEAD blob unreadable.');
+                        throw new \RuntimeException('Required comparison-base blob unreadable.');
                     }
                     $before = $blob['stdout'];
                 }
@@ -130,9 +134,9 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
                     || !in_array($mode, ['100644', '100755'], true)) {
                     continue;
                 }
-                $blob = $git(['cat-file', 'blob', 'HEAD:' . $path], $root);
+                $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
-                    throw new \RuntimeException('Deleted HEAD source unreadable.');
+                    throw new \RuntimeException('Deleted comparison-base blob unreadable.');
                 }
                 array_push($oldSites, ...policy_site_snapshots($blob['stdout'], $path)['snapshots']);
             }
@@ -152,7 +156,7 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
         $report['summary']['coverage_review_count'] = count($report['coverage_review']);
         $report['status'] = $report['blocked'] !== [] ? 'BLOCKED' : ($report['findings'] !== [] ? 'FAIL' : 'PASS');
     } catch (\Throwable $error) {
-        $report['blocked'][] = ['path' => $activePath, 'reason' => 'Git HEAD/runtime policy comparison could not complete; coverage unknown.'];
+        $report['blocked'][] = ['path' => $activePath, 'reason' => 'Git comparison-base/runtime policy comparison could not complete; coverage unknown.'];
         $report['status'] = 'BLOCKED';
     }
     return $report;

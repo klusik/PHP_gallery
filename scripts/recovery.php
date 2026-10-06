@@ -28,12 +28,10 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
 /** CLI recovery assurance. Never bootstraps an installation or connects to a database. */
 require_once __DIR__ . '/recovery/cli.php';
-
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
 
 exit(\Gallery\Recovery\main($argv));

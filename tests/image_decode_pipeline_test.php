@@ -33,6 +33,17 @@ declare(strict_types=1);
 
 namespace Gallery\Core {
     /**
+     * Identify DNG paths for the isolated display-file fixture.
+     *
+     * @param string $path Candidate source path.
+     * @return bool True when the fixture path uses the DNG extension.
+     */
+    function is_dng_image_path(string $path): bool
+    {
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'dng';
+    }
+
+    /**
      * Supply central defaults and isolated test overrides without reading config.php.
      *
      * @param string $key Stable runtime-limit key.
@@ -130,17 +141,6 @@ namespace Gallery\Services {
     }
 
     /**
-     * Keep the integration fixture on the ordinary raster path.
-     *
-     * @param array<string,mixed> $image Synthetic image identity.
-     * @return bool Always false; separate RAW converters are outside this fixture.
-     */
-    function image_uses_dng_display_derivatives(array $image): bool
-    {
-        return false;
-    }
-
-    /**
      * Resolve/create only the disposable thumbnail directory.
      *
      * @param array<string,mixed> $gallery Synthetic gallery identity.
@@ -209,9 +209,11 @@ namespace {
     use function Gallery\Services\create_image_thumbnails_result;
     use function Gallery\Services\image_create_from_path;
     use function Gallery\Services\image_decode_gd_path_result;
+    use function Gallery\Services\image_public_display_file;
     use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
 
     require_once __DIR__ . '/../app/services/thumbnail_generation.php';
+    require_once __DIR__ . '/../app/services/dng_derivatives.php';
 
     /**
      * Fail this fixture with an actionable contract diagnostic.
@@ -325,7 +327,48 @@ namespace {
             $decoded = image_create_from_path($path, $mime);
             image_decode_pipeline_assert($decoded instanceof GdImage && imagesx($decoded) === 64 && imagesy($decoded) === 48, 'An admitted ordinary codec failed: ' . $format);
             imagedestroy($decoded);
+
+            $GLOBALS['image_decode_fixture_source'] = $path;
+            $displayFile = image_public_display_file($image, $gallery);
+            image_decode_pipeline_assert(is_array($displayFile) && $displayFile['mime'] === $mime,
+                'The public display resolver must preserve the detected MIME for ' . $format . ' content.');
         }
+
+        $misleadingPath = $root . '/raster.txt';
+        image_decode_pipeline_assert(imagejpeg($smallSource, $misleadingPath), 'Could not create misleading-extension JPEG fixture.');
+        $GLOBALS['image_decode_fixture_source'] = $misleadingPath;
+        $misleadingDisplay = image_public_display_file($image, $gallery);
+        image_decode_pipeline_assert(is_array($misleadingDisplay) && $misleadingDisplay['mime'] === 'image/jpeg',
+            'The public display resolver must identify JPEG content independently of its filename extension.');
+
+        if (function_exists('imagebmp')) {
+            $bmpPath = $root . '/legacy-bitmap.bmp';
+            image_decode_pipeline_assert(imagebmp($smallSource, $bmpPath), 'Could not create BMP compatibility fixture.');
+            $legacyFinfoMime = (string) ((new \finfo(FILEINFO_MIME_TYPE))->file($bmpPath) ?: mime_content_type($bmpPath));
+            $GLOBALS['image_decode_fixture_source'] = $bmpPath;
+            $bmpDisplay = image_public_display_file($image, $gallery);
+            image_decode_pipeline_assert(is_array($bmpDisplay) && $bmpDisplay['mime'] === $legacyFinfoMime,
+                'Other raster formats must retain the historical fileinfo MIME identity.');
+        }
+
+        $svgPath = $root . '/legacy-vector.svg';
+        file_put_contents($svgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>');
+        $GLOBALS['image_decode_fixture_source'] = $svgPath;
+        $svgDisplay = image_public_display_file($image, $gallery);
+        image_decode_pipeline_assert(is_array($svgDisplay) && $svgDisplay['mime'] === 'image/svg+xml',
+            'The fileinfo fallback must preserve legacy image/* sources not identified by GD headers.');
+
+        $textPath = $root . '/not-an-image.png';
+        file_put_contents($textPath, 'not an image');
+        foreach (glob($root . '/thumbs/*') ?: [] as $cachedPath) {
+            if (is_file($cachedPath)) {
+                unlink($cachedPath);
+            }
+        }
+        $GLOBALS['image_decode_fixture_source'] = $textPath;
+        image_decode_pipeline_assert(image_public_display_file($image, $gallery) === null,
+            'A non-image with an image-looking extension must remain unavailable for public display.');
+
         imagedestroy($smallSource);
 
         // A real malformed, tiny PNG keeps metadata readable but fails normal decoding.

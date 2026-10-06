@@ -23,8 +23,50 @@ env:
   # PRs compare against the target SHA; pushes include every commit since the prior head.
   # Manual runs compare against the first parent. Missing history blocks the source audit.
   PHP_GALLERY_SOURCE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
+  # Preserve bounded packaging child timings when a full audit fails or times out.
+  PHP_GALLERY_DEPLOY_TEST_TIMINGS: '1'
 
 jobs:
+  production-package:
+    name: Positive production package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - name: Require current production membership and integrity data
+        run: |
+          php scripts/generate_production_files.php --check
+          php scripts/generate_manifest.php --check
+      - name: Add unrelated dirty workspace files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .agent-local, .codex, .idea, cache, logs, tmp | Out-Null
+          foreach ($path in @('.agent-local/package-private.txt', '.codex/package-private.txt', '.idea/package-private.txt', 'TEMP_CI_PACKAGE.md', 'cache/package-private.txt', 'logs/package-private.txt', 'tmp/package-private.txt')) {
+            [IO.File]::WriteAllText((Join-Path $PWD $path), 'Must never enter the production artifact.')
+          }
+      - name: Build production folder with Bash
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash scripts/deploy.sh --mode local --deploy-folder "$RUNNER_TEMP/gallery-production" --upload-media false --include-tests false --make-zip-deploy false
+      - name: Build production folder with PowerShell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/deploy.ps1 -Mode local -DeployFolder "$env:RUNNER_TEMP/gallery-production" -UploadMedia false -IncludeTests false -MakeZipDeploy false
+      - name: Inspect exact artifact membership
+        shell: pwsh
+        run: |
+          php scripts/release_files.php verify "--root=$env:RUNNER_TEMP/gallery-production" "--source-root=$PWD" --profile=production
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   real-database-browser:
     name: PHP ${{ matrix.php }} workflows (${{ matrix.database }}, Unicode)
     runs-on: ubuntu-24.04
@@ -35,6 +77,8 @@ jobs:
         include:
           - php: '8.3'
             database: 'mysql:8.4'
+          - php: '8.3'
+            database: 'mariadb:10.11'
           - php: '8.5'
             database: 'mariadb:11.4'
     services:
@@ -77,7 +121,7 @@ jobs:
           package-manager-cache: false
       - name: Central audit with mandatory real workflows and database races
         run: php scripts/gallery_workflow_ci.php
-      - name: Upload compact audit reports only
+      - name: Upload audit reports and process diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -88,6 +132,8 @@ jobs:
             cache/test-audit/**/source-documentation.json
             cache/test-audit/**/source-documentation-changed.json
             cache/test-audit/**/python-import-policy.json
+            cache/test-audit/**/php-regression.log
+            cache/test-audit/**/runtime-performance.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -128,7 +174,7 @@ jobs:
           package-manager-cache: false
       - name: Central source audit
         run: php scripts/audit.php --profile=full
-      - name: Upload compact audit reports only
+      - name: Upload audit reports and process diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -139,6 +185,8 @@ jobs:
             cache/test-audit/**/source-documentation.json
             cache/test-audit/**/source-documentation-changed.json
             cache/test-audit/**/python-import-policy.json
+            cache/test-audit/**/php-regression.log
+            cache/test-audit/**/runtime-performance.log
           if-no-files-found: ignore
           retention-days: 7
 

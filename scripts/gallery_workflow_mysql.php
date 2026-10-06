@@ -13,10 +13,8 @@
  */
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 // Quick feedback belongs to the central runner and needs no private daemon.
 if (($argv[1] ?? '') === '--quick') {
     $argv = [__DIR__ . '/audit.php', '--profile=quick'];
@@ -76,7 +74,7 @@ $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
     $mode = (string) ($argv[1] ?? '');
-    check(in_array($mode, ['--development', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
+    check(in_array($mode, ['--development', '--audit-quick', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
     $routeProbeLabel = '';
     if ($mode === '--route-probes') {
         $routeProbeLabel = trim((string) ($argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE') ?: ''));

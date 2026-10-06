@@ -7,6 +7,17 @@ This guide applies to PHP Gallery Version 0.119. Release verification uses the c
 Retained Version 0.107 thumbnail acceptance: open a gallery editor, run **Create all thumbnails** with and without **Include subgalleries**, and confirm only the selected branch is processed. Confirm browser generation is initially selected there and in the all-gallery Maintenance card, server generation remains selectable, progress completes in place, and every gallery-editor tab still responds after the Images tab is opened. For the Metadata Organizer, verify a successful move changes the physical file location and an induced move failure gives a safe reason while the pending journal remains available for reconciliation. The central release audit owns automated verification; these are manual browser and filesystem acceptance checks.
 This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
 
+## Database support evidence
+
+The project-tested database/PHP representatives are MySQL 8.4/PHP 8.3,
+MariaDB 10.11/PHP 8.3, and MariaDB 11.4/PHP 8.5. Their matrix jobs require the
+disposable real-database workflow; a missing fixture is a failure in CI. The
+separate PHP 8.1 job is source-only and does not qualify a database combination.
+Other server series, including newer vendor-maintained or innovation releases,
+remain unqualified until directly represented by required CI. See
+[Database support](docs/DATABASE_SUPPORT.md) for status definitions, concrete
+SQL assumptions, and upgrade guidance.
+
 ### Version 0.108 gallery creation and editor acceptance
 
 Use a disposable, migrated installation with two administrator accounts and a gallery containing a nested branch. The central **release** profile owns automated regression; the following is the release-specific human browser/upgrade matrix and must be recorded as actual evidence rather than inferred from source tests.
@@ -49,13 +60,34 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 ```
 
-`quick` runs `php-fast`: the explicit `quick_tests` subset in `scripts/audit_php_registry.php`, selected for audit infrastructure, core/bootstrap/routing, security, and mutation contracts. It also runs MVC boundaries, the whole-tree Python import policy, strict changed-source documentation/policy checks, fast Node fixtures, mutation/version contracts, clean-child runtime performance probes, and changed PHP/JavaScript syntax checks. It excludes the complete PHP regression tree, whole-tree advisory source inventory, WinApp tests, slow Node work, and Chromium. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. A quick PASS does not replace full handoff verification.
+`quick` runs `php-fast`: the explicit `quick_tests` subset in `scripts/audit_php_registry.php`, selected for audit infrastructure, core/bootstrap/routing, security, and mutation contracts. It also runs MVC boundaries, the whole-tree Python import policy, strict changed-source documentation/policy checks, fast Node fixtures, mutation/version contracts, clean-child runtime performance probes, and changed PHP/JavaScript syntax checks. It excludes the complete PHP regression tree, whole-tree source inventory and debt budgets, WinApp tests, slow Node work, and Chromium. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. A quick PASS does not replace full handoff verification.
 
-`full` retains the complete PHP regression tree, whole-tree advisory source inventory, WinApp tests, all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures. It also records runtime performance probes. `release` retains all full coverage and adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is Chromium browser integration. `php tests/run.php` still delegates to `--suite=php-regression --no-report` and always means the complete PHP suite.
+`full` retains the complete PHP regression tree, whole-tree source inventory and debt budgets, WinApp tests, all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures. It also records runtime performance probes. `release` retains all full coverage and adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is Chromium browser integration. `php tests/run.php` still delegates to `--suite=php-regression --no-report` and always means the complete PHP suite.
 
 ### Clean PHP include-phase probes
 
+`production_file_policy_test.php` validates canonical positive membership, safe contained paths and source-archive activation. `updates_path_safety_test.php` checks updater destination ancestors. The full/release regression `deploy_app_packaging_test.php` runs the actual deploy helpers on owned dirty fixtures and inspects folder/ZIP contents, required-file failures and local source-review/media choices; its complete-inventory proof has an exclusive 600-second process budget. The `production-package` CI job independently builds and verifies production folders on Linux, Windows and macOS. See [production file policy](docs/PRODUCTION_FILES.md).
+
+`tests/cli_http_boundary_test.php` exercises real direct HTTP requests to CLI
+entrypoints through a PHP server without rewrite rules, checks empty refusals
+before bootstrap/mutation, and retains CLI execution. Its isolated Apache fixture
+loads the shipped internal-tree authorization rules without `mod_rewrite` and
+checks public query-string routing. Set `PHP_GALLERY_APACHE` and
+`PHP_GALLERY_APACHE_PHP_MODULE` to the local executables/module when automatic
+discovery is unavailable. Missing Apache coverage is reported explicitly; it is
+separate from the always-required PHP HTTP boundary checks.
+
 Every profile starts `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. These include-only probes stop before `cms_run()` and do not start sessions, load installation configuration, access a database, or dispatch a request. The separate registered runtime-performance suite measures actual route lifecycles through the public entrypoint when the runner receives an owned disposable workflow fixture.
+
+The curated quick registry also runs the MVC scanner's paired fixtures. Ordinary
+route `prepare()` calls must remain distinct from typed PDO receivers, aliases,
+construction and SQL-bearing calls. Provenance must stay local to its declaration
+scope and assignment order. The architecture JSON retains raw observations and
+reports accepted Core boundary path/signal pairs with their purpose and evidence;
+accepting a response or diagnostic signal never exempts unrelated responsibilities
+in the same file. Session-boundary fixtures assert actual key values, one-time
+consumption, language separation, OAuth expiry and gallery-grant expiry rather
+than testing only that superglobals disappeared from source.
 
 Included PHP files and peak memory are hard ceilings: early runtime is 1 file and 16,777,216 bytes (16 MiB); application bootstrap has a 24-file baseline, a 40-file ceiling, and a 16,777,216-byte (16 MiB) ceiling. Wall time is observational and never compared to a machine-specific limit. Each include-probe entry in the audit report's `details.metrics` has `schema_version: 1`, `probe`, `scope: include-only-before-cms_run`, `php_version`, `php_int_size`, `included_php_files`, `included_paths`, `bootstrap_wall_ms`, `peak_memory_bytes`, and `limits`. The compact Markdown report prints raw file counts, byte counts, and wall milliseconds.
 
@@ -77,7 +109,23 @@ The registered `runtime-performance` suite runs each route in a fresh isolated P
 
 These are in-process application lifecycle measurements, not HTTP-server, network, or TLS latency measurements. The child buffers the response to record body size and SHA-256; it does not retain page contents. When no owned `GALLERY_WORKFLOW_FIXTURE` is available, the route suite reports an explicit `SKIP` rather than treating include-only probes as route coverage.
 
-For local full qualification with a private MySQL server, use the existing disposable workflow wrapper. Set `GALLERY_WORKFLOW_ENABLE=disposable-only` and `GALLERY_WORKFLOW_MYSQL_BIN` to a MySQL 8 `mysqld` executable, then run `php scripts/gallery_workflow_mysql.php --audit`. The wrapper initializes a private data directory, creates a dedicated generated database account, starts the migrated application copy and HTTP fixture, and cleans up its owned resources afterward. The audit receives the fixture identity and runs the route matrix inside that same disposable environment. Never point this workflow at the active Gallery configuration or database. Without this wrapper, ordinary quick/full/release audit runs still execute the include probes and mark the real-route suite `SKIP` when the fixture is absent.
+For local qualification with a private MySQL server, use the existing disposable workflow wrapper. Set `GALLERY_WORKFLOW_ENABLE=disposable-only` and `GALLERY_WORKFLOW_MYSQL_BIN` to a MySQL 8 `mysqld` executable, then run `php scripts/gallery_workflow_mysql.php --audit` for full qualification or `--audit-quick` for fixture-backed quick feedback. The wrapper initializes a private data directory, creates a dedicated generated database account, starts the migrated application copy and HTTP fixture, and cleans up its owned resources afterward. Both modes require all nine route measurements; quick retains its curated regression subset, while full additionally requires database/HTTP/concurrency and enabled browser workflow PASS records. This local MySQL wrapper does not qualify MariaDB; the required CI matrix runs the same central real-database workflow against each listed representative. Never point this workflow at the active Gallery configuration or database. Without this wrapper, ordinary quick/full/release audit runs still execute the include probes and mark the real-route suite `SKIP` when the fixture is absent. The historical `--quick` convenience flag still delegates directly without provisioning a fixture.
+
+`scripts/runtime_plan_baseline.json` also protects the nine routes and the shipped
+module graph without requiring a database. The reviewed post-composition graph is
+the structural baseline; included-file counts and memory come from the disposable
+pre-change route capture. File counts and global direct entries allow the larger
+of four files or five percent; transitive and global module counts allow two
+additional modules. Route roots must stay unchanged, and duplicated direct file
+ownership cannot grow. Peak memory allows one 4 MiB allocation margin. Wall time
+is recorded without a threshold. The prior flat graph remains diagnostic evidence,
+not a permissive future limit. A deliberate ownership or budget change requires
+reviewing and updating this baseline rather than raising the broad route ceilings.
+
+The module-plan fixture compares composed and flattened legacy loading in separate
+fresh PHP processes for every logical module. It checks actual include order,
+including files required by module entrypoints, callable route handlers, and no
+include-time output, headers, sessions or umbrella loading.
 
 ### PHP worker scheduling
 
@@ -209,9 +257,10 @@ in-memory drafts and parent-picker integration. A passing Node seam test is not
 reported as real browser interaction.
 
 The source contract task stores complete value-free inventories under the
-individual audit run directory. Its PASS means discovery succeeded; the console
-still reports remaining documentation/policy findings. Header/declaration/MVC
-contracts remain distinct enforcement checks. Manual mobile, Firefox/WebKit and
+individual audit run directory. Its PASS means discovery succeeded and reliable
+category counts stayed within reviewed historical caps; the console still reports
+remaining documentation/policy debt. Changed-declaration/MVC contracts remain
+distinct enforcement checks. Manual mobile, Firefox/WebKit and
 assistive-technology acceptance are not inferred from Chromium results.
 
 ## Canonical Feature Capability Policy
@@ -1702,8 +1751,54 @@ operational numeric assignments and direct timer literals in runtime PHP/JS.
 Missing history or failed parsing blocks the relevant gate. The policy artifact
 explicitly lists unparsed formats, embedded scripts and map-entry review gaps;
 passing this bounded gate does not mean the complete codebase has no magic values.
-Whole-tree documentation/policy inventory remains an advisory artifact with
-remaining counts, not an accepted-debt baseline.
+Full/release reuse those whole-tree reports for reviewed category budgets below.
+Historical debt remains visible; three explicitly noisy policy heuristics remain
+advisory rather than being counted as reviewed violations.
+
+### Source debt category budgets
+
+`source-contract-inventory` in full/release runs each existing analyzer once,
+stores `source-documentation.json` and `source-policy.json`, and passes their
+decoded reports to `scripts/source_contracts/debt_ratchet.php`. It stores the
+evaluation in `source-debt-ratchet.json`; quick runs the fast pure ratchet fixture
+and retains strict changed-source gates without a second whole-tree scan.
+
+`scripts/source_contract_debt_baseline.json` records deterministic sorted counts,
+separate reliable caps, the classifier fingerprint, and reviewed Git provenance.
+Categories are report family, ownership scope, extension, declaration kind, and
+rule family. Parameter-name suffixes aggregate within their documented rule.
+Runtime, tests, tooling, native assets, and other source scopes partition budgets;
+they do not exempt documentation or native typing. New reliable categories have
+cap zero. Growth in any reliable category fails even if another category shrinks.
+
+Only `constant.duplicate_name_review`, `policy.script_assignment_review`, and
+`policy.css_duration_review` stay advisory: they represent unresolved lexical
+symbols, unparsed script assignments, and visual CSS durations. Their counts and
+deltas remain visible. Unknown rules/formats, incomplete reports, a missing or
+malformed baseline, and classifier drift block coverage rather than silently
+granting debt allowances. Supported analyzer-scope changes require deliberate
+classifier and budget review.
+
+After repairing historical contracts, use the explicit maintenance command:
+
+```text
+php scripts/generate_source_debt_baseline.php --check
+php scripts/generate_source_debt_baseline.php --refresh
+```
+
+Check never writes. Refresh refuses reliable growth and can only lower caps;
+disappeared categories retain zero caps. Review its JSON diff with the source
+repair. Initial creation is separate: `--initialize --provenance-base=REF` requires
+an absent baseline and resolves the reviewed base and current checkpoint to
+immutable Git SHAs. It refuses an existing file; do not delete a baseline to
+reset debt. Normal audits and CI never initialize or refresh budgets.
+
+Both changed gates honor `--base=REF` or `PHP_GALLERY_SOURCE_BASE`, defaulting to
+`HEAD` for local compatibility. Use the event-appropriate immutable comparison
+base for CI or multi-commit reviews. Missing or unreadable history remains
+blocked. Budget PASS does not establish semantic truth: review parameter/return
+shapes, side effects, ownership, security, lifecycle, and compatibility invariants.
+Preserve useful documentation when moving code; do not mass-generate comments.
 
 ### Documentation and declaration types across PHP, JavaScript and Python
 
@@ -1716,9 +1811,9 @@ have no docstring contract, including callbacks assigned to variables or object
 members. Variables, constants, and class properties also need no declaration
 docstring. Named functions or classes nested inside callbacks remain checked.
 File headers, native typing, operational-policy comments, and parser coverage
-are separate contracts. The full inventory is advisory while existing debt is being repaired;
-a passing inventory means discovery completed, not that every old function complies.
-No accepted-debt baseline or automatic fabricated descriptions are introduced.
+are separate contracts. The full inventory reports historical debt and enforces
+reliable category caps while it is repaired; a passing task does not mean every
+old function complies. Do not add fabricated descriptions or inflate budgets.
 
 The changed-source gate also recognizes ordinary brace-bodied Bash and PowerShell
 functions through a conservative, non-executing lexer. Added or changed functions

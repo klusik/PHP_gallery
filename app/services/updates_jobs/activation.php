@@ -138,7 +138,9 @@ function application_update_job_assert_ready(array $job): void
         throw new RuntimeException('Rollback metadata is missing.');
     }
     foreach ((array) ($job['checkpoints']['activation_files'] ?? []) as $relative) {
-        $ready = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $relative);
+        $relative = (string) $relative;
+        application_update_assert_safe_target($jobDir, 'ready/' . $relative);
+        $ready = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (!is_file($ready)) {
             throw new RuntimeException('Prepared activation file is missing.');
         }
@@ -178,7 +180,8 @@ function application_update_activation_priority(string $path): int
  * temporary file plus rename(), and replay treats a destination matching the
  * prepared release hash as already committed.
  *
- * @param array $job Job state, updated by reference.
+ * @param array<string,mixed> $job Job state with an id and activation_files/obsolete_paths checkpoints, updated by reference as activation progress is saved.
+ * @return void Completes activation or throws when a prepared target cannot be safely committed.
  */
 function application_update_job_activate(array &$job): void
 {
@@ -194,6 +197,8 @@ function application_update_job_activate(array &$job): void
 
     $activated = 0;
     foreach ($files as $relative) {
+        application_update_assert_safe_target($jobDir, 'ready/' . $relative);
+        application_update_assert_safe_target($root, $relative, true);
         $ready = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $readyHash = hash_file('sha256', $ready);
@@ -212,6 +217,10 @@ function application_update_job_activate(array &$job): void
 
         application_update_ensure_dir(dirname($destination));
         $temporary = dirname($destination) . '/.php-gallery-activate-' . bin2hex(random_bytes(6)) . '.tmp';
+        $temporaryRelative = dirname(str_replace('/', DIRECTORY_SEPARATOR, $relative));
+        $temporaryRelative = ($temporaryRelative === '.' ? '' : str_replace(DIRECTORY_SEPARATOR, '/', $temporaryRelative) . '/')
+            . basename($temporary);
+        application_update_assert_safe_target($root, $temporaryRelative, true);
         if (!copy($ready, $temporary)) {
             throw new RuntimeException('Could not prepare active file replacement.');
         }
@@ -219,6 +228,8 @@ function application_update_job_activate(array &$job): void
             @unlink($temporary);
             throw new RuntimeException('Active file replacement failed integrity verification.');
         }
+        application_update_assert_safe_target($root, $relative, true);
+        application_update_assert_safe_target($root, $temporaryRelative);
         if (!rename($temporary, $destination)) {
             @unlink($temporary);
             throw new RuntimeException('Could not atomically replace an active application file.');
@@ -228,8 +239,11 @@ function application_update_job_activate(array &$job): void
     }
 
     foreach ((array) ($job['checkpoints']['obsolete_paths'] ?? []) as $relative) {
-        $path = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $relative);
+        $relative = (string) $relative;
+        application_update_assert_safe_target($root, $relative, true);
+        $path = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (file_exists($path) || is_link($path)) {
+            application_update_assert_safe_target($root, $relative);
             application_update_remove_path($path);
         }
     }

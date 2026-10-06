@@ -110,6 +110,8 @@ use function Gallery\Views\view_render_meta_tag;
 use function Gallery\Views\view_render_missing_admin_email_notice;
 use function Gallery\Views\view_render_public_seo_tags;
 
+require_once __DIR__ . '/request_data.php';
+
 /**
  * Return optional artwork for the shared public header.
  */
@@ -166,17 +168,23 @@ function favorite_gallery_nav_html(array $items): string
 }
 
 /**
- * Render the shared document header, navigation, theme variables, and CSS links.
+ * Prepare request-aware shared header data and render the document header.
+ *
+ * @param string $title Page title passed to the shared presentation view.
+ * @param ?array<string,mixed> $currentGallery Optional gallery selected by the controller.
+ * @param bool $publicOnly Whether branding assets must use public-safe variants.
+ * @return void Render the shared header and its navigation.
  */
 function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     if (!function_exists('Gallery\Views\view_render_header')) {
         throw new RuntimeException('Shared header view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    $requestQuery = is_array($_GET) ? $_GET : [];
-    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
-    $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
-    $page = (string) ($_GET['page'] ?? 'home');
+    $requestQuery = request_data('query');
+    $server = request_data('server');
+    $requestUri = (string) ($server['REQUEST_URI'] ?? '');
+    $scriptName = (string) ($server['SCRIPT_NAME'] ?? '/index.php');
+    $page = (string) ($requestQuery['page'] ?? 'home');
     $headExtras = cms_head_extras_html();
     $model = shared_layout_header_model($currentGallery, $publicOnly, $requestQuery, $requestUri, $scriptName, $page, $headExtras);
     view_render_header($title, $model, $requestUri, $page);
@@ -373,25 +381,29 @@ function cms_browser_i18n_strings(): array
 
 /**
  * Render translated strings for browser-side modules before the ES module entrypoint loads.
+ *
+ * @return void Select the browser script variant from the normalized request page.
  */
 function render_browser_i18n_script(): void
 {
     if (!function_exists('Gallery\Views\view_render_browser_i18n_script')) {
         throw new RuntimeException('Browser i18n view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    $page = (string) ($_GET['page'] ?? 'home');
+    $page = (string) (request_data('query')['page'] ?? 'home');
     $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
     view_render_browser_i18n_script(shared_layout_browser_i18n_asset_url($isAdminPage));
 }
 
 /**
- * Render the shared footer and JavaScript include.
+ * Render the shared footer and JavaScript include for the current page.
+ *
+ * @return void Select the footer model from the normalized request page.
  */
 function render_footer(): void
 {
     if (!function_exists('Gallery\Views\view_render_footer')) {
         throw new RuntimeException('Shared footer view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    $page = (string) ($_GET['page'] ?? 'home');
+    $page = (string) (request_data('query')['page'] ?? 'home');
     view_render_footer($page, shared_layout_footer_model($page));
 }

@@ -149,7 +149,10 @@ function admin_log_archive_ensure_root_dir(): string
 
     $denyPath = $root . DIRECTORY_SEPARATOR . '.htaccess';
     if (!is_file($denyPath)) {
-        @file_put_contents($denyPath, "Require all denied\n", LOCK_EX);
+        $denyPolicy = "# Project: PHP Gallery\n# File: data/admin-log-archives/.htaccess\n"
+            . "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
+        @file_put_contents($denyPath, $denyPolicy, LOCK_EX);
     }
     return $root;
 }

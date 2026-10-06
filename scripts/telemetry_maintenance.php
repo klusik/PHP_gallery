@@ -32,6 +32,9 @@
  *   2026-05-04
  */
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
 /**
  * Command-line telemetry maintenance runner.
  *

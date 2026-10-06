@@ -47,6 +47,11 @@ use const Gallery\Core\CMS_GITHUB_REPOSITORY;
 use const Gallery\Core\CMS_UPDATE_BRANCHES;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\e;
+use function Gallery\Core\release_file_policy_archive_updater_paths;
+use function Gallery\Core\release_file_policy_is_updater_path;
+use function Gallery\Core\release_file_policy_is_protected_path;
+use function Gallery\Core\release_file_policy_prior_updater_paths;
+use function Gallery\Core\release_file_policy_resolves_to_expected_path;
 use function Gallery\Core\run_migrations;
 
 /**
@@ -94,7 +99,9 @@ function application_update_project_root(): string
 /**
  * Reject dangerous updater destinations before any files are copied or removed.
  *
- * @param string $root Root value.
+ * @param string $root Project root to validate.
+ * @return void No value is returned when the root contains the required files and directories.
+ * @throws RuntimeException When the path resolves to the app directory or required targets are missing or redirected.
  */
 function application_update_assert_project_root(string $root): void
 {
@@ -114,6 +121,7 @@ function application_update_assert_project_root(string $root): void
     foreach ($requiredPaths as $requiredPath) {
         // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
         $absolutePath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
+        application_update_assert_safe_target($root, $requiredPath);
         if (!is_file($absolutePath)) {
             throw new RuntimeException('Updater refused to run because the project root is missing: ' . $requiredPath);
         }
@@ -122,6 +130,7 @@ function application_update_assert_project_root(string $root): void
     foreach (['app', 'public', 'cache'] as $requiredDirectory) {
         // $absoluteDirectory stores an intermediate value used by the surrounding gallery workflow.
         $absoluteDirectory = $root . '/' . $requiredDirectory;
+        application_update_assert_safe_target($root, $requiredDirectory);
         if (!is_dir($absoluteDirectory)) {
             throw new RuntimeException('Updater refused to run because the project root is missing directory: ' . $requiredDirectory);
         }
@@ -212,12 +221,17 @@ function application_update_assert_source_root(string $sourceRoot): void
         if (!is_file($absolutePath) || !is_readable($absolutePath)) {
             throw new RuntimeException('Downloaded update archive is incomplete. Missing or unreadable: ' . $requiredPath);
         }
+        application_update_assert_safe_target($sourceRoot, $requiredPath);
     }
 
     // A current release must provide at least one migration-definition implementation.
     if (!is_file($sourceRoot . '/app/migration_definitions.php') && !is_file($sourceRoot . '/app/migrations.php')) {
         throw new RuntimeException('Downloaded update archive is incomplete. Missing migration support files.');
     }
+
+    // Current source archives activate the exact reviewed updater inventory; older
+    // stable archives remain compatible through their bounded core-manifest list.
+    release_file_policy_archive_updater_paths($sourceRoot);
 }
 
 /**
@@ -254,6 +268,7 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
     application_update_assert_project_root($destinationRoot);
     application_update_assert_source_root($sourceRoot);
     application_update_assert_gallery_edit_enforcement($sourceRoot);
+    $previousUpdaterFiles = release_file_policy_prior_updater_paths($destinationRoot);
 
     // $backup stores the rollback archive for overwritten and removed files.
     $backup = new ZipArchive();
@@ -269,27 +284,13 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
     $removed = [];
 
     try {
-        // Stage every incoming file first. A staging failure leaves the active installation untouched.
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
-        );
-        foreach ($iterator as $item) {
-            if ($item->isLink()) {
-                continue;
-            }
-            // $relativePath stores the normalized path inside the release snapshot.
-            $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
-            if (application_update_path_is_protected($relativePath)) {
-                continue;
-            }
-
+        // Stage only the canonical updater inventory; source ZIP development files stay inactive.
+        foreach (release_file_policy_archive_updater_paths($sourceRoot)['files'] as $relativePath) {
+            application_update_assert_safe_target($sourceRoot, $relativePath);
+            application_update_assert_safe_target($destinationRoot, $relativePath, true);
+            $sourcePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
             // $destination stores the corresponding active-installation path.
             $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-            if ($item->isDir()) {
-                application_update_ensure_dir($destination);
-                continue;
-            }
             if (is_dir($destination)) {
                 throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
             }
@@ -297,10 +298,10 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
             $parent = dirname($destination);
             application_update_ensure_dir($parent);
             $temporaryPath = $parent . '/.php-gallery-update-' . bin2hex(random_bytes(8)) . '.tmp';
-            if (!copy($item->getPathname(), $temporaryPath)) {
+            if (!copy($sourcePath, $temporaryPath)) {
                 throw new RuntimeException('Could not stage update file: ' . $relativePath);
             }
-            $expectedSize = filesize($item->getPathname());
+            $expectedSize = filesize($sourcePath);
             $stagedSize = filesize($temporaryPath);
             if ($expectedSize === false || $stagedSize === false || $expectedSize !== $stagedSize) {
                 @unlink($temporaryPath);
@@ -353,7 +354,7 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
         application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
         $removed = array_values(array_unique(array_merge(
             application_update_remove_malformed_root_files($destinationRoot, $backup),
-            application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles)
+            application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles, $previousUpdaterFiles)
         )));
     } finally {
         foreach ($stagedFiles as $stagedFile) {
@@ -518,26 +519,13 @@ function application_update_path_is_managed_by_updater(string $relativePath, boo
     if ($relativePath === '') {
         return false;
     }
-    if (in_array($relativePath, application_update_managed_server_policy_files(), true)) {
-        return true;
-    }
     if (application_update_path_is_protected($relativePath)) {
         return false;
     }
     if ($cleanUnexpectedFiles) {
         return true;
     }
-    foreach (['app', 'public', 'database/migrations', 'scripts'] as $managedDirectory) {
-        if ($relativePath === $managedDirectory || str_starts_with($relativePath, $managedDirectory . '/')) {
-            return true;
-        }
-    }
-    foreach (['index.php', 'install.php', 'reset.php', 'setup-gallery.php', 'deploy.bat', 'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'config.example.php'] as $managedFile) {
-        if ($relativePath === $managedFile) {
-            return true;
-        }
-    }
-    return false;
+    return release_file_policy_is_updater_path($relativePath);
 }
 
 /**
@@ -547,12 +535,48 @@ function application_update_path_is_managed_by_updater(string $relativePath, boo
  * @param string $destinationRoot Destination root value.
  * @param ZipArchive $backup Backup value.
  * @param bool $cleanUnexpectedFiles Clean unexpected files value.
- * @return array Structured result data for the caller.
+ * @param list<string> $previousUpdaterFiles Files proven to belong to the prior installed release.
+ * @return array<int,string> Project-relative paths removed after being backed up.
  */
-function application_update_remove_obsolete_managed_paths(string $sourceRoot, string $destinationRoot, ZipArchive $backup, bool $cleanUnexpectedFiles): array
+function application_update_remove_obsolete_managed_paths(
+    string $sourceRoot,
+    string $destinationRoot,
+    ZipArchive $backup,
+    bool $cleanUnexpectedFiles,
+    array $previousUpdaterFiles = []
+): array
 {
     // $removed stores normalized relative paths removed from the installation.
     $removed = [];
+    if (!$cleanUnexpectedFiles) {
+        $incoming = array_fill_keys(release_file_policy_archive_updater_paths($sourceRoot)['files'], true);
+        $root = realpath($destinationRoot);
+        if ($root === false) {
+            throw new RuntimeException('Updater destination root is unavailable during obsolete-file cleanup.');
+        }
+        foreach ($previousUpdaterFiles as $relativePath) {
+            if (!is_string($relativePath)
+                || !\Gallery\Core\release_file_policy_is_safe_relative_path($relativePath)
+                || isset($incoming[$relativePath])
+                || application_update_path_is_protected($relativePath)) {
+                continue;
+            }
+            $absolute = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            if (!is_file($absolute) && !is_link($absolute)) {
+                continue;
+            }
+            application_update_assert_safe_target($root, $relativePath);
+            if (is_link($absolute) || !release_file_policy_resolves_to_expected_path($root, $relativePath, $absolute)) {
+                throw new RuntimeException('Updater refuses to remove an obsolete path through a link or redirected directory.');
+            }
+            application_update_add_path_to_backup($backup, $absolute, 'removed-before-update/' . $relativePath);
+            application_update_remove_path($absolute);
+            $removed[] = $relativePath;
+        }
+        sort($removed, SORT_STRING);
+        return $removed;
+    }
+
     // $iterator stores destination entries checked from deepest to shallowest so directories can be removed safely.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($destinationRoot, FilesystemIterator::SKIP_DOTS),
@@ -1139,28 +1163,7 @@ function application_update_version_from_local_bootstrap(string $bootstrapPath):
  */
 function application_update_path_is_protected(string $relativePath): bool
 {
-    // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
-    // $protectedFiles stores an intermediate value used by the surrounding gallery workflow.
-    $protectedFiles = [
-        'config.php',
-        'public/assets/custom.css',
-        '.user.ini',
-        'php.ini',
-        'robots.txt',
-    ];
-    if (in_array($relativePath, $protectedFiles, true)) {
-        return true;
-    }
-    if (in_array($relativePath, application_update_managed_server_policy_files(), true)) {
-        return false;
-    }
-    foreach (['.git', '.well-known', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {
-        if ($relativePath === $directory || str_starts_with($relativePath, $directory . '/')) {
-            return true;
-        }
-    }
-    return false;
+    return release_file_policy_is_protected_path($relativePath);
 }
 
 /**

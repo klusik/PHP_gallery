@@ -314,7 +314,9 @@ function gallery_trash_root(): string
     // Keep runtime-created stores protected even before an application update reconciles policy files.
     // The identity header lets future updater policy reconciliation recognize the file as application-owned.
     $policyPath = $directory . DIRECTORY_SEPARATOR . '.htaccess';
-    $policyContents = "# Project: PHP Gallery\n# File: data/gallery-trash/.htaccess\nRequire all denied\n";
+    $policyContents = "# Project: PHP Gallery\n# File: data/gallery-trash/.htaccess\n"
+        . "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+        . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
     if (!is_file($policyPath) && @file_put_contents($policyPath, $policyContents) === false) {
         throw new RuntimeException('Could not create the gallery trash HTTP protection policy.');
     }

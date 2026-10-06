@@ -39,8 +39,12 @@ namespace Gallery\Services;
 
 // Keep request_data() available when this service module is loaded in isolation.
 require_once dirname(__DIR__) . '/request_data.php';
+require_once dirname(__DIR__) . '/session_context.php';
 
 use function Gallery\Core\request_data;
+use function Gallery\Core\session_context_get;
+use function Gallery\Core\session_context_remove;
+use function Gallery\Core\session_context_set;
 
 use RuntimeException;
 
@@ -533,11 +537,13 @@ function nsfw_guard_session_key(): string
 }
 
 /**
- * Store the current session-level 18+ acknowledgment.
+ * Store the current session-level 18+ acknowledgment timestamp.
+ *
+ * @return void Does not return a value.
  */
 function grant_nsfw_guard_access(): void
 {
-    $_SESSION[nsfw_guard_session_key()] = time();
+    session_context_set(nsfw_guard_session_key(), time());
 }
 
 /**
@@ -547,7 +553,7 @@ function grant_nsfw_guard_access(): void
  */
 function nsfw_guard_session_is_valid(): bool
 {
-    return (int) ($_SESSION[nsfw_guard_session_key()] ?? 0) > 0;
+    return (int) (session_context_get(nsfw_guard_session_key()) ?? 0) > 0;
 }
 
 /**
@@ -657,10 +663,10 @@ function gallery_access_requirement(array $gallery): ?array
 }
 
 /**
- * Handles gallery access session key logic for the gallery application.
+ * Build the session key that stores one gallery's temporary public unlock.
  *
- * @param mixed $galleryId Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Gallery whose password authorization is stored.
+ * @return string Stable flat session key owned by gallery access.
  */
 function gallery_access_session_key(int $galleryId): string
 {
@@ -668,9 +674,9 @@ function gallery_access_session_key(int $galleryId): string
 }
 
 /**
- * Handles gallery access lifetime seconds logic for the gallery application.
+ * Return the lifetime of one gallery password unlock.
  *
- * @return mixed Result produced by this operation.
+ * @return int Number of seconds for which the unlock remains valid.
  */
 function gallery_access_lifetime_seconds(): int
 {
@@ -678,32 +684,33 @@ function gallery_access_lifetime_seconds(): int
 }
 
 /**
- * Handles grant gallery public access logic for the gallery application.
+ * Store a timestamp granting temporary public access to one gallery.
  *
- * @param mixed $galleryId Input used by this operation.
+ * @param int $galleryId Gallery whose password authorization was verified.
+ * @return void Does not return a value.
  */
 function grant_gallery_public_access(int $galleryId): void
 {
-    $_SESSION[gallery_access_session_key($galleryId)] = time();
+    session_context_set(gallery_access_session_key($galleryId), time());
 }
 
 /**
- * Handles gallery public access session is valid logic for the gallery application.
+ * Return whether one gallery's session unlock remains within its allowed lifetime.
  *
- * @param mixed $galleryId Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Gallery whose password authorization is checked.
+ * @return bool True when the stored unlock is positive and no more than 600 seconds old.
  */
 function gallery_public_access_session_is_valid(int $galleryId): bool
 {
     // $key stores an intermediate value used by the surrounding gallery workflow.
     $key = gallery_access_session_key($galleryId);
     // $unlockedAt stores an intermediate value used by the surrounding gallery workflow.
-    $unlockedAt = (int) ($_SESSION[$key] ?? 0);
+    $unlockedAt = (int) (session_context_get($key) ?? 0);
     if ($unlockedAt <= 0) {
         return false;
     }
     if ((time() - $unlockedAt) > gallery_access_lifetime_seconds()) {
-        unset($_SESSION[$key]);
+        session_context_remove($key);
         return false;
     }
     return true;

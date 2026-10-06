@@ -43,6 +43,11 @@ use RecursiveIteratorIterator;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
+use function Gallery\Core\release_file_policy_archive_updater_paths;
+use function Gallery\Core\release_file_policy_is_updater_path;
+use function Gallery\Core\release_file_policy_path_comparison_key;
+use function Gallery\Core\release_file_policy_prior_updater_paths;
+use function Gallery\Core\release_file_policy_rollback_snapshot_paths;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
@@ -53,22 +58,7 @@ use function Gallery\Core\run_migrations_bounded;
  */
 function application_update_release_files(string $sourceRoot): array
 {
-    $files = [];
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS)
-    );
-    foreach ($iterator as $item) {
-        if (!$item->isFile() || $item->isLink()) {
-            continue;
-        }
-        $relative = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
-        if (application_update_path_is_protected($relative)
-            || !application_update_path_is_managed_by_updater($relative, false)
-            || in_array(basename($relative), ['.DS_Store', 'Thumbs.db'], true)) {
-            continue;
-        }
-        $files[] = $relative;
-    }
+    $files = release_file_policy_archive_updater_paths($sourceRoot)['files'];
 
     usort($files, static function (string $left, string $right): int {
         $priority = static function (string $path): int {
@@ -103,6 +93,8 @@ function application_update_changed_release_files(string $sourceRoot, string $de
     $changed = [];
     foreach ($files as $relative) {
         $relative = (string) $relative;
+        application_update_assert_safe_target($sourceRoot, $relative);
+        application_update_assert_safe_target($destinationRoot, $relative, true);
         $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (!is_file($source) || is_link($source)) {
@@ -133,10 +125,8 @@ function application_update_changed_release_files(string $sourceRoot, string $de
 /**
  * Return obsolete managed destination paths that the incoming release does not contain.
  *
- * Protected directories are pruned before recursive traversal. Normal updates inspect
- * only updater-owned application roots instead of walking galleries/cache/custom data.
- * Clean reinstall may inspect additional root entries, but still never descends into
- * protected directories.
+ * Normal updates diff the incoming package against paths known from the prior installed
+ * inventory. Explicit clean reinstall retains its broader reviewed cleanup behavior.
  *
  * @param string $sourceRoot Extracted source root.
  * @param string $destinationRoot Active project root.
@@ -145,12 +135,36 @@ function application_update_changed_release_files(string $sourceRoot, string $de
  */
 function application_update_obsolete_paths(string $sourceRoot, string $destinationRoot, bool $cleanUnexpectedFiles): array
 {
+    if (!$cleanUnexpectedFiles) {
+        $incoming = [];
+        foreach (application_update_release_files($sourceRoot) as $incomingPath) {
+            $incoming[release_file_policy_path_comparison_key($incomingPath)] = true;
+        }
+        $removed = [];
+        foreach (release_file_policy_prior_updater_paths($destinationRoot) as $relative) {
+            if (isset($incoming[release_file_policy_path_comparison_key($relative)]) || application_update_path_is_protected($relative)) {
+                continue;
+            }
+            application_update_assert_safe_target($destinationRoot, $relative, true);
+            $path = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            if (is_file($path) || is_link($path)) {
+                $removed[] = $relative;
+            }
+        }
+        usort($removed, static function (string $left, string $right): int {
+            return substr_count($right, '/') <=> substr_count($left, '/') ?: strcmp($left, $right);
+        });
+        return $removed;
+    }
+
     $removed = [];
     $roots = [];
     if ($cleanUnexpectedFiles) {
         foreach (new FilesystemIterator($destinationRoot, FilesystemIterator::SKIP_DOTS) as $entry) {
             $relative = str_replace('\\', '/', $entry->getFilename());
-            if ($relative !== '' && !application_update_path_is_protected($relative)) {
+            if ($relative !== ''
+                && !application_update_path_is_protected($relative)) {
+                application_update_assert_safe_target($destinationRoot, $relative);
                 $roots[] = $entry->getPathname();
             }
         }
@@ -182,7 +196,11 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
     $roots = array_values(array_unique($roots));
     foreach ($roots as $rootPath) {
         $relativeRoot = str_replace('\\', '/', substr($rootPath, strlen($destinationRoot) + 1));
-        if ($relativeRoot === '' || application_update_path_is_protected($relativeRoot)) {
+        if ($relativeRoot === '') {
+            continue;
+        }
+        application_update_assert_safe_target($destinationRoot, $relativeRoot);
+        if (application_update_path_is_protected($relativeRoot)) {
             continue;
         }
         if (is_link($rootPath)) {
@@ -202,9 +220,13 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
         $directory = new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS);
         $filter = new \RecursiveCallbackFilterIterator(
             $directory,
-            static function ($current) use ($destinationRoot): bool {
+            static function (\SplFileInfo $current) use ($destinationRoot): bool {
                 $relative = str_replace('\\', '/', substr($current->getPathname(), strlen($destinationRoot) + 1));
-                return $relative !== '' && !$current->isLink() && !application_update_path_is_protected($relative);
+                if ($relative === '' || application_update_path_is_protected($relative)) {
+                    return false;
+                }
+                application_update_assert_safe_target($destinationRoot, $relative);
+                return !$current->isLink();
             }
         );
         $iterator = new RecursiveIteratorIterator($filter, RecursiveIteratorIterator::CHILD_FIRST);
@@ -248,6 +270,7 @@ function application_update_backup_items_for_plan(string $root, array $files, ar
     $items = [];
     foreach ($files as $relative) {
         $relative = (string) $relative;
+        application_update_assert_safe_target($root, $relative, true);
         $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (is_link($destination)) {
             throw new RuntimeException('Updater refuses symbolic links in managed activation paths.');
@@ -259,6 +282,7 @@ function application_update_backup_items_for_plan(string $root, array $files, ar
     }
     foreach ($obsolete as $relative) {
         $relative = (string) $relative;
+        application_update_assert_safe_target($root, $relative, true);
         $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (is_file($destination) || is_link($destination)) {
             $items[$relative] = true;
@@ -285,11 +309,16 @@ function application_update_job_build_plan(array &$job): void
         }
         $sourceRoot = $sourceJobDir . '/rollback/original';
         application_update_assert_gallery_edit_enforcement($sourceRoot);
+        $rollbackIndex = array_values(array_unique(array_merge(
+            (array) ($metadata['activation_files'] ?? []),
+            (array) ($metadata['obsolete_paths'] ?? [])
+        )));
+        $rollbackFiles = release_file_policy_rollback_snapshot_paths($sourceRoot, $rollbackIndex);
         $job['checkpoints']['source_root'] = $sourceRoot;
         $files = application_update_changed_release_files(
             $sourceRoot,
             application_update_project_root(),
-            application_update_release_files($sourceRoot)
+            $rollbackFiles
         );
         $obsolete = [];
         foreach ((array) ($metadata['created_paths'] ?? []) as $relative) {
@@ -390,6 +419,9 @@ function application_update_job_stage_files_slice(array &$job, array $budget): b
  */
 function application_update_backup_path_to_directory(string $root, string $backupRoot, string $relative): bool
 {
+    application_update_ensure_dir($backupRoot);
+    application_update_assert_safe_target($root, $relative, true);
+    application_update_assert_safe_target($backupRoot, $relative, true);
     $source = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
     if (!file_exists($source) && !is_link($source)) {
         return false;
@@ -404,6 +436,8 @@ function application_update_backup_path_to_directory(string $root, string $backu
         }
         $destination = $backupRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         application_update_ensure_dir(dirname($destination));
+        application_update_assert_safe_target($root, $relative);
+        application_update_assert_safe_target($backupRoot, $relative, true);
         if (!is_file($destination)) {
             if (!copy($source, $destination)) {
                 throw new RuntimeException('Could not prepare rollback snapshot file.');
@@ -421,11 +455,17 @@ function application_update_backup_path_to_directory(string $root, string $backu
                 throw new RuntimeException('Updater refuses symbolic links in managed rollback paths.');
             }
             $suffix = str_replace('\\', '/', substr($item->getPathname(), strlen($source) + 1));
-            $destination = $backupRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative . '/' . $suffix);
+            $nestedRelative = $relative . '/' . $suffix;
+            application_update_assert_safe_target($root, $nestedRelative);
+            application_update_assert_safe_target($backupRoot, $nestedRelative, true);
+            $destination = $backupRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $nestedRelative);
             if ($item->isDir()) {
                 application_update_ensure_dir($destination);
+                application_update_assert_safe_target($backupRoot, $nestedRelative);
             } else {
                 application_update_ensure_dir(dirname($destination));
+                application_update_assert_safe_target($root, $nestedRelative);
+                application_update_assert_safe_target($backupRoot, $nestedRelative, true);
                 if (!is_file($destination) && !copy($item->getPathname(), $destination)) {
                     throw new RuntimeException('Could not prepare rollback snapshot directory.');
                 }

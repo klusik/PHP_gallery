@@ -241,7 +241,7 @@ Komponent & Krav\\
 \midrule
 \endhead
 PHP & Version 8.1 eller senare.\\
-Databas & MySQL 5.7 eller senare, eller MariaDB 10.2 eller senare.\\
+Databas & MySQL 8.4 LTS, MariaDB 10.11 LTS eller MariaDB 11.4 LTS.\\
 PDO & Tillägget PDO MySQL för programmets frågor och migreringar.\\
 Bildbehandling & GD för vanlig generering av miniatyrbilder. Ytterligare lokala bildverktyg kan stödja specialformat.\\
 Arkiv & ZipArchive för paket-, hämtnings- och överföringsflöden som skapar eller läser ZIP-data.\\
@@ -249,6 +249,8 @@ Filsystem & Skrivbara platser för programdata, gallerier, cache och genererade 
 Webbserver & URL-omskrivning av Apache-typ rekommenderas för rena URL:er; dirigering med frågesträngar stöder kompatibla miljöer utan omskrivning.\\
 \bottomrule
 \end{longtable}
+
+Den underhållna supportmatrisen kvalificerar MySQL 8.4 LTS, MariaDB 10.11 LTS och MariaDB 11.4 LTS som representativa versioner som testas direkt i obligatoriska CI. Det kanoniska dokumentet listar MySQL 8.0 och MariaDB 10.4--10.10 som äldre versioner med bästa möjliga stöd, men de saknar obligatorisk databastestning i projektet samt projektets regressions- och säkerhetsgarantier. De ligger utanför den underhållna kvalificeringen. MySQL 5.7 och äldre samt MariaDB 10.3 och äldre stöds inte. Andra databasserier är okvalificerade tills de testas direkt i obligatoriska CI; ett högre versionsnummer bevisar inte i sig kompatibilitet. Se \filepath{docs/DATABASE_SUPPORT.md} för detaljer.
 
 Utgående HTTPS-åtkomst stöder programuppdateringar och fjärrhämtade utgåvemetadata. Lokal drift och manuellt installerade utgåvor kan fungera med mer begränsad utgående trafik.\footnote{Nätverkspolicyn bör följa installationsägarens krav på uppdateringar och integritet. Uppdateringskoden validerar paket och bevarar återställningsdata enligt den lokala uppdaterarens implementation.}
 

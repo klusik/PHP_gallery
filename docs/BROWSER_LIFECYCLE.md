@@ -1,5 +1,37 @@
 # Browser lifecycle ownership
 
+## Lightbox navigation transaction
+
+`public/assets/gallery-modules/lightbox-navigation-lifecycle.js` owns the
+canonical target index, image ID, generation, phase, and signal for one active
+lightbox intent. `lightbox.js` creates one owner per setup and reads its
+`index`, `imageId`, `generation`, and `snapshot()` accessors; it keeps no second
+mutable current-index or generation copy. DEV diagnostics render a copied owner
+snapshot rather than maintaining another navigation state machine.
+
+`begin(index, imageId)` aborts the prior logical signal, advances the generation,
+and returns a frozen transaction token. Sparse-card navigation begins before the
+shared metadata-window request; `bindImageId(index, generation, imageId)` binds
+the server-provided ID once the card arrives without changing the generation.
+Callbacks retain the established `(index, generation)` projections and ask
+`isCurrent()` before they can update the image, loading/error UI, quality
+progress, transition, or telemetry. `setPhase()` owns the current diagnostic
+phase; `settle()` records displayed/failed while leaving the displayed generation
+current so same-photo quality work remains valid.
+
+The navigation signal retires logical callbacks when a newer intent starts or
+the viewer closes. It does not cancel shared metadata-range requests, reusable
+neighbor-preview work, the separately owned map-popup selection, slideshow
+preparation, or quality requests. Those owners keep their own cancellation
+scopes. Close invalidates the generation and retains the last selected index;
+setup teardown calls terminal `dispose()`. The independent transition token
+continues to guard cross-fade and zoom presentation work.
+
+`tests/lightbox_navigation_lifecycle_test.mjs` executes the owner directly. It
+covers target identity, sparse-ID binding, phase settlement, stale completion,
+close/reopen, and terminal disposal. `tests/lightbox_navigation_transaction_liveness_test.php`
+continues to protect coordinator integration and the no-shadow-state contract.
+
 ## Lightbox nearby-preview queue
 
 `public/assets/gallery-modules/lightbox-preload-lifecycle.js` owns one bounded
@@ -12,10 +44,12 @@ no timer or request.
 The lifecycle module owns the queue, queued-source deduplication, generation,
 active slot count, scheduled drain handle, and preload abort controller. The
 viewer supplies authorized sources, decoding, connection policy, and optional
-diagnostics. There is no second foreground navigation generation or event bus.
-The decoded cache, metadata requests, slideshow-original preparation, quality
-promotion, DOM listeners, hidden-cache timer, and viewer presentation remain in
-`lightbox.js`.
+diagnostics. The preload queue does not own foreground navigation generation;
+that state belongs to the transaction owner above. There is no second queue
+generation or event bus in the viewer.
+The decoded cache and detached media work belong to the resource owner below;
+metadata requests, slideshow-original preparation, quality promotion, DOM
+listeners, and viewer presentation remain in `lightbox.js`.
 
 ### API and integration contract
 
@@ -50,13 +84,41 @@ slot; foreground presentation keeps its existing error path.
 | Close or backgrounding an open viewer | `reset()`; obsolete neighbors and active preview work are cancelled. Reopen uses the same owner with a fresh signal. |
 | Public fragment replacement / setup teardown | The setup controller aborts, permanently disposing the old queue. The replacement setup creates its own owner. |
 
+## Lightbox decoded-resource lifecycle
+
+`public/assets/gallery-modules/lightbox-resource-lifecycle.js` owns one setup's
+decoded exact-URL cache, detached image nodes, tracked Fetch readers, idle/size
+eviction, hidden cleanup timer, and cache-result association. The coordinator
+passes already-authorized URLs and keeps active quality tokens, progress UI,
+visible DOM images, metadata windows, and nearby queue scheduling in their
+existing owners. Navigation signals never cancel shared foreground decode or
+metadata work; the queue has its own cancellation scope, while active quality
+Fetch work uses its dedicated request signal.
+
+The reusable cache retains a 12-entry desktop limit, a 6-entry mobile limit,
+pending-promise reuse, foreground retry of failed/null entries, and a 60-second
+idle age measured from settlement or the most recent touch. Pending entries are
+never evicted. Hidden viewers reset nearby previews immediately and let the
+resource owner release settled entries after the same bounded idle interval.
+`clear()` cancels work and empties a reusable owner on close; `dispose()` is
+terminal on setup teardown. Eviction only drops a cache reference, so a decoded
+node already handed to the visible image is unaffected.
+
+`snapshot()` exposes copied scalar counts for detached image loads, tracked
+quality loads, and Fetch transfers. Performance diagnostics must report these
+categories separately; tracked Fetch work is not a detached `Image` load.
+`tests/lightbox_resource_lifecycle_test.mjs` covers pending reuse, retry,
+bounded eviction, hidden cleanup, settlement races, signal isolation, and
+clear/dispose behavior.
+
 `resetLightboxPreloadQueue()` remains the viewer adapter that clears
 `preloadedSources` diagnostic bookkeeping and delegates reset options.
 `queueDecodedLightboxPreload()` retains immediate decoded-cache reuse and
-delegates uncached sources. Close and teardown still cancel other detached
-loads, clear the decoded cache, and release viewer resources through their
-existing owners. Settling promises may briefly retain a retired instance until
-their completion microtasks run; they cannot schedule more work after disposal.
+delegates uncached sources. Close calls the reusable resource owner's `clear()`;
+setup teardown calls terminal `dispose()`. The viewer separately cancels
+metadata, quality, slideshow, transition, and map work through their existing
+owners. Settling promises may briefly retain a retired instance until their
+completion microtasks run; epoch and entry checks prevent cache reinsertion.
 
 ### Public behavior boundaries
 
@@ -68,8 +130,10 @@ passed through unchanged; this module introduces no media endpoint or fetch.
 
 The single viewer, centered 100% geometry, 100-400% zoom range, pan/fullscreen
 controls, and synchronous assignment of the active original on deliberate zoom
-stay in the existing viewer. Slideshow-only full-image preparation and the
-no-JavaScript navigation fallback also retain their existing paths.
+stay in the existing viewer. A current live-image error restores its protected
+preview immediately and cancels the matching tracked request; stale errors
+cannot restore over a newer navigation. Slideshow-only full-image preparation
+and the no-JavaScript navigation fallback also retain their existing paths.
 
 ### Verification and central integration
 
@@ -78,12 +142,13 @@ with controlled scheduling and promises. It covers FIFO/deduplication, both time
 APIs (including handle zero), dynamic concurrency, soft/hard reset, stale callback
 suppression, synchronous throws, rejected promises, diagnostic failure, terminal
 disposal, pre-aborted setup, and 30 repeated close/reopen/fragment-owner replacement
-cycles. It also executes the production viewer factory and source-selection/reset
-adapters with both renderer labels to check preview-only warming, immediate cache
-reuse, shared cancellation, and mobile/connection policy. These are runtime seam
-tests, not a full DOM/browser rendering simulation or server authorization test.
+cycles. It also executes the production viewer factory, resource owner, and
+source-selection/reset adapters with both renderer labels to check preview-only
+warming, actual cache reuse, shared cancellation, and mobile/connection policy.
+These are runtime seam tests, not a full DOM/browser rendering simulation or
+server authorization test.
 
-The focused fixture passed 12/12 cases on 2026-09-20 using Node v24.18.1.
+The focused fixture passed 12/12 cases on 2026-10-06 using Node v24.18.1.
 A central PASS is not inferred from these focused results.
 
 `lightbox_preload_lifecycle_test.mjs` is registered in the `node_tests` map in
@@ -147,6 +212,33 @@ payload grew. The measured benefit is a separately testable lifecycle owner,
 not a demonstrated startup or navigation speed improvement.
 
 ## Operational measurement gap
+
+### Navigation and resource extraction measured on 2026-10-06
+
+The campaign baseline is `1ea39b1f4755788e3649c091e1703b7460147e98`.
+The same LF/UTF-8, gzip level 9, and Brotli quality 11 method above now includes
+all four ownership assets. The existing nearby-preview owner was present in the
+baseline; the navigation and resource owners were absent. Runtime versions are
+Node v24.18.1, zlib 1.3.1-e00f703, and Brotli 1.2.0.
+
+| Asset / revision | Lines | Source bytes | gzip bytes | Brotli bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline viewer and preload owner | 7,781 | 354,865 | 69,656 | 55,493 |
+| Current `lightbox.js` | 7,383 | 339,704 | 66,295 | 52,639 |
+| Current preload owner | 177 | 7,482 | 2,143 | 1,785 |
+| Navigation owner | 280 | 10,323 | 2,729 | 2,321 |
+| Resource owner | 808 | 33,168 | 7,666 | 6,660 |
+| Current combined | 8,648 | 390,677 | 78,833 | 63,405 |
+| Combined change | +867 | +35,812 | +9,177 | +7,912 |
+
+```text
+node tests/support/lightbox_lifecycle_size.mjs 1ea39b1f4755788e3649c091e1703b7460147e98 --owners
+```
+
+The coordinator shrank by 221 lines and 7,679 source bytes. The combined assets
+grew, including typed API documentation and independently testable state owners.
+This is ownership and regression evidence; browser startup, transfer, and
+navigation performance improvements have not been demonstrated.
 
 Real-phone browser benchmarking is unavailable for this slice. Representative
 desktop/phone compressed HTTP transfer, parse/evaluation, initialization timing,

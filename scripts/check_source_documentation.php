@@ -17,6 +17,9 @@ declare(strict_types=1);
 
 namespace PhpGallery\SourceContracts;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 require_once __DIR__ . '/source_contracts/inventory.php';
 require_once __DIR__ . '/source_contracts/php.php';
 require_once __DIR__ . '/source_contracts/javascript.php';
@@ -198,6 +201,6 @@ function documentation_main(array $argv): int
     }
 }
 
-if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     exit(documentation_main($argv));
 }

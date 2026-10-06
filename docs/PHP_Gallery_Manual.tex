@@ -243,7 +243,7 @@ Component & Requirement\\
 \midrule
 \endhead
 PHP & Version 8.1 or~newer.\\
-Database & MySQL 5.7 or~newer, or~MariaDB 10.2 or~newer.\\
+Database & MySQL 8.4 LTS, MariaDB 10.11 LTS, or~MariaDB 11.4 LTS.\\
 PDO & PDO MySQL extension for~application queries and~migrations.\\
 Image processing & GD for~common thumbnail generation. Additional local image tooling can~support specialized formats.\\
 Archives & ZipArchive for~package, download, and~transfer workflows that produce or~consume ZIP data.\\
@@ -251,6 +251,8 @@ Filesystem & Writable application data, gallery, cache, and~generated-media loca
 Web server & Apache-style rewriting is~recommended for~clean URLs; query-string routing supports compatible environments without rewrites.\\
 \bottomrule
 \end{longtable}
+
+The~maintained support matrix names MySQL~8.4 LTS, MariaDB~10.11 LTS, and~MariaDB~11.4 LTS as~representatives directly exercised by~required CI. The~canonical support document lists MySQL~8.0 and~MariaDB~10.4--10.10 as~legacy best-effort series without a~required project database workflow or~project regression and~security assurance; they~are outside the~maintained qualification set. MySQL~5.7 or~older and~MariaDB~10.3 or~older are~unsupported. Other database-server series remain unqualified until~required CI tests them directly; a~higher version alone does~not~establish compatibility. See \filepath{docs/DATABASE_SUPPORT.md} for~the~full policy.
 
 Outbound HTTPS access supports application updates and~remote release metadata. Local operation and~manually deployed releases can~function with a~more restricted outbound policy.\footnote{Network policy should follow the~installation owner’s update and~privacy requirements. Update code validates packages and~preserves recovery data according to~the~local updater implementation.}
 

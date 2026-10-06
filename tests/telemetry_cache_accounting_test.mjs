@@ -6,20 +6,17 @@
  * Module Type: Regression Test
  *
  * Purpose:
- *   Exercises telemetry repairs using isolated deterministic fixtures.
+ *   Exercises decoded-cache telemetry through the production resource owner.
  *
  * Responsibilities:
- *   - Execute production behavior with isolated inputs
- *   - Fail on privacy, recovery or reporting regressions
+ *   - Execute production cache ownership with deterministic detached images
+ *   - Protect hit/miss attribution and stale-navigation suppression
  *
  * Author:
  *   Rudolf Klusal
  *
  * License:
  *   MIT License (see LICENSE file in repository)
- *
- * Notes:
- *   - Keep comments and docstrings intact when modifying this file.
  */
 
 import assert from 'node:assert/strict';
@@ -27,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
+import {createLightboxResourceLifecycle} from '../public/assets/gallery-modules/lightbox-resource-lifecycle.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'public/assets/gallery-modules/lightbox.js'), 'utf8').replaceAll('\r\n', '\n');
@@ -34,70 +32,108 @@ const start = source.indexOf('    function loadDecodedLightboxImage(');
 assert.ok(start > 0);
 const end = source.indexOf('\n    }', start) + '\n    }'.length;
 const body = source.slice(start, end);
+
 /**
- * Execute the production cache decision function with isolated decode and navigation state.
- * @param {Promise<Object<string, unknown>|null>|null} entry Optional cached promise.
- * @return {Object<string, unknown>} Loaded function, captured events and mutable ownership.
+ * Create the production cache owner and coordinator adapter around controllable image nodes.
+ * @param {'pending'|'failed'|'success'|null} [seed] Optional cache entry state to prepare.
+ * @return {Object<string, unknown>} Owner, controlled images, telemetry observations, and adapter.
  */
-function fixture(entry) {
-    const state = {current: true, fresh: 0, saved: 0};
-    const events = [], freshImage = {source: 'fresh'}, counters = {cacheHits: 0, cacheMisses: 0};
+function fixture(seed = null) {
+    const state = {current: true, fresh: 0, cacheHits: 0, cacheMisses: 0};
+    const events = [];
+    const images = [];
     const context = {
-        Promise, Number, Error, WeakMap, galleryDevModeEnabled: true, galleryDevModeState: counters,
-        lightboxTelemetryCacheResults: new WeakMap(),
-        /** Resolve one cached entry. @return {Object<string, unknown>|null} Prepared entry or cache miss. */
-        useDecodedLightboxImageCacheEntry() { return entry === null ? null : {promise: entry}; },
-        /** Resolve safe fallback text. @param {string} key Translation identifier. @param {string} fallback Safe default. @return {string} Message. */
-        i18n(key, fallback) { assert.equal(key, 'lightbox.missing_image_source'); return fallback; },
-        /** Ignore visual diagnostics in this no-DOM fixture. @return {void} No browser state is touched. */
-        devMarkSource() {},
-        /** Check live ownership, not ownership captured before an asynchronous decode. @return {boolean} Whether this navigation is current. */
-        isCurrentLightboxImageRequest() { return state.current; },
-        /** Capture a bounded cache observation. @param {string} name Event name. @param {number} index Active index. @param {string} src Source only retained inside this local fixture. @return {void} Appends one observed event. */
-        telemetryLightboxCacheEvent(name, index, src) { events.push({name, index, src}); },
-        /** Simulate fresh decoding. @return {Promise<Object<string, string>>} A distinct fresh image. */
-        loadFreshDecodedLightboxImage() { state.fresh++; return Promise.resolve(freshImage); },
-        /** Count recovery cache writes. @return {void} Records a cache insertion without network I/O. */
-        rememberDecodedLightboxImage() { state.saved++; },
+        Promise,
+        Number,
+        Error,
+        performance: {now: () => Date.now()},
+        galleryDevModeEnabled: true,
+        galleryDevModeState: state,
+        lightboxResources: null,
+        i18n: (key, fallback) => {
+            assert.equal(key, 'lightbox.missing_image_source');
+            return fallback;
+        },
+        devMarkSource: () => {},
+        isCurrentLightboxImageRequest: () => state.current,
+        telemetryLightboxCacheEvent: (name, index, src) => events.push({name, index, src}),
+        telemetryVisibleImageDecoded: () => {},
     };
+    const owner = createLightboxResourceLifecycle({
+        createImage: () => {
+            const image = {
+                naturalWidth: 800,
+                naturalHeight: 600,
+                onload: null,
+                onerror: null,
+                source: '',
+                removeAttribute: () => {},
+                finish: () => image.onload?.(),
+                fail: () => image.onerror?.(),
+            };
+            Object.defineProperty(image, 'src', {
+                get: () => image.source,
+                set: (value) => { image.source = value; },
+            });
+            images.push(image);
+            state.fresh += 1;
+            return image;
+        },
+        decodeImage: () => Promise.resolve(),
+    });
+    context.lightboxResources = owner;
     vm.createContext(context);
     vm.runInContext(body + '\nthis.load = loadDecodedLightboxImage;', context, {filename: 'lightbox-cache-fixture.js'});
-    return {state, events, freshImage, counters, load: context.load};
+    if (seed !== null) {
+        owner.preload('/authorized/image', {reason: 'fixture-seed'});
+        if (seed === 'failed') {
+            images.at(-1).fail();
+        } else if (seed === 'pending') {
+            // The caller controls when the pending detached image is completed.
+        } else {
+            images.at(-1).finish();
+        }
+    }
+    return {state, events, images, owner, load: context.load};
 }
+
 const owned = {telemetryIndex: 4, telemetryToken: 22};
-const image = {source: 'cached'};
-let resolveCache;
-const pending = new Promise(
-    /** Capture deferred decode completion. @param {Function} resolve Promise resolver. @return {void} Stores the resolver for explicit completion. */
-    function (resolve) { resolveCache = resolve; }
-);
-const hit = fixture(pending);
+const hit = fixture('pending');
 const hitLoad = hit.load('/authorized/image', owned);
-assert.equal(hit.events.length, 0, 'A pending preload is not yet a cache hit.');
-resolveCache(image);
-assert.equal(await hitLoad, image);
+assert.equal(hit.events.length, 0, 'An unresolved preload is not yet a cache hit.');
+hit.images[0].finish();
+assert.equal(await hitLoad, hit.images[0]);
 assert.equal(hit.events.length, 1);
 assert.equal(hit.events[0].name, 'cache.lightbox.hit');
-assert.equal(hit.counters.cacheHits, 1);
-assert.equal(hit.state.fresh, 0);
-const failed = fixture(Promise.resolve(null));
-assert.equal(await failed.load('/authorized/image', owned), failed.freshImage);
-assert.equal(failed.events.length, 1);
-assert.equal(failed.events[0].name, 'cache.lightbox.miss');
-assert.equal(failed.counters.cacheHits, 0);
-assert.equal(failed.counters.cacheMisses, 1);
-assert.equal(failed.state.saved, 1);
-const absent = fixture(null);
-await absent.load('/authorized/image', owned);
-assert.equal(absent.events.length, 1);
+assert.equal(hit.state.cacheHits, 1);
+assert.equal(hit.state.fresh, 1);
+
+const failed = fixture('failed');
+const failedLoad = failed.load('/authorized/image', owned);
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(failed.state.fresh, 2, 'Foreground lookup retries a cached null failure.');
+failed.images[1].finish();
+assert.equal(await failedLoad, failed.images[1]);
+assert.equal(failed.events.at(-1).name, 'cache.lightbox.miss');
+assert.equal(failed.state.cacheMisses, 1);
+
+const absent = fixture();
+const absentLoad = absent.load('/authorized/image', owned);
 assert.equal(absent.events[0].name, 'cache.lightbox.miss');
-const stale = fixture(Promise.resolve(image));
+absent.images[0].finish();
+await absentLoad;
+
+const stale = fixture('pending');
 const staleLoad = stale.load('/authorized/image', owned);
 stale.state.current = false;
-assert.equal(await staleLoad, image);
+stale.images[0].finish();
+assert.equal(await staleLoad, stale.images[0]);
 assert.equal(stale.events.length, 0, 'Late decode must not attribute a hit to a new navigation.');
-const preload = fixture(Promise.resolve(image));
-await preload.load('/authorized/image');
-assert.equal(preload.events.length, 0, 'Unowned background preloads must not inflate visible lookup ratios.');
+
+const preload = fixture('pending');
+const backgroundLoad = preload.load('/authorized/image');
+preload.images[0].finish();
+await backgroundLoad;
+assert.equal(preload.events.length, 0, 'Background lookup without active navigation ownership emits no visible telemetry.');
 await assert.rejects(preload.load(''), /Missing lightbox image source/);
-console.log('Cache decision and asynchronous ownership fixtures passed.');
+console.log('Production resource owner cache accounting fixtures passed.');

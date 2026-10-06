@@ -44,6 +44,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Public bootstrap and version constants | `app/bootstrap.php` |
 | Request kernel and core types | `app/runtime/Request.php`, `Router.php`, `RouteDefinition.php`, `RouteRegistry.php`, `ModuleLoader.php`, `Kernel.php`; `autoload.php` and `bridge.php` preserve zero-install loading and procedural compatibility. |
 | Reviewed runtime module plan | `app/runtime/modules.php`; generated in development from `scripts/runtime_dependencies.php`, `scripts/runtime_dynamic_dependencies.php`, `scripts/runtime_module_roots.php`, and `scripts/generate_runtime_modules.php`. Runtime loading uses this checked-in plan and has no source-scan or load-all fallback. |
+| Runtime dependency/performance ratchet | `scripts/runtime_plan_metrics.php`, `runtime_plan_baseline.json`, `audit_route_performance.php`; reviewed compositional closure and module counts plus disposable included-file/memory baselines. Timing is observational. |
 | Full procedural compatibility umbrella | `app/bootstrap_full.php`; use only for legacy CLI/test consumers that require the full models/services/views/controllers/migrations/integrity surface. |
 | Lightweight request updater policy | `app/services/updates_request.php` and `updates_job_lookup.php`; active-job lookup precedes eligibility gates, and only active/due work requests the compiled updater worker module. |
 | Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
@@ -54,9 +55,11 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Gallery edit concurrency | `app/services/gallery_edit_concurrency.php` and its model; ordinary revision-column migration, explicit model revision writes, editor response and writer-lock contracts |
 | Replay-safe Admin operations | `app/services/admin_operation_keys.php` and its model; actor/payload-bound creation/classic-upload completion ledger |
 | Bounded gallery destination search | `gallery_picker.php` service, `gallery_picker_search.php` model, `admin_gallery_picker_search.php` controller, existing picker asset |
-| Source ownership/documentation inventory | `scripts/source_contracts/`, `check_source_documentation.php`, `check_policy_constants.php`; central audit records whole-tree debt separately from strict changed-declaration and bounded changed-runtime-policy gates |
+| Source ownership/documentation and debt budgets | `scripts/source_contracts/`, `check_source_documentation.php`, `check_policy_constants.php`; strict changed contracts use the selected immutable Git base. Full/release reuse each complete inventory once for category budgets in `source_contract_debt_baseline.json`; `generate_source_debt_baseline.php` permits explicit initialization and decrease-only refresh. Three noisy policy heuristics remain advisory. |
+| Compatibility lifecycle | `docs/COMPATIBILITY_LIFECYCLE.md`; component ownership, protected scenarios, regression evidence, measurable/unknown usage, and safe retirement conditions or permanent-support contracts. |
 | Request and security-header lifecycle | `app/bootstrap/request.php` |
 | Session lifecycle | `app/bootstrap/session.php` |
+| Core request/session data boundaries | `app/request_data.php`, `app/session_context.php`; dependency-free transport bags and flat session-key access. Translation, Navigraph OAuth/cache, gallery grants and NSFW acknowledgement keep their domain semantics in their existing services; runtime flash stays active-session-only. |
 | Caller-owned domain session state | Discovery controller/service job map; OAuth controller/service state map; report controller/service checkpoint; duplicate-detector controller/service job map; Viewer controller/anti-automation private ticket context. Services receive explicit context and do not select session compartments. |
 | Setup marker storage | `app/security.php` compatibility facades delegate to `app/services/auth_accounts.php`; setup readiness combines the configuration file and installed marker. |
 | Migration transfer-file lifetime | `app/services/gallery_migration/temporary_files.php` via its module entry; only request-allocated transfers can be released. |
@@ -71,6 +74,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Whole-module source reading for contract tests | `tests/support/module_source.php`, `contract_file()` in `scripts/check_admin_mutation_contracts.php` |
 | View loader | `app/views.php` |
 | Database connection | `app/database.php` |
+| Database support and direct engine qualification | `docs/DATABASE_SUPPORT.md`, `.github/workflows/gallery-workflows.yml`, `tests/database_engine_contract_test.php`; canonical representative-series policy and owned temporary-table JSON/CHECK, InnoDB/utf8mb4 inspection and advisory-lock contracts. |
 | Migration runner | `app/migrations.php` |
 | Migration definition validation | `app/migration_definitions.php` |
 | Migration data repairs | `app/migration_repairs.php` |
@@ -591,8 +595,10 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 | PHP regression compatibility entrypoint | `tests/run.php`, `tests/*_test.php`<br>Historical `php tests/run.php` delegates to the central audit runner's `php-regression` suite. |
 | Standalone JavaScript model tests | `tests/*_test.mjs` |
 | Manual migration CLI | `scripts/migrate.php` |
+| CLI and internal HTTP boundaries | `scripts/cli_guard.php`, internal-tree `.htaccess` files, `app/services/update_server_policy_reconciliation.php`; classification and server requirements in `docs/HTTP_ENTRYPOINTS.md`. |
 | Admin creation | `scripts/create_admin.php` |
 | Manifest generation | `scripts/generate_manifest.php` |
+| Positive production membership | `app/production-files.json`, `app/release_file_policy.php`, `scripts/generate_production_files.php`, `scripts/release_files.php`; `docs/PRODUCTION_FILES.md` describes packaging/updater ownership. |
 | Recovery evidence and synthetic drill | `scripts/recovery.php`, `scripts/recovery/`, `tests/recovery_assurance_test.php`; read-only inventory/isolated-file checks, not automatic production restore. |
 | Disposable full-stack workflows | `scripts/gallery_workflow_run.php`, `scripts/gallery_workflow_mysql.php`, `scripts/gallery_workflow_ci.php`, `tests/support/gallery_workflow_*`, `.github/workflows/gallery-workflows.yml`; owned fixture provisioning around the central full or release audit. |
 | Artifact-bound release evidence | `scripts/release_qualification.php`, `scripts/release_qualification_lib.php`, `scripts/release_qualification/`, `tests/release_qualification_test.php`; source/PDF identity, explicit reviews, release-report binding, and bounded previews. |

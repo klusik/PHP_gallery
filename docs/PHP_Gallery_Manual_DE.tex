@@ -245,7 +245,7 @@ Komponente & Anforderung\\
 \midrule
 \endhead
 PHP & Version~8.1 oder neuer.\\
-Datenbank & MySQL~5.7 oder neuer beziehungsweise MariaDB~10.2 oder neuer.\\
+Datenbank & MySQL~8.4 LTS, MariaDB~10.11 LTS oder MariaDB~11.4 LTS.\\
 PDO & PDO-MySQL-Erweiterung für Anwendungsabfragen und Migrationen.\\
 Bildverarbeitung & GD für die übliche Vorschaubilderzeugung. Zusätzliche lokale Bildwerkzeuge können spezielle Formate unterstützen.\\
 Archive & ZipArchive für Paket-, Download- und Übertragungsabläufe, die ZIP-Daten erzeugen oder verarbeiten.\\
@@ -253,6 +253,8 @@ Dateisystem & Beschreibbare Speicherorte für Anwendungsdaten, Galerien, Cache u
 Webserver & Umschreibregeln nach Apache-Art werden für sprechende URLs empfohlen; das Routing über Abfrageparameter unterstützt kompatible Umgebungen ohne Umschreibregeln.\\
 \bottomrule
 \end{longtable}
+
+Die gepflegte Supportmatrix qualifiziert MySQL 8.4 LTS, MariaDB 10.11 LTS und MariaDB 11.4 LTS als unmittelbar in der vorgeschriebenen CI getestete Vertreter. Das kanonische Dokument führt MySQL 8.0 und MariaDB 10.4--10.10 als ältere Versionen mit Unterstützung nach bestem Bemühen auf; für sie gibt es weder einen vorgeschriebenen Datenbank-CI-Lauf noch eine projektseitige Regressions- oder Sicherheitszusage. Sie liegen außerhalb der gepflegten Qualifizierung. MySQL 5.7 und älter sowie MariaDB 10.3 und älter werden nicht unterstützt. Andere Datenbankserien bleiben unqualifiziert, bis sie direkt durch die vorgeschriebene CI abgedeckt sind; eine höhere Versionsnummer allein belegt keine Kompatibilität. Einzelheiten enthält \filepath{docs/DATABASE_SUPPORT.md}.
 
 Ausgehender HTTPS-Zugriff unterstützt Anwendungsaktualisierungen und entfernte Veröffentlichungsmetadaten. Lokaler Betrieb und manuell bereitgestellte Versionen können auch bei stärker eingeschränktem ausgehendem Zugriff funktionieren.\footnote{Die Netzwerkrichtlinie sollte den Aktualisierungs- und Datenschutzanforderungen des Installationsbetreibers folgen. Der Aktualisierungscode prüft Pakete und bewahrt Wiederherstellungsdaten entsprechend der lokalen Aktualisierungsimplementierung auf.}
 

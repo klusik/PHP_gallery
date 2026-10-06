@@ -38,6 +38,7 @@ namespace Gallery\Core;
 
 
 require_once __DIR__ . '/request_data.php';
+require_once __DIR__ . '/session_context.php';
 require_once __DIR__ . '/helpers_request.php';
 require_once __DIR__ . '/helpers_mutation.php';
 require_once __DIR__ . '/helpers_public_urls.php';

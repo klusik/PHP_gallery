@@ -19,10 +19,8 @@ declare(strict_types=1);
 use function Gallery\Services\gallery_title_completion_candidates;
 use function Gallery\Tests\title_completion_fixture_rows;
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 $titleCompletionFixturePath = dirname(__DIR__) . '/tests/support/gallery_title_completion_fixture.php';
 if (!is_file($titleCompletionFixturePath) || !is_readable($titleCompletionFixturePath)) {
     fwrite(STDERR, "BLOCKED: title completion benchmark requires a source checkout with its test fixtures; deployment packages exclude tests.\n");

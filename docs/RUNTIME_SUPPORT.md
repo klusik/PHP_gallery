@@ -82,13 +82,15 @@ An expired minimum produces an advisory; it never changes application access.
 ## CI coverage and evidence
 
 The existing `.github/workflows/gallery-workflows.yml` keeps central audit
-orchestration and defines four intentional environments plus a dedicated required
-Chromium job:
+orchestration and defines five intentional environments plus a dedicated required
+Chromium job. Database qualification details and current server lifecycle status
+are owned by [Database support](DATABASE_SUPPORT.md):
 
 | Job | PHP | Database | Title normalization | Verification owner |
 | --- | --- | --- | --- | --- |
-| Maintained minimum | 8.3 | Disposable MySQL 8.4 | `intl` + `mbstring`: NFKC/lowercase | Existing workflow provisioner, central full audit |
-| Newer maintained branch | 8.5 | Disposable MariaDB 11.4 | `intl` + `mbstring`: NFKC/lowercase | Existing workflow provisioner, central full audit |
+| MySQL representative | 8.3 | Disposable MySQL 8.4 LTS | `intl` + `mbstring`: NFKC/lowercase | Required real-database workflow and central audit |
+| Shared-hosting MariaDB representative | 8.3 | Disposable MariaDB 10.11 LTS | `intl` + `mbstring`: NFKC/lowercase | Required real-database workflow and central audit |
+| Newer MariaDB representative | 8.5 | Disposable MariaDB 11.4 LTS | `intl` + `mbstring`: NFKC/lowercase | Required real-database workflow and central audit |
 | Compatibility floor | 8.1 | No external database | `intl` + `mbstring`: NFKC/lowercase | Central full source audit |
 | Optional-extension fallback | 8.5 | No external database | `intl` disabled, `mbstring` present: ASCII only | Central full source audit |
 | Chromium browser fixtures | 8.3 | No external database | Node 22 and installed Chrome/Chromium | Required `browser-map` suite |
@@ -102,11 +104,22 @@ rather than in each matrix combination.
 
 This is not the Cartesian product of every PHP/database/extension combination.
 In particular PHP 8.4 is not a separate CI job, and the source-only jobs do not
-claim real-database/browser workflow coverage. The existing database jobs retain
-mandatory disposable workflows and their no-skip check. CI uses
+claim real-database/browser workflow coverage. Each of the three database/PHP
+tuples is an exact project-tested representative; it does not certify other
+combinations or make a newer vendor-maintained database series automatically
+qualified. All three database jobs retain mandatory disposable workflows and
+their no-skip check. CI uses
 `GALLERY_SESSION_REQUIRED=1` so the lightweight session fixture cannot silently skip.
 The actual-route follow-up below additionally needs the disposable database job;
 source-only jobs do not claim that coverage.
+
+The required database semantic fixture covers migration-created InnoDB/`utf8mb4`
+schema, vote `CHECK` behavior, JSON validation/extraction, and advisory
+`GET_LOCK()` behavior on both database families. The real-database workflow's
+concurrency scenarios exercise transactional row locking separately. The workflow
+provisioner grants only the disposable test account the temporary-table privilege
+needed by the fixture. This is test setup; normal Gallery installation credentials
+do not receive an additional privilege requirement.
 
 `runtime_normalization_environment_test.php` asserts that the actual installed
 capabilities match `GALLERY_RUNTIME_NORMALIZATION=unicode|ascii`; a mislabeled

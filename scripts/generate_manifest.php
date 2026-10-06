@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
+require_once dirname(__DIR__) . '/app/release_file_policy.php';
+
 /**
  * Generate the core integrity manifest for a PHP Gallery release.
  *
@@ -49,7 +54,13 @@ declare(strict_types=1);
  */
 function manifest_root_path(): string
 {
-    return dirname(__DIR__);
+    $requestedRoot = manifest_option_value('--root');
+    $root = realpath($requestedRoot ?? dirname(__DIR__));
+    if ($root === false || !is_dir($root)) {
+        fwrite(STDERR, "Manifest project root is unavailable.\n");
+        exit(1);
+    }
+    return $root;
 }
 
 /**
@@ -204,7 +215,7 @@ function manifest_ignored_patterns(): array
 /**
  * Return true when a relative path should be ignored by the manifest generator.
  *
- * @param string $relativePath Relative path filesystem path.
+ * @param string $relativePath Candidate project-relative path.
  * @return bool True when the condition matches.
  */
 function manifest_is_ignored_path(string $relativePath): bool
@@ -224,63 +235,36 @@ function manifest_is_ignored_path(string $relativePath): bool
  * Return true when a path is part of the immutable release surface.
  *
  * @param string $relativePath Relative path filesystem path.
+ * @param ?array<string,bool> $approvedProductionSet Optional positive membership set from the static inventory.
  * @return bool True when the condition matches.
  */
-function manifest_is_core_like_path(string $relativePath): bool
+function manifest_is_core_like_path(string $relativePath, ?array $approvedProductionSet = null): bool
 {
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = str_replace('\\', '/', ltrim($relativePath, '/'));
-    if ($normalizedPath === '' || manifest_is_ignored_path($normalizedPath)) {
+    if ($normalizedPath === '') {
         return false;
     }
 
-    // $allowedRootFiles stores an intermediate value used by the surrounding gallery workflow.
-    $allowedRootFiles = manifest_allowed_root_files();
-    if (isset($allowedRootFiles[$normalizedPath])) {
-        return true;
-    }
-
-    // $firstSegment stores an intermediate value used by the surrounding gallery workflow.
-    $firstSegment = explode('/', $normalizedPath, 2)[0];
-    if (!in_array($firstSegment, manifest_allowed_roots(), true)) {
-        return false;
-    }
-
-    // $extension stores an intermediate value used by the surrounding gallery workflow.
-    $extension = strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION));
-    // $basename stores an intermediate value used by the surrounding gallery workflow.
-    $basename = basename($normalizedPath);
-    // $allowedExtensions stores an intermediate value used by the surrounding gallery workflow.
-    $allowedExtensions = manifest_allowed_extensions();
-
-    return $basename === '.htaccess' || isset($allowedExtensions[$extension]);
+    $approvedProductionSet ??= array_fill_keys(\Gallery\Core\release_file_policy_paths(manifest_root_path()), true);
+    return isset($approvedProductionSet[$normalizedPath])
+        && \Gallery\Core\release_file_policy_is_integrity_path($normalizedPath);
 }
 
 /**
  * Return a sorted list of files that should be written into the manifest.
  *
  * @param string $rootPath Root path filesystem path.
- * @return array Structured result data for the caller.
+ * @return list<string> Sorted production files covered by normalized integrity hashes.
  */
 function manifest_discover_files(string $rootPath): array
 {
     // $files stores an intermediate value used by the surrounding gallery workflow.
     $files = [];
-    // $iterator stores an intermediate value used by the surrounding gallery workflow.
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS)
-    );
-
-    foreach ($iterator as $fileInfo) {
-        if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile()) {
-            continue;
-        }
-
-        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
-        $absolutePath = str_replace('\\', '/', $fileInfo->getPathname());
-        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = ltrim(substr($absolutePath, strlen(str_replace('\\', '/', $rootPath))), '/');
-        if (!manifest_is_core_like_path($relativePath)) {
+    $productionPaths = \Gallery\Core\release_file_policy_paths($rootPath);
+    $approvedProductionSet = array_fill_keys($productionPaths, true);
+    foreach ($productionPaths as $relativePath) {
+        if (!manifest_is_core_like_path($relativePath, $approvedProductionSet)) {
             continue;
         }
 
@@ -317,13 +301,16 @@ function manifest_hash_file(string $absolutePath): string
 
 /**
  * Print CLI usage information.
+ *
+ * @return void Writes supported options to standard output.
  */
 function manifest_print_usage(): void
 {
-    echo "Usage: php scripts/generate_manifest.php [--version=0.46] [--check]\n";
+    echo "Usage: php scripts/generate_manifest.php [--root=PATH] [--version=0.46] [--check]\n";
     echo "\n";
     echo "Options:\n";
     echo "  --version=VERSION  Override the version detected from app/bootstrap.php.\n";
+    echo "  --root=PATH        Read/write manifests under another project root.\n";
     echo "  --check            Exit with code 1 if the generated manifest differs.\n";
 }
 

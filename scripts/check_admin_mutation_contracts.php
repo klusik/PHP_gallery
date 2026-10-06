@@ -1,7 +1,4 @@
 <?php
-
-declare(strict_types=1);
-
 /**
  * Project: PHP Gallery
  * Repository: https://github.com/klusik/PHP_gallery
@@ -39,6 +36,11 @@ declare(strict_types=1);
  * Last Updated:
  *   2026-09-02
  */
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 $root = dirname(__DIR__);
 $failures = [];
@@ -154,6 +156,7 @@ $galleryEditActions = contract_file($root, 'app/controllers/admin_galleries_edit
 $publicInlineController = contract_file($root, 'app/controllers/admin_public_inline.php', $failures);
 $security = contract_file($root, 'app/security.php', $failures);
 $lightbox = contract_file($root, 'public/assets/gallery-modules/lightbox.js', $failures);
+$lightboxResources = contract_file($root, 'public/assets/gallery-modules/lightbox-resource-lifecycle.js', $failures);
 $routeNavdata = contract_file($root, 'public/assets/gallery-modules/admin-route-navdata.js', $failures);
 $navigationController = contract_file($root, 'app/controllers/navigation_data.php', $failures);
 
@@ -184,23 +187,27 @@ contract_forbid($coordinator, 'history.replaceState', 'Coordinator must not rewr
 // Public fragment replacement can re-run lightbox setup on parent gallery views that
 // contain no photo cards. Cleanup state referenced by the registered teardown callback
 // must therefore be initialized before setup can return early.
-contract_count($lightbox, 'let lightboxHiddenCleanupTimer = 0;', 1, 'Lightbox hidden cleanup timer must have exactly one lifecycle declaration.', $failures, $checks);
+contract_count($lightbox, 'let lightboxResources = null;', 1, 'Lightbox resource lifecycle must have exactly one setup owner.', $failures, $checks);
 contract_require_before(
     $lightbox,
-    'let lightboxHiddenCleanupTimer = 0;',
+    'let lightboxResources = null;',
     'galleryLightboxState.cleanup = () => {',
-    'Lightbox hidden cleanup timer is initialized after cleanup registration, recreating a teardown TDZ failure.',
+    'Lightbox resource owner is initialized after cleanup registration, recreating a teardown TDZ failure.',
     $failures,
     $checks
 );
 contract_require_before(
     $lightbox,
-    'let lightboxHiddenCleanupTimer = 0;',
+    'let lightboxResources = null;',
     'if (!overlay || cards.length === 0) {',
-    'Lightbox hidden cleanup timer is initialized after the no-lightbox early return.',
+    'Lightbox resource owner is initialized after the no-lightbox early return.',
     $failures,
     $checks
 );
+contract_forbid($lightbox, 'lightboxHiddenCleanupTimer', 'Hidden cleanup state must not be duplicated in the lightbox coordinator.', $failures, $checks);
+contract_require($lightbox, 'lightboxResources?.dispose();', 'Lightbox teardown must dispose its resource owner, including route-only setup.', $failures, $checks);
+contract_count($lightboxResources, 'let hiddenCleanupTimer = null;', 1, 'Hidden cleanup timer must have one resource lifecycle owner.', $failures, $checks);
+contract_require_before($lightboxResources, 'let hiddenCleanupTimer = null;', "signal?.addEventListener?.('abort', dispose", 'Resource cleanup state must exist before terminal abort can dispose it.', $failures, $checks);
 
 // Direct card observation is the strongest gallery-membership invariant. Aggregate
 // counts are only a fallback for targets that may legitimately live off-page.

@@ -13,10 +13,8 @@
 
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 $probes = require __DIR__ . '/audit_performance_registry.php';
 $probeId = (string) ($argv[1] ?? '');

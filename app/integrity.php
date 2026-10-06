@@ -36,10 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
+require_once __DIR__ . '/release_file_policy.php';
+
 use function Gallery\Services\t;
 
 const CMS_INTEGRITY_CACHE_TTL = 86400;
@@ -212,95 +210,24 @@ function integrity_load_manifest(): array
 }
 
 /**
- * Return a sorted list of core-like files currently present in the installation.
+ * Discover diagnostic candidates within canonical updater-owned source surfaces.
  *
- * @return array Structured result data for the caller.
+ * Unknown candidates remain diagnostics; discovery never admits them to a package.
+ *
+ * @return list<string> Existing safe paths eligible for the shared integrity hash rule.
  */
 function integrity_discover_core_like_files(): array
 {
-    // $rootPath stores an intermediate value used by the surrounding gallery workflow.
-    $rootPath = integrity_root_path();
-    // $allowedRoots stores an intermediate value used by the surrounding gallery workflow.
-    $allowedRoots = [
-        'app',
-        'database',
-        'public',
-        'scripts',
-    ];
-    // $allowedRootFiles stores an intermediate value used by the surrounding gallery workflow.
-    $allowedRootFiles = [
-        '.htaccess' => true,
-        'index.php' => true,
-        'install.php' => true,
-        'reset.php' => true,
-        'deploy.bat' => true,
-        'README.md' => true,
-        'PATCH_NOTES.md' => true,
-        'ARCHITECTURE.md' => true,
-    ];
-    // $allowedExtensions stores an intermediate value used by the surrounding gallery workflow.
-    $allowedExtensions = [
-        'php' => true,
-        'js' => true,
-        'css' => true,
-        'md' => true,
-        'bat' => true,
-        'ps1' => true,
-        'htaccess' => true,
-    ];
-
-    // $files stores an intermediate value used by the surrounding gallery workflow.
-    $files = [];
-    // $iterator stores an intermediate value used by the surrounding gallery workflow.
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS)
-    );
-
-    foreach ($iterator as $fileInfo) {
-        if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile()) {
-            continue;
-        }
-
-        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
-        $absolutePath = str_replace('\\', '/', $fileInfo->getPathname());
-        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = ltrim(substr($absolutePath, strlen(str_replace('\\', '/', $rootPath))), '/');
-        if ($relativePath === '') {
-            continue;
-        }
-
-        // $firstSegment stores an intermediate value used by the surrounding gallery workflow.
-        $firstSegment = explode('/', $relativePath, 2)[0];
-        if (isset($allowedRootFiles[$relativePath])) {
-            $files[] = $relativePath;
-            continue;
-        }
-
-        if (!in_array($firstSegment, $allowedRoots, true)) {
-            continue;
-        }
-
-        if (integrity_is_ignored_unknown_path($relativePath)) {
-            continue;
-        }
-
-        // $extension stores an intermediate value used by the surrounding gallery workflow.
-        $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
-        // $basename stores an intermediate value used by the surrounding gallery workflow.
-        $basename = basename($relativePath);
-        if ($basename === '.htaccess' || isset($allowedExtensions[$extension])) {
-            $files[] = $relativePath;
-        }
-    }
-
-    sort($files, SORT_STRING);
-    return $files;
+    return array_values(array_filter(
+        release_file_policy_archive_owned_candidates(integrity_root_path()),
+        static fn(string $path): bool => release_file_policy_is_integrity_path($path)
+    ));
 }
 
 /**
  * Calculate the current integrity status against the manifest.
  *
- * @return array Structured result data for the caller.
+ * @return array{checked_at:int,checked_at_iso:string,status:string,version:string,hash_mode:string,manifest_fingerprint:string,manifest_error:string,modified:list<string>,missing:list<string>,unknown:list<string>,ignored_unknown_count:int} Bounded integrity status and relative diagnostic paths.
  */
 function integrity_calculate_status(): array
 {
@@ -360,7 +287,14 @@ function integrity_calculate_status(): array
         array_keys($manifestFiles)
     ), true);
 
-    foreach (integrity_discover_core_like_files() as $relativePath) {
+    try {
+        $diagnosticPaths = integrity_discover_core_like_files();
+    } catch (\RuntimeException) {
+        $status['status'] = 'error';
+        $status['manifest_error'] = 'Production file ownership could not be inspected safely.';
+        return $status;
+    }
+    foreach ($diagnosticPaths as $relativePath) {
         if (isset($manifestPathSet[$relativePath])) {
             continue;
         }

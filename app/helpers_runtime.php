@@ -98,20 +98,27 @@ use function Gallery\Views\view_render_meta_tag;
 use function Gallery\Views\view_render_missing_admin_email_notice;
 use function Gallery\Views\view_render_public_seo_tags;
 
+require_once __DIR__ . '/request_data.php';
+require_once __DIR__ . '/session_context.php';
+
 /**
- * Resolve public asset paths for either repository-root or public/ web roots.
+ * Resolve public asset paths for repository-root and public/ web-root requests.
+ *
+ * @param string $path Asset path relative to the public asset root.
+ * @return string URL selected for the active deployment document root.
  */
 function asset_url(string $path): string
 {
     // Variable $path stores this steps working value.
     $path = ltrim($path, '/');
     // Variable $script stores this steps working value.
-    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $server = request_data('server');
+    $script = str_replace('\\', '/', (string) ($server['SCRIPT_NAME'] ?? ''));
     if (str_ends_with($script, '/public/index.php')) {
         return base_url('public/' . $path);
     }
     // Variable $scriptFile stores this steps working value.
-    $scriptFile = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    $scriptFile = str_replace('\\', '/', (string) ($server['SCRIPT_FILENAME'] ?? ''));
     if (str_ends_with($scriptFile, '/public/index.php')) {
         return base_url($path);
     }
@@ -166,35 +173,51 @@ function redirect_to(string $url): never
 }
 
 /**
- * Store or retrieve a one-time flash message in the active session.
+ * Store or consume one flash message when a PHP session is already active.
+ *
+ * Inactive sessions preserve the historical return behavior and never create
+ * session state. Active reads consume only the requested message key.
+ *
+ * @param string $key Stable flash-message key within the session message bag.
+ * @param ?string $message Optional message to store; null requests consumption.
+ * @return ?string Consumed message, or the supplied message when storage is inactive.
  */
 function flash_message(string $key, ?string $message = null): ?string
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
+    if (!session_context_active()) {
         return $message;
     }
 
+    $messages = session_context_get('flash_messages');
+    if (!is_array($messages)) {
+        $messages = [];
+    }
     if ($message !== null) {
-        $_SESSION['flash_messages'][$key] = $message;
+        $messages[$key] = $message;
+        session_context_set('flash_messages', $messages);
         return null;
     }
 
-    if (!isset($_SESSION['flash_messages'][$key])) {
+    if (!isset($messages[$key])) {
         return null;
     }
 
     // $value stores an intermediate value used by the surrounding gallery workflow.
-    $value = (string) $_SESSION['flash_messages'][$key];
-    unset($_SESSION['flash_messages'][$key]);
+    $value = (string) $messages[$key];
+    unset($messages[$key]);
+    session_context_set('flash_messages', $messages);
     return $value;
 }
 
 /**
- * Normalize the current HTTP method for simple route guards.
+ * Return the normalized HTTP method for request and route guards.
+ *
+ * @return string Uppercase request method, defaulting to GET when unavailable.
  */
 function request_method(): string
 {
-    return strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $server = request_data('server');
+    return strtoupper((string) ($server['REQUEST_METHOD'] ?? 'GET'));
 }
 
 /**

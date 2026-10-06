@@ -36,9 +36,11 @@ declare(strict_types=1);
 
 use function Gallery\Core\run_migrations;
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
 require __DIR__ . '/../app/bootstrap_full.php';
 
 // Variable $ran stores this steps working value.
 $ran = run_migrations();
 echo $ran ? "Applied migrations:\n" . implode("\n", $ran) . "\n" : "No pending migrations.\n";
-

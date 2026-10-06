@@ -42,6 +42,17 @@ Anonymous functions, closures, arrow functions, and inline or variable-bound cal
 
 File attribution headers, native signature typing, operational-policy comments, and parser coverage checks remain separate requirements. `scripts/check_source_documentation.php` and the historical named-function presence test must apply the same anonymous-function exemption.
 
+## Compatibility Lifecycle
+
+New or materially changed compatibility/fallback branches need a reason, a
+concrete protected behavior/version/environment, an owning component, and a safe
+retirement condition or permanent-support rationale in the change description.
+Record high-impact paths in `docs/COMPATIBILITY_LIFECYCLE.md` with regression
+evidence and measurable usage or an explicit `unknown`. Do not infer introduction
+versions or usage from a path's age. Preserve behavior until its retirement proof
+covers migration, supported clients/data, and acceptance requirements. This is a
+review convention; do not add a branch parser or blanket expiry dates.
+
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 

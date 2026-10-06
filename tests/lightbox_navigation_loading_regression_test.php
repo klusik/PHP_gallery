@@ -62,7 +62,7 @@ lightbox_navigation_loading_assert(
 );
 
 $resetStart = strpos($lightboxSource, 'function resetLightboxPreloadQueue(options = {})');
-$resetEnd = strpos($lightboxSource, 'function clearLightboxHiddenCleanupTimer()', $resetStart === false ? 0 : $resetStart);
+$resetEnd = strpos($lightboxSource, 'function handleLightboxVisibilityChange()', $resetStart === false ? 0 : $resetStart);
 lightbox_navigation_loading_assert($resetStart !== false && $resetEnd !== false, 'Preload reset helper with lifecycle options is missing.');
 $resetSource = substr($lightboxSource, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
 lightbox_navigation_loading_assert(

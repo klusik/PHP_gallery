@@ -241,7 +241,7 @@ Součást & Požadavek\\
 \midrule
 \endhead
 PHP & Verze 8.1 nebo novější.\\
-Databáze & MySQL 5.7 nebo novější, případně MariaDB 10.2 nebo novější.\\
+Databáze & MySQL 8.4 LTS, MariaDB 10.11 LTS nebo MariaDB 11.4 LTS.\\
 PDO & Rozšíření PDO MySQL pro dotazy aplikace a~migrace.\\
 Zpracování obrázků & GD pro běžné generování náhledů. Další místní nástroje mohou podporovat specializované formáty obrázků.\\
 Archivy & ZipArchive pro pracovní postupy s~balíčky, stahováním a~přenosem, které vytvářejí nebo zpracovávají data ZIP.\\
@@ -249,6 +249,8 @@ Souborový systém & Zapisovatelná umístění pro data aplikace, galerie, mezi
 Webový server & Pro čisté adresy URL se doporučuje přepisování ve stylu Apache; směrování pomocí parametrů dotazu podporuje kompatibilní prostředí bez přepisování.\\
 \bottomrule
 \end{longtable}
+
+Udržovaná matice podpory kvalifikuje MySQL 8.4 LTS, MariaDB 10.11 LTS a MariaDB 11.4 LTS jako zástupce přímo testované v povinném CI. Kanonický dokument uvádí MySQL 8.0 a MariaDB 10.4--10.10 jako starší řady s podporou podle nejlepšího úsilí, bez povinného databázového CI a bez projektové regresní či bezpečnostní záruky; tyto řady jsou mimo udržovanou kvalifikaci. MySQL 5.7 a starší a MariaDB 10.3 a starší nejsou podporovány. Jiné řady zůstávají nekvalifikované, dokud je přímo nepokryje povinné CI; vyšší číslo verze samo o sobě kompatibilitu nezaručuje. Podrobnosti uvádí \filepath{docs/DATABASE_SUPPORT.md}.
 
 Odchozí přístup HTTPS podporuje aktualizace aplikace a~vzdálená metadata vydání. Místní provoz a~ručně nasazená vydání mohou fungovat i~s~přísnějším omezením odchozích spojení.\footnote{Síťová pravidla by měla odpovídat požadavkům vlastníka instalace na aktualizace a~soukromí. Aktualizační kód ověřuje balíčky a~uchovává data pro obnovu podle místní implementace aktualizátoru.}
 

@@ -32,6 +32,12 @@ architecture documentation before changing code. In particular:
 - Keep changes focused. Do not include local configuration, credentials,
   uploads, caches, generated deployment archives, or unrelated formatting
   changes.
+- For a new or materially changed compatibility branch, explain its reason,
+  protected behavior/version/environment, owner, and safe retirement condition
+  or permanent-support rationale in the change description. Record high-impact
+  paths in [the compatibility registry](docs/COMPATIBILITY_LIFECYCLE.md).
+  Mark unmeasured usage and uncertain dates as unknown; removal needs evidence
+  that the recorded condition is met.
 
 ## Verification
 
@@ -49,6 +55,13 @@ maintainer release preparation. Read [TESTING.md](TESTING.md) for audit scope,
 environment requirements, and manual acceptance boundaries. If a required
 runtime or optional integration is unavailable, say so and include the audit's
 reported status; do not describe skipped coverage as passed.
+
+Full/release audits enforce historical source debt by stable categories through
+the existing inventory. Reliable counts may decrease; they must not exceed their
+reviewed caps. New categories start with zero allowance. Only the three documented
+noisy policy heuristics remain advisory. See [source debt maintenance](TESTING.md#source-debt-category-budgets)
+for the explicit decrease-only refresh workflow. Do not reset or inflate budgets
+to pass an audit; preserve meaningful existing documentation when moving code.
 
 ## Pull requests
 

@@ -252,8 +252,8 @@ function dng_display_master_filename(array $image): string
 /**
  * Return the absolute generated WebP master path for one DNG source.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image row or image data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
  * @param bool $create Create value.
  * @return string Text result for the caller.
  */
@@ -283,8 +283,8 @@ function image_source_mime_for_derivatives(string $sourcePath, array $image = []
 /**
  * Return the file that public media routes are allowed to stream for visible display.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image row or image data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
  * @param bool $createIfMissing Create if missing value.
  * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
  */
@@ -319,10 +319,17 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
         ];
     }
 
-    // $finfo stores an intermediate value used by the surrounding gallery workflow.
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    // $mime stores an intermediate value used by the surrounding gallery workflow.
-    $mime = (string) ($finfo->file($sourcePath) ?: mime_content_type($sourcePath));
+    // Header inspection avoids PHP 8.5 fileinfo's 7 MiB read buffer for common raster sources.
+    $headerMime = image_source_mime_for_derivatives($sourcePath, $image);
+    $fastMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (in_array($headerMime, $fastMimeTypes, true)) {
+        $mime = $headerMime;
+    } else {
+        // Keep fileinfo's historical MIME aliases and coverage for other image and legacy formats.
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        // $mime stores an intermediate value used by the surrounding gallery workflow.
+        $mime = (string) ($finfo->file($sourcePath) ?: mime_content_type($sourcePath));
+    }
     if (!str_starts_with($mime, 'image/')) {
         return image_public_display_derivative_fallback_file($image, $gallery);
     }

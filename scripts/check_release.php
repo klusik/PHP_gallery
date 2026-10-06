@@ -40,10 +40,8 @@ use function PhpGallery\Release\detect_cms_version;
 use function PhpGallery\Release\project_root;
 use function PhpGallery\Release\valid_version;
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 require_once __DIR__ . '/release_lib.php';
 

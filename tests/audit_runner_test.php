@@ -99,7 +99,15 @@ foreach (['quick', 'full', 'release'] as $profile) {
 
 $phpRegistry = require dirname(__DIR__) . '/scripts/audit_php_registry.php';
 $quickTests = $phpRegistry['quick_tests'];
-audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= 40 && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
+/**
+ * Bound the explicit feedback subset while admitting the three fast source-debt/base fixtures.
+ * @var int Units: registered test cases. Scope: central quick registry contract.
+ * Consumers: curated feedback cardinality assertion below.
+ * Rationale: the reviewed subset now has 43 cases; these pure/small Git fixtures
+ * add about one second, while whole-tree inventory and slow suites remain excluded.
+ */
+const QUICK_REGISTRY_CASE_LIMIT = 44;
+audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= QUICK_REGISTRY_CASE_LIMIT && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
 foreach ($quickTests as $testName) {
     audit_test_assert(basename($testName) === $testName && is_file(__DIR__ . '/' . $testName), 'Every curated PHP entry must identify an existing standalone test.');
 }

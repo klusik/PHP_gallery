@@ -1,0 +1,129 @@
+{
+    "schema_version": 1,
+    "scope": "runtime-plan-route-ratchet",
+    "captured_at": "2026-10-05T20:49:17+00:00",
+    "source": "Post-composition schema-2 plan structure; live counters from qualified pre-issue-79 disposable MySQL routes.",
+    "php_version": "8.3.30",
+    "generated_plan_sha256": "02752e64a7d2e34023da596a4aeca21e43cfc61fd78f6a9cbcc07c2b8f99e38a",
+    "allowances": {
+        "plan_and_included_files": "4 files or 5 percent, whichever is larger",
+        "transitive_module_count": "2 modules above the reviewed post-composition baseline",
+        "root_module_and_count": "must remain unchanged",
+        "direct_duplicate_file_entries": "no growth beyond the reviewed post-composition baseline",
+        "peak_memory_bytes": 4194304,
+        "wall_ms": "observational only"
+    },
+    "plan": {
+        "module_count": 93,
+        "direct_file_entries": 4110,
+        "unique_direct_file_count": 410,
+        "direct_duplicate_file_entries": 3700
+    },
+    "pre_refactor_plan": {
+        "module_count": 93,
+        "direct_file_entries": 6565,
+        "unique_direct_file_count": 410,
+        "direct_duplicate_file_entries": 6155
+    },
+    "routes": {
+        "admin": {
+            "root_module": "domain-admin-dashboard",
+            "root_count": 1,
+            "transitive_module_count": 3,
+            "plan_file_count": 141,
+            "shared_file_count": 141,
+            "direct_file_entries": 141,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 207,
+            "peak_memory_bytes": 20971520
+        },
+        "admin_denied": {
+            "root_module": "domain-admin-dashboard",
+            "root_count": 1,
+            "transitive_module_count": 3,
+            "plan_file_count": 141,
+            "shared_file_count": 141,
+            "direct_file_entries": 141,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 207,
+            "peak_memory_bytes": 18874368
+        },
+        "admin_telemetry": {
+            "root_module": "domain-admin-telemetry",
+            "root_count": 1,
+            "transitive_module_count": 3,
+            "plan_file_count": 77,
+            "shared_file_count": 77,
+            "direct_file_entries": 77,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 133,
+            "peak_memory_bytes": 12582912
+        },
+        "admin_telemetry_denied": {
+            "root_module": "domain-admin-telemetry",
+            "root_count": 1,
+            "transitive_module_count": 3,
+            "plan_file_count": 77,
+            "shared_file_count": 77,
+            "direct_file_entries": 77,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 133,
+            "peak_memory_bytes": 12582912
+        },
+        "gallery": {
+            "root_module": "public-gallery",
+            "root_count": 1,
+            "transitive_module_count": 5,
+            "plan_file_count": 156,
+            "shared_file_count": 122,
+            "direct_file_entries": 156,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 245,
+            "peak_memory_bytes": 18874368
+        },
+        "home": {
+            "root_module": "public-home",
+            "root_count": 1,
+            "transitive_module_count": 4,
+            "plan_file_count": 109,
+            "shared_file_count": 109,
+            "direct_file_entries": 109,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 175,
+            "peak_memory_bytes": 16777216
+        },
+        "media": {
+            "root_module": "public-media",
+            "root_count": 1,
+            "transitive_module_count": 5,
+            "plan_file_count": 81,
+            "shared_file_count": 81,
+            "direct_file_entries": 81,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 138,
+            "peak_memory_bytes": 14680064
+        },
+        "robots": {
+            "root_module": "public-robots",
+            "root_count": 1,
+            "transitive_module_count": 1,
+            "plan_file_count": 3,
+            "shared_file_count": 3,
+            "direct_file_entries": 3,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 92,
+            "peak_memory_bytes": 10485760
+        },
+        "thumb": {
+            "root_module": "public-thumbnails",
+            "root_count": 1,
+            "transitive_module_count": 5,
+            "plan_file_count": 87,
+            "shared_file_count": 86,
+            "direct_file_entries": 87,
+            "direct_duplicate_file_entries": 0,
+            "included_php_files": 142,
+            "peak_memory_bytes": 12582912
+        }
+    }
+}

@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once dirname(__DIR__) . '/session_context.php';
+
 use PDOException;
 use RuntimeException;
 use Throwable;
@@ -45,6 +47,9 @@ use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\current_user;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\session_context_get;
+use function Gallery\Core\session_context_remove;
+use function Gallery\Core\session_context_set;
 use function Gallery\Core\url_for;
 use function Gallery\Models\navigation_data_model_account;
 use function Gallery\Models\navigation_data_model_account_delete;
@@ -591,18 +596,18 @@ function navigation_data_navigraph_connected(): bool
 /**
  * Return the stored Navigraph session data.
  *
- * @return array<string mixed>.
+ * @return array<string,mixed> Current in-memory or hydrated Navigraph account state.
  */
 function navigation_data_navigraph_session(): array
 {
-    $session = $_SESSION['navigation_data_navigraph'] ?? [];
+    $session = session_context_get('navigation_data_navigraph') ?? [];
     if (is_array($session) && (trim((string) ($session['access_token'] ?? '')) !== '' || trim((string) ($session['refresh_token'] ?? '')) !== '')) {
         return $session;
     }
 
     $storedSession = navigation_data_navigraph_load_account_session();
     if ($storedSession !== []) {
-        $_SESSION['navigation_data_navigraph'] = $storedSession;
+        session_context_set('navigation_data_navigraph', $storedSession);
         return $storedSession;
     }
 
@@ -612,7 +617,8 @@ function navigation_data_navigraph_session(): array
 /**
  * Store Navigraph session data after token exchange or refresh.
  *
- * @param array $tokenPayload Token payload value.
+ * @param array<string,mixed> $tokenPayload Decoded token response fields supplied by the provider.
+ * @return void Does not return a value.
  */
 function navigation_data_navigraph_store_tokens(array $tokenPayload): void
 {
@@ -633,7 +639,7 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
         $claims = navigation_data_jwt_payload($idToken);
     }
 
-    $_SESSION['navigation_data_navigraph'] = [
+    $storedSession = [
         'access_token' => $accessToken,
         'refresh_token' => $refreshToken !== '' ? $refreshToken : (string) ($previousSession['refresh_token'] ?? ''),
         'id_token' => $idToken !== '' ? $idToken : (string) ($previousSession['id_token'] ?? ''),
@@ -648,18 +654,21 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
         'updated_at' => now_sql(),
     ];
 
+    session_context_set('navigation_data_navigraph', $storedSession);
     if ($persistentStorageAvailable) {
-        navigation_data_navigraph_persist_session($_SESSION['navigation_data_navigraph']);
+        navigation_data_navigraph_persist_session($storedSession);
     }
 }
 
 /**
- * Clear the Navigraph token set from the current session.
+ * Delete persisted Navigraph credentials and clear their two session values.
+ *
+ * @return void Does not return a value.
  */
 function navigation_data_navigraph_disconnect(): void
 {
     navigation_data_navigraph_delete_account_session();
-    unset($_SESSION['navigation_data_navigraph'], $_SESSION['navigation_data_navigraph_oauth']);
+    session_context_remove('navigation_data_navigraph', 'navigation_data_navigraph_oauth');
 }
 
 /**
@@ -998,11 +1007,11 @@ function navigation_data_navigraph_authorization_url(): string
     $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
     $redirectUri = navigation_data_navigraph_redirect_uri();
 
-    $_SESSION['navigation_data_navigraph_oauth'] = [
+    session_context_set('navigation_data_navigraph_oauth', [
         'state' => $state,
         'verifier' => $verifier,
         'created_at' => time(),
-    ];
+    ]);
 
     $query = http_build_query([
         'client_id' => (string) $config['client_id'],
@@ -1020,12 +1029,14 @@ function navigation_data_navigraph_authorization_url(): string
 /**
  * Exchange an OAuth code for Navigraph tokens and store them in the session.
  *
- * @param string $code Code value.
- * @param string $state State value.
+ * @param string $code Authorization code returned by the provider.
+ * @param string $state OAuth state value returned by the provider.
+ * @param callable(string,array<string,string>,int):string|null $postForm Optional HTTP form transport; null uses the production HTTP adapter.
+ * @return void Does not return a value.
  */
-function navigation_data_navigraph_exchange_code(string $code, string $state): void
+function navigation_data_navigraph_exchange_code(string $code, string $state, ?callable $postForm = null): void
 {
-    $oauth = $_SESSION['navigation_data_navigraph_oauth'] ?? [];
+    $oauth = session_context_get('navigation_data_navigraph_oauth') ?? [];
     if (!is_array($oauth) || !hash_equals((string) ($oauth['state'] ?? ''), $state)) {
         throw new RuntimeException('Navigraph login state did not match. Start the connection again.');
     }
@@ -1047,14 +1058,16 @@ function navigation_data_navigraph_exchange_code(string $code, string $state): v
         $fields['client_secret'] = (string) $config['client_secret'];
     }
 
-    $response = navigation_data_http_post_form((string) $config['token_endpoint'], $fields, 30);
+    $response = $postForm !== null
+        ? $postForm((string) $config['token_endpoint'], $fields, 30)
+        : navigation_data_http_post_form((string) $config['token_endpoint'], $fields, 30);
     $payload = json_decode($response, true);
     if (!is_array($payload) || trim((string) ($payload['access_token'] ?? '')) === '') {
         throw new RuntimeException('Navigraph token response did not contain an access token.');
     }
 
     navigation_data_navigraph_store_tokens($payload);
-    unset($_SESSION['navigation_data_navigraph_oauth']);
+    session_context_remove('navigation_data_navigraph_oauth');
 }
 
 /**
@@ -1104,7 +1117,7 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
 /**
  * Refresh the cached Navigraph package metadata for the current session.
  *
- * @return array<string mixed>.
+ * @return array{cycle:string,status:string,format:string,file_count:int} Selected package summary after its account cache has been updated and persisted.
  */
 function navigation_data_navigraph_refresh_packages(): array
 {
@@ -1138,12 +1151,13 @@ function navigation_data_navigraph_refresh_packages(): array
         throw new RuntimeException('Navigraph packages response did not contain a usable package.');
     }
 
-    $_SESSION['navigation_data_navigraph'] = navigation_data_navigraph_session() + [];
-    $_SESSION['navigation_data_navigraph']['package_cycle'] = (string) ($bestPackage['cycle'] ?? '');
-    $_SESSION['navigation_data_navigraph']['package_status'] = (string) ($bestPackage['package_status'] ?? '');
-    $_SESSION['navigation_data_navigraph']['package_format'] = (string) ($bestPackage['format'] ?? '');
-    $_SESSION['navigation_data_navigraph']['package_checked_at'] = now_sql();
-    navigation_data_navigraph_persist_session($_SESSION['navigation_data_navigraph']);
+    $session = navigation_data_navigraph_session();
+    $session['package_cycle'] = (string) ($bestPackage['cycle'] ?? '');
+    $session['package_status'] = (string) ($bestPackage['package_status'] ?? '');
+    $session['package_format'] = (string) ($bestPackage['format'] ?? '');
+    $session['package_checked_at'] = now_sql();
+    session_context_set('navigation_data_navigraph', $session);
+    navigation_data_navigraph_persist_session($session);
 
     return [
         'cycle' => (string) ($bestPackage['cycle'] ?? ''),

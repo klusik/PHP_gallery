@@ -71,6 +71,11 @@ $explicitUpgradeSource = ($explicitUpgradeStart !== false && $explicitUpgradeEnd
     : '';
 $trackedDownloadStartPosition = strpos($explicitUpgradeSource, 'loadTrackedDecodedLightboxImage(fullSrc, {');
 $explicitInstallPosition = strpos($explicitUpgradeSource, 'installDecodedLightboxQualityImage(loadedImage, fullSrc');
+$liveOriginalAssignmentPosition = strpos($explicitUpgradeSource, 'requestImage.src = fullSrc;');
+$liveImageOwnershipPosition = strpos($explicitUpgradeSource, 'image.dataset.lightboxImageId = imageId;');
+$qualityOwnershipPosition = strpos($explicitUpgradeSource, 'activeLightboxQualityAbortController = qualityAbortController;');
+$failureRestorePosition = strpos($explicitUpgradeSource, 'const restoreProtectedPreviewIfCurrent = () =>');
+$liveErrorAbortPosition = strpos($explicitUpgradeSource, 'qualityAbortController.abort();', $failureRestorePosition === false ? 0 : $failureRestorePosition);
 $setZoomStart = strpos($lightboxSource, 'function setLightboxZoomScale(');
 $setZoomEnd = $setZoomStart === false ? false : strpos($lightboxSource, 'function resetLightboxZoom(', $setZoomStart);
 $setZoomSource = ($setZoomStart !== false && $setZoomEnd !== false)
@@ -83,7 +88,22 @@ lightbox_zoom_quality_lifecycle_assert(
     $setZoomRequestPosition !== false
         && $setZoomRenderPosition !== false
         && $setZoomRequestPosition < $setZoomRenderPosition,
-    'Discrete zoom must assign the original source before enlarging the preview layout, while retaining the pre-source-change geometry.'
+    'Discrete zoom must complete its same-task source promotion before enlarging the preview layout, while retaining pre-source-change geometry.'
+);
+
+lightbox_zoom_quality_lifecycle_assert(
+    $liveImageOwnershipPosition !== false
+        && $qualityOwnershipPosition !== false
+        && $liveOriginalAssignmentPosition !== false
+        && $trackedDownloadStartPosition !== false
+        && $liveImageOwnershipPosition < $qualityOwnershipPosition
+        && $qualityOwnershipPosition < $liveOriginalAssignmentPosition
+        && $liveOriginalAssignmentPosition < $trackedDownloadStartPosition
+        && str_contains($explicitUpgradeSource, 'requestImage.addEventListener(\'error\', onLiveQualityImageError')
+        && str_contains($explicitUpgradeSource, 'requestImage.removeEventListener(\'error\', onLiveQualityImageError)')
+        && $failureRestorePosition !== false
+        && $liveErrorAbortPosition !== false,
+    'Deliberate zoom must assign the active authorized original synchronously after ownership is established, before tracked Fetch/decode, and restore the protected preview immediately on a current live-node error.'
 );
 
 lightbox_zoom_quality_lifecycle_assert(
@@ -91,6 +111,10 @@ lightbox_zoom_quality_lifecycle_assert(
         && str_contains($explicitUpgradeSource, "const fullSrc = String(card?.dataset.fullSrc || '').trim();")
         && str_contains($explicitUpgradeSource, 'activeLightboxTransitionToken += 1;')
         && str_contains($explicitUpgradeSource, 'removeTransitionImage();')
+        && !str_contains($explicitUpgradeSource, 'failedLightboxQualitySources.has(failureKey)')
+        && str_contains($explicitUpgradeSource, 'pendingLightboxQualitySource === fullSrc')
+        && str_contains($explicitUpgradeSource, 'image.dataset.lightboxExplicitZoomQuality === imageId')
+        && str_contains($explicitUpgradeSource, 'if (image.getAttribute(\'src\') !== fullSrc)')
         && str_contains($lightboxSource, 'delete image.dataset.lightboxExplicitZoomQuality;')
         && str_contains($explicitUpgradeSource, 'image.dataset.lightboxExplicitZoomQuality = imageId;')
         && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');")

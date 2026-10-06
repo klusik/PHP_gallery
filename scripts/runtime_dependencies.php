@@ -18,6 +18,9 @@ declare(strict_types=1);
 
 namespace Gallery\Tools\RuntimeDependencies;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 /**
  * Return a normalized repository-relative path using forward slashes.
  *

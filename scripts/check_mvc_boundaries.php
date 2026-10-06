@@ -44,6 +44,9 @@ namespace PhpGallery\MvcBoundary;
 
 use RuntimeException;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 const DEFAULT_BASELINE = 'scripts/mvc_boundary_baseline.json';
 
 /**
@@ -180,6 +183,805 @@ function token_is_function_call(array $tokens, int $index): bool
 }
 
 /**
+ * Return the previous non-whitespace, non-comment token index.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $index Current token index.
+ * @return ?int Previous significant token index.
+ */
+function previous_significant_token_index(array $tokens, int $index): ?int
+{
+    for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
+        $token = $tokens[$cursor];
+        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+        return $cursor;
+    }
+    return null;
+}
+
+/**
+ * Return the enclosing named/anonymous function range for one token.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $targetIndex Token index to locate.
+ * @return array{start:int,end:int}|null Callable source range, or null outside a callable.
+ */
+function callable_scope_for_token(array $tokens, int $targetIndex): ?array
+{
+    $selected = null;
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || $token[0] !== T_FUNCTION) {
+            continue;
+        }
+        $parameterDepth = 0;
+        $bodyOpen = null;
+        for ($cursor = $index + 1, $count = count($tokens); $cursor < $count; $cursor++) {
+            $candidate = $tokens[$cursor];
+            if ($candidate === '(') {
+                $parameterDepth++;
+            } elseif ($candidate === ')') {
+                $parameterDepth--;
+            } elseif ($parameterDepth === 0 && $candidate === ';') {
+                break;
+            } elseif ($parameterDepth === 0 && $candidate === '{') {
+                $bodyOpen = $cursor;
+                break;
+            }
+        }
+        if ($bodyOpen === null || $bodyOpen >= $targetIndex) {
+            continue;
+        }
+        $braceDepth = 0;
+        $bodyClose = null;
+        for ($cursor = $bodyOpen; $cursor < count($tokens); $cursor++) {
+            if ($tokens[$cursor] === '{') {
+                $braceDepth++;
+            } elseif ($tokens[$cursor] === '}') {
+                $braceDepth--;
+                if ($braceDepth === 0) {
+                    $bodyClose = $cursor;
+                    break;
+                }
+            }
+        }
+        if ($bodyClose !== null && $targetIndex < $bodyClose
+            && ($selected === null || $index > $selected['start'])) {
+            $selected = ['start' => $index, 'end' => $bodyClose];
+        }
+    }
+    return $selected;
+}
+
+/**
+ * Return the parameter and expression range for an enclosing arrow function.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $targetIndex Token index to locate.
+ * @return array{start:int,parameter_end:int,end:int}|null Arrow range, or null.
+ */
+function arrow_scope_for_token(array $tokens, int $targetIndex): ?array
+{
+    $selected = null;
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || $token[0] !== T_FN) {
+            continue;
+        }
+        $open = next_significant_token_index($tokens, $index);
+        if ($open === null || $tokens[$open] !== '(') {
+            continue;
+        }
+        $close = matching_token_index($tokens, $open, '(', ')', count($tokens));
+        if ($close === null) {
+            continue;
+        }
+        $arrow = next_significant_token_index($tokens, $close);
+        while ($arrow !== null && $arrow < count($tokens)
+            && (!is_array($tokens[$arrow]) || $tokens[$arrow][0] !== T_DOUBLE_ARROW)) {
+            $arrow = next_significant_token_index($tokens, $arrow);
+        }
+        if ($arrow === null) {
+            continue;
+        }
+        $end = arrow_expression_end($tokens, $arrow + 1);
+        if ($targetIndex > $arrow && $targetIndex < $end
+            && ($selected === null || $index > $selected['start'])) {
+            $selected = ['start' => $index, 'parameter_end' => $close, 'end' => $end];
+        }
+    }
+    return $selected;
+}
+
+/**
+ * Find the matching delimiter in a token stream.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $openIndex Opening delimiter index.
+ * @param string $open Opening delimiter.
+ * @param string $close Closing delimiter.
+ * @param int $limit Exclusive search limit.
+ * @return ?int Matching closing delimiter index.
+ */
+function matching_token_index(array $tokens, int $openIndex, string $open, string $close, int $limit): ?int
+{
+    $depth = 0;
+    for ($index = $openIndex; $index < $limit; $index++) {
+        if ($tokens[$index] === $open) {
+            $depth++;
+        } elseif ($tokens[$index] === $close && --$depth === 0) {
+            return $index;
+        }
+    }
+    return null;
+}
+
+/**
+ * Find the end of an arrow expression at the current nesting level.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $start Expression start index.
+ * @return int Exclusive expression end.
+ */
+function arrow_expression_end(array $tokens, int $start): int
+{
+    $stack = [];
+    for ($index = $start, $count = count($tokens); $index < $count; $index++) {
+        $token = $tokens[$index];
+        if ($token === '(' || $token === '[' || $token === '{') {
+            $stack[] = $token;
+        } elseif ($token === ')' || $token === ']' || $token === '}') {
+            if ($stack === []) {
+                return $index;
+            }
+            array_pop($stack);
+        } elseif ($stack === [] && ($token === ';' || $token === ',')) {
+            return $index;
+        }
+    }
+    return count($tokens);
+}
+
+/**
+ * Return PDO typed parameter names from a callable parameter list.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $start Parameter list start.
+ * @param int $end Parameter list end.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context Active symbol context.
+ * @param bool $promotedOnly Require a visibility modifier for promoted properties.
+ * @return array<int,string> Proven PDO parameter names.
+ */
+function typed_callable_parameters(array $tokens, int $start, int $end, array $context, bool $promotedOnly = false): array
+{
+    $names = [];
+    for ($index = $start; $index < $end; $index++) {
+        if (!is_array($tokens[$index]) || $tokens[$index][0] !== T_VARIABLE) {
+            continue;
+        }
+        $hasType = false;
+        $hasVisibility = false;
+        $cursor = $index;
+        for ($steps = 0; $steps < 12 && ($cursor = previous_significant_token_index($tokens, $cursor)) !== null && $cursor > $start; $steps++) {
+            $candidate = $tokens[$cursor];
+            if (!is_array($candidate)) {
+                if (in_array($candidate, [',', '(', '=', '&', '...'], true)) {
+                    break;
+                }
+                continue;
+            }
+            if ($candidate[0] === T_VARIABLE) {
+                break;
+            }
+            if (in_array($candidate[0], [T_PUBLIC, T_PROTECTED, T_PRIVATE], true)) {
+                $hasVisibility = true;
+            }
+            if (in_array($candidate[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+                && resolves_to_pdo((string) $candidate[1], $context)) {
+                $hasType = true;
+            }
+        }
+        if ($hasType && (!$promotedOnly || $hasVisibility)) {
+            $names[] = (string) $tokens[$index][1];
+        }
+    }
+    return $names;
+}
+
+/**
+ * Return the end of a nested function body for scope-local token scans.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $functionIndex Function token index.
+ * @param int $limit Exclusive search limit.
+ * @return ?int Function body closing brace index.
+ */
+function callable_body_end(array $tokens, int $functionIndex, int $limit): ?int
+{
+    $depth = 0;
+    $bodyOpen = null;
+    for ($cursor = $functionIndex + 1; $cursor < $limit; $cursor++) {
+        if ($tokens[$cursor] === '(') {
+            $depth++;
+        } elseif ($tokens[$cursor] === ')') {
+            $depth--;
+        } elseif ($depth === 0 && $tokens[$cursor] === '{') {
+            $bodyOpen = $cursor;
+            break;
+        } elseif ($depth === 0 && $tokens[$cursor] === ';') {
+            return null;
+        }
+    }
+    if ($bodyOpen === null) {
+        return null;
+    }
+    $braceDepth = 0;
+    for ($cursor = $bodyOpen; $cursor < $limit; $cursor++) {
+        if ($tokens[$cursor] === '{') {
+            $braceDepth++;
+        } elseif ($tokens[$cursor] === '}' && --$braceDepth === 0) {
+            return $cursor;
+        }
+    }
+    return null;
+}
+
+/**
+ * Return the enclosing class-like body range for one token.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $targetIndex Token index to locate.
+ * @return array{start:int,end:int}|null Class body range, or null outside a class.
+ */
+function class_scope_for_token(array $tokens, int $targetIndex): ?array
+{
+    $classTokens = [T_CLASS, T_TRAIT];
+    if (defined('T_ENUM')) {
+        $classTokens[] = T_ENUM;
+    }
+    if (defined('T_ANONYMOUS_CLASS')) {
+        $classTokens[] = T_ANONYMOUS_CLASS;
+    }
+    $selected = null;
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || !in_array($token[0], $classTokens, true)) {
+            continue;
+        }
+        if ($token[0] === T_CLASS) {
+            $previous = previous_significant_token_index($tokens, $index);
+            if ($previous !== null && is_array($tokens[$previous]) && $tokens[$previous][0] === T_DOUBLE_COLON) {
+                continue;
+            }
+        }
+        $parameterDepth = 0;
+        $bodyOpen = null;
+        for ($cursor = $index + 1, $count = count($tokens); $cursor < $count; $cursor++) {
+            $candidate = $tokens[$cursor];
+            if ($candidate === '(') {
+                $parameterDepth++;
+            } elseif ($candidate === ')') {
+                $parameterDepth--;
+            } elseif ($parameterDepth === 0 && $candidate === ';') {
+                break;
+            } elseif ($parameterDepth === 0 && $candidate === '{') {
+                $bodyOpen = $cursor;
+                break;
+            }
+        }
+        if ($bodyOpen === null || $bodyOpen >= $targetIndex) {
+            continue;
+        }
+        $braceDepth = 0;
+        $bodyClose = null;
+        for ($cursor = $bodyOpen; $cursor < count($tokens); $cursor++) {
+            if ($tokens[$cursor] === '{') {
+                $braceDepth++;
+            } elseif ($tokens[$cursor] === '}') {
+                $braceDepth--;
+                if ($braceDepth === 0) {
+                    $bodyClose = $cursor;
+                    break;
+                }
+            }
+        }
+        if ($bodyClose !== null && $targetIndex < $bodyClose
+            && ($selected === null || $index > $selected['start'])) {
+            $selected = ['start' => $bodyOpen, 'end' => $bodyClose];
+        }
+    }
+    return $selected;
+}
+
+/**
+ * Resolve the file namespace and simple class/function imports.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $targetIndex Token index that selects the active namespace/import context.
+ * @return array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} Resolved namespace and import aliases active at the token.
+ */
+function source_symbol_context(array $tokens, int $targetIndex): array
+{
+    $namespace = '';
+    $braceDepth = 0;
+    $namespaceBodyDepth = 0;
+    $classAliases = [];
+    $functionAliases = [];
+    for ($index = 0; $index < $targetIndex; $index++) {
+        $token = $tokens[$index];
+        if (is_array($token) && $token[0] === T_NAMESPACE) {
+            $name = '';
+            for ($cursor = $index + 1; $cursor < count($tokens); $cursor++) {
+                $part = $tokens[$cursor];
+                if ($part === ';') {
+                    $namespaceBodyDepth = $braceDepth;
+                    break;
+                }
+                if ($part === '{') {
+                    $namespaceBodyDepth = $braceDepth + 1;
+                    break;
+                }
+                if (is_array($part) && in_array($part[0], [T_WHITESPACE, T_COMMENT], true)) {
+                    continue;
+                }
+                $name .= is_array($part) ? (string) $part[1] : $part;
+            }
+            $namespace = strtolower(ltrim(trim($name), '\\'));
+            continue;
+        }
+        if (is_array($token) && $token[0] === T_USE && $braceDepth === $namespaceBodyDepth) {
+            $cursor = next_significant_token_index($tokens, $index);
+            $kind = 'class';
+            if ($cursor !== null && is_array($tokens[$cursor]) && $tokens[$cursor][0] === T_FUNCTION) {
+                $kind = 'function';
+                $cursor = next_significant_token_index($tokens, $cursor);
+            }
+            if ($cursor !== null && is_array($tokens[$cursor])
+                && in_array($tokens[$cursor][0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)) {
+                $imported = strtolower(ltrim((string) $tokens[$cursor][1], '\\'));
+                $aliasIndex = next_significant_token_index($tokens, $cursor);
+                if ($aliasIndex !== null && is_array($tokens[$aliasIndex]) && $tokens[$aliasIndex][0] === T_AS) {
+                    $aliasIndex = next_significant_token_index($tokens, $aliasIndex);
+                } else {
+                    $segments = explode('\\', $imported);
+                    $aliasIndex = null;
+                    $alias = (string) end($segments);
+                }
+                if ($aliasIndex !== null && is_array($tokens[$aliasIndex]) && $tokens[$aliasIndex][0] === T_STRING) {
+                    $alias = strtolower((string) $tokens[$aliasIndex][1]);
+                }
+                if ($kind === 'function') {
+                    $functionAliases[$alias] = $imported;
+                } else {
+                    $classAliases[$alias] = $imported;
+                }
+            }
+        }
+        if ($token === '{') {
+            $braceDepth++;
+        } elseif ($token === '}') {
+            $braceDepth--;
+        }
+    }
+    return [
+        'namespace' => $namespace,
+        'class_aliases' => $classAliases,
+        'function_aliases' => $functionAliases,
+    ];
+}
+
+/**
+ * Return whether a class name resolves to PHP's global PDO class.
+ *
+ * @param string $name Class name token or PHPDoc name.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context File symbol context.
+ * @return bool True only for a proven global PDO reference.
+ */
+function resolves_to_pdo(string $name, array $context): bool
+{
+    $trimmed = trim($name);
+    $absolute = str_starts_with($trimmed, '\\');
+    $normalized = strtolower(ltrim($trimmed, '\\?'));
+    if ($absolute) {
+        return $normalized === 'pdo';
+    }
+    if (str_contains($normalized, '\\')) {
+        return $normalized === 'pdo';
+    }
+    if (isset($context['class_aliases'][$normalized])) {
+        return $context['class_aliases'][$normalized] === 'pdo';
+    }
+    return $normalized === 'pdo' && ($absolute || $context['namespace'] === '');
+}
+
+/**
+ * Return whether a function name resolves to the canonical Core db() helper.
+ *
+ * @param string $name Function name token.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context File symbol context.
+ * @return bool True only for Gallery\Core\db.
+ */
+function resolves_to_core_db(string $name, array $context): bool
+{
+    $trimmed = trim($name);
+    $absolute = str_starts_with($trimmed, '\\');
+    $normalized = strtolower(ltrim($trimmed, '\\'));
+    if (str_contains($normalized, '\\')) {
+        return $normalized === 'gallery\\core\\db';
+    }
+    if (isset($context['function_aliases'][$normalized])) {
+        return $context['function_aliases'][$normalized] === 'gallery\\core\\db';
+    }
+    return $normalized === 'db' && !$absolute && $context['namespace'] === 'gallery\\core';
+}
+
+/**
+ * Collect PDO variables in the current callable before a persistence call.
+ *
+ * Evidence is limited to an explicit PDO type, a direct PDO constructor, a
+ * canonical db() result, or an assignment from an already identified PDO variable.
+ * Analysis stops at the method call, so unrelated later assignments cannot lend
+ * PDO provenance to an earlier ordinary method call or another function scope.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $methodIndex Method-name token index.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context Active symbol context.
+ * @return array<string, true> Proven PDO variable names in this callable.
+ */
+function pdo_variable_provenance(array $tokens, int $methodIndex, array $context): array
+{
+    $scope = callable_scope_for_token($tokens, $methodIndex);
+    $arrowScope = arrow_scope_for_token($tokens, $methodIndex);
+    $scopeStart = $arrowScope['start'] ?? $scope['start'] ?? 0;
+    $pdoVariables = [];
+    if ($arrowScope !== null) {
+        $shadowedParameters = [];
+        for ($parameterIndex = $arrowScope['start']; $parameterIndex <= $arrowScope['parameter_end']; $parameterIndex++) {
+            if (is_array($tokens[$parameterIndex]) && $tokens[$parameterIndex][0] === T_VARIABLE) {
+                $shadowedParameters[(string) $tokens[$parameterIndex][1]] = true;
+            }
+        }
+        foreach (pdo_variable_provenance($tokens, $arrowScope['start'], $context) as $outerName => $_) {
+            if (!isset($shadowedParameters[$outerName])) {
+                $pdoVariables[$outerName] = true;
+            }
+        }
+        foreach (typed_callable_parameters($tokens, $arrowScope['start'], $arrowScope['parameter_end'], $context) as $name) {
+            $pdoVariables[$name] = true;
+        }
+    }
+    for ($index = $scopeStart; $index < $methodIndex; $index++) {
+        $token = $tokens[$index];
+        if (!is_array($token)) {
+            continue;
+        }
+        [$tokenId, $value] = $token;
+        if ($tokenId === T_FUNCTION && $index !== ($scope['start'] ?? -1)) {
+            $nestedEnd = callable_body_end($tokens, $index, $methodIndex);
+            if ($nestedEnd !== null) {
+                $index = $nestedEnd;
+            }
+            continue;
+        }
+        if ($tokenId === T_FN) {
+            if ($arrowScope === null || $arrowScope['start'] !== $index) {
+                $parameterOpen = next_significant_token_index($tokens, $index);
+                $parameterClose = $parameterOpen !== null && $tokens[$parameterOpen] === '('
+                    ? matching_token_index($tokens, $parameterOpen, '(', ')', $methodIndex)
+                    : null;
+                $arrowToken = $parameterClose === null ? null : next_significant_token_index($tokens, $parameterClose);
+                while ($arrowToken !== null && $arrowToken < $methodIndex
+                    && (!is_array($tokens[$arrowToken]) || $tokens[$arrowToken][0] !== T_DOUBLE_ARROW)) {
+                    $arrowToken = next_significant_token_index($tokens, $arrowToken);
+                }
+                if ($arrowToken !== null && $arrowToken < $methodIndex) {
+                    $nestedEnd = arrow_expression_end($tokens, $arrowToken + 1);
+                    $index = min($nestedEnd - 1, $methodIndex - 1);
+                }
+            }
+            continue;
+        }
+        if ($tokenId === T_DOC_COMMENT
+            && preg_match_all('/@var\s+([^\s*|]+)(?:\|[^\s*]+)?\s+(\$[A-Za-z_][A-Za-z0-9_]*)/i', $value, $matches, PREG_SET_ORDER) > 0) {
+            foreach ($matches as $match) {
+                if (resolves_to_pdo($match[1], $context)) {
+                    $pdoVariables[$match[2]] = true;
+                }
+            }
+        }
+        if ($tokenId !== T_VARIABLE) {
+            continue;
+        }
+
+        $typed = false;
+        $cursor = $index;
+        for ($steps = 0; $steps < 8 && ($cursor = previous_significant_token_index($tokens, $cursor)) !== null && $cursor >= $scopeStart; $steps++) {
+            $previous = $tokens[$cursor];
+            if (!is_array($previous)) {
+                if (in_array($previous, ['=', ';', ',', '(', '{', '}', ':'], true)) {
+                    break;
+                }
+                continue;
+            }
+            if ($previous[0] === T_VARIABLE || in_array($previous[0], [T_FUNCTION, T_FN], true)) {
+                break;
+            }
+            if (resolves_to_pdo((string) $previous[1], $context)) {
+                $typed = true;
+                break;
+            }
+        }
+        if ($typed) {
+            $pdoVariables[$value] = true;
+        }
+
+        $next = next_significant_token_index($tokens, $index);
+        if ($next === null || $tokens[$next] !== '=') {
+            continue;
+        }
+        $right = next_significant_token_index($tokens, $next);
+        if ($right === null) {
+            continue;
+        }
+        $rightToken = $tokens[$right];
+        if (is_array($rightToken) && $rightToken[0] === T_NEW) {
+            $constructedType = next_significant_token_index($tokens, $right);
+            if ($constructedType !== null && is_array($tokens[$constructedType])
+                && resolves_to_pdo((string) $tokens[$constructedType][1], $context)) {
+                $pdoVariables[$value] = true;
+            } else {
+                unset($pdoVariables[$value]);
+            }
+        } elseif (is_array($rightToken) && $rightToken[0] === T_VARIABLE) {
+            if (isset($pdoVariables[$rightToken[1]])) {
+                $pdoVariables[$value] = true;
+            } else {
+                unset($pdoVariables[$value]);
+            }
+        } elseif (is_array($rightToken) && in_array($rightToken[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+            && resolves_to_core_db((string) $rightToken[1], $context)) {
+            $callOpen = next_significant_token_index($tokens, $right);
+            if ($callOpen !== null && $tokens[$callOpen] === '(') {
+                $pdoVariables[$value] = true;
+            } else {
+                unset($pdoVariables[$value]);
+            }
+        } else {
+            unset($pdoVariables[$value]);
+        }
+    }
+
+    return $pdoVariables;
+}
+
+/**
+ * Collect explicitly typed PDO properties from the current class body.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $methodIndex Method-name token index.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context Active symbol context.
+ * @return array<string, true> Proven PDO property names.
+ */
+function pdo_property_provenance(array $tokens, int $methodIndex, array $context): array
+{
+    $scope = class_scope_for_token($tokens, $methodIndex);
+    if ($scope === null) {
+        return [];
+    }
+    $properties = [];
+    $braceDepth = 1;
+    for ($index = $scope['start'] + 1; $index < $methodIndex && $index < $scope['end']; $index++) {
+        $token = $tokens[$index];
+        if (is_array($token) && $token[0] === T_FUNCTION) {
+            $bodyOpen = null;
+            $parameterDepth = 0;
+            $methodNameIndex = next_significant_token_index($tokens, $index);
+            $parameterOpen = $methodNameIndex;
+            while ($parameterOpen !== null && $parameterOpen < $scope['end'] && $tokens[$parameterOpen] !== '(') {
+                if ($tokens[$parameterOpen] === '{' || $tokens[$parameterOpen] === ';') {
+                    $parameterOpen = null;
+                    break;
+                }
+                $parameterOpen = next_significant_token_index($tokens, $parameterOpen);
+            }
+            if ($parameterOpen !== null && $tokens[$parameterOpen] === '(') {
+                $parameterClose = matching_token_index($tokens, $parameterOpen, '(', ')', $scope['end']);
+                if ($parameterClose !== null && is_array($tokens[$methodNameIndex] ?? null)
+                    && strtolower((string) $tokens[$methodNameIndex][1]) === '__construct') {
+                    foreach (typed_callable_parameters($tokens, $parameterOpen, $parameterClose, $context, true) as $name) {
+                        $properties[ltrim($name, '$')] = true;
+                    }
+                }
+            }
+            for ($cursor = $index + 1; $cursor < $scope['end']; $cursor++) {
+                if ($tokens[$cursor] === '(') {
+                    $parameterDepth++;
+                } elseif ($tokens[$cursor] === ')') {
+                    $parameterDepth--;
+                } elseif ($parameterDepth === 0 && $tokens[$cursor] === '{') {
+                    $bodyOpen = $cursor;
+                    break;
+                }
+            }
+            if ($bodyOpen !== null) {
+                $depth = 0;
+                for ($cursor = $bodyOpen; $cursor < $scope['end']; $cursor++) {
+                    if ($tokens[$cursor] === '{') {
+                        $depth++;
+                    } elseif ($tokens[$cursor] === '}') {
+                        $depth--;
+                        if ($depth === 0) {
+                            $index = $cursor;
+                            break;
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if ($token === '{') {
+            $braceDepth++;
+            continue;
+        }
+        if ($token === '}') {
+            $braceDepth--;
+            continue;
+        }
+        if ($braceDepth !== 1 || !is_array($token) || $token[0] !== T_VARIABLE) {
+            continue;
+        }
+        $propertyName = ltrim((string) $token[1], '$');
+        $typed = false;
+        $cursor = $index;
+        for ($steps = 0; $steps < 8 && ($cursor = previous_significant_token_index($tokens, $cursor)) !== null && $cursor > $scope['start']; $steps++) {
+            $previous = $tokens[$cursor];
+            if (!is_array($previous)) {
+                if (in_array($previous, [';', '{', '}', '=', ','], true)) {
+                    break;
+                }
+                continue;
+            }
+            if ($previous[0] === T_VARIABLE) {
+                break;
+            }
+            if (resolves_to_pdo((string) $previous[1], $context)) {
+                $typed = true;
+                break;
+            }
+        }
+        if ($typed) {
+            $properties[$propertyName] = true;
+        }
+    }
+    return $properties;
+}
+
+/**
+ * Return whether a method call has SQL argument or PDO receiver evidence.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $methodIndex Method-name token index.
+ * @param array{namespace:string,class_aliases:array<string,string>,function_aliases:array<string,string>} $context Active symbol context.
+ * @return bool True when the call is credibly a PDO persistence operation.
+ */
+function is_pdo_method_call(array $tokens, int $methodIndex, array $context): bool
+{
+    $open = next_significant_token_index($tokens, $methodIndex);
+    if ($open === null || $tokens[$open] !== '(') {
+        return false;
+    }
+    $depth = 0;
+    $arguments = '';
+    $argumentLimit = min(count($tokens), $open + 2048);
+    for ($cursor = $open; $cursor < $argumentLimit; $cursor++) {
+        $token = $tokens[$cursor];
+        if ($token === '(') {
+            $depth++;
+        } elseif ($token === ')') {
+            $depth--;
+            if ($depth === 0) {
+                break;
+            }
+        }
+        if ($cursor > $open) {
+            if (!is_array($token) || !in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                $arguments .= is_array($token) ? (string) $token[1] : $token;
+            }
+        }
+    }
+    if (looks_like_sql($arguments)) {
+        return true;
+    }
+
+    $pdoVariables = pdo_variable_provenance($tokens, $methodIndex, $context);
+    $operator = previous_significant_token_index($tokens, $methodIndex);
+    if ($operator === null || !is_array($tokens[$operator])
+        || !in_array($tokens[$operator][0], [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR], true)) {
+        return false;
+    }
+    $receiver = previous_significant_token_index($tokens, $operator);
+    if ($receiver === null) {
+        return false;
+    }
+    $receiverToken = $tokens[$receiver];
+    if (is_array($receiverToken) && $receiverToken[0] === T_VARIABLE) {
+        return isset($pdoVariables[$receiverToken[1]]);
+    }
+    if (is_array($receiverToken) && in_array($receiverToken[0], [T_STRING, T_VARIABLE], true)) {
+        $propertyOperator = previous_significant_token_index($tokens, $receiver);
+        $propertyOwner = $propertyOperator === null ? null : previous_significant_token_index($tokens, $propertyOperator);
+        $properties = pdo_property_provenance($tokens, $methodIndex, $context);
+        if ($propertyOperator !== null && is_array($tokens[$propertyOperator])
+            && in_array($tokens[$propertyOperator][0], [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR], true)
+            && $propertyOwner !== null && is_array($tokens[$propertyOwner])
+            && $tokens[$propertyOwner][0] === T_VARIABLE && $tokens[$propertyOwner][1] === '$this') {
+            return isset($properties[(string) $receiverToken[1]]);
+        }
+    }
+    if ($receiverToken !== ')') {
+        return false;
+    }
+    $callOpen = null;
+    $depth = 0;
+    for ($cursor = $receiver; $cursor >= 0; $cursor--) {
+        if ($tokens[$cursor] === ')') {
+            $depth++;
+        } elseif ($tokens[$cursor] === '(') {
+            $depth--;
+            if ($depth === 0) {
+                $callOpen = $cursor;
+                break;
+            }
+        }
+    }
+    if ($callOpen === null) {
+        return false;
+    }
+    $functionName = previous_significant_token_index($tokens, $callOpen);
+    if ($functionName === null || !is_array($tokens[$functionName])) {
+        return false;
+    }
+    $nameToken = $tokens[$functionName];
+    return in_array($nameToken[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+        && resolves_to_core_db((string) $nameToken[1], $context);
+}
+
+/**
+ * Return the final segment of a possibly qualified PHP name in lowercase.
+ *
+ * @param string $name PHP identifier or qualified name.
+ * @return string Lowercase unqualified identifier.
+ */
+function token_name_leaf(string $name): string
+{
+    $segments = explode('\\', ltrim($name, '\\'));
+    return strtolower((string) end($segments));
+}
+
+/**
+ * Return whether a response API call mutates transport state.
+ *
+ * http_response_code() with no argument reads the current response status; the
+ * Kernel uses that read while finalizing its request lifecycle observer.
+ *
+ * @param array<int, array|string> $tokens Token stream.
+ * @param int $functionIndex Response function token index.
+ * @param string $name Lowercase response function name.
+ * @return bool True when the call changes the outgoing response.
+ */
+function is_http_response_mutation(array $tokens, int $functionIndex, string $name): bool
+{
+    if ($name !== 'http_response_code') {
+        return true;
+    }
+    $open = next_significant_token_index($tokens, $functionIndex);
+    if ($open === null || $tokens[$open] !== '(') {
+        return false;
+    }
+    $argument = next_significant_token_index($tokens, $open);
+    return $argument !== null && $tokens[$argument] !== ')';
+}
+
+/**
  * Return source lines with safe 1-based lookup.
  *
  * @param string $source PHP source.
@@ -203,7 +1005,9 @@ function source_lines(string $source): array
  */
 function core_persistence_boundary_path(string $relativePath): bool
 {
-    return preg_match('~^app/(?:security|helpers(?:_[a-z0-9_]+)?)(?:\.php$|/)~', str_replace('\\', '/', $relativePath)) === 1;
+    $normalized = str_replace('\\', '/', $relativePath);
+    return preg_match('~^app/(?:security|helpers(?:_[a-z0-9_]+)?)(?:\.php$|/)~', $normalized) === 1
+        || in_array($normalized, ['app/request_data.php', 'app/session_context.php'], true);
 }
 
 /**
@@ -242,13 +1046,16 @@ function scan_core_persistence_source(string $source, string $relativePath): arr
                 && in_array($name, $securityFilesystemMutations, true) && token_is_function_call($tokens, $index)) {
                 add_violation($violations, $relativePath, 'core.security_filesystem_mutation', $line, $lines[$line] ?? '');
             }
-            if ($name === 'db' && !$memberAccess && token_is_function_call($tokens, $index)) {
+            if (in_array($id, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+                && !$memberAccess && token_is_function_call($tokens, $index)
+                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
                 add_violation($violations, $relativePath, 'core.direct_db', $line, $lines[$line] ?? '');
             }
-            if ($name === 'pdo' && $previousId === T_NEW) {
+            if ($previousId === T_NEW && resolves_to_pdo($value, source_symbol_context($tokens, $index))) {
                 add_violation($violations, $relativePath, 'core.pdo_construction', $line, $lines[$line] ?? '');
             }
-            if ($memberAccess && in_array($name, $pdoMethods, true) && token_is_function_call($tokens, $index)) {
+            if ($memberAccess && in_array($name, $pdoMethods, true) && token_is_function_call($tokens, $index)
+                && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
                 add_violation($violations, $relativePath, 'core.pdo_method', $line, $lines[$line] ?? '');
             }
         }
@@ -296,16 +1103,21 @@ function scan_source(string $source, string $relativePath): array
         $snippet = $lines[$line] ?? $value;
 
         if ($tokenId === T_VARIABLE) {
-            if ($value === '$_SESSION'
-                && preg_match('~^app/services/(admin_gallery_discovery|google_auth|admin_gallery_report/job|duplicate_photo_detector|viewer_anti_automation)(?:\.php$|/)~', $relativePath, $sessionOwner) === 1) {
-                $sessionRule = match ($sessionOwner[1]) {
-                    'google_auth' => 'services.google_auth_session_global',
-                    'admin_gallery_report/job' => 'services.report_job_session_global',
-                    'duplicate_photo_detector' => 'services.duplicate_detector_session_global',
-                    'viewer_anti_automation' => 'services.viewer_anti_automation_session_global',
-                    default => 'services.discovery_session_global',
-                };
+            if ($value === '$_SESSION' && $layer === 'services') {
+                if (preg_match('~^app/services/(admin_gallery_discovery|google_auth|admin_gallery_report/job|duplicate_photo_detector|viewer_anti_automation)(?:\.php$|/)~', $relativePath, $sessionOwner) === 1) {
+                    $sessionRule = match ($sessionOwner[1]) {
+                        'google_auth' => 'services.google_auth_session_global',
+                        'admin_gallery_report/job' => 'services.report_job_session_global',
+                        'duplicate_photo_detector' => 'services.duplicate_detector_session_global',
+                        'viewer_anti_automation' => 'services.viewer_anti_automation_session_global',
+                        default => 'services.discovery_session_global',
+                    };
+                } else {
+                    $sessionRule = 'services.session_global';
+                }
                 add_violation($violations, $relativePath, $sessionRule, $line, $snippet);
+            } elseif ($value === '$_SESSION' && $layer === 'models') {
+                add_violation($violations, $relativePath, 'models.session_global', $line, $snippet);
             }
             $forbiddenGlobals = $layer === 'views' ? $viewGlobals : $requestGlobals;
             if (($layer === 'models' || $layer === 'services' || $layer === 'views') && in_array($value, $forbiddenGlobals, true)) {
@@ -330,12 +1142,16 @@ function scan_source(string $source, string $relativePath): array
                 add_violation($violations, $relativePath, 'controllers.mobile_webdav_filesystem_mutation', $line, $snippet);
             }
         }
-        if ($tokenId === T_STRING && token_is_function_call($tokens, $index)) {
+        if (in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+            && token_is_function_call($tokens, $index)) {
             $name = strtolower($value);
-            if (($layer === 'services' || $layer === 'controllers' || $layer === 'views') && $name === 'db') {
+            if (($layer === 'services' || $layer === 'controllers' || $layer === 'views')
+                && in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
                 add_violation($violations, $relativePath, $layer . '.direct_db', $line, $snippet);
             }
-            if (($layer === 'models' || $layer === 'services' || $layer === 'views') && in_array($name, $responseFunctions, true)) {
+            if (($layer === 'models' || $layer === 'services' || $layer === 'views') && in_array($name, $responseFunctions, true)
+                && is_http_response_mutation($tokens, $index, $name)) {
                 add_violation($violations, $relativePath, $layer . '.http_response', $line, $snippet);
             }
             if ($layer === 'views' && in_array($name, $filesystemMutationFunctions, true)) {
@@ -343,7 +1159,8 @@ function scan_source(string $source, string $relativePath): array
             }
         }
 
-        if ($tokenId === T_STRING && in_array($value, $pdoMethods, true)) {
+        if ($tokenId === T_STRING && in_array(strtolower($value), array_map('strtolower', $pdoMethods), true)
+            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
             for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
                 $previous = $tokens[$cursor];
                 if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
@@ -514,6 +1331,9 @@ function architecture_role_for_path(string $relativePath): string
     if ($layer !== null) {
         return rtrim($layer, 's');
     }
+    if (in_array($relativePath, ['app/session_context.php', 'app/bootstrap/viewer_identity_context.php'], true)) {
+        return 'session_adapter';
+    }
     if (str_starts_with($relativePath, 'app/bootstrap/') || $relativePath === 'app/bootstrap.php' || $relativePath === 'app/early_runtime.php') {
         return 'bootstrap';
     }
@@ -586,6 +1406,74 @@ function architecture_signal_count(array $signals, string $name): int
 }
 
 /**
+ * Classify reviewed HTTP, security, diagnostic, and integrity ownership signals.
+ *
+ * The source inventory still retains every raw signal. These exact path/signal
+ * pairs explain established boundary responsibilities separately from actionable
+ * advisory candidates; they do not exempt unrelated signals from the same file.
+ *
+ * @param array<string, mixed> $record File inventory record.
+ * @return array<int, array{path:string,signal:string,count:int,reason:string,evidence:array<int,array{line:int,snippet:string}>}> Accepted boundary rows.
+ */
+function architecture_accepted_boundaries(array $record): array
+{
+    $path = str_replace('\\', '/', (string) ($record['path'] ?? ''));
+    $signals = is_array($record['signals'] ?? null) ? $record['signals'] : [];
+    $policies = [
+        'app/security.php' => [
+            'request_global' => 'Compatibility security owns CSRF request-token checks and cookie/request identity inputs.',
+            'session_global' => 'Compatibility security owns PHP-session CSRF and authenticated-principal state.',
+            'presentation_output' => 'Compatibility security emits bounded CSRF and error response material at the existing security boundary.',
+        ],
+        'app/request_data.php' => [
+            'request_global' => 'The canonical Core request adapter is the narrow owner of PHP request input bags.',
+        ],
+        'app/helpers_request.php' => [
+            'request_global' => 'The compatibility request helper owns request normalization and login-target interpretation.',
+            'http_response' => 'The compatibility request helper applies cookie and header intents for established login and base-URL behavior.',
+        ],
+        'app/diagnostics/admin_test_run_early.php' => [
+            'request_global' => 'Bootstrap-free early diagnostics capture a bounded request fingerprint before the normal runtime loads.',
+            'filesystem_mutation' => 'Early diagnostics write only their owned bounded request-observation artifact.',
+        ],
+        'app/helpers_runtime.php' => [
+            'http_response' => 'The compatibility redirect helper owns the Location header and terminating 302 transport response.',
+        ],
+        'app/integrity.php' => [
+            'filesystem_mutation' => 'Integrity/update verification owns its reviewed low-level filesystem checks and repair operations.',
+        ],
+        'app/runtime/Kernel.php' => [
+            'http_response_status_read' => 'The Core Kernel reads the completed HTTP status for request-observer finalization after dispatch.',
+            'http_response' => 'The Core Kernel owns response status and headers while completing the HTTP request lifecycle.',
+        ],
+        'app/session_context.php' => [
+            'session_global' => 'The dependency-free Core session adapter is the narrow owner of PHP session storage access.',
+        ],
+        'app/bootstrap/viewer_identity_context.php' => [
+            'request_global' => 'Bootstrap viewer identity restoration reads user-agent and remember-cookie inputs while constructing the request identity snapshot.',
+            'http_response' => 'Bootstrap viewer identity restoration applies the remember-cookie response while restoring the HTTP identity context.',
+            'session_global' => 'Bootstrap viewer identity restoration owns its narrow session principal snapshot at HTTP initialization.',
+        ],
+    ];
+    $accepted = [];
+    foreach ($policies[$path] ?? [] as $signalName => $reason) {
+        $signal = $signals[$signalName] ?? null;
+        $count = is_array($signal) ? (int) ($signal['count'] ?? 0) : 0;
+        if ($count <= 0) {
+            continue;
+        }
+        $accepted[] = [
+            'path' => $path,
+            'signal' => $signalName,
+            'count' => $count,
+            'reason' => $reason,
+            'evidence' => array_values($signal['evidence'] ?? []),
+        ];
+    }
+    return $accepted;
+}
+
+/**
  * Inspect one runtime PHP source as text/tokens and return architecture signals.
  *
  * This function never includes or executes the inspected file. It deliberately
@@ -605,7 +1493,7 @@ function scan_architecture_source(string $source, string $relativePath): array
     $requestGlobals = ['$_GET', '$_POST', '$_REQUEST', '$_FILES', '$_COOKIE', '$_SERVER'];
     $responseFunctions = ['header', 'http_response_code', 'setcookie', 'setrawcookie'];
     $filesystemMutationFunctions = ['file_put_contents', 'unlink', 'rename', 'copy', 'mkdir', 'rmdir', 'chmod', 'chown', 'touch', 'symlink', 'link'];
-    $pdoMethods = ['prepare', 'query', 'exec', 'beginTransaction', 'commit', 'rollBack'];
+    $pdoMethods = ['prepare', 'query', 'exec', 'begintransaction', 'commit', 'rollback'];
     $nameTokenIds = [T_STRING];
     if (defined('T_NAME_QUALIFIED')) {
         $nameTokenIds[] = T_NAME_QUALIFIED;
@@ -629,20 +1517,26 @@ function scan_architecture_source(string $source, string $relativePath): array
             }
         }
 
-        if ($tokenId === T_STRING && token_is_function_call($tokens, $index)) {
+        if (in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+            && token_is_function_call($tokens, $index)) {
             $name = strtolower($value);
-            if ($name === 'db') {
+            if (in_array($tokenId, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)
+                && resolves_to_core_db($value, source_symbol_context($tokens, $index))) {
                 record_architecture_signal($signals, 'direct_db', $line, $snippet);
             }
             if (in_array($name, $responseFunctions, true)) {
-                record_architecture_signal($signals, 'http_response', $line, $snippet);
+                $responseSignal = $name === 'http_response_code' && !is_http_response_mutation($tokens, $index, $name)
+                    ? 'http_response_status_read'
+                    : 'http_response';
+                record_architecture_signal($signals, $responseSignal, $line, $snippet);
             }
             if (in_array($name, $filesystemMutationFunctions, true)) {
                 record_architecture_signal($signals, 'filesystem_mutation', $line, $snippet);
             }
         }
 
-        if ($tokenId === T_STRING && in_array($value, $pdoMethods, true)) {
+        if ($tokenId === T_STRING && in_array(strtolower($value), $pdoMethods, true)
+            && token_is_function_call($tokens, $index) && is_pdo_method_call($tokens, $index, source_symbol_context($tokens, $index))) {
             for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
                 $previous = $tokens[$cursor];
                 if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
@@ -714,9 +1608,16 @@ function architecture_review_candidates(array $record): array
     $path = (string) ($record['path'] ?? '');
     $role = (string) ($record['role'] ?? 'other');
     $signals = is_array($record['signals'] ?? null) ? $record['signals'] : [];
+    $acceptedSignals = [];
+    foreach (architecture_accepted_boundaries($record) as $accepted) {
+        $acceptedSignals[(string) $accepted['signal']] = true;
+    }
     $candidates = [];
 
-    $append = static function (string $rule, string $signal, string $reason) use (&$candidates, $path, $role, $signals): void {
+    $append = static function (string $rule, string $signal, string $reason) use (&$candidates, $path, $role, $signals, $acceptedSignals): void {
+        if (isset($acceptedSignals[$signal])) {
+            return;
+        }
         $count = architecture_signal_count($signals, $signal);
         if ($count <= 0) {
             return;
@@ -743,19 +1644,19 @@ function architecture_review_candidates(array $record): array
             $append('architecture.persistence_outside_model', $signal, 'Persistence syntax exists outside the canonical model/infrastructure ownership boundary.');
         }
     }
-    if (in_array($role, ['service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+    if (in_array($role, ['service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics', 'request_adapter', 'session_adapter'], true)) {
         $append('architecture.request_outside_http_boundary', 'request_global', 'Request globals are read outside controller/bootstrap/request-adapter ownership.');
     }
-    if (in_array($role, ['model', 'service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+    if (in_array($role, ['model', 'service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics', 'request_adapter', 'session_adapter'], true)) {
         $append('architecture.session_state_outside_http_boundary', 'session_global', 'Session state is accessed outside the canonical HTTP boundary and should be reviewed for adapter/controller extraction.');
     }
-    if (in_array($role, ['model', 'controller', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+    if (in_array($role, ['model', 'controller', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics', 'request_adapter', 'session_adapter'], true)) {
         $append('architecture.filesystem_mutation_outside_service', 'filesystem_mutation', 'Filesystem mutation exists outside service/infrastructure ownership.');
     }
-    if (in_array($role, ['model', 'service', 'view', 'helper', 'core', 'diagnostics'], true)) {
+    if (in_array($role, ['model', 'service', 'view', 'helper', 'core', 'diagnostics', 'request_adapter', 'session_adapter'], true)) {
         $append('architecture.response_outside_controller', 'http_response', 'HTTP response manipulation exists outside controller/bootstrap ownership.');
     }
-    if (in_array($role, ['model', 'service', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+    if (in_array($role, ['model', 'service', 'helper', 'security_compatibility', 'core', 'diagnostics', 'request_adapter', 'session_adapter'], true)) {
         $append('architecture.presentation_outside_view', 'presentation_output', 'Presentation output exists outside view/controller response ownership.');
     }
 
@@ -766,13 +1667,14 @@ function architecture_review_candidates(array $record): array
  * Scan the complete first-party PHP web runtime without executing source files.
  *
  * @param string $root Project root.
- * @return array{files:array<int,array<string,mixed>>,candidates:array<int,array<string,mixed>>,roles:array<string,int>,signals:array<string,int>}
+ * @return array{files:array<int,array<string,mixed>>,candidates:array<int,array<string,mixed>>,accepted_boundaries:array<int,array{path:string,signal:string,count:int,reason:string,evidence:array<int,array{line:int,snippet:string}>}>,roles:array<string,int>,signals:array<string,int>} Per-file inventory, review candidates, accepted boundaries, roles, and signal totals.
  */
 function scan_runtime_architecture(string $root): array
 {
     $normalizedRoot = rtrim(str_replace('\\', '/', realpath($root) ?: $root), '/');
     $records = [];
     $candidates = [];
+    $acceptedBoundaries = [];
     $roles = [];
     $signalTotals = [];
 
@@ -790,17 +1692,20 @@ function scan_runtime_architecture(string $root): array
         foreach (($record['signals'] ?? []) as $signal => $definition) {
             $signalTotals[$signal] = ($signalTotals[$signal] ?? 0) + (int) ($definition['count'] ?? 0);
         }
+        array_push($acceptedBoundaries, ...architecture_accepted_boundaries($record));
         array_push($candidates, ...architecture_review_candidates($record));
     }
 
     usort($records, static fn(array $left, array $right): int => [$right['signal_count'], $left['path']] <=> [$left['signal_count'], $right['path']]);
     usort($candidates, static fn(array $left, array $right): int => [$right['count'], $left['path'], $left['rule']] <=> [$left['count'], $right['path'], $right['rule']]);
+    usort($acceptedBoundaries, static fn(array $left, array $right): int => [$left['path'], $left['signal']] <=> [$right['path'], $right['signal']]);
     ksort($roles, SORT_STRING);
     ksort($signalTotals, SORT_STRING);
 
     return [
         'files' => $records,
         'candidates' => $candidates,
+        'accepted_boundaries' => $acceptedBoundaries,
         'roles' => $roles,
         'signals' => $signalTotals,
     ];
@@ -814,6 +1719,7 @@ function scan_runtime_architecture(string $root): array
  * @param array<int,array<string,mixed>> $current Current strict violations.
  * @param array<int,array<string,mixed>> $baseline Reviewed strict baseline.
  * @param array{new:array<int,array<string,mixed>>,resolved:array<int,array<string,mixed>>} $comparison Strict comparison.
+ * @return void Write the machine-readable MVC architecture report to the requested path.
  */
 function write_architecture_report(string $path, string $root, array $current, array $baseline, array $comparison): void
 {
@@ -842,6 +1748,7 @@ function write_architecture_report(string $path, string $root, array $current, a
             'roles' => $runtime['roles'],
             'signal_totals' => $runtime['signals'],
             'review_candidates' => array_values($runtime['candidates']),
+            'accepted_boundaries' => array_values($runtime['accepted_boundaries']),
             'hotspots' => $hotspots,
         ],
     ];
@@ -1101,6 +2008,6 @@ function main(array $argv): int
     }
 }
 
-if (PHP_SAPI === 'cli' && isset($_SERVER['SCRIPT_FILENAME']) && realpath((string) $_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string) $_SERVER['SCRIPT_FILENAME']) === __FILE__) {
     exit(main($argv));
 }

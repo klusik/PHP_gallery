@@ -12,10 +12,8 @@
  */
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 // Preserve the historical convenience flag without provisioning a database for
 // an edit-cycle profile that intentionally excludes real workflow qualification.
 if (($argv[1] ?? '') === '--quick') {
@@ -37,7 +35,7 @@ $exit = 0;
 $stage = 'prerequisites';
 try {
     $mode = (string) ($argv[1] ?? '');
-    check(in_array($mode, ['--development', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
+    check(in_array($mode, ['--development', '--audit-quick', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
     $routeProbeLabel = '';
     if ($mode === '--route-probes') {
         $routeProbeLabel = trim((string) ($argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE') ?: ''));
@@ -60,26 +58,40 @@ try {
         // The existing PHP regression suite discovers the PHP workflow tests and the real DB races.
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
         $profile = match ($mode) {
+            '--audit-quick' => 'quick',
             '--release' => 'release',
             default => 'full',
         };
         $stage = 'central ' . $profile . ' audit';
         $fixture->run([PHP_BINARY, __DIR__ . '/audit.php', '--profile=' . $profile], 1200, $stage);
         $report = json_decode((string) file_get_contents(dirname(__DIR__) . '/cache/test-audit/latest.json'), true, 512, JSON_THROW_ON_ERROR);
-        $regression = array_values(array_filter($report['tasks'] ?? [], static fn (array $task): bool => $task['id'] === 'php-regression'))[0] ?? [];
+        $runtime = array_values(array_filter($report['tasks'] ?? [], static fn (array $task): bool => $task['id'] === 'runtime-performance'))[0] ?? [];
+        check(($runtime['status'] ?? '') === 'PASS'
+            && ($runtime['counts']['passed'] ?? 0) === 11
+            && ($runtime['counts']['skipped'] ?? 1) === 0,
+            'The disposable central audit must qualify both include phases and all nine actual route lifecycles.');
+        $regressionId = $profile === 'quick' ? 'php-fast' : 'php-regression';
+        $regression = array_values(array_filter($report['tasks'] ?? [], static fn (array $task): bool => $task['id'] === $regressionId))[0] ?? [];
         $logPath = (string) ($regression['log'] ?? '');
         check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..'), 'Central regression evidence missing.');
         $evidence = (string) file_get_contents(dirname(__DIR__) . '/' . $logPath);
-        // Only explicit Chromium disablement omits browser evidence. Every real
-        // database/HTTP and race PASS remains mandatory in both qualification profiles.
-        $requiredTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
-        if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
-            $requiredTests[] = 'gallery_workflow_browser_test.php';
+        $requiredTests = ['database_engine_contract_test.php'];
+        if ($profile !== 'quick') {
+            // Only explicit Chromium disablement omits browser evidence. Every real
+            // database/HTTP and race PASS remains mandatory in both qualification profiles.
+            $requiredTests = array_merge($requiredTests, ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php']);
+            if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
+                $requiredTests[] = 'gallery_workflow_browser_test.php';
+            }
         }
         foreach ($requiredTests as $test) {
             check(preg_match('/^\[PASS\] ' . preg_quote($test, '/') . ' /m', $evidence) === 1, 'Mandatory integration coverage was skipped or unregistered.');
         }
-        echo 'PASS gallery workflow central ' . $profile . " audit completed\n";
+        if ($profile === 'quick') {
+            echo "PASS gallery workflow central quick audit completed with all nine route lifecycles and database engine contracts\n";
+        } else {
+            echo 'PASS gallery workflow central ' . $profile . " audit completed\n";
+        }
     }
 } catch (Throwable $exception) {
     fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at ' . basename($exception->getFile()) . ' line ' . $exception->getLine() . "\n");

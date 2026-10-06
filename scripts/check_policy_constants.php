@@ -16,6 +16,9 @@ declare(strict_types=1);
 
 namespace PhpGallery\SourceContracts;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 require_once __DIR__ . '/check_source_documentation.php';
 require_once __DIR__ . '/source_contracts/policy_changes.php';
 
@@ -190,7 +193,7 @@ function policy_report(string $root, array $paths = []): array
 }
 
 /**
- * Run advisory whole-tree inventory or strict HEAD-based runtime policy enforcement.
+ * Run advisory whole-tree inventory or strict comparison-base runtime policy enforcement.
  * @param list<string> $argv Process arguments.
  * @return int Zero for inventory success or bounded gate PASS, one for strict findings, two for blocked coverage/errors.
  */
@@ -199,7 +202,7 @@ function policy_main(array $argv): int
     try {
         $options = report_options($argv);
         if ($options['changed']) {
-            $report = changed_policy_report($options['root'], $options['paths']);
+            $report = changed_policy_report($options['root'], $options['paths'], null, $options['base']);
             print_report($report, $options['json'], 'Changed runtime policy gate ' . $report['status']);
             return match ($report['status']) {
                 'PASS' => 0,
@@ -216,6 +219,6 @@ function policy_main(array $argv): int
     }
 }
 
-if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     exit(policy_main($argv));
 }

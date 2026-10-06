@@ -15,6 +15,9 @@ declare(strict_types=1);
 
 namespace Gallery\Tools\RuntimeDynamicDependencies;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 require_once __DIR__ . '/runtime_dependencies.php';
 
 use function Gallery\Tools\RuntimeDependencies\scan_files;
@@ -179,6 +182,7 @@ Gallery\Services\viewer_reauthentication_status|variable_callable|$failure()
 Gallery\Services\viewer_registration_verification_resend_deliver_locked|variable_callable|$deliver()
 Gallery\Services\viewer_registration_verification_resend_prepare|variable_callable|$empty()
 Gallery\Services\weighted_tag_suggestions_for_gallery|variable_callable|$addRows()
+Gallery\Services\navigation_data_navigraph_exchange_code|variable_callable|$postForm()
 Gallery\Views\admin_gallery_report_table|dynamic_callback_argument|is_callable($column)
 Gallery\Views\view_telemetry_export_table|dynamic_callback_argument|is_callable($column)
 SITES;
@@ -199,6 +203,7 @@ SITES;
             str_contains($signature, 'application_update_job_finalize|') => 'string-callbacks:required-updater-cache-roots',
             str_contains($signature, 'admin_test_run_clear_safe_caches|') => 'string-callbacks:required-diagnostic-cache-roots',
             str_contains($signature, 'image_decode_gd_path_result|') => 'runtime-function:optional-gd-decoder',
+            str_contains($signature, 'navigation_data_navigraph_exchange_code|') => 'injected-oauth-transport:default-http-post-remains-static',
             default => 'caller-owned-or-local-callback:no-module-edge',
         };
     }
@@ -358,7 +363,7 @@ function main(array $arguments): int
     return 0;
 }
 
-if (PHP_SAPI === 'cli' && isset($_SERVER['SCRIPT_FILENAME']) && realpath((string) $_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__)) {
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string) $_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__)) {
     try {
         exit(main(array_slice($argv, 1)));
     } catch (\Throwable $exception) {
