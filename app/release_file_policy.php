@@ -131,7 +131,31 @@ function release_file_policy_is_production_path(string $relativePath): bool
         || str_starts_with($relativePath, 'scripts/')
         || str_starts_with($relativePath, 'docs/')
         || (str_starts_with($relativePath, 'database/migrations/'))
+        || release_file_policy_is_winapp_source_path($relativePath)
         || (str_starts_with($relativePath, 'custom_css/') && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'css');
+}
+
+/**
+ * Identify distributable WinApp sources and required runtime assets without local build state.
+ *
+ * @param string $relativePath Project-relative candidate using forward slashes.
+ * @return bool True for reviewed WinApp entry points, tooling, assets, and Python modules.
+ */
+function release_file_policy_is_winapp_source_path(string $relativePath): bool
+{
+    if (in_array($relativePath, [
+        'winapp/README.md', 'winapp/VERSION', 'winapp/SimConnect.dll',
+        'winapp/build.bat', 'winapp/build_installer.py', 'winapp/installer.iss',
+        'winapp/gallery_http_monitor.py', 'winapp/gallery_watch_upload.pyw',
+        'winapp/install.bat', 'winapp/run_gallery_watcher.bat',
+        'winapp/requirements.txt', 'winapp/requirements-build.txt',
+        'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
+    ], true)) {
+        return true;
+    }
+
+    return str_starts_with($relativePath, 'winapp/uploader/')
+        && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'py';
 }
 
 /**

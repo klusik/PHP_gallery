@@ -42,6 +42,18 @@ $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\
 $includeMedia = $false
 $includeRepositoryTests = $false
 $zipDeploy = $false
+$interactiveLauncher = $PSBoundParameters.Count -eq 0
+
+# Explorer launches have no arguments: preserve diagnostics until Enter is pressed.
+# Parameterized automation keeps its non-interactive completion and failure status.
+trap {
+    Write-Error -ErrorRecord $_ -ErrorAction Continue
+    if ($interactiveLauncher) {
+        Write-Host 'Deployment failed. See the error above.'
+        Read-Host 'Press Enter to close this window' | Out-Null
+    }
+    exit 1
+}
 
 # Return true when a command-line value uses a recognized affirmative spelling.
 function Test-Truthy {
@@ -172,6 +184,44 @@ function Get-AbsoluteDestination {
     return [System.IO.Path]::GetFullPath((Join-Path $root $Path))
 }
 
+<#
+.SYNOPSIS
+Choose a fresh sibling destination when an interactive local package already exists.
+.PARAMETER Path
+Absolute destination already checked for unsafe roots and reparse points.
+.PARAMETER Zip
+Whether the destination holds a ZIP rather than a copied package tree.
+.OUTPUTS
+System.String. Original destination or an unused sibling with a timestamp suffix.
+#>
+function Get-AvailableDeployDestination {
+    param(
+        [string]$Path,
+        [bool]$Zip
+    )
+
+    $collision = if ($Zip) {
+        Test-Path -LiteralPath (Join-Path $Path 'php-gallery-deploy.zip')
+    } else {
+        Test-Path -LiteralPath $Path
+    }
+    if (-not $collision) {
+        return $Path
+    }
+
+    $basePath = $Path.TrimEnd('\', '/') + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $candidate = $basePath
+    $suffix = 1
+    while (Test-Path -LiteralPath $candidate) {
+        $candidate = '{0}-{1}' -f $basePath, $suffix
+        $suffix++
+    }
+
+    Write-Host "An earlier local package already exists at $Path."
+    Write-Host "Creating the new package at $candidate."
+    return $candidate
+}
+
 # Reject an existing destination ancestor that could redirect output through a junction or symlink.
 function Assert-NoReparseAncestors {
     param(
@@ -277,6 +327,8 @@ function Ensure-RemoteDirectory {
     }
 }
 
+# A prompted destination may select a fresh sibling; explicit CLI targets keep collision errors.
+$interactiveDeployFolder = -not $PSBoundParameters.ContainsKey('DeployFolder')
 if (-not $Mode) {
     $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
     $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
@@ -327,6 +379,11 @@ if ($Mode -eq 'local') {
     Assert-NoReparseAncestors -Path $deployTarget
     if ((Test-Path -LiteralPath $deployTarget) -and ((Get-Item -LiteralPath $deployTarget -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "Local deploy target cannot be a symbolic link or junction: $deployTarget"
+    }
+
+    if ($interactiveDeployFolder) {
+        $deployTarget = Get-AvailableDeployDestination -Path $deployTarget -Zip $zipDeploy
+        $DeployFolder = $deployTarget
     }
 
     if ($zipDeploy) {
@@ -413,4 +470,9 @@ try {
     if ($temporaryArchiveOwned -and $temporaryArchiveDirectory -and (Test-Path -LiteralPath $temporaryArchiveDirectory)) {
         Remove-Item -LiteralPath $temporaryArchiveDirectory -Recurse -Force
     }
+}
+
+if ($interactiveLauncher) {
+    Write-Host 'Deployment completed successfully.'
+    Read-Host 'Press Enter to close this window' | Out-Null
 }

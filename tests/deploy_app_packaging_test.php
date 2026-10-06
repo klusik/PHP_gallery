@@ -327,6 +327,12 @@ function deploy_test_add_noise(string $sourceRoot): void
         'config.php' => '<?php $local = true;',
         'app/unlisted-local.bin' => 'unapproved application file',
         'galleries/private/gallery.jpg' => 'private media',
+        'winapp/build/generated.py' => 'local build output',
+        'winapp/dist/0.0.0/Setup.exe' => 'local installer output',
+        'winapp/http_monitor_logs/private.txt' => 'private monitor log',
+        'winapp/settings.json' => '{"private":true}',
+        'winapp/tests/local_test.py' => 'local test',
+        'winapp/uploader/unlisted.py' => 'unlisted local Python module',
     ];
     foreach ($noise as $relativePath => $contents) {
         $path = $sourceRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
@@ -446,6 +452,60 @@ function deploy_test_build_artifact(
 }
 
 /**
+ * Prove repeated interactive Windows packaging preserves earlier output and selects a fresh destination.
+ *
+ * @param string $powerShellPath PowerShell executable used by the Windows batch launcher.
+ * @param string $fixtureRoot Source fixture containing the real deployment workflow.
+ * @param string $outputRoot Owned output directory for collision fixtures.
+ * @return void Throws if prompted ZIP/folder packaging overwrites content or cannot complete.
+ */
+function deploy_test_verify_interactive_windows_packaging(string $powerShellPath, string $fixtureRoot, string $outputRoot): void
+{
+    $expectedPaths = deploy_test_canonical_paths(PHP_BINARY, $fixtureRoot);
+    foreach ([true, false] as $zip) {
+        $destination = $outputRoot . DIRECTORY_SEPARATOR . ($zip ? 'interactive zip' : 'interactive folder');
+        mkdir($destination, 0777, true);
+        $protectedFile = $destination . DIRECTORY_SEPARATOR . ($zip ? 'php-gallery-deploy.zip' : 'keep.txt');
+        file_put_contents($protectedFile, 'preserve the earlier package');
+        // Pin the clock and occupy its first candidate to exercise same-second repeated launches.
+        $occupiedCandidate = $destination . '-20000101-000000';
+        mkdir($occupiedCandidate, 0777, true);
+        file_put_contents($occupiedCandidate . DIRECTORY_SEPARATOR . 'keep.txt', 'preserve the sibling');
+
+        $destinationLiteral = "'" . str_replace("'", "''", $destination) . "'";
+        $scriptLiteral = "'" . str_replace("'", "''", $fixtureRoot . '/scripts/deploy.ps1') . "'";
+        $script = '$global:DeployAnswers = [Collections.Generic.Queue[string]]::new(); '
+            . "foreach (\$answer in @('local', 'n', 'n', " . $destinationLiteral . ", '" . ($zip ? 'y' : 'n') . "', '')) { \$global:DeployAnswers.Enqueue(\$answer); } "
+            . 'function Read-Host { param([string]$Prompt) Write-Host "Prompt: $Prompt"; return $global:DeployAnswers.Dequeue(); } '
+            . "function Get-Date { param([string]\$Format) return '20000101-000000'; } "
+            . '& ' . $scriptLiteral;
+        $result = deploy_test_run([$powerShellPath, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $script], $fixtureRoot);
+        deploy_test_assert($result['exit_code'] === 0, 'Interactive Windows packaging failed: ' . $result['stdout'] . $result['stderr']);
+        deploy_test_assert(file_get_contents($protectedFile) === 'preserve the earlier package', 'Interactive packaging overwrote earlier output.');
+        deploy_test_assert(file_get_contents($occupiedCandidate . DIRECTORY_SEPARATOR . 'keep.txt') === 'preserve the sibling', 'Interactive packaging overwrote a timestamp collision.');
+        $newDestination = $occupiedCandidate . '-1';
+        deploy_test_assert(str_contains($result['stdout'], $newDestination), 'Interactive packaging did not report the actual output destination.');
+        deploy_test_assert(str_contains($result['stdout'], 'Deployment completed successfully.'), 'An Explorer launch hid its success summary.');
+        deploy_test_assert(str_contains($result['stdout'], 'Prompt: Press Enter to close this window'), 'An Explorer launch omitted its closing prompt.');
+        if ($zip) {
+            deploy_test_assert_zip_matches($newDestination . '/php-gallery-deploy.zip', $fixtureRoot, $expectedPaths);
+        } else {
+            deploy_test_assert_package_matches($newDestination, $fixtureRoot, $expectedPaths);
+        }
+    }
+
+    $fixtureLiteral = "'" . str_replace("'", "''", $fixtureRoot) . "'";
+    $failureScript = '$global:DeployAnswers = [Collections.Generic.Queue[string]]::new(); '
+        . "foreach (\$answer in @('local', 'n', 'n', " . $fixtureLiteral . ", 'y', '')) { \$global:DeployAnswers.Enqueue(\$answer); } "
+        . 'function Read-Host { param([string]$Prompt) Write-Host "Prompt: $Prompt"; return $global:DeployAnswers.Dequeue(); } '
+        . '& ' . $scriptLiteral;
+    $failure = deploy_test_run([$powerShellPath, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $failureScript], $fixtureRoot);
+    deploy_test_assert($failure['exit_code'] !== 0, 'An interactive launch accepted the project root as its output.');
+    deploy_test_assert(str_contains($failure['stdout'], 'Deployment failed. See the error above.'), 'An Explorer launch hid its failure summary.');
+    deploy_test_assert(str_contains($failure['stdout'], 'Prompt: Press Enter to close this window'), 'A failed Explorer launch omitted its closing prompt.');
+}
+
+/**
  * Build and validate package artifacts from actual installed Bash and PowerShell wrappers.
  *
  * @return void Throws when a dirty workspace leaks, an expected path is missing, or output differs.
@@ -473,6 +533,13 @@ function deploy_test_run_behavioral_packaging_proof(): void
         deploy_test_assert(!in_array('TEMP_local-plan.md', $fixtureProductionPaths, true), 'A dirty TEMP file entered the production inventory.');
         deploy_test_assert(!in_array('app/unlisted-local.bin', $fixtureProductionPaths, true), 'An unlisted application file entered the production inventory.');
         deploy_test_assert(!in_array('galleries/private/gallery.jpg', $fixtureProductionPaths, true), 'Gallery media entered the default production inventory.');
+        foreach (['winapp/gallery_watch_upload.pyw', 'winapp/gallery_http_monitor.py', 'winapp/VERSION',
+            'winapp/SimConnect.dll', 'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
+            'winapp/install.bat', 'winapp/run_gallery_watcher.bat', 'winapp/uploader/media.py',
+            'winapp/uploader/self_update.py', 'winapp/build_installer.py'] as $winAppPath) {
+            deploy_test_assert(in_array($winAppPath, $fixtureProductionPaths, true), 'Deployment omitted a required WinApp source or asset: ' . $winAppPath);
+        }
+        deploy_test_assert(!in_array('winapp/uploader/unlisted.py', $fixtureProductionPaths, true), 'An unlisted WinApp module entered the production inventory.');
 
         $bashPath = deploy_test_find_executable([
             (string) getenv('GIT_BASH'),
@@ -507,6 +574,18 @@ function deploy_test_run_behavioral_packaging_proof(): void
 
             $zipDirectory = $outputRoot . DIRECTORY_SEPARATOR . $name . ' zip with spaces';
             deploy_test_build_artifact($wrapperCommand, $fixtureRoot, $zipDirectory, true);
+
+            $zipHash = hash_file('sha256', $zipDirectory . '/php-gallery-deploy.zip');
+            $zipCollision = deploy_test_run(deploy_test_wrapper_arguments($wrapperCommand, [
+                '--mode' => 'local',
+                '--deploy-folder' => $zipDirectory,
+                '--upload-media' => 'false',
+                '--make-zip-deploy' => 'true',
+                '--include-tests' => 'false',
+            ]), $fixtureRoot);
+            deploy_test_assert($zipCollision['exit_code'] !== 0, $name . ' overwrote an explicit ZIP destination.');
+            deploy_test_assert(hash_file('sha256', $zipDirectory . '/php-gallery-deploy.zip') === $zipHash, $name . ' modified a rejected existing ZIP.');
+            deploy_test_assert(!str_contains($zipCollision['stdout'], 'Press Enter to close this window'), $name . ' paused a scripted invocation.');
 
             $existingTarget = $outputRoot . DIRECTORY_SEPARATOR . $name . ' existing target';
             mkdir($existingTarget, 0777, true);
@@ -552,6 +631,11 @@ function deploy_test_run_behavioral_packaging_proof(): void
         }
 
         if (isset($wrappers['powershell'])) {
+            $windowsPowerShell = deploy_test_find_executable([
+                (string) getenv('SystemRoot') . '/System32/WindowsPowerShell/v1.0/powershell.exe',
+            ]);
+            $interactivePowerShell = $windowsPowerShell ?? $wrappers['powershell'][0];
+            deploy_test_verify_interactive_windows_packaging($interactivePowerShell, $fixtureRoot, $outputRoot);
             $junctionPath = $outputRoot . DIRECTORY_SEPARATOR . 'galleries junction';
             $galleryPath = $fixtureRoot . DIRECTORY_SEPARATOR . 'galleries';
             $junctionPathLiteral = "'" . str_replace("'", "''", $junctionPath) . "'";

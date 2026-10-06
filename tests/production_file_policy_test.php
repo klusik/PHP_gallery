@@ -103,6 +103,10 @@ try {
         'docs/manual.pdf',
         'public/assets/styles.css',
         'tests/.htaccess',
+        'winapp/SimConnect.dll',
+        'winapp/assets/tray-icon.ico',
+        'winapp/gallery_watch_upload.pyw',
+        'winapp/uploader/media.py',
     ];
     $updater = ['app/.htaccess', 'app/example.php', 'app/production-files.json', 'public/assets/styles.css', 'tests/.htaccess'];
     $sourceReview = ['tests/policy_fixture.php'];
@@ -122,6 +126,7 @@ try {
     production_file_policy_assert(release_file_policy_is_integrity_path('app/example.json'), 'Integrity selector rejected an application JSON file.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('docs/manual.pdf'), 'Integrity selector accepted a distribution PDF.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('custom_css/preset.css'), 'Integrity selector accepted a user CSS preset.');
+    production_file_policy_assert(!\Gallery\Core\release_file_policy_is_updater_path('winapp/uploader/media.py'), 'CMS updater claimed independently owned WinApp sources.');
     production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/CON.txt'), 'Windows device path was accepted.');
     production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/unsafe. '), 'Trailing-dot/space alias was accepted.');
 
@@ -152,7 +157,9 @@ try {
     $inventoryPath = $source . '/app/production-files.json';
     $inventoryBytes = file_get_contents($inventoryPath);
     production_file_policy_assert(is_string($inventoryBytes), 'Fixture inventory bytes are unavailable.');
-    foreach (['config.php', 'public/assets/custom.css', 'cache/private.txt', 'data/private.txt', 'app/_for_codex/private.txt'] as $protected) {
+    foreach (['config.php', 'public/assets/custom.css', 'cache/private.txt', 'data/private.txt', 'app/_for_codex/private.txt',
+        'winapp/dist/0.3.2/Setup.exe', 'winapp/build/generated.py', 'winapp/settings.json',
+        'winapp/tests/local_test.py', 'winapp/http_monitor_logs/private.txt'] as $protected) {
         $tampered = json_decode($inventoryBytes, true, 512, JSON_THROW_ON_ERROR);
         $tampered['production_files'][] = $protected;
         $tampered['updater_files'][] = $protected;

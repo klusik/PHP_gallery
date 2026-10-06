@@ -68,6 +68,8 @@ php scripts/audit.php --profile=release
 
 `production_file_policy_test.php` validates canonical positive membership, safe contained paths and source-archive activation. `updates_path_safety_test.php` checks updater destination ancestors. The full/release regression `deploy_app_packaging_test.php` runs the actual deploy helpers on owned dirty fixtures and inspects folder/ZIP contents, required-file failures and local source-review/media choices; its complete-inventory proof has an exclusive 600-second process budget. The `production-package` CI job independently builds and verifies production folders on Linux, Windows and macOS. See [production file policy](docs/PRODUCTION_FILES.md).
 
+The same regression exercises repeated interactive Windows folder/ZIP builds under the Windows PowerShell runtime used by `deploy.bat`, including timestamp collisions, and verifies earlier packages remain unchanged. An interactive destination collision selects a fresh sibling directory and prints its path; an explicit `-DeployFolder` keeps the existing refusal to overwrite. Launches without arguments show success/failure completion and wait for Enter before closing. Scripted invocations with arguments finish without pausing.
+
 `tests/cli_http_boundary_test.php` exercises real direct HTTP requests to CLI
 entrypoints through a PHP server without rewrite rules, checks empty refusals
 before bootstrap/mutation, and retains CLI execution. Its isolated Apache fixture
