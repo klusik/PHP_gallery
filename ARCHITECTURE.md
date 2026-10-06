@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.120';
+const CMS_VERSION = '0.120.1';
 ```
 
 Update-related code uses:
@@ -1253,7 +1253,7 @@ Repair migrations return an empty SQL list to the legacy runner and execute thei
 
 ## Updater Safety
 
-Production membership is the exact checked-in `app/production-files.json` policy, read by `app/release_file_policy.php`. Bash and PowerShell packaging, integrity ownership and updater activation derive from that owner. The updater list is a validated subset retaining installation-owned custom CSS and distribution-only artifacts; a GitHub source archive may contain development files without activating them. Obsolete removal uses prior owned inventory/manifest evidence. See [production file policy](docs/PRODUCTION_FILES.md).
+Production membership is the exact checked-in `app/production-files.json` policy, read by `app/release_file_policy.php`. Bash and PowerShell packaging, integrity ownership and updater activation derive from that owner. Schema-1 packaging combines the base production list with optional reviewed WinApp companion membership; the base remains readable by installed pre-WinApp updaters. The updater list is a validated base subset retaining installation-owned custom CSS and distribution-only artifacts; a GitHub source archive may contain development or companion files without activating them. Obsolete removal uses prior owned inventory/manifest evidence. See [production file policy](docs/PRODUCTION_FILES.md).
 
 `app/services/updates_jobs.php` is the canonical installer engine for stable updates, beta installs, stable restores, clean reinstalls, rollback, Admin button requests, pure-PHP entry points, and automatic background updates. Legacy functions in `updates_install.php` now start a durable job instead of downloading, extracting, copying, migrating, and cleaning in one request.
 

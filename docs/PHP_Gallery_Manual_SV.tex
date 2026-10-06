@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.120}
+\newcommand{\version}{0.120.1}
 \newcommand{\manualdate}{6~oktober~2026}
 
 \hypersetup{
@@ -1996,7 +1996,9 @@ Samma tidiga körningsgräns omvandlar ohanterade och fångstbara fatala PHP-fel
 
 Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begärandekärnan och dess granskade modulplan. Ett ofullständigt arkiv avvisas medan förberedda filer ligger utanför den aktiva installationen. Behåll alla levererade körmiljöfiler tillsammans vid manuell distribution; att bara ersätta bootstrap skulle lämna programmet ofullständigt.
 
-Uppdateringsaktivering använder den granskade uppdaterardelmängden av produktionslistan. Äldre källarkiv utan lista behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare ägarbevis och bevarar okända lokala filer. Filåterställning använder det servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd återställer inte databasmigreringar.
+Uppdateringsaktivering använder den granskade uppdaterardelmängden av produktionslistan. Inkommande listor anger WinApp-källor separat så att äldre installerade uppdaterare kan kontrollera utgåvan innan dess läskod installeras. CMS-uppdateraren installerar inte dessa källor. Äldre källarkiv utan lista behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare ägarbevis och bevarar okända lokala filer. Filåterställning använder det servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd återställer inte databasmigreringar.
+
+Om en uppdatering stoppades före aktivering, avbryt det gamla jobbet, tvinga fram en ny utgåvekontroll och starta en ny stabil uppdatering när den korrigerade utgåvan är tillgänglig. Ett nytt försök kan behålla jobbets ursprungliga målversion.
 
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}

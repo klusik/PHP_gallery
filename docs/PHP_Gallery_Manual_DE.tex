@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.120}
+\newcommand{\version}{0.120.1}
 \newcommand{\manualdate}{6.~Oktober~2026}
 
 \hypersetup{
@@ -2000,7 +2000,9 @@ Dieselbe frühe Laufzeitgrenze wandelt nicht abgefangene und abfangbare fatale P
 
 Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den vollständigen neuen Anfragekernel und seinen geprüften Modulplan. Ein unvollständiges Archiv wird abgelehnt, während vorbereitete Dateien außerhalb der aktiven Installation bleiben. Halten Sie bei manueller Bereitstellung alle ausgelieferten Laufzeitdateien zusammen; ein Austausch nur des Bootstrap würde eine unvollständige Anwendung hinterlassen.
 
-Die Update-Aktivierung verwendet die geprüfte Updater-Teilmenge des Produktionsinventars. Ältere Quellarchive ohne Inventar behalten einen begrenzten Kompatibilitätspfad anhand ihres eigenen Manifests; ein vorhandenes ungültiges Inventar wird abgelehnt. Das Entfernen veralteter Dateien erfordert frühere Eigentumsnachweise und bewahrt unbekannte lokale Dateien. Die Dateiwiederherstellung nutzt den serverseitig geschriebenen Sicherungsindex und lehnt nicht indexierte Dateien sowie durch symbolische Links oder Windows-Junctions umgeleitete Pfade ab. Diese Dateisicherung macht Datenbankmigrationen nicht rückgängig.
+Die Update-Aktivierung verwendet die geprüfte Updater-Teilmenge des Produktionsinventars. Eingehende Inventare führen WinApp-Quellen getrennt auf, damit ältere installierte Updater das Release vor der Installation seines Lesecodes prüfen können. Der CMS-Updater installiert diese Quellen nicht. Ältere Quellarchive ohne Inventar behalten einen begrenzten Kompatibilitätspfad anhand ihres eigenen Manifests; ein vorhandenes ungültiges Inventar wird abgelehnt. Das Entfernen veralteter Dateien erfordert frühere Eigentumsnachweise und bewahrt unbekannte lokale Dateien. Die Dateiwiederherstellung nutzt den serverseitig geschriebenen Sicherungsindex und lehnt nicht indexierte Dateien sowie durch symbolische Links oder Windows-Junctions umgeleitete Pfade ab. Diese Dateisicherung macht Datenbankmigrationen nicht rückgängig.
+
+Wenn ein Update vor der Aktivierung gestoppt wurde, brechen Sie den alten Auftrag ab, erzwingen Sie eine neue Release-Prüfung und starten Sie ein neues stabiles Update, sobald das korrigierte Release verfügbar ist. Ein erneuter Versuch kann die ursprüngliche Zielversion des Auftrags beibehalten.
 
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.120}
+\newcommand{\version}{0.120.1}
 \newcommand{\manualdate}{6~October~2026}
 
 \hypersetup{
@@ -2017,7 +2017,9 @@ The~same early runtime boundary converts uncaught and~catchable fatal PHP failur
 
 Before activation, updater archive validation also requires the~complete new request runtime and~its reviewed module plan. A~partial archive is~refused while prepared files remain outside the~active installation. Keep all shipped runtime files together during manual deployment; replacing only the~bootstrap would leave an~incomplete application.
 
-Updater activation uses the~reviewed updater subset of~the~production inventory. Older source archives without that inventory retain a~bounded path based on~their owned manifest; a~malformed present inventory is~refused. Obsolete cleanup requires prior ownership evidence and~preserves unknown local files. Rollback uses the~server-written snapshot index and~refuses unindexed files or~paths redirected by~symbolic links or~Windows junctions. These file safeguards do~not~reverse database migrations.
+Updater activation uses the~reviewed updater subset of~the~production inventory. Incoming inventories list WinApp sources separately so~older installed updaters can~validate the~release before installing its reader. The~CMS updater does~not~install those sources. Older source archives without that inventory retain a~bounded path based on~their owned manifest; a~malformed present inventory is~refused. Obsolete cleanup requires prior ownership evidence and~preserves unknown local files. Rollback uses the~server-written snapshot index and~refuses unindexed files or~paths redirected by~symbolic links or~Windows junctions. These file safeguards do~not~reverse database migrations.
+
+If~an~update stopped before activation, cancel the~old job, force a~fresh release check, and~start a~new stable update once the~corrected release is~available. Retrying a~job may~retain its original target version.
 
 \subsection{Integrity manifest}
 \index{core manifest}
