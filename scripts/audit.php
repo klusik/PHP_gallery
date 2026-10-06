@@ -54,6 +54,7 @@ use function PhpGallery\Audit\resolve_executable;
 use function PhpGallery\Audit\resolve_python_command;
 use function PhpGallery\Audit\run_process;
 use function PhpGallery\Audit\run_process_pool;
+use function PhpGallery\Audit\run_file_checks;
 use function PhpGallery\Audit\worker_count;
 use function PhpGallery\Audit\process_status;
 use function PhpGallery\Audit\browser_required;
@@ -324,9 +325,11 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
         $timeout = max(1, min(600, (int) ($requirement['timeout'] ?? 45)));
         $serial = !empty($requirement['serial']);
         $serialCount += $serial ? 1 : 0;
-        $jobs[] = ['command' => [PHP_BINARY, $file], 'timeout' => $timeout, 'serial' => $serial];
-        $jobNames[] = $name;
+        $jobs[$name] = ['command' => [PHP_BINARY, $file], 'timeout' => $timeout, 'serial' => $serial];
     }
+    // Drain the parallel batch once, then retain the relative order of exclusive fixtures.
+    uasort($jobs, static fn(array $left, array $right): int => $left['serial'] <=> $right['serial']);
+    $jobNames = array_keys($jobs);
     foreach (run_process_pool($jobs, $root, $workers) as $index => $process) {
         $results[$jobNames[$index]] = $process;
     }
@@ -521,7 +524,7 @@ function audit_select_node_tests(array $registry, bool $includeSlow, bool $brows
  *
  * @param string $suiteId Stable suite identifier.
  * @param string $label Human-readable label.
- * @param array<string,array{browser?:bool,temporary_output?:string,timeout?:int,slow?:bool,php_argument?:bool}> $definitions Registry-owned test paths and explicit invocation requirements.
+ * @param array<string,array{browser?:bool,temporary_output?:string,timeout?:int,slow?:bool,php_argument?:bool,serial?:bool}> $definitions Registry-owned test paths and explicit invocation requirements.
  * @param ?string $node Node executable.
  * @param ?string $browser Browser executable for browser-only tests.
  * @return array<string,mixed> Normalized suite result with pass/fail/skip/blocked counts and a bounded log link.
@@ -536,12 +539,19 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
     if ($definitions === []) {
         return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No registered Node tests were selected.');
     }
+    try {
+        $workers = worker_count();
+    } catch (InvalidArgumentException $exception) {
+        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+    }
 
     $counts = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => count($definitions)];
     $problems = [];
     $gaps = [];
-    $log = [$label];
+    $log = [$label . '; worker limit=' . $workers];
     $requiredBrowser = $suiteId === 'browser-map' && browser_required();
+    $jobs = [];
+    $outputs = [];
 
     foreach ($definitions as $name => $definition) {
         $file = $root . '/tests/' . $name;
@@ -578,7 +588,18 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         }
 
         $timeout = max(5, (int) ($definition['timeout'] ?? 30));
-        $process = run_process($command, $root, $timeout);
+        $jobs[$name] = ['command' => $command, 'timeout' => $timeout, 'serial' => !empty($definition['serial'])];
+        $outputs[$name] = $temporaryOutput;
+    }
+    $jobNames = array_keys($jobs);
+    $testResults = [];
+    foreach (run_process_pool($jobs, $root, $workers) as $index => $process) {
+        $name = $jobNames[$index];
+        $timeout = $jobs[$name]['timeout'];
+        $temporaryOutput = $outputs[$name];
+        $testResults[] = ['name' => $name, 'status' => process_status($process, $requiredBrowser),
+            'exit_code' => $process['exit_code'], 'timed_out' => $process['timed_out'],
+            'duration_seconds' => round((float) $process['duration'], 4)];
         audit_record_slow_check('Node ' . $name, (float) $process['duration']);
         $output = audit_process_output($process);
         if ($temporaryOutput !== null && is_file($temporaryOutput)) {
@@ -632,7 +653,8 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
     }
     $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
     $logPath = audit_write_log($suiteId, $log);
-    return task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath, ['problems' => $problems, 'gaps' => $gaps]);
+    return task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
+        ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers, 'tests' => $testResults]);
 }
 
 /**
@@ -937,7 +959,7 @@ function audit_lint_targets(array $extensions, bool $changedOnly): array
  * Run PHP syntax validation over selected source files.
  *
  * @param bool $changedOnly True to prefer Git-changed files.
- * @return array Normalized task result.
+ * @return array<string,mixed> Normalized task result.
  */
 function audit_run_php_lint(bool $changedOnly): array
 {
@@ -945,13 +967,19 @@ function audit_run_php_lint(bool $changedOnly): array
     $id = $changedOnly ? 'php-lint-changed' : 'php-lint';
     $label = $changedOnly ? 'PHP syntax (changed)' : 'PHP syntax';
     $started = microtime(true);
+    try {
+        $workers = worker_count();
+    } catch (InvalidArgumentException $exception) {
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+    }
     $targets = audit_lint_targets(['php'], $changedOnly);
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
 
-    foreach ($files as $file) {
-        $process = run_process([PHP_BINARY, '-l', $file], $root, 15);
+    // Syntax parsing needs no installed extensions or php.ini startup work.
+    foreach (run_file_checks($files, [PHP_BINARY, '-n', '-l'], $root, $workers, 15) as $index => $process) {
+        $file = $files[$index];
         audit_record_slow_check('PHP lint ' . relative_path($file, $root), (float) $process['duration']);
         if ((int) $process['exit_code'] !== 0 || $process['timed_out']) {
             $failed[] = relative_path($file, $root);
@@ -973,7 +1001,7 @@ function audit_run_php_lint(bool $changedOnly): array
  *
  * @param bool $changedOnly True to prefer Git-changed files.
  * @param ?string $node Node executable.
- * @return array Normalized task result.
+ * @return array<string,mixed> Normalized task result.
  */
 function audit_run_js_lint(bool $changedOnly, ?string $node): array
 {
@@ -985,12 +1013,17 @@ function audit_run_js_lint(bool $changedOnly, ?string $node): array
     }
 
     $started = microtime(true);
+    try {
+        $workers = worker_count();
+    } catch (InvalidArgumentException $exception) {
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+    }
     $targets = audit_lint_targets(['js', 'mjs'], $changedOnly);
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
-    foreach ($files as $file) {
-        $process = run_process([$node, '--check', $file], $root, 15);
+    foreach (run_file_checks($files, [$node, '--check'], $root, $workers, 15) as $index => $process) {
+        $file = $files[$index];
         audit_record_slow_check('JS lint ' . relative_path($file, $root), (float) $process['duration']);
         if ((int) $process['exit_code'] !== 0 || $process['timed_out']) {
             $failed[] = relative_path($file, $root);

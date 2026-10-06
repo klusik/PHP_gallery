@@ -51,6 +51,7 @@ use function PhpGallery\Audit\resolve_browser_executable;
 use function PhpGallery\Audit\browser_required;
 use function PhpGallery\Audit\process_status;
 use function PhpGallery\Audit\run_process_pool;
+use function PhpGallery\Audit\run_file_checks;
 use function PhpGallery\Audit\worker_count;
 
 /**
@@ -100,15 +101,19 @@ foreach (['quick', 'full', 'release'] as $profile) {
 $phpRegistry = require dirname(__DIR__) . '/scripts/audit_php_registry.php';
 $quickTests = $phpRegistry['quick_tests'];
 /**
- * Bound the explicit feedback subset including the inline description-link contract.
+ * Bound the explicit feedback subset without the complete module-loading matrix.
  * @var int Units: registered test cases. Scope: central quick registry contract.
  * Consumers: curated feedback cardinality assertion below.
- * Rationale: the reviewed subset now has 47 cases; the description-link contract
- * uses only an in-process renderer and adds less than one second, while whole-tree
- * inventory and slow suites remain excluded.
+ * Rationale: the reviewed subset has 46 cases, including the in-process description
+ * renderer. Complete compilation and isolated comparison of every runtime module
+ * remain covered by full/release rather than repeated during each edit cycle.
  */
-const QUICK_REGISTRY_CASE_LIMIT = 47;
+const QUICK_REGISTRY_CASE_LIMIT = 46;
 audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= QUICK_REGISTRY_CASE_LIMIT && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
+audit_test_assert(!in_array('runtime_module_plan_test.php', $quickTests, true)
+    && in_array('runtime_dependencies_test.php', $quickTests, true)
+    && in_array('runtime_plan_ratchet_test.php', $quickTests, true),
+    'Quick must retain dependency/graph contracts while reserving the complete clean-child module matrix for full/release.');
 foreach ($quickTests as $testName) {
     audit_test_assert(basename($testName) === $testName && is_file(__DIR__ . '/' . $testName), 'Every curated PHP entry must identify an existing standalone test.');
 }
@@ -264,6 +269,16 @@ $statePath = $fixtureDirectory . '/state.txt';
 $eventPath = $fixtureDirectory . '/events.txt';
 $lockPath = $fixtureDirectory . '/state.lock';
 try {
+    $validSource = $fixtureDirectory . '/valid source.php';
+    $invalidSource = $fixtureDirectory . '/invalid source.php';
+    $executionSentinel = $fixtureDirectory . '/must-not-execute.txt';
+    file_put_contents($validSource, '<?php file_put_contents(' . var_export($executionSentinel, true) . ', "executed");');
+    file_put_contents($invalidSource, '<?php function broken( {');
+    $syntaxResults = run_file_checks([$invalidSource, $validSource], [PHP_BINARY, '-n', '-l'], $fixtureDirectory, 2, 15);
+    audit_test_assert(process_status($syntaxResults[0]) === 'FAIL' && process_status($syntaxResults[1]) === 'PASS'
+        && str_contains($syntaxResults[0]['stdout'] . $syntaxResults[0]['stderr'], 'invalid source.php')
+        && str_contains($syntaxResults[1]['stdout'], 'valid source.php') && !is_file($executionSentinel),
+        'Parallel syntax checks must attribute failures to literal paths with spaces and never execute checked code.');
     file_put_contents($statePath, "0,0\n");
     $makeFixtureJob = static function (string $name, string $kind = 'parallel', int $delayMs = 120) use ($statePath, $eventPath, $lockPath): array {
         $script = '$state=' . var_export($statePath, true) . ';$events=' . var_export($eventPath, true) . ';$lockPath=' . var_export($lockPath, true)
@@ -436,6 +451,22 @@ try {
 } finally {
     putenv($previousBrowserRequired === false ? 'PHP_GALLERY_BROWSER_REQUIRED' : 'PHP_GALLERY_BROWSER_REQUIRED=' . $previousBrowserRequired);
     putenv($previousBrowser === false ? 'PHP_GALLERY_BROWSER' : 'PHP_GALLERY_BROWSER=' . $previousBrowser);
+}
+
+$previousWorkerCount = getenv('PHP_GALLERY_AUDIT_WORKERS');
+try {
+    putenv('PHP_GALLERY_AUDIT_WORKERS=0');
+    foreach (['php-lint-changed', 'js-lint-changed', 'node-fast'] as $suiteId) {
+        $invalidWorkerAudit = \PhpGallery\Audit\run_process(
+            [PHP_BINARY, $root . '/scripts/audit.php', '--suite=' . $suiteId, '--no-report'], $root, 20
+        );
+        audit_test_assert($invalidWorkerAudit['exit_code'] === 2
+            && str_contains($invalidWorkerAudit['stdout'], 'Result: BLOCKED')
+            && str_contains($invalidWorkerAudit['stdout'], 'PHP_GALLERY_AUDIT_WORKERS'),
+            'Syntax and Node CLI suites must block an invalid shared worker limit: ' . $suiteId);
+    }
+} finally {
+    putenv($previousWorkerCount === false ? 'PHP_GALLERY_AUDIT_WORKERS' : 'PHP_GALLERY_AUDIT_WORKERS=' . $previousWorkerCount);
 }
 
 $releaseTask = \PhpGallery\Audit\task_result(

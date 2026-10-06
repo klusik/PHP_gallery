@@ -36,7 +36,7 @@ return [
         'runtime_kernel_test.php',
         'runtime_dependencies_test.php',
         'runtime_route_probe_test.php',
-        'runtime_module_plan_test.php',
+        // Complete compilation and both loaders for every module belong to full/release.
         'runtime_plan_ratchet_test.php',
         'module_split_path_resolution_test.php',
         'feature_policy_core_test.php',

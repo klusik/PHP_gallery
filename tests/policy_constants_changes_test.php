@@ -18,6 +18,7 @@ use function PhpGallery\SourceContracts\changed_policy_report;
 use function PhpGallery\SourceContracts\changed_policy_source;
 use function PhpGallery\SourceContracts\compare_declaration_snapshots;
 use function PhpGallery\SourceContracts\policy_site_snapshots;
+use function PhpGallery\SourceContracts\declaration_snapshots;
 
 /**
  * Fail an isolated source-contract assertion without printing fixture source.
@@ -45,6 +46,16 @@ function policy_changes_explanation(): string
 }
 
 $doc = policy_changes_explanation();
+foreach ([
+    'php' => '<?php namespace Fixture; class Owner { public function run(): void { $callback = function (): void { usleep(20); }; } } namespace Other; function run(): void {}',
+    'js' => 'class Owner { run() { const callback = () => { setTimeout(() => {}, 20); }; } } function run() {}',
+] as $extension => $source) {
+    $complete = declaration_snapshots($source, $extension);
+    $owners = declaration_snapshots($source, $extension, false);
+    policy_changes_assert(array_column($complete, 'identity') === array_column($owners, 'identity')
+        && array_column($complete, 'record') === array_column($owners, 'record'),
+        'Ownership-only scanning must preserve namespaces, classes, methods and nested callback identities and records.');
+}
 $oldHeader = "/** Project: PHP Gallery\n * Repository: https://github.com/klusik/PHP_gallery\n * Purpose: Explain the old native module role.\n */\nconst LEGACY_LIMIT = 9;";
 $newHeader = str_replace(' * Repository:', " * File: public/assets/fixture.js\n * Repository:", $oldHeader);
 policy_changes_assert(changed_policy_source($oldHeader, $newHeader, 'public/assets/fixture.js')['findings'] === [],
