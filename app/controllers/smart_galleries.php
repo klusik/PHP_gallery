@@ -89,6 +89,8 @@ use function Gallery\Services\smart_gallery_rules_from_json;
 use function Gallery\Services\smart_gallery_rules_from_search;
 use function Gallery\Services\smart_gallery_save;
 use function Gallery\Services\t;
+use function Gallery\Services\breadcrumb_style_picker_options;
+use function Gallery\Services\theme_breadcrumb_style;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\public_thumbnail_render_picture_html;
@@ -481,7 +483,11 @@ function smart_gallery_admin_json_error(string $message, string $errorCode, stri
     ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
-/** Normalize the Smart Gallery editor POST payload. */
+/**
+ * Normalize the Smart Gallery editor POST payload.
+ *
+ * @return array<string,mixed> Validated request fields ready for service-level normalization and persistence.
+ */
 function smart_gallery_admin_input(): array
 {
     $presentation = [];
@@ -495,6 +501,7 @@ function smart_gallery_admin_input(): array
             'thumbnail_max_size' => $thumbnailMaxSize,
             'thumbnail_rendering_mode' => (string) ($_POST['presentation_thumbnail_rendering_mode'] ?? ''),
             'card_layout' => (string) ($_POST['presentation_card_layout'] ?? ''),
+            'breadcrumb_style' => $_POST['presentation_breadcrumb_style'] ?? 'inherit',
             'metadata_visible' => isset($_POST['presentation_metadata_visible']),
             'source_gallery_visible' => isset($_POST['presentation_source_gallery_visible']),
             'map_enabled' => isset($_POST['presentation_map_enabled']),
@@ -657,7 +664,12 @@ function smart_gallery_admin_editor_view_model(array $gallery, ?int $previewCoun
         'placement_modes' => $placementModes,
         'sort_modes' => $sortModes,
         'enabled' => !array_key_exists('enabled', $gallery) || !empty($gallery['enabled']),
-        'presentation_controls' => smart_gallery_presentation_controls_view_model($presentationPreferences, $presentationOverrides !== [], $presentationMasters),
+        'presentation_controls' => smart_gallery_presentation_controls_view_model(
+            $presentationPreferences,
+            $presentationOverrides !== [],
+            $presentationMasters,
+            isset($presentationOverrides['breadcrumb_style']) ? (string) $presentationOverrides['breadcrumb_style'] : null
+        ),
         'rules_json' => $rulesJson,
         'preview_count' => $previewCount,
         'preview_cards' => $previewCount !== null && $previewImages !== []
@@ -688,9 +700,10 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount, array $
  * @param array<string,mixed> $presentation Stored/inherited Smart Gallery presentation preferences.
  * @param bool $hasOverride Whether the Smart Gallery owns explicit presentation overrides.
  * @param ?array<string,bool> $masterStatus Site-wide capability masters that may suppress runtime behavior.
+ * @param ?string $breadcrumbStyleOverride Explicit registered breadcrumb style, or null to inherit Theme.
  * @return array<string,mixed> Controller-prepared control state.
  */
-function smart_gallery_presentation_controls_view_model(array $presentation, bool $hasOverride, ?array $masterStatus = null): array
+function smart_gallery_presentation_controls_view_model(array $presentation, bool $hasOverride, ?array $masterStatus = null, ?string $breadcrumbStyleOverride = null): array
 {
     $thumbnailModes = [];
     foreach (public_thumbnail_rendering_modes() as $mode) {
@@ -721,6 +734,13 @@ function smart_gallery_presentation_controls_view_model(array $presentation, boo
         ];
     }
 
+    $breadcrumbStylePicker = [
+        'field_name' => 'presentation_breadcrumb_style',
+        'label' => t('admin.gallery_editor.breadcrumb_style_label', 'Breadcrumb style'),
+        'current' => $breadcrumbStyleOverride ?? 'inherit',
+        'options' => breadcrumb_style_picker_options(true, theme_breadcrumb_style()),
+    ];
+
     $thumbnailBoundState = admin_thumbnail_bound_slider_state(
         isset($presentation['thumbnail_min_size']) ? (int) $presentation['thumbnail_min_size'] : null,
         isset($presentation['thumbnail_max_size']) ? (int) $presentation['thumbnail_max_size'] : null
@@ -739,6 +759,7 @@ function smart_gallery_presentation_controls_view_model(array $presentation, boo
         'pagination_safety_limit' => SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
         'thumbnail_modes' => $thumbnailModes,
         'card_layouts' => $cardLayouts,
+        'breadcrumb_style_picker' => $breadcrumbStylePicker,
         'thumbnail_bounds' => $thumbnailBoundState,
         'lightbox_modes' => $lightboxModes,
         'capability_masters' => [
@@ -934,7 +955,11 @@ function smart_gallery_render_image_cards(array $images, array $sourceGalleries,
     );
 }
 
-/** Render a published Smart Gallery using physical-gallery media URLs and shared thumbnail cards. */
+/**
+ * Render a published Smart Gallery using authorized media and prepared presentation state.
+ *
+ * @return void Emits the public page response or not-found response.
+ */
 function cms_smart_gallery(): void
 {
     $testRunActive = admin_test_run_active();
@@ -1085,6 +1110,14 @@ function cms_smart_gallery(): void
 
     \Gallery\Views\view_render_public_smart_gallery([
         'title' => (string) $gallery['title'],
+        'breadcrumbs' => \Gallery\Services\breadcrumb_view_model(
+            [
+                ['label' => t('public.galleries', 'Galleries'), 'url' => url_for('home')],
+                ['label' => (string) $gallery['title'], 'current' => true],
+            ],
+            (string) $presentation['breadcrumb_style'],
+            t('public.breadcrumbs', 'Breadcrumbs')
+        ),
         'description' => (string) $gallery['description'],
         'total' => $total,
         'download' => $download,

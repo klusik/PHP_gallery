@@ -70,6 +70,8 @@ use function Gallery\Views\view_render_tag_list;
 
 /**
  * Public tag-filter page listing galleries associated with a tag.
+ *
+ * @return void
  */
 function cms_tag(): void
 {
@@ -118,9 +120,14 @@ function cms_tag(): void
 
     $viewModel = [
         'title' => $pageTitle,
-        'breadcrumbs_label' => t('public.common.breadcrumbs', 'Breadcrumbs'),
-        'home_url' => url_for('home'),
-        'galleries_label' => t('public.gallery.galleries', 'Galleries'),
+        'breadcrumbs' => \Gallery\Services\breadcrumb_view_model(
+            [
+                ['label' => t('public.gallery.galleries', 'Galleries'), 'url' => url_for('home')],
+                ['label' => $pageTitle, 'current' => true],
+            ],
+            \Gallery\Services\theme_breadcrumb_style(),
+            t('public.common.breadcrumbs', 'Breadcrumbs')
+        ),
         'tag_id' => (int) $tag['id'],
         'gallery_count' => count($galleries),
         'canonical_url' => url_for('tag', ['slug' => (string) $tag['slug']]),

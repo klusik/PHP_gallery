@@ -62,6 +62,7 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\app_setting;
+use function Gallery\Services\breadcrumb_style_picker_options;
 use function Gallery\Services\clear_theme_overrides;
 use function Gallery\Services\custom_css_path;
 use function Gallery\Services\custom_css_preset_path;
@@ -102,6 +103,7 @@ use function Gallery\Services\theme_background_regenerate_optimized;
 use function Gallery\Services\theme_background_source;
 use function Gallery\Services\theme_branding_asset_types;
 use function Gallery\Services\theme_branding_asset_url;
+use function Gallery\Services\theme_breadcrumb_style;
 use function Gallery\Services\theme_branding_separator_height_value;
 use function Gallery\Services\theme_branding_separator_stretch_enabled;
 use function Gallery\Services\theme_branding_separator_width_value;
@@ -312,6 +314,15 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         ];
     }
 
+    // The picker receives complete example paths without resolving policy in the view.
+    $currentBreadcrumbStyle = theme_breadcrumb_style();
+    $breadcrumbStylePicker = [
+        'field_name' => 'theme_breadcrumb_style',
+        'label' => t('admin.theme.layout.breadcrumb_style_label', 'Default breadcrumb style'),
+        'current' => $currentBreadcrumbStyle,
+        'options' => breadcrumb_style_picker_options(),
+    ];
+
     // $lightboxOptions stores presentation-only browsing-mode rows when the feature is enabled.
     $lightboxOptions = [];
     if ($lightboxModesFeatureEnabled) {
@@ -328,6 +339,7 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         'favorite_shortcuts' => $favoriteShortcuts,
         'home_token' => THEME_FAVORITE_GALLERIES_HOME_TOKEN,
         'description_layouts' => $descriptionLayouts,
+        'breadcrumb_style_picker' => $breadcrumbStylePicker,
         'gallery_count_badge_enabled' => ((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1',
         'thumbnail_modes' => [
             [
@@ -372,6 +384,9 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
             'favorite_galleries_visibility_hint' => t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.'),
             'description_layout_legend' => t('admin.theme.layout.description_layout_legend', 'Gallery description format'),
             'description_layout_hint' => t('admin.theme.layout.description_layout_hint', 'Vertical places the gallery photo above the description. Horizontal places it beside the description. Cards include the title, tags, and a shortened Markdown-capable description.'),
+            'breadcrumb_style_legend' => t('admin.theme.layout.breadcrumb_style_legend', 'Breadcrumb style'),
+            'breadcrumb_style_label' => t('admin.theme.layout.breadcrumb_style_label', 'Default breadcrumb style'),
+            'breadcrumb_style_hint' => t('admin.theme.layout.breadcrumb_style_hint', 'Used by galleries that inherit the site default.'),
             'description_layout_label' => t('admin.theme.layout.description_layout_label', 'Default gallery-card layout'),
             'description_preview_title' => t('admin.theme.layout.description_preview_title', 'Summer gallery'),
             'description_preview_meta' => t('admin.theme.layout.description_preview_meta', '12 photos'),

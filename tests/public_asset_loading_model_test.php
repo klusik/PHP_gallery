@@ -101,9 +101,10 @@ $anonymousPublicStyles = view_stylesheet_files_for_context('public-page', null, 
 assert_public_asset_contains('assets/styles/public-shared.css', $anonymousPublicStyles, 'anonymous public styles include extracted shared public CSS');
 assert_public_asset_contains('assets/styles/public.css', $anonymousPublicStyles, 'anonymous public styles include public CSS');
 assert_public_asset_contains('assets/styles/lightbox.css', $anonymousPublicStyles, 'anonymous public styles include lightbox CSS');
+assert_public_asset_contains('assets/styles/breadcrumbs.css', $anonymousPublicStyles, 'anonymous public styles include shared breadcrumb presentation');
 
 foreach (view_admin_stylesheet_files() as $styleFile) {
-    if (in_array($styleFile, ['assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css', 'assets/styles/utilities.css', 'assets/styles.css'], true)) {
+    if (in_array($styleFile, ['assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css'], true)) {
         continue;
     }
     assert_public_asset_not_contains($styleFile, $anonymousPublicStyles, 'anonymous public styles exclude admin-only CSS');

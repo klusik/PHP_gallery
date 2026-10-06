@@ -76,6 +76,8 @@ require_once __DIR__ . '/services/admin_dashboard.php';
 require_once __DIR__ . '/services/custom_css.php';
 // Load theme settings and CSS default helpers after custom CSS paths are available.
 require_once __DIR__ . '/services/theme.php';
+// Share breadcrumb configuration across public navigation and Admin settings.
+require_once __DIR__ . '/services/breadcrumbs.php';
 // Load favicon service helpers. Kept separate only after fixing module-relative paths.
 require_once __DIR__ . '/services/favicon.php';
 // Load gallery and theme background helpers after their module-relative paths were corrected.

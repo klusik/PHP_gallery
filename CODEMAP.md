@@ -88,7 +88,8 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | --- | --- | --- |
 | Home page gallery listing | `app/controllers/public_gallery.php` | `app/services/gallery_display.php`, `app/services/gallery_lookup.php`, `app/services/pagination.php` |
 | Gallery detail page | `app/controllers/public_gallery.php` | `app/views/layout.php`, `app/views/gallery_descriptions.php`, `app/services/gallery_display.php` |
-| Breadcrumbs | `app/controllers/public_gallery.php` | `app/services/gallery_lookup.php`, `app/services/public_paths.php` |
+| Breadcrumbs | `app/controllers/public_gallery.php` | `app/services/breadcrumbs.php`, `app/services/gallery_lookup.php`, `app/services/public_paths.php` |
+| Breadcrumb style preference | `app/services/breadcrumbs.php`, `app/services/theme_layout_settings.php`, `tests/breadcrumb_theme_settings_test.php` | Stable style registry, Theme fallback, per-gallery inheritance, and safe default normalization. |
 | Gallery cards | `app/controllers/public_gallery.php` | `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/gallery_grid.php` |
 | Gallery date ranges | `app/services/gallery_dates.php` | Manual start/end validation, public date formatting and EXIF-derived suggestion aggregation. |
 | Image grid | `app/controllers/public_gallery.php` | `app/services/public_thumbnail_rendering.php`, `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php`, `app/services/public_gallery_media_manifest.php` |

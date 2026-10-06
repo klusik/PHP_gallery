@@ -218,25 +218,14 @@ function view_render_public_gallery_branding_separator(array $viewModel): void
 }
 
 /**
- * Render public breadcrumbs from controller-prepared ancestors.
+ * Delegate public gallery navigation to the shared breadcrumb presentation.
  *
  * @param array<string,mixed> $viewModel Controller-prepared breadcrumb state.
+ * @return void
  */
 function view_render_public_gallery_breadcrumbs(array $viewModel): void
 {
-    echo '<nav class="breadcrumbs" aria-label="' . e(t('public.breadcrumbs', 'Breadcrumbs')) . '">';
-    echo '<a href="' . e((string) ($viewModel['home_url'] ?? '')) . '">' . e(t('public.galleries', 'Galleries')) . '</a>';
-    foreach ((array) ($viewModel['ancestors'] ?? []) as $ancestor) {
-        if (!is_array($ancestor)) {
-            continue;
-        }
-        echo '<span aria-hidden="true">/</span><a href="' . e((string) ($ancestor['url'] ?? '')) . '">' . e((string) ($ancestor['title'] ?? '')) . '</a>';
-    }
-    $currentTitle = (string) ($viewModel['current_title'] ?? '');
-    if ($currentTitle !== '') {
-        echo '<span aria-hidden="true">/</span><span>' . e($currentTitle) . '</span>';
-    }
-    echo '</nav>';
+    view_render_breadcrumbs($viewModel);
 }
 
 /**

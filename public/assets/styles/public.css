@@ -451,17 +451,6 @@ button.is-update-pending {
     gap: 0.75rem;
     margin: 0;
 }
-.breadcrumbs {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    margin: 0 0 1rem;
-    color: var(--muted);
-}
-.breadcrumbs a {
-    color: var(--accent-dark);
-}
 .tree-title {
     display: inline-flex;
     align-items: center;

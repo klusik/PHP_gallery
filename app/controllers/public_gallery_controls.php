@@ -457,27 +457,29 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
  */
 function public_gallery_breadcrumbs_view_model(?array $gallery = null): array
 {
-    $ancestors = [];
+    $items = [['label' => t('public.galleries', 'Galleries'), 'url' => url_for('home')]];
     if ($gallery) {
         foreach (gallery_breadcrumb_ancestors($gallery) as $ancestor) {
-            $ancestors[] = [
-                'title' => (string) ($ancestor['title'] ?? ''),
+            $items[] = [
+                'label' => (string) ($ancestor['title'] ?? ''),
                 'url' => gallery_public_url($ancestor),
             ];
         }
+        $items[] = ['label' => (string) ($gallery['title'] ?? ''), 'current' => true];
     }
 
-    return [
-        'home_url' => url_for('home'),
-        'ancestors' => $ancestors,
-        'current_title' => $gallery ? (string) ($gallery['title'] ?? '') : '',
-    ];
+    return \Gallery\Services\breadcrumb_view_model(
+        $items,
+        \Gallery\Services\gallery_breadcrumb_style($gallery),
+        t('public.breadcrumbs', 'Breadcrumbs')
+    );
 }
 
 /**
  * Handles render breadcrumbs logic for the gallery application.
  *
  * @param mixed $gallery Input used by this operation.
+ * @return void
  */
 function render_breadcrumbs(?array $gallery = null): void
 {

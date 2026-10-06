@@ -82,6 +82,51 @@ namespace Gallery\Services {
         return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_description_layout'] ?? 'vertical');
     }
 
+    /** Return the shared stable breadcrumb style metadata for the isolated Theme test.
+     * @return array<string,array{label:string,class:string}> Supported breadcrumb style definitions.
+     */
+    function breadcrumb_style_registry(): array
+    {
+        return [
+            'minimal' => ['label' => 'Minimal', 'class' => 'breadcrumbs--minimal'],
+            'chevron' => ['label' => 'Chevron', 'class' => 'breadcrumbs--chevron'],
+            'pills' => ['label' => 'Pills', 'class' => 'breadcrumbs--pills'],
+            'surface' => ['label' => 'Surface', 'class' => 'breadcrumbs--surface'],
+            'ribbon' => ['label' => 'Ribbon', 'class' => 'breadcrumbs--ribbon'],
+            'nodes' => ['label' => 'Connected nodes', 'class' => 'breadcrumbs--nodes'],
+            'tabs' => ['label' => 'Tabs', 'class' => 'breadcrumbs--tabs'],
+            'tiles' => ['label' => 'Tiles', 'class' => 'breadcrumbs--tiles'],
+            'gradient' => ['label' => 'Gradient', 'class' => 'breadcrumbs--gradient'],
+        ];
+    }
+
+    /** Normalize a Theme or gallery breadcrumb value against the isolated shared registry.
+     * @param scalar|array<array-key,mixed>|object|resource|null $value Submitted or persisted style identifier.
+     * @param bool $allowInherit Whether the gallery inheritance sentinel is accepted.
+     * @return string Registered style or safe inheritance/default fallback.
+     */
+    function breadcrumb_style_normalize(mixed $value, bool $allowInherit = false): string
+    {
+        if (!is_string($value) && !is_int($value)) {
+            return $allowInherit ? 'inherit' : 'chevron';
+        }
+        $style = strtolower(trim((string) $value));
+        if ($allowInherit && $style === 'inherit') {
+            return 'inherit';
+        }
+        return array_key_exists($style, breadcrumb_style_registry())
+            ? $style
+            : ($allowInherit ? 'inherit' : 'chevron');
+    }
+
+    /** Return the current safe global breadcrumb style for the isolated Theme test.
+     * @return string Supported style from the shared breadcrumb contract.
+     */
+    function theme_breadcrumb_style(): string
+    {
+        return breadcrumb_style_normalize($GLOBALS['theme_layout_test_values']['theme_breadcrumb_style'] ?? 'chevron');
+    }
+
     /** Return whether gallery count badges are enabled. @return bool Fixture badge state. */
     function theme_gallery_count_badge_enabled(): bool
     {
@@ -160,6 +205,7 @@ namespace Gallery\Services {
 
 namespace Gallery\Tests\ThemeLayoutSettings {
     use InvalidArgumentException;
+    use function Gallery\Services\breadcrumb_style_registry;
     use function Gallery\Services\theme_layout_safe_normalize;
     use function Gallery\Services\theme_layout_safe_save;
     use function Gallery\Services\theme_layout_safe_setting_available;
@@ -193,12 +239,17 @@ namespace Gallery\Tests\ThemeLayoutSettings {
     assert_true($settings['pagination_columns'] === '6' && $settings['home_gallery_grid_columns'] === '5', 'Grid settings did not preserve owner values.');
     assert_true($settings['tag_page_gallery_description_layout'] === 'horizontal', 'Tag card layout did not preserve owner value.');
     assert_true($settings['theme_hero_tag_visible_limit'] === '20' && $settings['theme_hero_tag_sort_mode'] === 'usage', 'Hero-tag settings did not preserve owner values.');
+    assert_true($settings['theme_breadcrumb_style'] === 'chevron', 'Breadcrumb style did not use its safe Theme default.');
     assert_true(theme_layout_safe_setting_available('theme_gps_pin_enabled'), 'Enabled GPS capability was treated as unavailable.');
     assert_true(theme_layout_safe_setting_available('theme_lightbox_browsing_mode'), 'Enabled lightbox capability was treated as unavailable.');
 
     assert_true(theme_layout_safe_normalize('pagination_columns', '12') === '12', 'Maximum grid columns were not accepted.');
     assert_true(theme_layout_safe_normalize('theme_gps_pin_background_size', '0') === '0', 'Zero GPS background size was not accepted.');
     assert_true(theme_layout_safe_normalize('theme_gallery_description_layout', 'horizontal') === 'horizontal', 'Supported card layout was not accepted.');
+    foreach (array_keys(breadcrumb_style_registry()) as $styleId) {
+        assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', $styleId) === $styleId, 'Registered breadcrumb style was not accepted: ' . $styleId);
+    }
+    assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', []) === 'chevron', 'Malformed breadcrumb style did not fall back safely.');
     assert_true(theme_layout_safe_normalize('theme_hero_tag_visible_limit', '200') === '200', 'Maximum hero-tag visible limit was not accepted.');
     assert_true(theme_layout_safe_normalize('theme_hero_tag_sort_mode', 'alphabetical') === 'alphabetical', 'Supported hero-tag sort mode was not accepted.');
     expect_invalid(static fn (): string => theme_layout_safe_normalize('pagination_columns', '13'));
@@ -227,6 +278,11 @@ namespace Gallery\Tests\ThemeLayoutSettings {
     theme_layout_safe_save('theme_hero_tag_sort_mode', 'alphabetical');
     assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_hero_tag_sort_mode', 'alphabetical'], 'Hero-tag sort mode did not persist through app settings.');
     assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Hero-tag changes did not bump the public-content revision.');
+
+    $GLOBALS['theme_layout_test_writes'] = [];
+    theme_layout_safe_save('theme_breadcrumb_style', 'surface');
+    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_breadcrumb_style', 'surface'], 'Breadcrumb style did not persist through app settings.');
+    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Breadcrumb style change did not bump the public-content revision.');
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('home_gallery_grid_rows', '9');

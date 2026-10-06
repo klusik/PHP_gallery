@@ -61,6 +61,8 @@ namespace {
         @$document->loadHTML('<?xml encoding="utf-8" ?>' . $html);
         return new \DOMXPath($document);
     }
+    require_once __DIR__ . '/../app/services/breadcrumbs.php';
+    require_once __DIR__ . '/../app/views/breadcrumbs.php';
     require_once __DIR__ . '/../app/views/smart_galleries.php';
     require_once __DIR__ . '/../app/controllers/smart_galleries.php';
     $GLOBALS['smart_ui_auth'] = 0;
@@ -78,7 +80,7 @@ namespace {
     $GLOBALS['smart_ui_rows'][] = ['id' => 6, 'title' => 'Disabled', 'slug' => 'disabled', 'visibility' => 'public', 'enabled' => 0, 'placement_mode' => 'root'];
     ob_start(); \Gallery\Controllers\cms_admin_smart_galleries(); $multiple = (string) ob_get_clean();
     smart_ui_assert(smart_ui_document($multiple)->query('//a[@data-smart-gallery-open-public]')->length === 1 && !str_contains($multiple, 'page=smart_gallery&amp;slug=private') && !str_contains($multiple, 'page=smart_gallery&amp;slug=disabled'), 'Private and disabled definitions never get misleading public destinations.');
-    $editor = ['gallery' => ['title' => 'A <gallery>', 'slug' => 'published', 'description' => 'Description', 'visibility' => 'public', 'sort_direction' => 'asc'], 'existing' => true, 'gallery_id' => 4, 'enabled' => true, 'form_action' => '/index.php?page=admin_smart_galleries&id=4', 'public_url' => '/index.php?page=smart_gallery&slug=published', 'csrf_html' => '<input type="hidden" name="csrf_token" value="fixture-csrf">', 'rules_json' => '{"version":1,"root":{"type":"group","operator":"AND","children":[]}}', 'presentation_controls' => ['has_override' => true, 'source_label' => 'Smart Gallery override', 'presentation' => ['grid_columns' => 4, 'grid_rows' => 30, 'pagination_enabled' => true], 'thumbnail_bounds' => ['values' => [600,1600]]], 'placements' => []];
+    $editor = ['gallery' => ['title' => 'A <gallery>', 'slug' => 'published', 'description' => 'Description', 'visibility' => 'public', 'sort_direction' => 'asc'], 'existing' => true, 'gallery_id' => 4, 'enabled' => true, 'form_action' => '/index.php?page=admin_smart_galleries&id=4', 'public_url' => '/index.php?page=smart_gallery&slug=published', 'csrf_html' => '<input type="hidden" name="csrf_token" value="fixture-csrf">', 'rules_json' => '{"version":1,"root":{"type":"group","operator":"AND","children":[]}}', 'presentation_controls' => ['has_override' => true, 'source_label' => 'Smart Gallery override', 'presentation' => ['grid_columns' => 4, 'grid_rows' => 30, 'pagination_enabled' => true], 'breadcrumb_style_picker' => ['field_name' => 'presentation_breadcrumb_style', 'label' => 'Breadcrumb style', 'current' => 'inherit', 'options' => \Gallery\Services\breadcrumb_style_picker_options(true, 'chevron')], 'thumbnail_bounds' => ['values' => [600,1600]]], 'placements' => []];
     ob_start(); \Gallery\Views\view_render_smart_gallery_editor($editor); $html = (string) ob_get_clean();
     $document = smart_ui_document($html);
     $ruleLabels = json_decode($document->query('//form[@data-smart-gallery-editor]')->item(0)->getAttribute('data-smart-gallery-rule-labels'), true, 512, JSON_THROW_ON_ERROR);
@@ -87,6 +89,10 @@ namespace {
     foreach (['title','slug','description','placement_mode','enabled','visibility','sort_mode','sort_direction','rules_json','presentation_override_enabled','presentation_grid_columns','presentation_grid_rows','presentation_pagination_enabled','presentation_thumbnail_min_size','presentation_thumbnail_max_size','presentation_thumbnail_rendering_mode','presentation_card_layout','presentation_map_enabled','presentation_lightbox_enabled','presentation_lightbox_browsing_mode','presentation_slideshow_enabled','presentation_voting_enabled','presentation_download_enabled','presentation_metadata_visible','presentation_source_gallery_visible'] as $name) {
         smart_ui_assert($document->query('//form[@data-smart-gallery-editor]//*[@name="' . $name . '" and not(@disabled)]')->length === 1, 'Compact or collapsed controls preserve submitted field: ' . $name);
     }
+    $breadcrumbRadios = $document->query('//form[@data-smart-gallery-editor]//input[@type="radio" and @name="presentation_breadcrumb_style"]');
+    smart_ui_assert($breadcrumbRadios->length === 10, 'Presentation form renders inherit plus all nine registered breadcrumb styles.');
+    $checkedBreadcrumbRadio = $document->query('//form[@data-smart-gallery-editor]//input[@type="radio" and @name="presentation_breadcrumb_style" and @value="inherit" and @checked]');
+    smart_ui_assert($checkedBreadcrumbRadio->length === 1, 'The prepared Smart Gallery presentation defaults to the checked Theme inheritance choice.');
     smart_ui_assert($document->query('//form[@data-smart-gallery-editor]//button[@name="action" and @value="save"]')->length === 1 && $document->query('//form[@data-smart-gallery-editor]//button[@name="action" and @value="preview"]')->length === 1, 'Primary and existing preview actions remain inside their owned form.');
     smart_ui_assert($document->query('//form[@data-smart-gallery-panel-form]')->length === 3 && $document->query('//a[@data-smart-gallery-open-public]')->length === 1, 'Panel mutation ownership and the editor public action remain intact.');
     $editor['existing'] = false; $editor['gallery_id'] = 0; $editor['public_url'] = '';

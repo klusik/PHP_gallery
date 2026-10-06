@@ -66,6 +66,8 @@ namespace {
     require_once dirname(__DIR__,2).'/app/helpers_admin_rendering.php';
     require_once dirname(__DIR__,2).'/app/views/admin_chrome.php';
     require_once dirname(__DIR__,2).'/app/views/admin_ui.php';
+    require_once dirname(__DIR__,2).'/app/services/breadcrumbs.php';
+    require_once dirname(__DIR__,2).'/app/views/breadcrumbs.php';
     require_once dirname(__DIR__,2).'/app/views/admin_theme.php';
     require_once dirname(__DIR__,2).'/app/views/admin_gallery_renderers.php';
     require_once dirname(__DIR__,2).'/app/views/layout.php';
@@ -110,7 +112,15 @@ namespace {
             $id='theme-favorite-gallery-'.($index+1); $selected=$index===0?'42':'';
             $shortcuts[]=['slot_label'=>'Shortcut '.($index+1),'selected_type'=>$type,'picker_html'=>\Gallery\Views\view_render_gallery_search_picker(['field_name'=>'theme_favorite_gallery_ids[]','picker_id'=>$id,'list_id'=>$id.'-list','hidden_value'=>$selected,'input_value'=>$selected!==''?'Gallery <safe> / fixture':'','search_url'=>'/fixture-gallery-search','placeholder'=>'Search gallery by name or path','clear_label'=>'Clear gallery','loading_label'=>'Loading','error_label'=>'Search unavailable','empty_label'=>'No matches','page_size'=>20,'next_after_id'=>0,'more_label'=>'More','help_label'=>'Choose one gallery','lookup_url'=>'#lookup','lookup_label'=>'Look up gallery ID','fallback_label'=>'Gallery ID','rows'=>[['id'=>42,'title'=>'Gallery <safe>','label'=>'Gallery <safe> / fixture','path_label'=>'/fixture'],['id'=>84,'title'=>'Second gallery','label'=>'Second gallery / fixture-two','path_label'=>'/fixture-two']]])];
         }
+        $breadcrumbStyle = \Gallery\Services\theme_breadcrumb_style();
+        $breadcrumbStylePicker = [
+            'field_name'=>'theme_breadcrumb_style',
+            'label'=>\Gallery\Services\t('admin.theme.layout.breadcrumb_style_label','Default breadcrumb style'),
+            'current'=>$breadcrumbStyle,
+            'options'=>\Gallery\Services\breadcrumb_style_picker_options(),
+        ];
         return array_replace(['favorite_shortcuts'=>$shortcuts,'home_token'=>'home','gallery_count_badge_enabled'=>true,'thumbnail_modes'=>[['value'=>'progressive','label'=>'Progressive','selected'=>true],['value'=>'responsive','label'=>'Responsive','selected'=>false]],
+            'breadcrumb_style_picker'=>$breadcrumbStylePicker,
             'pagination'=>['enabled'=>true,'columns'=>3,'rows'=>4,'items_per_page'=>12],'home_grid'=>['columns'=>4,'rows'=>5],'lightbox_modes_enabled'=>true,'lightbox_options'=>[['value'=>'single','label'=>'Single image','selected'=>true],['value'=>'picture_strip','label'=>'Picture strip','selected'=>false],['value'=>'3d_carousel','label'=>'3D carousel','selected'=>false]],'max_columns'=>12,'max_rows'=>50,'labels'=>['reset_gallery_grids_confirm'=>'Reset all custom gallery grids?','reset_all_gallery_grids'=>'Reset all custom gallery grids','show_count_badge'=>'Show picture count']],$overrides);
     }
     /** Load canonical pure defaults once without conflicting with rendering translation stubs.

@@ -1,0 +1,393 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/breadcrumbs.css
+ * Module Type: Stylesheet
+ * Purpose: Present all breadcrumb presets through one accessible hierarchy.
+ * Responsibilities: Preserve readable ancestors, focus states and narrow-screen wrapping.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.breadcrumbs {
+    min-width: 0;
+    max-width: 100%;
+    margin: 0 0 1rem;
+    color: var(--ink);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.breadcrumbs__list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Wrap whole ancestors and then long words: every destination remains reachable. */
+.breadcrumbs__item {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    gap: 0.5rem;
+}
+
+.breadcrumbs__link,
+.breadcrumbs__current {
+    display: block;
+    min-width: 0;
+    padding: 0.2rem 0;
+    overflow-wrap: anywhere;
+}
+
+.breadcrumbs__link {
+    color: var(--accent-dark, var(--ink));
+    text-decoration: none;
+    text-underline-offset: 0.18em;
+}
+
+.breadcrumbs__link:hover {
+    text-decoration: underline;
+}
+
+.breadcrumbs__link:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+    border-radius: 3px;
+    text-decoration: underline;
+}
+
+.breadcrumbs__current {
+    color: var(--ink);
+    font-weight: 700;
+}
+
+/* Empty generated content keeps separators out of the accessibility tree. */
+.breadcrumbs__item + .breadcrumbs__item::before {
+    content: "";
+    flex: 0 0 0.35em;
+    width: 0.35em;
+    height: 0.35em;
+    border-top: 1px solid currentColor;
+    border-right: 1px solid currentColor;
+    color: var(--muted);
+    transform: rotate(45deg);
+}
+
+.breadcrumbs--minimal .breadcrumbs__item + .breadcrumbs__item::before {
+    flex-basis: 0;
+    width: 0;
+    height: 0.8em;
+    border-top: 0;
+    transform: none;
+}
+
+.breadcrumbs--pills .breadcrumbs__link,
+.breadcrumbs--pills .breadcrumbs__current {
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+}
+
+.breadcrumbs--pills .breadcrumbs__current {
+    border-color: var(--ink);
+}
+
+.breadcrumbs--surface {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 12px);
+    background: var(--panel);
+}
+
+.breadcrumbs--surface .breadcrumbs__current {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.2em;
+}
+
+/* Ribbon segments use a separate arrow marker so every link keeps its full focus outline. */
+.breadcrumbs--ribbon .breadcrumbs__list {
+    gap: 0.35rem 0.45rem;
+}
+
+.breadcrumbs--ribbon .breadcrumbs__item {
+    gap: 0.35rem;
+    padding: 0.12rem 0.32rem 0.12rem 0.48rem;
+    border: 1px solid var(--line);
+    border-radius: 0.4rem;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+}
+
+.breadcrumbs--ribbon .breadcrumbs__link,
+.breadcrumbs--ribbon .breadcrumbs__current {
+    padding: 0.12rem 0;
+}
+
+.breadcrumbs--ribbon .breadcrumbs__item + .breadcrumbs__item::before {
+    display: none;
+}
+
+.breadcrumbs--ribbon .breadcrumbs__item::after {
+    content: "";
+    flex: 0 0 0.42rem;
+    width: 0.42rem;
+    height: 0.62rem;
+    background: var(--accent);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+/* Nodes turn the separator slot into a connected, non-verbal route marker. */
+.breadcrumbs--nodes .breadcrumbs__item::before {
+    content: "";
+    flex: 0 0 0.42rem;
+    width: 0.42rem;
+    height: 0.42rem;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    background: var(--panel);
+    pointer-events: none;
+}
+
+.breadcrumbs--nodes .breadcrumbs__item + .breadcrumbs__item::before {
+    flex-basis: 0.9rem;
+    width: 0.9rem;
+    height: 0.5rem;
+    border: 0;
+    border-radius: 0;
+    transform: none;
+    background:
+        radial-gradient(circle at 50% 50%, var(--accent) 0 0.2rem, transparent 0.22rem),
+        linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat;
+}
+
+.breadcrumbs--nodes .breadcrumbs__item:first-child::before {
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Tabs keep the hierarchy compact while the active destination reads as selected. */
+.breadcrumbs--tabs .breadcrumbs__list {
+    align-items: stretch;
+    gap: 0.18rem 0.3rem;
+}
+
+.breadcrumbs--tabs .breadcrumbs__item {
+    padding: 0.1rem 0.45rem;
+    border: 1px solid transparent;
+    border-bottom-color: var(--line);
+}
+
+.breadcrumbs--tabs .breadcrumbs__item + .breadcrumbs__item::before {
+    display: none;
+}
+
+.breadcrumbs--tabs .breadcrumbs__link,
+.breadcrumbs--tabs .breadcrumbs__current {
+    padding: 0.16rem 0.05rem;
+}
+
+.breadcrumbs--tabs .breadcrumbs__current {
+    border-bottom: 2px solid var(--accent);
+    color: var(--ink);
+}
+
+/* Small raised tiles provide a card-like treatment without clipping focus rings. */
+.breadcrumbs--tiles .breadcrumbs__list {
+    gap: 0.35rem;
+}
+
+.breadcrumbs--tiles .breadcrumbs__item {
+    padding: 0.18rem 0.48rem;
+    border: 1px solid var(--line);
+    border-radius: 0.45rem;
+    background: var(--panel);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.breadcrumbs--tiles .breadcrumbs__item + .breadcrumbs__item::before {
+    display: none;
+}
+
+.breadcrumbs--tiles .breadcrumbs__link,
+.breadcrumbs--tiles .breadcrumbs__current {
+    padding: 0.08rem 0;
+}
+
+.breadcrumbs--tiles .breadcrumbs__current {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.2em;
+}
+
+/* The gradient preset keeps foreground contrast tied to Theme ink and panel colors. */
+.breadcrumbs--gradient {
+    overflow: visible;
+    padding: 0 0.1rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 12px);
+    background: var(--panel);
+    background: linear-gradient(
+        110deg,
+        color-mix(in srgb, var(--accent) 12%, var(--panel)),
+        var(--panel) 72%
+    );
+    color: var(--ink);
+}
+
+.breadcrumbs--gradient::before {
+    display: block;
+    height: 0.22rem;
+    margin: 0 -0.1rem 0.3rem;
+    border-radius: var(--radius, 12px) var(--radius, 12px) 0 0;
+    background: var(--accent);
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 24%, var(--panel)));
+    content: "";
+    pointer-events: none;
+}
+
+.breadcrumbs--gradient .breadcrumbs__link,
+.breadcrumbs--gradient .breadcrumbs__current {
+    color: var(--ink);
+}
+
+.breadcrumbs--gradient .breadcrumbs__current {
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.2em;
+}
+
+.breadcrumbs--gradient .breadcrumbs__item + .breadcrumbs__item::before {
+    color: var(--accent);
+}
+
+/* Native radio cards keep style choice usable without a script or nested controls. */
+.breadcrumb-style-picker {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.breadcrumb-style-picker__label {
+    margin: 0 0 0.55rem;
+    color: var(--ink);
+    font-weight: 700;
+}
+
+.breadcrumb-style-picker__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.breadcrumb-style-picker__option {
+    position: relative;
+    display: block;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.breadcrumb-style-picker__input,
+.admin-page .breadcrumb-style-picker__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    padding: 0;
+    margin: -1px;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.breadcrumb-style-picker__card {
+    position: relative;
+    display: block;
+    min-width: 0;
+    height: 100%;
+    padding: 0.7rem;
+    border: 2px solid var(--line);
+    border-radius: var(--radius, 12px);
+    background: var(--panel);
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+
+.breadcrumb-style-picker__name {
+    display: block;
+    margin-bottom: 0.35rem;
+    padding-inline-end: 1.2rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.breadcrumb-style-picker__preview {
+    display: block;
+    min-width: 0;
+    padding: 0.35rem;
+    border-radius: 0.45rem;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 74%, var(--line));
+}
+
+.breadcrumb-style-picker__preview .breadcrumbs {
+    display: block;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 400;
+}
+
+.breadcrumb-style-picker__input:checked + .breadcrumb-style-picker__card {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.breadcrumb-style-picker__input:checked + .breadcrumb-style-picker__card::after {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.9rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: inset 0 0 0 2px var(--panel);
+    content: "";
+    pointer-events: none;
+}
+
+.breadcrumb-style-picker__input:focus-visible + .breadcrumb-style-picker__card {
+    outline: 3px solid var(--ink);
+    outline-offset: 3px;
+}
+
+.breadcrumb-style-picker__option:hover .breadcrumb-style-picker__card {
+    border-color: var(--accent);
+}
+
+#admin-theme-breadcrumb-style,
+.admin-display-option-breadcrumbs {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 460px) {
+    .breadcrumb-style-picker__grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

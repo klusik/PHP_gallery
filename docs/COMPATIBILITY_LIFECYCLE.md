@@ -26,6 +26,23 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Database and migrations
 
+### UI-1 — Breadcrumb preferences missing on upgraded installations
+
+- **Reason / protected scenario:** Existing galleries and installations have no
+  breadcrumb preference. Missing or obsolete gallery values inherit the Theme
+  default; missing or obsolete Theme values use the built-in `chevron` style.
+  Existing route destinations and server-rendered navigation remain available.
+- **Owner:** `app/services/breadcrumbs.php`, the shared view, and gallery/Theme
+  settings owners. Physical gallery overrides use existing application settings;
+  no optional schema probe or manual migration is required.
+- **Evidence / tests:** `breadcrumb_component_test.php`,
+  `breadcrumb_gallery_settings_test.php`, `breadcrumb_theme_settings_test.php`
+  and the registered `breadcrumb_browser_test.mjs`.
+- **Usage:** Preference absence and obsolete identifiers are unmeasured (`unknown`).
+- **Support rationale:** Missing preferences and unknown style identifiers are
+  permanently supported upgrade states. The public gallery helper delegates to
+  the shared renderer so existing page composition retains its include contract.
+
 ### DB-1 — Legacy migration definition shapes and direct-require runner
 
 - **Reason / protected scenario:** `load_migration_definition()` accepts both

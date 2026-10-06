@@ -44,10 +44,11 @@ use function Gallery\Services\t;
  * Render the public tag landing page body.
  *
  * @param array<string, mixed> $viewModel Prepared tag-page presentation model.
+ * @return void
  */
 function view_render_public_tag_page(array $viewModel): void
 {
-    echo '<nav class="breadcrumbs" aria-label="' . e((string) ($viewModel['breadcrumbs_label'] ?? '')) . '"><a href="' . e((string) ($viewModel['home_url'] ?? '')) . '">' . e((string) ($viewModel['galleries_label'] ?? '')) . '</a><span aria-hidden="true">/</span><span>' . e((string) ($viewModel['title'] ?? '')) . '</span></nav>';
+    view_render_breadcrumbs((array) ($viewModel['breadcrumbs'] ?? []));
     echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) ($viewModel['tag_id'] ?? 0) . '" data-public-tag-gallery-count="' . (int) ($viewModel['gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '"><div class="hero-title-row"><div><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1></div>';
     view_render_public_tag_admin_actions((array) ($viewModel['admin_actions'] ?? []));
     echo '</div>';

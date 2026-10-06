@@ -67,6 +67,9 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_options;
 use function Gallery\Services\gallery_lightbox_browsing_mode_override_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_source_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\gallery_breadcrumb_style_override;
+use function Gallery\Services\breadcrumb_style_picker_options;
+use function Gallery\Services\theme_breadcrumb_style;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_bounds_schema_ready;
 use function Gallery\Views\view_render_admin_gallery_display_tab;
@@ -191,6 +194,14 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
         ];
     }
 
+    $breadcrumbStyle = [
+        'field_name' => 'gallery_breadcrumb_style',
+        'current' => gallery_breadcrumb_style_override((int) ($gallery['id'] ?? 0)),
+        'label' => t('admin.gallery_editor.breadcrumb_style_label', 'Breadcrumb style'),
+        'options' => breadcrumb_style_picker_options(true, theme_breadcrumb_style()),
+        'help' => t('admin.gallery_editor.breadcrumb_style_help', 'Choose the breadcrumb appearance for this gallery. Inherit from Theme uses the default style configured in Theme settings.'),
+    ];
+
     $grid = [
         'ready' => gallery_grid_schema_ready(),
         'migration_message' => t('admin.gallery_editor.grid_migration_hidden', 'Gallery display-grid overrides will be available after the database migration is applied.'),
@@ -284,6 +295,7 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
         'description_layout' => $descriptionLayout,
         'count_badge' => $countBadge,
         'lightbox' => $lightbox,
+        'breadcrumb_style' => $breadcrumbStyle,
         'grid' => $grid,
         'thumbnail_bounds' => $thumbnailBounds,
     ]);

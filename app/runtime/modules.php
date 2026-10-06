@@ -360,305 +360,307 @@ return array (
     109 => 'app/services/auth_accounts.php',
     110 => 'app/services/auth_persistence.php',
     111 => 'app/services/auth_throttle.php',
-    112 => 'app/services/browser_thumbnail_rebuild.php',
-    113 => 'app/services/browser_uploads.php',
-    114 => 'app/services/client_ip.php',
-    115 => 'app/services/configured_mail.php',
-    116 => 'app/services/content_localization.php',
-    117 => 'app/services/cooperative_content.php',
-    118 => 'app/services/cooperative_galleries.php',
-    119 => 'app/services/cooperative_proposals.php',
-    120 => 'app/services/custom_css.php',
-    121 => 'app/services/database_helpers.php',
-    122 => 'app/services/database_maintenance.php',
-    123 => 'app/services/database_observer.php',
-    124 => 'app/services/dng_derivatives.php',
-    125 => 'app/services/download_artifact_cache.php',
-    126 => 'app/services/download_capabilities.php',
-    127 => 'app/services/download_manifest_cache.php',
-    128 => 'app/services/download_signatures.php',
-    129 => 'app/services/downloads.php',
-    130 => 'app/services/duplicate_photo_detector.php',
-    131 => 'app/services/duplicate_photo_ledger.php',
-    132 => 'app/services/exif.php',
-    133 => 'app/services/favicon.php',
-    134 => 'app/services/favorite_galleries.php',
-    135 => 'app/services/feature_flags.php',
-    136 => 'app/services/flight_maps.php',
-    137 => 'app/services/gallery_access.php',
-    138 => 'app/services/gallery_backgrounds.php',
-    139 => 'app/services/gallery_benchmark.php',
-    140 => 'app/services/gallery_branding.php',
-    141 => 'app/services/gallery_bulk_mutations.php',
-    142 => 'app/services/gallery_count_badges.php',
-    143 => 'app/services/gallery_covers.php',
-    144 => 'app/services/gallery_creation_preferences.php',
-    145 => 'app/services/gallery_creation_safety.php',
-    146 => 'app/services/gallery_dates.php',
-    147 => 'app/services/gallery_description_layout.php',
-    148 => 'app/services/gallery_description_layout_compatibility.php',
-    149 => 'app/services/gallery_display.php',
-    150 => 'app/services/gallery_edit_concurrency.php',
-    151 => 'app/services/gallery_editor_mutations.php',
-    152 => 'app/services/gallery_editor_quick_access.php',
-    153 => 'app/services/gallery_feature_plans.php',
-    154 => 'app/services/gallery_grid.php',
-    155 => 'app/services/gallery_image_move_journal.php',
-    156 => 'app/services/gallery_lightbox_mode.php',
-    157 => 'app/services/gallery_lookup.php',
-    158 => 'app/services/gallery_metadata_organizer.php',
-    159 => 'app/services/gallery_migration.php',
-    160 => 'app/services/gallery_mutations.php',
-    161 => 'app/services/gallery_paths.php',
-    162 => 'app/services/gallery_picker.php',
-    163 => 'app/services/gallery_sidecars.php',
-    164 => 'app/services/gallery_sorting.php',
-    165 => 'app/services/gallery_trash.php',
-    166 => 'app/services/github.php',
-    167 => 'app/services/google_auth.php',
-    168 => 'app/services/image_bulk_mutations.php',
-    169 => 'app/services/image_decode_policy.php',
-    170 => 'app/services/image_editor_mutations.php',
-    171 => 'app/services/image_order.php',
-    172 => 'app/services/image_scanning.php',
-    173 => 'app/services/lightbox_metadata.php',
-    174 => 'app/services/link_favicons.php',
-    175 => 'app/services/logs.php',
-    176 => 'app/services/maintenance_center.php',
-    177 => 'app/services/media_renamer.php',
-    178 => 'app/services/mobile_webdav.php',
-    179 => 'app/services/mutation_schema_policy.php',
-    180 => 'app/services/navigation_data.php',
-    181 => 'app/services/openai_text_assist.php',
-    182 => 'app/services/outbound_http.php',
-    183 => 'app/services/pagination.php',
-    184 => 'app/services/picture_game.php',
-    185 => 'app/services/picture_manager.php',
-    186 => 'app/services/presentation_schema_policy.php',
-    187 => 'app/services/public_gallery_media_manifest.php',
-    188 => 'app/services/public_paths.php',
-    189 => 'app/services/public_render_profiler.php',
-    190 => 'app/services/public_search.php',
-    191 => 'app/services/public_search_diagnostics.php',
-    192 => 'app/services/public_search_progressive.php',
-    193 => 'app/services/public_thumbnail_rendering.php',
-    194 => 'app/services/runtime_support.php',
-    195 => 'app/services/schema_inspection.php',
-    196 => 'app/services/security_tokens.php',
-    197 => 'app/services/seo_request_guard.php',
-    198 => 'app/services/simbrief_description_drafts.php',
-    199 => 'app/services/simbrief_descriptions.php',
-    200 => 'app/services/site_maintenance.php',
-    201 => 'app/services/site_url.php',
-    202 => 'app/services/smart_galleries.php',
-    203 => 'app/services/tag_metadata.php',
-    204 => 'app/services/telemetry.php',
-    205 => 'app/services/telemetry_diagnostics.php',
-    206 => 'app/services/telemetry_privacy.php',
-    207 => 'app/services/telemetry_rollup.php',
-    208 => 'app/services/telemetry_settings.php',
-    209 => 'app/services/theme.php',
-    210 => 'app/services/theme_layout_settings.php',
-    211 => 'app/services/thumbnail_bounds.php',
-    212 => 'app/services/thumbnail_bundles.php',
-    213 => 'app/services/thumbnail_compatibility.php',
-    214 => 'app/services/thumbnail_formats.php',
-    215 => 'app/services/thumbnail_generation.php',
-    216 => 'app/services/thumbnail_html.php',
-    217 => 'app/services/thumbnail_maintenance.php',
-    218 => 'app/services/thumbnail_metadata.php',
-    219 => 'app/services/thumbnail_sources.php',
-    220 => 'app/services/thumbnail_warmup.php',
-    221 => 'app/services/translations.php',
-    222 => 'app/services/update_server_policy_reconciliation.php',
-    223 => 'app/services/updates_filesystem.php',
-    224 => 'app/services/updates_install.php',
-    225 => 'app/services/updates_job_lookup.php',
-    226 => 'app/services/updates_jobs.php',
-    227 => 'app/services/updates_patch_notes.php',
-    228 => 'app/services/updates_path_safety.php',
-    229 => 'app/services/updates_remote.php',
-    230 => 'app/services/updates_request.php',
-    231 => 'app/services/updates_status.php',
-    232 => 'app/services/upload_automation.php',
-    233 => 'app/services/uploads.php',
-    234 => 'app/services/viewer_accounts.php',
-    235 => 'app/services/viewer_admin_accounts.php',
-    236 => 'app/services/viewer_anti_automation.php',
-    237 => 'app/services/viewer_authentication.php',
-    238 => 'app/services/viewer_collection_shares.php',
-    239 => 'app/services/viewer_collections.php',
-    240 => 'app/services/viewer_content_foundations.php',
-    241 => 'app/services/viewer_favourites.php',
-    242 => 'app/services/viewer_http.php',
-    243 => 'app/services/viewer_lifecycle.php',
-    244 => 'app/services/viewer_mail.php',
-    245 => 'app/services/viewer_maintenance.php',
-    246 => 'app/services/viewer_rate_limits.php',
-    247 => 'app/services/viewer_registration.php',
-    248 => 'app/services/viewer_security_events.php',
-    249 => 'app/services/viewer_security_operations.php',
-    250 => 'app/services/viewer_tokens.php',
-    251 => 'app/services/votes.php',
-    252 => 'app/views/admin_auth.php',
-    253 => 'app/views/admin_chrome.php',
-    254 => 'app/views/admin_cooperative_galleries.php',
-    255 => 'app/views/admin_cooperative_proposals.php',
-    256 => 'app/views/admin_dashboard.php',
-    257 => 'app/views/admin_dashboard_sections.php',
-    258 => 'app/views/admin_database_maintenance.php',
-    259 => 'app/views/admin_database_usage.php',
-    260 => 'app/views/admin_diagnostics.php',
-    261 => 'app/views/admin_duplicate_photos.php',
-    262 => 'app/views/admin_features.php',
-    263 => 'app/views/admin_gallery_dates.php',
-    264 => 'app/views/admin_gallery_discovery.php',
-    265 => 'app/views/admin_gallery_edit_components.php',
-    266 => 'app/views/admin_gallery_edit_tabs.php',
-    267 => 'app/views/admin_gallery_forms.php',
-    268 => 'app/views/admin_gallery_metadata_organizer.php',
-    269 => 'app/views/admin_gallery_migration.php',
-    270 => 'app/views/admin_gallery_renderers.php',
-    271 => 'app/views/admin_gallery_report.php',
-    272 => 'app/views/admin_gallery_report_export.php',
-    273 => 'app/views/admin_integrity.php',
-    274 => 'app/views/admin_language_settings.php',
-    275 => 'app/views/admin_logs.php',
-    276 => 'app/views/admin_maintenance_center.php',
-    277 => 'app/views/admin_media_renamer.php',
-    278 => 'app/views/admin_public_inline.php',
-    279 => 'app/views/admin_render_profiler.php',
-    280 => 'app/views/admin_search_diagnostics.php',
-    281 => 'app/views/admin_settings.php',
-    282 => 'app/views/admin_setup_wizard.php',
-    283 => 'app/views/admin_storage_statistics.php',
-    284 => 'app/views/admin_tags.php',
-    285 => 'app/views/admin_telemetry.php',
-    286 => 'app/views/admin_test_run_panel.php',
-    287 => 'app/views/admin_theme.php',
-    288 => 'app/views/admin_trash.php',
-    289 => 'app/views/admin_ui.php',
-    290 => 'app/views/admin_updates.php',
-    291 => 'app/views/admin_upload_settings.php',
-    292 => 'app/views/admin_uploads.php',
-    293 => 'app/views/cooperative_gallery.php',
-    294 => 'app/views/downloads.php',
-    295 => 'app/views/gallery_dates.php',
-    296 => 'app/views/gallery_descriptions.php',
-    297 => 'app/views/http.php',
-    298 => 'app/views/layout.php',
-    299 => 'app/views/mobile_webdav.php',
-    300 => 'app/views/navigation_data.php',
-    301 => 'app/views/pagination.php',
-    302 => 'app/views/picture_game.php',
-    303 => 'app/views/public_gallery_cards.php',
-    304 => 'app/views/public_gallery_controls.php',
-    305 => 'app/views/public_gallery_lightbox.php',
-    306 => 'app/views/public_gallery_pages.php',
-    307 => 'app/views/public_render_profiler.php',
-    308 => 'app/views/public_search.php',
-    309 => 'app/views/public_tags.php',
-    310 => 'app/views/seo.php',
-    311 => 'app/views/setup.php',
-    312 => 'app/views/simbrief_descriptions.php',
-    313 => 'app/views/smart_galleries.php',
-    314 => 'app/views/thumbnail_bounds.php',
-    315 => 'app/views/upload_automation.php',
-    316 => 'app/views/viewer_accounts.php',
-    317 => 'app/views/viewer_collection_shares.php',
-    318 => 'app/views/viewer_collections.php',
-    319 => 'app/views/viewer_favourites.php',
-    320 => 'app/views/viewer_lifecycle.php',
-    321 => 'app/views/votes.php',
-    322 => 'app/controllers/admin_auth.php',
-    323 => 'app/controllers/admin_cooperative_albums.php',
-    324 => 'app/controllers/admin_cooperative_galleries.php',
-    325 => 'app/controllers/admin_cooperative_proposals.php',
-    326 => 'app/controllers/admin_dashboard.php',
-    327 => 'app/controllers/admin_database_maintenance.php',
-    328 => 'app/controllers/admin_diagnostics.php',
-    329 => 'app/controllers/admin_duplicate_photos.php',
-    330 => 'app/controllers/admin_features.php',
-    331 => 'app/controllers/admin_galleries_bulk.php',
-    332 => 'app/controllers/admin_galleries_discovery.php',
-    333 => 'app/controllers/admin_galleries_edit_actions.php',
-    334 => 'app/controllers/admin_galleries_edit_metadata.php',
-    335 => 'app/controllers/admin_galleries_edit_page.php',
-    336 => 'app/controllers/admin_galleries_edit_views.php',
-    337 => 'app/controllers/admin_galleries_reorder.php',
-    338 => 'app/controllers/admin_gallery_benchmark.php',
-    339 => 'app/controllers/admin_gallery_dates.php',
-    340 => 'app/controllers/admin_gallery_features.php',
-    341 => 'app/controllers/admin_gallery_form_models.php',
-    342 => 'app/controllers/admin_gallery_picker_search.php',
-    343 => 'app/controllers/admin_gallery_quick_access.php',
-    344 => 'app/controllers/admin_gallery_renderers.php',
-    345 => 'app/controllers/admin_gallery_report.php',
-    346 => 'app/controllers/admin_gallery_title_completion.php',
-    347 => 'app/controllers/admin_images_bulk.php',
-    348 => 'app/controllers/admin_images_reorder.php',
-    349 => 'app/controllers/admin_integrity.php',
-    350 => 'app/controllers/admin_logs.php',
-    351 => 'app/controllers/admin_maintenance_center.php',
-    352 => 'app/controllers/admin_media_renamer.php',
-    353 => 'app/controllers/admin_openai_text_assist.php',
-    354 => 'app/controllers/admin_public_inline.php',
-    355 => 'app/controllers/admin_search_diagnostics.php',
-    356 => 'app/controllers/admin_settings.php',
-    357 => 'app/controllers/admin_setup_wizard.php',
-    358 => 'app/controllers/admin_simbrief.php',
-    359 => 'app/controllers/admin_tags.php',
-    360 => 'app/controllers/admin_telemetry.php',
-    361 => 'app/controllers/admin_test_runs.php',
-    362 => 'app/controllers/admin_theme.php',
-    363 => 'app/controllers/admin_theme_actions.php',
-    364 => 'app/controllers/admin_theme_appearance.php',
-    365 => 'app/controllers/admin_theme_custom_css.php',
-    366 => 'app/controllers/admin_theme_language.php',
-    367 => 'app/controllers/admin_theme_layout.php',
-    368 => 'app/controllers/admin_theme_media.php',
-    369 => 'app/controllers/admin_theme_page.php',
-    370 => 'app/controllers/admin_thumbnails.php',
-    371 => 'app/controllers/admin_trash.php',
-    372 => 'app/controllers/admin_uploads.php',
-    373 => 'app/controllers/cooperative_content.php',
-    374 => 'app/controllers/cooperative_metadata.php',
-    375 => 'app/controllers/cooperative_pairing.php',
-    376 => 'app/controllers/cooperative_proposals.php',
-    377 => 'app/controllers/downloads.php',
-    378 => 'app/controllers/exif.php',
-    379 => 'app/controllers/gallery_lightbox.php',
-    380 => 'app/controllers/gallery_migration.php',
-    381 => 'app/controllers/http_helpers.php',
-    382 => 'app/controllers/mobile_webdav.php',
-    383 => 'app/controllers/navigation_data.php',
-    384 => 'app/controllers/picture_game.php',
-    385 => 'app/controllers/picture_manager.php',
-    386 => 'app/controllers/public_gallery_cards.php',
-    387 => 'app/controllers/public_gallery_controls.php',
-    388 => 'app/controllers/public_gallery_descriptions.php',
-    389 => 'app/controllers/public_gallery_home.php',
-    390 => 'app/controllers/public_gallery_lightbox.php',
-    391 => 'app/controllers/public_gallery_page.php',
-    392 => 'app/controllers/public_media.php',
-    393 => 'app/controllers/public_search.php',
-    394 => 'app/controllers/public_seo.php',
-    395 => 'app/controllers/public_tags.php',
-    396 => 'app/controllers/setup.php',
-    397 => 'app/controllers/shared_layout.php',
-    398 => 'app/controllers/site_maintenance.php',
-    399 => 'app/controllers/smart_galleries.php',
-    400 => 'app/controllers/telemetry.php',
-    401 => 'app/controllers/theme_assets.php',
-    402 => 'app/controllers/thumbnail_warmup.php',
-    403 => 'app/controllers/updates.php',
-    404 => 'app/controllers/upload_automation.php',
-    405 => 'app/controllers/viewer_accounts.php',
-    406 => 'app/controllers/viewer_collection_shares.php',
-    407 => 'app/controllers/viewer_collections.php',
-    408 => 'app/controllers/viewer_favourites.php',
-    409 => 'app/controllers/viewer_lifecycle.php',
-    410 => 'app/controllers/votes.php',
+    112 => 'app/services/breadcrumbs.php',
+    113 => 'app/services/browser_thumbnail_rebuild.php',
+    114 => 'app/services/browser_uploads.php',
+    115 => 'app/services/client_ip.php',
+    116 => 'app/services/configured_mail.php',
+    117 => 'app/services/content_localization.php',
+    118 => 'app/services/cooperative_content.php',
+    119 => 'app/services/cooperative_galleries.php',
+    120 => 'app/services/cooperative_proposals.php',
+    121 => 'app/services/custom_css.php',
+    122 => 'app/services/database_helpers.php',
+    123 => 'app/services/database_maintenance.php',
+    124 => 'app/services/database_observer.php',
+    125 => 'app/services/dng_derivatives.php',
+    126 => 'app/services/download_artifact_cache.php',
+    127 => 'app/services/download_capabilities.php',
+    128 => 'app/services/download_manifest_cache.php',
+    129 => 'app/services/download_signatures.php',
+    130 => 'app/services/downloads.php',
+    131 => 'app/services/duplicate_photo_detector.php',
+    132 => 'app/services/duplicate_photo_ledger.php',
+    133 => 'app/services/exif.php',
+    134 => 'app/services/favicon.php',
+    135 => 'app/services/favorite_galleries.php',
+    136 => 'app/services/feature_flags.php',
+    137 => 'app/services/flight_maps.php',
+    138 => 'app/services/gallery_access.php',
+    139 => 'app/services/gallery_backgrounds.php',
+    140 => 'app/services/gallery_benchmark.php',
+    141 => 'app/services/gallery_branding.php',
+    142 => 'app/services/gallery_bulk_mutations.php',
+    143 => 'app/services/gallery_count_badges.php',
+    144 => 'app/services/gallery_covers.php',
+    145 => 'app/services/gallery_creation_preferences.php',
+    146 => 'app/services/gallery_creation_safety.php',
+    147 => 'app/services/gallery_dates.php',
+    148 => 'app/services/gallery_description_layout.php',
+    149 => 'app/services/gallery_description_layout_compatibility.php',
+    150 => 'app/services/gallery_display.php',
+    151 => 'app/services/gallery_edit_concurrency.php',
+    152 => 'app/services/gallery_editor_mutations.php',
+    153 => 'app/services/gallery_editor_quick_access.php',
+    154 => 'app/services/gallery_feature_plans.php',
+    155 => 'app/services/gallery_grid.php',
+    156 => 'app/services/gallery_image_move_journal.php',
+    157 => 'app/services/gallery_lightbox_mode.php',
+    158 => 'app/services/gallery_lookup.php',
+    159 => 'app/services/gallery_metadata_organizer.php',
+    160 => 'app/services/gallery_migration.php',
+    161 => 'app/services/gallery_mutations.php',
+    162 => 'app/services/gallery_paths.php',
+    163 => 'app/services/gallery_picker.php',
+    164 => 'app/services/gallery_sidecars.php',
+    165 => 'app/services/gallery_sorting.php',
+    166 => 'app/services/gallery_trash.php',
+    167 => 'app/services/github.php',
+    168 => 'app/services/google_auth.php',
+    169 => 'app/services/image_bulk_mutations.php',
+    170 => 'app/services/image_decode_policy.php',
+    171 => 'app/services/image_editor_mutations.php',
+    172 => 'app/services/image_order.php',
+    173 => 'app/services/image_scanning.php',
+    174 => 'app/services/lightbox_metadata.php',
+    175 => 'app/services/link_favicons.php',
+    176 => 'app/services/logs.php',
+    177 => 'app/services/maintenance_center.php',
+    178 => 'app/services/media_renamer.php',
+    179 => 'app/services/mobile_webdav.php',
+    180 => 'app/services/mutation_schema_policy.php',
+    181 => 'app/services/navigation_data.php',
+    182 => 'app/services/openai_text_assist.php',
+    183 => 'app/services/outbound_http.php',
+    184 => 'app/services/pagination.php',
+    185 => 'app/services/picture_game.php',
+    186 => 'app/services/picture_manager.php',
+    187 => 'app/services/presentation_schema_policy.php',
+    188 => 'app/services/public_gallery_media_manifest.php',
+    189 => 'app/services/public_paths.php',
+    190 => 'app/services/public_render_profiler.php',
+    191 => 'app/services/public_search.php',
+    192 => 'app/services/public_search_diagnostics.php',
+    193 => 'app/services/public_search_progressive.php',
+    194 => 'app/services/public_thumbnail_rendering.php',
+    195 => 'app/services/runtime_support.php',
+    196 => 'app/services/schema_inspection.php',
+    197 => 'app/services/security_tokens.php',
+    198 => 'app/services/seo_request_guard.php',
+    199 => 'app/services/simbrief_description_drafts.php',
+    200 => 'app/services/simbrief_descriptions.php',
+    201 => 'app/services/site_maintenance.php',
+    202 => 'app/services/site_url.php',
+    203 => 'app/services/smart_galleries.php',
+    204 => 'app/services/tag_metadata.php',
+    205 => 'app/services/telemetry.php',
+    206 => 'app/services/telemetry_diagnostics.php',
+    207 => 'app/services/telemetry_privacy.php',
+    208 => 'app/services/telemetry_rollup.php',
+    209 => 'app/services/telemetry_settings.php',
+    210 => 'app/services/theme.php',
+    211 => 'app/services/theme_layout_settings.php',
+    212 => 'app/services/thumbnail_bounds.php',
+    213 => 'app/services/thumbnail_bundles.php',
+    214 => 'app/services/thumbnail_compatibility.php',
+    215 => 'app/services/thumbnail_formats.php',
+    216 => 'app/services/thumbnail_generation.php',
+    217 => 'app/services/thumbnail_html.php',
+    218 => 'app/services/thumbnail_maintenance.php',
+    219 => 'app/services/thumbnail_metadata.php',
+    220 => 'app/services/thumbnail_sources.php',
+    221 => 'app/services/thumbnail_warmup.php',
+    222 => 'app/services/translations.php',
+    223 => 'app/services/update_server_policy_reconciliation.php',
+    224 => 'app/services/updates_filesystem.php',
+    225 => 'app/services/updates_install.php',
+    226 => 'app/services/updates_job_lookup.php',
+    227 => 'app/services/updates_jobs.php',
+    228 => 'app/services/updates_patch_notes.php',
+    229 => 'app/services/updates_path_safety.php',
+    230 => 'app/services/updates_remote.php',
+    231 => 'app/services/updates_request.php',
+    232 => 'app/services/updates_status.php',
+    233 => 'app/services/upload_automation.php',
+    234 => 'app/services/uploads.php',
+    235 => 'app/services/viewer_accounts.php',
+    236 => 'app/services/viewer_admin_accounts.php',
+    237 => 'app/services/viewer_anti_automation.php',
+    238 => 'app/services/viewer_authentication.php',
+    239 => 'app/services/viewer_collection_shares.php',
+    240 => 'app/services/viewer_collections.php',
+    241 => 'app/services/viewer_content_foundations.php',
+    242 => 'app/services/viewer_favourites.php',
+    243 => 'app/services/viewer_http.php',
+    244 => 'app/services/viewer_lifecycle.php',
+    245 => 'app/services/viewer_mail.php',
+    246 => 'app/services/viewer_maintenance.php',
+    247 => 'app/services/viewer_rate_limits.php',
+    248 => 'app/services/viewer_registration.php',
+    249 => 'app/services/viewer_security_events.php',
+    250 => 'app/services/viewer_security_operations.php',
+    251 => 'app/services/viewer_tokens.php',
+    252 => 'app/services/votes.php',
+    253 => 'app/views/admin_auth.php',
+    254 => 'app/views/admin_chrome.php',
+    255 => 'app/views/admin_cooperative_galleries.php',
+    256 => 'app/views/admin_cooperative_proposals.php',
+    257 => 'app/views/admin_dashboard.php',
+    258 => 'app/views/admin_dashboard_sections.php',
+    259 => 'app/views/admin_database_maintenance.php',
+    260 => 'app/views/admin_database_usage.php',
+    261 => 'app/views/admin_diagnostics.php',
+    262 => 'app/views/admin_duplicate_photos.php',
+    263 => 'app/views/admin_features.php',
+    264 => 'app/views/admin_gallery_dates.php',
+    265 => 'app/views/admin_gallery_discovery.php',
+    266 => 'app/views/admin_gallery_edit_components.php',
+    267 => 'app/views/admin_gallery_edit_tabs.php',
+    268 => 'app/views/admin_gallery_forms.php',
+    269 => 'app/views/admin_gallery_metadata_organizer.php',
+    270 => 'app/views/admin_gallery_migration.php',
+    271 => 'app/views/admin_gallery_renderers.php',
+    272 => 'app/views/admin_gallery_report.php',
+    273 => 'app/views/admin_gallery_report_export.php',
+    274 => 'app/views/admin_integrity.php',
+    275 => 'app/views/admin_language_settings.php',
+    276 => 'app/views/admin_logs.php',
+    277 => 'app/views/admin_maintenance_center.php',
+    278 => 'app/views/admin_media_renamer.php',
+    279 => 'app/views/admin_public_inline.php',
+    280 => 'app/views/admin_render_profiler.php',
+    281 => 'app/views/admin_search_diagnostics.php',
+    282 => 'app/views/admin_settings.php',
+    283 => 'app/views/admin_setup_wizard.php',
+    284 => 'app/views/admin_storage_statistics.php',
+    285 => 'app/views/admin_tags.php',
+    286 => 'app/views/admin_telemetry.php',
+    287 => 'app/views/admin_test_run_panel.php',
+    288 => 'app/views/admin_theme.php',
+    289 => 'app/views/admin_trash.php',
+    290 => 'app/views/admin_ui.php',
+    291 => 'app/views/admin_updates.php',
+    292 => 'app/views/admin_upload_settings.php',
+    293 => 'app/views/admin_uploads.php',
+    294 => 'app/views/breadcrumbs.php',
+    295 => 'app/views/cooperative_gallery.php',
+    296 => 'app/views/downloads.php',
+    297 => 'app/views/gallery_dates.php',
+    298 => 'app/views/gallery_descriptions.php',
+    299 => 'app/views/http.php',
+    300 => 'app/views/layout.php',
+    301 => 'app/views/mobile_webdav.php',
+    302 => 'app/views/navigation_data.php',
+    303 => 'app/views/pagination.php',
+    304 => 'app/views/picture_game.php',
+    305 => 'app/views/public_gallery_cards.php',
+    306 => 'app/views/public_gallery_controls.php',
+    307 => 'app/views/public_gallery_lightbox.php',
+    308 => 'app/views/public_gallery_pages.php',
+    309 => 'app/views/public_render_profiler.php',
+    310 => 'app/views/public_search.php',
+    311 => 'app/views/public_tags.php',
+    312 => 'app/views/seo.php',
+    313 => 'app/views/setup.php',
+    314 => 'app/views/simbrief_descriptions.php',
+    315 => 'app/views/smart_galleries.php',
+    316 => 'app/views/thumbnail_bounds.php',
+    317 => 'app/views/upload_automation.php',
+    318 => 'app/views/viewer_accounts.php',
+    319 => 'app/views/viewer_collection_shares.php',
+    320 => 'app/views/viewer_collections.php',
+    321 => 'app/views/viewer_favourites.php',
+    322 => 'app/views/viewer_lifecycle.php',
+    323 => 'app/views/votes.php',
+    324 => 'app/controllers/admin_auth.php',
+    325 => 'app/controllers/admin_cooperative_albums.php',
+    326 => 'app/controllers/admin_cooperative_galleries.php',
+    327 => 'app/controllers/admin_cooperative_proposals.php',
+    328 => 'app/controllers/admin_dashboard.php',
+    329 => 'app/controllers/admin_database_maintenance.php',
+    330 => 'app/controllers/admin_diagnostics.php',
+    331 => 'app/controllers/admin_duplicate_photos.php',
+    332 => 'app/controllers/admin_features.php',
+    333 => 'app/controllers/admin_galleries_bulk.php',
+    334 => 'app/controllers/admin_galleries_discovery.php',
+    335 => 'app/controllers/admin_galleries_edit_actions.php',
+    336 => 'app/controllers/admin_galleries_edit_metadata.php',
+    337 => 'app/controllers/admin_galleries_edit_page.php',
+    338 => 'app/controllers/admin_galleries_edit_views.php',
+    339 => 'app/controllers/admin_galleries_reorder.php',
+    340 => 'app/controllers/admin_gallery_benchmark.php',
+    341 => 'app/controllers/admin_gallery_dates.php',
+    342 => 'app/controllers/admin_gallery_features.php',
+    343 => 'app/controllers/admin_gallery_form_models.php',
+    344 => 'app/controllers/admin_gallery_picker_search.php',
+    345 => 'app/controllers/admin_gallery_quick_access.php',
+    346 => 'app/controllers/admin_gallery_renderers.php',
+    347 => 'app/controllers/admin_gallery_report.php',
+    348 => 'app/controllers/admin_gallery_title_completion.php',
+    349 => 'app/controllers/admin_images_bulk.php',
+    350 => 'app/controllers/admin_images_reorder.php',
+    351 => 'app/controllers/admin_integrity.php',
+    352 => 'app/controllers/admin_logs.php',
+    353 => 'app/controllers/admin_maintenance_center.php',
+    354 => 'app/controllers/admin_media_renamer.php',
+    355 => 'app/controllers/admin_openai_text_assist.php',
+    356 => 'app/controllers/admin_public_inline.php',
+    357 => 'app/controllers/admin_search_diagnostics.php',
+    358 => 'app/controllers/admin_settings.php',
+    359 => 'app/controllers/admin_setup_wizard.php',
+    360 => 'app/controllers/admin_simbrief.php',
+    361 => 'app/controllers/admin_tags.php',
+    362 => 'app/controllers/admin_telemetry.php',
+    363 => 'app/controllers/admin_test_runs.php',
+    364 => 'app/controllers/admin_theme.php',
+    365 => 'app/controllers/admin_theme_actions.php',
+    366 => 'app/controllers/admin_theme_appearance.php',
+    367 => 'app/controllers/admin_theme_custom_css.php',
+    368 => 'app/controllers/admin_theme_language.php',
+    369 => 'app/controllers/admin_theme_layout.php',
+    370 => 'app/controllers/admin_theme_media.php',
+    371 => 'app/controllers/admin_theme_page.php',
+    372 => 'app/controllers/admin_thumbnails.php',
+    373 => 'app/controllers/admin_trash.php',
+    374 => 'app/controllers/admin_uploads.php',
+    375 => 'app/controllers/cooperative_content.php',
+    376 => 'app/controllers/cooperative_metadata.php',
+    377 => 'app/controllers/cooperative_pairing.php',
+    378 => 'app/controllers/cooperative_proposals.php',
+    379 => 'app/controllers/downloads.php',
+    380 => 'app/controllers/exif.php',
+    381 => 'app/controllers/gallery_lightbox.php',
+    382 => 'app/controllers/gallery_migration.php',
+    383 => 'app/controllers/http_helpers.php',
+    384 => 'app/controllers/mobile_webdav.php',
+    385 => 'app/controllers/navigation_data.php',
+    386 => 'app/controllers/picture_game.php',
+    387 => 'app/controllers/picture_manager.php',
+    388 => 'app/controllers/public_gallery_cards.php',
+    389 => 'app/controllers/public_gallery_controls.php',
+    390 => 'app/controllers/public_gallery_descriptions.php',
+    391 => 'app/controllers/public_gallery_home.php',
+    392 => 'app/controllers/public_gallery_lightbox.php',
+    393 => 'app/controllers/public_gallery_page.php',
+    394 => 'app/controllers/public_media.php',
+    395 => 'app/controllers/public_search.php',
+    396 => 'app/controllers/public_seo.php',
+    397 => 'app/controllers/public_tags.php',
+    398 => 'app/controllers/setup.php',
+    399 => 'app/controllers/shared_layout.php',
+    400 => 'app/controllers/site_maintenance.php',
+    401 => 'app/controllers/smart_galleries.php',
+    402 => 'app/controllers/telemetry.php',
+    403 => 'app/controllers/theme_assets.php',
+    404 => 'app/controllers/thumbnail_warmup.php',
+    405 => 'app/controllers/updates.php',
+    406 => 'app/controllers/upload_automation.php',
+    407 => 'app/controllers/viewer_accounts.php',
+    408 => 'app/controllers/viewer_collection_shares.php',
+    409 => 'app/controllers/viewer_collections.php',
+    410 => 'app/controllers/viewer_favourites.php',
+    411 => 'app/controllers/viewer_lifecycle.php',
+    412 => 'app/controllers/votes.php',
   ),
   'modules' =>
   array (
@@ -695,6 +697,28 @@ return array (
       'files' =>
       array (
         0 => 'app/services/gallery_benchmark.php',
+      ),
+    ),
+    'breadcrumb-policy' =>
+    array (
+      'depends' =>
+      array (
+        0 => 'database-observer',
+      ),
+      'files' =>
+      array (
+        0 => 'app/services/breadcrumbs.php',
+      ),
+    ),
+    'breadcrumb-presentation' =>
+    array (
+      'depends' =>
+      array (
+        0 => 'breadcrumb-policy',
+      ),
+      'files' =>
+      array (
+        0 => 'app/views/breadcrumbs.php',
       ),
     ),
     'database-observer' =>
@@ -840,7 +864,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -1093,8 +1118,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1231,8 +1257,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1322,8 +1349,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1461,7 +1489,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1513,8 +1542,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-presentation',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1658,8 +1688,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -1748,7 +1779,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -1822,7 +1854,7 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'database-observer',
+        0 => 'breadcrumb-policy',
       ),
       'files' =>
       array (
@@ -1877,7 +1909,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -2035,8 +2068,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -2362,8 +2396,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -2465,8 +2500,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -2638,7 +2674,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -2712,7 +2749,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -2953,7 +2991,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
+        0 => 'breadcrumb-presentation',
+        1 => 'request-policy',
       ),
       'files' =>
       array (
@@ -3112,8 +3151,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -3197,8 +3237,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -3360,8 +3401,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (
@@ -3558,7 +3600,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -3618,8 +3661,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -3765,8 +3809,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-presentation',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (
@@ -3836,7 +3881,8 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -3895,8 +3941,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-presentation',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (
@@ -4034,8 +4081,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-presentation',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (
@@ -4236,8 +4284,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-presentation',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (
@@ -4509,8 +4558,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'request-policy',
-        1 => 'routing-paths',
+        0 => 'breadcrumb-policy',
+        1 => 'request-policy',
+        2 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -5147,9 +5197,10 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
-        2 => 'routing-paths',
+        0 => 'breadcrumb-presentation',
+        1 => 'public-policy',
+        2 => 'request-policy',
+        3 => 'routing-paths',
       ),
       'files' =>
       array (
@@ -5279,8 +5330,9 @@ return array (
     array (
       'depends' =>
       array (
-        0 => 'public-policy',
-        1 => 'request-policy',
+        0 => 'breadcrumb-policy',
+        1 => 'public-policy',
+        2 => 'request-policy',
       ),
       'files' =>
       array (

@@ -22,6 +22,8 @@ With Flight Maps and Navigation Data enabled, route input and SimBrief draft req
 
 Gallery headers and cards share an animated tag panel. The server renders the saved tag preview and row cap immediately; the header panel preserves every direct and contained tag, wraps long names and keeps the header dimensions stable. Native disclosure remains available without JavaScript, and existing Theme limits, sorting, scrollbar and animation settings continue to apply.
 
+Breadcrumb navigation offers nine styles through one accessible component: Minimal, Chevron, Pills, Surface, Ribbon (arrow segments), Nodes (connected dots), Tabs, Tiles (raised cards), and Gradient (theme-colored surface and accent stripe). In **Theme > Layout > Cards & badges**, gallery **Display > Advanced**, and Smart Gallery presentation controls, each native radio-card option shows a real breadcrumb example so administrators can choose by appearance. The inherit card previews the effective Theme style; the controls support keyboard selection and work without JavaScript. **Default / inherit** resolves to the Theme choice and then built-in Chevron. Invalid values safely fall back, and wrapping keeps ancestor links reachable without JavaScript. See the [breadcrumb component contract](docs/BREADCRUMBS.md).
+
 Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
 
 ## Product manuals

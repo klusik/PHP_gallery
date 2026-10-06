@@ -109,7 +109,7 @@ function view_render_smart_gallery_open_link(string $publicUrl): void
 }
 
 /**
- * Render the Smart Gallery editor workspace.
+ * Render the Smart Gallery editor workspace, including prepared presentation controls.
  *
  * @param array<string,mixed> $viewModel Controller-prepared editor state.
  * @return void Emits compact controls while preserving every form field and panel-owned action.
@@ -186,9 +186,10 @@ function view_render_smart_gallery_editor(array $viewModel): void
 }
 
 /**
- * Render canonical Smart Gallery presentation controls.
+ * Render canonical Smart Gallery presentation controls, including breadcrumb inheritance.
  *
  * @param array<string,mixed> $viewModel Controller-prepared presentation state.
+ * @return void Emits the presentation fieldset from controller-prepared data.
  */
 function view_render_smart_gallery_presentation_controls(array $viewModel): void
 {
@@ -241,6 +242,8 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
     }
     echo '</select></label>';
     echo '<p class="muted">' . e(t('smart_gallery.placed_card_layout_help', 'This layout controls the Smart Gallery card when it is placed on the homepage or beneath a physical gallery. It does not change the result photo cards.')) . '</p>';
+    view_render_breadcrumb_style_picker((array) ($viewModel['breadcrumb_style_picker'] ?? []));
+    echo '<p class="muted">' . e(t('admin.gallery_editor.breadcrumb_style_help', 'Choose the breadcrumb appearance for this gallery. Inherit from Theme uses the default style configured in Theme settings.')) . '</p>';
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_metadata_visible" value="1"' . (!empty($presentation['metadata_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.metadata_visible', 'Show photo metadata overlays')) . '</label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_source_gallery_visible" value="1"' . (!empty($presentation['source_gallery_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.source_gallery_visible', 'Show source gallery')) . '</label>';
     echo '</div>';
@@ -376,10 +379,12 @@ function view_render_smart_gallery_source_summary(array $summary): void
  * Render a published Smart Gallery page.
  *
  * @param array<string,mixed> $viewModel Controller-prepared public page state.
+ * @return void
  */
 function view_render_public_smart_gallery(array $viewModel): void
 {
     render_header((string) ($viewModel['title'] ?? ''));
+    view_render_breadcrumbs((array) ($viewModel['breadcrumbs'] ?? []));
     echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1><p>' . e((string) ($viewModel['description'] ?? '')) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => (int) ($viewModel['total'] ?? 0)])) . '</p></div></div><div class="hero-meta"><div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
     $download = $viewModel['download'] ?? null;
     if (is_array($download)) {
