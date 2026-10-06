@@ -43,9 +43,12 @@ jobs:
           extensions: zip
           coverage: none
       - name: Require current production membership and integrity data
+        shell: pwsh
         run: |
           php scripts/generate_production_files.php --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           php scripts/generate_manifest.php --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Add unrelated dirty workspace files
         shell: pwsh
         run: |

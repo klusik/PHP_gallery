@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.121.1
+
+Version 0.121.1 corrects Windows packaging CI failure propagation and makes the viewer-language workflow fixture deterministic across filesystems and database ID allocation. It also completes release inventory membership for the localization documentation and regression tests shipped with Version 0.121.
+
+### Highlights
+
+#### Reliable release verification
+
+- Fixed the Windows packaging preflight to stop immediately when production membership or manifest validation fails.
+- Fixed the localization workflow fixture to select its two known originals by filename and set their page order explicitly, preserving separate source-fallback and out-of-page translated preview checks. Ref: [#93](https://github.com/klusik/PHP_gallery/issues/93).
+- Added the localization investigation document and two existing localization regression tests to their reviewed production/source-review inventory lists.
+
+### Technical Details
+
+#### Tooling and inventory
+
+- Updated `.github/workflows/gallery-workflows.yml` to use PowerShell explicitly and propagate each native PHP preflight exit code before continuing the Windows packaging job.
+- Updated `app/production-files.json` to include `docs/ISSUE_93_LOCALIZATION.md` in production documentation and `tests/content_language_workflow_integration_test.php` and `tests/content_request_language_test.php` in the optional source-review test inventory. FTP deployment continues to exclude tests.
+- Refreshed CMS release metadata, all four manual editions and PDFs, and `app/core-manifest.json`.
+
+#### Database, frontend and compatibility
+
+- Added no migration, schema change, runtime feature, setting, capability, browser asset or compatibility branch. Preserved Version 0.121 gallery behavior and the independent WinApp 0.3.2 version and installer.
+
+#### Tests
+
+- Updated `tests/content_language_workflow_integration_test.php` to identify `sample-1.jpg` and `sample-2.jpg` without relying on scan order or auto-increment IDs and explicitly place the larger preview on the second photo page.
+- Retained real disposable database/HTTP coverage for source-language fallback and translated Open Graph/Twitter captions outside the selected photo page.
+
+### User Impact
+
+#### For administrators
+
+- Improved the reliability of release packaging gates and localization regression evidence across Windows and CI database environments.
+- Kept upgrade and configuration workflows unchanged; no database migration or companion installer update is required.
+
+#### For visitors
+
+- Preserved the breadcrumb styles and viewer-language presentation introduced in Version 0.121.
+
 ## Version 0.121
 
 Version 0.121 adds configurable visual styles for public breadcrumb navigation and completes viewer-language selection for gallery and photo titles and descriptions.
