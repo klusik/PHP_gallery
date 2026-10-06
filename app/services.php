@@ -39,6 +39,7 @@ namespace Gallery\Core;
 
 // Load the dependency-free Core request adapter for isolated service consumers.
 require_once __DIR__ . '/request_data.php';
+require_once __DIR__ . '/session_context.php';
 // Load database-facing MVC models before service-layer orchestration.
 require_once __DIR__ . '/models.php';
 // Load DB-backed application settings before any feature module reads app_setting().

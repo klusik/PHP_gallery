@@ -86,6 +86,26 @@ function remove_updater_test_tree(string $path): void
     @rmdir($path);
 }
 
+/**
+ * Write a minimal canonical package inventory for an isolated updater fixture.
+ *
+ * @param string $root Fixture project root.
+ * @param list<string> $paths Sorted production and updater paths.
+ * @return void Writes a schema-valid checked-in-style package inventory.
+ */
+function write_updater_policy_fixture(string $root, array $paths): void
+{
+    $json = json_encode([
+        'schema_version' => 1,
+        'production_files' => $paths,
+        'updater_files' => $paths,
+        'source_review_files' => [],
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if ($json === false || file_put_contents($root . '/app/production-files.json', $json . "\n") === false) {
+        throw new RuntimeException('Could not write updater policy fixture inventory.');
+    }
+}
+
 $expectedStages = [
     'download', 'archive_validate', 'extract', 'package_validate', 'plan', 'stage_files',
     'backup', 'ready', 'activate', 'migrate', 'finalize', 'cleanup', 'completed',
@@ -205,6 +225,9 @@ try {
     mkdir($destinationPlan . '/app', 0775, true);
     mkdir($destinationPlan . '/galleries/huge/private', 0775, true);
     file_put_contents($destinationPlan . '/app/stale.php', "stale\n");
+    file_put_contents($sourcePlan . '/app/package.php', "package\n");
+    write_updater_policy_fixture($sourcePlan, ['app/package.php', 'app/production-files.json']);
+    write_updater_policy_fixture($destinationPlan, ['app/production-files.json', 'app/stale.php']);
     file_put_contents($destinationPlan . '/galleries/huge/private/photo.jpg', str_repeat('x', 1024));
     $obsolete = application_update_obsolete_paths($sourcePlan, $destinationPlan, false);
     assert_updater_resumable(in_array('app/stale.php', $obsolete, true), 'Managed stale application file was not planned for removal.');
@@ -359,8 +382,17 @@ $autoStartEnd = strpos($installSource, 'function application_update_beta_backup_
 $autoStartSource = substr($installSource, (int) $autoStartPosition, (int) $autoStartEnd - (int) $autoStartPosition);
 assert_updater_resumable(!str_contains($autoStartSource, 'application_update_process_job('), 'Automatic discovery and package processing were recombined into one request.');
 assert_updater_resumable(str_contains($cliSource, 'Discovery already consumed this invocation') && str_contains($cliSource, 'application_update_continue_background_job($budgetSeconds)'), 'CLI background continuation/discovery no longer uses the bounded safe retry path.');
-assert_updater_resumable(stripos($deployShellSource, 'manifest') === false && preg_match('/^\s*php\s/m', $deployShellSource) !== 1, 'Shell deployment regained manifest handling or PHP execution.');
-assert_updater_resumable(stripos($deployPowerShellSource, 'manifest') === false && !str_contains($deployPowerShellSource, '& php '), 'PowerShell deployment regained manifest handling or PHP execution.');
+assert_updater_resumable(str_contains($deployShellSource, 'scripts/release_files.php')
+    && str_contains($deployShellSource, 'release_files.php" list')
+    && str_contains($deployShellSource, 'release_files.php" verify'),
+    'Shell deployment must list and verify staged paths through the canonical PHP package-policy bridge.');
+assert_updater_resumable(str_contains($deployPowerShellSource, 'scripts/release_files.php')
+    && str_contains($deployPowerShellSource, "'list',")
+    && str_contains($deployPowerShellSource, "'verify',"),
+    'PowerShell deployment must list and verify staged paths through the canonical PHP package-policy bridge.');
+assert_updater_resumable(str_contains($deployShellSource, 'generate_manifest.php') && str_contains($deployShellSource, '--check')
+    && str_contains($deployPowerShellSource, 'generate_manifest.php') && str_contains($deployPowerShellSource, '--check'),
+    'Deploy wrappers must verify the release manifest before staging or publishing files.');
 assert_updater_resumable(str_contains($jobsSource, "version_compare(\$validatedVersion, \$targetVersion, '<')"), 'Stable package validation no longer enforces the selected target-version floor.');
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_cancel_job') && str_contains($jobsSource, 'Update cannot be cancelled after activation has begun.'), 'Pre-activation cancellation boundary disappeared.');
 assert_updater_resumable(str_contains($jobsSource, 'Caught failures require application_update_retry_job()') && str_contains($jobsSource, "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))"), 'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.');

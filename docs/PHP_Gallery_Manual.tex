@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.119}
-\newcommand{\manualdate}{5~October~2026}
+\newcommand{\version}{0.120}
+\newcommand{\manualdate}{6~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -243,7 +243,7 @@ Component & Requirement\\
 \midrule
 \endhead
 PHP & Version 8.1 or~newer.\\
-Database & MySQL 5.7 or~newer, or~MariaDB 10.2 or~newer.\\
+Database & MySQL 8.4 LTS, MariaDB 10.11 LTS, or~MariaDB 11.4 LTS.\\
 PDO & PDO MySQL extension for~application queries and~migrations.\\
 Image processing & GD for~common thumbnail generation. Additional local image tooling can~support specialized formats.\\
 Archives & ZipArchive for~package, download, and~transfer workflows that produce or~consume ZIP data.\\
@@ -251,6 +251,8 @@ Filesystem & Writable application data, gallery, cache, and~generated-media loca
 Web server & Apache-style rewriting is~recommended for~clean URLs; query-string routing supports compatible environments without rewrites.\\
 \bottomrule
 \end{longtable}
+
+The~maintained support matrix names MySQL~8.4 LTS, MariaDB~10.11 LTS, and~MariaDB~11.4 LTS as~representatives directly exercised by~required CI. The~canonical support document lists MySQL~8.0 and~MariaDB~10.4--10.10 as~legacy best-effort series without a~required project database workflow or~project regression and~security assurance; they~are~outside the~maintained qualification set. MySQL~5.7 or~older and~MariaDB~10.3 or~older are~unsupported. Other database-server series remain unqualified until~required CI tests them directly; a~higher version alone does~not~establish compatibility. See \filepath{docs/DATABASE_SUPPORT.md} for~the~full policy.
 
 Outbound HTTPS access supports application updates and~remote release metadata. Local operation and~manually deployed releases can~function with a~more restricted outbound policy.\footnote{Network policy should follow the~installation owner’s update and~privacy requirements. Update code validates packages and~preserves recovery data according to~the~local updater implementation.}
 
@@ -265,6 +267,10 @@ The~web process needs read access to~runtime code and~write access to~designated
 \label{sec:installation}
 \index{installation}
 \index{setup}
+
+Internal application, tooling, documentation, cache, data, and~log directories carry their own Apache authorization guards, independent of~URL rewriting. The~host must honor those directives or~provide equivalent server rules; PHP's development server does~not~read them. Direct HTTP requests to~CLI commands receive an~empty 404 before application startup. Continue to~use the~public front controller for~browser routes and~the~shell for~maintenance commands. See \filepath{docs/HTTP_ENTRYPOINTS.md}.
+
+Prepare deployment folders or~ZIPs only when needed, using the~reviewed file list in~\filepath{app/production-files.json}. The~deploy helpers verify staged membership and~current integrity data; local agent files, live media, configuration, custom CSS, and~runtime payloads stay outside ordinary packages. Approved WinApp sources ship with the~package, while its installer remains independent. A~prompted Windows target that already contains a~package selects a~fresh timestamped sibling; an~explicit automation target refuses a~collision. Read \filepath{docs/PRODUCTION_FILES.md} before manual deployment.
 
 \subsection{Browser installation}
 
@@ -2011,6 +2017,8 @@ The~same early runtime boundary converts uncaught and~catchable fatal PHP failur
 
 Before activation, updater archive validation also requires the~complete new request runtime and~its reviewed module plan. A~partial archive is~refused while prepared files remain outside the~active installation. Keep all shipped runtime files together during manual deployment; replacing only the~bootstrap would leave an~incomplete application.
 
+Updater activation uses the~reviewed updater subset of~the~production inventory. Older source archives without that inventory retain a~bounded path based on~their owned manifest; a~malformed present inventory is~refused. Obsolete cleanup requires prior ownership evidence and~preserves unknown local files. Rollback uses the~server-written snapshot index and~refuses unindexed files or~paths redirected by~symbolic links or~Windows junctions. These file safeguards do~not~reverse database migrations.
+
 \subsection{Integrity manifest}
 \index{core manifest}
 
@@ -2024,6 +2032,8 @@ Before activation, updater archive validation also requires the~complete new req
 \index{views}
 
 The~following pages describe the~request path used by~the~application. They are~mainly relevant to~maintenance and~development; ordinary gallery administration does not~require them.
+
+The~generated module plan declares shared dependencies and~one canonical file order, preserving the~complete route closure and~include order. Keep dependency inputs and~the~generated plan together when changing routes. Request/session adapters own transport access; language, navigation tokens, gallery grants, NSFW acknowledgement, and~flash behavior retain their established owners. The~lightbox separately owns navigation generations and~decoded resources, while the~viewer keeps presentation and~authorized quality selection. This separation provides regression boundaries; it~does~not~establish faster browser operation. See \filepath{docs/BROWSER_LIFECYCLE.md} and~\filepath{docs/COMPATIBILITY_LIFECYCLE.md}.
 
 \subsection{Bootstrap, routing, and~dispatch}
 \index{bootstrap}
@@ -2224,11 +2234,11 @@ For~public thumbnail rendering, inspect the~Elements and~Network panels. Respons
 
 \subsection{Release hygiene}
 
-A~release review confirms runtime version consistency, ordered migration compatibility, manifest hashes, documentation, translations, browser cache-busting, tests, package exclusions, and~user-data safety. The~maintainer starts from a~clean release branch, compares it~with the~exact previous release tag, reviews every intervening commit and~path, and~records anything intentionally excluded. The~runtime version in~\filepath{app/bootstrap.php}, the~\filepath{release-metadata.json} key and~tag, newest \filepath{PATCH_NOTES.md} heading, documentation markers, intended archive name, and~final Git tag must all agree.
+Follow \filepath{RELEASE.md} for~the~complete release sequence. Compare the~exact previous stable tag, complete the~release notes and~permanent documentation, and~align all~four maintained manual editions. Rebuild each PDF with the~indexed multi-pass sequence in~\filepath{docs/LATEX_BUILD.md} and~check compiler success, references, index entries, and~layout warnings. Visual PDF review is~reserved for~an~explicit request or~diagnosis of~a~concrete layout problem; routine successful builds need no~additional visual-approval gate.
 
-New migrations are~reviewed in~timestamp order and~exercised through migration-consistency and~legacy-runner tests. The~maintainer rebuilds this PDF with the~complete \filepath{docs/LATEX_BUILD.md} sequence and~inspects its title page, release overview, contents, bookmarks, index, and~changed feature sections. Every changed PHP file receives \codeword{php -l}; changed JavaScript and~Node fixtures receive syntax checks; focused feature tests, translation consistency, documentation coverage, the~complete PHP suite, and~\codeword{git diff --check} must pass.
+After the~final edits, generate the~manifest, pass the~release/manifest/whitespace preflight, initialize the~qualification fingerprint, and~freeze the~inputs. Run exactly one central \codeword{--profile=release} audit, directly or~through the~configured disposable workflow fixture. The~audit owns syntax, regression, contracts, browser fixtures, and~release consistency; do~not~add a~second manual test-tree sweep. Attach its report to~the~unchanged fingerprint and~report coverage gaps and~pending operational reviews separately.
 
-Only after the~final source and~documentation edit does the~maintainer run \codeword{php scripts/generate_manifest.php} and~its \codeword{--check} mode. The~deployment helper then creates the~requested local folder or~ZIP; it~only packages files and~does not~execute PHP or~repair a~stale manifest. Inspect the~archive listing and~confirm it~contains the~current PDF, patch notes, release metadata, migrations, and~\filepath{app/core-manifest.json}, while protected configuration, caches, logs, temporary files, local tools, deploy output, and~user media follow the~packaging policy. Recheck the~manifest after packaging, create the~release commit and~annotated \codeword{v_<version>} tag from the~verified tree, and~smoke-test an~updater upgrade from the~previous stable release. Missing local dependencies must be~reported with exact blocked commands and~environment details rather than calling the~release fully verified.
+Create a~deployment folder or~ZIP only when explicitly requested. The~helpers require current integrity data and~verify the~canonical production inventory; inspect the~requested artifact before use. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy only with explicit authorization. After publication, verify updater discovery, migrations, login, public galleries, protected media, and~integrity/status on~the~published installation.
 
 \section{Making the~gallery feel fast}
 \label{sec:performance}

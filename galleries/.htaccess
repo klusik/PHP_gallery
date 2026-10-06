@@ -26,19 +26,34 @@
 #   - Prefer small, readable changes over broad rewrites.
 #
 # Last Updated:
-#   2026-05-04
+#   2026-10-05
 
 Options -Indexes
-<FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8)$">
-    Require all denied
-</FilesMatch>
-<FilesMatch "\.(dng|DNG)$">
-    Require all denied
-</FilesMatch>
+<IfModule mod_authz_core.c>
+    <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8)$">
+        Require all denied
+    </FilesMatch>
+    <FilesMatch "\.(dng|DNG)$">
+        Require all denied
+    </FilesMatch>
 
-
-# Deny direct browser access to stored gallery files.
-# Media should be served by PHP routes so gallery visibility, password, share-link, and NSFW rules are applied.
-<FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip)$">
-    Require all denied
-</FilesMatch>
+    # Deny direct browser access to stored gallery files.
+    # Media should be served by PHP routes so gallery visibility, password, share-link, and NSFW rules are applied.
+    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+    <FilesMatch "\.(dng|DNG)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>

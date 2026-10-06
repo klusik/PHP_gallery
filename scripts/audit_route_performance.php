@@ -15,6 +15,10 @@ declare(strict_types=1);
 
 namespace PhpGallery\Audit;
 
+require_once __DIR__ . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+require_once __DIR__ . '/runtime_plan_metrics.php';
+
 /**
  * Check that a route emitted its expected product content rather than a generic error page.
  *
@@ -87,6 +91,15 @@ function route_metric_problems(array $metrics, string $probeId, array $limits): 
             }
         }
     }
+    $loadedModules = $metrics['loaded_modules'] ?? null;
+    if (!is_array($loadedModules) || !array_is_list($loadedModules)
+        || count(array_filter($loadedModules, 'is_string')) !== count($loadedModules)
+        || count(array_unique($loadedModules, SORT_STRING)) !== count($loadedModules)
+        || !is_int($metrics['loaded_module_count'] ?? null)
+        || $metrics['loaded_module_count'] < 1
+        || $metrics['loaded_module_count'] !== count($loadedModules)) {
+        $pathProblems[] = 'loaded_modules must be a unique list matching loaded_module_count.';
+    }
 
     $requiredSchema = ($metrics['schema_version'] ?? null) === 1
         && ($metrics['scope'] ?? null) === 'cms-run-route-lifecycle'
@@ -99,6 +112,8 @@ function route_metric_problems(array $metrics, string $probeId, array $limits): 
         && is_int($metrics['http_status'] ?? null) && $metrics['http_status'] >= 100 && $metrics['http_status'] <= 599
         && is_int($metrics['included_php_files'] ?? null) && $metrics['included_php_files'] >= 1
         && is_array($paths) && count($paths) === $metrics['included_php_files']
+        && is_array($loadedModules)
+        && is_int($metrics['loaded_module_count'] ?? null) && $metrics['loaded_module_count'] >= 1
         && is_int($metrics['peak_memory_bytes'] ?? null) && $metrics['peak_memory_bytes'] > 0
         && (is_int($metrics['wall_ms'] ?? null) || is_float($metrics['wall_ms'] ?? null))
         && is_finite((float) ($metrics['wall_ms'] ?? NAN)) && (float) $metrics['wall_ms'] >= 0
@@ -125,12 +140,26 @@ function route_metric_problems(array $metrics, string $probeId, array $limits): 
         return ['Invalid route performance limits.'];
     }
 
+    try {
+        $baselineJson = file_get_contents(__DIR__ . '/runtime_plan_baseline.json');
+        $baselineDocument = is_string($baselineJson) ? json_decode($baselineJson, true, 512, JSON_THROW_ON_ERROR) : null;
+        $probeIds = array_keys($definitions);
+        $baselines = runtime_plan_baseline_routes($baselineDocument, $probeIds);
+        $baseline = $baselines[$probeId] ?? null;
+        if (!is_array($baseline)) {
+            return ['Route is missing from the runtime plan ratchet baseline.'];
+        }
+    } catch (\Throwable) {
+        return ['Runtime plan ratchet baseline is malformed or unavailable.'];
+    }
+
     $problems = [];
     foreach (['included_php_files' => 'max_included_php_files', 'peak_memory_bytes' => 'max_peak_memory_bytes'] as $metric => $limit) {
         if ($metrics[$metric] > $limits[$limit]) {
             $problems[] = $metric . '=' . $metrics[$metric] . ' exceeds ' . $limits[$limit] . '.';
         }
     }
+    $problems = array_merge($problems, runtime_plan_ratchet_problems($metrics, $baseline));
     return $problems;
 }
 

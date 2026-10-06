@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.119}
-\newcommand{\manualdate}{5~oktober~2026}
+\newcommand{\version}{0.120}
+\newcommand{\manualdate}{6~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -241,7 +241,7 @@ Komponent & Krav\\
 \midrule
 \endhead
 PHP & Version 8.1 eller senare.\\
-Databas & MySQL 5.7 eller senare, eller MariaDB 10.2 eller senare.\\
+Databas & MySQL 8.4 LTS, MariaDB 10.11 LTS eller MariaDB 11.4 LTS.\\
 PDO & Tillägget PDO MySQL för programmets frågor och migreringar.\\
 Bildbehandling & GD för vanlig generering av miniatyrbilder. Ytterligare lokala bildverktyg kan stödja specialformat.\\
 Arkiv & ZipArchive för paket-, hämtnings- och överföringsflöden som skapar eller läser ZIP-data.\\
@@ -249,6 +249,8 @@ Filsystem & Skrivbara platser för programdata, gallerier, cache och genererade 
 Webbserver & URL-omskrivning av Apache-typ rekommenderas för rena URL:er; dirigering med frågesträngar stöder kompatibla miljöer utan omskrivning.\\
 \bottomrule
 \end{longtable}
+
+Den underhållna supportmatrisen kvalificerar MySQL 8.4 LTS, MariaDB 10.11 LTS och MariaDB 11.4 LTS som representativa versioner som testas direkt i obligatoriska CI. Det kanoniska dokumentet listar MySQL 8.0 och MariaDB 10.4--10.10 som äldre versioner med bästa möjliga stöd, men de saknar obligatorisk databastestning i projektet samt projektets regressions- och säkerhetsgarantier. De ligger utanför den underhållna kvalificeringen. MySQL 5.7 och äldre samt MariaDB 10.3 och äldre stöds inte. Andra databasserier är okvalificerade tills de testas direkt i obligatoriska CI; ett högre versionsnummer bevisar inte i sig kompatibilitet. Se \filepath{docs/DATABASE_SUPPORT.md} för detaljer.
 
 Utgående HTTPS-åtkomst stöder programuppdateringar och fjärrhämtade utgåvemetadata. Lokal drift och manuellt installerade utgåvor kan fungera med mer begränsad utgående trafik.\footnote{Nätverkspolicyn bör följa installationsägarens krav på uppdateringar och integritet. Uppdateringskoden validerar paket och bevarar återställningsdata enligt den lokala uppdaterarens implementation.}
 
@@ -263,6 +265,10 @@ Webbprocessen behöver läsåtkomst till programkoden och skrivåtkomst till uts
 \label{sec:installation}
 \index{i00123@installation}
 \index{g00118@grundinställningar}
+
+Interna mappar för program, verktyg, dokumentation, cache, data och loggar har egna Apache-regler som nekar åtkomst oberoende av URL-omskrivning. Webbhotellet måste följa reglerna eller ordna motsvarande serverregler; PHP:s utvecklingsserver läser dem inte. Direkta HTTP-anrop till CLI-kommandon får ett tomt 404-svar före programstart. Använd den offentliga ingången för webbläsarrutter och kommandoraden för underhåll. Se \filepath{docs/HTTP_ENTRYPOINTS.md}.
+
+Bygg vid behov distributionsmappar eller ZIP-filer med \filepath{app/production-files.json}. Verktygen verifierar exakt filinnehåll och aktuella integritetsdata; lokala agentfiler, aktiva medier, konfiguration, egen CSS och körningsdata ingår inte i vanliga paket. Godkända WinApp-källor medföljer, medan installationsfilen förblir fristående. Om ett interaktivt valt Windows-mål redan innehåller ett paket väljs en ny intilliggande sökväg med tidsstämpel; ett uttryckligt automatiseringsmål nekar kollisioner. Läs \filepath{docs/PRODUCTION_FILES.md} före manuell distribution.
 
 \subsection{Installation i webbläsaren}
 
@@ -1990,6 +1996,8 @@ Samma tidiga körningsgräns omvandlar ohanterade och fångstbara fatala PHP-fel
 
 Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begärandekärnan och dess granskade modulplan. Ett ofullständigt arkiv avvisas medan förberedda filer ligger utanför den aktiva installationen. Behåll alla levererade körmiljöfiler tillsammans vid manuell distribution; att bara ersätta bootstrap skulle lämna programmet ofullständigt.
 
+Uppdateringsaktivering använder den granskade uppdaterardelmängden av produktionslistan. Äldre källarkiv utan lista behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare ägarbevis och bevarar okända lokala filer. Filåterställning använder det servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd återställer inte databasmigreringar.
+
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}
 
@@ -2002,6 +2010,8 @@ Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begära
 \index{v00264@vyer}
 
 Följande sidor beskriver den begärandeväg som programmet använder. De är främst relevanta för underhåll och utveckling; vanlig galleriadministration kräver dem inte.
+
+Den genererade modulplanen anger delade beroenden och en kanonisk filordning som bevarar hela ruttens beroenden och inläsningsordning. Håll beroendeunderlag och genererad plan tillsammans när rutter ändras. Request-/sessionsadaptrar äger transportåtkomst; språk, navigationstoken, galleriåtkomst, NSFW-bekräftelse och engångsmeddelanden behåller sina befintliga ägare. Ljuslådan skiljer navigationsgenerationer från avkodade resurser, medan visaren behåller presentation och auktoriserat kvalitetsval. Uppdelningen ger regressionsgränser men bevisar inte snabbare webbläsardrift. Se \filepath{docs/BROWSER_LIFECYCLE.md} och \filepath{docs/COMPATIBILITY_LIFECYCLE.md}.
 
 \subsection{Uppstart, dirigering och fördelning}
 \index{u00257@uppstart}
@@ -2202,11 +2212,11 @@ För offentlig miniatyrbildsrendering undersöker du panelerna Elements och Netw
 
 \subsection{Rutiner vid utgivning}
 
-En utgåvegranskning bekräftar konsekvent körningsversion, ordnad migreringskompatibilitet, manifesthashar, dokumentation, översättningar, cacheuppdatering för webbläsare, tester, paketundantag och användardatasäkerhet. Underhållaren börjar från en ren utgåvegren, jämför den med exakt föregående utgåvetagg, granskar varje mellanliggande commit och sökväg och registrerar allt som avsiktligt utesluts. Körningsversionen i \filepath{app/bootstrap.php}, nyckeln och taggen \filepath{release-metadata.json}, senaste rubriken i \filepath{PATCH_NOTES.md}, dokumentationsmarkörer, avsett arkivnamn och slutlig Git-tagg måste alla stämma överens.
+Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föregående stabila tagg, färdigställ versionsanteckningar och permanent dokumentation och samordna alla fyra handboksutgåvor. Bygg varje PDF med index och flera körningar enligt \filepath{docs/LATEX_BUILD.md}; kontrollera kompilering, referenser, indexposter och layoutvarningar. Visuell PDF-granskning görs endast på uttrycklig begäran eller för att undersöka ett konkret layoutproblem; en lyckad rutinbyggnad kräver inget ytterligare visuellt godkännande.
 
-Nya migreringar granskas i tidsstämpelordning och provas genom tester för migreringskonsekvens och äldre körare. Underhållaren bygger om denna PDF med hela sekvensen \filepath{docs/LATEX_BUILD.md} och undersöker titelblad, utgåveöversikt, innehållsförteckning, bokmärken, index och ändrade funktionsavsnitt. Varje ändrad PHP-fil får \codeword{php -l}; ändrad JavaScript och Node-testdata får syntaxkontroller; riktade funktionstester, översättningskonsekvens, dokumentationstäckning, hela PHP-sviten och \codeword{git diff --check} måste godkännas.
+Generera manifestet efter sista ändringen, godkänn förkontroller för utgåva, manifest och blanksteg, initiera kvalificeringens fingeravtryck och frys underlaget. Kör exakt en central granskning med \codeword{--profile=release}, direkt eller genom den konfigurerade isolerade testinstallationen. Granskningen äger syntax, regressioner, kontrakt, webbläsartestfall och utgåvekonsekvens; lägg inte till en andra manuell genomgång av testträdet. Koppla rapporten till det oförändrade fingeravtrycket och redovisa täckningsluckor separat från väntande driftgranskningar.
 
-Först efter den sista källkods- och dokumentationsändringen kör underhållaren \codeword{php scripts/generate_manifest.php} och dess läge \codeword{--check}. Driftsättningshjälpmedlet skapar sedan begärd lokal mapp eller ZIP-fil; det paketerar bara filer och kör inte PHP eller reparerar ett gammalt manifest. Undersök arkivförteckningen och bekräfta att den innehåller aktuell PDF, patchanteckningar, utgåvemetadata, migreringar och \filepath{app/core-manifest.json}, medan skyddad konfiguration, cache, loggar, tillfälliga filer, lokala verktyg, driftsättningsutdata och användarmedier följer paketeringspolicyn. Kontrollera manifestet igen efter paketeringen, skapa utgåvecommit och kommenterad \codeword{v_<version>}-tagg från det verifierade trädet och gör ett grundläggande funktionstest av en uppdateraruppgradering från föregående stabila utgåva. Saknade lokala beroenden måste rapporteras med exakta blockerade kommandon och miljödetaljer i stället för att kalla utgåvan fullt verifierad.
+Skapa distributionsmapp eller ZIP endast på uttrycklig begäran. Verktygen kräver aktuella integritetsdata och verifierar den kanoniska produktionslistan; kontrollera den begärda artefakten före användning. En ren CMS-utgåva kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. Kontrollera efter publicering uppdateringsidentifiering, migreringar, inloggning, offentliga gallerier, skyddade medier och integritet/status i den publicerade installationen.
 
 \section{Få galleriet att kännas snabbt}
 \label{sec:performance}

@@ -49,6 +49,8 @@ foreach ($registry as $probeId => $definition) {
         'http_status' => $status,
         'included_php_files' => 3,
         'included_paths' => ['app/bootstrap.php', 'app/bootstrap/dispatch.php', 'public/index.php'],
+        'loaded_module_count' => 1,
+        'loaded_modules' => ['request-policy'],
         'peak_memory_bytes' => 8388608,
         'wall_ms' => 42.5,
         'php_version' => '8.3.0',
@@ -108,6 +110,8 @@ $base = [
     'http_status' => 200,
     'included_php_files' => 2,
     'included_paths' => ['app/bootstrap.php', 'public/index.php'],
+    'loaded_module_count' => 1,
+    'loaded_modules' => ['request-policy'],
     'peak_memory_bytes' => 8388608,
     'wall_ms' => 1.0,
     'php_version' => '8.3.0',
@@ -124,13 +128,13 @@ $overIncludes['included_paths'] = ['public/index.php'];
 for ($index = 1; $index < $overIncludes['included_php_files']; $index++) {
     $overIncludes['included_paths'][] = 'app/bootstrap/synthetic-' . $index . '.php';
 }
-$expect(count(\PhpGallery\Audit\route_metric_problems($overIncludes, 'robots', $robots)) === 1,
-    'Included-file ceiling must be a hard failure.');
+$expect(\PhpGallery\Audit\route_metric_problems($overIncludes, 'robots', $robots) !== [],
+    'Included-file ceiling and route ratchet must be hard failures.');
 
 $overMemory = $base;
 $overMemory['peak_memory_bytes'] = $robots['max_peak_memory_bytes'] + 1;
-$expect(count(\PhpGallery\Audit\route_metric_problems($overMemory, 'robots', $robots)) === 1,
-    'Peak-memory ceiling must be a hard failure.');
+$expect(\PhpGallery\Audit\route_metric_problems($overMemory, 'robots', $robots) !== [],
+    'Peak-memory ceiling and route ratchet must be hard failures.');
 
 $badSchema = $base;
 $badSchema['schema_version'] = 2;
@@ -146,6 +150,12 @@ $duplicatePath = $base;
 $duplicatePath['included_paths'] = ['app/bootstrap.php', 'app/bootstrap.php'];
 $expect(\PhpGallery\Audit\route_metric_problems($duplicatePath, 'robots', $robots) !== [],
     'Duplicate include paths must fail.');
+
+$duplicateModules = $base;
+$duplicateModules['loaded_module_count'] = 2;
+$duplicateModules['loaded_modules'] = ['request-policy', 'request-policy'];
+$expect(\PhpGallery\Audit\route_metric_problems($duplicateModules, 'robots', $robots) !== [],
+    'Duplicate loaded logical modules must fail.');
 
 $fatalMetric = $base;
 $fatalMetric['fatal_error'] = true;

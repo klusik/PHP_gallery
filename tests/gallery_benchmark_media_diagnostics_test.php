@@ -37,10 +37,11 @@ $profiler = (string) file_get_contents($root . '/app/services/public_render_prof
 $dispatch = file_get_contents($root . '/app/bootstrap/dispatch.php');
 $adminJs = file_get_contents($root . '/public/assets/gallery-modules/admin-gallery-benchmark.js');
 $lightboxJs = file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$lightboxResourcesJs = file_get_contents($root . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js');
 $galleryJs = file_get_contents($root . '/public/assets/gallery.js');
 $staticProbe = file_get_contents($root . '/public/assets/gallery-benchmark-static-probe.txt');
 
-foreach ([$service, $mediaController, $adminController, $profiler, $dispatch, $adminJs, $lightboxJs, $galleryJs, $staticProbe] as $source) {
+foreach ([$service, $mediaController, $adminController, $profiler, $dispatch, $adminJs, $lightboxJs, $lightboxResourcesJs, $galleryJs, $staticProbe] as $source) {
     if (!is_string($source) || $source === '') {
         fwrite(STDERR, "Benchmark v4.2 diagnostics source file could not be read.\n");
         exit(1);
@@ -76,8 +77,10 @@ $assertions = [
         && str_contains($adminJs, 'runtimeWindow = targetWindow;'), 'Lightbox runtime cleanup variables must be declared in the scenario function scope.'],
     [str_contains($adminJs, "first_lightbox_image_did_not_load"), 'The benchmark must fail fast when the first lightbox image does not load.'],
     [str_contains($lightboxJs, 'function benchmarkSourceLabel(src)'), 'Benchmark image source labeling helper must be defined before runtime use.'],
-    [str_contains($lightboxJs, 'decoded_cache_insert_after_close'), 'Late decoded-cache reinsertion diagnostics must remain observable.'],
-    [str_contains($lightboxJs, 'image_load_abort'), 'Detached image-load abort diagnostics must remain observable.'],
+    [str_contains($lightboxResourcesJs, 'epoch !== insertionEpoch') && str_contains($lightboxResourcesJs, 'cache.get(src) !== entry'), 'Late decoded-cache completion must remain fenced from reinsertion after close.'],
+    [str_contains($lightboxJs, 'decoded_cache_insert_after_close') && str_contains($lightboxJs, "event.name === 'inserted'"), 'Cache insertion diagnostics must retain the established post-close counter with owner-reported insertion events.'],
+    [str_contains($lightboxJs, "recordLightboxBenchmarkEvent('image_load_abort'") && str_contains($lightboxResourcesJs, "name: 'aborted'"), 'Detached image-load abort diagnostics must remain observable.'],
+    [str_contains($lightboxJs, 'resources.activeDetachedImageLoads') && str_contains($lightboxJs, 'resources.activeTrackedLoads') && str_contains($lightboxJs, 'resources.activeFetchTransfers'), 'Benchmark snapshots must report detached images, tracked quality work, and Fetch transfers separately.'],
     [str_contains($galleryJs, 'admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2'), 'Gallery module import must cache-bust benchmark v4.2.'],
     [str_contains($staticProbe, 'benchmark static probe v4.2'), 'Tiny static probe asset must identify v4.2.'],
 ];

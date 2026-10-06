@@ -16,6 +16,10 @@ database workflow fixtures. The historical `--quick` convenience flag on either
 workflow launcher delegates straight to the central quick profile without
 creating a database, application copy or daemon; use `--audit` or `--release`
 for workflow qualification.
+The distinct `--audit-quick` mode provisions the same owned database/application
+fixture around one central quick audit and requires all nine actual route
+lifecycle measurements. It retains the quick profile's curated PHP subset and
+does not claim full HTTP/concurrency/browser workflow qualification.
 The browser PHP entry point launches tests/gallery_workflow_browser.mjs using the
 same standalone headless Chromium approach as the existing map fixture. It needs
 no browser tool runtime, npm install, Playwright, Selenium, or Composer dependency.
@@ -104,11 +108,15 @@ gallery_workflow_ followed by 24 random hex characters, uses CREATE DATABASE
 without IF NOT EXISTS, and drops only a database it successfully created.
 The account needs only schema-local `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
 `CREATE`, `ALTER`, `DROP`, `INDEX`, and `REFERENCES` permissions for that prefix.
+The engine contract also needs schema-local `CREATE TEMPORARY TABLES` for its
+connection-owned JSON table; this is a test prerequisite, not a production grant.
 It does not need `TRIGGER`, `SUPER`, an `ALL PRIVILEGES` grant, or authority over
 server-global settings. Never repurpose an administrator or production account.
 
-.github/workflows/gallery-workflows.yml creates independent MySQL 8.4 and
-MariaDB 11.4 service containers on port 13316, without host data volumes.
+.github/workflows/gallery-workflows.yml creates independent MySQL 8.4, MariaDB
+10.11 and MariaDB 11.4 service containers on port 13316, without host data volumes.
+The exact PHP representatives and qualification categories are defined in
+[Database support](DATABASE_SUPPORT.md).
 The fixed service bootstrap password is a disposable CI fixture value, not an
 installation credential. scripts/gallery_workflow_ci.php additionally requires
 GitHub Actions and verifies the service hostname before creating its restricted,
@@ -120,7 +128,7 @@ Chrome/Chromium, sets PHP_GALLERY_BROWSER_REQUIRED=1, and runs
 `php scripts/audit.php --suite=browser-map`. Required mode fails when the browser
 is missing or cannot start, when browser fixtures are skipped, or when no browser
 fixture runs. The full central audit remains in place, and the database/HTTP
-workflows, image-move crash recovery, and MySQL races still require PASS records
+workflows, engine contracts, image-move crash recovery, and MySQL/MariaDB races still require PASS records
 from the central regression log. An absent, skipped or unregistered database/HTTP
 or concurrency test cannot qualify. Local browser discovery and explicit
 executable overrides retain their existing behavior unless the operator

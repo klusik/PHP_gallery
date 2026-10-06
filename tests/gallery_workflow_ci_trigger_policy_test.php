@@ -137,9 +137,9 @@ namespace {
                 $state['account_writes']++;
                 return 0;
             }
-            $grant = 'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES ON '
+            $grant = 'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, CREATE TEMPORARY TABLES, ALTER, DROP, INDEX, REFERENCES ON '
                 . chr(96) . 'gallery\\_workflow\\_%' . chr(96) . ".* TO 'gallery_workflow_runner'@'%'";
-            check($statement === $grant, 'Bootstrap widened the runner grant or changed unexpected server state.');
+            check($statement === $grant, 'Bootstrap changed the schema-local runner grant or added unapproved privileges.');
             $state['account_writes']++;
             return 0;
         }
@@ -272,13 +272,16 @@ namespace {
     $selectionEnd = strpos($runner, 'foreach ($requiredTests as $test)', $selectionStart);
     check($selectionStart !== false && $selectionEnd !== false, 'Mandatory central workflow evidence selector missing.');
     $selectionBody = substr($runner, $selectionStart, $selectionEnd - $selectionStart);
-    $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (): array {' . $selectionBody . 'return $requiredTests;};');
+    $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (string $profile): array {' . $selectionBody . 'return $requiredTests;};');
     check($selection instanceof Closure, 'Actual central evidence selector did not compile.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = 'disabled';
     $requiredDatabaseTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
-    check($selection() === $requiredDatabaseTests, 'Explicit browser disablement changed database/HTTP or race PASS requirements.');
+    check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests],
+        'Explicit browser disablement changed database/HTTP or race PASS requirements.');
+    check($selection('quick') === ['database_engine_contract_test.php'],
+        'Quick workflow qualification must retain its database-engine contract without requiring full-only races.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = '';
-    check($selection() === [...$requiredDatabaseTests, 'gallery_workflow_browser_test.php'],
+    check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests, 'gallery_workflow_browser_test.php'],
         'Local defaults no longer require browser PASS in the workflow runner.');
     echo 'PASS CI schema-local migration account and browser-only opt-out: ' . count($cases) . " inert ownership and authority cases; no database or CI execution\n";
 }

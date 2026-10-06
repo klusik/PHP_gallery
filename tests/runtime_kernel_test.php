@@ -211,6 +211,86 @@ namespace {
         runtime_kernel_assert($GLOBALS[$globalKey] === ['base', 'feature'], 'Module dependencies should load in order and only once per loader.');
         runtime_kernel_assert($loader->loadedModules() === ['base', 'feature'], 'Loaded module history should reflect dependency-first order without duplicates.');
 
+        runtime_kernel_write_fixture($tempRoot, 'app/schema-core.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'schema-core';\n");
+        runtime_kernel_write_fixture($tempRoot, 'app/models/schema-model.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'schema-model';\n");
+        runtime_kernel_write_fixture($tempRoot, 'app/services/schema-service.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'schema-service';\n");
+        $composedDefinitions = [
+            'schema-core' => ['depends' => [], 'files' => ['app/schema-core.php']],
+            'schema-model' => ['depends' => ['schema-core'], 'files' => ['app/models/schema-model.php']],
+            'schema-service' => ['depends' => ['schema-model'], 'files' => ['app/services/schema-service.php']],
+        ];
+        $composedOrder = ['app/schema-core.php', 'app/models/schema-model.php', 'app/services/schema-service.php'];
+        $composedLoader = new ModuleLoader($tempRoot, $composedDefinitions, $composedOrder);
+        $composedLoader->load('schema-service');
+        runtime_kernel_assert(array_slice($GLOBALS[$globalKey], -3) === ['schema-core', 'schema-model', 'schema-service'],
+            'Composed modules must include the selected union in canonical global order.');
+        runtime_kernel_assert($composedLoader->loadedModules() === ['schema-core', 'schema-model', 'schema-service'],
+            'Composed loader must preserve dependency-first logical module history.');
+        $GLOBALS[$globalKey] = ['base', 'feature'];
+
+        runtime_kernel_write_fixture($tempRoot, 'app/schema-independent-a.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'independent-a';\n");
+        runtime_kernel_write_fixture($tempRoot, 'app/schema-independent-b.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'independent-b';\n");
+        runtime_kernel_write_fixture($tempRoot, 'app/schema-independent-root.php', '<?php $GLOBALS[' . var_export($globalKey, true) . "][] = 'independent-root';\n");
+        $independentDefinitions = [
+            'branch-a' => ['depends' => [], 'files' => ['app/schema-independent-a.php']],
+            'branch-b' => ['depends' => [], 'files' => ['app/schema-independent-b.php']],
+            'branch-root' => ['depends' => ['branch-b', 'branch-a'], 'files' => ['app/schema-independent-root.php']],
+        ];
+        $independentLoader = new ModuleLoader($tempRoot, $independentDefinitions, [
+            'app/schema-independent-a.php', 'app/schema-independent-b.php', 'app/schema-independent-root.php',
+        ]);
+        $independentLoader->load('branch-root');
+        runtime_kernel_assert(array_slice($GLOBALS[$globalKey], -3) === ['independent-a', 'independent-b', 'independent-root'],
+            'Composed independent files must follow canonical global order.');
+        runtime_kernel_assert($independentLoader->loadedModules() === ['branch-b', 'branch-a', 'branch-root'],
+            'Completed module history must retain deterministic dependency-first DFS order.');
+        $GLOBALS[$globalKey] = ['base', 'feature'];
+
+        runtime_kernel_write_fixture($tempRoot, 'app/schema-throwing-root.php', '<?php throw new RuntimeException("fixture include failure");' . "\n");
+        $throwingLoader = new ModuleLoader($tempRoot, [
+            'throwing-base' => ['depends' => [], 'files' => ['app/base.php']],
+            'throwing-root' => ['depends' => ['throwing-base'], 'files' => ['app/schema-throwing-root.php']],
+        ], ['app/base.php', 'app/schema-throwing-root.php']);
+        runtime_kernel_expect_exception(
+            static fn (): mixed => $throwingLoader->load('throwing-root'),
+            RuntimeException::class,
+            'A throwing composed include should propagate its failure.',
+        );
+        runtime_kernel_assert($throwingLoader->loadedModules() === ['throwing-base'],
+            'A failed root include must preserve completed dependencies without claiming the incomplete root.');
+
+        $beforeInvalidPlan = $GLOBALS[$globalKey];
+        runtime_kernel_expect_exception(
+            static fn (): ModuleLoader => new ModuleLoader($tempRoot, $composedDefinitions, [
+                'app/schema-core.php', 'app/schema-core.php', 'app/services/schema-service.php',
+            ]),
+            RuntimeException::class,
+            'Composed loader must reject duplicate or incomplete global order before include.',
+        );
+        runtime_kernel_assert($GLOBALS[$globalKey] === $beforeInvalidPlan, 'Invalid global order included a feature file.');
+        runtime_kernel_expect_exception(
+            static fn (): ModuleLoader => new ModuleLoader($tempRoot, [
+                'reachable' => ['depends' => [], 'files' => ['app/schema-core.php']],
+                'unreachable' => ['depends' => ['absent'], 'files' => []],
+            ], ['app/schema-core.php']),
+            RuntimeException::class,
+            'Composed loader must validate unselected graph nodes before any include.',
+        );
+        runtime_kernel_assert($GLOBALS[$globalKey] === $beforeInvalidPlan, 'Invalid unselected graph included a feature file.');
+        $lazyDefinitions = [
+            'reachable' => ['depends' => [], 'files' => ['app/schema-core.php']],
+            'unreachable' => ['depends' => [], 'files' => ['app/missing.php']],
+        ];
+        $lazyLoader = new ModuleLoader($tempRoot, $lazyDefinitions, ['app/missing.php', 'app/schema-core.php']);
+        $lazyLoader->load('reachable');
+        runtime_kernel_assert($GLOBALS[$globalKey] === $beforeInvalidPlan, 'An unreachable missing path altered include state.');
+        runtime_kernel_expect_exception(
+            static fn (): mixed => $lazyLoader->load('unreachable'),
+            RuntimeException::class,
+            'A selected missing path must fail before the closure begins including files.',
+        );
+        runtime_kernel_assert($GLOBALS[$globalKey] === $beforeInvalidPlan, 'Selected missing path included another module first.');
+
         $secondLoader = new ModuleLoader($tempRoot, $definitions);
         runtime_kernel_assert($secondLoader->loadedModules() === [], 'A new ModuleLoader instance inherited another loader’s state.');
         $secondLoader->load('base');

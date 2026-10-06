@@ -38,6 +38,9 @@ declare(strict_types=1);
 use function Gallery\Services\site_maintenance_run;
 use function Gallery\Services\site_maintenance_time_budget_seconds;
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
 require __DIR__ . '/../app/bootstrap_full.php';
 
 /**

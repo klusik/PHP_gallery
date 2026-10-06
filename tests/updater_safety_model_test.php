@@ -133,6 +133,12 @@ try {
         }
         file_put_contents($absolute, "<?php\n");
     }
+    file_put_contents($tempRoot . '/app/core-manifest.json', json_encode([
+        'version' => '0.0-test',
+        'algorithm' => 'sha256',
+        'hash_mode' => 'normalized-text-sha256',
+        'files' => ['index.php' => 'sha256:fixture'],
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 
     $failedAsExpected = false;
     try {

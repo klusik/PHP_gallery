@@ -74,7 +74,7 @@ The aggregate endpoint returns a bounded DTO with `total_images`, `gps_images`, 
 
 The current hard cap is 10,000 markers. Existing Leaflet rendering is retained until real measurements justify clustering. If clustering is added later, the point DTO should remain stable where possible; any server-side spatial aggregation that changes point semantics requires an explicit payload version.
 
-Map popup actions preserve Smart Gallery ordering. The browser sends the authoritative `target_image_id`; the server resolves its exact zero-based position through the canonical order including the image-id tie breaker. The client never guesses a global index from the current page DOM. The position query intentionally avoids SQL window functions to preserve the MySQL 5.7+/MariaDB 10.2+ compatibility floor. A separate popup link opens the physical source gallery and intentionally leaves Smart Gallery context.
+Map popup actions preserve Smart Gallery ordering. The browser sends the authoritative `target_image_id`; the server resolves its exact zero-based position through the canonical order including the image-id tie breaker. The client never guesses a global index from the current page DOM. The position query computes the count of rows ordered before the target and spells out nullable-value ordering with MySQL/MariaDB comparison operators; it does not require SQL window functions. That is the query's implementation choice, not a declaration that every server version supporting this syntax is project-qualified. See [Database support](DATABASE_SUPPORT.md) for the tested server series. A separate popup link opens the physical source gallery and intentionally leaves Smart Gallery context.
 
 ## Diagnostics and performance verification
 

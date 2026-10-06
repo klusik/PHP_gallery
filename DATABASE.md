@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.119. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.120. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -8,7 +8,16 @@ Version 0.105 adds three integrity structures. Migration `202609200001_gallery_i
 
 Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
 
+Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
+
 ## Database Engine
+
+Database version status is maintained separately from schema inventory. PHP Gallery's
+directly tested server/PHP representatives, legacy best-effort guidance, unsupported
+historical versions, and unqualified newer lines are defined in
+[Database support](docs/DATABASE_SUPPORT.md). A `+` suffix must not be read as
+qualification for every later server series. PHP 8.1 remains a source/runtime
+compatibility floor and does not imply a database test combination.
 
 ### Multilingual content
 
@@ -18,7 +27,25 @@ Base fields remain the compatibility/source representation. Additional-language 
 
 Version 0.111 adds no schema migration. Setup Wizard writes reuse existing `app_settings` and `telemetry_settings` rows, with separate ordered row locks and a database transaction. Missing or unknown required settings storage refuses apply; `base_url` remains filesystem configuration with reversible-save compensation.
 
-The migrations target MySQL or MariaDB through PDO.
+Migrations target MySQL or MariaDB through PDO MySQL. They use InnoDB tables,
+foreign keys, unique keys, transactions, and `utf8mb4`; transactional workflows
+also depend on `SELECT ... FOR UPDATE`. Several maintenance and replay-safe
+workflows use server-level `GET_LOCK()` advisory locks. Required disposable MySQL
+and MariaDB CI runs cover these paths; see [Database support](docs/DATABASE_SUPPORT.md)
+and [Testing](TESTING.md) for the exact evidence boundary.
+
+The initial voting schema declares a `CHECK` constraint on vote values. MySQL
+versions before 8.0.16 parse but do not enforce `CHECK`, so application-side vote
+validation remains required. The anonymous-telemetry migration uses `JSON`
+columns and telemetry reports use `JSON_VALID`, `JSON_EXTRACT`, and
+`JSON_UNQUOTE`. MariaDB's `JSON` type is a `LONGTEXT` alias with JSON validation;
+the application relies on these shared SQL operations, not identical storage
+formats. The required direct MariaDB row exercises migration and reporting SQL.
+
+Migration replay is deliberately portable. MySQL and MariaDB differ in support
+for `ALTER TABLE ... IF NOT EXISTS`; `app/migrations.php` treats recognized
+duplicate-object DDL errors as safe replay after an interrupted migration. Do not
+replace this path with an engine-version guess or assume all DDL is transactional.
 
 Default table options used by migrations:
 

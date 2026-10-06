@@ -1,0 +1,32 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: .agents/.htaccess
+# Module Type: Web Server Configuration
+#
+# Purpose:
+#   Denies direct HTTP access to repository agent metadata.
+#
+# Responsibilities:
+#   - Keep repository-only metadata outside the public interface
+#   - Work without mod_rewrite on Apache 2.4 and Apache 2.2
+#
+# Author:
+#   Rudolf Klusal
+#
+# Contact:
+#   https://github.com/klusik
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+#
+# Last Updated:
+#   2026-10-05
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

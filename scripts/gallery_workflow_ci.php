@@ -12,10 +12,8 @@
  */
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_safety.php')) {
     fwrite(STDERR, "BLOCKED gallery workflow source checkout with test support required\n");
     exit(1);
@@ -46,8 +44,10 @@ try {
     $pdo->exec("CREATE USER 'gallery_workflow_runner'@'%' IDENTIFIED BY " . $pdo->quote($password));
     $quotedSchemaPattern = chr(96) . 'gallery\\_workflow\\_%' . chr(96);
     // Match ordinary application ownership: schema-local data and portable DDL
-    // only. Migrations must not depend on TRIGGER, SUPER or server-global state.
-    $pdo->exec("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES ON "
+    // only. The engine qualification fixture also owns connection-local temporary
+    // tables; this test privilege is not a production installation requirement.
+    // Migrations must not depend on TRIGGER, SUPER or server-global state.
+    $pdo->exec("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, CREATE TEMPORARY TABLES, ALTER, DROP, INDEX, REFERENCES ON "
         . $quotedSchemaPattern . ".* TO 'gallery_workflow_runner'@'%'");
     $pdo = null;
     putenv('GALLERY_WORKFLOW_REQUIRED=1');

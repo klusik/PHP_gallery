@@ -54,7 +54,7 @@ $prepareEnd = strpos($source, 'function syncLightboxSlideshowControls()', $prepa
 slideshow_preload_assert($prepareStart !== false && $prepareEnd !== false, 'Slideshow full-image preparation helper is missing.');
 $prepareSource = substr($source, (int) $prepareStart, (int) $prepareEnd - (int) $prepareStart);
 slideshow_preload_assert(str_contains($prepareSource, "card.dataset.fullSrc || card.dataset.previewSrc"), 'Slideshow preparation must prefer the full source.');
-slideshow_preload_assert(str_contains($prepareSource, "loadFreshDecodedLightboxImage(fullSrc, {priority: 'high', signal})"), 'Slideshow preparation must fully load and decode the next full source without adding it to the reusable decoded cache.');
+slideshow_preload_assert(str_contains($prepareSource, "lightboxResources.loadFresh(fullSrc, {priority: 'high', signal})"), 'Slideshow preparation must fully load and decode the next full source without adding it to the reusable decoded cache.');
 slideshow_preload_assert(!str_contains($prepareSource, 'loadDecodedLightboxImage(fullSrc'), 'Slideshow full-source preparation must remain transient instead of accumulating originals in the reusable decoded cache.');
 slideshow_preload_assert(str_contains($prepareSource, 'fetchLightboxWindowAround(normalizedIndex)'), 'Slideshow preparation must support sparse paginated gallery metadata.');
 

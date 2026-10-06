@@ -39,8 +39,13 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once dirname(__DIR__) . '/session_context.php';
+
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
+use function Gallery\Core\session_context_get;
+use function Gallery\Core\session_context_remove;
+use function Gallery\Core\session_context_set;
 
 const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
@@ -586,11 +591,13 @@ function translation_public_language(): string
 /**
  * Resolve the current admin interface language.
  *
- * @return string Text result for the caller.
+ * @param string $adminCookie Current administrator-language cookie value.
+ * @param string $legacyCookie Legacy shared-language cookie value used as fallback.
+ * @return string Valid selected language code for the administrator interface.
  */
 function translation_admin_language(string $adminCookie = '', string $legacyCookie = ''): string
 {
-    $candidate = translation_normalize_language_code((string) ($_SESSION['cms_admin_language'] ?? ''));
+    $candidate = translation_normalize_language_code((string) (session_context_get('cms_admin_language') ?? ''));
     if ($candidate !== '' && translation_language_allowed($candidate)) {
         return $candidate;
     }
@@ -624,12 +631,12 @@ function translation_bootstrap_request(?string $route = null, array $requestCont
     $publicCookie = (string) ($requestContext['public_cookie'] ?? '');
     $cookieIntents = [];
     $isAdminRoute = translation_route_is_admin($route);
-    $_SESSION['cms_translation_context'] = $isAdminRoute ? 'admin' : 'public';
+    session_context_set('cms_translation_context', $isAdminRoute ? 'admin' : 'public');
 
     if ($isAdminRoute) {
         $selected = translation_admin_language($adminCookie, $legacyCookie);
-        $_SESSION['cms_admin_language'] = $selected;
-        $_SESSION['cms_language'] = $selected;
+        session_context_set('cms_admin_language', $selected);
+        session_context_set('cms_language', $selected);
         return [];
     }
 
@@ -641,7 +648,7 @@ function translation_bootstrap_request(?string $route = null, array $requestCont
     if ($acceptViewerLanguageRequest && array_key_exists('lang', $query)) {
         $requestedLanguage = strtolower(trim((string) $query['lang']));
         if ($requestedLanguage === 'default') {
-            unset($_SESSION['cms_public_language_override']);
+            session_context_remove('cms_public_language_override');
             $cookieIntents[] = translation_public_language_cookie_intent('', time() - 3600);
             $selected = translation_public_language();
         }
@@ -649,13 +656,13 @@ function translation_bootstrap_request(?string $route = null, array $requestCont
         $candidate = translation_normalize_language_code($requestedLanguage);
         if ($selected === '' && $candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
-            $_SESSION['cms_public_language_override'] = $selected;
+            session_context_set('cms_public_language_override', $selected);
             $cookieIntents[] = translation_public_language_cookie_intent($selected, time() + 31536000);
         }
     }
 
     if ($selected === '') {
-        $candidate = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
+        $candidate = translation_normalize_language_code((string) (session_context_get('cms_public_language_override') ?? ''));
         if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
         }
@@ -665,7 +672,7 @@ function translation_bootstrap_request(?string $route = null, array $requestCont
         $candidate = translation_normalize_language_code($publicCookie);
         if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
-            $_SESSION['cms_public_language_override'] = $selected;
+            session_context_set('cms_public_language_override', $selected);
         }
     }
 
@@ -673,7 +680,7 @@ function translation_bootstrap_request(?string $route = null, array $requestCont
         $selected = translation_public_language();
     }
 
-    $_SESSION['cms_language'] = $selected;
+    session_context_set('cms_language', $selected);
     return $cookieIntents;
 }
 
@@ -731,13 +738,16 @@ function translation_admin_language_cookie_intents(string $language): array
 
 /**
  * Return whether the public visitor currently has a valid personal override.
+ *
+ * @param string $publicCookie Current public-language cookie value.
+ * @return bool True when a valid session or cookie override is active.
  */
 function translation_public_language_override_active(string $publicCookie = ''): bool
 {
     if (!translation_public_language_selector_enabled()) {
         return false;
     }
-    $sessionLanguage = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
+    $sessionLanguage = translation_normalize_language_code((string) (session_context_get('cms_public_language_override') ?? ''));
     if ($sessionLanguage !== '' && translation_public_language_selector_language_allowed($sessionLanguage)) {
         return true;
     }
@@ -788,12 +798,12 @@ function translation_public_language_url(string $language, string $requestUri = 
  */
 function translation_active_language(): string
 {
-    $context = (string) ($_SESSION['cms_translation_context'] ?? 'public');
+    $context = (string) (session_context_get('cms_translation_context') ?? 'public');
     if ($context === 'admin') {
         return translation_admin_language();
     }
 
-    $candidate = translation_normalize_language_code((string) ($_SESSION['cms_language'] ?? ''));
+    $candidate = translation_normalize_language_code((string) (session_context_get('cms_language') ?? ''));
     if ($candidate !== '' && translation_language_allowed($candidate)) {
         return $candidate;
     }
@@ -1029,8 +1039,8 @@ function translation_interpolate(string $text, array $parameters): string
 /**
  * Persist the selected language for the current admin/browser session.
  *
- * @param string $language Language value.
- * @return bool True when the condition matches.
+ * @param string $language Requested language code to normalize and validate.
+ * @return bool True when the code is supported and persisted to both established session keys.
  */
 function translation_set_active_language(string $language): bool
 {
@@ -1039,8 +1049,8 @@ function translation_set_active_language(string $language): bool
         return false;
     }
 
-    $_SESSION['cms_admin_language'] = $language;
-    $_SESSION['cms_language'] = $language;
+    session_context_set('cms_admin_language', $language);
+    session_context_set('cms_language', $language);
     return true;
 }
 
@@ -1085,37 +1095,67 @@ function translation_diagnostics_enabled(): bool
  * Store one missing translation detail for display in the admin language tab.
  *
  * @param string $key Lookup key.
- * @param string $active Active value.
- * @param string $fallbackUsed Fallback used value.
+ * @param string $active Language active when the lookup missed.
+ * @param string $fallbackUsed Fallback language or text returned for the lookup.
+ * @return void Does not return a value.
  */
 function translation_record_missing_key(string $key, string $active, string $fallbackUsed): void
 {
     if (!translation_diagnostics_enabled()) {
         return;
     }
-    if (!isset($_SESSION['cms_translation_missing']) || !is_array($_SESSION['cms_translation_missing'])) {
-        $_SESSION['cms_translation_missing'] = [];
-    }
+    $rows = session_context_get('cms_translation_missing');
+    session_context_set(
+        'cms_translation_missing',
+        translation_missing_diagnostic_rows_updated(
+            is_array($rows) ? $rows : [],
+            $key,
+            $active,
+            $fallbackUsed,
+            date('Y-m-d H:i:s')
+        )
+    );
+}
 
-    // $diagnosticKey keeps repeated missing keys compact in the session.
+/**
+ * Update one keyed missing-translation diagnostic while retaining other rows.
+ *
+ * Existing malformed or legacy values are preserved so the presentation reader
+ * remains responsible for filtering them out of its result.
+ *
+ * @param array<string,mixed> $rows Existing diagnostics keyed by their stable composite key.
+ * @param string $key Missing translation lookup key.
+ * @param string $active Active translation language.
+ * @param string $fallbackUsed Fallback language or text that supplied the result.
+ * @param string $lastSeen Current formatted observation time.
+ * @return array<string,mixed> Updated keyed diagnostic rows with unrelated values retained.
+ */
+function translation_missing_diagnostic_rows_updated(
+    array $rows,
+    string $key,
+    string $active,
+    string $fallbackUsed,
+    string $lastSeen
+): array {
     $diagnosticKey = $active . '|' . $key . '|' . $fallbackUsed;
-    $_SESSION['cms_translation_missing'][$diagnosticKey] = [
+    $rows[$diagnosticKey] = [
         'key' => $key,
         'active_language' => $active,
         'fallback_used' => $fallbackUsed,
-        'last_seen' => date('Y-m-d H:i:s'),
+        'last_seen' => $lastSeen,
     ];
+    return $rows;
 }
 
 /**
  * Return collected missing translation diagnostics for the current admin session.
  *
- * @return array Structured result data for the caller.
+ * @return list<array<string,mixed>> Valid diagnostic rows in their stored order.
  */
 function translation_missing_diagnostics(): array
 {
     // $rows stores the missing-key diagnostics collected for this session.
-    $rows = $_SESSION['cms_translation_missing'] ?? [];
+    $rows = session_context_get('cms_translation_missing') ?? [];
     if (!is_array($rows)) {
         return [];
     }
@@ -1144,10 +1184,12 @@ function translation_public_language_selector_view_data(): array
 
 /**
  * Clear collected missing translation diagnostics for the current admin session.
+ *
+ * @return void Does not return a value.
  */
 function translation_clear_missing_diagnostics(): void
 {
-    unset($_SESSION['cms_translation_missing']);
+    session_context_remove('cms_translation_missing');
 }
 
 /**

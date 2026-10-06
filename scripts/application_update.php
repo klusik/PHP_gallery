@@ -32,6 +32,9 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
+
 // Prevent bootstrap's browser-request auto-update hook from treating this CLI process as a GET request.
 $_SERVER['REQUEST_METHOD'] = 'CLI';
 

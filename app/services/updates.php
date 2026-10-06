@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once dirname(__DIR__) . '/release_file_policy.php';
+require_once __DIR__ . '/updates_path_safety.php';
 
 require_once __DIR__ . '/updates_status.php';
 require_once __DIR__ . '/updates_patch_notes.php';

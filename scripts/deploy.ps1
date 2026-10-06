@@ -1,4 +1,4 @@
-﻿<#
+<#
   Project: PHP Gallery
   Repository: https://github.com/klusik/PHP_gallery
 
@@ -6,12 +6,12 @@
   Module Type: Deployment Script
 
   Purpose:
-    Automates deployment packaging or upload workflows for PHP Gallery.
+    Builds or uploads the canonical PHP Gallery production file set.
 
   Responsibilities:
-    - Collect deployment inputs safely
-    - Prepare files for local or remote deployment
-    - Report deployment failures clearly
+    - Check release integrity and canonical package membership
+    - Build local folders or ZIP archives from validated paths
+    - Upload only validated files through FTP
 
   Author:
     Rudolf Klusal
@@ -20,16 +20,10 @@
     https://github.com/klusik
 
   License:
-    MIT License (see LICENSE file in repository)
-
-  Notes:
-    - Keep comments and docstrings intact when modifying this file.
-    - Prefer small, readable changes over broad rewrites.
-
-  Last Updated:
-    2026-05-04
+    MIT License (see LICENSE file)
 #>
 
+[CmdletBinding()]
 param(
     [ValidateSet('ftp', 'local')]
     [string]$Mode,
@@ -43,206 +37,258 @@ param(
     [string]$IncludeTests
 )
 
-if (-not $Mode) {
-    # Variable $answer stores this scripts working value.
-    $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
-    # Variable $Mode stores this scripts working value.
-    $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
-}
-# Variable $includeMedia stores this scripts working value.
+$ErrorActionPreference = 'Stop'
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\', '/')
 $includeMedia = $false
-if ($PSBoundParameters.ContainsKey('UploadMedia')) {
-    # Variable $includeMedia stores this scripts working value.
-    $includeMedia = ($UploadMedia -match '^(1|true|yes|y)$')
-} else {
-    # Variable $includeMedia stores this scripts working value.
-    $includeMedia = ((Read-Host "Upload media folders? y/N") -match '^[Yy]')
-}
-# Variable $includeRepositoryTests stores whether repository tests are included in this deploy.
 $includeRepositoryTests = $false
-if ($PSBoundParameters.ContainsKey('IncludeTests')) {
-    # Variable $includeRepositoryTests stores the explicit command-line tests-folder choice.
-    $includeRepositoryTests = ($IncludeTests -match '^(1|true|yes|y)$')
-} elseif ($Mode -eq 'local') {
-    # Variable $includeRepositoryTests stores the interactive tests-folder choice.
-    $includeRepositoryTests = ((Read-Host "Include tests folder? y/N") -match '^[Yy]')
-}
-# Tests are source-review material, not production deployment content. Keep the
-# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
-if ($includeRepositoryTests -and $Mode -eq 'ftp') {
-    throw 'Tests may be included only in local deployment folders or ZIP packages.'
-}
-if ($Mode -eq 'ftp') {
-    if (-not $HostName) { $HostName = Read-Host "FTP host" }
-    if (-not $UserName) { $UserName = Read-Host "FTP user" }
-    if (-not $Password) { $Password = Read-Host "FTP password" }
-    if (-not $RemoteFolder) { $RemoteFolder = Read-Host "Remote folder" }
-}
-if ($Mode -eq 'local' -and -not $DeployFolder) {
-    # Variable $DeployFolder stores this scripts working value.
-    $DeployFolder = Read-Host "Local deploy folder [deploy]"
-    if (-not $DeployFolder) { $DeployFolder = 'deploy' }
-}
-
-# Variable $zipDeploy stores this scripts working value.
 $zipDeploy = $false
-if ($Mode -eq 'local') {
-    if ($PSBoundParameters.ContainsKey('MakeZipDeploy')) {
-        # Variable $zipDeploy stores this scripts working value.
-        $zipDeploy = ($MakeZipDeploy -match '^(1|true|yes|y)$')
-    } else {
-        # Variable $zipAnswer stores this scripts working value.
-        $zipAnswer = Read-Host "Make a zip deploy? Y/n"
-        # Variable $zipDeploy stores this scripts working value.
-        $zipDeploy = -not ($zipAnswer -match '^[Nn]')
+$interactiveLauncher = $PSBoundParameters.Count -eq 0
+
+# Explorer launches have no arguments: preserve diagnostics until Enter is pressed.
+# Parameterized automation keeps its non-interactive completion and failure status.
+trap {
+    Write-Error -ErrorRecord $_ -ErrorAction Continue
+    if ($interactiveLauncher) {
+        Write-Host 'Deployment failed. See the error above.'
+        Read-Host 'Press Enter to close this window' | Out-Null
+    }
+    exit 1
+}
+
+# Return true when a command-line value uses a recognized affirmative spelling.
+function Test-Truthy {
+    param([string]$Value)
+
+    return $Value -match '^(1|true|yes|y)$'
+}
+
+# Choose the package profile shared with the release-file resolver.
+function Get-PackageProfile {
+    if ($includeRepositoryTests) {
+        return 'source-review'
+    }
+
+    return 'production'
+}
+
+# Check that the current integrity manifest matches the selected source root.
+function Test-CurrentManifest {
+    & php (Join-Path $root 'scripts/generate_manifest.php') --check "--root=$root" | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The core manifest is missing or stale. Run php scripts/generate_manifest.php and retry.'
     }
 }
 
-# Variable $root stores this scripts working value.
-$root = Resolve-Path "$PSScriptRoot\.."
-# Variable $excludeDirs stores this scripts working value.
-$excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
-# Variable $excludeDirNamesAnywhere stores folder names skipped wherever they appear in the repository tree.
-$excludeDirNamesAnywhere = @('__pycache__', '.pytest_cache', 'tests', 'http_monitor_logs')
-if ($includeRepositoryTests) {
-    $excludeDirNamesAnywhere = @($excludeDirNamesAnywhere | Where-Object { $_ -ne 'tests' })
-}
-if (-not $includeMedia) { $excludeDirs += 'galleries' }
-# Variable $excludeFiles stores this scripts working value.
-$excludeFiles = @('.gitignore', '.DS_Store', 'config.php', '.env', '*.log', '*.tmp', '*.pyc', '*.aux', '*.idx', '*.ilg', '*.ind', '*.out', '*.toc')
-# Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
-$alwaysIncludeRelatives = @('app')
-
-
-# Function `Get-DeployRelativePath` handles this script step.
-function Get-DeployRelativePath($Path) {
-    # Variable $fullPath stores this scripts working value.
-    $fullPath = [System.IO.Path]::GetFullPath($Path)
-    # Variable $rootPath stores this scripts working value.
-    $rootPath = [System.IO.Path]::GetFullPath($root)
-    return $fullPath.Substring($rootPath.Length).TrimStart('\', '/')
-}
-
-# Exclude runtime files and the installation-owned stylesheet before applying include rules.
-# Path is an absolute candidate path; the result is true when deployment must omit it.
-function Should-Skip($Path) {
-    if ($Mode -eq 'local' -and $script:DeployTarget) {
-        # Variable $fullPath stores this scripts working value.
-        $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-        # Variable $deployTargetPath stores this scripts working value.
-        $deployTargetPath = [System.IO.Path]::GetFullPath($script:DeployTarget).TrimEnd('\', '/')
-        if ($fullPath -eq $deployTargetPath -or $fullPath.StartsWith($deployTargetPath + [System.IO.Path]::DirectorySeparatorChar)) {
-            return $true
-        }
-    }
-
-    # Variable $relative stores this scripts working value.
-    $relative = Get-DeployRelativePath $Path
-    # Variable $portableRelative stores this scripts working value.
-    $portableRelative = $relative.Replace('\', '/')
-    # The active stylesheet belongs to the installation owner; deploying a local copy
-    # would overwrite their customization. Catalog templates remain deployable.
-    if ($portableRelative -eq 'public/assets/custom.css') {
-        return $true
-    }
-    $protectedDeployPaths = @(
-        'cache/.htaccess',
-        'galleries/.htaccess',
-        'data/admin-log-archives/.htaccess',
-        'data/gallery-trash/.htaccess'
+# Return the sorted canonical relative paths from the shared release-file policy.
+function Get-PackagePaths {
+    $profile = Get-PackageProfile
+    $arguments = @(
+        (Join-Path $root 'scripts/release_files.php'),
+        'list',
+        "--root=$root",
+        "--profile=$profile",
+        '--format=json'
     )
-    if ($protectedDeployPaths -contains $portableRelative) {
-        return $false
+    if ($includeMedia) {
+        $arguments += '--include-media'
     }
 
-    # Runtime/user data must never be copied into a deployment package. The release-owned
-    # runtime protection .htaccess files above are the only data/ exceptions.
-    if ($portableRelative -eq 'data' -or $portableRelative.StartsWith('data/')) {
-        return $true
+    $json = & php @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The canonical production file list could not be resolved.'
     }
-    foreach ($alwaysIncludeRelative in $alwaysIncludeRelatives) {
-        # Variable $portableAlwaysInclude stores one deploy path that must not be filtered out.
-        $portableAlwaysInclude = $alwaysIncludeRelative.Replace('\', '/').Trim('/')
-        if ($portableRelative -eq $portableAlwaysInclude -or $portableRelative.StartsWith($portableAlwaysInclude + '/')) {
-            return $false
+
+    $document = ($json -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($null -eq $document.files -or $document.files -isnot [System.Array]) {
+        throw 'The release-file resolver returned an invalid file list.'
+    }
+
+    return ,$document.files
+}
+
+# Compare a staged package with the canonical policy and selected optional media.
+function Test-PackageTree {
+    param(
+        [string]$StageRoot
+    )
+
+    $arguments = @(
+        (Join-Path $root 'scripts/release_files.php'),
+        'verify',
+        "--root=$StageRoot",
+        "--source-root=$root",
+        "--profile=$(Get-PackageProfile)"
+    )
+    if ($includeMedia) {
+        $arguments += '--include-media'
+    }
+
+    & php @arguments | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "The staged package does not match the canonical file set: $StageRoot"
+    }
+}
+
+# Copy only the canonical listed paths into a new staging tree and verify the result.
+function New-PackageStage {
+    param(
+        [string]$StageRoot
+    )
+
+    New-Item -ItemType Directory -Path $StageRoot -Force | Out-Null
+    $paths = Get-PackagePaths
+    foreach ($relativePath in $paths) {
+        $portablePath = [string]$relativePath
+        $sourcePath = Join-Path $root ($portablePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        $destinationPath = Join-Path $StageRoot ($portablePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        $destinationDirectory = Split-Path $destinationPath -Parent
+        New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath
+    }
+
+    Test-PackageTree -StageRoot $StageRoot
+    return ,$paths
+}
+
+# Claim a new output folder and copy only paths from a verified staging tree.
+function Publish-PackageFolder {
+    param(
+        [string]$StageRoot,
+        [string]$DestinationRoot,
+        [string[]]$PackagePaths
+    )
+
+    New-Item -ItemType Directory -Path $DestinationRoot -ErrorAction Stop | Out-Null
+    foreach ($relativePath in $PackagePaths) {
+        $portablePath = [string]$relativePath
+        $sourcePath = Join-Path $StageRoot ($portablePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        $destinationPath = Join-Path $DestinationRoot ($portablePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        $destinationDirectory = Split-Path $destinationPath -Parent
+        New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+        [System.IO.File]::Copy($sourcePath, $destinationPath, $false)
+    }
+
+    Test-PackageTree -StageRoot $DestinationRoot
+}
+
+# Resolve a user-selected destination to an absolute path without following its final link.
+function Get-AbsoluteDestination {
+    param(
+        [string]$Path
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $root $Path))
+}
+
+<#
+.SYNOPSIS
+Choose a fresh sibling destination when an interactive local package already exists.
+.PARAMETER Path
+Absolute destination already checked for unsafe roots and reparse points.
+.PARAMETER Zip
+Whether the destination holds a ZIP rather than a copied package tree.
+.OUTPUTS
+System.String. Original destination or an unused sibling with a timestamp suffix.
+#>
+function Get-AvailableDeployDestination {
+    param(
+        [string]$Path,
+        [bool]$Zip
+    )
+
+    $collision = if ($Zip) {
+        Test-Path -LiteralPath (Join-Path $Path 'php-gallery-deploy.zip')
+    } else {
+        Test-Path -LiteralPath $Path
+    }
+    if (-not $collision) {
+        return $Path
+    }
+
+    $basePath = $Path.TrimEnd('\', '/') + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $candidate = $basePath
+    $suffix = 1
+    while (Test-Path -LiteralPath $candidate) {
+        $candidate = '{0}-{1}' -f $basePath, $suffix
+        $suffix++
+    }
+
+    Write-Host "An earlier local package already exists at $Path."
+    Write-Host "Creating the new package at $candidate."
+    return $candidate
+}
+
+# Reject an existing destination ancestor that could redirect output through a junction or symlink.
+function Assert-NoReparseAncestors {
+    param(
+        [string]$Path
+    )
+
+    $currentPath = Split-Path ([System.IO.Path]::GetFullPath($Path)) -Parent
+    while ($currentPath) {
+        if (Test-Path -LiteralPath $currentPath) {
+            $currentItem = Get-Item -LiteralPath $currentPath -Force
+            if ($currentItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "Local deploy destination cannot pass through a symbolic link or junction: $currentPath"
+            }
         }
+
+        $parentPath = Split-Path $currentPath -Parent
+        if (-not $parentPath -or $parentPath -eq $currentPath) {
+            break
+        }
+        $currentPath = $parentPath
     }
-    foreach ($dir in $excludeDirs) {
-        if ($relative -match "^[.\\/]?$([regex]::Escape($dir))([\\/]|$)") { return $true }
-    }
-    foreach ($dirName in $excludeDirNamesAnywhere) {
-        # Variable $escapedDirName stores this scripts working value.
-        $escapedDirName = [regex]::Escape($dirName)
-        if ($portableRelative -match "(^|/)$escapedDirName(/|$)") { return $true }
-    }
-    foreach ($pattern in $excludeFiles) {
-        if ([System.Management.Automation.WildcardPattern]::new($pattern).IsMatch((Split-Path $Path -Leaf))) { return $true }
-    }
-    return $false
 }
 
-# Function `Upload-File` handles this script step.
-function Upload-File($LocalPath) {
-    # Variable $relative stores this scripts working value.
-    $relative = (Get-DeployRelativePath $LocalPath).Replace('\', '/')
-    # Variable $remoteBase stores this scripts working value.
+# Upload one validated relative path to the requested FTP folder.
+function Send-DeployFile {
+    param(
+        [string]$RelativePath,
+        [string]$StageRoot
+    )
+
+    $portablePath = $RelativePath.Replace('\', '/')
     $remoteBase = ("ftp://{0}/{1}" -f $HostName, $RemoteFolder.Trim('/')).TrimEnd('/')
-    # Variable $relativeDir stores this scripts working value.
-    $relativeDir = Split-Path $relative -Parent
-    if ($relativeDir) {
-        Ensure-RemoteDirectory "$remoteBase/$($relativeDir.Replace('\', '/'))"
+    $relativeDirectory = Split-Path $portablePath -Parent
+    if ($relativeDirectory) {
+        Ensure-RemoteDirectory "$remoteBase/$($relativeDirectory.Replace('\', '/'))"
     }
-    # Variable $uri stores this scripts working value.
-    $uri = "$remoteBase/$relative"
-    # Variable $request stores this scripts working value.
-    $request = [System.Net.FtpWebRequest]::Create($uri)
+
+    $request = [System.Net.FtpWebRequest]::Create("$remoteBase/$portablePath")
     $request.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile
-    $request.Credentials = New-Object System.Net.NetworkCredential($UserName, $Password)
-    # Variable $bytes stores this scripts working value.
-    $bytes = [System.IO.File]::ReadAllBytes($LocalPath)
+    $request.Credentials = [System.Net.NetworkCredential]::new($UserName, $Password)
+    $bytes = [System.IO.File]::ReadAllBytes((Join-Path $StageRoot ($portablePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))))
     $request.ContentLength = $bytes.Length
-    # Variable $stream stores this scripts working value.
     $stream = $request.GetRequestStream()
-    $stream.Write($bytes, 0, $bytes.Length)
-    $stream.Close()
-    # Variable $response stores this scripts working value.
+    try {
+        $stream.Write($bytes, 0, $bytes.Length)
+    } finally {
+        $stream.Dispose()
+    }
     $response = $request.GetResponse()
-    $response.Close()
-    Write-Host "Uploaded $relative"
+    $response.Dispose()
+    Write-Host "Uploaded $portablePath"
 }
 
-# Function `Copy-DeployFile` handles this script step.
-function Copy-DeployFile($LocalPath) {
-    # Variable $relative stores this scripts working value.
-    $relative = Get-DeployRelativePath $LocalPath
-    # Variable $destination stores this scripts working value.
-    $destination = Join-Path $script:DeployTarget $relative
-    # Variable $destinationDir stores this scripts working value.
-    $destinationDir = Split-Path $destination -Parent
-    if (-not (Test-Path $destinationDir)) {
-        New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
-    }
-    Copy-Item -LiteralPath $LocalPath -Destination $destination -Force
-    Write-Host "Copied $relative"
-}
-
-# Function `New-CompatibleZipArchive` handles this script step.
-function New-CompatibleZipArchive($SourceDirectory, $DestinationZip) {
-    if (Test-Path $DestinationZip) {
-        Remove-Item -LiteralPath $DestinationZip -Force
-    }
+# Build an uncompressed ZIP with portable file names from a verified staging tree.
+function New-CompatibleZipArchive {
+    param(
+        [string]$SourceDirectory,
+        [string]$DestinationZip
+    )
 
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    # Variable $sourcePath stores the normalized staging directory used to derive portable entry names.
     $sourcePath = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\', '/')
-    # Variable $archive stores the writable ZIP container.
     $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
     try {
-        Get-ChildItem -LiteralPath $sourcePath -Recurse -File | ForEach-Object {
-            # ZIP entry paths must use forward slashes. Some web extractors treat Windows backslashes as literal filename characters.
+        Get-ChildItem -LiteralPath $sourcePath -Force -Recurse -File | ForEach-Object {
             $entryName = $_.FullName.Substring($sourcePath.Length).TrimStart('\', '/').Replace('\', '/')
-            # NoCompression creates plain stored entries that remain compatible with older hosting tools.
             [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                 $archive,
                 $_.FullName,
@@ -255,86 +301,178 @@ function New-CompatibleZipArchive($SourceDirectory, $DestinationZip) {
     }
 }
 
-# Function `Ensure-RemoteDirectory` handles this script step.
-function Ensure-RemoteDirectory($Uri) {
-    # Variable $parts stores this scripts working value.
+# Create remote FTP directories required by a validated file path.
+function Ensure-RemoteDirectory {
+    param(
+        [string]$Uri
+    )
+
     $parts = ([Uri]$Uri).AbsolutePath.Trim('/').Split('/')
-    # Variable $current stores this scripts working value.
     $current = "ftp://$HostName"
     foreach ($part in $parts) {
-        if (-not $part) { continue }
-        # Variable $current stores this scripts working value.
+        if (-not $part) {
+            continue
+        }
+
         $current = "$current/$part"
         try {
-            # Variable $request stores this scripts working value.
             $request = [System.Net.FtpWebRequest]::Create($current)
             $request.Method = [System.Net.WebRequestMethods+Ftp]::MakeDirectory
-            $request.Credentials = New-Object System.Net.NetworkCredential($UserName, $Password)
-            # Variable $response stores this scripts working value.
+            $request.Credentials = [System.Net.NetworkCredential]::new($UserName, $Password)
             $response = $request.GetResponse()
-            $response.Close()
+            $response.Dispose()
         } catch {
+            # The directory may already exist; the following upload reports real failures.
         }
     }
 }
 
-Set-Location $root
-
+# A prompted destination may select a fresh sibling; explicit CLI targets keep collision errors.
+$interactiveDeployFolder = -not $PSBoundParameters.ContainsKey('DeployFolder')
+if (-not $Mode) {
+    $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
+    $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
+}
+if ($PSBoundParameters.ContainsKey('UploadMedia')) {
+    $includeMedia = Test-Truthy -Value $UploadMedia
+} else {
+    $includeMedia = (Read-Host "Upload media folders? y/N") -match '^[Yy]'
+}
+if ($PSBoundParameters.ContainsKey('IncludeTests')) {
+    $includeRepositoryTests = Test-Truthy -Value $IncludeTests
+} elseif ($Mode -eq 'local') {
+    $includeRepositoryTests = (Read-Host "Include tests folder? y/N") -match '^[Yy]'
+}
+if ($includeRepositoryTests -and $Mode -eq 'ftp') {
+    throw 'Tests may be included only in local deployment folders or ZIP packages.'
+}
+if ($Mode -eq 'ftp') {
+    if (-not $HostName) { $HostName = Read-Host "FTP host" }
+    if (-not $UserName) { $UserName = Read-Host "FTP user" }
+    if (-not $Password) { $Password = Read-Host "FTP password" }
+    if (-not $RemoteFolder) { $RemoteFolder = Read-Host "Remote folder" }
+} elseif (-not $DeployFolder) {
+    $DeployFolder = Read-Host "Local deploy folder [deploy/package]"
+    if (-not $DeployFolder) { $DeployFolder = 'deploy/package' }
+}
 if ($Mode -eq 'local') {
-    $script:DeployTarget = if ([System.IO.Path]::IsPathRooted($DeployFolder)) {
-        $DeployFolder
+    if ($PSBoundParameters.ContainsKey('MakeZipDeploy')) {
+        $zipDeploy = Test-Truthy -Value $MakeZipDeploy
     } else {
-        Join-Path $root $DeployFolder
-    }
-
-    # Variable $rootPath stores this scripts working value.
-    $rootPath = [System.IO.Path]::GetFullPath($root).TrimEnd('\', '/')
-    # Variable $deployTargetPath stores this scripts working value.
-    $deployTargetPath = [System.IO.Path]::GetFullPath($script:DeployTarget).TrimEnd('\', '/')
-    if ($deployTargetPath -eq $rootPath) {
-        throw "Local deploy folder cannot be the project root."
+        $zipAnswer = Read-Host "Make a zip deploy? Y/n"
+        $zipDeploy = -not ($zipAnswer -match '^[Nn]')
     }
 }
 
-# Variable $files stores this scripts working value.
-$files = Get-ChildItem -Recurse -File | Where-Object { -not (Should-Skip $_.FullName) }
-
+Test-CurrentManifest
 if ($Mode -eq 'local') {
-    if (Test-Path $script:DeployTarget) {
-        Remove-Item -LiteralPath $script:DeployTarget -Recurse -Force
+    $deployTarget = Get-AbsoluteDestination -Path $DeployFolder
+    if ($deployTarget -eq $root -or $root.StartsWith($deployTarget.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Local deploy target cannot be the project root or one of its parent directories.'
     }
-    New-Item -ItemType Directory -Path $script:DeployTarget -Force | Out-Null
+    if ($includeMedia) {
+        $galleryRoot = [System.IO.Path]::GetFullPath((Join-Path $root 'galleries')).TrimEnd('\', '/')
+        if ($deployTarget.Equals($galleryRoot, [System.StringComparison]::OrdinalIgnoreCase) -or $deployTarget.StartsWith($galleryRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Media-enabled local output cannot be created inside the source galleries tree.'
+        }
+    }
+    Assert-NoReparseAncestors -Path $deployTarget
+    if ((Test-Path -LiteralPath $deployTarget) -and ((Get-Item -LiteralPath $deployTarget -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Local deploy target cannot be a symbolic link or junction: $deployTarget"
+    }
+
+    if ($interactiveDeployFolder) {
+        $deployTarget = Get-AvailableDeployDestination -Path $deployTarget -Zip $zipDeploy
+        $DeployFolder = $deployTarget
+    }
 
     if ($zipDeploy) {
-        # Variable $deployStaging stores this scripts working value.
-        $deployStaging = Join-Path $env:TEMP ("php-gallery-deploy-{0}" -f ([guid]::NewGuid().ToString('N')))
-        # Variable $previousDeployTarget stores this scripts working value.
-        $previousDeployTarget = $script:DeployTarget
-        try {
-            $script:DeployTarget = $deployStaging
-            New-Item -ItemType Directory -Path $script:DeployTarget -Force | Out-Null
-            $files | ForEach-Object {
-                Copy-DeployFile $_.FullName
+        if ((Test-Path -LiteralPath $deployTarget) -and -not (Test-Path -LiteralPath $deployTarget -PathType Container)) {
+            throw "ZIP deploy destination must be a directory: $deployTarget"
+        }
+        $zipPath = Join-Path $deployTarget 'php-gallery-deploy.zip'
+        if (Test-Path -LiteralPath $zipPath) {
+            throw "Refusing to overwrite an existing ZIP deploy: $zipPath"
+        }
+    } elseif (Test-Path -LiteralPath $deployTarget) {
+        throw "Refusing to replace an existing deploy directory: $deployTarget"
+    }
+}
+$stageParent = [System.IO.Path]::GetTempPath()
+if ($Mode -eq 'local' -and -not $zipDeploy) {
+    $stageParent = Split-Path $deployTarget -Parent
+    if (-not (Test-Path -LiteralPath $stageParent -PathType Container)) {
+        New-Item -ItemType Directory -Path $stageParent -Force | Out-Null
+    }
+}
+$stagePath = Join-Path $stageParent ('.php-gallery-stage-{0}' -f [guid]::NewGuid().ToString('N'))
+$stageOwned = $false
+$temporaryArchiveDirectory = $null
+$temporaryArchiveOwned = $false
+try {
+    New-Item -ItemType Directory -Path $stagePath -ErrorAction Stop | Out-Null
+    $stageOwned = $true
+    $paths = New-PackageStage -StageRoot $stagePath
+
+    if ($Mode -eq 'local') {
+        $deployTarget = Get-AbsoluteDestination -Path $DeployFolder
+        if ($deployTarget -eq $root) {
+            throw 'Local deploy target cannot be the project root.'
+        }
+        if ((Test-Path -LiteralPath $deployTarget) -and ((Get-Item -LiteralPath $deployTarget -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Local deploy target cannot be a symbolic link or junction: $deployTarget"
+        }
+
+        if ($zipDeploy) {
+            if ((Test-Path -LiteralPath $deployTarget) -and -not (Test-Path -LiteralPath $deployTarget -PathType Container)) {
+                throw "ZIP deploy destination must be a directory: $deployTarget"
+            }
+            New-Item -ItemType Directory -Path $deployTarget -Force | Out-Null
+            $zipPath = Join-Path $deployTarget 'php-gallery-deploy.zip'
+            if (Test-Path -LiteralPath $zipPath) {
+                throw "Refusing to overwrite an existing ZIP deploy: $zipPath"
             }
 
-            # Variable $zipPath stores this scripts working value.
-            $zipPath = Join-Path $previousDeployTarget 'php-gallery-deploy.zip'
-            New-CompatibleZipArchive -SourceDirectory $deployStaging -DestinationZip $zipPath
-            Write-Host "Local zip deploy created at $zipPath"
-        } finally {
-            $script:DeployTarget = $previousDeployTarget
-            if (Test-Path $deployStaging) {
-                Remove-Item -LiteralPath $deployStaging -Recurse -Force
+            $temporaryArchiveDirectory = Join-Path $deployTarget ('.php-gallery-zip-{0}' -f [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $temporaryArchiveDirectory -ErrorAction Stop | Out-Null
+            $temporaryArchiveOwned = $true
+            $temporaryArchive = Join-Path $temporaryArchiveDirectory 'php-gallery-deploy.zip'
+            New-CompatibleZipArchive -SourceDirectory $stagePath -DestinationZip $temporaryArchive
+            $archiveItem = Get-Item -LiteralPath $temporaryArchive -Force
+            if ($archiveItem.PSIsContainer -or ($archiveItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                throw 'The ZIP builder did not create a regular archive file.'
             }
+            Add-Type -AssemblyName System.IO.Compression
+            $archiveCheck = [System.IO.Compression.ZipFile]::OpenRead($temporaryArchive)
+            $archiveCheck.Dispose()
+            [System.IO.File]::Move($temporaryArchive, $zipPath)
+            Remove-Item -LiteralPath $temporaryArchiveDirectory -Recurse -Force
+            $temporaryArchiveDirectory = $null
+            $temporaryArchiveOwned = $false
+            Write-Host "Local zip deploy created at $zipPath"
+        } else {
+            if (Test-Path -LiteralPath $deployTarget) {
+                throw "Refusing to replace an existing deploy directory: $deployTarget"
+            }
+            Publish-PackageFolder -StageRoot $stagePath -DestinationRoot $deployTarget -PackagePaths $paths
+            Write-Host "Local deploy folder created at $deployTarget"
         }
     } else {
-        $files | ForEach-Object {
-            Copy-DeployFile $_.FullName
+        foreach ($relativePath in $paths) {
+            Send-DeployFile -RelativePath ([string]$relativePath) -StageRoot $stagePath
         }
-        Write-Host "Local deploy folder created at $script:DeployTarget"
     }
-} else {
-    $files | ForEach-Object {
-        Upload-File $_.FullName
+} finally {
+    # Remove only the unique temporary paths created by this invocation.
+    if ($stageOwned -and (Test-Path -LiteralPath $stagePath)) {
+        Remove-Item -LiteralPath $stagePath -Recurse -Force
     }
+    if ($temporaryArchiveOwned -and $temporaryArchiveDirectory -and (Test-Path -LiteralPath $temporaryArchiveDirectory)) {
+        Remove-Item -LiteralPath $temporaryArchiveDirectory -Recurse -Force
+    }
+}
+
+if ($interactiveLauncher) {
+    Write-Host 'Deployment completed successfully.'
+    Read-Host 'Press Enter to close this window' | Out-Null
 }

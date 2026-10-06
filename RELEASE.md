@@ -41,7 +41,7 @@ Before changing version markers:
    - user-facing behavior that must be reflected in documentation and the manual.
 5. Decide whether the release is patch, feature, or larger-scope work based on the actual diff. Do not infer the version solely from the branch name.
 6. Choose the final audit path now: direct release profile or the disposable MySQL/Chromium fixture when its prerequisites are available. Run one of them in phase 7, not both.
-7. Only when packaging is explicitly requested, choose a clean package source now. The deploy scripts walk physical directories and do not exclude every ignored local agent folder. Use a clean checkout or a reviewed staging tree copied from tracked files; stage any new release files before copying. Keep local `.codex/`, `.agent-local/`, and other private/runtime files out of the package source.
+7. Only when packaging is explicitly requested, review the canonical positive inventory in `app/production-files.json`. Both deploy helpers consume that same exact file set; unrelated workspace files cannot enter a production artifact. New shipped paths require an explicit inventory refresh and review, followed by manifest generation. See [production file policy](docs/PRODUCTION_FILES.md).
 
 If Git metadata is unavailable, record that the previous-tag comparison is a coverage gap instead of inventing history from the ZIP contents.
 
@@ -130,6 +130,8 @@ Only after all source, documentation, release-note, and manual edits are complet
 php scripts/generate_manifest.php
 ```
 
+When shipped paths were added or removed, first stage the reviewed source paths and run `php scripts/generate_production_files.php`. Review its inventory diff before generating the integrity manifest. Inventory regeneration is a developer operation; packaging and public requests never discover new production membership.
+
 Do not edit a manifest-covered source file after this step without regenerating the manifest.
 
 ### 6. Pass the cheap preflight and freeze the inputs
@@ -203,7 +205,7 @@ Replace HASH with the exact initialized fingerprint. An old/unbound report, a pa
 
 ### 8. Build and inspect an explicitly requested release package
 
-Skip this phase during normal release preparation. Only when the user explicitly requests packaging and the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper from the clean package source chosen in phase 1. Copy the reviewed, current tracked-file contents into staging if the working directory contains local agent state; do not use a stale `git archive HEAD` that omits uncommitted release edits. The deploy scripts package files only. They do not repair stale release metadata or integrity data.
+Skip this phase during normal release preparation. Only when the user explicitly requests packaging and the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper. The helper requires a current manifest, copies only canonical inventory members from the current source bytes, and verifies the exact staged file set. Missing required files and unexpected staged files fail packaging. An existing output must be reviewed and moved aside by its owner before another package is built; helpers do not erase it. Packaging does not refresh the inventory or repair release metadata.
 
 Inspect the archive listing before publication. Confirm that it contains the intended runtime files and release artifacts, including:
 
@@ -214,7 +216,7 @@ Inspect the archive listing before publication. Confirm that it contains the int
 - current `docs/PHP_Gallery_Manual.pdf` when documentation is part of the package;
 - all new runtime scripts/files introduced by the release.
 
-Confirm that excluded local/runtime state remains excluded according to deployment policy, including `config.php`, caches, logs, temporary files, and gallery media when media inclusion is disabled. Repository tests are excluded from production deployment by default.
+Confirm that staged files agree with the positive inventory using `php scripts/release_files.php verify --root=<stage> --source-root=<source> --profile=production`. Installation-owned `config.php`, active custom CSS, caches, logs, temporary payloads, local agent state and gallery media are outside production membership. Runtime directory protection files are explicit members. Media is a separate opt-in; repository tests may be included only in an explicit local source-review profile, never FTP deployment.
 
 The following identifiers must agree before publication:
 

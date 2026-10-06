@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import vm from 'node:vm';
+import {createLightboxNavigationLifecycle} from '../public/assets/gallery-modules/lightbox-navigation-lifecycle.js';
 
 const source = process.argv.includes('--baseline')
     ? execFileSync('git', ['show', 'HEAD:public/assets/gallery-modules/lightbox.js'], {encoding: 'utf8'})
@@ -55,7 +56,11 @@ async function settle() {
     for (let i = 0; i < 12; i++) await Promise.resolve();
 }
 
-/** Build one isolated live-viewer fixture and compile the actual production functions into it. */
+/**
+ * Build an isolated live-viewer fixture around the production navigation owner and functions.
+ *
+ * @return {Record<string, unknown>} Fixture controls, observations, and production closure context.
+ */
 function fixture() {
     const visible = new Element({imageId: '1', galleryId: '7', lightboxIndex: '0'});
     const pending = [];
@@ -71,7 +76,8 @@ function fixture() {
         controller: new AbortController(), mapPhotoNavigationController: null,
         lightboxMetadataAbortController: new AbortController(), lightboxMetadataGeneration: 0,
         lightboxPendingWindows: new Map(), lightboxBenchmarkDiagnosticsEnabled: false,
-        cards: Array.from({length: 200}, (_, i) => i === 0 ? visible : null), currentIndex: 0,
+        cards: Array.from({length: 200}, (_, i) => i === 0 ? visible : null),
+        lightboxNavigation: createLightboxNavigationLifecycle(),
         lightboxEndpoint: '/index.php?page=gallery_lightbox_data&id=7', lightboxTotal: 200, lightboxWindowSize: 60,
         overlay, lightboxMapSplit: split, lightboxMapSplitCanvas: null, fullscreen: false,
         clearLightboxSplitMapRuntime() {}, clearFullscreenMapImageFit() {}, scheduleLightboxZoomReclamp() {},
@@ -86,8 +92,16 @@ function fixture() {
             setTimeout: callback => timers.push(callback),
         },
         fetch: (url, options) => new Promise((resolve, reject) => pending.push({url, options, resolve, reject})),
-        // Rendering is a boundary: record the committed photo while exercising all real resolution and lifecycle code.
-        openAt(index, options) { opened.push({index, options}); context.currentIndex = index; },
+        /**
+         * Record a committed target while the production owner advances its generation.
+         * @param {number} index Resolved position in the sparse gallery card list.
+         * @param {Record<string, unknown>} options Presentation options passed by production navigation.
+         * @return {void} Records the presentation request and begins the selected navigation.
+         */
+        openAt(index, options) {
+            opened.push({index, options});
+            context.lightboxNavigation.begin(index, String(context.cards[index]?.dataset.imageId || ''));
+        },
         isLightboxFullscreen: () => context.fullscreen,
     });
     const names = ['refreshLightboxOrderFromDom', 'lightboxIndexForCard', 'createLightboxCardFromItem',
@@ -109,7 +123,16 @@ function fixture() {
             request.resolve({ok: true, json: async () => ({target_index: index, items: [{id, index, gallery_id: 7}]})});
             await settle();
         },
-        close() { overlay.hidden = true; context.cancelLightboxMetadataRequests(); context.refreshLightboxOrderFromDom(); },
+        /**
+         * Close the fixture viewer and retire its navigation and metadata work.
+         * @return {void} Invalidates the current owner before refreshing the closed card list.
+         */
+        close() {
+            overlay.hidden = true;
+            context.lightboxNavigation.invalidate();
+            context.cancelLightboxMetadataRequests();
+            context.refreshLightboxOrderFromDom();
+        },
     };
 }
 
@@ -119,7 +142,7 @@ const cases = [
         assert.equal(f.opened[0]?.index, 100); assert.equal(f.pending.length, 0); assert.deepEqual(f.navigated, []);
     }],
     ['detached current photo retains gallery identity for cross-page lookup', async () => {
-        const f = fixture(); f.load(101, 100); f.context.currentIndex = 100;
+        const f = fixture(); f.load(101, 100); f.context.lightboxNavigation.begin(100, '101');
         f.select(151); await f.flush(); assert.equal(f.pending.length, 1);
         const request = f.pending[0]; const url = new URL(request.url);
         assert.equal(url.searchParams.get('target_image_id'), '151'); assert.equal(url.searchParams.get('limit'), '60');

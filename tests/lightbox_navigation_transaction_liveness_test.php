@@ -31,6 +31,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $source = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$navigationSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-navigation-lifecycle.js');
 $dashboardSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-dev-dashboard.js');
 
 /**
@@ -71,18 +72,33 @@ $beginSource = lightbox_navigation_transaction_function(
 );
 lightbox_navigation_transaction_assert($beginSource !== '', 'Navigation transaction begin helper is missing.');
 foreach ([
-    'activeLightboxImageToken += 1;',
+    'lightboxNavigation.begin(index, String(cards[index]?.dataset.imageId || \'\'))',
     'clearLightboxNavigationPending();',
     'clearLightboxNavigationFailure();',
     'clearPendingLightboxQualityUpgrade();',
     'activeLightboxTransitionToken += 1;',
     'removeTransitionImage();',
+    'resetLightboxPreloadQueue({abortActive: false});',
 ] as $required) {
     lightbox_navigation_transaction_assert(
         str_contains($beginSource, $required),
         'Navigation intent must retire previous ownership before metadata/image work: ' . $required
     );
 }
+lightbox_navigation_transaction_assert(
+    str_contains($source, "import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=")
+        && str_contains($navigationSource, 'function isCurrent(targetIndex, targetGeneration)')
+        && str_contains($navigationSource, 'function bindImageId(targetIndex, targetGeneration, targetImageId)')
+        && str_contains($navigationSource, 'function invalidate()')
+        && str_contains($navigationSource, 'function dispose()'),
+    'Navigation target, image ID, generation, phase, and signal must have one extracted owner.'
+);
+lightbox_navigation_transaction_assert(
+    !str_contains($source, 'let currentIndex =')
+        && !str_contains($source, 'let activeLightboxImageToken =')
+        && !str_contains($source, 'galleryDevModeState.navigationStage'),
+    'The viewer and DEV diagnostics must not retain mutable copies of navigation ownership.'
+);
 
 $openSource = lightbox_navigation_transaction_function($source, 'openAt', 'step');
 lightbox_navigation_transaction_assert($openSource !== '', 'openAt() source is missing.');
@@ -96,6 +112,10 @@ lightbox_navigation_transaction_assert(
     str_contains($openSource, 'navigationIntentToken: imageToken')
         && str_contains($openSource, 'isCurrentLightboxImageRequest(normalizedIndex, requestedResumeToken)'),
     'Sparse metadata resume must carry and validate the original navigation token.'
+);
+lightbox_navigation_transaction_assert(
+    str_contains($openSource, 'lightboxNavigation.bindImageId(normalizedIndex, imageToken, String(card.dataset.imageId || \'\'))'),
+    'Sparse metadata must bind its server-provided image ID to the existing generation before rendering.'
 );
 lightbox_navigation_transaction_assert(
     str_contains($openSource, "finalizeLightboxNavigationTransaction(normalizedIndex, imageToken, false, 'metadata')")
@@ -144,13 +164,12 @@ lightbox_navigation_transaction_assert(
 );
 
 lightbox_navigation_transaction_assert(
-    str_contains($source, 'navigationStage')
-        && str_contains($source, 'navigationFailure')
+    str_contains($source, 'navigationSnapshot.phase')
         && str_contains($source, "const liveId = String(image?.dataset.lightboxImageId || '');")
-        && str_contains($source, 'token: activeLightboxImageToken, stage: galleryDevModeState.navigationStage')
+        && str_contains($source, 'token: navigationSnapshot.generation, stage: navigationSnapshot.phase')
         && str_contains($dashboardSource, "set('target',")
         && str_contains($dashboardSource, "set('photo',"),
-    'DEV diagnostics must expose active navigation ownership and terminal stage separately from historical source readiness.'
+    'DEV diagnostics must render a read-only owner snapshot separately from historical source readiness.'
 );
 
 fwrite(STDOUT, "Lightbox navigation transaction liveness checks passed.\n");

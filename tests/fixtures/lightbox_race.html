@@ -1,0 +1,417 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/lightbox_race.html
+Module Type: Browser Test Fixture
+Purpose: Exercise real lightbox navigation, image decoding, resource cleanup, and zoom input.
+Responsibilities:
+  - Supply sparse gallery cards and actual delayed local SVG media.
+  - Record browser-visible outcomes for out-of-order async completions.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Lightbox race fixture</title>
+<style>
+    [hidden] { display: none !important; }
+    [data-lightbox] { position: fixed; inset: 0; background: white; }
+    .lightbox-stage-link { display: block; width: 800px; height: 600px; }
+    [data-lightbox-img] { max-width: 100%; max-height: 100%; }
+</style>
+<body>
+<pre id="results">RUNNING</pre>
+<div data-lightbox-config data-lightbox-endpoint="/metadata" data-lightbox-total="30" data-lightbox-window-size="12"></div>
+<a id="card-a" href="/photo/a" data-lightbox-image data-image-id="1" data-gallery-id="7" data-lightbox-index="0" data-page-url="/photo/a" data-title="Photo A">Photo A</a>
+<a id="card-b" href="/photo/b" data-lightbox-image data-image-id="2" data-gallery-id="7" data-lightbox-index="1" data-page-url="/photo/b" data-title="Photo B">Photo B</a>
+<a id="card-c" href="/photo/c" data-lightbox-image data-image-id="3" data-gallery-id="7" data-lightbox-index="2" data-page-url="/photo/c" data-title="Photo C">Photo C</a>
+<div data-lightbox hidden>
+    <button data-lightbox-action="close">Close</button>
+    <button data-lightbox-action="next">Next</button>
+    <button data-lightbox-action="zoom-in" aria-label="Zoom in">Zoom in</button>
+    <figure><a class="lightbox-stage-link" data-lightbox-stage><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
+    <div class="lightbox-meta"><h2 data-lightbox-title></h2><p data-lightbox-description></p><span data-lightbox-counter></span></div>
+</div>
+<script type="module">
+    import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox.js';
+
+    const result = document.querySelector('#results');
+    const errors = [];
+    const originalFetch = window.fetch.bind(window);
+    const metadataPending = [];
+    const trackedMediaFetchCounts = new Map();
+    const metadataPath = '/metadata';
+    const nativeImageDecode = HTMLImageElement.prototype.decode;
+    const decodeGates = [];
+    const decodeGateSources = new Set();
+    const decodeGateCounts = new Map();
+    const createdDetachedImages = [];
+    const NativeImage = window.Image;
+    const mediaSvg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="slateblue"/></svg>');
+    const previewSources = new Map();
+    const fullSources = new Map();
+
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
+
+    /** Throw a browser-visible failure with a precise contract message.
+     * @param {boolean} value Assertion result.
+     * @param {string} message Failure explanation.
+     * @return {void} Throws when the contract is absent.
+     */
+    function check(value, message) {
+        if (!value) throw new Error(message);
+    }
+
+    /** Wait for one observable browser or loopback-server state before the fixture deadline.
+     * @param {function(): boolean|Promise<boolean>} predicate State predicate to poll.
+     * @param {string} message Failure explanation after the deadline.
+     * @param {number} timeoutMs Maximum wait in milliseconds.
+     * @return {Promise<void>} Resolves when the state is observable.
+     */
+    async function waitFor(predicate, message, timeoutMs = 5000) {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            if (await predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        throw new Error(message);
+    }
+
+    /** Return the held response and cancellation state for all actual local image requests.
+     * @return {Promise<Array<{path: string, released: boolean, aborted: boolean}>>} Server-observed image requests.
+     */
+    async function imageStats() {
+        const response = await originalFetch('/__fixture/stats', {cache: 'no-store'});
+        return (await response.json()).images;
+    }
+
+    /** Wait until the browser has started the requested actual image network request.
+     * @param {string} source Path and query of the expected local image.
+     * @param {number} occurrence Minimum request count for this source.
+     * @return {Promise<void>} Resolves after the browser request reaches the server.
+     */
+    async function waitForImageRequest(source, occurrence = 1) {
+        await waitFor(async () => (await imageStats()).filter(item => item.path === source).length >= occurrence,
+            `Image request did not start: ${source}; requests=${JSON.stringify(await imageStats())}; overlayHidden=${overlay.hidden}; title=${activePresentation().title}; cardSource=${cardA.dataset.previewSrc}`);
+    }
+
+    /** Release a held local image response so Chromium performs its real image load and decode.
+     * @param {string} source Path and query of the held image.
+     * @return {Promise<void>} Resolves after the server releases the response.
+     */
+    async function releaseImage(source) {
+        const response = await originalFetch(`/__fixture/release-image?path=${encodeURIComponent(source)}`, {cache: 'no-store'});
+        const payload = await response.json();
+        check(payload.ok, `No held image response could be released: ${source}`);
+    }
+
+    /** Finish held requests for one exact URL with bytes the browser cannot decode as an image.
+     * @param {string} source Path and query of the held image.
+     * @return {Promise<number>} Number of failed in-flight responses.
+     */
+    async function failImage(source) {
+        const response = await originalFetch(`/__fixture/fail-image?path=${encodeURIComponent(source)}`, {cache: 'no-store'});
+        const payload = await response.json();
+        check(payload.ok, `No held image response could be failed: ${source}`);
+        return payload.count;
+    }
+
+    /** Wait until actual native image decode has completed and the fixture's continuation is gated.
+     * @param {string} source Path and query of the decoded image.
+     * @param {number} decodeOrdinal Ordinal of the expected native decode gate.
+     * @return {Promise<void>} Resolves when the continuation is held.
+     */
+    async function waitForDecodeGate(source, decodeOrdinal = 1) {
+        await waitFor(() => decodeGates.some(gate => gate.source === source && gate.ordinal >= decodeOrdinal),
+            `Native image decode did not reach gate ${decodeOrdinal}: ${source}`);
+    }
+
+    /** Release one held post-decode continuation for the exact media URL.
+     * @param {string} source Path and query of the decoded image.
+     * @param {number} decodeOrdinal Ordinal of the continuation to release.
+     * @return {void} Releases the selected decode continuation.
+     */
+    function releaseDecode(source, decodeOrdinal = 1) {
+        const index = decodeGates.findIndex(gate => gate.source === source && gate.ordinal === decodeOrdinal);
+        check(index >= 0, `No held native decode continuation exists: ${source}`);
+        const [gate] = decodeGates.splice(index, 1);
+        gate.resolve();
+    }
+
+    /** Return one absolute synthetic image URL with a unique attempt key.
+     * @param {string} photo Synthetic photo identifier.
+     * @param {string} kind Preview or full source kind.
+     * @param {number} attempt Unique request attempt.
+     * @return {string} Absolute same-origin synthetic media URL.
+     */
+    function mediaSource(photo, kind, attempt = 1) {
+        return new URL(`/media/${photo}/${kind}.svg?attempt=${attempt}`, location.href).href;
+    }
+
+    /** Return the same-origin path and query used by the local image response controller.
+     * @param {string} source Absolute or relative image URL.
+     * @return {string} Local request key.
+     */
+    function mediaKey(source) {
+        const url = new URL(source, location.href);
+        return url.pathname + url.search;
+    }
+
+    /** Build a complete bounded metadata item for one sparse result index.
+     * @param {number} index Zero-based result index.
+     * @param {number} id Stable image identifier.
+     * @param {string} title Displayed image title.
+     * @param {string} preview Authorized preview source.
+     * @param {string} full Authorized original source.
+     * @return {Record<string, unknown>} Sparse endpoint fixture item.
+     */
+    function metadataItem(index, id, title, preview, full) {
+        return {id, index, gallery_id: 7, title, page_url: `/photo/${id}`, full_src: full, preview_src: preview,
+            width: 800, height: 600};
+    }
+
+    /** Resolve the held real production metadata fetch with one selected sparse card.
+     * @param {number} offset Requested range offset.
+     * @param {Record<string, unknown>} item Sparse card to return.
+     * @return {void} Resolves the matching fetch promise.
+     */
+    function resolveMetadata(offset, item) {
+        const pending = metadataPending.find(request => (request.offset === offset || request.imageId === offset) && !request.settled);
+        check(pending, `Sparse metadata request for key ${offset} was not pending`);
+        pending.settled = true;
+        pending.resolve(new Response(JSON.stringify({target_index: item.index, items: [item]}), {headers: {'Content-Type': 'application/json'}}));
+    }
+
+    /** Return the current title and live image node produced by the actual lightbox module.
+     * @return {{title: string, image: HTMLImageElement|null}} Current DOM presentation.
+     */
+    function activePresentation() {
+        return {
+            title: document.querySelector('[data-lightbox-title]')?.textContent || '',
+            image: document.querySelector('[data-lightbox-img]'),
+        };
+    }
+
+    window.fetch = (input, options = {}) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (url.pathname === metadataPath) {
+            return new Promise(resolve => metadataPending.push({
+                offset: Number(url.searchParams.get('offset')),
+                imageId: Number(url.searchParams.get('target_image_id')),
+                signal: options.signal,
+                resolve,
+                settled: false,
+            }));
+        }
+        if (url.pathname.startsWith('/media/') && url.pathname.includes('/full.svg')) {
+            const requestKey = url.pathname + url.search;
+            trackedMediaFetchCounts.set(requestKey, (trackedMediaFetchCounts.get(requestKey) || 0) + 1);
+        }
+        return originalFetch(input, options);
+    };
+
+    window.Image = function (width, height) {
+        const image = new NativeImage(width, height);
+        createdDetachedImages.push(image);
+        return image;
+    };
+    window.Image.prototype = NativeImage.prototype;
+    HTMLImageElement.prototype.decode = function (...args) {
+        const source = this.currentSrc || this.src;
+        const key = source ? mediaKey(source) : '';
+        const count = decodeGateCounts.get(key) || 0;
+        const shouldGate = createdDetachedImages.includes(this) && decodeGateSources.has(key) && count === 0;
+        if (!shouldGate) return nativeImageDecode.apply(this, args);
+        const ordinal = count + 1;
+        decodeGateCounts.set(key, ordinal);
+        return nativeImageDecode.apply(this, args).then(() => new Promise(resolve => decodeGates.push({source: key, ordinal, resolve})));
+    };
+
+    const overlay = document.querySelector('[data-lightbox]');
+    const cardA = document.querySelector('#card-a');
+    const cardB = document.querySelector('#card-b');
+    const cardC = document.querySelector('#card-c');
+    for (const [card, photo, id] of [[cardA, 'a', '1'], [cardB, 'b', '2'], [cardC, 'c', '3']]) {
+        const preview = mediaSource(photo, 'preview');
+        const full = mediaSource(photo, 'full');
+        card.dataset.previewSrc = preview;
+        card.dataset.fullSrc = full;
+        card.dataset.imageWidth = '800';
+        card.dataset.imageHeight = '600';
+        card.dataset.galleryId = '7';
+        card.dataset.imageId = id;
+        previewSources.set(photo.toUpperCase(), preview);
+        fullSources.set(photo.toUpperCase(), full);
+    }
+
+    try {
+        for (const photo of ['A', 'B', 'C']) decodeGateSources.add(mediaKey(previewSources.get(photo)));
+        setupGalleryLightbox();
+
+        cardA.click();
+        await waitForImageRequest(mediaKey(previewSources.get('A')));
+        await releaseImage(mediaKey(previewSources.get('A')));
+        await waitForDecodeGate(mediaKey(previewSources.get('A')));
+
+        document.querySelector('[data-lightbox-action="next"]').click();
+        await waitForImageRequest(mediaKey(previewSources.get('B')));
+        await releaseImage(mediaKey(previewSources.get('B')));
+        await waitForDecodeGate(mediaKey(previewSources.get('B')));
+
+        document.querySelector('[data-lightbox-action="next"]').click();
+        await waitForImageRequest(mediaKey(previewSources.get('C')));
+        await releaseImage(mediaKey(previewSources.get('C')));
+        await waitForDecodeGate(mediaKey(previewSources.get('C')));
+
+        releaseDecode(mediaKey(previewSources.get('C')), 1);
+        await waitFor(() => activePresentation().title === 'Photo C' && activePresentation().image?.dataset.lightboxImageId === '3', 'Newest photo C did not become active after its native decode.');
+        releaseDecode(mediaKey(previewSources.get('B')), 1);
+        releaseDecode(mediaKey(previewSources.get('A')), 1);
+        await new Promise(resolve => setTimeout(resolve, 180));
+        check(activePresentation().title === 'Photo C', 'late B/A decode completions must not replace current photo C');
+        check(activePresentation().image?.dataset.lightboxImageId === '3', 'late image callbacks must not change the live image owner');
+
+        const activeImageBeforeZoom = activePresentation().image;
+        const expectedActiveOriginal = new URL(fullSources.get('C'), location.href).href;
+        document.querySelector('[data-lightbox-action="zoom-in"]').click();
+        const imageImmediatelyAfterZoomInput = activePresentation().image;
+        const immediateZoomSourceMatches = imageImmediatelyAfterZoomInput?.getAttribute('src') === expectedActiveOriginal;
+        const immediateZoomSourceFailure = immediateZoomSourceMatches
+            ? ''
+            : 'zoom above 100% must assign the active card original to the live image in the same click task';
+        check(Boolean(activeImageBeforeZoom?.dataset.lightboxImageId === '3'), 'same-task original promotion must keep the active image identity');
+        check(immediateZoomSourceMatches, immediateZoomSourceFailure);
+        await waitForImageRequest(mediaKey(fullSources.get('C')));
+        document.querySelector('[data-lightbox-action="zoom-in"]').click();
+        document.querySelector('[data-lightbox-action="zoom-in"]').click();
+        check(activePresentation().image?.getAttribute('src') === expectedActiveOriginal,
+            'repeated zoom input must keep the same active original assigned to the live image');
+        check(trackedMediaFetchCounts.get(mediaKey(fullSources.get('C'))) === 1,
+            'repeated zoom input while the active original is pending must reuse its tracked Fetch');
+
+        const sparseNavigationIndex = 18;
+        const sparseNavigationId = 118;
+        const sparseNavigationPreview = mediaSource('sparse-navigation-18', 'preview');
+        const sparseNavigationFull = mediaSource('sparse-navigation-18', 'full');
+        const oldRangeOffset = 0;
+        const newRangeOffset = 12;
+        for (let advance = 0; advance < sparseNavigationIndex - 2; advance += 1) {
+            document.querySelector('[data-lightbox-action="next"]').click();
+        }
+        await waitFor(() => metadataPending.some(request => request.offset === oldRangeOffset && !request.settled),
+            'Sparse navigation did not request the old metadata window through the next control.');
+        await waitFor(() => metadataPending.some(request => request.offset === newRangeOffset && !request.settled),
+            'Sparse navigation did not cross into a second metadata window through the next control.');
+        const oldNavigationRange = metadataPending.find(request => request.offset === oldRangeOffset && !request.settled);
+        const newerNavigationRange = metadataPending.find(request => request.offset === newRangeOffset && !request.settled);
+        check(oldNavigationRange && newerNavigationRange, 'Both sparse navigation windows must remain pending.');
+        check(!oldNavigationRange.signal?.aborted, 'Shared metadata window work must not inherit the superseded navigation signal.');
+        resolveMetadata(newRangeOffset, metadataItem(sparseNavigationIndex, sparseNavigationId, 'Sparse Navigation 18', sparseNavigationPreview, sparseNavigationFull));
+        await waitForImageRequest(mediaKey(sparseNavigationPreview));
+        await releaseImage(mediaKey(sparseNavigationPreview));
+        await waitFor(() => activePresentation().title === 'Sparse Navigation 18'
+            && activePresentation().image?.dataset.lightboxImageId === String(sparseNavigationId),
+        'Newest sparse navigation target did not resume after its own metadata window arrived.');
+        resolveMetadata(oldRangeOffset, metadataItem(3, 4, 'Stale Sparse Navigation 4', mediaSvg, mediaSvg));
+        await new Promise(resolve => setTimeout(resolve, 120));
+        check(activePresentation().title === 'Sparse Navigation 18'
+            && activePresentation().image?.dataset.lightboxImageId === String(sparseNavigationId),
+        'Late completion from the older sparse navigation window must not resume its stale target.');
+
+        const sparseTwelve = document.createElement('a');
+        sparseTwelve.href = '/photo/13';
+        sparseTwelve.dataset.mapOpenPhoto = '13';
+        sparseTwelve.dataset.mapPhotoGalleryId = '7';
+        sparseTwelve.dataset.mapPhotoPageUrl = '/photo/13';
+        const sparseTwentyFour = document.createElement('a');
+        sparseTwentyFour.href = '/photo/25';
+        sparseTwentyFour.dataset.mapOpenPhoto = '25';
+        sparseTwentyFour.dataset.mapPhotoGalleryId = '7';
+        sparseTwentyFour.dataset.mapPhotoPageUrl = '/photo/25';
+        document.body.append(sparseTwelve, sparseTwentyFour);
+
+        sparseTwelve.click();
+        await waitFor(() => metadataPending.some(request => request.imageId === 13 && !request.settled), 'Sparse map target 13 request did not start.');
+        sparseTwentyFour.click();
+        await waitFor(() => metadataPending.some(request => request.imageId === 25 && !request.settled), 'Sparse map target 25 request did not start.');
+        resolveMetadata(25, metadataItem(24, 25, 'Sparse Photo 25', mediaSvg, mediaSvg));
+        await waitFor(() => activePresentation().title === 'Sparse Photo 25', 'Newer sparse target did not render.');
+        resolveMetadata(13, metadataItem(12, 13, 'Sparse Photo 13', mediaSvg, mediaSvg));
+        await new Promise(resolve => setTimeout(resolve, 60));
+        check(activePresentation().title === 'Sparse Photo 25', 'late sparse metadata must not resume the stale target');
+
+        const reopenSourceTwo = mediaSource('a', 'preview', 2);
+        cardA.dataset.previewSrc = reopenSourceTwo;
+        cardA.dataset.fullSrc = mediaSource('a', 'full', 2);
+        const reopenKeyTwo = mediaKey(reopenSourceTwo);
+        decodeGateSources.add(reopenKeyTwo);
+        document.querySelector('[data-lightbox-action="close"]').click();
+        cardA.click();
+        await waitForImageRequest(reopenKeyTwo);
+        await releaseImage(reopenKeyTwo);
+        await waitForDecodeGate(reopenKeyTwo);
+        const canceledDetached = createdDetachedImages.find(image => mediaKey(image.src || '') === reopenKeyTwo);
+        document.querySelector('[data-lightbox-action="close"]').click();
+        await waitFor(() => canceledDetached?.getAttribute('src') === null, 'Close must detach an unfinished detached image request source.');
+
+        const reopenSourceThree = mediaSource('a', 'preview', 3);
+        const reopenKeyThree = mediaKey(reopenSourceThree);
+        cardA.dataset.previewSrc = reopenSourceThree;
+        cardA.dataset.fullSrc = mediaSource('a', 'full', 3);
+        decodeGateSources.add(reopenKeyThree);
+        cardA.click();
+        await waitForImageRequest(reopenKeyThree);
+        await releaseImage(reopenKeyThree);
+        await waitForDecodeGate(reopenKeyThree);
+        releaseDecode(reopenKeyThree);
+        await waitFor(() => activePresentation().title === 'Photo A' && activePresentation().image?.getAttribute('src') === reopenSourceThree,
+            'Reopened viewer did not display the new photo A completion.');
+        releaseDecode(reopenKeyTwo);
+        await new Promise(resolve => setTimeout(resolve, 120));
+        check(activePresentation().image?.getAttribute('src') === new URL(reopenSourceThree, location.href).href,
+            'a completion from the closed viewer must not replace the reopened image');
+
+        const reopenedOriginal = mediaSource('a', 'full', 3);
+        const reopenedOriginalKey = mediaKey(reopenedOriginal);
+        const reopenedPreviewKey = mediaKey(reopenSourceThree);
+        document.querySelector('[data-lightbox-action="zoom-in"]').click();
+        check(activePresentation().image?.getAttribute('src') === reopenedOriginal,
+            'reopened photo zoom must synchronously select that photo original in the live image');
+        await waitForImageRequest(reopenedOriginalKey);
+        const failedOriginalResponses = await failImage(reopenedOriginalKey);
+        check(failedOriginalResponses >= 1, 'the current photo original request must be held before inducing its decode failure');
+        try {
+            await waitFor(() => activePresentation().title === 'Photo A'
+                && activePresentation().image?.dataset.lightboxImageId === '1'
+            && activePresentation().image?.getAttribute('src') === new URL(reopenSourceThree, location.href).href
+            && activePresentation().image.complete
+            && activePresentation().image.naturalWidth > 0,
+            'a failed original load/decode must restore the protected preview for the still-current photo', 2200);
+        } catch (error) {
+            const failedImage = activePresentation().image;
+            const progress = overlay.querySelector('.lightbox-quality-progress');
+            const requests = (await imageStats()).filter(item => item.path === reopenedOriginalKey || item.path === reopenedPreviewKey);
+            throw new Error(`${error.message}; presentation=${JSON.stringify({title: activePresentation().title, imageId: failedImage?.dataset.lightboxImageId || '', src: failedImage?.getAttribute('src') || '', complete: failedImage?.complete || false, naturalWidth: failedImage?.naturalWidth || 0, explicitQualityOwner: failedImage?.dataset.lightboxExplicitZoomQuality || '', overlayClasses: Array.from(overlay.classList), progressHidden: progress?.hidden ?? null, progressText: progress?.textContent || '', failedOriginalResponses})}; ownedRequests=${JSON.stringify(requests)}`);
+        }
+
+        document.querySelector('[data-lightbox-action="close"]').click();
+
+        const requestedPaths = (await imageStats()).map(item => item.path);
+        check(!requestedPaths.some(source => source.startsWith('/media/b/full.svg')),
+            'navigation and zoom must not request neighboring photos original sources');
+        check(requestedPaths.some(source => source.startsWith('/media/a/full.svg')),
+            'the reopened active photo original must be requested for the bounded failure and preview-restore case');
+        check(requestedPaths.some(source => source.startsWith('/media/c/full.svg')),
+            'explicit zoom must request the authorized active-card original');
+        check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
+        result.textContent = 'BROWSER PASS: real A/B/C image load and decode race, same-task active-original assignment with repeated-zoom Fetch reuse, out-of-order sparse map and next-control metadata windows, close/reopen stale decode invalidation, detached-load cancellation, settled-cache release, and no neighboring originals.';
+    } catch (error) {
+        result.textContent = `BROWSER FAIL: ${error.stack}\n${errors.join('\n')}`;
+    } finally {
+        teardownGalleryLightbox();
+        window.fetch = originalFetch;
+        window.Image = NativeImage;
+        HTMLImageElement.prototype.decode = nativeImageDecode;
+    }
+</script>
+</body></html>

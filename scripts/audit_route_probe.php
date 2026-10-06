@@ -13,10 +13,8 @@
 
 declare(strict_types=1);
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 require_once dirname(__DIR__) . '/tests/support/gallery_workflow_safety.php';
 require_once __DIR__ . '/audit_route_performance.php';
@@ -119,6 +117,8 @@ register_shutdown_function(static function () use (&$bodyBytes, &$bodyHash, &$pr
             ? ($status >= 200 && $status < 300 ? 'success' : 'unexpected')
             : (in_array($status, [302, 401, 403, 404], true) ? 'denied' : 'unexpected')
     );
+    $loadedModules = function_exists('Gallery\\Core\\cms_runtime_kernel')
+        ? \Gallery\Core\cms_runtime_kernel()->loadedModules() : [];
     $metric = [
         'schema_version' => 1,
         'scope' => 'cms-run-route-lifecycle',
@@ -132,6 +132,8 @@ register_shutdown_function(static function () use (&$bodyBytes, &$bodyHash, &$pr
         'http_status' => $status,
         'included_php_files' => count($paths),
         'included_paths' => $paths,
+        'loaded_module_count' => count($loadedModules),
+        'loaded_modules' => $loadedModules,
         'peak_memory_bytes' => memory_get_peak_usage(true),
         'wall_ms' => round((hrtime(true) - $startedAt) / 1e6, 4),
         'php_version' => PHP_VERSION,

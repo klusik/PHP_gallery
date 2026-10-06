@@ -7,6 +7,14 @@
 - [ ] Schema or migration impact (describe below if applicable)
 - [ ] Filesystem, security, compatibility, or configuration impact (describe below if applicable)
 - [ ] Documentation or translations updated where needed
+- [ ] Compatibility lifecycle considered: no new/materially changed branch, or reason, protected scenario, and retirement condition recorded below
+
+Compatibility changes (write `none` when not applicable):
+
+- Reason and protected behavior/version/environment:
+- Component owner and high-impact registry record:
+- Safe retirement condition, or permanent-support rationale:
+- Regression evidence and usage measurement (or `unknown`):
 
 ## Verification
 

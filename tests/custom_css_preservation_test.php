@@ -140,6 +140,7 @@ namespace {
     \copy(dirname(__DIR__).'/app/services/custom_css.php',$root.'/app/services/custom_css.php');
     require $root.'/app/services/custom_css.php';
     require dirname(__DIR__).'/app/services/updates.php';
+    require_once dirname(__DIR__).'/app/release_file_policy.php';
     $GLOBALS['css_upload']=$root.'/upload.css';
     try {
         file_put_contents($root.'/custom_css/new.css','/* preset CSS */ .preset{display:grid}');
@@ -180,10 +181,19 @@ namespace {
         foreach(array_keys($manifest['files']) as $path) css_preserve_require($path!=='public/assets/custom.css' && !str_starts_with($path,'custom_css/'),'local CSS became updater managed');
         $controller=file_get_contents(dirname(__DIR__).'/app/controllers/admin_theme_actions.php');
         css_preserve_require(substr_count($controller,'custom_css_save_selection(')===1 && !str_contains($controller,'elseif ($customCssChanged)'),'normal Theme save reintroduced implicit appearance reset or multiple CSS commits');
+        $productionPaths=\Gallery\Core\release_file_policy_paths(dirname(__DIR__),'production');
+        $updaterPaths=\Gallery\Core\release_file_policy_paths(dirname(__DIR__),'updater');
+        foreach(['public/assets/custom.css','custom_css/new.css','custom_css/nested/local.css'] as $path) {
+            css_preserve_require(!in_array($path,$productionPaths,true) && !in_array($path,$updaterPaths,true),'canonical package policy admitted active or dynamically created local CSS '.$path);
+        }
+        foreach(['custom_css/css_template.css','custom_css/custom.css','custom_css/modern.css'] as $path) {
+            css_preserve_require(in_array($path,$productionPaths,true),'canonical production inventory lost an intentional shipped CSS preset '.$path);
+        }
         $powershell=file_get_contents(dirname(__DIR__).'/scripts/deploy.ps1'); $shell=file_get_contents(dirname(__DIR__).'/scripts/deploy.sh');
-        $powershellGuard="if (\$portableRelative -eq 'public/assets/custom.css')"; $shellGuard='if [[ "$portable_relative" == "public/assets/custom.css" ]]; then';
-        css_preserve_require(str_contains($powershell,$powershellGuard) && strpos($powershell,$powershellGuard)<strpos($powershell,'foreach ($alwaysIncludeRelative in $alwaysIncludeRelatives)'),'PowerShell packaging does not protect the exact active CSS path before include policy');
-        css_preserve_require(str_contains($shell,$shellGuard) && strpos($shell,$shellGuard)<strpos($shell,'if is_always_included "$portable_relative"; then'),'shell packaging does not protect the exact active CSS path before include policy');
+        css_preserve_require(str_contains($powershell,'scripts/release_files.php') && str_contains($powershell,"'list',") && str_contains($powershell,"'verify',"),
+            'PowerShell deployment bypassed the canonical inventory list or staged-tree verifier');
+        css_preserve_require(str_contains($shell,'release_files.php" list') && str_contains($shell,'release_files.php" verify'),
+            'Shell deployment bypassed the canonical inventory list or staged-tree verifier');
         echo "PASS Custom CSS preservation\n";
     } finally {
         foreach(['/public/assets','/custom_css','/app/services',''] as $directory) foreach(glob($root.$directory.'/*') ?: [] as $path) if(is_file($path)) unlink($path);

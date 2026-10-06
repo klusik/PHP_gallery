@@ -31,6 +31,9 @@ namespace PhpGallery\ReleaseQualification;
 
 use RuntimeException;
 
+require_once dirname(__DIR__) . '/cli_guard.php';
+\gallery_guard_cli_entrypoint(__FILE__);
+
 /** CLI syntax deliberately keeps the reviewed fingerprint explicit on evidence writes. */
 function usage(): string
 {

@@ -26,7 +26,7 @@
 #   - Prefer small, readable changes over broad rewrites.
 #
 # Last Updated:
-#   2026-05-04
+#   2026-10-05
 
 Options -Indexes
 
@@ -64,14 +64,26 @@ Options -Indexes
     </FilesMatch>
 </IfModule>
 
-<FilesMatch "^(config|config\.example)\.php$">
-    Require all denied
-</FilesMatch>
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(config|config\.example)\.php$">
+        Require all denied
+    </FilesMatch>
 
-<FilesMatch "\.(?:md|markdown|bat|cmd|ps1|sql|zip|log|tmp|bak|backup|old|orig|dist|ini|env|yml|yaml|lock)$">
-    Require all denied
-</FilesMatch>
+    <FilesMatch "\.(?:md|markdown|bat|cmd|ps1|sql|zip|log|tmp|bak|backup|old|orig|dist|ini|env|yml|yaml|lock)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^(config|config\.example)\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+
+    <FilesMatch "\.(?:md|markdown|bat|cmd|ps1|sql|zip|log|tmp|bak|backup|old|orig|dist|ini|env|yml|yaml|lock)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
 
 RedirectMatch 404 (^|/)\.git(/|$)
 RedirectMatch 404 (^|/)\.(?!well-known/)
-

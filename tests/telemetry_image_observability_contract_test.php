@@ -41,6 +41,7 @@ $root = dirname(__DIR__);
 $usageSource = (string) file_get_contents($root . '/public/assets/usage.js');
 $compatibilitySource = (string) file_get_contents($root . '/public/assets/telemetry.js');
 $lightboxSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$resourceSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js');
 $privacySource = (string) file_get_contents($root . '/app/services/telemetry_privacy.php');
 
 telemetry_image_observability_contract_assert(
@@ -70,24 +71,19 @@ telemetry_image_observability_contract_assert(
     'Server privacy normalization must allow only the bounded image-performance context fields.'
 );
 
-$loadStart = strpos($lightboxSource, 'function loadFreshDecodedLightboxImage');
-$loadEnd = $loadStart === false ? false : strpos($lightboxSource, 'function cancelActiveDetachedLightboxImageLoads', $loadStart);
-$loadSource = ($loadStart !== false && $loadEnd !== false)
-    ? substr($lightboxSource, $loadStart, $loadEnd - $loadStart)
-    : '';
 telemetry_image_observability_contract_assert(
-    $loadSource !== ''
-        && str_contains($loadSource, 'loadedImage.onload = () => {')
-        && str_contains($loadSource, 'const decodeStartedAt = performance.now();')
-        && str_contains($loadSource, 'decodeLoadedImage(loadedImage).then(() => {')
-        && str_contains($loadSource, 'Number.isInteger(options.telemetryIndex)')
-        && str_contains($loadSource, 'Number.isInteger(options.telemetryToken)')
-        && str_contains($loadSource, "'miss'"),
-    'Visible image-decode timing must begin after load completion and require active lightbox telemetry ownership.'
+    str_contains($resourceSource, 'function loadFresh(src, options = {})')
+        && str_contains($resourceSource, 'image.onload = () => {')
+        && str_contains($resourceSource, 'decodeImage(image)')
+        && str_contains($lightboxSource, 'function loadDecodedLightboxImage(src, options = {})')
+        && str_contains($lightboxSource, 'Number.isInteger(options.telemetryIndex)')
+        && str_contains($lightboxSource, 'Number.isInteger(options.telemetryToken)')
+        && str_contains($lightboxSource, 'cacheResultFor(loadedImage)'),
+    'Decoded-resource timing must be owned by the resource module and visible attribution must require current lightbox ownership.'
 );
 
 $preloadStart = strpos($lightboxSource, 'function preloadDecodedLightboxImage');
-$preloadEnd = $preloadStart === false ? false : strpos($lightboxSource, 'function lightboxPreloadConcurrency', $preloadStart);
+$preloadEnd = $preloadStart === false ? false : strpos($lightboxSource, 'function queueDecodedLightboxPreload', $preloadStart);
 $preloadSource = ($preloadStart !== false && $preloadEnd !== false)
     ? substr($lightboxSource, $preloadStart, $preloadEnd - $preloadStart)
     : '';
@@ -112,11 +108,13 @@ telemetry_image_observability_contract_assert(
     'Visible presentation timing must start only after decode and finish at a successful display boundary.'
 );
 telemetry_image_observability_contract_assert(
-    str_contains($lightboxSource, "telemetryLightboxCacheEvent('cache.lightbox.hit'")
-        && str_contains($lightboxSource, "telemetryLightboxCacheEvent('cache.lightbox.miss'")
+    str_contains($lightboxSource, 'telemetryLightboxCacheEvent(`cache.lightbox.${result}`')
+        && str_contains($resourceSource, "name: 'miss'")
         && str_contains($lightboxSource, "telemetryLightboxCacheEvent('cache.lightbox.evicted'")
+        && str_contains($resourceSource, "name: 'evicted'")
         && str_contains($lightboxSource, "'decoded_lightbox'")
-        && str_contains($lightboxSource, 'This is not HTTP/browser cache telemetry.'),
+        && str_contains($lightboxSource, 'This is not HTTP/browser cache telemetry.')
+        && str_contains($lightboxSource, 'decoded-lightbox cache owned by this module.'),
     'Cache telemetry must describe only the decoded-lightbox application cache and must expose its scope explicitly.'
 );
 telemetry_image_observability_contract_assert(

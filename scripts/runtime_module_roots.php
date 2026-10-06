@@ -78,6 +78,24 @@ return [
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_not_found' => 'http-not-found',
     ],
+    // These existing roots have stable lifecycle/domain ownership. The compiler
+    // creates an edge only when the owner's complete historic closure is present.
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths'],
+    'module_dependencies' => [
+        'updater-work' => ['request-maintenance'],
+    ],
+    // Dispatch loads public policy before only these sensitive route families.
+    'route_dependencies' => [
+        'public-policy' => [
+            'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap',
+            'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
+            'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data',
+            'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data',
+            'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest',
+            'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery',
+            'download_smart_gallery_manifest', 'download_smart_gallery_file',
+        ],
+    ],
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [

@@ -32,7 +32,7 @@
  *     even when the current PHP request still has the previous updater implementation in memory.
  *
  * Last Updated:
- *   2026-08-31
+ *   2026-10-05
  */
 
 declare(strict_types=1);
@@ -40,6 +40,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
+use function Gallery\Core\release_file_policy_server_paths;
 
 /**
  * Return the exact Apache policy files owned by PHP Gallery releases.
@@ -52,14 +53,7 @@ use RuntimeException;
  */
 function application_update_server_policy_files(): array
 {
-    return [
-        '.htaccess',
-        'public/.htaccess',
-        'galleries/.htaccess',
-        'cache/.htaccess',
-        'data/admin-log-archives/.htaccess',
-        'data/gallery-trash/.htaccess',
-    ];
+    return release_file_policy_server_paths();
 }
 
 /**

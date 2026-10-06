@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.119';
+const CMS_VERSION = '0.120';
 ```
 
 Update-related code uses:
@@ -59,6 +59,36 @@ The long-term application flow is `Bootstrap/Router -> Controller -> Service -> 
 The contract is enforced by `scripts/check_mvc_boundaries.php`. `scripts/mvc_boundary_baseline.json` is retained as an always-empty assertion with `violation_count: 0`, not as a legacy allowlist. Any detected SQL/PDO/request/transport/presentation/upward-dependency signature inside the canonical MVC roots fails immediately. `tests/mvc_layer_contract_test.php` protects the checker semantics, the Stage 7-13 boundary tests protect the intermediate ownership contracts, and all central audit profiles run the boundary checker.
 
 The same checker also performs a non-executing whole-runtime architecture inventory. It tokenizes every first-party PHP web-runtime file under `app/` plus the supported public/setup entrypoints, classifies each file by architecture role, and records bounded evidence for SQL/PDO access, request/session globals, HTTP response APIs, filesystem mutations, presentation output, includes, and cross-layer dependencies. These historical `review_candidates` are advisory until their ownership is reviewed; the strict zero-baseline MVC contract remains the hard gate. During the central audit the machine-readable result is stored as `<run-directory>/mvc-architecture.json`, and the compact suite summary reports both strict violations and the number of historical review candidates. Once a reviewed candidate class reaches zero, it can be promoted into strict enforcement without introducing a legacy baseline.
+
+The inventory retains raw observations when a reviewed boundary accepts a signal.
+Accepted boundaries are identified by exact path and signal with their purpose;
+they do not exempt unrelated behavior in the same file or permit service leaks.
+PDO detection uses persistence evidence rather than treating any method named
+`prepare()` as database access. `Kernel::prepare()` selects and loads route
+handlers; observing an existing HTTP status without an argument is also distinct
+from changing the response.
+
+| Reviewed boundary | Owned behavior |
+| --- | --- |
+| `app/request_data.php` | Read-only normalized request bags; controllers may instead pass explicit semantic inputs. |
+| `app/helpers_request.php` | Core request/URL transport normalization and application of prepared cookie/header intents. |
+| `app/session_context.php` | PHP session reads/writes/removal and active-state observation; no session startup or domain policy. |
+| `app/bootstrap/viewer_identity_context.php` | Viewer-specific session, remember-cookie and rotation transport; it does not own administrator identity. |
+| `app/security.php` | Authentication, CSRF, identity/session transport and the existing CSRF hidden-field compatibility output. |
+| `app/runtime/Kernel.php` | Request dispatch and response completion/observation. Route preparation is not persistence. |
+| `app/helpers_runtime.php` | Existing redirect response adapter; request and flash helpers use the Core adapters. |
+| `app/diagnostics/admin_test_run_early.php` | Bootstrap-free request/fatal observation and bounded owned diagnostics storage before application dependencies exist. |
+| `app/integrity.php` | Reviewed low-level integrity/update filesystem primitives under canonical release membership and path safety. |
+
+Session namespace policy remains with its domain owner. Translation services own
+administrator/public language preferences, translation context and missing-key
+diagnostics; navigation services own Navigraph tokens, OAuth state and package
+metadata; gallery-access services own NSFW acknowledgment and per-gallery unlock
+timestamps. The adapter preserves existing flat keys and CLI-seeded session data.
+It does not start a session or read configuration during include. Flash messages
+still require an active session and are consumed once; gallery unlock expires
+only after its existing 600-second lifetime, while NSFW acknowledgment retains
+its existing positive-timestamp policy.
 
 When adding a new feature, use the strict vertical slice directly. Do not first place SQL in a controller/service or policy in a view with the intention of moving it later.
 
@@ -168,6 +198,17 @@ Root-level operational files:
 | `config.example.php` | Example config used by tooling and first setup. |
 | `config.php` | Local generated config, not expected in deploy ZIPs unless intentionally bundled. |
 
+### Internal and command-line execution boundaries
+
+True command-line entrypoints use `scripts/cli_guard.php` before bootstrap or
+mutation. Direct HTTP invocation receives an empty 404; includeable tooling keeps
+its separate direct-entry boundary. Internal trees carry their own Apache 2.4
+authorization denial with the Apache 2.2 access-control fallback, independent of
+`mod_rewrite`. Public front controllers and query-string routing remain available.
+The updater owns the exact server-policy paths, including guards in writable
+storage, without acquiring ownership of adjacent data. See
+[HTTP entrypoint inventory](docs/HTTP_ENTRYPOINTS.md) for the supported boundaries.
+
 ## Bootstrap Responsibilities
 
 `app/bootstrap.php` is the compatibility bootstrap for the ordinary public request. It loads the small `Gallery\Core` runtime and the shared request, security, configuration, session, maintenance, and dispatch boundaries. `cms_run()` delegates to the request-local `Kernel`, which preserves the established request lifecycle while loading only the logical feature modules needed for the selected route.
@@ -177,6 +218,8 @@ The request kernel consists of `Request`, `Router`, `RouteDefinition`, `RouteReg
 `app/runtime/modules.php` is a checked-in reviewed loading plan. Development tooling compiles it from `scripts/runtime_dependencies.php` and `scripts/runtime_module_roots.php`; `scripts/runtime_dynamic_dependencies.php` records reviewed dynamic-call targets. Compilation detects new or stale unreviewed dynamic callback/class-site signatures and requires explicit targets for those sites. Ordinary dynamic method calls are covered through their reviewed class closures. Production requests read the generated map; they do not scan source files, compile dependency graphs, or fall back to loading every controller, service, model, view, migration, and integrity module. PHP 8.1 remains sufficient and production installation requires no Composer or Node build. Public requests never load the umbrella files. `app/bootstrap_full.php` is an explicit convenience for CLI/test consumers that need the complete procedural API; existing consumers may continue to include individual compatibility umbrellas directly.
 
 Early Admin Test Run instrumentation in `app/diagnostics/admin_test_run_early.php` belongs to the public front controller, which includes and initializes it before bootstrap. Selective domain plans exclude this optional transport owner; direct bootstrap consumers retain the existing guarded hook behavior. ModuleLoader records the actual `runtime_module.<id>` include phases when early instrumentation is active.
+
+The generated schema-2 plan represents reviewed shared ownership with explicit module `depends` relationships. A single canonical `file_order` preserves the established layer/path include order across the transitive union, so extracting a dependency cannot move a service ahead of a required model. The compiler compares every compositional closure with its original complete closure before emitting the plan; isolated module children verify ordered loading, handler availability and absence of include-time response/session effects. Hand-built CLI/test module definitions retain the loader's dependency-first compatibility mode. Development-only static plan ratchets and disposable route measurements protect dependency fan-out, included-file counts and memory; wall time remains observational.
 
 Automatic-update request eligibility lives in `app/services/updates_request.php`. Its active-job lookup uses `updates_job_lookup.php` before method, preference and timer gates. This eligibility path loads the `updater-work` module only for active or due work. Updater administration routes may also load their owned implementation. The legacy `updates_jobs.php` entrypoint requires the same lookup owner for compatibility.
 
@@ -592,6 +635,15 @@ The main Admin dashboard keeps its initial request bounded: the Maintenance tab 
 | `app/views/seo.php` | SEO-related rendering helpers. |
 
 ## Database Layer
+
+[The database support matrix](docs/DATABASE_SUPPORT.md) defines maintained
+representative series separately from legacy, unsupported and unqualified
+versions. Required CI directly exercises MySQL 8.4, MariaDB 10.11 and MariaDB
+11.4; the PHP 8.1 source floor does not imply database qualification. The owned
+disposable engine fixture checks JSON operations and rejection, vote constraints,
+InnoDB/utf8mb4 metadata and advisory-lock exclusion alongside the existing
+migration, HTTP and row-lock workflow tests. These checks do not add engine-version
+branches to production code or change the schema.
 
 `app/database.php` exposes a single function:
 
@@ -1200,6 +1252,8 @@ The same browser settings also control browser-assisted thumbnail rebuilds in th
 Repair migrations return an empty SQL list to the legacy runner and execute their callback while the legacy `$pdo` variable is in scope. The current runner executes the same callback through the validated `after` definition. A migration version is recorded only after the callback succeeds.
 
 ## Updater Safety
+
+Production membership is the exact checked-in `app/production-files.json` policy, read by `app/release_file_policy.php`. Bash and PowerShell packaging, integrity ownership and updater activation derive from that owner. The updater list is a validated subset retaining installation-owned custom CSS and distribution-only artifacts; a GitHub source archive may contain development files without activating them. Obsolete removal uses prior owned inventory/manifest evidence. See [production file policy](docs/PRODUCTION_FILES.md).
 
 `app/services/updates_jobs.php` is the canonical installer engine for stable updates, beta installs, stable restores, clean reinstalls, rollback, Admin button requests, pure-PHP entry points, and automatic background updates. Legacy functions in `updates_install.php` now start a durable job instead of downloading, extracting, copying, migrating, and cleaning in one request.
 

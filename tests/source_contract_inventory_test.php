@@ -290,7 +290,8 @@ PHP;
         'Caller-owned nullable report checkpoints remain valid service inputs.');
     source_inventory_assert(\PhpGallery\MvcBoundary\scan_source('<?php /* $_SESSION is controller-owned. */ $label = \'$_SESSION\';', 'app/services/admin_gallery_report/job.php') === [],
         'Report session documentation and inert strings are not global access.');
-    source_inventory_assert(\PhpGallery\MvcBoundary\scan_source('<?php $_SESSION["fixture"] = [];', 'app/services/admin_gallery_report/other.php') === [],
+    $reportSiblingSession = \PhpGallery\MvcBoundary\scan_source('<?php $_SESSION["fixture"] = [];', 'app/services/admin_gallery_report/other.php');
+    source_inventory_assert(count($reportSiblingSession) === 1 && $reportSiblingSession[0]['rule'] === 'services.session_global',
         'Report-job promotion must not silently broaden into an unreviewed sibling owner.');
     $detectorSession = \PhpGallery\MvcBoundary\scan_source('<?php $_SESSION["detector"] = [];', 'app/services/duplicate_photo_detector.php');
     source_inventory_assert(count($detectorSession) === 1 && $detectorSession[0]['rule'] === 'services.duplicate_detector_session_global',

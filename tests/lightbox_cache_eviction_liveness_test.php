@@ -31,6 +31,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $source = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$resourceSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js');
 $preloadSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
 
 /**
@@ -65,33 +66,16 @@ function lightbox_cache_eviction_liveness_function(string $source, string $name,
 }
 
 lightbox_cache_eviction_liveness_assert(
-    !str_contains($source, 'lightboxIndexForSource('),
-    'Decoded-cache eviction must not call the nonexistent lightboxIndexForSource() helper.'
+    str_contains($resourceSource, 'if (!entry?.settled)')
+        && str_contains($resourceSource, 'cache.delete(src);')
+        && str_contains($resourceSource, 'if (cache.get(src) !== entry || epoch !== insertionEpoch)'),
+    'The resource owner must evict settled entries only and fence late cache completion by epoch and exact entry.'
 );
-
-$evictionSource = lightbox_cache_eviction_liveness_function(
-    $source,
-    'evictSettledDecodedLightboxImage',
-    'sweepDecodedLightboxImageCache'
-);
-lightbox_cache_eviction_liveness_assert($evictionSource !== '', 'Decoded-cache eviction helper is missing.');
 lightbox_cache_eviction_liveness_assert(
-    str_contains($evictionSource, 'decodedLightboxImages.delete(src);')
-        && str_contains($evictionSource, 'const telemetryIndex = devFindSourceIndex(src);'),
-    'Decoded-cache eviction must delete the settled entry and reuse the existing source-index lookup.'
-);
-
-$telemetrySource = lightbox_cache_eviction_liveness_function(
-    $source,
-    'telemetryLightboxCacheEvent',
-    'telemetryVisibleImageDecoded'
-);
-lightbox_cache_eviction_liveness_assert($telemetrySource !== '', 'Decoded-cache telemetry helper is missing.');
-lightbox_cache_eviction_liveness_assert(
-    str_contains($telemetrySource, 'try {')
-        && str_contains($telemetrySource, 'window.PHPGalleryTelemetryCacheEvent(')
-        && str_contains($telemetrySource, '} catch (error) {'),
-    'Optional decoded-cache telemetry must not be able to abort viewer/cache control flow.'
+    str_contains($source, 'function telemetryLightboxCacheEvent(')
+        && str_contains($source, 'window.PHPGalleryTelemetryCacheEvent(')
+        && str_contains($source, '} catch (error) {'),
+    'Optional cache telemetry must remain isolated in the coordinator and cannot interrupt cache control flow.'
 );
 
 $drainSource = lightbox_cache_eviction_liveness_function(

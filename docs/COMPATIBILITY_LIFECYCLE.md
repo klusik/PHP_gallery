@@ -1,0 +1,387 @@
+# Compatibility lifecycle and retirement register
+
+Reviewed 2026-10-06 for Issue #73. This is an evidence-backed inventory, not a
+guarantee that every path is exercised in production. Approximate eras mean
+“visible in current code/evidence by this time”; they do not claim the first
+release that introduced the behavior. Usage is marked unknown unless an
+existing product metric actually observes adoption.
+
+## Policy
+
+Compatibility is a supported behavior when users, installed data, older
+clients, host configurations, or documented no-JavaScript flows rely on it.
+Keep such behavior until its owner demonstrates the retirement condition below.
+An unsupported platform policy may be a retirement candidate without implying
+that a corresponding production branch exists.
+
+When adding or materially changing a fallback or compatibility branch, record
+in the pull request: its reason, the concrete old behavior/version/environment
+it protects, its component owner, and the earliest safe retirement condition.
+For high-cost or cross-cutting behavior, add or update a record here. State
+“unknown” for unmeasured usage or uncertain introduction dates; do not infer
+adoption from a code path, log event, or earliest Git path alone. Removal must
+include migration and release-note implications where applicable, and a
+regression/acceptance proof for the retired scenario. This is review metadata,
+not a source parser or a commitment to remove anything on a calendar date.
+
+## Database and migrations
+
+### DB-1 — Legacy migration definition shapes and direct-require runner
+
+- **Reason / protected scenario:** `load_migration_definition()` accepts both
+  the historical SQL-list definition and the `{statements, after}` callback
+  form. Repair migrations scoped to a PDO and returned an empty list for old
+  direct-require runners. This preserves legacy migration consumers while new
+  definitions use callback-aware semantics.
+- **Era / owner:** Callback API evidence exists by 2026-07-12; original
+  introduction is unknown. Owner: `app/migration_definitions.php` and
+  `database/migrations/`.
+- **Evidence / tests:** `app/migration_definitions.php`,
+  `migration_consistency_test.php`,
+  `migration_legacy_runner_compatibility_test.php` (repair files and
+  conditional maintenance).
+- **Usage:** External direct-require runner adoption is unknown.
+- **Earliest safe retirement:** Only after the oldest supported installer or
+  updater no longer directly requires migration files, all supported runners
+  consume callback-aware definitions, and the direct-require contract is
+  explicitly retired. Do not mass-convert immutable historical migrations.
+
+### DB-2 — Applied migration ledger rows with no current file
+
+- **Reason / protected scenario:** An already-applied `schema_migrations` row
+  remains history even when its migration file has been removed; it must not
+  reappear as pending work or be silently discarded.
+- **Era / owner:** Era unknown. Owner: `app/migration_definitions.php` and
+  `app/migrations.php`.
+- **Evidence / tests:** `pending_migration_files()` and migration-history
+  handling; `migration_consistency_test.php` uses simulated files and applied
+  version arrays to cover unknown historical versions, pending files, and a
+  fully applied set. It does not insert live database ledger rows.
+- **Usage:** Ledger-row frequency is not measured as a product metric.
+- **Lifecycle:** Permanent history protection under the current ledger model.
+  Reconsider only as part of an explicit, versioned ledger-compaction design
+  with backup/upgrade proof; no current removal is planned.
+
+### DB-3 — Duplicate DDL reconciliation on migration replay
+
+- **Reason / protected scenario:** MySQL/MariaDB DDL can partially persist when
+  a process stops before recording the migration. Known duplicate-object errors
+  are reconciled on replay so the ledger is recorded only after the resulting
+  schema is correct, including non-transactional DDL.
+- **Era / owner:** Evidence exists by 2026-04-28; origin unknown. Owner:
+  `app/migrations.php`.
+- **Evidence / tests:** `apply_migration_statement()` and
+  `migration_schema_cache_reset_test.php`.
+- **Usage:** Replay events are not an adoption measure.
+- **Lifecycle:** Retain for supported MySQL/MariaDB families unless an
+  equivalent, equally durable partial-DDL recovery guarantee replaces it.
+  A single-engine transaction assumption is not a retirement proof.
+
+### DB-4 — Unsupported database-floor and former query-workaround rationale
+
+- **Reason / protected scenario:** Historical support notes explain old server
+  floors and a former Smart Gallery window-function-avoidance rationale. The
+  current support policy lists MySQL 8.4 and MariaDB 10.11/11.4 as required
+  maintained workflow representatives; no runtime branch based on server
+  version was found.
+- **Era / owner:** Policy review is current in `docs/DATABASE_SUPPORT.md`;
+  query/index rationale predates this review. Owner: database support policy
+  and Smart Gallery query/index owners.
+- **Evidence / tests:** `docs/DATABASE_SUPPORT.md`,
+  `tests/database_engine_contract_test.php`, direct database workflow.
+- **Usage:** Unsupported-version installations are unknown; CI measures only
+  the required representative engine tuples.
+- **Retirement status:** Explicit policy/documentation candidate, not a proven
+  removable runtime branch. Revisit the unsupported floor and former query
+  rationale only after correctness, performance, and safety review of the
+  query and digest index. Keep current query and index behavior until that
+  review supports a change.
+
+## Updater and release compatibility
+
+### UPD-1 — Positive manifest ownership bridge for archives without sidecar
+
+- **Reason / protected scenario:** An incoming production-files sidecar may be
+  absent in an older supported archive. The updater then accepts only safe
+  positive paths owned by the core manifest and recognized guards. A present
+  but invalid sidecar fails closed; absence is not treated as arbitrary trust.
+- **Era / owner:** Policy evidence exists by 2026-10-05; oldest supported
+  archive is unknown. Owner: `app/release_file_policy.php` and updater archive
+  validation.
+- **Evidence / tests:** `tests/production_file_policy_test.php` covers valid
+  positive membership, invalid-sidecar refusal, older ZIPs, and unlisted
+  paths; `tests/updater_safety_model_test.php` covers updater safety.
+- **Usage:** Archive-sidecar adoption is not aggregated.
+- **Earliest safe retirement:** After the bridge upgrade window is documented
+  and every supported installer/updater archive plus prior ownership state has
+  valid positive inventory. Do not substitute a calendar date for the
+  supported-upgrade floor.
+
+## Translations and language preference
+
+### I18N-1 — PHP catalogs when a language JSON pack is absent
+
+- **Reason / protected scenario:** `translation_load_language()` reads the
+  maintained JSON pack first and uses the matching PHP dictionary only when
+  that JSON file is absent. A present malformed JSON pack does not silently
+  switch formats; it resolves to empty catalog data.
+- **Era / owner:** JSON foundation evidence exists by 2026-05-11; the PHP
+  fallback's first introduction is unknown. Owner: `app/services/translations.php` and
+  `app/lang/`.
+- **Evidence / tests:** `tests/translation_catalog_consistency_test.php`
+  validates maintained catalogs, but current evidence does not prove it
+  executes the absent-JSON PHP fallback.
+- **Usage:** Format fallback adoption is unknown.
+- **Earliest safe retirement:** Only after supported packages and upgrade
+  scenarios guarantee every supported JSON pack, the product owner explicitly
+  ends PHP-catalog compatibility, and an absent-pack regression is replaced by
+  a documented fail-safe. The current coverage gap must remain explicit.
+
+### I18N-2 — Canonical English and key fallback
+
+- **Reason / protected scenario:** `t()` resolves the active catalog, canonical
+  English, caller default, then key so incomplete translations do not erase
+  visible labels or break older callers.
+- **Era / owner:** Translation foundation is visible by 2026-05-11; exact
+  first introduction is unknown. Owner: `app/services/translations.php` and
+  `app/lang/en.json`.
+- **Evidence / tests:** `tests/translation_catalog_consistency_test.php`
+  checks English keys and four maintained catalogs.
+- **Usage:** Missing-key frequency is not reported as product adoption.
+- **Lifecycle:** Permanent user-facing fallback contract; no removal planned.
+
+### I18N-3 — Legacy shared Admin language cookie/session mirror
+
+- **Reason / protected scenario:** Admin language preference resolution
+  preserves the `cms_admin_language` session value, dedicated Admin cookie,
+  older shared `cms_language` cookie, and a `cms_language` session mirror.
+  Public language preference remains separate and current.
+- **Era / owner:** Base translation/session evidence exists by 2026-05-11;
+  selector evidence by 2026-08-13. Owner: `app/services/translations.php` and request
+  language/session bootstrap.
+- **Evidence / tests:** `tests/public_language_preference_test.php` and
+  `tests/session_context_test.php` cover Admin/Public separation, mirrors,
+  reset, and diagnostics.
+- **Usage:** Existing cookies/session values are not counted.
+- **Earliest safe retirement:** Stop emitting the shared alias first; preserve
+  readers through at least the one-year cookie max-age and supported-session
+  horizon, then expire/migrate stored Admin preference while preserving it.
+  Never merge the Public dedicated preference into this alias.
+
+## Core runtime and session contracts
+
+### CORE-1 — Two-argument ModuleLoader construction
+
+- **Reason / protected scenario:** An optional `null` third file-order argument
+  preserves historical two-argument construction for consumers using a
+  dependency-first manual plan. The official bridge supplies the compiled
+  third order.
+- **Era / owner:** The two-argument Core runtime API is visible by 2026-10-05
+  (#69); optional third file-order argument is visible by 2026-10-06 (#79).
+  Exact originating release is unknown. Owner: `app/runtime/ModuleLoader.php`
+  and `app/runtime/bridge.php`.
+- **Evidence / tests:** `tests/runtime_kernel_test.php` covers two-argument
+  construction and composed plans.
+- **Usage:** External constructor usage is unknown.
+- **Earliest safe retirement:** After all in-repository consumers use the
+  explicit order and the project publishes an intentional unsupported-API
+  boundary for external consumers. Do not infer external non-use from local
+  search results.
+
+### CORE-2 — Flat session keys and domain-owned semantics
+
+- **Reason / protected scenario:** `app/session_context.php` centralizes
+  flat-key get/set/remove access while preserving the existing key names,
+  inactive-CLI seeded values, and unrelated sibling keys. Translation,
+  Navigraph cache/OAuth, gallery access, NSFW acknowledgement, and flash keep
+  domain semantics in their owning services.
+- **Era / owner:** The adapter is from 2026-10-06 (#72); underlying session
+  keys span older mixed eras. Owner: `app/session_context.php` plus each
+  domain session owner.
+- **Evidence / tests:** `tests/session_context_test.php` and
+  `tests/request_session_helpers_test.php`.
+- **Usage:** Key-level usage is repository-observable; external session
+  consumers are not measured.
+- **Lifecycle:** Established current state contract; no removal planned.
+  Redesign requires a versioned namespace, dual-read/migrate-on-write or an
+  explicit expiry window, and key-by-key compatibility regression coverage.
+
+## Media and routing
+
+### MEDIA-1 — Responsive and progressive thumbnail renderers
+
+- **Reason / protected scenario:** `responsive` provides complete server
+  responsive markup and no-JavaScript behavior; `progressive` provides a
+  real small first image and bounded near-viewport sharpening. The selected
+  gallery setting accepts both permanent values and normalizes invalid values
+  to progressive.
+- **Era / owner:** Default-setting migration is 2026-08-20; service path is
+  visible by 2026-08-24. Owner: `app/services/public_thumbnail_rendering.php`,
+  responsive HTML helpers, and progressive browser modules.
+- **Evidence / tests:** `tests/public_thumbnail_rendering_model_test.php`,
+  `tests/progressive_thumbnail_renderer_test.mjs`, and the renderer browser
+  fixture.
+- **Usage:** Configured mode is measurable; aggregate visitor traffic by mode is
+  unknown.
+- **Lifecycle:** Both machine values and pipelines are permanent supported
+  behavior. Keep semantic image markup, alt text, authorization, and no-JS
+  behavior in both. No removal planned.
+
+### MEDIA-2 — JPEG compatibility derivatives alongside WebP
+
+- **Reason / protected scenario:** Legacy JPEG derivatives remain available
+  alongside WebP for consumers that cannot use WebP. The indexed cleanup
+  inventory deletes only registered legacy JPEG derivatives, not originals or
+  WebP files.
+- **Era / owner:** Evidence exists by 2026-06-08; exact introduction unknown.
+  Owner: `app/services/thumbnail_compatibility.php` and thumbnail format/
+  metadata services.
+- **Evidence / tests:** `tests/thumbnail_compatibility_model_test.php` and
+  `tests/thumbnail_format_metadata_consistency_test.php`.
+- **Usage:** Inventory count/bytes are measurable; actual served-format need
+  is unknown.
+- **Earliest safe retirement:** Only after the indexed legacy inventory is
+  empty and supported consumers demonstrate that JPEG derivative demand is
+  absent. Keep explicit non-destructive inventory and cleanup until then.
+
+### MEDIA-3 — Header-first MIME detection with fileinfo compatibility fallback
+
+- **Reason / protected scenario:** Common JPEG, PNG, GIF, and WebP media is
+  identified from its image header before fileinfo is consulted. PHP 8.5.11's
+  fileinfo libmagic path allocates a 7 MiB read buffer even for a tiny image.
+  The existing fileinfo path remains for supported `image/*` formats such as
+  SVG, BMP MIME aliases, and legacy files whose headers are not in the common
+  fast-path set; file extensions do not establish image identity.
+- **Era / owner:** The header-first path is visible by 2026-10-06; the original
+  fileinfo-based behavior predates this review. Owner:
+  `app/services/dng_derivatives.php`.
+- **Evidence / tests:** `image_source_mime_for_derivatives()` and
+  `image_public_display_file()`; `tests/image_decode_pipeline_test.php` covers
+  JPEG content with a misleading extension, supported raster MIME values,
+  SVG fallback, and rejection of non-image content.
+  Upstream PHP 8.5.11 defines the [7 MiB read bound](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/file.h#L471)
+  and [allocates that buffer before reading the file](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/magic.c#L201).
+- **Usage:** Per-format media requests and fallback rates are not measured.
+- **Lifecycle:** Keep header inspection for recognized raster content and the
+  fileinfo compatibility path for other formats and historical MIME aliases.
+  Reconsider the fallback only after every supported legacy image format has
+  a tested, trustworthy alternative MIME detector; do not replace content
+  detection with extension-based guesses.
+
+### ROUTE-1 — Query routes and clean URL aliases
+
+- **Reason / protected scenario:** Query routes remain the canonical
+  compatibility form. Pretty/clean path mapping is a convenience when rewrite
+  rules are available.
+- **Era / owner:** Routing path evidence exists by 2026-08-12; exact first
+  introduction unknown. Owner: `app/bootstrap/routing.php`, dispatcher, and
+  URL producers.
+- **Evidence / tests:** `tests/route_reference_integrity_test.php`,
+  `tests/public_media_url_rewrite_test.php`,
+  `tests/public_media_version_routing_test.php`, and the HTTP-entry fixture
+  from #78.
+- **Usage:** No aggregate route-form metric is collected; existing access logs
+  may provide local evidence.
+- **Lifecycle:** Query routing is permanent. Removing clean paths requires an
+  explicit public-URL breaking policy and proof for generated/bookmarked URLs.
+
+## WinApp, upload, and downloads
+
+### WINAPP-1 — Query-first upload API and narrow clean-route fallback
+
+- **Reason / protected scenario:** Canonical query POST is tried first because
+  some hosting WAFs mishandle clean routes. The clean route is retried only on
+  a non-JSON 404; Gallery JSON 404, authorization failures, network failures,
+  and transient statuses do not cause route retry. Revocation has its own
+  bounded 502/503/504 retry and already-revoked reconciliation.
+- **Era / owner:** Upload entry point exists by 2026-05-16; fallback is newer,
+  exact introduction unknown. Owner: `winapp/gallery_watch_upload.pyw` and
+  Gallery upload controllers.
+- **Evidence / tests:** `winapp/tests/test_redesign.py` covers canonical-first,
+  multipart 404, revoke 404, JSON 404, transient behavior, and reconciliation.
+- **Usage:** Local warning logs exist; aggregate alias adoption is unknown.
+- **Earliest safe retirement:** Retire only the alternate route after target
+  hosting and the supported client floor guarantee the canonical route. Keep
+  query-first and status-classification contracts unless that contract is
+  deliberately redesigned.
+
+### WINAPP-2 — Installer Python selection and matching windowless launcher
+
+- **Reason / protected scenario:** Installer startup finds a supported Python
+  runtime (`python`/`py`) and pairs the selected interpreter with its matching
+  `pythonw.exe` shortcut so the GUI launches without a console.
+- **Era / owner:** `.pyw` entry is visible by 2026-05-16; exact installer
+  selector introduction unknown. Owner: WinApp installer/launcher scripts.
+- **Evidence / tests:** `winapp/tests/test_redesign.py` loads the `.pyw` entry;
+  current evidence found no automated installer BAT/shortcut creation test.
+- **Usage:** Installed shortcut/runtime adoption is unknown; test coverage gap
+  is explicit.
+- **Earliest safe retirement:** Only when the supported installer/runtime and
+  deployed shortcuts no longer depend on this selection contract and a focused
+  installer acceptance test proves the replacement.
+
+### WINAPP-3 — Batch wrapper PATH-based `pythonw` entry
+
+- **Reason / protected scenario:** `run_gallery_watcher.bat` remains a
+  separately supported launcher that invokes `pythonw` through PATH; this may
+  coexist with installer-created shortcuts that bind a particular runtime.
+- **Era / owner:** Visible by 2026-05-16; exact introduction unknown. Owner:
+  `winapp/run_gallery_watcher.bat` and WinApp launch documentation.
+- **Evidence / tests:** `winapp/tests/test_self_update_smoke.py` checks the
+  startup prefix; direct wrapper activation adoption is not measured.
+- **Usage:** Unknown.
+- **Earliest safe retirement:** Only after support documentation and deployed
+  scripts/shortcuts no longer advertise or call the wrapper, with replacement
+  launcher evidence on supported Windows installs.
+
+### UPLOAD-1 — Client-side thumbnail negotiation for the local WinApp uploader
+
+- **Reason / protected scenario:** WinApp uses local Pillow derivatives and
+  transmits thumbnail IDs with server-side batch work disabled to avoid
+  shared-hosting thumbnail CPU bursts. Unsupported HEIC/HEIF/DNG, missing
+  Pillow, or local conversion failure remains server-owned.
+- **Era / owner:** Watcher/uploader entry exists by 2026-05-16; current
+  negotiation detail introduction unknown. Owner: `winapp/uploader/media.py`,
+  `gallery_watch_upload.pyw`, `upload_automation.php`, and browser upload
+  service.
+- **Evidence / tests:** `winapp/tests/test_redesign.py` covers local thumbnail
+  and multipart behavior; `tests/browser_upload_settings_test.php` and
+  `tests/browser_upload_zip_worker_test.mjs` cover the server path.
+- **Usage:** Local warnings may be logged; aggregate client adoption and
+  fallback rates are unknown.
+- **Earliest safe retirement:** Only after supported deployed clients and all
+  accepted formats have a validated replacement, and shared-hosting server
+  processing constraints are acceptable. Keep server fallback for unsupported
+  formats and local failures.
+
+### DOWNLOAD-1 — Server ZIP generation, immutable cache, and direct/no-JS path
+
+- **Reason / protected scenario:** The server may create and reuse an
+  authorized immutable artifact; progressive browser streaming remains the
+  modern client path while direct and no-JavaScript requests remain supported.
+  Cache health is checked before manifest/build, and every request is
+  authorized before artifact reuse. Optional cache failure leaves progressive
+  availability intact.
+- **Era / owner:** Cache path exists by 2026-09-03; exact direct-path
+  introduction unknown. Owner: `app/services/download_artifact_cache.php`,
+  download controllers, and `public/assets/gallery-download.js`.
+- **Evidence / tests:** `tests/gallery_download_controller_test.php` covers
+  early legacy-capability 503 and progressive availability;
+  `tests/gallery_download_service_test.php` covers legacy manifest bounds,
+  and `tests/gallery_download_manifest_test.php` plus
+  `tests/gallery_download_client_test.mjs` cover manifest and client paths.
+- **Usage:** `media.download.served` logs are observable but are not a product
+  adoption metric for legacy/direct clients.
+- **Earliest safe retirement:** Only after the direct/no-JavaScript contract is
+  explicitly ended, usage is measured and acceptably low, and an authorized
+  replacement remains safe. Do not remove the server fallback because cache
+  generation is optional or unhealthy.
+
+## Retiring a record
+
+Do not delete a compatibility path because its record is old or its branch is
+not visible in a local search. The owner should update this entry with the
+proof that meets its retirement condition, identify migration and release-note
+effects, add or adjust the regression/acceptance evidence, and link the change
+that removes the behavior. Permanent records may remain as architectural
+contracts rather than accumulating expiry dates.

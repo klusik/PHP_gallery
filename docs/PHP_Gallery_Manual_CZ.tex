@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.119}
-\newcommand{\manualdate}{5.~října~2026}
+\newcommand{\version}{0.120}
+\newcommand{\manualdate}{6.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -241,7 +241,7 @@ Součást & Požadavek\\
 \midrule
 \endhead
 PHP & Verze 8.1 nebo novější.\\
-Databáze & MySQL 5.7 nebo novější, případně MariaDB 10.2 nebo novější.\\
+Databáze & MySQL 8.4 LTS, MariaDB 10.11 LTS nebo MariaDB 11.4 LTS.\\
 PDO & Rozšíření PDO MySQL pro dotazy aplikace a~migrace.\\
 Zpracování obrázků & GD pro běžné generování náhledů. Další místní nástroje mohou podporovat specializované formáty obrázků.\\
 Archivy & ZipArchive pro pracovní postupy s~balíčky, stahováním a~přenosem, které vytvářejí nebo zpracovávají data ZIP.\\
@@ -249,6 +249,8 @@ Souborový systém & Zapisovatelná umístění pro data aplikace, galerie, mezi
 Webový server & Pro čisté adresy URL se doporučuje přepisování ve stylu Apache; směrování pomocí parametrů dotazu podporuje kompatibilní prostředí bez přepisování.\\
 \bottomrule
 \end{longtable}
+
+Udržovaná matice podpory kvalifikuje MySQL 8.4 LTS, MariaDB 10.11 LTS a MariaDB 11.4 LTS jako zástupce přímo testované v povinném CI. Kanonický dokument uvádí MySQL 8.0 a MariaDB 10.4--10.10 jako starší řady s podporou podle nejlepšího úsilí, bez povinného databázového CI a bez projektové regresní či bezpečnostní záruky; tyto řady jsou mimo udržovanou kvalifikaci. MySQL 5.7 a starší a MariaDB 10.3 a starší nejsou podporovány. Jiné řady zůstávají nekvalifikované, dokud je přímo nepokryje povinné CI; vyšší číslo verze samo o sobě kompatibilitu nezaručuje. Podrobnosti uvádí \filepath{docs/DATABASE_SUPPORT.md}.
 
 Odchozí přístup HTTPS podporuje aktualizace aplikace a~vzdálená metadata vydání. Místní provoz a~ručně nasazená vydání mohou fungovat i~s~přísnějším omezením odchozích spojení.\footnote{Síťová pravidla by měla odpovídat požadavkům vlastníka instalace na aktualizace a~soukromí. Aktualizační kód ověřuje balíčky a~uchovává data pro obnovu podle místní implementace aktualizátoru.}
 
@@ -263,6 +265,10 @@ Webový proces potřebuje přístup pro čtení běhového kódu a~pro zápis do
 \label{sec:installation}
 \index{i00056@instalace}
 \index{n00098@nastavení}
+
+Interní adresáře aplikace, nástrojů, dokumentace, mezipaměti, dat a~logů mají vlastní autorizační ochranu Apache nezávislou na přepisování URL. Hosting musí tato pravidla respektovat nebo zajistit odpovídající ochranu na serveru; vývojový server PHP je nečte. Přímý HTTP požadavek na CLI příkaz vrací prázdnou odpověď 404 ještě před spuštěním aplikace. Pro webové stránky používejte veřejný vstupní bod a~pro údržbu příkazovou řádku. Podrobnosti uvádí \filepath{docs/HTTP_ENTRYPOINTS.md}.
+
+Nasazovací složky nebo ZIP vytvářejte podle potřeby pomocí schváleného seznamu \filepath{app/production-files.json}. Nasazovací nástroje ověřují přesné členství připravených souborů a~aktuální integritní data; místní soubory agentů, živá média, konfigurace, vlastní CSS a~běhová data nejsou součástí běžného balíčku. Schválené zdroje WinApp se distribuují s~balíčkem, jeho instalátor zůstává samostatný. Pokud interaktivně zvolený cíl ve Windows již obsahuje balíček, nástroj vybere novou sousední cestu s~časovou značkou; výslovně zadaný automatizační cíl kolizi odmítne. Před ručním nasazením čtěte \filepath{docs/PRODUCTION_FILES.md}.
 
 \subsection{Instalace v~prohlížeči}
 
@@ -1988,6 +1994,8 @@ Stejná časná běhová hranice převádí nezachycená a~zachytitelná fatáln
 
 Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové jádro požadavků a~jeho revidovaný plán modulů. Neúplný archiv se odmítne a~připravené soubory zůstanou mimo aktivní instalaci. Při ručním nasazení zachovejte všechny dodávané soubory jádra pohromadě; výměna samotného bootstrapu by zanechala neúplnou aplikaci.
 
+Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčního seznamu. Starší zdrojové archivy bez tohoto seznamu zachovávají omezenou kompatibilní cestu podle svého vlastněného manifestu; poškozený přítomný seznam se odmítne. Odstranění zastaralých souborů vyžaduje důkaz předchozího vlastnictví a~zachovává neznámé místní soubory. Návrat souborů používá serverem zapsaný index zálohy a~odmítá neindexované soubory i~cesty přesměrované symbolickými odkazy nebo junctions ve Windows. Tato ochrana souborů nevrací databázové migrace.
+
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}
 
@@ -2000,6 +2008,8 @@ Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové 
 \index{p00139@pohledy}
 
 Následující stránky popisují cestu požadavku používanou aplikací. Jsou důležité především pro údržbu a~vývoj; běžná správa galerií je nevyžaduje.
+
+Generovaný plán modulů deklaruje sdílené závislosti a~jedno kanonické pořadí souborů, které zachovává úplné závislosti routy i~pořadí načítání. Při změně rout udržujte vstupy závislostí a~generovaný plán společně. Adaptéry požadavků a~session vlastní přístup k~transportním datům; jazyk, navigační tokeny, přístup ke galeriím, potvrzení NSFW a~jednorázové zprávy zůstávají u~svých dosavadních vlastníků. Lightbox má samostatné vlastníky generací navigace a~dekódovaných zdrojů, zatímco prohlížeč fotografií zachovává prezentaci a~výběr autorizované kvality. Rozdělení poskytuje regresní hranice, neprokazuje rychlejší běh v~prohlížeči. Viz \filepath{docs/BROWSER_LIFECYCLE.md} a~\filepath{docs/COMPATIBILITY_LIFECYCLE.md}.
 
 \subsection{Inicializace, směrování a~předání řadiči}
 \index{i00055@inicializace}
@@ -2200,11 +2210,11 @@ U~veřejného vykreslování náhledů prozkoumejte panely Prvky a~Síť. Respon
 
 \subsection{Čistota vydání}
 
-Kontrola vydání ověřuje konzistenci běhové verze, kompatibilitu seřazených migrací, hashe manifestu, dokumentaci, překlady, obnovu mezipaměti prohlížeče změnou verzování, testy, vyloučení z~balíčku a~bezpečnost uživatelských dat. Správce začíná z~čisté větve vydání, porovnává ji s~přesným tagem předchozího vydání, kontroluje každý mezilehlý commit a~cestu a~zaznamenává vše záměrně vyloučené. Běhová verze v~\filepath{app/bootstrap.php}, klíč a~tag \filepath{release-metadata.json}, nejnovější nadpis \filepath{PATCH_NOTES.md}, značky dokumentace, zamýšlený název archivu a~konečný tag Git se musejí shodovat.
+Úplný postup vydání určuje \filepath{RELEASE.md}. Porovnejte přesný předchozí stabilní tag, dokončete poznámky k~vydání a~trvalou dokumentaci a~slaďte všechny čtyři udržované příručky. Každé PDF sestavte víceprůchodovým postupem s~rejstříkem podle \filepath{docs/LATEX_BUILD.md}; ověřte úspěch kompilace, odkazy, položky rejstříku a~varování sazby. Vizuální kontrola PDF je vyhrazena výslovné žádosti nebo diagnostice konkrétního problému sazby; běžné úspěšné sestavení nevyžaduje další vizuální schvalování.
 
-Nové migrace se kontrolují v~pořadí časových razítek a~zkoušejí testy konzistence migrací a~staršího migračního nástroje. Správce znovu sestaví toto PDF úplnou posloupností \filepath{docs/LATEX_BUILD.md} a~prohlédne titulní stránku, přehled vydání, obsah, záložky, rejstřík a~změněné oddíly funkcí. Každý změněný soubor PHP projde \codeword{php -l}; změněný JavaScript a~testovací podklady Node projdou kontrolou syntaxe; cílené testy funkcí, konzistence překladů, pokrytí dokumentace, úplná sada PHP a~\codeword{git diff --check} musejí uspět.
+Po posledních úpravách vygenerujte manifest, proveďte předběžné kontroly vydání, manifestu a~bílých znaků, inicializujte kvalifikační otisk a~zmrazte vstupy. Spusťte právě jeden centrální audit \codeword{--profile=release}, přímo nebo prostřednictvím nakonfigurované izolované testovací instalace. Audit vlastní syntaxi, regrese, kontrakty, prohlížečové testy a~konzistenci vydání; nepřidávejte další ruční průchod stromem testů. Připojte jeho zprávu k~nezměněnému otisku a~oddělte mezery pokrytí od čekajících provozních kontrol.
 
-Teprve po konečné úpravě zdrojů a~dokumentace správce spustí \codeword{php scripts/generate_manifest.php} a~jeho režim \codeword{--check}. Pomocný nástroj nasazení poté vytvoří požadovanou místní složku nebo ZIP; pouze balí soubory a~nespouští PHP ani neopravuje zastaralý manifest. Prohlédněte seznam archivu a~ověřte přítomnost aktuálního PDF, poznámek k~vydání, metadat vydání, migrací a~\filepath{app/core-manifest.json}, zatímco chráněná konfigurace, mezipaměti, protokoly, dočasné soubory, místní nástroje, výstup nasazení a~uživatelská média následují pravidla balení. Po zabalení znovu zkontrolujte manifest, vytvořte commit vydání a~anotovaný tag \codeword{v_<version>} z~ověřeného stromu a~proveďte základní zkoušku upgradu aktualizátorem z~předchozího stabilního vydání. Chybějící místní závislosti se musejí hlásit s~přesnými blokovanými příkazy a~podrobnostmi prostředí místo označení vydání za úplně ověřené.
+Nasazovací složku nebo ZIP vytvořte pouze na výslovnou žádost. Nástroje vyžadují aktuální integritní data a~ověřují kanonický produkční seznam; požadovaný artefakt před použitím zkontrolujte. Vydání samotného CMS nevyžaduje nový instalátor WinApp. Commit, tag, zveřejnění, nahrání a~nasazení provádějte pouze s~výslovným oprávněním. Po zveřejnění ověřte objevení aktualizace, migrace, přihlášení, veřejné galerie, chráněná média a~integritu či stav na zveřejněné instalaci.
 
 \section{Jak zajistit svižný dojem galerie}
 \label{sec:performance}

@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.119
+**Current Version:** 0.120
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -15,6 +15,8 @@ The Admin gallery workspace shows hierarchy, direct/descendant image counts and 
 Card orientation means vertical/photo above text and horizontal/photo beside text. Migration `202610020001_gallery_description_layout_semantics.php` preserves existing appearance across database values, sidecars, Smart Galleries and Trash. Back up those stores together and use the normal migration runner. Search defaults on only without a saved preference and when its capability is available.
 
 Custom CSS remains installation-owned, is preserved by ordinary saves and is excluded from deployment. Updates use bounded hourly discovery; automatic OurAirports imports use weekly freshness and failure backoff. The Windows build writes installer and matching generated JSON together under `winapp/dist/<version>/`, keeping the companion version independent.
+
+Deployment uses the exact reviewed [production file inventory](docs/PRODUCTION_FILES.md). Both helpers require current integrity data and verify staged membership; local agent state, temporary notes and live runtime payloads cannot enter through a directory walk.
 
 With Flight Maps and Navigation Data enabled, route input and SimBrief draft requests check local navigation-data freshness in the background. Gallery saves remain available during imports; unresolved saved manual routes can gain coordinates while preserving existing points, SimBrief OFP geometry, and newer edits. Side-panel completion keeps the editor draft, drawer, and browser URL in place.
 
@@ -325,7 +327,7 @@ After installation, open **Admin > Settings > Website address** to correct the p
 **Minimum compatibility:**
 
 - PHP 8.1 or newer (PHP 8.1 is upstream end of life)
-- MySQL 5.7+ or MariaDB 10.2+
+- PDO MySQL connected to a MySQL or MariaDB server; project-tested database versions and legacy guidance are listed in [Database support](docs/DATABASE_SUPPORT.md)
 - PDO MySQL extension
 - ZipArchive extension
 - GD extension (for thumbnail generation)
@@ -341,6 +343,7 @@ After installation, open **Admin > Settings > Website address** to correct the p
 - Query-string routes work without Apache rewrites
 - If FTP upload limits file size, split the upload (e.g., `public/assets/` separately)
 - Contact host support if outbound downloads are blocked
+- Check the exact database series with the [database support policy](docs/DATABASE_SUPPORT.md); a newer server version is not automatically project-qualified
 
 ### Full Package Installation
 

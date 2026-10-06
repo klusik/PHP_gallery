@@ -25,6 +25,7 @@ import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 import {createLightboxPreloadLifecycle} from '../public/assets/gallery-modules/lightbox-preload-lifecycle.js';
+import {createLightboxResourceLifecycle} from '../public/assets/gallery-modules/lightbox-resource-lifecycle.js';
 
 /** Controlled idle/timeout scheduling, including callbacks dispatched before cancellation. */
 function schedulerFixture(idle = true) {
@@ -292,45 +293,71 @@ for (const renderer of ['progressive', 'responsive']) {
     test(`${renderer} card seam preserves cache hits, preview selection, cancellation, and mobile policy`, async () => {
         const owner = new AbortController();
         const scheduler = schedulerFixture();
-        const cache = new Map();
-        const calls = [];
+        const images = [];
+        const resources = createLightboxResourceLifecycle({
+            signal: owner.signal,
+            scheduler,
+            createImage: () => {
+                const image = {
+                    naturalWidth: 1200,
+                    naturalHeight: 800,
+                    onload: null,
+                    onerror: null,
+                    source: '',
+                    removeAttribute: (name) => { if (name === 'src') image.source = ''; },
+                    /**
+                     * Remember the authorized URL assigned by the resource owner.
+                     * @param {string} value URL for the detached fixture image.
+                     * @return {void} Updates the fixture source without performing network work.
+                     */
+                    set src(value) { this.source = value; },
+                    /**
+                     * Expose the source currently held by the detached fixture image.
+                     * @return {string} Last assigned URL or empty source after cancellation.
+                     */
+                    get src() { return this.source; },
+                    finish: () => image.onload?.(),
+                };
+                images.push(image);
+                return image;
+            },
+            decodeImage: () => Promise.resolve(),
+        });
         const card = {dataset: {previewSrc: '/authorized/preview', fullSrc: '/authorized/original'}};
         const context = vm.createContext({
             createLightboxPreloadLifecycle, controller: owner, window: scheduler,
             navigator: {connection: {effectiveType: '4g', saveData: false}}, isMobileTouchDevice: false,
             document: {body: {dataset: {publicThumbnailRenderingMode: renderer}}},
-            decodedLightboxImages: cache, preloadedSources: new Set(), galleryDevModeEnabled: false,
+            lightboxResources: resources,
+            preloadedSources: new Set(),
+            galleryDevModeEnabled: false,
+            galleryDevModeState: {cacheHits: 0, cacheMisses: 0, preloadStarted: 0},
             devMarkSource() {}, devLog() {}, shortenDevUrl: src => src,
-            preloadDecodedLightboxImage(src, options = {}) {
-                calls.push({src, signal: options.signal});
-                if (!cache.has(src)) cache.set(src, Promise.resolve({}));
-                return cache.get(src);
-            },
             card,
         });
         const creation = viewerSource.match(/^    const lightboxPreloads = createLightboxPreloadLifecycle\(\{[^]*?^    \}\);/m);
         assert.ok(creation, 'viewer must create the production lifecycle owner');
-        const functions = ['queueDecodedLightboxPreload', 'resetLightboxPreloadQueue', 'preloadCardLightboxImages',
+        const functions = ['preloadDecodedLightboxImage', 'queueDecodedLightboxPreload', 'resetLightboxPreloadQueue', 'preloadCardLightboxImages',
             'lightboxPreloadConcurrency', 'currentLightboxConnection', 'shouldLimitLightboxPreloading'];
         vm.runInContext(functions.map(productionFunction).join('\n') + '\n' + creation[0]
             + '\nglobalThis.queue = lightboxPreloads;', context);
         vm.runInContext("preloadCardLightboxImages(card, false, {queued: true});", context);
-        assert.equal(calls.length, 0);
+        assert.equal(images.length, 0);
         scheduler.run();
         await settle();
-        assert.deepEqual(calls.map(call => call.src), ['/authorized/preview']);
+        assert.deepEqual(images.map(image => image.src), ['/authorized/preview']);
         vm.runInContext("preloadCardLightboxImages(card, false, {queued: true});", context);
-        assert.equal(calls.length, 2, 'cached preview keeps its immediate reuse path');
+        assert.equal(images.length, 1, 'cached preview keeps its immediate reuse path without another detached load');
         assert.equal(scheduler.pending.size, 0);
         vm.runInContext("preloadCardLightboxImages({dataset: {fullSrc: '/authorized/other-original'}}, false, {queued: true});", context);
-        assert.equal(calls.length, 2, 'hidden metadata cards must not fall back to neighboring originals');
+        assert.equal(images.length, 1, 'hidden metadata cards must not fall back to neighboring originals');
         vm.runInContext('resetLightboxPreloadQueue({abortActive: false});', context);
-        assert.equal(calls[0].signal.aborted, false);
+        assert.equal(images[0].source, '/authorized/preview', 'queue-only reset preserves active reusable preview work');
         assert.equal(context.preloadedSources.size, 0);
         vm.runInContext('preloadCardLightboxImages(card, false);', context);
-        assert.equal(calls[2].signal, context.queue.signal, 'immediate warming shares cancellation');
+        assert.equal(images.length, 1, 'immediate warming reuses the actual owner cache entry');
         vm.runInContext('resetLightboxPreloadQueue();', context);
-        assert.equal(calls[2].signal.aborted, true);
+        assert.equal(images[0].source, '', 'hard queue reset cancels its resource-owned detached preview');
         assert.equal(vm.runInContext('lightboxPreloadConcurrency()', context), 2);
         for (const settings of ["isMobileTouchDevice = true;", "isMobileTouchDevice = false; navigator.connection.effectiveType = '3g';",
             "navigator.connection.effectiveType = '4g'; navigator.connection.saveData = true;"]) {
@@ -338,6 +365,7 @@ for (const renderer of ['progressive', 'responsive']) {
             assert.equal(vm.runInContext('lightboxPreloadConcurrency()', context), 1);
         }
         owner.abort();
+        resources.dispose();
         assert.equal(context.queue.snapshot().disposed, true);
         assert.equal(getEventListeners(owner.signal, 'abort').length, 0);
     });

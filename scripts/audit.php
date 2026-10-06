@@ -65,13 +65,12 @@ use const PhpGallery\Audit\STATUS_FAIL;
 use const PhpGallery\Audit\STATUS_PASS;
 use const PhpGallery\Audit\STATUS_SKIP;
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
-    exit;
-}
+require_once __DIR__ . '/cli_guard.php';
+gallery_require_cli_sapi();
 
 require_once __DIR__ . '/audit_lib.php';
 require_once __DIR__ . '/audit_route_performance.php';
+require_once __DIR__ . '/source_contracts/debt_ratchet.php';
 
 $registryPath = __DIR__ . '/audit_registry.php';
 if (!is_file($registryPath)) {
@@ -761,14 +760,14 @@ function audit_run_mvc_boundaries(): array
 }
 
 /**
- * Persist complete documentation/policy discovery while reporting remaining debt explicitly.
+ * Persist complete discovery and enforce reviewed category budgets on reliable source debt.
  *
- * Successful discovery is not documentation compliance. Declaration/header
- * enforcement lives in registered regression contracts; these inventories keep
- * legacy findings visible without treating thousands of heuristic candidates as
- * reviewed violations or quietly adding a baseline.
+ * Each existing analyzer runs once. Its decoded complete report feeds the pure
+ * ratchet; historical debt stays visible, while reliable category growth fails.
+ * The three explicitly noisy policy heuristics remain advisory. Missing history,
+ * malformed reports or baseline/classifier drift block coverage without resetting budgets.
  *
- * @return array<string,mixed> Normalized task with explicit advisory counts and artifact paths.
+ * @return array<string,mixed> Normalized debt gate with historical counts, growth evidence and artifact paths.
  */
 function audit_run_source_contract_inventory(): array
 {
@@ -778,6 +777,7 @@ function audit_run_source_contract_inventory(): array
     $artifacts = [];
     $problems = [];
     $status = STATUS_PASS;
+    $reports = [];
     foreach (['documentation' => 'check_source_documentation.php', 'policy' => 'check_policy_constants.php'] as $kind => $script) {
         $process = run_process([PHP_BINARY, $root . '/scripts/' . $script, '--json'], $root, 90);
         $report = json_decode((string) $process['stdout'], true);
@@ -792,10 +792,44 @@ function audit_run_source_contract_inventory(): array
         $artifacts[$kind . '_json'] = relative_path($path, $root);
         $counts[$kind . '_findings'] = (int) $report['summary']['finding_count'];
         $counts[$kind . '_files'] = (int) $report['summary']['source_files'];
+        $reports[$kind] = $report;
+    }
+    if (count($reports) === 2) {
+        try {
+            $baselineText = @file_get_contents($root . '/scripts/source_contract_debt_baseline.json');
+            if (!is_string($baselineText)) {
+                throw new RuntimeException('Reviewed source debt baseline is missing or unreadable.');
+            }
+            $baseline = json_decode($baselineText, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($baseline)) {
+                throw new RuntimeException('Reviewed source debt baseline must be an object.');
+            }
+            $evaluation = PhpGallery\SourceDebt\evaluate($baseline, $reports);
+            $ratchetPath = $runDirectory . '/source-debt-ratchet.json';
+            write_text_file($ratchetPath, json_encode([
+                'schema_version' => 1,
+                'classifier_sha256' => $baseline['classifier_sha256'],
+                'provenance' => $baseline['provenance'],
+                'evaluation' => $evaluation,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n");
+            $artifacts['debt_ratchet_json'] = relative_path($ratchetPath, $root);
+            $counts['debt_categories'] = count($evaluation['counts']);
+            $counts['debt_growth_categories'] = count($evaluation['violations']);
+            $counts['advisory_categories'] = count($evaluation['advisory']);
+            foreach ($evaluation['violations'] as $category => $violation) {
+                $problems[] = $category . ': ' . $violation['current'] . ' findings exceed cap ' . $violation['cap'] . '.';
+            }
+            if ($evaluation['status'] !== STATUS_PASS) {
+                $status = STATUS_FAIL;
+            }
+        } catch (Throwable $error) {
+            $status = STATUS_BLOCKED;
+            $problems[] = 'Source debt coverage blocked: ' . $error->getMessage();
+        }
     }
     $summary = $problems !== [] ? implode(' ', $problems)
         : $counts['documentation_findings'] . ' documentation / ' . $counts['policy_findings']
-            . ' policy findings; inventory only, remediation remains';
+            . ' policy findings; ' . $counts['debt_growth_categories'] . ' reliable categories grew; noisy policy heuristics advisory';
     return task_result('source-contract-inventory', 'Source contract inventory',
         $status, microtime(true) - $started,
         $counts, $summary, null, ['problems' => $problems, 'artifacts' => $artifacts]);

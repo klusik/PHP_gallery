@@ -91,6 +91,10 @@ $registry = [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'deploy_app_packaging_test.php' => [
+            'timeout' => 600,
+            'reason' => 'Real Bash and PowerShell folder/ZIP proofs copy the complete production and source-review inventory into an owned dirty fixture.',
+        ],
         'cooperative_galleries_foundations_test.php' => [
             'extensions' => ['openssl'],
             'missing_status' => 'BLOCKED',
@@ -298,12 +302,18 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'lightbox_race_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'lightbox_dev_dashboard_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,
         ],
         'lightbox_map_navigation_test.mjs' => [],
         'lightbox_preload_lifecycle_test.mjs' => [],
+        'lightbox_navigation_lifecycle_test.mjs' => [],
+        'lightbox_resource_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_search_progressive_test.mjs' => [],

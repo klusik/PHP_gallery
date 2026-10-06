@@ -27,6 +27,11 @@ function cms_runtime_kernel(): Kernel
         return $kernel;
     }
     $plans = require __DIR__ . '/modules.php';
+    if (!is_array($plans) || ($plans['schema_version'] ?? null) !== 2
+        || !is_array($plans['route_modules'] ?? null) || !is_array($plans['modules'] ?? null)
+        || !is_array($plans['file_order'] ?? null) || !array_is_list($plans['file_order'])) {
+        throw new \RuntimeException('Runtime module metadata is malformed or unsupported.');
+    }
     $definitions = [];
     foreach (cms_route_handlers() as $page => $handler) {
         if (!isset($plans['route_modules'][$page])) {
@@ -36,6 +41,6 @@ function cms_runtime_kernel(): Kernel
     }
     $fallback = new RouteDefinition('not_found', '\\Gallery\\Controllers\\cms_not_found', [$plans['route_modules']['not_found']]);
     $registry = new RouteRegistry($definitions, $fallback);
-    $kernel = new Kernel(new Router($registry), new ModuleLoader(dirname(__DIR__, 2), $plans['modules']));
+    $kernel = new Kernel(new Router($registry), new ModuleLoader(dirname(__DIR__, 2), $plans['modules'], $plans['file_order']));
     return $kernel;
 }
