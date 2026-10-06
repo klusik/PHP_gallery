@@ -218,7 +218,10 @@ namespace {
         }
     }
 
-    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gallery-thumbnail-identity-' . bin2hex(random_bytes(8));
+    // Match the production containment guard even when macOS exposes /var through a symlink.
+    $temporaryRoot = realpath(sys_get_temp_dir());
+    assert_identity($temporaryRoot !== false, 'The temporary fixture root must resolve to an existing directory.');
+    $root = $temporaryRoot . DIRECTORY_SEPARATOR . 'gallery-thumbnail-identity-' . bin2hex(random_bytes(8));
     $GLOBALS['identity_fixture_root'] = $root;
     mkdir($root . DIRECTORY_SEPARATOR . 'thumbs', 0775, true);
     $gallery = ['id' => 1, 'folder_path' => 'fixture'];

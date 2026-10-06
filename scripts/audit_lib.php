@@ -444,6 +444,24 @@ function run_process(array $command, string $cwd, int $timeoutSeconds = 30): arr
 }
 
 /**
+ * Check each source file in an isolated child within the shared worker limit.
+ *
+ * @param list<string> $files Ordered absolute source paths, passed as literal arguments.
+ * @param list<string> $commandPrefix Syntax checker executable and flags.
+ * @param string $cwd Child working directory.
+ * @param int $workers Maximum concurrent children from one through eight.
+ * @param int $timeoutSeconds Independent deadline in seconds for each started checker. Rationale: bound syntax-only children to the existing 15-second lint budget.
+ * @return list<array<string,mixed>> Captured checker outcomes in source-path order.
+ */
+function run_file_checks(array $files, array $commandPrefix, string $cwd, int $workers, int $timeoutSeconds): array
+{
+    $jobs = array_map(static fn(string $file): array => [
+        'command' => array_merge($commandPrefix, [$file]), 'timeout' => $timeoutSeconds,
+    ], $files);
+    return run_process_pool($jobs, $cwd, $workers);
+}
+
+/**
  * Return deterministic files with one of the requested extensions.
  *
  * @param string $rootPath Repository root.

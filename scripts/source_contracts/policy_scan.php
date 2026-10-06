@@ -193,7 +193,8 @@ function policy_site_snapshots(string $source, string $path): array
         }
     }
     $pairs = delimiter_pairs($tokens);
-    $declarations = declaration_snapshots($source, $extension);
+    // Policy fingerprints cover the sites below, not every enclosing function body.
+    $declarations = declaration_snapshots($source, $extension, false);
     $sites = [];
     $definitions = [];
     $review = [];

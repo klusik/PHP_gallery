@@ -180,6 +180,24 @@ not a source parser or a commitment to remove anything on a calendar date.
   compatibility by executing PHP supplied in an incoming archive or granting
   companions authority over installation-owned state.
 
+### UPD-3 — Windows checkout line endings in production inventory verification
+
+- **Reason / protected scenario:** Git may convert the checked-in JSON inventory
+  to CRLF on Windows. Comparing those bytes with generated LF text must not
+  reject an otherwise identical reviewed production list.
+- **Era / owner:** The correction is evidenced by commit `d4cbe89` and shipped
+  in CMS 0.121.2. Owner: `scripts/generate_production_files.php` through
+  `production_files_inventory_content_matches()`.
+- **Evidence / tests:** `tests/production_file_policy_test.php` accepts CRLF
+  conversion and still rejects actual content changes. The generator normalizes
+  only CRLF to LF; membership, path safety and manifest hashes keep their
+  existing strict checks.
+- **Usage:** Windows checkout adoption is unknown.
+- **Permanent-support rationale:** LF and CRLF are supported Git checkout
+  representations. Retire normalization only if support for CRLF checkouts is
+  explicitly ended and supported Windows build/packaging environments prove
+  canonical LF handling. This is not an archive-integrity normalization rule.
+
 ## Translations and language preference
 
 ### I18N-1 — PHP catalogs when a language JSON pack is absent

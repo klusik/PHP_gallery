@@ -14,6 +14,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/release_file_policy.php';
+require_once dirname(__DIR__) . '/scripts/generate_production_files.php';
 
 use function Gallery\Core\release_file_policy_is_integrity_path;
 use function Gallery\Core\release_file_policy_is_safe_relative_path;
@@ -96,6 +97,16 @@ $fixture = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-production-po
 $source = $fixture . DIRECTORY_SEPARATOR . 'source';
 $stage = $fixture . DIRECTORY_SEPARATOR . 'stage';
 try {
+    $generatedInventory = "{\n    \"production_files\": [\n        \"app/example.php\"\n    ]\n}\n";
+    production_file_policy_assert(
+        production_files_inventory_content_matches(str_replace("\n", "\r\n", $generatedInventory), $generatedInventory),
+        'Windows CRLF checkout changed otherwise canonical production inventory data.'
+    );
+    production_file_policy_assert(
+        !production_files_inventory_content_matches(str_replace('app/example.php', 'app/other.php', $generatedInventory), $generatedInventory),
+        'Production inventory comparison accepted changed membership after EOL normalization.'
+    );
+
     $production = [
         'app/.htaccess',
         'app/example.php',

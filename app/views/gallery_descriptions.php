@@ -188,6 +188,7 @@ function view_gallery_description_link_icon_id(string $url): ?string
  * Render the optional local icon placed before a known external-link label.
  *
  * @param string $url Normalized HTTP(S) URL.
+ * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
  * @return string Safe inline SVG markup, or an empty string for unknown hosts.
  */
 function view_gallery_description_link_icon_html(string $url, array $linkModels = []): string
@@ -211,6 +212,7 @@ function view_gallery_description_link_icon_html(string $url, array $linkModels 
  * @param string $url Raw URL text from description markup.
  * @param string $label Already escaped/rendered link label.
  * @param string $fallback Original escaped markup returned for unsafe URLs.
+ * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
  * @return string Safe anchor HTML or the unchanged fallback markup.
  */
 function view_gallery_description_link_html(string $url, string $label, string $fallback, array $linkModels = []): string
@@ -224,12 +226,59 @@ function view_gallery_description_link_html(string $url, string $label, string $
 }
 
 /**
- * Handle view gallery description markdown html.
+ * Protect one rendered fragment while the surrounding Markdown text is parsed.
  *
- * Used by server-rendered view helpers.
+ * @param string $value Safe HTML fragment to restore after text formatting.
+ * @param array<string,string> $tokens Token map mutated by this renderer.
+ * @param string $tokenPrefix Unique prefix for this description render.
+ * @return string Opaque token that marks the protected fragment.
+ */
+function view_gallery_description_register_token(string $value, array &$tokens, string $tokenPrefix): string
+{
+    $token = $tokenPrefix . count($tokens) . "\x1E";
+    $tokens[$token] = $value;
+    return $token;
+}
+
+/**
+ * Restore protected fragments nested inside a rendered link label or fallback.
+ *
+ * @param string $value Rendered text that may contain description tokens.
+ * @param array<string,string> $tokens Token map for the current description.
+ * @param string $tokenPrefix Unique prefix for this description render.
+ * @return string Text with known tokens replaced by their safe HTML fragments.
+ */
+function view_gallery_description_resolve_tokens(string $value, array $tokens, string $tokenPrefix): string
+{
+    return preg_replace_callback('/' . preg_quote($tokenPrefix, '/') . '\d+\x1E/u', static function (array $matches) use ($tokens): string {
+        return $tokens[(string) $matches[0]] ?? $matches[0];
+    }, $value) ?? $value;
+}
+
+/**
+ * Apply the supported emphasis and inline-code formatting to already escaped text.
+ *
+ * @param string $value Escaped text; caller protects link targets and code spans first.
+ * @return string Escaped text with supported inline formatting markup.
+ */
+function view_gallery_description_format_inline(string $value): string
+{
+    $value = preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $value) ?? $value;
+    $value = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $value) ?? $value;
+    $value = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $value) ?? $value;
+    $value = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $value) ?? $value;
+    return preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $value) ?? $value;
+}
+
+/**
+ * Render a gallery description as safe HTML with the supported Markdown subset.
+ *
+ * Link targets and code literals are protected before text emphasis is parsed,
+ * so punctuation and underscores in URLs cannot change anchor destinations.
  *
  * @param string $markdown Markdown value.
- * @return string Text result for the caller.
+ * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
+ * @return string Rendered safe description HTML.
  */
 function view_gallery_description_markdown_html(string $markdown, array $linkModels = []): string
 {
@@ -239,27 +288,38 @@ function view_gallery_description_markdown_html(string $markdown, array $linkMod
     }
     $paragraphs = preg_split('/\n{2,}/u', $normalized) ?: [$normalized];
     $html = [];
+    $tokenPrefix = "\x1DGALLERYDESCRIPTION" . hash('sha256', $normalized) . 'TOKEN';
+    $tokens = [];
+
     foreach ($paragraphs as $paragraph) {
         $paragraph = trim((string) $paragraph);
         if ($paragraph === '') {
             continue;
         }
         $escaped = e($paragraph);
-        $escaped = preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu', static function (array $matches) use ($linkModels): string {
-            return view_gallery_description_link_html((string) $matches[2], (string) $matches[3], (string) $matches[0], $linkModels);
+        $escaped = preg_replace_callback('/`([^`\n]+)`/u', static function (array $matches) use (&$tokens, $tokenPrefix): string {
+            return view_gallery_description_register_token('<code>' . $matches[1] . '</code>', $tokens, $tokenPrefix);
         }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu', static function (array $matches) use ($linkModels): string {
+        $escaped = preg_replace_callback('/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
+            $label = view_gallery_description_resolve_tokens(view_gallery_description_format_inline((string) $matches[3]), $tokens, $tokenPrefix);
+            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
+            $markup = view_gallery_description_link_html((string) $matches[2], $label, $fallback, $linkModels);
+            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
+        }, $escaped) ?? $escaped;
+        $escaped = preg_replace_callback('/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
             $label = trim((string) $matches[2]);
-            return view_gallery_description_link_html($label, $label, (string) $matches[0], $linkModels);
+            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
+            $markup = view_gallery_description_link_html($label, $label, $fallback, $linkModels);
+            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
         }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>")]+)\)/iu', static function (array $matches) use ($linkModels): string {
-            return view_gallery_description_link_html((string) $matches[2], (string) $matches[1], (string) $matches[0], $linkModels);
+        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>\")]+)\)/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
+            $label = view_gallery_description_resolve_tokens(view_gallery_description_format_inline((string) $matches[1]), $tokens, $tokenPrefix);
+            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
+            $markup = view_gallery_description_link_html((string) $matches[2], $label, $fallback, $linkModels);
+            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
         }, $escaped) ?? $escaped;
+        $escaped = view_gallery_description_format_inline($escaped);
+        $escaped = strtr($escaped, $tokens);
         $html[] = '<p>' . str_replace("\n", '<br>', $escaped) . '</p>';
     }
     return implode('', $html);

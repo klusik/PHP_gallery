@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.121.1}
+\newcommand{\version}{0.121.2}
 \newcommand{\manualdate}{6~oktober~2026}
 
 \hypersetup{
@@ -988,6 +988,8 @@ En avstängd funktion döljs från vanlig navigering och dess skyddade rutter ne
 Galleriadministration omfattar samlingens hela liv: skapande, upptäckt, namngivning, beskrivning, datum, taggar, integritet, lösenord, profilering, omslag, layout, ordning, flyttning och slutlig radering. Ett undergalleri kan ärva användbara val från sitt övergalleri. Till exempel kan varje galleri i en privat familjegren följa övergalleriets skydd, och ett enskilt undergalleri kan använda egna presentationsval där redigeraren erbjuder en åsidosättning. Skärmen för gallerimassåtgärder ger motsvarande flergalleriåtgärder när samma ändring passar flera samlingar samtidigt.
 
 Galleribeskrivningar kan visa säkra externa länkar skrivna som vanliga Markdown-länkar, \codeword{[link=URL]label[/link]}, \codeword{[url=URL]label[/url]} eller kortformer där den synliga texten också är målet. Endast HTTP- och HTTPS-mål blir länkar; andra scheman förblir overksam text. Kända tjänster använder medföljande lokala varumärkessymboler. För andra offentliga värdar kan sparande av galleriet hämta en liten validerad favicon till den lokala gallericachen. Hämtningen dedupliceras efter värdnamn, begränsas av storlek, tid, omdirigeringar och återförsök, avvisar privata eller reserverade nätverksmål och sker aldrig medan en besökare visar den offentliga beskrivningen. Om cachen eller dess databastabell är otillgänglig förblir länken användbar utan ikon.
+
+Länkmål behåller understreck och frågeparametrar. Formaterade etiketter och bokstavlig inline-kod bevaras, och länkar stannar i det omgivande stycket.
 
 När lagring för rena offentliga sökvägar är tillgänglig bygger \ui{Generera om rena offentliga sökvägar} om lagrade galleri- och bildsökvägar från aktuell hierarki och rapporterar separata antal för gallerier och bilder. Omordning och vissa sparningar i redigeraren uppdaterar också sökvägar när ändringarna kräver det. Underhållsåtgärden är användbar efter hierarkireparation, migrering eller äldre importer; den aktiverar inte URL-omskrivning av sig själv, så dirigering med frågesträngar förblir reservvägen när omskrivning är avstängd eller inte stöds av värden.
 \subsection{Metadataorganiserare}
@@ -2326,6 +2328,8 @@ Innan en återställd installation öppnas isolerar du e-post, schemalagda jobb,
 Den centrala ingången \filepath{scripts/audit.php} erbjuder tre profiler. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, den rådgivande inventeringen, WinApp-tester, långsamma Node-testfall och Chromium. Använd \codeword{--profile=full} för fullständig överlämningskontroll och \codeword{--profile=release} för utgåveförberedelse; ett snabbt PASS ersätter ingen av dessa profiler.
 
 PHP-sviter använder fyra arbetsprocesser som standard. Sätt \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} till ett heltal från 1 till 8; ogiltiga värden blockerar körningen. Registrerade exklusiva tester körs ensamma efter att aktiva processer har avslutats. Varje underprocess behåller egen diagnostik och en tidsgräns från sin verkliga start; resultaten behåller stabil indataordning. Varje profil mäter också inkluderingsfaser i nya processer före \codeword{cms\_run()}: den tidiga körmiljön tillåter en PHP-fil och 16~MiB toppminne, programbootstrap 40 filer och 16~MiB. Förfluten tid är endast en observation; sonderna utför inget databas-, sessions- eller ruttarbete.
+
+Syntaxkontroller för PHP och JavaScript samt oberoende Node/Chromium-fixturer använder samma processgräns. Parallella PHP-tester körs före exklusiva fixturer, så att poolen töms endast en gång; rapporterna behåller sin ursprungliga ordning. Syntaxkontroller kör aldrig källkoden. Fullständig databas- och konkurrenskvalificering beror fortfarande på fixturens kostnad och datorns prestanda. Kontroller av produktionslistan accepterar LF- och CRLF-radslut från Git-utcheckning, men avvisar fortfarande ändringar i innehåll eller filmedlemskap. MVC-kontrollen fastställer namnrymds- och importkontext en gång per fil och behåller alias- och PDO-kontroller utan att läsa om föregående token för varje anrop. Den fullständiga kompilator- och laddningsmatrisen för varje modul med sammansatt och ursprunglig laddare körs i profilerna full och release. Snabb återkoppling behåller kontrakt för beroenden, graf, kärna och bootstrap utan att starta varje modul två gånger.
 
 Samma prestandasvit mäter nio riktiga rutter endast med en egen isolerad databas-/HTTP-testinstallation: robots, startsida, galleri, miniatyr, media, inloggad administration och telemetri samt båda anonyma administrationsavvisningarna. Ruttgränserna är 160--300 inkluderade filer och 32--48~MiB toppminne; verkliga produktsvar och avvisningar kontrolleras också. Utan installationen hoppas ruttmätningarna uttryckligen över. Körtid förblir en observation.
 
