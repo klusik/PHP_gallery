@@ -74,6 +74,7 @@ use function Gallery\Views\view_render_picture_game_unavailable;
 
 /**
  * Public picture comparison game for opted-in gallery branches.
+ * @return void Renders authorized localized choices or handles a vote.
  */
 function cms_picture_game(): void
 {
@@ -127,6 +128,19 @@ function cms_picture_game(): void
     $pair = next_picture_game_pair($gallery);
     // Variable $topImages stores this steps working value.
     $topImages = picture_game_top_images($gallery);
+    $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
+    $topImages = \Gallery\Services\content_localize_entities('image', $topImages);
+    if ($pair) {
+        [$pair['left'], $pair['right']] = \Gallery\Services\content_localize_entities('image', [$pair['left'], $pair['right']]);
+        $sourceGalleries = [];
+        foreach ([$pair['left'], $pair['right']] as $image) {
+            $sourceId = (int) $image['gallery_id'];
+            $sourceGalleries[$sourceId] = find_gallery($sourceId) ?: $gallery;
+        }
+        $sourceTitles = array_column(\Gallery\Services\content_localize_entities('gallery', array_values($sourceGalleries)), 'title', 'id');
+        $pair['left']['gallery_title'] = $sourceTitles[(int) $pair['left']['gallery_id']] ?? '';
+        $pair['right']['gallery_title'] = $sourceTitles[(int) $pair['right']['gallery_id']] ?? '';
+    }
 
     ob_start();
     render_breadcrumbs($gallery);

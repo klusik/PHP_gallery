@@ -132,8 +132,8 @@ function theme_favorite_gallery_ids_encode(array $ids): string
 /**
  * Resolve gallery rows for selected IDs while preserving enough data for links.
  *
- * @param array $ids Ids value.
- * @return array<int array<string, mixed>> Rows keyed by gallery ID.
+ * @param array<int,int|string> $ids Saved gallery IDs or the main-page shortcut token.
+ * @return array<int,array<string,mixed>> Source rows keyed by gallery ID.
  */
 function theme_favorite_gallery_rows_by_ids(array $ids): array
 {
@@ -151,7 +151,8 @@ function theme_favorite_gallery_rows_by_ids(array $ids): array
         return \Gallery\Models\favorite_gallery_model_rows_by_ids(
             $ids,
             db_column_exists('galleries', 'url_path'),
-            gallery_access_schema_ready()
+            gallery_access_schema_ready(),
+            content_localization_enabled() && content_localization_schema_ready('gallery')
         );
     } catch (PDOException) {
         return [];
@@ -344,5 +345,10 @@ function theme_favorite_gallery_navigation_items(bool $publicOnly): array
     if ($ids === []) {
         return [];
     }
-    return theme_favorite_gallery_navigation_items_from_rows($ids, theme_favorite_gallery_rows_by_ids($ids), $publicOnly);
+    $rows = theme_favorite_gallery_rows_by_ids($ids);
+    // Apply presentation overlays after the existing listing policy, without
+    // changing the raw rows used by favorite selection and settings editors.
+    $rows = array_filter($rows, static fn (array $gallery): bool => !$publicOnly || gallery_is_public_listed($gallery));
+    $rows = content_localize_entities('gallery', array_values($rows));
+    return theme_favorite_gallery_navigation_items_from_rows($ids, $rows, $publicOnly);
 }

@@ -44,6 +44,7 @@ use Throwable;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Services\app_settings_reset_request_cache;
 use function Gallery\Models\gallery_mutation_model_delete_dependency;
 use function Gallery\Models\gallery_mutation_model_delete_images;
 use function Gallery\Models\gallery_mutation_model_delete_subtree;
@@ -252,7 +253,9 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
     );
 
-    return gallery_mutation_model_delete_subtree($galleryIds, gallery_mutation_delete_dependency_availability());
+    $deletedRows = gallery_mutation_model_delete_subtree($galleryIds, gallery_mutation_delete_dependency_availability());
+    app_settings_reset_request_cache();
+    return $deletedRows;
 }
 
 /**

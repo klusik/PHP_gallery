@@ -86,6 +86,8 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_editor_set_cover_image;
 use function Gallery\Services\gallery_editor_unique_slug;
 use function Gallery\Services\gallery_editor_update_fields;
+use function Gallery\Services\gallery_breadcrumb_style_save;
+use function Gallery\Services\gallery_breadcrumb_style_validate;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
@@ -766,6 +768,9 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
+    if (array_key_exists('gallery_breadcrumb_style', $input)) {
+        $input['gallery_breadcrumb_style'] = gallery_breadcrumb_style_validate($input['gallery_breadcrumb_style']);
+    }
     $lease = gallery_edit_begin($gallery, $input['edit_revision'] ?? null, $completeForm);
     try {
         // Ownership spans folder/assets, dependent writes and the final sidecar.
@@ -787,6 +792,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
  */
 function admin_save_gallery_owned_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm): array
 {
+    $submittedBreadcrumbStyle = array_key_exists('gallery_breadcrumb_style', $input)
+        ? (string) $input['gallery_breadcrumb_style']
+        : null;
     $smartGalleriesEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
         || feature_capability_effective_enabled('smart_galleries');
     $smartGalleryChildrenInput = (array) ($input['smart_gallery_children'] ?? []);
@@ -1190,6 +1198,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
         $fields['background_source'] = $backgroundSource;
     }
     gallery_editor_update_fields($galleryId, $fields);
+    if ($submittedBreadcrumbStyle !== null) {
+        gallery_breadcrumb_style_save($galleryId, $submittedBreadcrumbStyle);
+    }
     if ($shouldUpdateLocalization) {
         content_save_localizations('gallery', $galleryId, $input['content_language'] ?? null, $input['translations'] ?? []);
     }

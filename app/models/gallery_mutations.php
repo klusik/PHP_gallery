@@ -228,6 +228,12 @@ function gallery_mutation_model_delete_subtree_in_transaction(array $galleryIds,
         gallery_mutation_model_apply_delete_dependency($dependency, $galleryIds, $availableDependencies);
     }
 
+    $breadcrumbSettingKeys = array_map(
+        static fn (int $galleryId): string => 'gallery_breadcrumb_style.' . $galleryId,
+        $galleryIds
+    );
+    app_settings_model_delete($breadcrumbSettingKeys);
+
     return gallery_mutation_model_delete_fixed_rows('galleries.id', $galleryIds);
 }
 

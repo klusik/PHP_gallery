@@ -41,8 +41,12 @@ try {
     $rows = $pdo->query("SELECT id, title, folder_path, visibility FROM galleries WHERE folder_path LIKE 'browser-workflow%'")->fetchAll(PDO::FETCH_ASSOC);
     check(count($rows) === 1 && $rows[0]['title'] === 'Browser edited 2', 'Browser duplicate suppression or edit persistence failed.');
     check($rows[0]['visibility'] === 'public', 'Browser visibility persistence failed.');
+    $breadcrumbSetting = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+    $breadcrumbSetting->execute(['gallery_breadcrumb_style.' . (int) $rows[0]['id']]);
+    check($breadcrumbSetting->fetchColumn() === 'gradient', 'Browser-selected gallery breadcrumb style was not persisted through the side panel.');
     $sidecar = json_decode((string) file_get_contents($directory . '/galleries/' . $rows[0]['folder_path'] . '/gallery.json'), true);
     check(($sidecar['title'] ?? '') === 'Browser edited 2', 'Browser sidecar mismatch.');
+    check(($sidecar['breadcrumb_style'] ?? '') === 'gradient', 'Browser-selected breadcrumb style was not preserved in the gallery sidecar.');
     $statement = $pdo->prepare('SELECT relative_path, width, height FROM images WHERE gallery_id = ?');
     $statement->execute([$rows[0]['id']]);
     $images = $statement->fetchAll(PDO::FETCH_ASSOC);

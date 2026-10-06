@@ -178,6 +178,7 @@ function view_admin_stylesheet_files(): array
         'assets/styles/admin-gallery-access.css',
         'assets/styles/admin-gallery-display.css',
         'assets/styles/admin-gallery-media.css',
+        'assets/styles/breadcrumbs.css',
     ];
 }
 
@@ -198,6 +199,7 @@ function view_public_stylesheet_files(): array
         'assets/styles/public-shared.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
+        'assets/styles/breadcrumbs.css',
     ];
 }
 

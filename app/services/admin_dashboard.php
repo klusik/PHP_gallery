@@ -118,6 +118,7 @@ function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool
         'public_path' => $publicPathReady,
         'cover_asset' => $coverAssetReady,
         'edit_revision' => $editRevisionReady,
+        'content_localization' => content_localization_enabled() && content_localization_schema_ready('gallery'),
     ]);
 }
 
@@ -237,6 +238,12 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         admin_render_profile_set_counter('gallery_rows', count($galleries));
         // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
         $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
+        $galleries = content_localize_entities('gallery', $galleries);
+        $localizedTitles = array_column($galleries, 'title', 'id');
+        foreach ($galleries as &$gallery) {
+            $gallery['parent_title'] = $localizedTitles[(int) ($gallery['parent_id'] ?? 0)] ?? $gallery['parent_title'] ?? '';
+        }
+        unset($gallery);
         admin_render_profile_set_counter('ordered_gallery_rows', count($galleries));
         // Variable $collapsedIds stores this steps working value.
         $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn (): array => array_flip(collapsed_gallery_ids()));

@@ -2,9 +2,10 @@
     "schema_version": 1,
     "scope": "runtime-plan-route-ratchet",
     "captured_at": "2026-10-05T20:49:17+00:00",
-    "source": "Post-composition schema-2 plan structure; live counters from qualified pre-issue-79 disposable MySQL routes.",
+    "source": "Issue 93 shared authored-localization ownership review; route counters retained from qualified pre-issue-79 disposable MySQL routes.",
+    "plan_reviewed_at": "2026-10-06",
     "php_version": "8.3.30",
-    "generated_plan_sha256": "02752e64a7d2e34023da596a4aeca21e43cfc61fd78f6a9cbcc07c2b8f99e38a",
+    "generated_plan_sha256": "35f18f239371e4f68bb7578097224095c2e70390b6f290cf5d0a82f8150d6e02",
     "allowances": {
         "plan_and_included_files": "4 files or 5 percent, whichever is larger",
         "transitive_module_count": "2 modules above the reviewed post-composition baseline",
@@ -14,10 +15,10 @@
         "wall_ms": "observational only"
     },
     "plan": {
-        "module_count": 93,
-        "direct_file_entries": 4110,
-        "unique_direct_file_count": 410,
-        "direct_duplicate_file_entries": 3700
+        "module_count": 96,
+        "direct_file_entries": 4066,
+        "unique_direct_file_count": 413,
+        "direct_duplicate_file_entries": 3653
     },
     "pre_refactor_plan": {
         "module_count": 93,
@@ -73,7 +74,7 @@
         "gallery": {
             "root_module": "public-gallery",
             "root_count": 1,
-            "transitive_module_count": 5,
+            "transitive_module_count": 8,
             "plan_file_count": 156,
             "shared_file_count": 122,
             "direct_file_entries": 156,

@@ -271,6 +271,10 @@ function view_render_admin_theme_layout_tab(array $viewModel): void
     echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (!empty($viewModel['gallery_count_badge_enabled']) ? ' checked' : '') . '> ' . e((string) ($labels['show_count_badge'] ?? '')) . '</label>';
     echo '<p class="theme-layout-hint">' . e((string) ($labels['count_badge_hint'] ?? '')) . '</p>';
     echo '</fieldset>';
+    echo '<div class="theme-layout-card" id="admin-theme-breadcrumb-style">';
+    view_render_breadcrumb_style_picker((array) ($viewModel['breadcrumb_style_picker'] ?? []));
+    echo '<p class="theme-layout-hint">' . e((string) ($labels['breadcrumb_style_hint'] ?? 'Used by galleries that inherit the site default.')) . '</p>';
+    echo '</div>';
     echo '<fieldset class="theme-layout-card" id="admin-public-thumbnail-rendering"><legend>' . e((string) ($labels['thumbnail_rendering_legend'] ?? 'Public thumbnail rendering')) . '</legend>';
     echo '<label>' . e((string) ($labels['thumbnail_rendering_label'] ?? 'Selected-gallery photo cards')) . '<select name="public_thumbnail_rendering_mode" aria-describedby="admin-public-thumbnail-rendering-help admin-public-thumbnail-rendering-transfer">';
     foreach ($thumbnailModes as $mode) {

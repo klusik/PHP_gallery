@@ -428,6 +428,15 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
         view_render_admin_gallery_display_help($label, (string) ($lightbox['help'] ?? ''));
         echo '</div>';
     }
+
+    $breadcrumbStyle = (array) ($viewModel['breadcrumb_style'] ?? []);
+    if ($breadcrumbStyle !== []) {
+        $label = (string) ($breadcrumbStyle['label'] ?? 'Breadcrumb style');
+        echo '<div class="admin-display-option admin-display-option-breadcrumbs">';
+        view_render_breadcrumb_style_picker($breadcrumbStyle);
+        view_render_admin_gallery_display_help($label, (string) ($breadcrumbStyle['help'] ?? ''));
+        echo '</div>';
+    }
     echo '</div>';
 
     foreach ([$filenames, $descriptionLayout, $countBadge, $lightbox] as $item) {

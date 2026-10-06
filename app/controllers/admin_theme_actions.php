@@ -528,6 +528,9 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             'theme_gallery_description_layout',
             gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical')
         );
+        if (array_key_exists('theme_breadcrumb_style', $_POST)) {
+            theme_layout_safe_save('theme_breadcrumb_style', $_POST['theme_breadcrumb_style']);
+        }
         theme_layout_safe_save('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
         // Public thumbnail renderer values and their public-content revision side effect share one service path.
         public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);

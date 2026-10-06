@@ -54,6 +54,7 @@ function theme_layout_safe_settings(): array
         'theme_gps_pin_size' => (string) theme_gps_pin_size_value($theme['gps_pin_size'] ?? null),
         'theme_gps_pin_background_size' => (string) theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null),
         'theme_gallery_description_layout' => theme_gallery_description_layout(),
+        'theme_breadcrumb_style' => theme_breadcrumb_style(),
         'theme_gallery_count_badge_enabled' => theme_gallery_count_badge_enabled() ? '1' : '0',
         'pagination_enabled' => !empty($pagination['enabled']) ? '1' : '0',
         'pagination_columns' => (string) ($pagination['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS),
@@ -110,6 +111,9 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
 {
     if (!array_key_exists($id, theme_layout_safe_settings())) {
         throw new InvalidArgumentException('Unknown Theme layout setting.');
+    }
+    if ($id === 'theme_breadcrumb_style') {
+        return breadcrumb_style_normalize($value);
     }
     if (!is_scalar($value) || is_float($value)) {
         throw new InvalidArgumentException('Enter a valid Theme layout value.');
@@ -207,6 +211,14 @@ function theme_layout_safe_save(string $id, mixed $value): void
 
     if ($id === 'theme_gallery_description_layout') {
         $previous = theme_gallery_description_layout();
+        set_app_setting($id, $normalized);
+        if ($normalized !== $previous) {
+            set_app_setting('theme_public_content_revision', (string) time());
+        }
+        return;
+    }
+    if ($id === 'theme_breadcrumb_style') {
+        $previous = theme_breadcrumb_style();
         set_app_setting($id, $normalized);
         if ($normalized !== $previous) {
             set_app_setting('theme_public_content_revision', (string) time());

@@ -49,6 +49,7 @@ require_once __DIR__ . '/views/votes.php';
 require_once __DIR__ . '/views/admin_auth.php';
 require_once __DIR__ . '/views/viewer_accounts.php';
 require_once __DIR__ . '/views/public_tags.php';
+require_once __DIR__ . '/views/breadcrumbs.php';
 require_once __DIR__ . '/views/public_gallery_controls.php';
 require_once __DIR__ . '/views/public_gallery_cards.php';
 require_once __DIR__ . '/views/public_gallery_pages.php';

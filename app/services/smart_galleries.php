@@ -50,7 +50,11 @@ const SMART_GALLERY_GRAPH_MAX_EDGES = 20000;
 const SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS = 50000;
 const SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE = 20;
 
-/** Return the canonical inherited preference values for Smart Galleries before runtime capability suppression. */
+/**
+ * Return inherited Smart Gallery preferences before runtime capability suppression.
+ *
+ * @return array<string,mixed> Current Theme and site defaults for every Smart Gallery presentation control.
+ */
 function smart_gallery_presentation_defaults(): array
 {
     $pagination = pagination_global_settings(['listing' => 'smart_gallery']);
@@ -63,6 +67,7 @@ function smart_gallery_presentation_defaults(): array
         'thumbnail_max_size' => null,
         'thumbnail_rendering_mode' => public_thumbnail_rendering_mode(),
         'card_layout' => theme_gallery_description_layout(),
+        'breadcrumb_style' => theme_breadcrumb_style(),
         'metadata_visible' => true,
         'source_gallery_visible' => true,
         'map_enabled' => true,
@@ -93,7 +98,12 @@ function smart_gallery_presentation_master_status(): array
     ];
 }
 
-/** Normalize a stored or submitted Smart Gallery presentation document. */
+/**
+ * Normalize a stored or submitted Smart Gallery presentation document.
+ *
+ * @param array|string|null $value Stored JSON text, decoded presentation map, or absent value.
+ * @return array<string,mixed> Valid explicit overrides; omitted entries inherit current defaults.
+ */
 function smart_gallery_normalize_presentation(mixed $value): array
 {
     if (is_string($value)) {
@@ -143,16 +153,29 @@ function smart_gallery_normalize_presentation(mixed $value): array
         $mode = gallery_lightbox_browsing_mode_storage_value($value['lightbox_browsing_mode']);
         if ($mode !== null) $normalized['lightbox_browsing_mode'] = $mode;
     }
+    if (array_key_exists('breadcrumb_style', $value) && is_string($value['breadcrumb_style'])) {
+        $style = trim($value['breadcrumb_style']);
+        if (isset(breadcrumb_style_registry()[$style])) $normalized['breadcrumb_style'] = $style;
+    }
     return $normalized;
 }
 
-/** Return Smart Gallery presentation preferences without applying runtime capability masters. */
+/**
+ * Resolve Smart Gallery presentation preferences without applying capability masters.
+ *
+ * @param array<string,mixed> $gallery Smart Gallery row or preview state with optional presentation overrides.
+ * @return array<string,mixed> Current Theme/site defaults with valid explicit overrides applied.
+ */
 function smart_gallery_presentation_preferences(array $gallery): array
 {
     $defaults = smart_gallery_presentation_defaults();
     $presentationValue = array_key_exists('presentation', $gallery) ? $gallery['presentation'] : ($gallery['presentation_json'] ?? []);
     $overrides = smart_gallery_normalize_presentation($presentationValue);
     $preferences = array_merge($defaults, $overrides);
+    $preferences['breadcrumb_style'] = breadcrumb_style_resolve(
+        $overrides['breadcrumb_style'] ?? null,
+        (string) $defaults['breadcrumb_style']
+    );
     $preferences['grid_columns'] = pagination_dimension_value($preferences['grid_columns'], (int) $defaults['grid_columns'], CMS_PAGINATION_MAX_COLUMNS);
     $preferences['grid_rows'] = pagination_dimension_value($preferences['grid_rows'], (int) $defaults['grid_rows'], CMS_PAGINATION_MAX_ROWS);
     $preferences['items_per_page'] = (int) $preferences['grid_columns'] * (int) $preferences['grid_rows'];
@@ -1670,4 +1693,3 @@ function smart_gallery_set_image_rating(int $imageId, int $rating): void
     if ($rating < 0 || $rating > 5) throw new InvalidArgumentException('Ratings must be between 0 and 5.');
     \Gallery\Models\smart_gallery_model_set_image_rating($imageId, $rating === 0 ? null : $rating, now_sql());
 }
-

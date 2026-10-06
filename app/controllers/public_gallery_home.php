@@ -60,6 +60,7 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\child_galleries;
 use function Gallery\Services\child_galleries_tree_preload;
 use function Gallery\Services\contained_tags_for_gallery;
+use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\feature_flag_enabled;
@@ -217,6 +218,10 @@ function cms_home(): void
         $galleries = $allHomeGalleries;
     }
 
+    // Localize only the selected card page; keep the full source inventory and
+    // virtual Smart Gallery definitions intact for pagination and mutations.
+    $galleries = content_localize_entities('gallery', $galleries);
+
     // $paginationHtml preserves the established pagination renderer while the page shell moves into the view layer.
     $paginationHtml = '';
     // $cardsHtml stores already-rendered card fragments produced through the public card MVC wrappers.
@@ -294,4 +299,3 @@ function public_home_admin_creation_view_model(int $visibleGalleryCount): array
         'show_first_gallery' => $action !== null && $visibleGalleryCount === 0 && \Gallery\Services\gallery_catalog_is_empty(),
     ];
 }
-

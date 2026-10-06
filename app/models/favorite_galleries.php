@@ -37,15 +37,17 @@ use function Gallery\Core\db;
  * @param array<int,int> $ids Positive gallery identifiers.
  * @param bool $urlPathReady Whether galleries.url_path exists.
  * @param bool $accessSchemaReady Whether the gallery-access columns exist.
+ * @param bool $contentLocalizationReady Whether source-language storage is verified available.
  * @return array<int,array<string,mixed>> Rows keyed by gallery id.
  */
-function favorite_gallery_model_rows_by_ids(array $ids, bool $urlPathReady, bool $accessSchemaReady): array
+function favorite_gallery_model_rows_by_ids(array $ids, bool $urlPathReady, bool $accessSchemaReady, bool $contentLocalizationReady = false): array
 {
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
     if ($ids === []) return [];
 
     $selects = ['id', 'parent_id', 'folder_path', 'slug', 'title', 'visibility'];
     $selects[] = $urlPathReady ? 'url_path' : "'' AS url_path";
+    $selects[] = $contentLocalizationReady ? 'content_language' : 'NULL AS content_language';
     if ($accessSchemaReady) {
         $selects[] = 'access_mode';
         $selects[] = 'access_listing';

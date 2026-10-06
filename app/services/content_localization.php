@@ -237,15 +237,27 @@ function content_localized_fields(array $entity, string $language, array $transl
  *
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<int,array<string,mixed>> $entities Entity rows.
- * @param string $language Requested viewer language.
+ * @param ?string $language Explicit language override, or null for the effective request language.
  * @return array<int,array<string,mixed>> Rows with resolved title/description and localization metadata.
  */
-function content_localize_entities(string $entityType, array $entities, string $language): array
+function content_localize_entities(string $entityType, array $entities, ?string $language = null): array
 {
-    $ids = array_map(static fn (array $entity): int => (int) ($entity['id'] ?? 0), $entities);
+    $language = $language ?? translation_active_language();
+    // Virtual Smart Gallery IDs belong to a separate table without authored
+    // translations; they must never receive a physical gallery's overlay.
+    $ids = array_map(static fn (array $entity): int => !empty($entity['__smart_gallery']) ? 0 : (int) ($entity['id'] ?? 0), $entities);
     $translations = content_localization_enabled() ? content_translation_rows($entityType, $ids, $language) : [];
     foreach ($entities as &$entity) {
+        if (!empty($entity['__smart_gallery'])) {
+            continue;
+        }
         $id = (int) ($entity['id'] ?? 0);
+        // Repeated presentation passes and language changes must resolve from
+        // canonical source text, never from an earlier translated overlay.
+        if (isset($entity['_content_localization'])) {
+            $entity['title'] = (string) ($entity['source_title'] ?? $entity['title'] ?? '');
+            $entity['description'] = (string) ($entity['source_description'] ?? $entity['description'] ?? '');
+        }
         // A photo translation is one visible caption variant. Once present, its
         // blank field stays blank so source-language text is not mixed beneath
         // translated photo text. Galleries retain independent field fallback.
@@ -265,10 +277,10 @@ function content_localize_entities(string $entityType, array $entities, string $
  *
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<string,mixed> $entity Entity row.
- * @param string $language Requested viewer language.
+ * @param ?string $language Explicit language override, or null for the effective request language.
  * @return array<string,mixed> Localized entity row.
  */
-function content_localize_entity(string $entityType, array $entity, string $language): array
+function content_localize_entity(string $entityType, array $entity, ?string $language = null): array
 {
     return content_localize_entities($entityType, [$entity], $language)[0];
 }

@@ -54,6 +54,9 @@ return [
         'image_decode_upload_pipeline_test.php',
         'public_thumbnail_markup_test.php',
         'public_thumbnail_rendering_model_test.php',
+        'breadcrumb_component_test.php',
+        'breadcrumb_gallery_settings_test.php',
+        'breadcrumb_theme_settings_test.php',
         'thumbnail_source_identity_test.php',
         'thumbnail_format_metadata_consistency_test.php',
         'lightbox_zoom_integration_test.php',
@@ -82,6 +85,8 @@ return [
         'gallery_image_move_crash_test.php' => 'Kills its own mutation workers and repairs shared disposable database and gallery state.',
         'gallery_workflow_browser_test.php' => 'Browser journeys mutate the externally supplied shared disposable HTTP/database fixture.',
         'gallery_workflow_integration_test.php' => 'Authenticated workflows mutate the externally supplied shared disposable HTTP/database fixture.',
+        'breadcrumb_workflow_integration_test.php' => 'Breadcrumb Theme/gallery saves and Trash restore mutate the shared disposable HTTP/database fixture.',
+        'content_language_workflow_integration_test.php' => 'Language, translation, and favorite-navigation assertions temporarily mutate the shared disposable HTTP/database fixture.',
         'viewer_phase07_mysql_concurrency_test.php' => 'Runs nested writers against the common explicitly supplied MySQL test database.',
     ],
 ];

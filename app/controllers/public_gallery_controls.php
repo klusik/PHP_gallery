@@ -457,27 +457,30 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
  */
 function public_gallery_breadcrumbs_view_model(?array $gallery = null): array
 {
-    $ancestors = [];
+    $items = [['label' => t('public.galleries', 'Galleries'), 'url' => url_for('home')]];
     if ($gallery) {
-        foreach (gallery_breadcrumb_ancestors($gallery) as $ancestor) {
-            $ancestors[] = [
-                'title' => (string) ($ancestor['title'] ?? ''),
+        $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
+        foreach (\Gallery\Services\content_localize_entities('gallery', gallery_breadcrumb_ancestors($gallery)) as $ancestor) {
+            $items[] = [
+                'label' => (string) ($ancestor['title'] ?? ''),
                 'url' => gallery_public_url($ancestor),
             ];
         }
+        $items[] = ['label' => (string) ($gallery['title'] ?? ''), 'current' => true];
     }
 
-    return [
-        'home_url' => url_for('home'),
-        'ancestors' => $ancestors,
-        'current_title' => $gallery ? (string) ($gallery['title'] ?? '') : '',
-    ];
+    return \Gallery\Services\breadcrumb_view_model(
+        $items,
+        \Gallery\Services\gallery_breadcrumb_style($gallery),
+        t('public.breadcrumbs', 'Breadcrumbs')
+    );
 }
 
 /**
  * Handles render breadcrumbs logic for the gallery application.
  *
  * @param mixed $gallery Input used by this operation.
+ * @return void
  */
 function render_breadcrumbs(?array $gallery = null): void
 {
@@ -485,11 +488,12 @@ function render_breadcrumbs(?array $gallery = null): void
 }
 
 /**
- * Handles render gallery access gate logic for the gallery application.
+ * Render the gallery password/share/age gate without exposing protected descriptions.
  *
- * @param mixed $gallery Input used by this operation.
- * @param mixed $error Input used by this operation.
- * @param ?array $image Image row or image data.
+ * @param array<string,mixed> $gallery Gallery whose existing policy requires an access gate.
+ * @param string $error Prepared access validation message.
+ * @param ?array<string,mixed> $image Optional protected photo context.
+ * @return void Renders the existing access gate with a localized title and no protected description.
  */
 function render_gallery_access_gate(array $gallery, string $error = '', ?array $image = null): void
 {
@@ -506,7 +510,7 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
     }
 
     \Gallery\Views\view_render_gallery_access_gate([
-        'title' => (string) $gallery['title'],
+        'title' => (string) \Gallery\Services\content_localize_entity('gallery', $gallery)['title'],
         'breadcrumbs' => public_gallery_breadcrumbs_view_model($gallery),
         'error' => $error,
         'state' => $state,

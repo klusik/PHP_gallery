@@ -158,6 +158,12 @@ $registry = [
         'gallery_workflow_integration_test.php' => [
             'timeout' => 180,
         ],
+        'breadcrumb_workflow_integration_test.php' => [
+            'timeout' => 180,
+        ],
+        'breadcrumb_workflow_integration_test.php' => [
+            'timeout' => 180,
+        ],
         'gallery_workflow_browser_test.php' => [
             'timeout' => 180,
         ],
@@ -308,6 +314,11 @@ $registry = [
         ],
         'lightbox_dev_dashboard_browser_test.mjs' => [
             'browser' => true,
+            'timeout' => 60,
+        ],
+        'breadcrumb_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
             'timeout' => 60,
         ],
         'lightbox_map_navigation_test.mjs' => [],

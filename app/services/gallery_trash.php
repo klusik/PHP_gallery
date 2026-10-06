@@ -51,6 +51,7 @@ use Throwable;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Services\app_settings_reset_request_cache;
 use Gallery\Models\GalleryTrashCommitOutcomeUnknownException;
 use function Gallery\Models\gallery_trash_model_active_entry_for_path;
 use function Gallery\Models\gallery_trash_model_claim;
@@ -771,6 +772,7 @@ function gallery_trash_snapshot_gallery_record(array $gallery): array
         'parent_folder_path' => ($parentPath === '' || $parentPath === '/') ? null : $parentPath,
         'tags' => implode(', ', array_column(tags_for_entity('gallery', (int) ($gallery['id'] ?? 0)), 'name')),
         'cover_image_relative_path' => gallery_trash_cover_relative_path($gallery),
+        'breadcrumb_style' => gallery_breadcrumb_style_override((int) ($gallery['id'] ?? 0)),
     ];
     foreach (gallery_trash_existing_columns('galleries', gallery_trash_restorable_gallery_columns()) as $column) {
         if (array_key_exists($column, $gallery)) {
@@ -1082,6 +1084,8 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
                 $databaseOutcomeUnknown = true;
                 throw $exception;
             }
+
+            app_settings_reset_request_cache();
 
             $rowCount += $deletedRows;
             $imageCount += (int) ($snapshot['image_count'] ?? 0);
@@ -1855,13 +1859,18 @@ function gallery_trash_entry_can_purge(array $entry): bool
  * Re-apply database-only gallery fields after the folder was re-imported.
  *
  * @param int $galleryId Recreated gallery identifier.
- * @param array $record Snapshot gallery record.
+ * @param array<string,mixed> $record Snapshot gallery fields keyed by storage field name.
+ * @return void Reapplies the stored gallery settings and supported localized metadata.
  */
 function gallery_trash_apply_gallery_snapshot(int $galleryId, array $record): void
 {
     // $columns stores the restorable columns this database really provides.
     $columns = gallery_trash_existing_columns('galleries', gallery_trash_restorable_gallery_columns());
     gallery_trash_model_update_gallery_metadata($galleryId, $record, $columns, now_sql());
+    gallery_breadcrumb_style_save(
+        $galleryId,
+        breadcrumb_style_normalize($record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)
+    );
 
     if (isset($record['tags']) && is_string($record['tags'])) {
         sync_entity_tags('gallery', $galleryId, $record['tags']);

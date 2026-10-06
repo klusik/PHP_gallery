@@ -418,12 +418,12 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
 }
 
 /**
- * Build crawler-facing metadata for one generated thumbnail.
+ * Build authorized crawler image metadata with a caption in the effective request language.
  *
- * @param array $image Image row or image data.
- * @param array $currentGallery Current gallery value.
- * @param int $preferredSize Preferred size value.
- * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Structured result data for the caller.
+ * @param array<string,mixed> $image Candidate photo already selected by public listing policy.
+ * @param array<string,mixed> $currentGallery Prepared gallery row used for caption fallback.
+ * @param int $preferredSize Preferred crawler thumbnail width in pixels.
+ * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Safe thumbnail metadata, or null for an unavailable or restricted candidate.
  */
 function social_preview_image_from_thumbnail(array $image, array $currentGallery, int $preferredSize = 1280): ?array
 {
@@ -484,7 +484,8 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
     // $url stores the absolute public URL that social crawlers receive.
     $url = absolute_public_url(thumbnail_serving_url($image, $imageGallery, (int) $selected['size'], $format));
     // $alt stores descriptive text for Open Graph and Twitter image metadata.
-    $alt = image_alt_text($image, $currentGallery);
+    $localizedImage = \Gallery\Services\content_localize_entity('image', $image);
+    $alt = image_alt_text($localizedImage, $currentGallery);
 
     // $previewUrl stores the crawler URL exactly as generated, without adding
     // query parameters. Public thumbnail URLs must remain clean.

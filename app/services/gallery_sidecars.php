@@ -402,6 +402,10 @@ function write_gallery_sidecar(array $gallery): bool
             $data['lightbox_browsing_mode'] = $lightboxBrowsingMode;
         }
     }
+    $breadcrumbStyle = gallery_breadcrumb_style_override((int) $gallery['id']);
+    if ($breadcrumbStyle !== BREADCRUMB_STYLE_INHERIT) {
+        $data['breadcrumb_style'] = $breadcrumbStyle;
+    }
     if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
         $data['grid_columns'] = (int) $gallery['grid_columns'];
         $data['grid_rows'] = (int) $gallery['grid_rows'];
@@ -451,7 +455,7 @@ function write_gallery_sidecar(array $gallery): bool
  * hierarchy, even when those parent folders contain no direct photos.
  *
  * @param string $folderPath Folder path filesystem path.
- * @return array Structured result data for the caller.
+ * @return array{folder_path:string,title:mixed,description:mixed,content_language:?string,translations:array<array-key,mixed>,gallery_date:?string,gallery_date_end:?string,visibility:string,voting_enabled:int,show_filenames:int,description_layout:?string,count_badge_visibility:?string,lightbox_browsing_mode:?string,breadcrumb_style:string,grid_columns:?int,grid_rows:?int,grid_use_for_subgalleries:int,thumbnail_min_size:?int,thumbnail_max_size:?int,banner_image_path:mixed,logo_image_path:mixed,separator_image_path:mixed,access_mode:mixed,access_listing:mixed,sort_order:int} Normalized metadata for one candidate gallery folder.
  */
 function gallery_folder_candidate_metadata(string $folderPath): array
 {
@@ -476,6 +480,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
         'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
         'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value($metadata['lightbox_browsing_mode'] ?? null),
+        'breadcrumb_style' => breadcrumb_style_normalize($metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
@@ -634,6 +639,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     $fields['created_at'] = now_sql();
     $fields['updated_at'] = now_sql();
     $createdGalleryId = gallery_model_insert($fields);
+    if ($candidate['breadcrumb_style'] !== BREADCRUMB_STYLE_INHERIT) {
+        gallery_breadcrumb_style_save($createdGalleryId, $candidate['breadcrumb_style']);
+    }
     if (content_localization_schema_ready('gallery')) {
         content_save_localizations('gallery', $createdGalleryId, $candidate['content_language'] ?? null, $candidate['translations'] ?? []);
     }

@@ -35,6 +35,22 @@ return [
             'Gallery\\Services\\nsfw_guard_assert_public_policy_available',
         ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
+        // Settings-only and rendering callers share each owner independently.
+        'breadcrumb-policy' => [
+            'Gallery\\Services\\breadcrumb_view_model',
+            'Gallery\\Services\\breadcrumb_style_picker_options',
+        ],
+        // Authored overlays are shared by public cards/navigation and Admin
+        // presentation; keep their storage files out of duplicated route owners.
+        'content-localization' => [
+            'Gallery\\Services\\content_localize_entity',
+            'Gallery\\Services\\content_localize_entities',
+        ],
+        'breadcrumb-presentation' => [
+            'Gallery\\Services\\breadcrumb_view_model',
+            'Gallery\\Views\\view_render_breadcrumbs',
+            'Gallery\\Views\\view_render_breadcrumb_style_picker',
+        ],
         'feature-disabled-response' => ['Gallery\\Core\\cms_apply_feature_disabled_route_response'],
         'viewer-identity' => ['Gallery\\Core\\viewer_identity_remember_restore_request'],
         'database-observer' => ['Gallery\\Services\\telemetry_observe_db_query'],
@@ -80,9 +96,11 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths'],
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization'],
     'module_dependencies' => [
         'updater-work' => ['request-maintenance'],
+        // Rendering follows view-model preparation and reuses its shared Core dependencies.
+        'breadcrumb-presentation' => ['breadcrumb-policy'],
     ],
     // Dispatch loads public policy before only these sensitive route families.
     'route_dependencies' => [

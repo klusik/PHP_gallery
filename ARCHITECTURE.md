@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.120.1';
+const CMS_VERSION = '0.121';
 ```
 
 Update-related code uses:
@@ -259,9 +259,11 @@ The full procedural umbrellas (`models.php`, `services.php`, `views.php`, `contr
 
 Interface catalogs and user-authored content localization are separate systems. `app/services/translations.php` remains the authority for maintained languages (`en`, `cs`, `de`, `sv`) and viewer preference. `app/services/content_localization.php` uses only that set for optional gallery/image title and description overlays.
 
-The base `galleries.title`, `galleries.description`, `images.title`, and `images.description` fields remain source content for compatibility. Nullable `content_language` columns classify that source without assuming English. `gallery_translations` and `image_translations` store one optional row per owner/language. Resolution is field-independent, so a translated title can use a source-description fallback.
+The base `galleries.title`, `galleries.description`, `images.title`, and `images.description` fields remain source content for compatibility. Nullable `content_language` columns classify that source without assuming English. `gallery_translations` and `image_translations` store one optional row per owner/language. Gallery resolution is field-independent, so a translated title can use a source-description fallback. An existing photo translation is one caption variant: its blank fields remain blank rather than mixing languages; an absent photo translation uses source content.
 
 Public controllers localize only after access, visibility, NSFW, and pagination policy selects safe rows. Batch loading prevents per-card queries. Translations never affect slugs, paths, ordering, filenames, access policy, or media authorization. Admin forms keep source fields visible and put other maintained languages behind a disclosure. Configured OpenAI assistance inserts review-only drafts and never auto-saves.
+
+`content_localize_entities()` and `content_localize_entity()` default to the same `translation_active_language()` contract as `t()`. Explicit language arguments remain available for prepared language-specific jobs. Repeated overlays resolve from preserved `source_title` / `source_description`. Home cards, physical subgalleries, breadcrumbs (including ancestors), favorite navigation, the Admin gallery workspace and editor heading, Picture Game, and GPS map markers consume that shared contract. Map cache fingerprints include the language and verified localization availability. Virtual Smart Gallery definitions have no translation storage and never borrow translations from an unrelated physical gallery with the same numeric ID; their physical provenance and photos retain localization. The scope audit and intentional source-oriented contexts are documented in `docs/ISSUE_93_LOCALIZATION.md`.
 
 `app/services/translations.php` owns language normalization, pack discovery, request bootstrap, Admin/public language persistence, JSON editing support, key fallback, interpolation, and missing-key diagnostics.
 
@@ -1222,6 +1224,8 @@ Settings are used for URL rewrites, site name, dev mode, collapsed admin state, 
 `public_thumbnail_rendering_mode` is a scalar site setting owned by `app/services/public_thumbnail_rendering.php`. Its only machine values are `responsive` and `progressive`; missing, empty, unknown, malformed, or obsolete values normalize to `responsive`. Admin Theme persists the setting after the existing administrator and CSRF checks. No schema migration is required because the setting uses the existing `app_settings` key/value table.
 
 Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_ids`. The array may contain numeric gallery IDs and the `home` token for the main gallery page. `app/services/favorite_galleries.php` normalizes the value, removes duplicates, validates that selected galleries still exist before saving, and resolves public header navigation items in configured order. Anonymous visitors only receive gallery shortcuts that remain public and listed; the main page shortcut is always safe to render.
+
+Breadcrumb presentation is owned by `app/services/breadcrumbs.php`. The stable style IDs are `minimal`, `chevron`, `pills`, and `surface`; `theme_breadcrumb_style` is stored in the existing `app_settings` table and defaults safely to `chevron`. A physical gallery may store `inherit` or one of those IDs in its gallery-scoped setting. Missing or invalid gallery values inherit the Theme choice, while invalid global values fall back to the built-in `chevron` style. Theme > Layout exposes the global default and the gallery Display editor owns per-gallery overrides. Changing the global choice bumps `theme_public_content_revision`. Public breadcrumb links wrap onto additional lines on narrow screens, preserving every ancestor link and native access without JavaScript.
 
 Gallery hero tag presentation also uses the existing `app_settings` table and therefore needs no schema migration. `app/services/theme.php` owns normalization and defaults for `theme_hero_tag_visible_limit` (default 20, range 1 to 200), `theme_hero_tag_display_all` (default off, so progressive disclosure is active), `theme_hero_tag_scrollbar_enabled` (default on), `theme_hero_tag_scrollbar_rows` (default 5, range 1 to 12), and `theme_hero_tag_sort_mode` (`usage` or `alphabetical`, default `usage`). `app/controllers/admin_theme.php` persists the values after the existing Admin and CSRF checks and bumps `theme_public_content_revision` when this public rendering policy changes.
 

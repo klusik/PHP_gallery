@@ -1,5 +1,52 @@
 # Patch notes
 
+## Version 0.121
+
+Version 0.121 adds configurable visual styles for public breadcrumb navigation and completes viewer-language selection for gallery and photo titles and descriptions.
+
+### Highlights
+
+#### Breadcrumb presentation
+
+- Added nine selectable breadcrumb styles with graphical examples in Theme, physical-gallery Display settings, and Smart Gallery presentation controls. Gallery-level inheritance previews the active Theme style. Ref: [#84](https://github.com/klusik/PHP_gallery/issues/84).
+- Preserved accessible ancestor links, keyboard selection, responsive wrapping, and native controls without JavaScript. Gallery overrides remain in sidecars and survive Trash restore; unsupported values resolve through Theme defaults.
+
+#### Viewer-language localization
+
+- Applied the selected viewer language to public gallery and photo titles and descriptions across gallery controls, tags, Smart Galleries, breadcrumbs, and access-gate titles. Ref: [#93](https://github.com/klusik/PHP_gallery/issues/93).
+- Kept protected gallery descriptions out of password/share/age gates while localizing their visible titles; preserved canonical source text when the request language changes.
+
+### Technical Details
+
+#### Backend and frontend
+
+- Added `app/services/breadcrumbs.php`, `app/views/breadcrumbs.php`, and `public/assets/styles/breadcrumbs.css` for the shared breadcrumb style registry, presentation, and nine visual variants.
+- Added Theme and gallery presentation settings through existing settings owners; gallery-specific values continue through the existing sidecar and Trash recovery lifecycle.
+- Updated `app/services/content_localization.php` and public controllers to apply the effective request language when resolving entity text and to avoid applying physical-gallery translations to virtual Smart Galleries.
+- Updated the reviewed runtime module plan, language catalogs, production inventory, cache-busted assets, and `app/core-manifest.json`.
+
+#### Database and compatibility
+
+- Added no migration, table, column, index, capability, or new configuration store. Existing settings and sidecar owners remain authoritative.
+- Kept both features compatible with native no-JavaScript controls and existing fallback presentation.
+
+#### Tests and documentation
+
+- Added breadcrumb component, settings, workflow integration, browser, and content-language regression coverage; extended existing Admin Smart Gallery, theme layout, presentation, and public asset contracts.
+- Updated architecture, code map, settings inventory, testing and compatibility documentation, and all four maintained manual editions.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery breadcrumbs can use a visual style selected by the administrator, while links remain accessible and responsive.
+- Changing the viewer language now updates public titles and descriptions as well as interface labels.
+
+#### For administrators
+
+- Administrators can select a site-wide breadcrumb style and optionally override it for a physical gallery or Smart Gallery presentation.
+- Existing inheritance and stored gallery presentation settings continue to work without a schema upgrade.
+
 ## Version 0.120.1
 
 Version 0.120.1 fixes incoming release inventory compatibility so installations with the older CMS updater can install the stable release through Admin without first uploading a replacement validator. Reviewed WinApp sources remain available in deployment packages while CMS updater ownership stays unchanged.

@@ -80,6 +80,7 @@ function admin_dashboard_model_gallery_rows(array $capabilities): array
         'parent.title AS parent_title', 'COALESCE(image_counts.image_count, 0) AS image_count',
     ];
     $selects[] = !empty($capabilities['public_path']) ? 'g.url_path' : "'' AS url_path";
+    $selects[] = !empty($capabilities['content_localization']) ? 'g.content_language' : 'NULL AS content_language';
     $selects[] = !empty($capabilities['access']) ? 'g.access_mode' : "'normal' AS access_mode";
     $selects[] = !empty($capabilities['access']) ? 'g.access_listing' : "'listed' AS access_listing";
     // Expose presence only: dashboard rows must never carry password hashes or access tokens.

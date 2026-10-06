@@ -474,6 +474,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
 
         'theme_page_width' => admin_settings_entry('theme_page_width', 'appearance', 'Page width', 'Global public page width mode.', 'theme_page_width', 'summary', 'default', (string) ($theme['page_width'] ?? 'default'), 'admin_theme', [], 'admin-theme-tab-appearance'),
         'theme_gallery_description_layout' => admin_settings_entry('theme_gallery_description_layout', 'appearance', 'Gallery card layout', 'Global gallery-card description layout used unless a more specific override applies.', 'theme_gallery_description_layout', 'summary', 'vertical', theme_gallery_description_layout(), 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'], 'admin-theme-tab-appearance'),
+        'theme_breadcrumb_style' => admin_settings_entry('theme_breadcrumb_style', 'appearance', 'Breadcrumb style', 'Global public breadcrumb style used by galleries that inherit the site default.', 'theme_breadcrumb_style', 'summary', BREADCRUMB_STYLE_DEFAULT, theme_breadcrumb_style(), 'admin_theme', [], 'admin-theme-tab-layout'),
         'pagination_enabled' => admin_settings_entry('pagination_enabled', 'appearance', 'Pagination', 'Global public list pagination switch.', 'pagination_enabled', 'summary', '0', !empty($pagination['enabled']) ? '1' : '0', 'admin_theme', [], 'admin-theme-tab-layout'),
         'pagination_columns' => admin_settings_entry('pagination_columns', 'appearance', 'Global grid columns', 'Default number of columns used by paginated public lists.', 'pagination_columns', 'number', defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_COLUMNS') ? (string) CMS_PAGINATION_DEFAULT_COLUMNS : '4', (string) ($pagination['columns'] ?? 4), 'admin_theme', [], 'admin-theme-tab-layout', false, 'normal', ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_COLUMNS') ? CMS_PAGINATION_MAX_COLUMNS : 12]),
         'pagination_rows' => admin_settings_entry('pagination_rows', 'appearance', 'Global grid rows', 'Default number of rows per paginated public list.', 'pagination_rows', 'number', defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_ROWS') ? (string) CMS_PAGINATION_DEFAULT_ROWS : '5', (string) ($pagination['rows'] ?? 5), 'admin_theme', [], 'admin-theme-tab-layout', false, 'normal', ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_ROWS') ? CMS_PAGINATION_MAX_ROWS : 50]),
@@ -549,6 +550,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
  */
 function admin_settings_owner_for_id(string $id): string
 {
+    if ($id === 'theme_breadcrumb_style') {
+        return 'theme_layout_settings';
+    }
     if ($id === 'admin_legacy_upload_navigation_enabled') {
         return 'admin_settings_registry';
     }
@@ -657,7 +661,7 @@ function admin_settings_entry(
         'migration_required' => $migrationRequired,
         'normalization_callback' => $centralEditable ? 'Gallery\\Services\\admin_settings_normalize_editable_value' : null,
         'save_callback' => $centralEditable ? 'Gallery\\Services\\admin_settings_save_editable_value' : null,
-        'content_revision' => $id === 'public_thumbnail_rendering_mode' || in_array($key, ['theme_lightbox_browsing_mode', 'theme_gallery_description_layout', 'theme_hero_tag_visible_limit', 'theme_hero_tag_sort_mode'], true),
+        'content_revision' => $id === 'public_thumbnail_rendering_mode' || in_array($key, ['theme_lightbox_browsing_mode', 'theme_gallery_description_layout', 'theme_breadcrumb_style', 'theme_hero_tag_visible_limit', 'theme_hero_tag_sort_mode'], true),
     ];
 }
 
