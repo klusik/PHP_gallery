@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.119}
-\newcommand{\manualdate}{5.~Oktober~2026}
+\newcommand{\version}{0.120}
+\newcommand{\manualdate}{6.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -269,6 +269,10 @@ Der Webprozess benötigt Lesezugriff auf den Laufzeitcode und Schreibzugriff auf
 \label{sec:installation}
 \index{i00149@Installation}
 \index{e00082@Einrichtung}
+
+Interne Verzeichnisse für Anwendung, Werkzeuge, Dokumentation, Cache, Daten und Protokolle besitzen eigene Apache-Zugriffssperren unabhängig von URL-Umschreibungen. Der Hoster muss diese Regeln beachten oder gleichwertige Serverregeln bereitstellen; der PHP-Entwicklungsserver liest sie nicht. Direkte HTTP-Aufrufe von CLI-Befehlen erhalten vor dem Anwendungsstart eine leere Antwort 404. Verwenden Sie für Browserrouten den öffentlichen Einstiegspunkt und für Wartungsbefehle die Kommandozeile. Siehe \filepath{docs/HTTP_ENTRYPOINTS.md}.
+
+Erstellen Sie Bereitstellungsordner oder ZIP-Dateien bei Bedarf aus der geprüften Liste \filepath{app/production-files.json}. Die Werkzeuge prüfen die exakte Dateimenge und aktuelle Integritätsdaten; lokale Agentendateien, aktive Medien, Konfiguration, eigenes CSS und Laufzeitdaten gehören nicht zum normalen Paket. Freigegebene WinApp-Quellen werden mitgeliefert, der Installer bleibt unabhängig. Enthält ein interaktiv gewähltes Windows-Ziel bereits ein Paket, wird ein neuer benachbarter Pfad mit Zeitstempel gewählt; ein ausdrücklich angegebenes Automatisierungsziel lehnt Kollisionen ab. Lesen Sie vor manueller Bereitstellung \filepath{docs/PRODUCTION_FILES.md}.
 
 \subsection{Installation im Browser}
 
@@ -1996,6 +2000,8 @@ Dieselbe frühe Laufzeitgrenze wandelt nicht abgefangene und abfangbare fatale P
 
 Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den vollständigen neuen Anfragekernel und seinen geprüften Modulplan. Ein unvollständiges Archiv wird abgelehnt, während vorbereitete Dateien außerhalb der aktiven Installation bleiben. Halten Sie bei manueller Bereitstellung alle ausgelieferten Laufzeitdateien zusammen; ein Austausch nur des Bootstrap würde eine unvollständige Anwendung hinterlassen.
 
+Die Update-Aktivierung verwendet die geprüfte Updater-Teilmenge des Produktionsinventars. Ältere Quellarchive ohne Inventar behalten einen begrenzten Kompatibilitätspfad anhand ihres eigenen Manifests; ein vorhandenes ungültiges Inventar wird abgelehnt. Das Entfernen veralteter Dateien erfordert frühere Eigentumsnachweise und bewahrt unbekannte lokale Dateien. Die Dateiwiederherstellung nutzt den serverseitig geschriebenen Sicherungsindex und lehnt nicht indexierte Dateien sowie durch symbolische Links oder Windows-Junctions umgeleitete Pfade ab. Diese Dateisicherung macht Datenbankmigrationen nicht rückgängig.
+
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}
 
@@ -2008,6 +2014,8 @@ Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den voll
 \index{a00018@Ansichten}
 
 Die folgenden Seiten beschreiben den Anfrageweg der Anwendung. Sie betreffen hauptsächlich Wartung und Entwicklung; normale Galerieverwaltung erfordert sie nicht.
+
+Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische Dateireihenfolge, die die vollständigen Routenabhängigkeiten und Ladereihenfolge erhält. Halten Sie bei Routenänderungen Abhängigkeitseingaben und generierten Plan zusammen. Request-/Session-Adapter besitzen den Transportzugriff; Sprache, Navigationstoken, Galeriezugriffe, NSFW-Bestätigung und Flash-Nachrichten bleiben bei ihren bisherigen Verantwortlichen. Die Lightbox trennt Navigationsgenerationen und dekodierte Ressourcen; der Viewer behält Darstellung und autorisierte Qualitätsauswahl. Diese Trennung schafft Regressionsgrenzen, belegt jedoch keinen schnelleren Browserbetrieb. Siehe \filepath{docs/BROWSER_LIFECYCLE.md} und \filepath{docs/COMPATIBILITY_LIFECYCLE.md}.
 
 \subsection{Initialisierung, Routing und Dispatch}
 \index{i00148@Initialisierung}
@@ -2208,11 +2216,11 @@ Prüfen Sie für öffentliche Vorschaubilddarstellung die Bereiche Elemente und 
 
 \subsection{Sorgfalt bei Veröffentlichungen}
 
-Eine Veröffentlichungsprüfung bestätigt konsistente Laufzeitversion, geordnete Migrationskompatibilität, Manifesthashes, Dokumentation, Übersetzungen, Browsercacheinvalidierung, Tests, Paketausschlüsse und Benutzerdatensicherheit. Der Betreuer beginnt auf einem sauberen Veröffentlichungszweig, vergleicht ihn mit dem genauen vorherigen Veröffentlichungstag, prüft jeden dazwischenliegenden Commit und Pfad und vermerkt bewusst Ausgeschlossenes. Laufzeitversion in \filepath{app/bootstrap.php}, Schlüssel und Tag von \filepath{release-metadata.json}, neueste Überschrift in \filepath{PATCH_NOTES.md}, Dokumentationsmarker, vorgesehener Archivname und endgültiger Git-Tag müssen übereinstimmen.
+Der vollständige Release-Ablauf steht in \filepath{RELEASE.md}. Vergleichen Sie den genauen vorherigen stabilen Tag, vervollständigen Sie Versionshinweise und dauerhafte Dokumentation und gleichen Sie alle vier Handbuchausgaben ab. Erstellen Sie jedes PDF mit der indizierten Mehrpassfolge aus \filepath{docs/LATEX_BUILD.md}; prüfen Sie Compiler-Erfolg, Verweise, Indexeinträge und Layoutwarnungen. Visuelle PDF-Prüfung ist ausdrücklichen Anforderungen oder der Diagnose eines konkreten Layoutproblems vorbehalten; ein erfolgreicher Routinebau benötigt keine zusätzliche visuelle Freigabe.
 
-Neue Migrationen werden in Zeitstempelreihenfolge geprüft und durch Migrationskonsistenz- und ältere Läufertests erprobt. Der Betreuer erstellt dieses PDF mit der vollständigen \filepath{docs/LATEX_BUILD.md}-Abfolge neu und prüft Titelseite, Veröffentlichungsübersicht, Inhaltsverzeichnis, Lesezeichen, Index und geänderte Funktionsabschnitte. Jede geänderte PHP-Datei erhält \codeword{php -l}; geändertes JavaScript und Node-Fixtures erhalten Syntaxprüfungen; gezielte Funktionstests, Übersetzungskonsistenz, Dokumentationsabdeckung, vollständige PHP-Suite und \codeword{git diff --check} müssen bestehen.
+Erzeugen Sie nach den letzten Änderungen das Manifest, bestehen Sie Release-, Manifest- und Whitespace-Vorprüfungen, initialisieren Sie den Qualifizierungsfingerabdruck und frieren Sie die Eingaben ein. Führen Sie genau ein zentrales Audit \codeword{--profile=release} aus, direkt oder über die konfigurierte isolierte Testinstallation. Das Audit besitzt Syntax-, Regressions-, Vertrags-, Browser- und Release-Prüfungen; ergänzen Sie keinen zweiten manuellen Testbaumdurchlauf. Binden Sie seinen Bericht an den unveränderten Fingerabdruck und melden Sie Abdeckungslücken getrennt von ausstehenden Betriebsprüfungen.
 
-Erst nach der endgültigen Quellcode- und Dokumentationsänderung führt der Betreuer \codeword{php scripts/generate_manifest.php} und dessen Modus \codeword{--check} aus. Der Bereitstellungshelfer erstellt anschließend den angeforderten lokalen Ordner oder die ZIP-Datei; er verpackt lediglich Dateien und führt weder PHP aus noch repariert er ein veraltetes Manifest. Prüfen Sie die Archivliste auf aktuelles PDF, Versionshinweise, Veröffentlichungsmetadaten, Migrationen und \filepath{app/core-manifest.json}; geschützte Konfiguration, Caches, Protokolle, temporäre Dateien, lokale Werkzeuge, Bereitstellungsausgabe und Benutzermedien folgen der Verpackungsrichtlinie. Prüfen Sie das Manifest nach dem Verpacken erneut, erstellen Sie Veröffentlichungscommit und annotierten Tag \codeword{v_<version>} aus dem geprüften Baum und führen Sie einen kurzen Funktionstest einer Aktualisierung aus der vorherigen Stable-Version aus. Fehlende lokale Abhängigkeiten müssen mit genau blockierten Befehlen und Umgebungsdetails gemeldet werden, statt die Veröffentlichung als vollständig geprüft zu bezeichnen.
+Erstellen Sie Bereitstellungsordner oder ZIP nur auf ausdrückliche Anforderung. Die Werkzeuge verlangen aktuelle Integritätsdaten und prüfen das kanonische Produktionsinventar; kontrollieren Sie das angeforderte Artefakt vor Gebrauch. Ein reines CMS-Release benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung erfordern ausdrückliche Genehmigung. Prüfen Sie nach Veröffentlichung Update-Erkennung, Migrationen, Anmeldung, öffentliche Galerien, geschützte Medien und Integrität/Status auf der veröffentlichten Installation.
 
 \section{Die Galerie schnell wirken lassen}
 \label{sec:performance}

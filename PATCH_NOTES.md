@@ -1,5 +1,86 @@
 # Patch notes
 
+## Version 0.120
+
+Version 0.120 hardens internal HTTP boundaries, deployment packaging and updater file ownership, separates lightbox navigation and resource lifecycles, and makes runtime dependencies and source-contract debt measurable. The database support policy now names directly tested MySQL and MariaDB representatives while preserving existing gallery, media and administration workflows.
+
+### Highlights
+
+#### Private runtime trees and command-line tools
+
+- Added rewrite-independent Apache access denial for internal application, tooling, documentation and runtime-storage trees; preserved the public front controllers, assets and query-string routes. Ref: [#78](https://github.com/klusik/PHP_gallery/issues/78).
+- Added an early CLI-only guard so direct HTTP requests to maintenance, migration, update and release commands receive an empty `404` before bootstrap or mutation; preserved includeable tooling and normal shell invocation.
+- Preserved media authorization by denying unchecked static access to gallery originals and derivatives. Hosts must honor `.htaccess` authorization or configure equivalent server rules.
+
+#### Reviewed production membership and safer deployment
+
+- Added one exact production file inventory shared by Bash/PowerShell packaging, integrity ownership and updater activation. Dirty workspace state, caches, live data and unlisted files cannot silently enter a production package. Ref: [#70](https://github.com/klusik/PHP_gallery/issues/70).
+- Added verification of missing/unexpected package members, normalized integrity hashes, linked source paths, unsafe destinations and existing output collisions; prepared and verified temporary stages before publishing requested artifacts.
+- Improved the interactive Windows deployment launcher to retain completion/error diagnostics until Enter and choose a fresh timestamped destination when its prompted target already contains a package. Explicit automation targets still refuse collisions.
+- Included reviewed WinApp sources and required runtime assets in production packaging while excluding tests, settings, caches and installer build outputs; retained the independent WinApp version and installer.
+
+#### Lightbox navigation and resource ownership
+
+- Extracted navigation generations/targets and decoded-resource ownership into separate modules, with stale-result rejection, cancellation, pending-load reuse and bounded cache eviction. Ref: [#80](https://github.com/klusik/PHP_gallery/issues/80).
+- Preserved the single viewer, both permanent thumbnail renderers, preview-only nearby warming, slideshow preparation, maps, votes, fullscreen and synchronous active-original promotion when deliberately zooming above 100%.
+- Kept close/hidden cleanup and terminal teardown distinct; diagnostic counters distinguish detached image loads, tracked quality loads and Fetch transfers. The extraction does not establish a browser performance improvement.
+
+#### Explicit runtime, support and maintenance contracts
+
+- Composed route modules through reviewed shared dependencies and one canonical file order, preserving complete transitive closures and existing procedural entrypoints; added dependency/file/memory regression budgets. Ref: [#79](https://github.com/klusik/PHP_gallery/issues/79).
+- Centralized request/session transport through Core adapters while retaining language, navigation-token, gallery-unlock, NSFW and flash policy with their domain owners. Ref: [#72](https://github.com/klusik/PHP_gallery/issues/72).
+- Aligned database guidance with required MySQL 8.4/PHP 8.3, MariaDB 10.11/PHP 8.3 and MariaDB 11.4/PHP 8.5 CI representatives; distinguished legacy, unsupported and unqualified series. Ref: [#71](https://github.com/klusik/PHP_gallery/issues/71).
+- Documented compatibility owners, protected behavior, evidence, unknown usage and retirement conditions; added decrease-only budgets for reliable source-contract debt without weakening changed-source checks. Refs: [#73](https://github.com/klusik/PHP_gallery/issues/73), [#74](https://github.com/klusik/PHP_gallery/issues/74).
+
+### Technical Details
+
+#### Backend and updater
+
+- Added `app/session_context.php` and migrated request/session helper consumers without starting sessions during include, changing flat persisted keys, or moving domain policy into the adapter. Preserved one-use active-session flash and the existing gallery-unlock lifetime.
+- Updated `app/runtime/ModuleLoader.php`, `scripts/generate_runtime_modules.php` and the schema-2 `app/runtime/modules.php` plan with explicit dependencies and deterministic union loading. Added `scripts/runtime_plan_metrics.php` and `scripts/runtime_plan_baseline.json`; wall time remains observational.
+- Added `app/release_file_policy.php`, `app/production-files.json`, `scripts/generate_production_files.php` and `scripts/release_files.php`; updated manifest generation, deployment and updater planning/activation to consume the canonical membership owner.
+- Limited obsolete removal to prior owned inventory/manifest evidence. Retained a bounded older-archive path when the inventory is absent; malformed present inventory refuses activation, and invalid prior ownership produces no deletion authority.
+- Hardened updater copy/rollback paths through `app/services/updates_path_safety.php`: contained source/destination ancestors, symlinks and Windows junction aliases are checked before replacement. Partial rollback snapshots use their server-written index; unindexed files are refused, and file rollback does not reverse database migrations.
+- Expanded reconciliation of the exact application-owned server-policy files while preserving neighboring storage and configuration. Retained the existing incoming-hash verification policy; canonical membership does not introduce a new verification claim.
+- Used header-first MIME detection for common raster media to avoid fileinfo's large read buffer, retaining content-based fileinfo fallback for other supported formats and historical MIME aliases.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/lightbox-navigation-lifecycle.js` and `public/assets/gallery-modules/lightbox-resource-lifecycle.js`; integrated them with the existing preload scheduler and viewer presentation.
+- Updated versioned module imports and `app/views/layout.php` asset revision inputs so deployed browsers invalidate the changed lifecycle modules.
+- Preserved authorized source selection, protected-preview recovery, current-image quality tokens and no-JavaScript navigation; stale navigation and image failures cannot overwrite newer presentation state.
+
+#### Database, configuration and compatibility
+
+- Added no database migration, table, column, index, capability, System Health group or administrator setting. Existing `available`, confirmed `missing`, `unknown` and configuration-disabled schema decisions remain with their established owners.
+- Added direct disposable engine contracts for InnoDB/utf8mb4 metadata, JSON validation/extraction, vote constraints and advisory-lock exclusion. Retained portable interrupted-DDL replay and application-side vote validation.
+- Preserved PHP 8.1 source compatibility and shared-hosting operation without a production Composer/Node build. Database qualification covers named representatives, not every PHP/server combination or higher database version.
+- Documented the permanent Apache 2.2 access-control fallback alongside Apache 2.4 authorization and the existing query-route, full-bootstrap, hand-built module-plan and older updater archive compatibility paths in `docs/COMPATIBILITY_LIFECYCLE.md`.
+- Preserved WinApp 0.3.2 and its installer because shipped companion code, assets, dependencies and build behavior did not change.
+
+#### Tests and tooling
+
+- Added HTTP/CLI boundary, session-context and request-helper fixtures; strengthened MVC ownership and PDO-provenance checks while keeping the strict baseline empty.
+- Added real folder/ZIP packaging and production-policy regressions, dirty-tree exclusion, explicit/interactive collision handling, distributable WinApp source coverage, bounded subprocess stderr/timeout handling and updater path-safety/rollback cases.
+- Added runtime-plan ratchets, decrease-only source-debt budgets and immutable comparison-base contracts; integrated them with the authoritative central audit and required platform/database CI jobs.
+- Added `tests/lightbox_navigation_lifecycle_test.mjs`, `tests/lightbox_resource_lifecycle_test.mjs`, `tests/lightbox_race_browser_test.mjs` and their real-viewer fixture; extended navigation, preload, zoom-quality, cache and telemetry ownership coverage.
+- Updated permanent runtime, HTTP-entrypoint, production-file, browser-lifecycle, database-support and compatibility documentation; aligned all four manual editions and their PDFs.
+- Updated `PATCH_NOTES_TEMPLATE.md` to require clickable links for available, evidenced issue and pull-request references in future entries.
+
+### User Impact
+
+#### For visitors
+
+- Public galleries retain their existing authorized media, navigation, maps, lightbox controls and no-JavaScript behavior while obsolete asynchronous work cannot replace a newer lightbox state.
+- Internal implementation and stored media paths remain inaccessible through direct HTTP access on correctly configured hosting.
+
+#### For administrators and maintainers
+
+- Deployment artifacts and updater activation use an explicit reviewed file set and retain installation-owned configuration, custom CSS, gallery media and runtime data.
+- Windows interactive deployment keeps useful diagnostics visible and preserves earlier packages; automated destination collisions remain explicit failures.
+- Database support and compatibility obligations are documented precisely; new runtime paths require reviewed module inputs, and new production paths require reviewed inventory membership before manifest generation.
+- Local release evidence remains separate from manual browser acceptance and post-publication updater checks. Routine manual rebuilds require compiler/consistency checks without an additional PDF visual-approval gate.
+
 ## Version 0.119
 
 Version 0.119 introduces a small request kernel that loads reviewed PHP modules for the selected route, restores saved route maps in galleries without photographs, and replaces the lightbox's development readout with a localized diagnostic dashboard. Existing procedural handlers, access rules and shared-hosting deployment remain supported.
