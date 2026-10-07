@@ -34,6 +34,7 @@ return [
             'Gallery\\Services\\gallery_access_assert_public_policy_available',
             'Gallery\\Services\\nsfw_guard_assert_public_policy_available',
         ],
+        'simbrief-ofp-attachments' => ['Gallery\\Services\\simbrief_ofp_local_pdf_path'],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
         // Settings-only and rendering callers share each owner independently.
         'breadcrumb-policy' => [
@@ -96,7 +97,7 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization'],
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'simbrief-ofp-attachments'],
     'module_dependencies' => [
         'updater-work' => ['request-maintenance'],
         // Rendering follows view-model preparation and reuses its shared Core dependencies.

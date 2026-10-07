@@ -86,6 +86,10 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     }
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
+    if ((string) ($_POST['simbrief_action'] ?? '') === 'convert_pdf_pages') {
+        admin_edit_gallery_handle_ofp_convert($gallery);
+        return;
+    }
     if ((string) ($_POST['action'] ?? '') === 'apply_exif_date_suggestion') {
         if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
             flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
@@ -124,6 +128,46 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
         return;
     }
     admin_edit_gallery_handle_save($gallery, $returnTab);
+}
+
+/**
+ * Convert the saved OFP from the existing gallery editor's guarded POST flow.
+ *
+ * Gallery writes and the PDF page rasterizer stay in the editor's mutation
+ * domain rather than expanding the lightweight SimBrief draft module.
+ *
+ * @param array<string,mixed> $gallery Authorized source gallery row.
+ * @return void Sends a private JSON response without rendering editor HTML.
+ */
+function admin_edit_gallery_handle_ofp_convert(array $gallery): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    try {
+        if (!feature_capability_effective_enabled('simbrief')) {
+            throw new \RuntimeException('SimBrief integration is disabled.');
+        }
+        require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
+        require_once __DIR__ . '/../../services/simbrief_ofp_conversion.php';
+        $result = \Gallery\Services\simbrief_ofp_create_private_subgallery($gallery);
+        echo json_encode([
+            'ok' => true,
+            'created' => (bool) $result['created'],
+            'gallery_id' => (int) $result['gallery_id'],
+            'pages' => (int) $result['pages'],
+            'url' => (string) $result['url'],
+            'message' => $result['created']
+                ? t('simbrief.ofp.convert_success', 'Private OFP gallery created with {pages} page(s).', ['pages' => (int) $result['pages']])
+                : t('simbrief.ofp.convert_existing', 'The generated OFP subgallery already exists. No existing photos were changed.'),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (Throwable $exception) {
+        admin_log_event('warning', 'simbrief.ofp_conversion_failed', 'Optional OFP PDF conversion failed.', [
+            'gallery_id' => (int) $gallery['id'],
+            'error' => $exception->getMessage(),
+        ]);
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'error' => $exception->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
 }
 
 /**

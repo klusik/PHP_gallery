@@ -100,36 +100,6 @@ function cms_admin_simbrief_description(): void
         return;
     }
 
-    if ((string) ($_POST['simbrief_action'] ?? '') === 'convert_pdf_pages') {
-        try {
-            if (!$gallery) {
-                throw new \RuntimeException('Select an existing gallery with a saved SimBrief PDF.');
-            }
-            require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
-            require_once __DIR__ . '/../services/simbrief_ofp_conversion.php';
-            $result = \Gallery\Services\simbrief_ofp_create_private_subgallery($gallery);
-            admin_simbrief_json_response([
-                'ok' => true,
-                'created' => (bool) $result['created'],
-                'gallery_id' => (int) $result['gallery_id'],
-                'pages' => (int) $result['pages'],
-                'url' => (string) $result['url'],
-                'message' => $result['created']
-                    ? t('simbrief.ofp.convert_success', 'Private OFP gallery created with {pages} page(s).', ['pages' => (int) $result['pages']])
-                    : t('simbrief.ofp.convert_existing', 'The generated OFP subgallery already exists. No existing photos were changed.'),
-            ]);
-        } catch (Throwable $exception) {
-            if (function_exists('Gallery\\Services\\admin_log_event')) {
-                admin_log_event('warning', 'simbrief.ofp_conversion_failed', 'Optional OFP PDF conversion failed.', [
-                    'gallery_id' => $galleryId,
-                    'error' => $exception->getMessage(),
-                ]);
-            }
-            admin_simbrief_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
-        }
-        return;
-    }
-
     try {
         $simbriefInput = array_key_exists('simbrief_identifier', $_POST)
             ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)

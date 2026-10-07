@@ -93,3 +93,22 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
     }
     return $magic === '%PDF-' ? $path : null;
 }
+
+/**
+ * Check that a server-side PDF renderer is available without spawning commands.
+ *
+ * @return bool Whether this host can attempt optional OFP conversion.
+ */
+function simbrief_ofp_conversion_supported(): bool
+{
+    if (!class_exists(\Imagick::class)) {
+        return false;
+    }
+    try {
+        return in_array('PDF', \Imagick::queryFormats('PDF'), true)
+            && in_array('JPEG', \Imagick::queryFormats('JPEG'), true);
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
