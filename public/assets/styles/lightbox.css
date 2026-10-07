@@ -1491,6 +1491,8 @@
     margin-top: 1rem;
 }
 dialog.lightbox.simbrief-ofp-dialog {
+    /* The photo lightbox centers grid items; a document stage must fill its row. */
+    align-items: stretch;
     inset: 0;
     width: 100vw;
     height: 100vh;
