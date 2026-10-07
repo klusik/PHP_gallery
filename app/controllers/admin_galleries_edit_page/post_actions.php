@@ -70,6 +70,7 @@ use function Gallery\Services\admin_log_event;
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Dispatches a guarded mutation and its JSON response or redirect.
  */
 function admin_edit_gallery_handle_post(array $gallery, array $capabilities): void
 {

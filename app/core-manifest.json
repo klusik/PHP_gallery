@@ -39,7 +39,7 @@
         "app/controllers/admin_galleries_edit_page/capabilities.php": "sha256:6511cc02ad4b6995275f296be7b6152defba27bfbc15e9f9d6a73ed6a3315c8f",
         "app/controllers/admin_galleries_edit_page/controller.php": "sha256:cc30509bbc5186a39e1196ba3dec01e69cec3aa532ae0b4153790d1c59e9fdf9",
         "app/controllers/admin_galleries_edit_page/overview.php": "sha256:cb4ea8e12ef5b06629b07f53e041710bfac9c55abbec8b704cda1e2e80ed36dc",
-        "app/controllers/admin_galleries_edit_page/post_actions.php": "sha256:dea6e58866b40f5bf701769d5220e23cd3cc7f77e3035b095e27ffa318fcee8c",
+        "app/controllers/admin_galleries_edit_page/post_actions.php": "sha256:4563fc057396e2b0652de14d971efbb06999e233d903f43ebae8ed14a6f3ef6e",
         "app/controllers/admin_galleries_edit_page/tab_access.php": "sha256:a2569d7321b6f35280bdcdaf3c808f5cc69595aec56cc8db27d68b8919714e60",
         "app/controllers/admin_galleries_edit_page/tab_display.php": "sha256:53932954ae760b52e44537da4ec546e0f63cbdf50794e5b3cf23bc681c9642cb",
         "app/controllers/admin_galleries_edit_page/tab_identity.php": "sha256:494061c43b6e2c24714ff654a36ac00b0b7abfd5489431ca54ee8adf1c286129",
