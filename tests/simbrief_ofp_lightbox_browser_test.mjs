@@ -109,6 +109,9 @@ const html = String.raw`<!doctype html>
   const wholePage = (reason, width, height) => {
       const viewport = stage().getBoundingClientRect();
       const page = canvas().getBoundingClientRect();
+      check(stage().clientWidth > 100 && stage().clientHeight > 100,
+          reason + ': grid stage collapsed to ' + stage().clientWidth + ' × '
+          + stage().clientHeight + ' CSS pixels');
       check(page.top >= viewport.top - 2 && page.bottom <= viewport.bottom + 2
           && page.left >= viewport.left - 2 && page.right <= viewport.right + 2,
           reason + ': PDF page clipped');
@@ -118,7 +121,10 @@ const html = String.raw`<!doctype html>
           && Math.abs((page.left + page.right) / 2 - (viewport.left + stage().clientWidth / 2)) < 4,
           reason + ': PDF page not centered');
       check(Math.abs(page.width / page.height - width / height) < 0.01,
-          reason + ': PDF aspect ratio was distorted');
+          reason + ': PDF aspect ratio was distorted (' + page.width.toFixed(2)
+          + ' × ' + page.height.toFixed(2) + ' displayed, expected '
+          + width + ' × ' + height + ', stage '
+          + stage().clientWidth + ' × ' + stage().clientHeight + ')');
       check(active('fit-page'), reason + ': expected whole-page view mode');
       check(viewport.bottom <= document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().top + 1,
           reason + ': toolbar overlaps PDF stage');
