@@ -203,7 +203,7 @@ jobs:
           installer="${RUNNER_TEMP}/install-tinytex.sh"
           curl --fail --location --silent --show-error --retry 3 --retry-delay 2 \
             https://tinytex.yihui.org/install-bin-unix.sh -o "${installer}"
-          timeout 300 sh -s --no-path < "${installer}"
+          timeout 300 sh -s -- --no-path < "${installer}"
 
           tex_bin="$(find "${HOME}/.TinyTeX/bin" -mindepth 1 -maxdepth 1 -type d -print -quit)"
           if [[ -z "${tex_bin}" ]]; then
