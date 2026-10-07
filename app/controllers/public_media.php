@@ -569,11 +569,10 @@ function cms_gallery_ofp_pdf(): void
     $isAdmin = current_user() !== null
         && !\Gallery\Core\admin_anonymous_preview_active()
         && !current_user_is_known_under_18();
-    if (!$gallery || (!$isAdmin && (
-        !\Gallery\Services\gallery_allows_direct_public_request($gallery)
-        || !visitor_can_access_gallery($gallery)
-        || (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content())
-    ))) {
+    // Use the exact visitor policy without an implicit administrator bypass.
+    // A password/share-token grant may authorize a gallery even when its normal
+    // direct public URL is not accessible. Anonymous admin preview is not a grant.
+    if (!$gallery || (!$isAdmin && !\Gallery\Services\visitor_can_access_gallery_without_admin_bypass($gallery))) {
         cms_not_found();
         return;
     }
