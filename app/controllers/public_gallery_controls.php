@@ -417,10 +417,14 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     view_render_gallery_date(gallery_date_view_model($gallery), 'hero-gallery-date');
     $dateHtml = (string) ob_get_clean();
 
+    require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
+    $ofpPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
     \Gallery\Views\view_render_public_gallery_branding_header([
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
+        'ofp_pdf_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1]) : '',
+        'ofp_pdf_download_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1, 'download' => 1]) : '',
         'banner_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '',
         'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
         'date_html' => $dateHtml,

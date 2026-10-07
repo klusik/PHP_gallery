@@ -198,8 +198,19 @@ function view_render_public_gallery_branding_header(array $viewModel): void
     }
     echo '</div>';
     echo (string) ($viewModel['date_html'] ?? '');
-    if (trim($description) !== '') {
-        echo '<div class="hero-description gallery-description-rich">' . view_gallery_description_markdown_html($description, (array) ($viewModel['description_links'] ?? [])) . '</div>';
+    $ofpUrl = (string) ($viewModel['ofp_pdf_url'] ?? '');
+    if (trim($description) !== '' || $ofpUrl !== '') {
+        echo '<div class="hero-description gallery-description-rich">';
+        if (trim($description) !== '') {
+            echo view_gallery_description_markdown_html($description, (array) ($viewModel['description_links'] ?? []));
+        }
+        if ($ofpUrl !== '') {
+            echo '<div class="simbrief-ofp-actions">';
+            echo '<a class="button secondary simbrief-ofp-open" href="' . e($ofpUrl) . '" data-simbrief-ofp-open data-ofp-url="' . e($ofpUrl) . '">' . e(t('simbrief.ofp.view', 'View flight plan (OFP)')) . '</a>';
+            echo '<a class="button secondary" href="' . e((string) ($viewModel['ofp_pdf_download_url'] ?? $ofpUrl)) . '" download="simbrief-ofp.pdf">' . e(t('simbrief.ofp.download', 'Download OFP PDF')) . '</a>';
+            echo '</div>';
+        }
+        echo '</div>';
     }
 }
 
