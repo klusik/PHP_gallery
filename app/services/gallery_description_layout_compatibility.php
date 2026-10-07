@@ -42,6 +42,24 @@ use function Gallery\Models\gallery_layout_migration_model_finish;
 const GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION = 2;
 
 /**
+ * Bound Windows commits of a preflighted layout sidecar.
+ * @var int
+ * Units: rename attempts, including the first. Scope: one sidecar replacement.
+ * Consumers: gallery_description_layout_apply_sidecar_plan().
+ * Rationale: tolerate short sharing locks without removing the existing metadata.
+ */
+const GALLERY_LAYOUT_SIDECAR_RENAME_ATTEMPTS = 10;
+
+/**
+ * Bound pauses between Windows sidecar commit attempts.
+ * @var int
+ * Units: microseconds. Scope: one replacement, at most nine pauses.
+ * Consumers: gallery_description_layout_apply_sidecar_plan().
+ * Rationale: give readers up to 450 ms of requested pauses to release shared handles.
+ */
+const GALLERY_LAYOUT_SIDECAR_RENAME_DELAY_US = 50_000;
+
+/**
  * Convert one external legacy metadata document without changing any other field.
  * Old vertical meant photo beside text; current horizontal preserves that appearance.
  * Null, missing, empty and inherit values remain exactly as stored.
@@ -180,11 +198,31 @@ function gallery_description_layout_apply_sidecar_plan(array $documents): void
             if ($permissions !== false && !chmod($temporary, $permissions & 0777)) {
                 throw new RuntimeException('Gallery layout sidecar permissions could not be preserved.');
             }
-            if (file_put_contents($temporary, $encoded) !== strlen($encoded) || !rename($temporary, $path)) {
+            if (@file_put_contents($temporary, $encoded) !== strlen($encoded)) {
                 throw new RuntimeException('Gallery layout sidecar replacement failed.');
             }
+            // Retry only the same complete staging bytes on Windows. A concurrent
+            // edit during a pause invalidates the original preflight; never delete it.
+            $attempts = PHP_OS_FAMILY === 'Windows' ? GALLERY_LAYOUT_SIDECAR_RENAME_ATTEMPTS : 1;
+            $committed = false;
+            for ($attempt = 0; $attempt < $attempts; $attempt++) {
+                if ($attempt > 0 && file_get_contents($path) !== $document['original']) {
+                    throw new RuntimeException('Gallery layout sidecar changed during migration.');
+                }
+                if (@rename($temporary, $path)) {
+                    $committed = true;
+                    break;
+                }
+                if ($attempt + 1 < $attempts) usleep(GALLERY_LAYOUT_SIDECAR_RENAME_DELAY_US);
+            }
+            if (!$committed) throw new RuntimeException('Gallery layout sidecar replacement failed.');
         } finally {
-            if (is_file($temporary)) unlink($temporary);
+            if (is_file($temporary)) {
+                // The owned staging file may have inherited a read-only target mode.
+                // Restore owner read/write only for staging cleanup, never the target.
+                @chmod($temporary, 0600);
+                @unlink($temporary);
+            }
         }
     }
 }

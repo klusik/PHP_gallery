@@ -22,6 +22,7 @@ if (!executable && !preview) {
     console.log('SKIP browser diagnostics test: supply an installed Chromium executable.');
     process.exit(0);
 }
+let mediaRequestCount = 0;
 const server = createServer(async (request, response) => {
     try {
         const url = new URL(request.url, 'http://localhost');
@@ -32,7 +33,13 @@ const server = createServer(async (request, response) => {
             response.end('export const obsoleteDashboardAsset = true; export const createLightboxDevDashboard = () => { throw new Error("Obsolete dashboard must not be reused"); };');
             return;
         }
+        if (url.pathname === '/fixture-media-request-count') {
+            response.writeHead(200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
+            response.end(JSON.stringify({count: mediaRequestCount}));
+            return;
+        }
         if (url.pathname.startsWith('/media/')) {
+            mediaRequestCount += 1;
             if (url.pathname.includes('broken')) { response.writeHead(404).end(); return; }
             const full = url.pathname.includes('full');
             const width = full ? 2700 : 900;

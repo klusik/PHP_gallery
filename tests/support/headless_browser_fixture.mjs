@@ -18,7 +18,7 @@ const startupTimeoutMs = 15000;
 const fixtureTimeoutMs = 30000;
 
 /**
- * Run an isolated loopback browser document and return its result marker.
+ * Navigate one fresh owned tab to its loopback fixture and return the result marker.
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
@@ -45,7 +45,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
             '--disable-background-networking', '--disable-extensions', '--disable-component-update',
             '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--remote-debugging-port=0',
-            '--user-data-dir=' + profile, url], {windowsHide: true});
+            '--user-data-dir=' + profile, 'about:blank'], {windowsHide: true});
         // Preserve only bounded diagnostic tails; fixture results come from the owned DevTools page.
         browser.stdout.on('data', data => { output = (output + data).slice(-2000); });
         browser.stderr.on('data', data => { errors = (errors + data).slice(-2000); });
@@ -94,9 +94,16 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         }
 
         const {targetInfos} = await command('Target.getTargets');
-        const target = targetInfos.find(info => info.type === 'page' && info.url.startsWith('http://127.0.0.1:'));
+        const target = targetInfos.find(info => info.type === 'page' && info.url === 'about:blank');
         if (!target) throw new Error('Owned loopback fixture page not found');
         const {sessionId} = await command('Target.attachToTarget', {targetId: target.targetId, flatten: true});
+        await command('Page.enable', {}, sessionId);
+        // Keep native focus and :focus-visible behavior available in this owned headless page.
+        await command('Emulation.setFocusEmulationEnabled', {enabled: true}, sessionId);
+        // One explicit navigation avoids command-line startup stalls and never
+        // reloads an already-running authenticated workflow.
+        const navigation = await command('Page.navigate', {url}, sessionId);
+        if (navigation.errorText) throw new Error('Owned fixture navigation failed');
         // Bound fixture completion independently from browser startup and protocol request deadlines.
         const deadline = Date.now() + Math.max(1000, Math.min(145000, options.timeoutMs ?? fixtureTimeoutMs));
         let result = '';

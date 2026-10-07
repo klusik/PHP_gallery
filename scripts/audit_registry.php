@@ -91,6 +91,10 @@ $registry = [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'runtime_module_plan_test.php' => [
+            'timeout' => 240,
+            'reason' => 'Compiles the complete source dependency graph and verifies composed/legacy loading in 192 isolated children; 45 seconds does not cover the measured 72-second Windows run.',
+        ],
         'deploy_app_packaging_test.php' => [
             'timeout' => 600,
             'reason' => 'Real Bash and PowerShell folder/ZIP proofs copy the complete production and source-review inventory into an owned dirty fixture.',

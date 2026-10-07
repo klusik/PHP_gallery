@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.121.2}
-\newcommand{\manualdate}{6 October 2026}
+\newcommand{\version}{0.121.3}
+\newcommand{\manualdate}{7 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1839,6 +1839,8 @@ Trash payloads live in~protected persistent \filepath{data/gallery-trash/} stora
 
 Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze}, \ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash, cache, thumbnail, and~database content; it~writes only the~durable Maintenance Center checkpoint needed to~resume the~inspection. The~Review step groups tasks by~area, labels required automatic steps, and~places available optional tasks with~no~detected work in~a~collapsed disclosure. Required, default, and~optional tasks remain clear before any selected cleanup starts. Deep media verification and~full database optimization remain discoverable when relevant, even though they are~not~selected automatically.
 
+The~server loads the~reviewed subsystem dependencies again for~each separate analysis or~execution request before running its~task. Checking for~pending migrations only reads the~migration ledger; a~missing ledger or~failed inspection is~treated as~pending work. Apply migrations through the~explicit migration workflow; Analyze does~not~create or~repair migration storage.
+
 The~reviewed plan is~bound to~the~current application version, applied migration revision, Maintenance Center registry revision, and~plan content. If~one of~those inputs changes, execution refuses the~stale plan and~asks for~a~new analysis. The~server rechecks task dependencies, capability state, and~database-table eligibility at~execution time; browser checkboxes are~presentation input rather than~authorization.
 
 Execution advances through bounded checkpoints, so~you can~reload or~close the~page and~resume the~same job later. Only one running or~paused central job owns the~durable mutation claim, and~two browser tabs cannot advance one job concurrently. Automatic Site Maintenance yields before its~first mutation while that claim is~held. Public read-only gallery requests remain available.
@@ -2002,6 +2004,8 @@ Deployment helpers & Windows/Linux deploy scripts, release metadata, core-manife
 \subsection{Application updates}
 
 The~compact release summary keeps installed and~available versions, channel, status, and~the~main actions together; repository and~GitHub API details remain in~a~collapsed diagnostics section. When a~job completes, the~browser refreshes the~summary from~local metadata in~place, keeps the~panel open and~the~URL unchanged, and~hides an~obsolete stable-update action. This refresh does~not~perform another GitHub check. If~it~fails, use the~status-refresh button to~retry the~local read without repeating the~installation.
+
+On~Windows, an~updater checkpoint commit allows up~to~ten atomic replacement attempts, with~50~ms pauses and~a~450~ms total pause limit, to~handle brief file-sharing locks. If~the~commit still fails, the~previous checkpoint is~preserved. A~persistent permission problem requires fixing storage access before retrying the~job. Windows uses the~same bounded retry policy when migrating orientation metadata in~\filepath{gallery.json}; a~concurrent edit or~persistent refusal preserves the~existing document and~stops the~migration.
 
 The~updater checks configured channels, validates packages, stages content, verifies required runtime files and~sizes, preserves overwritten files in~recovery storage, and~activates the~update. Rate-limit handling and~retry state prevent repeated remote requests during provider wait periods. A~resumable job card appears in~both \ui{Status} and~\ui{Advanced tools}, so~a~beta install, restore, or~reinstall continues to~show its progress where it~was~started. The~page may~be~closed and~reopened without discarding completed checkpoints.
 

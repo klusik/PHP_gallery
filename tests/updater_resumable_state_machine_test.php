@@ -35,6 +35,7 @@ require_once __DIR__ . '/support/module_source.php';
 require_once __DIR__ . '/../app/services/updates.php';
 
 use function Gallery\Services\application_update_acquire_lock;
+use function Gallery\Services\application_update_write_json_atomic;
 use function Gallery\Services\application_update_activation_priority;
 use function Gallery\Services\application_update_backup_items_for_plan;
 use function Gallery\Services\application_update_backup_path_to_directory;
@@ -180,6 +181,37 @@ try {
     assert_updater_resumable(!application_update_backup_path_to_directory($activeRoot, $snapshotRoot, 'app/new.php'), 'Missing pre-update file was incorrectly reported as backed up.');
     assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/example.php') === "old-file\n", 'Rollback snapshot file contents changed.');
     assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/nested/value.txt') === "old-directory-file\n", 'Rollback snapshot directory contents changed.');
+
+    $atomicStatePath = $tempRoot . '/atomic-state.json';
+    application_update_write_json_atomic($atomicStatePath, ['revision' => 1]);
+    application_update_write_json_atomic($atomicStatePath, ['revision' => 2]);
+    assert_updater_resumable(json_decode((string) file_get_contents($atomicStatePath), true) === ['revision' => 2], 'Atomic updater state replacement did not commit the complete new checkpoint.');
+
+    $blockedStatePath = $tempRoot . '/blocked-state';
+    mkdir($blockedStatePath);
+    file_put_contents($blockedStatePath . '/preserved.txt', 'preserve');
+    $commitRefused = false;
+    try {
+        application_update_write_json_atomic($blockedStatePath, ['revision' => 3]);
+    } catch (RuntimeException) {
+        $commitRefused = true;
+    }
+    assert_updater_resumable($commitRefused && file_get_contents($blockedStatePath . '/preserved.txt') === 'preserve', 'Failed atomic commit changed its existing destination.');
+    assert_updater_resumable((glob($blockedStatePath . '.tmp-*') ?: []) === [], 'Failed atomic commit left a staging file.');
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        assert_updater_resumable(chmod($atomicStatePath, 0444), 'Could not protect the Windows checkpoint fixture.');
+        $commitRefused = false;
+        try {
+            application_update_write_json_atomic($atomicStatePath, ['revision' => 3]);
+        } catch (RuntimeException) {
+            $commitRefused = true;
+        } finally {
+            chmod($atomicStatePath, 0666);
+        }
+        assert_updater_resumable($commitRefused && json_decode((string) file_get_contents($atomicStatePath), true) === ['revision' => 2], 'Windows commit refusal did not preserve the previous checkpoint.');
+        assert_updater_resumable((glob($atomicStatePath . '.tmp-*') ?: []) === [], 'Windows commit refusal left a staging file.');
+    }
 
     $cacheFixtureRoot = $tempRoot . '/cache-lifecycle';
     mkdir($cacheFixtureRoot . '/cache/github-api', 0775, true);
