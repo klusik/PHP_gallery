@@ -50,6 +50,15 @@ const SIMBRIEF_DESCRIPTION_ENDPOINT = 'https://www.simbrief.com/api/xml.fetcher.
 const SIMBRIEF_DESCRIPTION_BASE_URL = 'https://www.simbrief.com';
 const SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS = 18;
 const SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS = 30;
+/**
+ * Upper bound for a locally retained SimBrief PDF response.
+ *
+ * @var int
+ * Units: bytes.
+ * Scope: one SimBrief PDF download and its stored gallery attachment.
+ * Consumers: simbrief_description_basic_pdf_fetch, simbrief_description_save_pdf_for_gallery.
+ * Rationale: constrain memory, shared-host storage and untrusted remote responses.
+ */
 const SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES = 26214400;
 
 /**
@@ -527,7 +536,7 @@ function simbrief_description_extract_details(array $payload): array
  * @param array $identifier Identifier value.
  * @param array $details Details value.
  * @param array $routeResult Route result value.
- * @return array{saved: bool, path: string, manifest_path: string, filename: string, pdf_saved: bool, pdf_path: string, pdf_filename: string, pdf_url: string, pdf_error: string, error: string}.
+ * @return array{saved:bool,path:string,manifest_path?:string,filename:string,pdf_saved?:bool,pdf_path?:string,pdf_filename?:string,pdf_url?:string,pdf_error?:string,error:string} Source OFP attachment paths and optional PDF download status.
  */
 function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
 {
@@ -765,7 +774,7 @@ function simbrief_description_normalize_pdf_url(string $candidate, string $fileR
  *
  * @param string $pdfUrl Pdf url URL.
  * @param string $targetPath Target filesystem path.
- * @return array{saved: bool, path: string, filename: string, url: string, error: string}.
+ * @return array{saved:bool,path:string,filename:string,url:string,error:string} Downloaded PDF attachment metadata or an actionable error.
  */
 function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targetPath): array
 {
@@ -831,7 +840,7 @@ function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds):
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Accept: application/pdf'],
             CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-            CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$body): int {
+            CURLOPT_WRITEFUNCTION => static function (\CurlHandle $handle, string $chunk) use (&$body): int {
                 $length = strlen($chunk);
                 if (strlen($body) + $length > SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES) {
                     return 0;

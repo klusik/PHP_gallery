@@ -100,6 +100,8 @@ function setupOptionalPublicFeature(moduleUrl, exportName, selector) {
  * These setup calls intentionally match the public subset from gallery.js. Admin
  * tools, upload workflows, side panels, reorder controls, and editors remain in
  * the legacy admin entrypoint so anonymous visitors do not fetch that module graph.
+ *
+ * @return {void} Installs public gallery behavior without eager loading admin modules.
  */
 function bootPublicGalleryBrowserFeatures() {
     setupGalleryLightbox();

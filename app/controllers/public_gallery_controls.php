@@ -404,9 +404,10 @@ function render_public_gallery_preview_toolbar(array $gallery): void
  * image visually replaces it. The logo is decorative here because it appears
  * beside an existing text or banner title and would otherwise duplicate content.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $seo Seo value.
- * @param bool $publicOnly Public only value.
+ * @param array<string,mixed> $gallery Source gallery record and branding configuration.
+ * @param array<string,mixed> $seo SEO metadata for the public gallery title.
+ * @param bool $publicOnly Whether only visitor-visible assets should be used.
+ * @return void Emits the accessible gallery heading, description and OFP actions.
  */
 function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
 {

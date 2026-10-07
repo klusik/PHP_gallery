@@ -177,7 +177,8 @@ function view_render_public_gallery_preview_toolbar(array $viewModel): void
 /**
  * Render the public gallery title and optional branding assets.
  *
- * @param array<string,mixed> $viewModel Controller-prepared branding state.
+ * @param array<string,mixed> $viewModel Controller-prepared branding, description and OFP attachment state.
+ * @return void Emits public gallery branding and conditional flight-plan controls.
  */
 function view_render_public_gallery_branding_header(array $viewModel): void
 {

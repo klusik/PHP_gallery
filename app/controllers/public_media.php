@@ -600,7 +600,10 @@ function cms_gallery_ofp_pdf(): void
 }
 
 /**
- * Handles cms media logic for the gallery application.
+ * Dispatch authorized public media, including imported OFP PDFs, through the
+ * existing gallery visibility, ownership and image-access controller.
+ *
+ * @return void Streams permitted media or sends an access-controlled failure.
  */
 function cms_media(): void
 {

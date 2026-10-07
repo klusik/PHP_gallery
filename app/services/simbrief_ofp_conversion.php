@@ -35,9 +35,45 @@ namespace Gallery\Services;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Maximum number of pages rasterized in a single explicit PDF conversion.
+ *
+ * @var int
+ * Units: pages.
+ * Scope: PDF rendering stage and generated page gallery.
+ * Consumers: simbrief_ofp_render_pdf_pages.
+ * Rationale: Bound CPU and image count on shared hosting.
+ */
 const SIMBRIEF_OFP_CONVERSION_MAX_PAGES = 40;
+/**
+ * Maximum cumulative JPEG output retained while rasterizing one OFP.
+ *
+ * @var int
+ * Units: bytes.
+ * Scope: Temporary conversion stage before child creation.
+ * Consumers: simbrief_ofp_render_pdf_pages.
+ * Rationale: Prevent unbounded disk usage.
+ */
 const SIMBRIEF_OFP_CONVERSION_MAX_BYTES = 67108864;
+/**
+ * Maximum rendered dimensions multiplied for any individual OFP page.
+ *
+ * @var int
+ * Units: pixels per page.
+ * Scope: One rasterized page in the private cache.
+ * Consumers: simbrief_ofp_render_pdf_pages.
+ * Rationale: Bound Imagick memory and output resolution.
+ */
 const SIMBRIEF_OFP_CONVERSION_MAX_PIXELS = 9000000;
+/**
+ * Maximum elapsed application time budget for the page-rendering loop.
+ *
+ * @var int
+ * Units: seconds.
+ * Scope: One explicitly invoked conversion stage.
+ * Consumers: simbrief_ofp_render_pdf_pages.
+ * Rationale: Prevent a long-running conversion on shared hosting.
+ */
 const SIMBRIEF_OFP_CONVERSION_MAX_SECONDS = 60;
 
 /**

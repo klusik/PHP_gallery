@@ -226,7 +226,7 @@ async function openOfpViewer(link) {
 /**
  * Show a localized loading state or browser-PDF fallback.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @param {string} message Status text.
  * @param {boolean} error Whether to show the fallback link.
  * @returns {void} Update visible status.
@@ -239,7 +239,7 @@ function setOfpStatus(state, message, error = false) {
 /**
  * Render only the current page to a bounded-resolution canvas.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @returns {Promise<void>} Render safely despite rapid navigation or cancellation.
  */
 async function renderOfpPage(state) {
@@ -302,7 +302,7 @@ async function renderOfpPage(state) {
 /**
  * Update the independent page counter, buttons and zoom label.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @returns {void} Refresh controls.
  */
 function updateOfpControls(state) {
@@ -317,7 +317,7 @@ function updateOfpControls(state) {
 /**
  * Dispatch an OFP-only action without invoking photo lightbox handlers.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @param {string} action OFP toolbar operation.
  * @returns {Promise<void>} Apply the operation.
  */
@@ -349,7 +349,7 @@ async function runOfpAction(state, action) {
 /**
  * Intercept the document keys before the photo lightbox global shortcuts.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @param {KeyboardEvent} event Keyboard event in capture phase.
  * @returns {void} Route the key to this document only.
  */
@@ -366,7 +366,7 @@ function handleOfpKeyboard(state, event) {
 /**
  * Apply two-finger pinch zoom on release, preserving a cheap live preview.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @returns {void} Register touch gesture listeners on the document viewport.
  */
 function attachOfpTouchZoom(state) {
@@ -398,7 +398,7 @@ function attachOfpTouchZoom(state) {
 /**
  * Release the PDF worker, old renders and event listeners on close.
  *
- * @param {object} state Document viewer state.
+ * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
  * @returns {Promise<void>} Restore focus to the original gallery link.
  */
 async function closeOfpViewer(state) {
