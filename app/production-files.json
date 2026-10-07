@@ -2096,6 +2096,7 @@
         "tests/lightbox_zoom_translation_test.php",
         "tests/link_favicon_model_test.php",
         "tests/maintenance_center_test.php",
+        "tests/manifest_reproducible_timestamp_test.php",
         "tests/migration_consistency_test.php",
         "tests/migration_legacy_runner_compatibility_test.php",
         "tests/migration_schema_cache_reset_test.php",
