@@ -370,5 +370,7 @@ jobs:
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            # Preserve the fixture's actionable failure details when the audit fails.
+            cache/test-audit/**/browser-map.log
           if-no-files-found: ignore
           retention-days: 7
