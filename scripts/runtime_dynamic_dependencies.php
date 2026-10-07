@@ -153,6 +153,7 @@ Gallery\Services\maintenance_center_analysis_step_unlocked|dynamic_callback_argu
 Gallery\Services\maintenance_center_analysis_step_unlocked|variable_callable|$analyzer()
 Gallery\Services\maintenance_center_execution_step_unlocked|dynamic_callback_argument|is_callable($executor)
 Gallery\Services\maintenance_center_execution_step_unlocked|variable_callable|$executor()
+Gallery\Services\maintenance_center_load_task_dependencies|variable_callable|$loadDependencies()
 Gallery\Services\maintenance_center_expand_selection|variable_callable|$expand()
 Gallery\Services\maintenance_center_registry_order|variable_callable|$visit()
 Gallery\Services\pagination_page_url|variable_callable|$urlBuilder()
@@ -200,6 +201,7 @@ SITES;
             str_contains($signature, 'application_autoupdate_maybe_run|'),
             str_contains($signature, 'site_maintenance_register_request_trigger|'),
             str_contains($signature, 'admin_log_archive_register_request_trigger|') => 'injected-module-loader:explicit-module-id',
+            str_contains($signature, 'maintenance_center_load_task_dependencies|') => 'injected-module-loader:maintenance-center-task-worker',
             str_contains($signature, 'application_update_job_finalize|') => 'string-callbacks:required-updater-cache-roots',
             str_contains($signature, 'admin_test_run_clear_safe_caches|') => 'string-callbacks:required-diagnostic-cache-roots',
             str_contains($signature, 'image_decode_gd_path_result|') => 'runtime-function:optional-gd-decoder',

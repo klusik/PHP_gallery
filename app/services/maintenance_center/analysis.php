@@ -249,20 +249,20 @@ function maintenance_center_start_analysis_unlocked(int $actorId): array
 }
 
 /** Run exactly one read-only registry analysis task. */
-function maintenance_center_analysis_step(int $jobId, int $actorId): array
+function maintenance_center_analysis_step(int $jobId, int $actorId, ?callable $loadDependencies = null): array
 {
     if (!maintenance_center_model_acquire_step_lock($jobId)) {
         return maintenance_center_job_status($jobId, $actorId);
     }
     try {
-        return maintenance_center_analysis_step_unlocked($jobId, $actorId);
+        return maintenance_center_analysis_step_unlocked($jobId, $actorId, $loadDependencies);
     } finally {
         maintenance_center_model_release_step_lock($jobId);
     }
 }
 
 /** Run one analysis task while the per-job single-flight lock is held. */
-function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId): array
+function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId, ?callable $loadDependencies = null): array
 {
     $row = maintenance_center_model_job($jobId);
     if (!is_array($row) || (int) ($row['actor_id'] ?? 0) !== $actorId) {
@@ -298,6 +298,7 @@ function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId): ar
 
     $featureAvailable = maintenance_center_task_feature_available($task);
     try {
+        maintenance_center_load_task_dependencies($key, 'analysis', $loadDependencies);
         $result = $featureAvailable
             ? $analyzer(['job' => $row, 'state' => $state, 'results' => (array) ($state['analysis_results'] ?? []), 'task' => $task])
             : ['available' => false, 'reason' => 'feature_disabled', 'has_work' => false, 'work_units' => 0];
@@ -305,14 +306,16 @@ function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId): ar
             throw new RuntimeException('Maintenance Center analyzer returned invalid data.');
         }
     } catch (Throwable $exception) {
+        $diagnostic = maintenance_center_exception_diagnostic($exception);
         $result = ['available' => false, 'reason' => 'analysis_failed', 'has_work' => false, 'work_units' => 0, 'warning' => maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_subsystem_failed', 'Analysis failed for this subsystem.')];
         maintenance_center_warning($state, 'analysis.' . str_replace('.', '_', $key), maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_task_failed', 'Analysis failed for {task}; the task will not be runnable.', ['task' => $key]));
         if (!empty($task['required'])) {
             maintenance_center_error($state, 'analysis_required_failed', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_required_failed', 'Required analysis failed for {task}.', ['task' => $key]));
             maintenance_center_model_finish_job($jobId, $actorId, 'failed', 'analysis_failed', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), 'analysis_failed', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_required_failed_generic', 'Required read-only analysis failed.'));
-            maintenance_center_log_lifecycle('error', 'maintenance_center.failed', 'Maintenance Center analysis failed.', $jobId, ['task' => $key]);
+            maintenance_center_log_lifecycle('error', 'maintenance_center.failed', 'Maintenance Center analysis failed.', $jobId, ['task' => $key] + $diagnostic);
             return maintenance_center_job_status($jobId, $actorId);
         }
+        maintenance_center_log_lifecycle('warning', 'maintenance_center.analysis_task_failed', 'Optional Maintenance Center analysis task failed and was disabled.', $jobId, ['task' => $key] + $diagnostic);
     }
 
     $state['analysis_results'][$key] = $result;

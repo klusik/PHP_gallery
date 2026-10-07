@@ -41,6 +41,7 @@ use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_error_envelope;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_token;
+use function Gallery\Core\cms_runtime_kernel;
 use function Gallery\Core\current_user;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
@@ -106,6 +107,18 @@ function admin_maintenance_center_error_payload(Throwable $exception): array
         return ['error_code' => 'maintenance_center.not_found', 'error' => t('admin.maintenance_center.error.not_found', 'Maintenance job was not found.'), 'status' => 404];
     }
     return ['error_code' => 'maintenance_center.request_failed', 'error' => t('admin.maintenance_center.error.generic', 'The maintenance request could not be completed safely.'), 'status' => 409];
+}
+
+/**
+ * Return the request-local selective runtime loader for bounded maintenance task workers.
+ *
+ * @return callable(string):void Logical-module loader bound to the active request kernel.
+ */
+function admin_maintenance_center_runtime_loader(): callable
+{
+    return static function (string $module): void {
+        cms_runtime_kernel()->load($module);
+    };
 }
 
 /** Execute one service callback and normalize its JSON success/failure envelope. */
@@ -189,7 +202,8 @@ function cms_admin_maintenance_center_analyze_step(): void
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_analysis_step($jobId, $actorId), 'analyze_step', $jobId);
+    $loadDependencies = admin_maintenance_center_runtime_loader();
+    admin_maintenance_center_json_action(static fn (): array => maintenance_center_analysis_step($jobId, $actorId, $loadDependencies), 'analyze_step', $jobId);
 }
 
 /** Start or resume approved plan execution. */
@@ -211,7 +225,8 @@ function cms_admin_maintenance_center_execute_step(): void
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_execution_step($jobId, $actorId), 'execute_step', $jobId);
+    $loadDependencies = admin_maintenance_center_runtime_loader();
+    admin_maintenance_center_json_action(static fn (): array => maintenance_center_execution_step($jobId, $actorId, $loadDependencies), 'execute_step', $jobId);
 }
 
 /** Pause between operations while retaining the central job claim. */
