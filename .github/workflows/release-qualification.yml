@@ -95,8 +95,17 @@ jobs:
         run: |
           set -euo pipefail
           php .github/scripts/prepare_release_candidate.php "${RELEASE_VERSION}"
+          # Share one release timestamp between manifest generation and PDF compilation.
+          export SOURCE_DATE_EPOCH="$(php -r '
+            $metadata = json_decode(file_get_contents("release-metadata.json"), true, 512, JSON_THROW_ON_ERROR);
+            $moment = new DateTimeImmutable($metadata[$argv[1]]["released_at"], new DateTimeZone("Europe/Prague"));
+            echo $moment->getTimestamp();
+          ' "${RELEASE_VERSION}")"
+          echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" >> "${GITHUB_ENV}"
           php scripts/generate_production_files.php
-          php scripts/generate_manifest.php
+          if ! php scripts/generate_manifest.php --check; then
+            php scripts/generate_manifest.php
+          fi
       - id: notes-before
         name: Check existing editorial release notes
         shell: bash
@@ -222,12 +231,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          # Stable release metadata fixes PDF timestamps across cache miss/hit and reruns.
-          export SOURCE_DATE_EPOCH="$(php -r '
-            $metadata = json_decode(file_get_contents("release-metadata.json"), true, 512, JSON_THROW_ON_ERROR);
-            $moment = new DateTimeImmutable($metadata[$argv[1]]["released_at"], new DateTimeZone("Europe/Prague"));
-            echo $moment->getTimestamp();
-          ' "${RELEASE_VERSION}")"
+          # SOURCE_DATE_EPOCH is fixed by deterministic release preparation.
           export FORCE_SOURCE_DATE=1
           cd docs
           for base in PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV; do
@@ -251,7 +255,9 @@ jobs:
         run: |
           set -euo pipefail
           php scripts/generate_production_files.php
-          php scripts/generate_manifest.php
+          if ! php scripts/generate_manifest.php --check; then
+            php scripts/generate_manifest.php
+          fi
       - id: commit
         name: Commit deterministic preparation to the release branch
         shell: bash

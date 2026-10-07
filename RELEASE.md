@@ -65,7 +65,8 @@ requires successful completion of all four manuals.
 
 All editions retain `pdflatex -> makeindex -> pdflatex -> pdflatex`.
 `SOURCE_DATE_EPOCH` comes from the stable release timestamp, making PDF timestamps
-repeatable across cache miss/hit and reruns. All PDFs are rebuilt on each preparation;
+repeatable across cache miss/hit and reruns. The manifest generator uses the same
+validated epoch for its generation timestamp; an already-current manifest is preserved. All PDFs are rebuilt on each preparation;
 no unchanged-document shortcut may accept PDFs with stale version/date markers.
 An identical prepared tree already at the branch head may be reused on a rerun
 without a write. A differing tree still fails the write-back lease.

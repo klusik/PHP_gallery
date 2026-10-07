@@ -321,6 +321,8 @@ namespace {
         && !str_contains($releaseWorkflow, 'restore-keys:')
         && str_contains($releaseWorkflow, 'SOURCE_DATE_EPOCH')
         && str_contains($releaseWorkflow, 'FORCE_SOURCE_DATE=1')
+        && str_contains($releaseWorkflow, 'echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" >> "${GITHUB_ENV}"')
+        && substr_count($releaseWorkflow, 'if ! php scripts/generate_manifest.php --check; then') === 2
         && str_contains($releaseWorkflow, 'PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV'),
         'TinyTeX must use an exact input-bound cache, save only after all manuals succeed and retain reproducible PDF builds.');
     check(str_contains($releaseWorkflow, "git rev-parse 'HEAD^{tree}'")

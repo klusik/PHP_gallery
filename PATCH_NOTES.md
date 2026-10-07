@@ -29,11 +29,12 @@ Version 0.122 added GitHub-hosted release preparation and qualification for rele
 - Added `.github/workflows/release-qualification.yml` to prepare release candidates, build all four manuals, refresh generated integrity data, and run qualification against the prepared commit.
 - Replaced repeated Ubuntu `apt-get` TeX Live provisioning with checksum-locked TinyTeX-1 2026.02 and the frozen TeX Live 2025 final repository. Verified the explicit manual-package inventory, bounded downloads/package installation, and saved the exact input-bound cache only after all four manual builds succeeded. Ref: [#101](https://github.com/klusik/PHP_gallery/issues/101).
 - Added the central `release-preflight` profile before AI or TeX to block syntax, declaration documentation, source inventory, Python import policy and workflow-contract failures early; preserved the complete exact-candidate qualification matrix.
-- Fixed PDF timestamps to release metadata for reproducible reruns, allowed reuse only of an identical already-prepared tree, and rejected a stale candidate at the final release gate.
+- Fixed PDF and manifest timestamps to release metadata for reproducible reruns, allowed reuse only of an identical already-prepared tree, and rejected a stale candidate at the final release gate.
 - Configured generated release notes to use the Copilot CLI with `gpt-6-luna` and fall back to automatic model selection when that model was unavailable. The workflow blocked qualification when required authentication, generation, or output validation failed.
 
 #### Tests and documentation
 
+- Added `tests/manifest_reproducible_timestamp_test.php` for stable timestamps, default-clock preservation and invalid epoch refusal.
 - Extended `tests/gallery_workflow_ci_trigger_policy_test.php` and `tests/audit_runner_test.php` to guard reusable workflow inputs, release-audit configuration, cache identity/provenance, frozen provisioning, fail-fast ordering, rerun/write-back safeguards and the AI patch-note boundary.
 - Documented GitHub-hosted release preparation and qualification in `RELEASE.md` and `docs/GALLERY_WORKFLOWS.md`.
 
