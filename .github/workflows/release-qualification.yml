@@ -130,13 +130,12 @@ jobs:
           php .github/scripts/patch_notes_ai.php prompt \
             "${RELEASE_VERSION}" "${BASE_TAG}" "${GITHUB_REPOSITORY}" \
             "${RUNNER_TEMP}/release-notes-prompt.txt"
-      - name: Generate release notes with GPT-6 Luna
+      - name: Generate release notes with Copilot
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         shell: bash
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_AUTO_UPDATE: 'false'
-          COPILOT_MODEL: gpt-6-luna
           GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS: 'false'
         run: |
           set -euo pipefail
@@ -144,9 +143,22 @@ jobs:
             echo "::error::COPILOT_GITHUB_TOKEN is required for AI release-note generation in this personal repository." >&2
             exit 1
           fi
-          copilot -s --model gpt-6-luna --no-ask-user \
+
+          error_log="${RUNNER_TEMP}/copilot-release-notes.err"
+          if copilot -s --model gpt-6-luna --no-ask-user \
             < "${RUNNER_TEMP}/release-notes-prompt.txt" \
-            > "${RUNNER_TEMP}/release-notes-response.md"
+            > "${RUNNER_TEMP}/release-notes-response.md" \
+            2> "${error_log}"; then
+            echo "Copilot release notes generated with gpt-6-luna."
+          elif grep -Fq 'Model "gpt-6-luna" from --model flag is not available.' "${error_log}"; then
+            echo "::warning::gpt-6-luna is not selectable for this Copilot entitlement; falling back to Copilot auto model selection."
+            copilot -s --model auto --no-ask-user \
+              < "${RUNNER_TEMP}/release-notes-prompt.txt" \
+              > "${RUNNER_TEMP}/release-notes-response.md"
+          else
+            echo "::error::Copilot release-note generation failed before producing validated output." >&2
+            exit 1
+          fi
       - name: Validate and apply generated release notes
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         shell: bash
