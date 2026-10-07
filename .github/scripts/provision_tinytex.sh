@@ -2,7 +2,12 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/scripts/provision_tinytex.sh
+# Module Type: Release Toolchain Provisioning
 # Purpose: Install and verify checksum-locked TinyTeX with frozen TeX Live packages.
+# Responsibilities:
+#   - Verify bundle and frozen repository checksums before provisioning
+#   - Bound downloads and package operations without live-repository fallbacks
+#   - Validate cache provenance and required local manual resources
 # Author: Rudolf Klusal
 # No rolling repository, installer script, automatic self-update or latest fallback is used.
 set -euo pipefail
