@@ -204,7 +204,7 @@ async function openOfpViewer(link) {
     try {
         const lib = await loadPdfjs();
         if (state.closed) return;
-        state.loadingTask = lib.getDocument({url: link.href, withCredentials: true});
+        state.loadingTask = lib.getDocument({url: link.href, withCredentials: true, isEvalSupported: false});
         const pdf = await state.loadingTask.promise;
         if (state.closed) {
             await pdf.destroy();
