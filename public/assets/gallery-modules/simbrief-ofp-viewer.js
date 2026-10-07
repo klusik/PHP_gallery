@@ -43,6 +43,38 @@ let activeViewer = null;
 export function setupSimbriefOfpViewer() {
     if (!document.querySelector('[data-simbrief-ofp-open]') || document.body?.dataset.ofpViewerBound === '1') return;
     document.body.dataset.ofpViewerBound = '1';
+    document.addEventListener('submit', async (event) => {
+        const form = event.target instanceof HTMLFormElement
+            ? event.target.closest('[data-ofp-convert-form]') : null;
+        if (!form || form.dataset.ofpConverting === '1') return;
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        const output = form.querySelector('[data-ofp-convert-result]');
+        form.dataset.ofpConverting = '1';
+        if (button) button.disabled = true;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {'Accept': 'application/json'},
+            });
+            const result = await response.json();
+            if (!response.ok || result.ok !== true) throw new Error(result.error || 'OFP conversion failed');
+            output.replaceChildren(document.createTextNode(String(result.message || '')));
+            if (typeof result.url === 'string' && result.url !== '') {
+                const link = document.createElement('a');
+                link.href = result.url;
+                link.textContent = ' ' + (locales[(document.documentElement.lang || 'en').slice(0, 2)] || locales.en).title;
+                output.appendChild(link);
+            }
+        } catch (error) {
+            output.textContent = error instanceof Error ? error.message : String(error);
+        } finally {
+            form.dataset.ofpConverting = '0';
+            if (button) button.disabled = false;
+        }
+    });
     document.addEventListener('click', (event) => {
         const link = event.target instanceof Element ? event.target.closest('[data-simbrief-ofp-open]') : null;
         if (!(link instanceof HTMLAnchorElement) || event.defaultPrevented || event.button !== 0

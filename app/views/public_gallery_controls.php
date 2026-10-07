@@ -208,6 +208,19 @@ function view_render_public_gallery_branding_header(array $viewModel): void
             echo '<div class="simbrief-ofp-actions">';
             echo '<a class="button secondary simbrief-ofp-open" href="' . e($ofpUrl) . '" data-simbrief-ofp-open data-ofp-url="' . e($ofpUrl) . '">' . e(t('simbrief.ofp.view', 'View flight plan (OFP)')) . '</a>';
             echo '<a class="button secondary" href="' . e((string) ($viewModel['ofp_pdf_download_url'] ?? $ofpUrl)) . '" download="simbrief-ofp.pdf">' . e(t('simbrief.ofp.download', 'Download OFP PDF')) . '</a>';
+            if (!empty($viewModel['ofp_can_convert'])) {
+                if (!empty($viewModel['ofp_conversion_supported'])) {
+                    echo '<form class="simbrief-ofp-convert-form" method="post" action="' . e((string) ($viewModel['ofp_conversion_url'] ?? '')) . '" data-ofp-convert-form>';
+                    echo (string) ($viewModel['ofp_conversion_csrf'] ?? '');
+                    echo '<input type="hidden" name="gallery_id" value="' . (int) ($viewModel['ofp_gallery_id'] ?? 0) . '">';
+                    echo '<input type="hidden" name="simbrief_action" value="convert_pdf_pages">';
+                    echo '<button type="submit" class="button secondary">' . e(t('simbrief.ofp.convert', 'Create private OFP subgallery')) . '</button>';
+                    echo '<span class="muted simbrief-ofp-convert-note">' . e(t('simbrief.ofp.convert_help', 'Optional. Convert PDF pages to images in a private subgallery that you can publish manually.')) . '</span>';
+                    echo '<output class="simbrief-ofp-convert-result" data-ofp-convert-result aria-live="polite"></output></form>';
+                } else {
+                    echo '<span class="muted simbrief-ofp-convert-note">' . e(t('simbrief.ofp.convert_unavailable', 'PDF page conversion requires Imagick with PDF support on this server.')) . '</span>';
+                }
+            }
             echo '</div>';
         }
         echo '</div>';
