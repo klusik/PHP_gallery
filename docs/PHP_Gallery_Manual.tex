@@ -2011,6 +2011,11 @@ The~updater checks configured channels, validates packages, stages content, veri
 
 The~Admin update area also shows cached release information and~versioned patch notes for~the~available channel, so~an~owner can~review a~release before starting its~job. Stable and~beta channels remain separate choices; the~Beta label belongs to~the~release choice in~the~Admin interface and~does~not~change the~updater's durable job or~manifest terminology.
 
+Patch notes are~stored as~raw Markdown in~the~installed \filepath{PATCH_NOTES.md} and~the~versioned cache. The~Admin viewer renders the~selected version when it~is~displayed, including entries loaded from~older caches; previously cached HTML is~discarded rather than~trusted. Reading the~viewer uses locally bundled or~cached notes without making another GitHub request. A~separate, bounded release-discovery operation may~refresh remote notes; when that fails, installed notes remain available.
+
+Markdown links such as~\codeword{[issue](https://example.org/issue/123)}, angle-bracket autolinks, and~plain HTTP(S) addresses become clickable. They open in~a~new tab with~\codeword{noopener} and~\codeword{noreferrer} protection. Other URL schemes remain escaped, inert text. The~renderer preserves headings, lists, emphasis, fenced blocks, and~literal inline code; it~does not~turn URLs inside code spans into links. Link punctuation, underscores, and~query parameters are~retained without accepting arbitrary HTML.
+
+
 Temporary download or~hosting failures may~be~retried. A~package whose files do~not~match its own integrity manifest is~different: downloading the~same published build again cannot change those bytes. PHP Gallery therefore asks the~administrator to~cancel that prepared job and~choose a~newer release or~beta code instead of~offering an~endless retry loop.
 
 Stable discovery and~package work are~separate bounded operations. A~discovery request may~create a~durable background job, while a~later safe request or~the~CLI runner advances a~short slice through download, archive validation, extraction, manifest verification, staging, rollback backup, activation, migrations, and~cleanup. Range requests can~resume interrupted downloads, worker locks prevent concurrent advancement, and~a~stale lock can~be~recovered after its~owner expires. On~idle shared hosting, schedule \codeword{php scripts/application_update.php} from~cron, for~example every five minutes. Each invocation performs bounded discovery or~advances existing background work; correctness does~not~depend on~\codeword{set_time_limit()} or~\codeword{ignore_user_abort()}.
@@ -2035,6 +2040,8 @@ If~an~update stopped before activation, cancel the~old job, force a~fresh releas
 \index{core manifest}
 
 \filepath{app/core-manifest.json} records the~application version and~hashes for~integrity-managed core files. The~local generator under \filepath{scripts/generate_manifest.php} calculates final hashes after runtime changes. Documentation and~user-data inclusion follow the~generator's established policy.
+
+During deterministic release preparation, the~manifest generator accepts the~optional \codeword{SOURCE_DATE_EPOCH} build timestamp for~its \codeword{generated_at} field; without it, normal generation uses the~current clock. The~hosted release workflow derives the~epoch from~the~release metadata and~uses it~for~both the~manual PDFs and~the~final manifest, so~identical prepared inputs retain reproducible timestamps. The~manifest still has~to~be~regenerated after changing an~integrity-managed application file.
 
 \section{Optional background: how PHP Gallery works}
 \label{sec:architecture}
@@ -2237,17 +2244,18 @@ Ask another person to~try the~gallery without instructions. Their first click an
 
 \subsection{Automated checks for~software maintainers}
 
-Developers can~run the~project's executable test scripts after changing application code. The~aggregate runner covers the~project suite, while focused scripts verify particular features.
+Use the~central audit \filepath{scripts/audit.php}, not~the~legacy \filepath{tests/run.php} wrapper, for~routine verification. The~profiles below are~alternatives, not~three successive gates. Use the~quick profile during development when useful, the~full profile once before a~normal handoff, or~the~release profile once for~final release qualification. Individual tests are~for~diagnosing a~reported failure or~developing a~newly registered fixture, not~for~a~second sweep of~the~test tree.
 
 \begin{lstlisting}[language=bash]
-php tests/run.php
-php tests/public_thumbnail_rendering_model_test.php
-php tests/public_thumbnail_markup_test.php
-php tests/duplicate_photo_detector_test.php
-php tests/duplicate_photo_ledger_test.php
-php tests/migration_consistency_test.php
-node tests/progressive_thumbnail_renderer_test.mjs
+# During development:
+php scripts/audit.php --profile=quick
+# Before ordinary code handoff:
+php scripts/audit.php --profile=full
+# Final release qualification only:
+php scripts/audit.php --profile=release
 \end{lstlisting}
+
+The~hosted release workflow first runs the~special \codeword{--profile=release-preflight} policy gate before expensive AI or~TeX work. That preflight is~not~a~replacement for~the~full exact-candidate release matrix.
 
 \subsection{Manual browser verification}
 
@@ -2264,6 +2272,10 @@ Follow \filepath{RELEASE.md} for~the~complete release sequence. Compare the~exac
 After the~final edits, generate the~manifest, pass the~release/manifest/whitespace preflight, initialize the~qualification fingerprint, and~freeze the~inputs. Run exactly one central \codeword{--profile=release} audit, directly or~through the~configured disposable workflow fixture. The~audit owns syntax, regression, contracts, browser fixtures, and~release consistency; do~not~add a~second manual test-tree sweep. Attach its report to~the~unchanged fingerprint and~report coverage gaps and~pending operational reviews separately.
 
 Create a~deployment folder or~ZIP only when explicitly requested. The~helpers require current integrity data and~verify the~canonical production inventory; inspect the~requested artifact before use. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy only with explicit authorization. After publication, verify updater discovery, migrations, login, public galleries, protected media, and~integrity/status on~the~published installation.
+
+During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
+
+For~GitHub-hosted preparation, push a~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z} branch, or~dispatch its~release-qualification workflow manually from~that branch. The~workflow prepares and~commits an~approved deterministic candidate back to~the~same branch, compiles all~four PDFs together, and~runs qualification on~the~resulting exact commit. It~does not~merge to~\codeword{main}, create a~tag, or~publish a~release.
 
 \section{Making the~gallery feel fast}
 \label{sec:performance}
@@ -2440,6 +2452,21 @@ by~whom, and~with what result. Keep unresolved checks pending and~post-publicati
 updater smoke testing separate. A~green automated report is~not~permission
 to~publish, and~the~tool never commits, tags, uploads, or~publishes
 the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record commands.
+
+\subsection{GitHub-hosted release preparation and~qualification}
+
+The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
+
+\begin{enumerate}
+  \item \textbf{Branch and~preflight.} A~push to~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z}, or~a~manual dispatch on~that branch, starts preparation. An~optional dispatched version must match the~branch. Preparation rejects an~already existing \codeword{v_X.Y[.Z]} tag, identifies the~previous release tag for~its comparison base, and~runs \codeword{release-preflight} for~source syntax, declarations, inventory, Python policy, and~workflow contracts before AI or~TeX provisioning.
+  \item \textbf{Deterministic metadata.} The~candidate helper aligns the~runtime version, release metadata, patch-note scaffold, and~all~four manual version/date markers, and~refreshes the~production inventory. It~does not~write explanatory TeX content. Preserve previously completed editorial notes and~keep the~four manuals semantically aligned before release.
+  \item \textbf{Editorial notes.} A~complete, maintainer-written version section is~kept unchanged. If~it~is~missing or~unfinished, the~workflow uses GitHub Copilot CLI with~\codeword{gpt-6-luna}, falling back to~automatic model selection only when that model is~unavailable. A~configured \codeword{COPILOT_GITHUB_TOKEN} is~required for~generation. Bounded evidence and~strict Markdown validation prevent placeholders, wrong versions, extraneous sections, or~assistant commentary from~becoming release notes. Generation or~validation failure blocks qualification rather than~publishing incomplete prose.
+  \item \textbf{Reproducible documentation.} The~workflow provisions checksum-locked TinyTeX and~the~frozen TeX Live package set, reusing a~cache keyed by~its lock and~package inventory when valid. It~builds English, Czech, German, and~Swedish manuals with~\codeword{pdflatex}, \codeword{makeindex}, and~two further \codeword{pdflatex} passes per~edition. The~release-metadata timestamp fixes the~PDF and~manifest build epoch. The~final inventory, integrity manifest, and~release consistency are~verified after compilation.
+  \item \textbf{Safe branch write-back.} Only approved preparation files are~staged. A~changed remote branch prevents a~stale push; an~identical already-prepared tree may~reuse its~current commit. Preparation commits back to~the~same release branch, not~to~\codeword{main}.
+  \item \textbf{Exact-candidate gate.} The~reusable central CI workflow checks out the~prepared commit SHA and~runs the~complete release matrix, including required Chromium coverage. The~aggregate gate succeeds only if~preparation, editorial notes, and~the~full matrix succeed and~the~branch still points to~that exact commit. A~green gate leaves promotion, merge, tagging, and~publication under maintainer control.
+\end{enumerate}
+
+See \filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md}, and~\filepath{docs/LATEX_BUILD.md} for~the~operational details. Do~not~run ordinary PDF compilation or~a~separate release audit merely because a~TeX source was edited.
 
 \section{Glossary}
 \label{sec:glossary}

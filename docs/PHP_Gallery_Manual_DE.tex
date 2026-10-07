@@ -1996,6 +1996,11 @@ Das Aktualisierungssystem prüft konfigurierte Kanäle, validiert Pakete, bereit
 
 Der administrative Aktualisierungsbereich zeigt außerdem zwischengespeicherte Veröffentlichungsinformationen und versionierte Versionshinweise für den verfügbaren Kanal, damit der Betreiber eine Veröffentlichung vor Auftragsbeginn prüfen kann. Stable- und Beta-Kanäle bleiben getrennte Entscheidungen; die Beta-Bezeichnung gehört zur Veröffentlichungsauswahl der Administrationsoberfläche und verändert nicht die Terminologie dauerhafter Aktualisierungsaufträge oder Manifeste.
 
+Versionshinweise werden als rohes Markdown in~der~installierten Datei \filepath{PATCH_NOTES.md} und~im~versionsbezogenen Cache gespeichert. Die~Administrationsansicht rendert die~ausgewählte Version erst beim Anzeigen, auch wenn Einträge aus~älteren Caches stammen; früher zwischengespeichertes HTML wird verworfen statt als vertrauenswürdig übernommen. Das~bloße Öffnen verwendet lokale oder bereits zwischengespeicherte Inhalte ohne weitere GitHub-Anfrage. Ein~separater zeitlich begrenzter Schritt der~Versionssuche kann entfernte Hinweise aktualisieren; bei einem Fehler bleiben die~mitgelieferten Hinweise verfügbar.
+
+Markdown-Links wie~\codeword{[Aufgabe](https://example.org/issue/123)}, Autolinks in~spitzen Klammern und~reine HTTP(S)-Adressen werden anklickbar. Sie öffnen einen neuen Tab mit~den~Schutzattributen \codeword{noopener} und~\codeword{noreferrer}. Andere URL-Schemata bleiben maskierter, inaktiver Text. Die~Darstellung bewahrt Überschriften, Listen, Hervorhebungen, Codeblöcke und~wörtlichen Inline-Code; Adressen innerhalb eines Codespans werden nicht verlinkt. Interpunktion, Unterstriche und~Abfrageparameter von~Links bleiben erhalten, ohne beliebiges HTML zuzulassen.
+
+
 Vorübergehende Download- oder Hostingfehler können erneut versucht werden. Ein Paket, dessen Dateien nicht zum eigenen Integritätsmanifest passen, ist anders: Erneutes Herunterladen derselben veröffentlichten Version verändert deren Bytes nicht. PHP Gallery fordert daher den Administrator auf, diesen vorbereiteten Auftrag abzubrechen und eine neuere Veröffentlichung oder Beta-Code zu wählen, statt eine endlose Wiederholungsschleife anzubieten.
 
 Stable-Erkennung und Paketverarbeitung sind getrennte begrenzte Vorgänge. Eine Erkennungsanfrage kann einen dauerhaften Hintergrundauftrag erstellen; eine spätere sichere Anfrage oder der CLI-Läufer führt einen kurzen Teilabschnitt über Download, Archivprüfung, Entpacken, Manifestprüfung, Vorbereitung, Rücknahmesicherung, Aktivierung, Migrationen und Bereinigung aus. Range-Anfragen können unterbrochene Downloads fortsetzen, Arbeitsprozesssperren verhindern paralleles Fortschreiten, und eine veraltete Sperre kann nach Ablauf ihres Besitzers wiederhergestellt werden. Planen Sie auf wenig frequentiertem Shared Hosting \codeword{php scripts/application_update.php} per Cron, beispielsweise alle fünf Minuten. Jeder Aufruf führt begrenzte Erkennung aus oder setzt vorhandene Hintergrundarbeit fort; die Korrektheit hängt nicht von \codeword{set_time_limit()} oder \codeword{ignore_user_abort()} ab.
@@ -2020,6 +2025,8 @@ Wenn ein Update vor der Aktivierung gestoppt wurde, brechen Sie den alten Auftra
 \index{k00156@Kernmanifest}
 
 \filepath{app/core-manifest.json} vermerkt Anwendungsversion und Hashes integritätsverwalteter Kerndateien. Der lokale Generator unter \filepath{scripts/generate_manifest.php} berechnet nach Laufzeitänderungen endgültige Hashes. Die Einbeziehung von Dokumentation und Benutzerdaten folgt der etablierten Generatorrichtlinie.
+Für~die~deterministische Release-Vorbereitung akzeptiert der~Manifestgenerator den~optionalen Build-Zeitstempel \codeword{SOURCE_DATE_EPOCH} für~das~Feld \codeword{generated_at}; ohne ihn gilt die~aktuelle Uhrzeit. Der~gehostete Workflow leitet diesen Zeitpunkt aus~den~Release-Metadaten ab und~verwendet ihn für~die~Handbuch-PDFs und~das~abschließende Manifest. Bei identischen vorbereiteten Eingaben bleiben die~Zeitstempel dadurch reproduzierbar. Nach Änderungen an~integritätsverwalteten Anwendungsdateien muss das~Manifest dennoch neu erzeugt werden.
+
 \section{Optionaler Hintergrund: Wie PHP Gallery funktioniert}
 \label{sec:architecture}
 \index{a00022@Architektur}
@@ -2221,17 +2228,18 @@ Bitten Sie eine andere Person, die Galerie ohne Anleitung auszuprobieren. Ihr er
 
 \subsection{Automatisierte Prüfungen für Softwarebetreuer}
 
-Entwickler können nach Änderungen des Anwendungscodes die ausführbaren Testskripte des Projekts ausführen. Der Gesamtläufer umfasst die Projektsuite; gezielte Skripte prüfen einzelne Funktionen.
+Verwenden Sie für die~übliche Prüfung das~zentrale Audit \filepath{scripts/audit.php} und~nicht den~älteren Wrapper \filepath{tests/run.php}. Die~folgenden Profile sind Alternativen und~keine drei aufeinanderfolgenden Prüfungen. Während der~Entwicklung dient bei Bedarf das~schnelle Profil, vor einer normalen Übergabe einmal das~vollständige und~zur abschließenden Veröffentlichungsqualifikation einmal das~Release-Profil. Einzeltests dienen nur zur Untersuchung gemeldeter Fehler oder~zur Entwicklung neu registrierter Fixtures, nicht zu~einem zweiten Durchlauf des~Testbaums.
 
 \begin{lstlisting}[language=bash]
-php tests/run.php
-php tests/public_thumbnail_rendering_model_test.php
-php tests/public_thumbnail_markup_test.php
-php tests/duplicate_photo_detector_test.php
-php tests/duplicate_photo_ledger_test.php
-php tests/migration_consistency_test.php
-node tests/progressive_thumbnail_renderer_test.mjs
+# During development:
+php scripts/audit.php --profile=quick
+# Before ordinary code handoff:
+php scripts/audit.php --profile=full
+# Final release qualification only:
+php scripts/audit.php --profile=release
 \end{lstlisting}
+
+Der~gehostete Veröffentlichungsablauf führt vor aufwendigen AI- oder~TeX-Schritten zunächst das~besondere Richtlinien-Gate \codeword{--profile=release-preflight} aus. Diese Vorprüfung ersetzt nicht die~vollständige Release-Matrix für~den~exakten Kandidaten.
 
 \subsection{Manuelle Browserprüfung}
 
@@ -2248,6 +2256,10 @@ Der vollständige Release-Ablauf steht in \filepath{RELEASE.md}. Vergleichen Sie
 Erzeugen Sie nach den letzten Änderungen das Manifest, bestehen Sie Release-, Manifest- und Whitespace-Vorprüfungen, initialisieren Sie den Qualifizierungsfingerabdruck und frieren Sie die Eingaben ein. Führen Sie genau ein zentrales Audit \codeword{--profile=release} aus, direkt oder über die konfigurierte isolierte Testinstallation. Das Audit besitzt Syntax-, Regressions-, Vertrags-, Browser- und Release-Prüfungen; ergänzen Sie keinen zweiten manuellen Testbaumdurchlauf. Binden Sie seinen Bericht an den unveränderten Fingerabdruck und melden Sie Abdeckungslücken getrennt von ausstehenden Betriebsprüfungen.
 
 Erstellen Sie Bereitstellungsordner oder ZIP nur auf ausdrückliche Anforderung. Die Werkzeuge verlangen aktuelle Integritätsdaten und prüfen das kanonische Produktionsinventar; kontrollieren Sie das angeforderte Artefakt vor Gebrauch. Ein reines CMS-Release benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung erfordern ausdrückliche Genehmigung. Prüfen Sie nach Veröffentlichung Update-Erkennung, Migrationen, Anmeldung, öffentliche Galerien, geschützte Medien und Integrität/Status auf der veröffentlichten Installation.
+
+Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
+
+Für~die~Vorbereitung auf~GitHub erstellen und~pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} oder~starten die~Release-Qualifikation manuell von~diesem Zweig. Der~Ablauf erstellt und~committet einen geprüften deterministischen Kandidaten zurück in~denselben Zweig, baut alle vier PDFs gemeinsam und~qualifiziert genau diesen Commit. Er~führt weder einen Merge nach~\codeword{main} aus, noch erstellt er~einen Tag oder~veröffentlicht ein~Release.
 
 \section{Die Galerie schnell wirken lassen}
 \label{sec:performance}
@@ -2365,6 +2377,21 @@ Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen
 Das Qualifikationswerkzeug \filepath{scripts/release_qualification.php} vermerkt den genauen Quellcode- und PDF-Fingerabdruck. Sein Befehl \codeword{render} erzeugt begrenzte Seitenvorschauen; Darstellung allein genehmigt deren Erscheinungsbild nicht. Der Befehl \codeword{record-audit} akzeptiert nur den passenden zentralen Veröffentlichungsbericht, kein älteres vollständiges Audit. Eine geänderte Quelldatei oder ein neu erstelltes PDF wählt neue ausstehende Nachweise, statt frühere Zustimmung still wiederzuverwenden.
 
 Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose eines konkreten Layoutproblems; optionale PDF-Prüffelder dürfen ausstehend bleiben. Prüfen Sie repräsentative Browserabläufe. Vermerken Sie, was tatsächlich von wem und mit welchem Ergebnis geprüft wurde. Halten Sie ungelöste Prüfungen ausstehend und den kurzen Aktualisierungsfunktionstest nach Veröffentlichung getrennt. Ein grüner automatisierter Bericht erlaubt keine Veröffentlichung; das Werkzeug erstellt niemals Commits oder Tags, lädt nicht hoch und veröffentlicht keine Version. Datensatzbefehle finden Sie in \filepath{docs/RELEASE_QUALIFICATION.md}.
+
+\subsection{GitHub-gehostete Release-Vorbereitung und~Qualifikation}
+
+Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Seine Schritte folgen diesem Vertrag:
+
+\begin{enumerate}
+  \item \textbf{Zweig und~Vorprüfung.} Ein~Push nach~\codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} oder~ein~manueller Start auf~diesem Zweig löst die~Vorbereitung aus. Eine~optional angegebene Version muss zum Zweignamen passen. Ein~bereits vorhandener Tag \codeword{v_X.Y[.Z]} führt zur Ablehnung. Der~vorige Release-Tag liefert die~Vergleichsbasis. Vor AI oder~TeX prüft \codeword{release-preflight} Quellsyntax, Deklarationsdokumentation, Dateiinventar, Python-Importrichtlinie und~Workflow-Verträge.
+  \item \textbf{Deterministische Metadaten.} Der~Helfer gleicht Anwendungsversion, Release-Metadaten, Versionshinweis-Gerüst sowie Versions- und~Datumsmarkierungen aller vier Handbücher ab und~aktualisiert das~Produktionsinventar. Er~verfasst keine inhaltliche TeX-Dokumentation. Fertige redaktionelle Versionshinweise bleiben erhalten. Gleichen Sie vor der~Freigabe die~Inhalte aller vier Handbücher ab.
+  \item \textbf{Redaktionelle Hinweise.} Eine~vollständige von~Betreuern verfasste Versionssektion bleibt unverändert. Fehlt sie oder~ist sie unvollständig, nutzt der~Workflow GitHub Copilot CLI mit~\codeword{gpt-6-luna}; nur bei fehlender Verfügbarkeit dieses Modells wechselt er~zur automatischen Modellauswahl. Für~die~Erzeugung ist \codeword{COPILOT_GITHUB_TOKEN} erforderlich. Begrenzte Belege und~strenge Markdown-Prüfung verhindern Platzhalter, falsche Versionen, zusätzliche Abschnitte und~Assistentenkommentare. Fehler bei Erzeugung oder~Validierung blockieren die~Qualifikation, statt unvollständige Hinweise zu~veröffentlichen.
+  \item \textbf{Reproduzierbare Handbücher.} Der~Workflow verwendet durch Prüfsummen gesperrtes TinyTeX und~eine festgelegte TeX-Live-Paketliste. Ein~gültiger Cache wird anhand der~Lockdatei und~des~Paketinventars wiederverwendet. Englische, tschechische, deutsche und~schwedische Ausgaben werden jeweils mit~\codeword{pdflatex}, \codeword{makeindex} und~zwei weiteren \codeword{pdflatex}-Durchläufen gebaut. Der~Zeitpunkt aus~den~Release-Metadaten steuert reproduzierbare PDF- und~Manifest-Zeitstempel. Danach werden Produktionsinventar, Integritätsmanifest und~Release-Konsistenz geprüft.
+  \item \textbf{Sicheres Zurückschreiben.} Nur freigegebene Vorbereitungsdateien werden gestaged. Eine~zwischenzeitliche Änderung am~Remote-Zweig verhindert einen veralteten Push; ein~identischer bereits vorbereiteter Tree darf den~aktuellen Commit wiederverwenden. Geschrieben wird nur in~denselben Release-Zweig, nicht nach~\codeword{main}.
+  \item \textbf{Gate für~den~exakten Kandidaten.} Der~wiederverwendbare zentrale CI-Workflow checkt die~genaue SHA des~vorbereiteten Commits aus und~führt die~vollständige Release-Matrix einschließlich verpflichtender Chromium-Prüfung aus. Das~Gesamt-Gate besteht nur bei erfolgreicher Vorbereitung, vollständigen Hinweisen, erfolgreicher Matrix und~unveränderter Zweig-SHA. Merge, Tag und~Veröffentlichung bleiben Entscheidungen des~Betreuers.
+\end{enumerate}
+
+Weitere Einzelheiten stehen in~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} und~\filepath{docs/LATEX_BUILD.md}. Eine~gewöhnliche TeX-Quelländerung erfordert weder sofortige PDF-Kompilierung noch ein~separates Release-Audit.
 
 \section{Glossar}
 \label{sec:glossary}

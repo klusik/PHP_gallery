@@ -1990,6 +1990,11 @@ Uppdateraren kontrollerar konfigurerade kanaler, validerar paket, förbereder in
 
 Administrationens uppdateringsområde visar också cachelagrad utgåveinformation och versionsbundna patchanteckningar för tillgänglig kanal, så att ägaren kan granska en utgåva innan jobbet startas. Stabila kanaler och betakanaler förblir separata val; etiketten Beta hör till utgåvevalet i administrationsgränssnittet och ändrar inte uppdaterarens terminologi för beständiga jobb eller manifest.
 
+Versionsanteckningarna sparas som rå Markdown i~den~installerade filen \filepath{PATCH_NOTES.md} och~i~den~versionsindelade cachen. Administrationsvyn renderar den~valda versionen först när den~visas, även för~poster från~äldre cachefiler; tidigare cachelagrad HTML kasseras i~stället för~att betros. Att bara öppna vyn använder lokala eller~redan cachelagrade anteckningar utan en~ny begäran till~GitHub. Ett~separat tidsbegränsat steg i~utgåvesökningen kan uppdatera fjärranteckningar; om~det misslyckas finns de~medföljande anteckningarna kvar.
+
+Markdown-länkar som~\codeword{[arende](https://example.org/issue/123)}, autolänkar i~vinkelparenteser och~rena HTTP(S)-adresser blir klickbara. De~öppnas på~en~ny flik med~skydden \codeword{noopener} och~\codeword{noreferrer}. Andra URL-scheman förblir escapad, inaktiv text. Renderingen bevarar rubriker, listor, betoning, kodblock och~bokstavlig inline-kod; adresser inuti kodspann blir inte länkar. Länkarnas skiljetecken, understreck och~frågeparametrar bevaras utan att godtycklig HTML tillåts.
+
+
 Tillfälliga hämtnings- eller webbhotellsfel kan försöks igen. Ett paket vars filer inte stämmer med dess eget integritetsmanifest är annorlunda: att hämta samma publicerade programbygge igen kan inte ändra dessa byte. PHP Gallery ber därför administratören att avbryta det förberedda jobbet och välja en nyare utgåva eller betakod i stället för att erbjuda en oändlig återförsöksslinga.
 
 Upptäckt av stabila utgåvor och paketarbete är separata begränsade åtgärder. En upptäcktsbegäran kan skapa ett beständigt bakgrundsjobb, medan en senare säker begäran eller CLI-köraren driver en kort del genom hämtning, arkivvalidering, uppackning, manifestverifiering, förberedelse, säkerhetskopiering för återställning, aktivering, migreringar och rensning. Range-begäranden kan återuppta avbrutna hämtningar, arbetarlås förhindrar samtidiga framsteg och ett gammalt lås kan återställas när dess ägare löpt ut. På inaktiva delade webbhotell schemalägger du \codeword{php scripts/application_update.php} från cron, t.ex. var femte minut. Varje anrop gör begränsad upptäckt eller driver befintligt bakgrundsarbete framåt; korrektheten beror inte på \codeword{set_time_limit()} eller \codeword{ignore_user_abort()}.
@@ -2014,6 +2019,8 @@ Om en uppdatering stoppades före aktivering, avbryt det gamla jobbet, tvinga fr
 \index{k00144@kärnmanifest}
 
 \filepath{app/core-manifest.json} registrerar programversionen och hashvärden för integritetshanterade kärnfiler. Den lokala generatorn under \filepath{scripts/generate_manifest.php} beräknar slutliga hashvärden efter körningsändringar. Inkludering av dokumentation och användardata följer generatorns etablerade policy.
+Vid deterministisk utgåveförberedelse accepterar manifestgeneratorn den~valfria byggtidsstämpeln \codeword{SOURCE_DATE_EPOCH} för~fältet \codeword{generated_at}; utan den~används aktuell tid. Det~värdbaserade flödet hämtar tidpunkten från~utgåvans metadata och~använder den~för~både handböckernas PDF-filer och~slutmanifestet, så~identiska förberedda indata får reproducerbara tidsstämplar. Manifestet måste ändå genereras om~när en~integritetsövervakad programfil har ändrats.
+
 \section{Valfri bakgrund: så fungerar PHP Gallery}
 \label{sec:architecture}
 \index{a00016@arkitektur}
@@ -2215,17 +2222,18 @@ Be någon annan prova galleriet utan instruktioner. Personens första klick och 
 
 \subsection{Automatiserade kontroller för programunderhållare}
 
-Utvecklare kan köra projektets körbara testskript efter ändringar i programkoden. Den samlade köraren omfattar projektsviten, medan riktade skript verifierar särskilda funktioner.
+Använd den~centrala granskaren \filepath{scripts/audit.php} för~normal verifiering, inte den~äldre omslutaren \filepath{tests/run.php}. Profilerna nedan är alternativ, inte tre steg som ska köras efter varandra. Använd vid behov snabbprofilen under utveckling, den~fullständiga profilen en~gång före vanlig överlämning eller~utgåveprofilen en~gång vid slutlig utgåvekvalificering. Kör enskilda tester bara för~att felsöka rapporterade fel eller~utveckla en~nyregistrerad testfixtur, inte som en~andra genomgång av~hela testträdet.
 
 \begin{lstlisting}[language=bash]
-php tests/run.php
-php tests/public_thumbnail_rendering_model_test.php
-php tests/public_thumbnail_markup_test.php
-php tests/duplicate_photo_detector_test.php
-php tests/duplicate_photo_ledger_test.php
-php tests/migration_consistency_test.php
-node tests/progressive_thumbnail_renderer_test.mjs
+# During development:
+php scripts/audit.php --profile=quick
+# Before ordinary code handoff:
+php scripts/audit.php --profile=full
+# Final release qualification only:
+php scripts/audit.php --profile=release
 \end{lstlisting}
+
+Det~värdbaserade utgåveflödet kör först den~särskilda policykontrollen \codeword{--profile=release-preflight} före resurskrävande AI- eller~TeX-steg. Den~förkontrollen ersätter inte hela utgåvematrisen för~den~exakta kandidaten.
 
 \subsection{Manuell webbläsarverifiering}
 
@@ -2242,6 +2250,10 @@ Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föreg
 Generera manifestet efter sista ändringen, godkänn förkontroller för utgåva, manifest och blanksteg, initiera kvalificeringens fingeravtryck och frys underlaget. Kör exakt en central granskning med \codeword{--profile=release}, direkt eller genom den konfigurerade isolerade testinstallationen. Granskningen äger syntax, regressioner, kontrakt, webbläsartestfall och utgåvekonsekvens; lägg inte till en andra manuell genomgång av testträdet. Koppla rapporten till det oförändrade fingeravtrycket och redovisa täckningsluckor separat från väntande driftgranskningar.
 
 Skapa distributionsmapp eller ZIP endast på uttrycklig begäran. Verktygen kräver aktuella integritetsdata och verifierar den kanoniska produktionslistan; kontrollera den begärda artefakten före användning. En ren CMS-utgåva kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. Kontrollera efter publicering uppdateringsidentifiering, migreringar, inloggning, offentliga gallerier, skyddade medier och integritet/status i den publicerade installationen.
+
+Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
+
+För~förberedelse på~GitHub skapar och~pushar du~en~gren med~namnet \codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~startar kvalificeringsflödet manuellt från~den~grenen. Flödet förbereder och~committar en~godkänd deterministisk kandidat tillbaka till~samma gren, bygger alla fyra PDF-filer tillsammans och~kvalificerar exakt den~commiten. Det~gör ingen merge till~\codeword{main}, skapar ingen tagg och~publicerar ingen utgåva.
 
 \section{Få galleriet att kännas snabbt}
 \label{sec:performance}
@@ -2359,6 +2371,21 @@ För utgåveförberedelse följer du \filepath{RELEASE.md}: slutför källkod oc
 Kvalificeringsverktyget \filepath{scripts/release_qualification.php} registrerar det exakta fingeravtrycket för källkod och PDF. Dess kommando \codeword{render} skapar begränsade sidförhandsvisningar; rendering ensam godkänner inte deras utseende. Kommandot \codeword{record-audit} accepterar endast den matchande centrala utgåverapporten, inte en äldre fullständig granskning. En ändrad källfil eller ombyggd PDF väljer nytt väntande underlag i stället för att tyst återanvända tidigare godkännande.
 
 Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera ett konkret layoutproblem; valfria PDF-granskningsfält får förbli väntande. Granska representativa webbläsarflöden. Registrera vad som faktiskt kontrollerades, av vem och med vilket resultat. Låt olösta kontroller vara väntande och håll grundläggande funktionstest av uppdateraren efter publicering separat. En grön automatiserad rapport är inte tillstånd att publicera, och verktyget gör aldrig commit, taggar, laddar upp eller publicerar utgåvan. Se \filepath{docs/RELEASE_QUALIFICATION.md} för postkommandona.
+
+\subsection{Utgåveförberedelse och~kvalificering på~GitHub}
+
+Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
+
+\begin{enumerate}
+  \item \textbf{Gren och~förkontroll.} En~push till~\codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~manuell start från~den~grenen, inleder förberedelsen. En~valfri angiven version måste motsvara grennamnet. Förberedelsen avvisar en~redan befintlig tagg \codeword{v_X.Y[.Z]}, hittar föregående utgåvetagg som~jämförelsebas och~kör \codeword{release-preflight} för~källsyntax, deklarationsdokumentation, filinventering, Pythons importpolicy och~arbetsflödeskontrakt före AI eller~TeX.
+  \item \textbf{Deterministiska metadata.} Hjälpskriptet samordnar programversion, utgåvemetadata, mall för~versionsanteckningar och~version-/datummarkeringar i~alla fyra handböcker och~uppdaterar produktionslistan. Det~skriver inte nytt sakligt innehåll i~TeX. Färdiga redaktionella anteckningar bevaras. Innehållet i~alla fyra handböcker måste vara samordnat före utgåvan.
+  \item \textbf{Redaktionella anteckningar.} Ett~färdigt avsnitt skrivet av~underhållaren lämnas oförändrat. Om~det saknas eller~är ofullständigt används GitHub Copilot CLI med~\codeword{gpt-6-luna}; automatiskt modellval används bara om~den~modellen är otillgänglig. Generering kräver \codeword{COPILOT_GITHUB_TOKEN}. Begränsade underlag och~strikt Markdown-validering avvisar platshållare, fel versioner, extra avsnitt och~assistentkommentarer. Misslyckad generering eller~validering blockerar kvalificeringen i~stället för~att släppa igenom ofullständiga anteckningar.
+  \item \textbf{Reproducerbara handböcker.} Flödet använder checksummeverifierad TinyTeX och~en~låst uppsättning TeX Live-paket och~återanvänder giltig cache enligt låsfilen och~paketlistan. Engelska, tjeckiska, tyska och~svenska handböcker byggs var för~sig med~\codeword{pdflatex}, \codeword{makeindex} och~ytterligare två \codeword{pdflatex}-körningar. Tidpunkten i~utgåvans metadata ger reproducerbara PDF- och~manifesttidsstämplar. Efter bygget verifieras produktionslistan, integritetsmanifestet och~utgåvans konsekvens.
+  \item \textbf{Säker återskrivning.} Bara godkända förberedelsefiler läggs till~i~commiten. Om~fjärrgrenen har ändrats stoppas en~föråldrad push; ett~identiskt redan förberett träd får återanvända aktuell commit. Ändringar skrivs bara till~samma utgåvegren, inte till~\codeword{main}.
+  \item \textbf{Kontroll av~exakt kandidat.} Det~återanvändbara centrala CI-flödet checkar ut~det~exakta SHA-värdet för~förberedd commit och~kör hela utgåvematrisen inklusive obligatoriska Chromium-tester. Det~samlade kontrollsteget lyckas bara om~förberedelsen, anteckningarna och~hela matrisen lyckas och~grenen fortfarande pekar på~exakt samma commit. Merge, taggning och~publicering förblir underhållarens beslut.
+\end{enumerate}
+
+Detaljer finns i~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} och~\filepath{docs/LATEX_BUILD.md}. En~vanlig ändring i~TeX-källan kräver varken omedelbar PDF-kompilering eller~en~separat utgåvegranskning.
 
 \section{Ordlista}
 \label{sec:glossary}
