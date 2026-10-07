@@ -279,8 +279,15 @@ namespace {
         && str_contains($releaseWorkflow, 'name: Prepare release candidate')
         && str_contains($releaseWorkflow, 'contents: write')
         && str_contains($releaseWorkflow, 'prepare_release_candidate.php')
+        && str_contains($releaseWorkflow, 'patch_notes_ai.php prompt')
+        && str_contains($releaseWorkflow, 'patch_notes_ai.php apply')
+        && str_contains($releaseWorkflow, 'COPILOT_GITHUB_TOKEN')
+        && str_contains($releaseWorkflow, 'gpt-6-luna')
+        && str_contains($releaseWorkflow, 'GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS')
+        && str_contains($releaseWorkflow, '--no-ask-user')
+        && !str_contains($releaseWorkflow, '--allow-all')
+        && !str_contains($releaseWorkflow, '--allow-tool')
         && str_contains($releaseWorkflow, 'Release branch changed during preparation; refusing stale write-back.')
-        && str_contains($releaseWorkflow, 'Editorial patch notes: **pending**')
         && str_contains($releaseWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
         && str_contains($releaseWorkflow, 'audit_profile: release')
         && str_contains($releaseWorkflow, 'checkout_ref:')
@@ -290,6 +297,16 @@ namespace {
         && !str_contains($releaseWorkflow, 'gh release create')
         && !str_contains($releaseWorkflow, 'git tag '),
         'Release workflow must write back only deterministic preparation to its release branch, preserve the editorial gate, reuse central CI and avoid main/tag/publication actions.');
+
+    $patchNotesAi = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/patch_notes_ai.php');
+    check(str_contains($patchNotesAi, 'EVIDENCE - TEXT DIFF:')
+        && str_contains($patchNotesAi, 'untrusted quoted repository data')
+        && str_contains($patchNotesAi, "':(exclude)docs/*.pdf'")
+        && str_contains($patchNotesAi, "':(exclude)winapp/dist/**'")
+        && str_contains($patchNotesAi, 'Generated release notes contain more than one version section.')
+        && str_contains($patchNotesAi, 'Completed release notes already exist; preserving maintainer-authored content.')
+        && !str_contains($patchNotesAi, 'COPILOT_GITHUB_TOKEN'),
+        'AI patch-note boundary must provide bounded evidence, reject unsafe output and remain independent of authentication secrets.');
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
