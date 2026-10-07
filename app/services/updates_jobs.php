@@ -44,6 +44,26 @@ namespace Gallery\Services;
 // Keep active/last state lookups available without including worker state-machine parts.
 require_once __DIR__ . '/updates_job_lookup.php';
 
+/**
+ * Bound retries of an atomic updater checkpoint commit on Windows.
+ *
+ * @var int
+ * Units: rename attempts, including the initial commit. Scope: one updater JSON write.
+ * Consumers: application_update_write_json_atomic().
+ * Rationale: tolerate brief Windows sharing locks while retaining the previous checkpoint.
+ */
+const APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS = 10;
+
+/**
+ * Bound the pause between Windows checkpoint-commit attempts.
+ *
+ * @var int
+ * Units: microseconds. Scope: one updater JSON write, at most nine pauses.
+ * Consumers: application_update_write_json_atomic().
+ * Rationale: allow transient readers to release their handles within a 450 ms retry budget.
+ */
+const APPLICATION_UPDATE_STATE_RENAME_DELAY_US = 50_000;
+
 // This module is split into focused part files under app/services/updates_jobs/.
 // Per-request time budget and runtime limit resolution.
 require_once __DIR__ . '/updates_jobs/budget.php';

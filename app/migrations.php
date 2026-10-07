@@ -345,19 +345,17 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
 /**
  * Return true when at least one migration file has not been recorded yet.
  *
+ * This inspection is deliberately read-only. A missing schema_migrations table
+ * or any database inspection failure is treated fail-closed as pending work;
+ * only run_migrations() / run_migrations_bounded() may create migration storage.
+ *
  * @return bool True when the condition matches.
  */
 function pending_migrations_exist(): bool
 {
     try {
-        // $pdo stores an intermediate value used by the surrounding gallery workflow.
-        $pdo = db();
-        $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
-            version VARCHAR(64) NOT NULL PRIMARY KEY,
-            applied_at DATETIME NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         // $appliedVersions stores the immutable audit rows already recorded by this database.
-        $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        $appliedVersions = db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
         // Extra historical audit rows are harmless when their obsolete files no longer ship.
         return pending_migration_files(
             discover_migration_files(dirname(__DIR__) . '/database/migrations'),

@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.121.2';
+const CMS_VERSION = '0.121.3';
 ```
 
 Update-related code uses:
@@ -1257,6 +1257,10 @@ Repair migrations return an empty SQL list to the legacy runner and execute thei
 
 ## Updater Safety
 
+The gallery-layout migration owner uses its own bounded Windows sidecar commit policy: ten attempts, nine 50 ms pauses, a byte-for-byte original-document recheck before every retry, no prior-target deletion and cleanup of only its owned staging file. This preserves per-document replay markers and concurrent edits. Other platforms retain one commit attempt.
+
+Windows updater checkpoint persistence retries the same complete staging file for at most ten atomic rename attempts, with nine 50 ms pauses. The prior checkpoint is never unlinked to obtain permission; persistent refusal deletes only the staging file and reports failure. Other platforms retain one commit attempt. Retry limits belong to `app/services/updates_jobs.php`, and `app/services/updates_jobs/state.php` owns the filesystem workflow.
+
 Production membership is the exact checked-in `app/production-files.json` policy, read by `app/release_file_policy.php`. Bash and PowerShell packaging, integrity ownership and updater activation derive from that owner. Schema-1 packaging combines the base production list with optional reviewed WinApp companion membership; the base remains readable by installed pre-WinApp updaters. The updater list is a validated base subset retaining installation-owned custom CSS and distribution-only artifacts; a GitHub source archive may contain development or companion files without activating them. Obsolete removal uses prior owned inventory/manifest evidence. See [production file policy](docs/PRODUCTION_FILES.md).
 
 `app/services/updates_jobs.php` is the canonical installer engine for stable updates, beta installs, stable restores, clean reinstalls, rollback, Admin button requests, pure-PHP entry points, and automatic background updates. Legacy functions in `updates_install.php` now start a durable job instead of downloading, extracting, copying, migrating, and cleaning in one request.
@@ -1864,6 +1868,8 @@ public/assets/gallery-modules/admin-maintenance-center.js
 public/assets/styles/admin-maintenance-center.css
 database/migrations/202609200004_maintenance_center.php
 ```
+
+Each analysis/execution HTTP step injects the request-local Core kernel loader from the controller. `maintenance_center_task_runtime_modules()` maps the task and phase to reviewed existing `site-maintenance-work`, `archive-maintenance-work` or `domain-admin-database-maintenance` modules, loaded before the dynamic task callback. The optional null loader supports full-bootstrap CLI/test consumers with dependencies already present. Migration inspection is read-only: a missing ledger or inspection failure is pending work, and only explicit migration runners create the ledger.
 
 The lifecycle is persisted as `analyzing -> ready -> running <-> paused -> completed|failed|cancelled`. Analysis writes only its own job checkpoint while inspecting the installation read-only. A finalized plan binds the application version, applied migration revision, and Maintenance Center registry revision. The browser may review and change selectable plan options, but execution authorization and dependency expansion are recalculated from the server registry.
 

@@ -436,6 +436,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | --- | --- |
 | Persisted maintenance jobs and central mutation claim | `app/models/maintenance_center.php`, `database/migrations/202609200004_maintenance_center.php` |
 | Task registry and dependency/state-machine policy | `app/services/maintenance_center/registry.php` |
+| Per-task/phase selective runtime dependency mapping and injected loader | `app/services/maintenance_center.php`, `app/controllers/admin_maintenance_center.php`, `scripts/runtime_dynamic_dependencies.php` |
 | Read-only plan analysis and stale-plan revision capture | `app/services/maintenance_center/analysis.php` |
 | Bounded execution, resume/cancel, one-table physical DB steps, verification/reporting | `app/services/maintenance_center/execution.php` |
 | Admin/dashboard status view-models and bounded lifecycle logging | `app/services/maintenance_center/status.php` |

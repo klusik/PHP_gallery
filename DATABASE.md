@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.121.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.121.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -1248,6 +1248,8 @@ The only repository-proven obsolete schema objects are the legacy pre-compaction
 ## Maintenance Center Job State
 
 ### `maintenance_jobs`
+
+Maintenance Center analysis checks the migration ledger without creating it. `pending_migrations_exist()` treats a missing `schema_migrations` table or inspection failure as pending work; only `run_migrations()` / `run_migrations_bounded()` create migration storage. This release adds no schema migration.
 
 `maintenance_jobs` stores the bounded durable state for the browser-driven Admin Maintenance Center. It intentionally uses one job row with bounded plan/state JSON instead of a high-cardinality per-step ledger.
 

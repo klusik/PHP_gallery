@@ -134,6 +134,49 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Updater and release compatibility
 
+
+### FILES-1 — Windows layout-migration sidecar sharing locks
+
+- **Reason / protected scenario:** Windows briefly refused atomic replacement of
+  an owned `gallery.json` during the release audit. The existing layout-migration
+  owner retries the same complete staging file for at most ten attempts with nine
+  50 ms pauses; other platforms retain one attempt.
+- **Owner:** `app/services/gallery_description_layout_compatibility.php`.
+- **Safety:** Recheck the original bytes before each retry, refuse concurrent
+  edits or persistent storage refusal, never delete the previous sidecar, retain
+  its permission-mode behavior, and remove only the owned staging file. A staging
+  file that inherited read-only mode becomes owner-writable only for cleanup.
+- **Evidence / tests:** `tests/gallery_description_layout_compatibility_test.php`
+  injects a transient refusal, verifies bounded Windows recovery and unchanged
+  non-Windows refusal, intervening-edit preservation, read-only refusal and
+  staging cleanup; existing rollback and per-document replay cases remain.
+- **Usage:** One local native sharing refusal was observed on 2026-10-07 with
+  PHP 8.5.10 on Windows; production frequency is unknown.
+- **Support rationale / retirement:** Permanent support while Windows is
+  supported. Removal requires an alternative atomic commit proven with transient
+  locks, persistent refusal, concurrent edits and migration replay.
+
+
+### UPD-4 — Windows updater checkpoint sharing locks
+
+- **Reason / protected scenario:** Windows readers can briefly deny replacement
+  of a just-written updater checkpoint. Retry the same complete staging file for
+  at most ten rename attempts with nine 50 ms pauses; never delete the prior
+  checkpoint to obtain replacement permission. Other platforms use one attempt.
+- **Owner:** `app/services/updates_jobs.php` and
+  `app/services/updates_jobs/state.php`, the existing updater state persistence owner.
+- **Evidence / tests:** An owned Windows probe refused its 29th consecutive
+  checkpoint replacement, then committed after one pause (66 ms observed).
+  `tests/updater_resumable_state_machine_test.php` covers complete replacement,
+  persistent destination refusal, staging cleanup, prior checkpoint preservation
+  on Windows read-only refusal, and 620 resumable archive-entry checkpoints.
+- **Usage:** Production sharing-lock frequency is unknown; the local failure and
+  successful retry were observed on 2026-10-07 with PHP 8.5.10 on Windows.
+- **Support rationale / retirement:** Permanent support for Windows file-sharing
+  semantics while Windows is supported. Removal requires a replacement atomic
+  persistence mechanism proven with transient locks, persistent refusal and
+  existing durable-job recovery; no calendar retirement is assumed.
+
 ### UPD-1 — Positive manifest ownership bridge for archives without sidecar
 
 - **Reason / protected scenario:** An incoming production-files sidecar may be
@@ -250,6 +293,22 @@ not a source parser or a commitment to remove anything on a calendar date.
   Never merge the Public dedicated preference into this alias.
 
 ## Core runtime and session contracts
+
+### CORE-3 — Maintenance Center full-bootstrap task consumers
+
+- **Reason / protected scenario:** CLI/test consumers that load the complete
+  bootstrap already have Maintenance Center subsystem dependencies and may call
+  task steps without a request kernel loader. Selective HTTP routes inject one
+  for each separate analysis/execution request.
+- **Owner:** `app/services/maintenance_center.php` and its analysis/execution
+  workers; HTTP injection belongs to `app/controllers/admin_maintenance_center.php`.
+- **Evidence / tests:** `tests/maintenance_center_test.php` covers phase-specific
+  module selection, controller injection and loading before task callbacks;
+  `scripts/runtime_dynamic_dependencies.php` registers the reviewed loader.
+- **Usage:** Full-bootstrap consumer adoption is unknown.
+- **Earliest safe retirement:** Migrate all supported CLI/test consumers to an
+  explicit loader and prove their include contracts before removing the optional
+  null-loader path. Never replace selective HTTP loading with umbrella loading.
 
 ### CORE-1 — Two-argument ModuleLoader construction
 

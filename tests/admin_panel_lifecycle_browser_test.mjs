@@ -65,7 +65,7 @@ let readFixtureResult = null;
 let closeOwnedBrowser = null;
 
 /**
- * Attach only to the freshly created profile and expose Chromium's native key dispatch.
+ * Attach to the fresh owned tab, navigate once, and expose Chromium's native key dispatch.
  * @param {string} profilePath Exact disposable profile directory.
  * @return {Promise<void>} Resolves when native keyboard injection is ready.
  */
@@ -116,9 +116,16 @@ async function attachKeyboard(profilePath) {
         });
     }
     const {targetInfos} = await command('Target.getTargets');
-    const target = targetInfos.find(/** Select the confined page in this freshly created browser profile. @param {{type: string, url: string, targetId: string}} info DevTools target description. @return {boolean} Whether it is the loopback fixture page. */ info => info.type === 'page' && info.url.startsWith('http://127.0.0.1:'));
+    const target = targetInfos.find(/** Select the confined page in this freshly created browser profile. @param {{type: string, url: string, targetId: string}} info DevTools target description. @return {boolean} Whether it is the fresh owned tab before fixture navigation. */ info => info.type === 'page' && info.url === 'about:blank');
     if (!target) throw new Error('Owned fixture page not found');
     const {sessionId} = await command('Target.attachToTarget', {targetId: target.targetId, flatten: true});
+    await command('Page.enable', {}, sessionId);
+    // Keep native focus and :focus-visible behavior available in this owned headless page.
+    await command('Emulation.setFocusEmulationEnabled', {enabled: true}, sessionId);
+    // Drive exactly one initial navigation after attaching; command-line URL startup
+    // can leave an empty document on Windows Chromium without a navigation event.
+    const navigation = await command('Page.navigate', {url: 'http://127.0.0.1:' + server.address().port + '/'}, sessionId);
+    if (navigation.errorText) throw new Error('Owned fixture navigation failed');
     /** Resize only the disposable Theme page for responsive layout coverage. @param {number} width Validated viewport width. @return {Promise<void>} Resolves after metrics are applied. */
     setFixtureWidth = async width => { await command('Emulation.setDeviceMetricsOverride', {width, height: 900, deviceScaleFactor: 1, mobile: false}, sessionId); };
     /** Send a complete native key press to the attached fixture page. @param {string} key Confined Tab, Escape or creation-fixture Enter. @param {boolean} shift Whether Shift is held. @return {Promise<void>} Resolves after key-down and key-up delivery. */
@@ -218,7 +225,7 @@ try {
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
         '--remote-debugging-port=0', ...(fixtureName === 'admin_gallery_tree.html' ? ['--window-size=1280,1000'] : []),
         '--user-data-dir=' + profile,
-        'http://127.0.0.1:' + server.address().port + '/'], {windowsHide: true});
+        'about:blank'], {windowsHide: true});
     browserReady = attachKeyboard(profile);
     // The HTTP keyboard boundary reports setup failure without an unhandled rejection.
     browserReady.catch(/** Consume the setup rejection already reported at the HTTP keyboard boundary. @return {void} Avoids an unhandled rejection without treating setup as successful. */ () => {});

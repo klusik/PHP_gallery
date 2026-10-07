@@ -95,7 +95,8 @@ function application_update_job_transition_allowed(string $from, string $to): bo
  * Atomically write a small JSON state file.
  *
  * @param string $path Destination JSON path.
- * @param array $payload State payload.
+ * @param array<string,mixed> $payload State payload.
+ * @return void Commits the state or refuses without removing the previous checkpoint.
  */
 function application_update_write_json_atomic(string $path, array $payload): void
 {
@@ -109,10 +110,19 @@ function application_update_write_json_atomic(string $path, array $payload): voi
     if (file_put_contents($temporary, $json . "\n", LOCK_EX) === false) {
         throw new RuntimeException('Could not persist update job state.');
     }
-    if (!rename($temporary, $path)) {
-        @unlink($temporary);
-        throw new RuntimeException('Could not commit update job state.');
+    // Windows readers may briefly deny replacement. Retry the same complete file;
+    // never unlink the previous checkpoint to make a commit succeed.
+    $attempts = PHP_OS_FAMILY === 'Windows' ? APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS : 1;
+    for ($attempt = 0; $attempt < $attempts; $attempt++) {
+        if (@rename($temporary, $path)) {
+            return;
+        }
+        if ($attempt + 1 < $attempts) {
+            usleep(APPLICATION_UPDATE_STATE_RENAME_DELAY_US);
+        }
     }
+    @unlink($temporary);
+    throw new RuntimeException('Could not commit update job state.');
 }
 
 /**

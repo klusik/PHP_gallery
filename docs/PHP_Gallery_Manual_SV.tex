@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.121.2}
-\newcommand{\manualdate}{6~oktober~2026}
+\newcommand{\version}{0.121.3}
+\newcommand{\manualdate}{7~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1821,6 +1821,8 @@ Papperskorgsinnehåll ligger i skyddad beständig \filepath{data/gallery-trash/}
 
 Öppna \ui{Underhåll > Underhållscenter} för ett väglett flöde med \ui{Analysera}, \ui{Granska}, \ui{Utför} och \ui{Verifiera} över vanliga underhållsansvar. Analysera är skrivskyddat för galleri-, telemetri-, logg-, papperskorgs-, cache-, miniatyrbilds- och databasinnehåll; det skriver bara den beständiga kontrollpunkt för Underhållscentret som behövs för att återuppta undersökningen. Granska-steget grupperar uppgifter efter område, märker obligatoriska automatiska steg och placerar tillgängliga valfria uppgifter utan upptäckt arbete i en infälld grupp. Obligatoriska, förvalda och valfria uppgifter förblir tydliga före rensning; djup medieverifiering och fullständig databasoptimering går fortfarande att hitta när de är tillgängliga, även om de inte väljs automatiskt.
 
+Servern laddar de granskade beroendena för respektive område på nytt i varje separat analys- eller körningsbegäran innan uppgiften körs. Kontrollen av väntande migreringar läser endast migreringsregistret; ett saknat register eller en misslyckad kontroll behandlas som väntande arbete. Tillämpa migreringar genom det uttryckliga migreringsflödet; Analysera skapar eller reparerar inte migreringslagringen.
+
 Den granskade planen binds till aktuell programversion, tillämpad migreringsrevision, Underhållscentrets registerrevision och planinnehåll. Om någon av dessa indata ändras vägrar körningen den gamla planen och begär en ny analys. Servern kontrollerar uppgiftsberoenden, funktionstillstånd och databastabellers lämplighet igen vid körningen; webbläsarkryssrutor är presentationsindata, inte behörighet.
 
 Körningen går framåt genom begränsade kontrollpunkter, så du kan ladda om eller stänga sidan och återuppta samma jobb senare. Bara ett körande eller pausat centralt jobb äger den beständiga ändringsreservationen, och två webbläsarflikar kan inte driva ett jobb framåt samtidigt. Automatiskt webbplatsunderhåll avstår före sin första ändring medan reservationen hålls. Offentliga skrivskyddade galleribegäranden förblir tillgängliga.
@@ -1981,6 +1983,8 @@ Driftsättningshjälpmedel & Windows- och Linux-driftsättningsskript, utgåveme
 \subsection{Programuppdateringar}
 
 Den kompakta versionsöversikten samlar installerad och tillgänglig version, kanal, status och huvudåtgärder; detaljer om kodförrådet och GitHub API finns kvar i ett hopfällt diagnostikavsnitt. När ett jobb slutförs uppdaterar webbläsaren översikten direkt från lokala metadata, håller panelen öppen och URL:en oförändrad och döljer en inaktuell åtgärd för stabil uppdatering. Detta gör ingen ny GitHub-kontroll. Om läsningen misslyckas kan knappen för statusuppdatering försöka läsa lokalt igen utan att upprepa installationen.
+
+I Windows tillåts upp till tio försök att atomärt ersätta uppdaterarens kontrollpunkt, med pauser på 50~ms och en sammanlagd pausgräns på 450~ms, för att hantera korta fildelningslås. Om skrivningen fortfarande misslyckas bevaras den föregående kontrollpunkten. Ett beständigt behörighetsproblem kräver att lagringsåtkomsten rättas innan jobbet försöks igen. Windows använder samma begränsade återförsök vid migrering av orienteringsmetadata i \filepath{gallery.json}; en samtidig ändring eller ett beständigt avslag bevarar det befintliga dokumentet och stoppar migreringen.
 
 Uppdateraren kontrollerar konfigurerade kanaler, validerar paket, förbereder innehåll, verifierar nödvändiga körningsfiler och storlekar, bevarar överskrivna filer i återställningslagring och aktiverar uppdateringen. Hantering av frekvensbegränsning och återförsökstillstånd förhindrar upprepade fjärrbegäranden under leverantörens väntetider. Ett återupptagningsbart jobbkort visas både under \ui{Status} och \ui{Avancerade verktyg}, så att en beta-installation, återställning eller ominstallation fortsätter visa sitt förlopp där den startades. Sidan kan stängas och öppnas igen utan att färdiga kontrollpunkter kastas.
 

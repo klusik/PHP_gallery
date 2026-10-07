@@ -232,20 +232,20 @@ function maintenance_center_cancel(int $jobId, int $actorId): array
 }
 
 /** Execute exactly one bounded registered task slice. */
-function maintenance_center_execution_step(int $jobId, int $actorId): array
+function maintenance_center_execution_step(int $jobId, int $actorId, ?callable $loadDependencies = null): array
 {
     if (!maintenance_center_model_acquire_step_lock($jobId)) {
         return maintenance_center_job_status($jobId, $actorId);
     }
     try {
-        return maintenance_center_execution_step_unlocked($jobId, $actorId);
+        return maintenance_center_execution_step_unlocked($jobId, $actorId, $loadDependencies);
     } finally {
         maintenance_center_model_release_step_lock($jobId);
     }
 }
 
 /** Execute one maintenance slice while the per-job single-flight lock is held. */
-function maintenance_center_execution_step_unlocked(int $jobId, int $actorId): array
+function maintenance_center_execution_step_unlocked(int $jobId, int $actorId, ?callable $loadDependencies = null): array
 {
     $row = maintenance_center_model_job($jobId);
     if (!is_array($row) || (int) ($row['actor_id'] ?? 0) !== $actorId) {
@@ -319,6 +319,7 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId): a
     }
     $taskState = is_array($execution['task_states'][$key] ?? null) ? $execution['task_states'][$key] : [];
     try {
+        maintenance_center_load_task_dependencies($key, 'execution', $loadDependencies);
         $result = $executor([
             'job' => $row,
             'state' => $state,

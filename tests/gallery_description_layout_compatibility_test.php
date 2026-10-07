@@ -36,6 +36,26 @@ namespace Gallery\Services {
     function gallery_edit_writer_begin(): string { return 'fixture'; }
     /** Release the fixture lease. @param string $lockName Fixture lease. @return void Records no persistent state. */
     function gallery_edit_writer_end(string $lockName): void {}
+    /**
+     * Inject one owned sidecar sharing refusal without changing other file moves.
+     * @param string $source Owned staging file.
+     * @param string $destination Requested sidecar destination.
+     * @return bool Native rename result or the controlled first refusal.
+     */
+    function rename(string $source, string $destination): bool {
+        if (isset($GLOBALS['layout_rename_fixture']['path'])
+            && str_replace('\\', '/', $GLOBALS['layout_rename_fixture']['path']) === str_replace('\\', '/', $destination)) {
+            $GLOBALS['layout_rename_fixture']['attempts']++;
+            if ($GLOBALS['layout_rename_fixture']['refusals'] > 0) {
+                $GLOBALS['layout_rename_fixture']['refusals']--;
+                if (isset($GLOBALS['layout_rename_fixture']['replacement'])) {
+                    file_put_contents($destination, $GLOBALS['layout_rename_fixture']['replacement']);
+                }
+                return false;
+            }
+        }
+        return \rename($source, $destination);
+    }
 }
 
 namespace {
@@ -82,6 +102,43 @@ namespace {
         layout_assert($sidecar->description_layout === 'horizontal' && $sidecar->custom instanceof \stdClass && $sidecar->description === 'horizontal is prose', 'Preserve unrelated JSON structure and prose');
         layout_assert(gallery_description_layout_upgrade_sidecars($root) === 0, 'Marked sidecar replay must be harmless');
         layout_assert(file_get_contents($root . '/unrelated/gallery.json') === 'not a metadata document', 'Unrelated malformed metadata must remain untouched');
+        $retryOriginal = '{"description_layout":"vertical","custom":{}}';
+        file_put_contents($path, $retryOriginal);
+        $GLOBALS['layout_rename_fixture'] = ['path' => $path, 'attempts' => 0, 'refusals' => 1];
+        $retryRefused = false;
+        try { gallery_description_layout_upgrade_sidecars($root); }
+        catch (\RuntimeException) { $retryRefused = true; }
+        if (PHP_OS_FAMILY === 'Windows') {
+            layout_assert(!$retryRefused && $GLOBALS['layout_rename_fixture']['attempts'] >= 2 && $GLOBALS['layout_rename_fixture']['attempts'] <= 10, 'Windows sidecar commit must tolerate a bounded transient sharing refusal');
+            layout_assert(json_decode((string) file_get_contents($path))->description_layout === 'horizontal', 'Retried commit must contain the complete converted document');
+        } else {
+            layout_assert($retryRefused && $GLOBALS['layout_rename_fixture']['attempts'] === 1 && file_get_contents($path) === $retryOriginal, 'Non-Windows refusal must retain one attempt and the prior document');
+        }
+        layout_assert((glob($root . '/.la*') ?: []) === [], 'Sidecar commit must clean its owned staging files');
+
+        file_put_contents($path, $retryOriginal);
+        $externalSidecar = '{"description_layout":"vertical","title":"Concurrent edit"}';
+        $GLOBALS['layout_rename_fixture'] = ['path' => $path, 'attempts' => 0, 'refusals' => 1, 'replacement' => $externalSidecar];
+        $retryRefused = false;
+        try { gallery_description_layout_upgrade_sidecars($root); }
+        catch (\RuntimeException $error) {
+            $retryRefused = true;
+            layout_assert($error->getMessage() === (PHP_OS_FAMILY === 'Windows' ? 'Gallery layout sidecar changed during migration.' : 'Gallery layout sidecar replacement failed.'), 'Concurrent replacement must refuse explicitly');
+        }
+        layout_assert($retryRefused && $GLOBALS['layout_rename_fixture']['attempts'] === 1 && file_get_contents($path) === $externalSidecar, 'Retry must never overwrite a concurrent sidecar edit');
+        layout_assert((glob($root . '/.la*') ?: []) === [], 'Concurrent-edit refusal must remove only staging');
+        unset($GLOBALS['layout_rename_fixture']);
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            file_put_contents($path, $retryOriginal);
+            layout_assert(chmod($path, 0444), 'Could not protect the sidecar fixture');
+            $retryRefused = false;
+            try { gallery_description_layout_upgrade_sidecars($root); }
+            catch (\RuntimeException) { $retryRefused = true; }
+            finally { chmod($path, 0666); }
+            layout_assert($retryRefused && file_get_contents($path) === $retryOriginal, 'Read-only sidecar refusal must preserve the original document');
+            layout_assert((glob($root . '/.la*') ?: []) === [], 'Read-only refusal must clean its owned staging file');
+        }
         file_put_contents($path, '{"description_layout":"vertical","custom":{}}');
         mkdir($root . '/broken');
         file_put_contents($root . '/broken/gallery.json', '{"description_layout":');

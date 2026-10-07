@@ -184,6 +184,77 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
     ];
 }
 
+/**
+ * Return reviewed deferred runtime modules required by one Maintenance Center task.
+ *
+ * Analysis and execution run as separate browser requests, so heavy subsystem
+ * owners must be loaded again for the current task. The mapping intentionally
+ * reuses existing logical runtime modules instead of bypassing selective loading
+ * through legacy models.php/services.php umbrella loaders.
+ *
+ * @param string $taskKey Stable Maintenance Center task key.
+ * @param string $phase Current task phase: analysis or execution.
+ * @return list<string> Logical runtime module identifiers to load before the task callback.
+ */
+function maintenance_center_task_runtime_modules(string $taskKey, string $phase): array
+{
+    if (!in_array($phase, ['analysis', 'execution'], true)) {
+        return [];
+    }
+
+    if ($taskKey === 'preflight') {
+        return $phase === 'analysis' ? ['site-maintenance-work'] : [];
+    }
+    if (in_array($taskKey, [
+        'trash.reconcile',
+        'telemetry.retention',
+        'trash.retention',
+        'security.cleanup',
+        'downloads.cache',
+        'thumbnail.metadata',
+        'media.deep_verify',
+    ], true)) {
+        return ['site-maintenance-work'];
+    }
+    if ($taskKey === 'logs.retention') {
+        return ['archive-maintenance-work'];
+    }
+    if (in_array($taskKey, [
+        'database.logical',
+        'database.inventory',
+        'database.analyze',
+        'database.optimize',
+    ], true)) {
+        return ['domain-admin-database-maintenance'];
+    }
+    if ($taskKey === 'verify') {
+        return $phase === 'execution' ? ['domain-admin-database-maintenance'] : [];
+    }
+    return [];
+}
+
+/**
+ * Load reviewed heavy dependencies for one bounded Maintenance Center task.
+ *
+ * A null loader is supported for full-bootstrap CLI/tests where every dependency
+ * is already present. Selective web routes inject the request-local runtime kernel
+ * loader from the controller.
+ *
+ * @param string $taskKey Stable Maintenance Center task key.
+ * @param string $phase Current task phase: analysis or execution.
+ * @param callable(string):void|null $loadDependencies Optional logical-module loader.
+ * @return void Loads all modules required by this task and phase.
+ */
+function maintenance_center_load_task_dependencies(string $taskKey, string $phase, ?callable $loadDependencies = null): void
+{
+    if ($loadDependencies === null) {
+        return;
+    }
+    foreach (maintenance_center_task_runtime_modules($taskKey, $phase) as $module) {
+        $loadDependencies($module);
+    }
+}
+
 require_once __DIR__ . '/maintenance_center/registry.php';
 require_once __DIR__ . '/maintenance_center/analysis.php';
 require_once __DIR__ . '/maintenance_center/execution.php';
