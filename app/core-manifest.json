@@ -1,6 +1,6 @@
 {
     "version": "0.122.1",
-    "generated_at": "2026-10-07T21:51:32+00:00",
+    "generated_at": "2026-10-07T21:52:40+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -103,7 +103,7 @@
         "app/controllers/public_gallery_home.php": "sha256:d9e019f2966fbeda0f2b3c41cae64e7c45902e35b46adbe9c0bd1b6c1eb3e58d",
         "app/controllers/public_gallery_lightbox.php": "sha256:e0b687db9d8a28a7f3a7d0c5099a7d5cd7de12ef0f1877645075c7959c2a7131",
         "app/controllers/public_gallery_page.php": "sha256:2440f82dabc1be7d5cf55d3459e3557bd1632cc004db9ebdda85fa0466969ea7",
-        "app/controllers/public_media.php": "sha256:6b78df1bf6db14acdc4cdfcf66d47aab16a7378973c715ef7a65571c4f1ecc13",
+        "app/controllers/public_media.php": "sha256:43e8846bdd3a284bf3645de6a054e4ecb1415e56a6294e79e81cc7c1cebb00d1",
         "app/controllers/public_search.php": "sha256:62d4223669760c78c0c5cd2a0191267d12a53fe7014a7fcc6a00e25485acfadc",
         "app/controllers/public_seo.php": "sha256:e017471fa3b63483c050ccf894b1b1144148b1b06c650298495826873f6fc968",
         "app/controllers/public_tags.php": "sha256:aa71762f0fc4d5df3f8045b26f267a5be62658d6f4196dc7fc2cbfad84fb096f",
