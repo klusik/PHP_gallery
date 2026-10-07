@@ -27,9 +27,62 @@ The current GitHub stage now performs deterministic preparation on the release b
 
 Editorial release-note prose is generated on GitHub when the target version section is absent or still contains the canonical scaffold. The workflow builds a bounded prompt from the previous stable tag-to-HEAD commit metadata, changed-path inventory, diff stat, text diff, `PATCH_NOTES_TEMPLATE.md`, and the previous release section as a style sample. Generated/binary release artifacts are excluded from the text diff, and repository evidence is explicitly treated as untrusted quoted data so source comments or strings cannot become model instructions.
 
-For this user-owned repository the Copilot CLI authenticates with the repository secret `COPILOT_GITHUB_TOKEN`, containing a fine-grained personal access token with the account-level **Copilot Requests** permission. The workflow pins the model selection to `gpt-6-luna`, disables project prompt-mode extensions, grants no Copilot tools, and uses non-interactive mode. The model returns text only and cannot directly modify the checkout. `.github/scripts/patch_notes_ai.php` validates the exact target heading, one-version-only structure, required release sections, output bound, absence of placeholders/code fences/meta-commentary, and then replaces only an incomplete target section. A completed maintainer-authored target section skips the AI steps entirely and is preserved.
+For this user-owned repository the Copilot CLI authenticates with the repository secret `COPILOT_GITHUB_TOKEN`, containing a fine-grained personal access token with the account-level **Copilot Requests** permission. The workflow requests `gpt-6-luna`, falls back to Copilot `auto` only for the explicit model-unavailable response, disables project prompt-mode extensions, grants no Copilot tools, and uses non-interactive mode. The model returns text only and cannot directly modify the checkout. `.github/scripts/patch_notes_ai.php` validates the exact target heading, one-version-only structure, required release sections, output bound, absence of placeholders/code fences/meta-commentary, and then replaces only an incomplete target section. A completed maintainer-authored target section skips the AI steps entirely and is preserved.
 
 After validated release notes exist, the workflow builds all four PDFs on GitHub, refreshes integrity data, runs `check_release.php`, commits the tracked release artifacts, and qualifies that exact prepared SHA. If the Copilot secret is unavailable, the AI request fails, or model output does not satisfy the validator, qualification is blocked rather than accepting partial notes. The maintainer can still complete the section manually and push it; the next run detects completed notes and does not call Copilot. A workflow-created commit uses the repository `GITHUB_TOKEN`; GitHub intentionally does not start another push workflow for that commit, so qualification continues inside the same run against the emitted prepared SHA.
+
+### Toolchain and fail-fast ordering
+
+Before deterministic preparation, Copilot or TeX, GitHub invokes
+`php scripts/audit.php --profile=release-preflight`. Its centrally registered
+static suites cover complete PHP syntax, changed declaration/policy documentation,
+source-contract inventory, the whole-tree Python import policy and the existing
+CI workflow contract. This early profile is an optimization; the complete
+matrix and final authoritative release profile still qualify the exact prepared SHA.
+
+Manuals use checksum-locked TinyTeX-1 2026.02 (TeX Live 2025) with the archived
+[TeX Live 2025 final repository](https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final/).
+The October 2026 bundle against a rolling repository allowed package-manager drift;
+the selected February bundle already has the final repository's `texlive.infra`
+revision 76780. `.github/texlive-lock.json` pins the bundle URL/SHA256 and frozen
+repository database SHA256. `.github/texlive-packages.txt` records verified
+TeX Live package names, including Czech, German and Swedish language/hyphenation support.
+Base packages are aligned to that same frozen repository before explicit installation.
+There is no live-repository fallback or automatic `tlmgr` self-update.
+Updating the toolchain requires a reviewed lock change and fresh qualification.
+
+The cache holds `~/.TinyTeX`. Its exact `tinytex-v2-ubuntu24.04-x86_64-` key
+hashes the lock, package manifest and provisioning helper. No restore prefix is used.
+A miss downloads/verifies the bundle and repository metadata, then installs against
+the frozen repository. Downloads have a 20-second connect timeout, 180-second
+attempt limit, two retries and a 240-second retry budget; the complete bundle step
+is limited to 300 seconds and frozen package provisioning to 600 seconds.
+A hit skips both network steps, verifies provenance, local package inventory,
+required resources and executable availability, then activates the same binary path.
+Corrupt/stale cache data fails closed; invalidate the key rather than silently
+repairing an existing cache entry. Cache save uses the restored primary key and
+requires successful completion of all four manuals.
+
+All editions retain `pdflatex -> makeindex -> pdflatex -> pdflatex`.
+`SOURCE_DATE_EPOCH` comes from the stable release timestamp, making PDF timestamps
+repeatable across cache miss/hit and reruns. The manifest generator uses the same
+validated epoch for its generation timestamp; an already-current manifest is preserved. All PDFs are rebuilt on each preparation;
+no unchanged-document shortcut may accept PDFs with stale version/date markers.
+An identical prepared tree already at the branch head may be reused on a rerun
+without a write. A differing tree still fails the write-back lease.
+The final gate checks that the release branch still points to the qualified candidate.
+
+### Branch lifecycle
+
+The canonical lifecycle from [#101](https://github.com/klusik/PHP_gallery/issues/101)
+is `develop -> release/v_X.Y.Z -> main -> develop`. The active release line owns
+release-critical fixes and is not routinely rebased onto newer develop work.
+A qualified candidate is never rebased. Any candidate mutation needs fresh
+qualification; future promotion must originate from that exact release candidate,
+followed by post-publication `main -> develop` reconciliation.
+Do not duplicate a release fix independently on develop. The current v_0.122
+bootstrap divergence is a documented exception; this qualification stage does not
+perform promotion, reconciliation, tagging or publication.
 
 This stage still does **not** merge to `main`, create tags, publish a GitHub Release, or bypass failed checks. Those promotion/publication steps remain later #100 phases.
 

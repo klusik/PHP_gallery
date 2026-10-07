@@ -1,5 +1,51 @@
 # Patch notes
 
+## Version 0.122
+
+Version 0.122 added GitHub-hosted release preparation and qualification for release branches. It prepared release metadata and manuals, preserved completed maintainer-authored notes, validated generated notes before applying them, and qualified the exact prepared commit through the existing CI matrix. Ref: [#100](https://github.com/klusik/PHP_gallery/issues/100).
+
+### Highlights
+
+#### GitHub-hosted release preparation
+
+- Added automatic qualification for `release/v_*` branches and support for manually dispatched qualification runs with an optional version cross-check.
+- Updated deterministic release markers and metadata, aligned all four maintained manual editions, refreshed generated inventories and the integrity manifest, and committed approved preparation files back to the same release branch.
+- Refused stale branch write-back when the remote branch changed during preparation.
+- Preserved completed maintainer-authored release notes and generated prose only when the target section was absent or incomplete. Validated generated output before replacing only that section.
+
+#### Release qualification
+
+- Reused the central CI workflow for the exact prepared candidate commit, including the existing platform, database, runtime, and required-Chromium jobs.
+- Added an authoritative `release`-profile audit and an aggregate gate that required preparation and the complete qualification matrix to succeed.
+- Kept merge, tagging, and publication outside this qualification stage.
+
+### Technical Details
+
+#### Backend
+
+- Added `.github/scripts/prepare_release_candidate.php` to apply deterministic release markers, metadata, translated manual markers, and the canonical patch-note scaffold.
+- Added `.github/scripts/patch_notes_ai.php` to prepare bounded release evidence and validate generated Markdown before applying it.
+- Configured `.github/workflows/gallery-workflows.yml` as a reusable workflow with explicit audit profile, checkout reference, and source-base inputs; retained `full` as its default audit profile.
+- Added `.github/workflows/release-qualification.yml` to prepare release candidates, build all four manuals, refresh generated integrity data, and run qualification against the prepared commit.
+- Replaced repeated Ubuntu `apt-get` TeX Live provisioning with checksum-locked TinyTeX-1 2026.02 and the frozen TeX Live 2025 final repository. Verified the explicit manual-package inventory, bounded downloads/package installation, and saved the exact input-bound cache only after all four manual builds succeeded. Ref: [#101](https://github.com/klusik/PHP_gallery/issues/101).
+- Added the central `release-preflight` profile before AI or TeX to block syntax, declaration documentation, source inventory, Python import policy and workflow-contract failures early; preserved the complete exact-candidate qualification matrix.
+- Fixed PDF and manifest timestamps to release metadata for reproducible reruns, allowed reuse only of an identical already-prepared tree, and rejected a stale candidate at the final release gate.
+- Configured generated release notes to use the Copilot CLI with `gpt-6-luna` and fall back to automatic model selection when that model was unavailable. The workflow blocked qualification when required authentication, generation, or output validation failed.
+
+#### Tests and documentation
+
+- Added `tests/manifest_reproducible_timestamp_test.php` for stable timestamps, default-clock preservation and invalid epoch refusal.
+- Extended `tests/gallery_workflow_ci_trigger_policy_test.php` and `tests/audit_runner_test.php` to guard reusable workflow inputs, release-audit configuration, cache identity/provenance, frozen provisioning, fail-fast ordering, rerun/write-back safeguards and the AI patch-note boundary.
+- Documented GitHub-hosted release preparation and qualification in `RELEASE.md` and `docs/GALLERY_WORKFLOWS.md`.
+
+### User Impact
+
+#### For administrators
+
+- Enabled release preparation and qualification on GitHub-hosted runners, with a single gate summarizing preparation and matrix results.
+- Kept completed editorial notes intact; when notes were incomplete, invalid or unavailable generated content blocked qualification rather than being accepted.
+- Preserved maintainer control over promotion: a successful qualification did not merge, tag, or publish a release.
+
 ## Version 0.121.3
 
 Version 0.121.3 fixes Maintenance Center analysis and execution under selective runtime loading, keeps migration inspection read-only, and protects Windows updater checkpoints and gallery-layout sidecar replacement from transient sharing locks. Ref: [#97](https://github.com/klusik/PHP_gallery/issues/97).

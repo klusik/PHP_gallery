@@ -285,6 +285,14 @@ namespace {
         && str_contains($releaseWorkflow, 'gpt-6-luna')
         && str_contains($releaseWorkflow, 'GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS')
         && str_contains($releaseWorkflow, '--no-ask-user')
+        && str_contains($releaseWorkflow, 'actions/cache/restore@v6.1.0')
+        && str_contains($releaseWorkflow, 'actions/cache/save@v6.1.0')
+        && str_contains($releaseWorkflow, '.github/texlive-lock.json')
+        && str_contains($releaseWorkflow, '.github/texlive-packages.txt')
+        && str_contains($releaseWorkflow, 'provision_tinytex.sh install')
+        && str_contains($releaseWorkflow, 'timeout --kill-after=15s 300')
+        && !str_contains($releaseWorkflow, 'sudo apt-get install')
+        && !str_contains($releaseWorkflow, 'texlive-latex-base')
         && !str_contains($releaseWorkflow, '--allow-all')
         && !str_contains($releaseWorkflow, '--allow-tool')
         && str_contains($releaseWorkflow, 'Release branch changed during preparation; refusing stale write-back.')
@@ -297,6 +305,65 @@ namespace {
         && !str_contains($releaseWorkflow, 'gh release create')
         && !str_contains($releaseWorkflow, 'git tag '),
         'Release workflow must write back only deterministic preparation to its release branch, preserve the editorial gate, reuse central CI and avoid main/tag/publication actions.');
+
+    $preflightPosition = strpos($releaseWorkflow, 'php scripts/audit.php --profile=release-preflight');
+    $preparationPosition = strpos($releaseWorkflow, 'name: Apply deterministic release preparation');
+    $buildPosition = strpos($releaseWorkflow, 'name: Build all maintained manuals');
+    $savePosition = strpos($releaseWorkflow, 'name: Save TinyTeX cache');
+    check($preflightPosition !== false && $preparationPosition !== false && $preflightPosition < $preparationPosition
+        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ steps.release.outputs.source_base }}'),
+        'Cheap blocking source checks must run through the central audit before preparation, AI and TeX.');
+    check($buildPosition !== false && $savePosition !== false && $buildPosition < $savePosition
+        && str_contains($releaseWorkflow, "steps.manuals.outcome == 'success'")
+        && str_contains($releaseWorkflow, "steps.tinytex-cache.outputs.cache-hit != 'true'")
+        && str_contains($releaseWorkflow, 'steps.tinytex-cache.outputs.cache-primary-key')
+        && str_contains($releaseWorkflow, "hashFiles('.github/texlive-lock.json', '.github/texlive-packages.txt', '.github/scripts/provision_tinytex.sh')")
+        && !str_contains($releaseWorkflow, 'restore-keys:')
+        && str_contains($releaseWorkflow, 'SOURCE_DATE_EPOCH')
+        && str_contains($releaseWorkflow, 'FORCE_SOURCE_DATE=1')
+        && str_contains($releaseWorkflow, 'echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" >> "${GITHUB_ENV}"')
+        && substr_count($releaseWorkflow, 'if ! php scripts/generate_manifest.php --check; then') === 2
+        && str_contains($releaseWorkflow, 'PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV'),
+        'TinyTeX must use an exact input-bound cache, save only after all manuals succeed and retain reproducible PDF builds.');
+    check(str_contains($releaseWorkflow, "git rev-parse 'HEAD^{tree}'")
+        && str_contains($releaseWorkflow, 'Prepared tree already exists at current release head')
+        && str_contains($releaseWorkflow, 'Release branch changed after preparation; this qualification is stale.'),
+        'Reruns may reuse only identical prepared trees and the final gate must refuse a changed branch head.');
+
+    $texLock = json_decode((string) file_get_contents(dirname(__DIR__) . '/.github/texlive-lock.json'), true, 512, JSON_THROW_ON_ERROR);
+    $texHelper = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/provision_tinytex.sh');
+    check(($texLock['schema_version'] ?? null) === 1 && ($texLock['texlive_year'] ?? null) === 2025
+        && ($texLock['infra_revision'] ?? null) === 76780
+        && ($texLock['bundle_version'] ?? null) === '2026.02'
+        && str_ends_with((string) ($texLock['repository'] ?? ''), '/2025/tlnet-final')
+        && preg_match('/^[a-f0-9]{64}$/D', (string) ($texLock['bundle_sha256'] ?? '')) === 1
+        && preg_match('/^[a-f0-9]{64}$/D', (string) ($texLock['repository_metadata_sha256'] ?? '')) === 1,
+        'Manual toolchain lock must identify compatible bundle/infra and immutable final repository checksums.');
+    check(str_contains($texHelper, 'sha256sum --check --strict')
+        && str_contains($texHelper, '--connect-timeout 20 --max-time 180')
+        && str_contains($texHelper, '--retry-max-time 240')
+        && str_contains($texHelper, '--repository "${repository}" update --all')
+        && str_contains($texHelper, '--repository "${repository}" install')
+        && str_contains($texHelper, '.php-gallery-provenance')
+        && str_contains($texHelper, 'Locked tlmgr revision mismatch.')
+        && !str_contains($texHelper, 'update --self')
+        && !str_contains($texHelper, 'tlnet.yihui.org')
+        && !str_contains($texHelper, 'install-bin-unix.sh'),
+        'TinyTeX must verify locked downloads, bound network work and refuse live/self-update fallbacks.');
+    $texPackages = (string) file_get_contents(dirname(__DIR__) . '/.github/texlive-packages.txt');
+    foreach (['english', 'czech', 'german', 'swedish'] as $language) {
+        check(str_contains($texPackages, 'babel-' . $language . "\n")
+            && str_contains($texPackages, 'hyphen-' . $language . "\n"),
+            'Every manual language must explicitly own its Babel and hyphenation packages.');
+    }
+    check(str_contains($texHelper, 'english.ldf czech.ldf ngerman.ldf swedish.ldf'),
+        'Cache activation must verify resources for all four manual languages.');
+    $verifyStart = strpos($texHelper, '    verify)');
+    $verifyEnd = strpos($texHelper, '    *)', $verifyStart === false ? 0 : $verifyStart);
+    check($verifyStart !== false && $verifyEnd !== false
+        && !str_contains(substr($texHelper, $verifyStart, $verifyEnd - $verifyStart), 'curl ')
+        && !str_contains(substr($texHelper, $verifyStart, $verifyEnd - $verifyStart), 'tlmgr" install'),
+        'A TinyTeX cache hit must verify local provenance and resources without provisioning.');
 
     $patchNotesAi = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/patch_notes_ai.php');
     check(str_contains($patchNotesAi, 'EVIDENCE - TEXT DIFF:')

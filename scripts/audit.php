@@ -92,7 +92,7 @@ if ($options['help']) {
 PHP Gallery central audit
 
 Usage:
-  php scripts/audit.php [--profile quick|full|release]
+  php scripts/audit.php [--profile quick|full|release|release-preflight]
   php scripts/audit.php --suite <suite-id>
   php scripts/audit.php --profile full --changed
 
@@ -113,6 +113,7 @@ Profiles:
   quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
+  release-preflight  Cheap static blockers before AI/TeX; final release qualification remains required.
 TEXT
     );
     exit(0);
@@ -162,6 +163,7 @@ $knownSuites = [
     'release-consistency',
     'manifest',
     'git-diff-check',
+    'ci-workflow-contract',
 ];
 foreach ($suiteIds as $suiteId) {
     if (!in_array($suiteId, $knownSuites, true)) {
@@ -1094,6 +1096,7 @@ function audit_suite_console_label(string $suiteId): string
         'php-lint-changed' => 'PHP syntax (changed)',
         'js-lint' => 'JavaScript syntax',
         'js-lint-changed' => 'JavaScript syntax (changed)',
+        'ci-workflow-contract' => 'CI workflow contracts',
         'release-consistency' => 'Release consistency',
         'manifest' => 'Core manifest freshness',
         'git-diff-check' => 'Git whitespace check',
@@ -1138,6 +1141,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),
+        'ci-workflow-contract' => audit_run_php_command('ci-workflow-contract', 'CI workflow contracts', 'tests/gallery_workflow_ci_trigger_policy_test.php'),
         'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
         'winapp' => audit_run_winapp($python),
         'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),

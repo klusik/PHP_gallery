@@ -128,7 +128,7 @@ profile behavior. `.github/workflows/release-qualification.yml` can call it with
 builds bounded previous-tag-to-HEAD evidence for GitHub Copilot CLI through
 `.github/scripts/patch_notes_ai.php`. The personal-repository workflow expects
 a fine-grained PAT in the `COPILOT_GITHUB_TOKEN` repository secret, selects
-`gpt-6-luna`, disables project prompt-mode extensions and grants no Copilot
+`gpt-6-luna` with an explicit model-unavailable fallback to `auto`, disables project prompt-mode extensions and grants no Copilot
 tools. The model output is validated as data before only the incomplete target
 release section may be replaced; completed maintainer-authored notes skip AI.
 Missing authentication, oversized evidence, AI failure or invalid output blocks
@@ -139,6 +139,15 @@ the reusable matrix with the exact prepared candidate SHA and previous-tag sourc
 base. The final `Release qualification gate` succeeds only when preparation and
 the complete reusable matrix succeed. This stage still does not merge, tag or
 publish.
+Before AI/TeX, the caller invokes the centrally owned `release-preflight` static profile;
+the final exact-SHA matrix remains complete. TinyTeX provisioning uses the checksum-locked
+2026.02 / TeX Live 2025 final toolchain, never a rolling package repository.
+The exact cache key covers lock, package inventory and helper; a hit verifies the local
+installation without networking, and save requires all four successful PDF builds.
+See [the release toolchain and branch lifecycle](../RELEASE.md) for timeout, invalidation,
+reproducible PDF and rerun rules. Release fixes remain on the release branch until
+future `release -> main -> develop` reconciliation.
+
 The exact PHP representatives and qualification categories are defined in
 [Database support](DATABASE_SUPPORT.md).
 The fixed service bootstrap password is a disposable CI fixture value, not an
