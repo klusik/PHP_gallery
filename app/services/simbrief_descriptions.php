@@ -50,6 +50,7 @@ const SIMBRIEF_DESCRIPTION_ENDPOINT = 'https://www.simbrief.com/api/xml.fetcher.
 const SIMBRIEF_DESCRIPTION_BASE_URL = 'https://www.simbrief.com';
 const SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS = 18;
 const SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS = 30;
+const SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES = 26214400;
 
 /**
  * Return a translated service message while allowing standalone tests to run.
@@ -550,6 +551,22 @@ function simbrief_description_save_ofp_for_gallery(array $gallery, array $payloa
     $pdfResult = $pdfUrl !== ''
         ? simbrief_description_save_pdf_for_gallery($pdfUrl, $pdfPath)
         : ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => '', 'error' => ''];
+    // A network/download failure must not replace the last successfully saved
+    // OFP snapshot, nor remove its existing local PDF attachment and link.
+    if ($pdfUrl !== '' && empty($pdfResult['saved']) && is_file($pdfPath) && is_file($manifestPath)) {
+        return [
+            'saved' => false,
+            'path' => is_file($ofpPath) ? $ofpPath : '',
+            'manifest_path' => $manifestPath,
+            'filename' => 'simbrief-ofp.json',
+            'pdf_saved' => true,
+            'pdf_path' => $pdfPath,
+            'pdf_filename' => 'simbrief-ofp.pdf',
+            'pdf_url' => '',
+            'pdf_error' => (string) ($pdfResult['error'] ?? ''),
+            'error' => 'New SimBrief OFP PDF could not be downloaded. The previously imported OFP remains intact.',
+        ];
+    }
     $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
     $ofpJson = json_encode($payload, $jsonFlags);
     if (!is_string($ofpJson)) {
@@ -758,19 +775,28 @@ function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targe
     }
 
     try {
-        $body = function_exists('Gallery\\Services\\http_fetch_with_headers')
-            ? http_fetch_with_headers($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS, ['Accept: application/pdf'])
-            : simbrief_description_basic_pdf_fetch($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS);
+        $body = simbrief_description_basic_pdf_fetch($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS);
     } catch (Throwable $exception) {
         return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => $exception->getMessage()];
     }
 
-    if (!str_starts_with(ltrim($body), '%PDF-')) {
-        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'SimBrief PDF response was not a PDF document.'];
+    if (strlen($body) < 8 || strlen($body) > SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES || !str_starts_with($body, '%PDF-')) {
+        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'SimBrief PDF was invalid or exceeded the size limit.'];
     }
 
-    if (file_put_contents($targetPath, $body, LOCK_EX) === false) {
-        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not write simbrief-ofp.pdf.'];
+    // Never overwrite a valid existing document with a partial download.
+    $temp = dirname($targetPath) . DIRECTORY_SEPARATOR . '.simbrief-ofp-' . bin2hex(random_bytes(8)) . '.tmp';
+    try {
+        if (@file_put_contents($temp, $body, LOCK_EX) !== strlen($body)) {
+            return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not stage the downloaded PDF.'];
+        }
+        if (!@rename($temp, $targetPath)) {
+            return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not atomically replace the saved PDF.'];
+        }
+    } finally {
+        if (is_file($temp)) {
+            @unlink($temp);
+        }
     }
 
     return ['saved' => true, 'path' => $targetPath, 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => ''];
@@ -794,44 +820,81 @@ function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds):
         if ($handle === false) {
             throw new RuntimeException('Could not initialize SimBrief PDF client.');
         }
+        $body = '';
         curl_setopt_array($handle, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 10),
             CURLOPT_TIMEOUT => $timeoutSeconds,
             CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Accept: application/pdf'],
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$body): int {
+                $length = strlen($chunk);
+                if (strlen($body) + $length > SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES) {
+                    return 0;
+                }
+                $body .= $chunk;
+                return $length;
+            },
         ]);
-        $body = curl_exec($handle);
+        $ok = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
         $error = curl_error($handle);
         curl_close($handle);
-        if ($body === false || $status >= 400) {
-            throw new RuntimeException($error !== '' ? $error : 'SimBrief PDF request failed with status ' . $status . '.');
+        if ($ok !== true || $status < 200 || $status >= 300) {
+            throw new RuntimeException($error !== '' ? $error : 'SimBrief PDF request failed with status ' . $status . ' (redirects are not allowed).');
         }
-        return (string) $body;
+        return $body;
     }
 
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
-            'header' => "User-Agent: PHP-Gallery-CMS\r\nAccept: application/pdf\r\n",
+            'follow_location' => 0,
+            'max_redirects' => 0,
             'ignore_errors' => true,
+            'header' => "User-Agent: PHP-Gallery-CMS\r\nAccept: application/pdf\r\n",
         ],
         'ssl' => [
             'verify_peer' => true,
             'verify_peer_name' => true,
         ],
     ]);
-    $body = @file_get_contents($url, false, $context);
-    if ($body === false) {
+    $stream = @fopen($url, 'rb', false, $context);
+    if ($stream === false) {
         throw new RuntimeException('SimBrief PDF request failed. Enable curl or allow_url_fopen.');
     }
-    return (string) $body;
+    try {
+        $metadata = stream_get_meta_data($stream);
+        $headers = (array) ($metadata['wrapper_data'] ?? []);
+        $httpStatus = 0;
+        foreach ($headers as $header) {
+            if (preg_match('#^HTTP/\S+\s+(\d{3})#i', (string) $header, $match)) {
+                $httpStatus = (int) $match[1];
+            }
+        }
+        if ($httpStatus < 200 || $httpStatus >= 300) {
+            throw new RuntimeException('SimBrief PDF request failed with status ' . $httpStatus . '.');
+        }
+        $body = '';
+        while (!feof($stream)) {
+            $chunk = fread($stream, 65536);
+            if ($chunk === false || ($chunk === '' && !feof($stream))) {
+                throw new RuntimeException('SimBrief PDF transfer failed or timed out.');
+            }
+            if (strlen($body) + strlen($chunk) > SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES) {
+                throw new RuntimeException('SimBrief PDF exceeded the size limit.');
+            }
+            $body .= $chunk;
+        }
+        return $body;
+    } finally {
+        fclose($stream);
+    }
 }
 
 /**

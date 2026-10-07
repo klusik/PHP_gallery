@@ -419,6 +419,8 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
 
     require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
     $ofpPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    require_once __DIR__ . '/../services/simbrief_ofp_conversion.php';
+    $conversionSupported = $ofpPath !== null && \Gallery\Services\simbrief_ofp_conversion_supported();
     \Gallery\Views\view_render_public_gallery_branding_header([
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
@@ -426,7 +428,7 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
         'ofp_pdf_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1]) : '',
         'ofp_pdf_download_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1, 'download' => 1]) : '',
         'ofp_can_convert' => $ofpPath !== null && \Gallery\Core\current_user() !== null && !\Gallery\Core\admin_anonymous_preview_active(),
-        'ofp_conversion_supported' => $ofpPath !== null && class_exists('Imagick') && \Imagick::queryFormats('PDF') !== [] && \Imagick::queryFormats('JPEG') !== [],
+        'ofp_conversion_supported' => $conversionSupported,
         'ofp_conversion_url' => $ofpPath !== null ? url_for('admin_simbrief_description') : '',
         'ofp_conversion_csrf' => $ofpPath !== null && \Gallery\Core\current_user() !== null ? \Gallery\Core\csrf_field() : '',
         'ofp_gallery_id' => (int) $gallery['id'],
