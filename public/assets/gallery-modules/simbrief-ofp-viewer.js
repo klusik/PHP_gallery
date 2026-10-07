@@ -27,10 +27,10 @@
  */
 
 const locales = {
-    en: {title:'Operational flight plan',close:'Close',previous:'Previous page',next:'Next page',zoomIn:'Zoom in',zoomOut:'Zoom out',reset:'Reset zoom',fitWidth:'Fit width',fitPage:'Fit page',fullscreen:'Fullscreen',download:'Download PDF',loading:'Loading flight plan…',rendering:'Rendering page…',error:'The PDF could not be displayed. Open the original PDF instead.',fallback:'Open original PDF',page:'Page {page} of {total}',zoom:'Zoom {percent}%'},
-    cs: {title:'Operační letový plán',close:'Zavřít',previous:'Předchozí stránka',next:'Další stránka',zoomIn:'Přiblížit',zoomOut:'Oddálit',reset:'Obnovit přiblížení',fitWidth:'Přizpůsobit šířce',fitPage:'Celá stránka',fullscreen:'Celá obrazovka',download:'Stáhnout PDF',loading:'Načítání letového plánu…',rendering:'Vykreslování stránky…',error:'PDF nelze zobrazit. Otevřete původní soubor PDF.',fallback:'Otevřít původní PDF',page:'Stránka {page} z {total}',zoom:'Přiblížení {percent} %'},
-    de: {title:'Flugdurchführungsplan',close:'Schließen',previous:'Vorherige Seite',next:'Nächste Seite',zoomIn:'Vergrößern',zoomOut:'Verkleinern',reset:'Zoom zurücksetzen',fitWidth:'An Breite anpassen',fitPage:'Ganze Seite',fullscreen:'Vollbild',download:'PDF herunterladen',loading:'Flugplan wird geladen…',rendering:'Seite wird gerendert…',error:'Das PDF konnte nicht angezeigt werden. Öffnen Sie das Original-PDF.',fallback:'Original-PDF öffnen',page:'Seite {page} von {total}',zoom:'Zoom {percent} %'},
-    sv: {title:'Operativ färdplan',close:'Stäng',previous:'Föregående sida',next:'Nästa sida',zoomIn:'Zooma in',zoomOut:'Zooma ut',reset:'Återställ zoom',fitWidth:'Anpassa till bredd',fitPage:'Hela sidan',fullscreen:'Helskärm',download:'Ladda ned PDF',loading:'Läser in färdplan…',rendering:'Renderar sida…',error:'PDF-filen kunde inte visas. Öppna originalfilen i stället.',fallback:'Öppna original-PDF',page:'Sida {page} av {total}',zoom:'Zoom {percent} %'},
+    en: {title:'Operational flight plan',close:'Close',previous:'Previous page',next:'Next page',zoomIn:'Zoom in',zoomOut:'Zoom out',reset:'Reset zoom',fitWidth:'Fit width',fitPage:'Fit whole page',actualSize:'Actual size (100%)',fullscreen:'Fullscreen',download:'Download PDF',loading:'Loading flight plan…',rendering:'Rendering page…',error:'The PDF could not be displayed. Open the original PDF instead.',fallback:'Open original PDF',page:'Page {page} of {total}',zoom:'Zoom {percent}%'},
+    cs: {title:'Operační letový plán',close:'Zavřít',previous:'Předchozí stránka',next:'Další stránka',zoomIn:'Přiblížit',zoomOut:'Oddálit',reset:'Obnovit přiblížení',fitWidth:'Přizpůsobit šířce',fitPage:'Zobrazit celou stránku',actualSize:'Skutečná velikost (100 %)',fullscreen:'Celá obrazovka',download:'Stáhnout PDF',loading:'Načítání letového plánu…',rendering:'Vykreslování stránky…',error:'PDF nelze zobrazit. Otevřete původní soubor PDF.',fallback:'Otevřít původní PDF',page:'Stránka {page} z {total}',zoom:'Přiblížení {percent} %'},
+    de: {title:'Flugdurchführungsplan',close:'Schließen',previous:'Vorherige Seite',next:'Nächste Seite',zoomIn:'Vergrößern',zoomOut:'Verkleinern',reset:'Zoom zurücksetzen',fitWidth:'An Breite anpassen',fitPage:'Ganze Seite anpassen',actualSize:'Originalgröße (100 %)',fullscreen:'Vollbild',download:'PDF herunterladen',loading:'Flugplan wird geladen…',rendering:'Seite wird gerendert…',error:'Das PDF konnte nicht angezeigt werden. Öffnen Sie das Original-PDF.',fallback:'Original-PDF öffnen',page:'Seite {page} von {total}',zoom:'Zoom {percent} %'},
+    sv: {title:'Operativ färdplan',close:'Stäng',previous:'Föregående sida',next:'Nästa sida',zoomIn:'Zooma in',zoomOut:'Zooma ut',reset:'Återställ zoom',fitWidth:'Anpassa till bredd',fitPage:'Anpassa hela sidan',actualSize:'Faktisk storlek (100 %)',fullscreen:'Helskärm',download:'Ladda ned PDF',loading:'Läser in färdplan…',rendering:'Renderar sida…',error:'PDF-filen kunde inte visas. Öppna originalfilen i stället.',fallback:'Öppna original-PDF',page:'Sida {page} av {total}',zoom:'Zoom {percent} %'},
 };
 let pdfjsPromise = null;
 let activeViewer = null;
@@ -137,11 +137,12 @@ function buildOfpDialog(copy) {
         '<button type="button" class="button secondary" data-ofp-action="next" data-ofp-label="next">▶</button>',
         '<span class="simbrief-ofp-divider"></span>',
         '<button type="button" class="button secondary" data-ofp-action="zoom-out" data-ofp-label="zoomOut">−</button>',
-        '<span class="simbrief-ofp-zoom-level" data-ofp-zoom></span>',
+        '<span class="simbrief-ofp-zoom-level" data-ofp-zoom aria-live="polite"></span>',
         '<button type="button" class="button secondary" data-ofp-action="zoom-in" data-ofp-label="zoomIn">+</button>',
         '<button type="button" class="button secondary" data-ofp-action="reset" data-ofp-label="reset">100%</button>',
-        '<button type="button" class="button secondary" data-ofp-action="fit-width" data-ofp-text="fitWidth"></button>',
-        '<button type="button" class="button secondary" data-ofp-action="fit-page" data-ofp-text="fitPage"></button>',
+        '<button type="button" class="button secondary" data-ofp-action="fit-width" data-ofp-text="fitWidth" aria-pressed="false"></button>',
+        '<button type="button" class="button secondary" data-ofp-action="fit-page" data-ofp-text="fitPage" aria-pressed="true"></button>',
+        '<button type="button" class="button secondary" data-ofp-action="actual-size" data-ofp-text="actualSize" aria-pressed="false"></button>',
         '</footer>'
     ].join('');
     dialog.querySelectorAll('[data-ofp-text]').forEach((element) => {
@@ -177,8 +178,10 @@ async function openOfpViewer(link) {
     document.body.appendChild(dialog);
     const state = {
         dialog, link, copy, loadingTask: null, pdf: null, renderTask: null,
-        page: 1, total: 0, zoom: 1, fit: 'width', generation: 0, closed: false,
-        keyHandler: null, resizeObserver: null, pinch: null,
+        page: 1, total: 0, zoom: 1, fit: 'page', manualScale: null, renderScale: null,
+        generation: 0, closed: false,
+        keyHandler: null, resizeObserver: null, resizeHandler: null,
+        fullscreenHandler: null, layoutFrame: null, pinch: null,
     };
     activeViewer = state;
     dialog.showModal();
@@ -195,12 +198,16 @@ async function openOfpViewer(link) {
     });
     state.keyHandler = (event) => handleOfpKeyboard(state, event);
     document.addEventListener('keydown', state.keyHandler, true);
+    state.resizeHandler = () => scheduleOfpFit(state);
     if (typeof ResizeObserver === 'function') {
-        state.resizeObserver = new ResizeObserver(() => {
-            if (!state.closed && state.pdf && state.zoom === 1) void renderOfpPage(state);
-        });
+        state.resizeObserver = new ResizeObserver(state.resizeHandler);
         state.resizeObserver.observe(dialog.querySelector('[data-ofp-stage]'));
+    } else {
+        // Older browsers still need fitting when their viewport changes.
+        window.addEventListener('resize', state.resizeHandler);
     }
+    state.fullscreenHandler = () => scheduleOfpFit(state);
+    document.addEventListener('fullscreenchange', state.fullscreenHandler);
     attachOfpTouchZoom(state);
     try {
         const lib = await loadPdfjs();
@@ -237,12 +244,67 @@ function setOfpStatus(state, message, error = false) {
 }
 
 /**
+ * Calculate the PDF viewport scale from the real document stage, not the window.
+ * The toolbar/header are grid siblings and are already excluded by clientHeight.
+ *
+ * @param {Record<string, unknown>} state Active document view and zoom mode.
+ * @param {{width: number, height: number}} unit Unscaled, rotated PDF page dimensions.
+ * @param {HTMLElement} stage Scrollable area reserved for the document.
+ * @param {HTMLElement} wrap Padded canvas container.
+ * @returns {number} CSS scale for the requested fit or persistent manual zoom.
+ */
+function ofpViewportScale(state, unit, stage, wrap) {
+    if (state.manualScale !== null) return state.manualScale;
+    if (state.fit === 'actual') return 96 / 72; // PDF.js convention: 100% at 96 CSS pixels per inch.
+    const css = getComputedStyle(wrap);
+    const horizontalPadding = parseFloat(css.paddingLeft) + parseFloat(css.paddingRight);
+    const verticalPadding = parseFloat(css.paddingTop) + parseFloat(css.paddingBottom);
+    // Leave an eight-pixel clearance on every side, including scrollbar gutters.
+    const widthScale = Math.max(1, stage.clientWidth - horizontalPadding - 16) / Math.max(1, unit.width);
+    const heightScale = Math.max(1, stage.clientHeight - verticalPadding - 16) / Math.max(1, unit.height);
+    return state.fit === 'width' ? widthScale : Math.min(widthScale, heightScale);
+}
+
+/**
+ * Coalesce layout changes while retaining manual CSS page scale and pan.
+ *
+ * @param {Record<string, unknown>} state Active document view and zoom mode.
+ * @returns {void} Re-render an active automatic fit after layout stabilizes.
+ */
+function scheduleOfpFit(state) {
+    if (state.closed || !state.pdf || state.manualScale !== null || state.fit === 'actual'
+        || state.layoutFrame !== null) return;
+    state.layoutFrame = requestAnimationFrame(() => {
+        state.layoutFrame = null;
+        if (!state.closed && state.manualScale === null && state.fit !== 'actual') {
+            void renderOfpPage(state);
+        }
+    });
+}
+
+/**
+ * Set manual zoom in fitted-relative steps while fixing the actual CSS scale.
+ *
+ * @param {Record<string, unknown>} state Active document view and zoom mode.
+ * @param {number} zoom Requested multiplier relative to the last automatic fit.
+ * @returns {void} Preserve a manual scale independently of future stage resizes.
+ */
+function setOfpManualZoom(state, zoom) {
+    const baseline = state.manualScale === null
+        ? (state.renderScale || 1)
+        : state.manualScale / Math.max(0.01, state.zoom);
+    state.zoom = Math.max(0.5, Math.min(5, Math.round(zoom * 100) / 100));
+    state.manualScale = baseline * state.zoom;
+}
+
+/**
  * Render only the current page to a bounded-resolution canvas.
  *
  * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
+ * @param {boolean} preservePan Keep the centered document point during manual zoom.
  * @returns {Promise<void>} Render safely despite rapid navigation or cancellation.
  */
-async function renderOfpPage(state) {
+async function renderOfpPage(state, preservePan = false) {
     if (state.closed || !state.pdf) return;
     const generation = ++state.generation;
     if (state.renderTask) {
@@ -256,10 +318,11 @@ async function renderOfpPage(state) {
         return;
     }
     const stage = state.dialog.querySelector('[data-ofp-stage]');
+    const wrap = state.dialog.querySelector('[data-ofp-canvas-wrap]');
     const unit = page.getViewport({scale: 1});
-    const widthScale = Math.max(0.1, (stage.clientWidth - 48) / unit.width);
-    const heightScale = Math.max(0.1, (stage.clientHeight - 48) / unit.height);
-    const viewport = page.getViewport({scale: (state.fit === 'page' ? Math.min(widthScale, heightScale) : widthScale) * state.zoom});
+    const scale = ofpViewportScale(state, unit, stage, wrap);
+    const viewport = page.getViewport({scale});
+    state.renderScale = scale;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', {alpha: false});
     if (!ctx) {
@@ -275,7 +338,11 @@ async function renderOfpPage(state) {
     canvas.style.height = Math.ceil(viewport.height) + 'px';
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', state.copy.page.replace('{page}', state.page).replace('{total}', state.total));
-    state.dialog.querySelector('[data-ofp-canvas-wrap]').replaceChildren(canvas);
+    const pan = preservePan ? {
+        x: (stage.scrollLeft + stage.clientWidth / 2) / Math.max(1, stage.scrollWidth),
+        y: (stage.scrollTop + stage.clientHeight / 2) / Math.max(1, stage.scrollHeight),
+    } : null;
+    wrap.replaceChildren(canvas);
     const task = page.render({
         canvasContext: ctx, viewport,
         transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0],
@@ -284,7 +351,10 @@ async function renderOfpPage(state) {
     try {
         await task.promise;
         if (!state.closed && generation === state.generation) {
-            stage.scrollTo({top: 0, left: 0});
+            stage.scrollTo({
+                top: pan ? pan.y * stage.scrollHeight - stage.clientHeight / 2 : 0,
+                left: pan ? pan.x * stage.scrollWidth - stage.clientWidth / 2 : 0,
+            });
             setOfpStatus(state, '');
             updateOfpControls(state);
         }
@@ -312,6 +382,11 @@ function updateOfpControls(state) {
         state.copy.zoom.replace('{percent}', Math.round(state.zoom * 100));
     state.dialog.querySelector('[data-ofp-action="previous"]').disabled = state.page <= 1;
     state.dialog.querySelector('[data-ofp-action="next"]').disabled = state.page >= state.total;
+    for (const [action, fit] of [['fit-page', 'page'], ['fit-width', 'width'], ['actual-size', 'actual']]) {
+        state.dialog.querySelector('[data-ofp-action="' + action + '"]').setAttribute(
+            'aria-pressed', String(state.manualScale === null && state.fit === fit)
+        );
+    }
 }
 
 /**
@@ -334,16 +409,22 @@ async function runOfpAction(state, action) {
         return;
     }
     if (!state.pdf) return;
+    let preservePan = false;
     if (action === 'previous') state.page = Math.max(1, state.page - 1);
     else if (action === 'next') state.page = Math.min(state.total, state.page + 1);
-    else if (action === 'zoom-in') state.zoom = Math.min(5, Math.round((state.zoom + 0.25) * 100) / 100);
-    else if (action === 'zoom-out') state.zoom = Math.max(0.5, Math.round((state.zoom - 0.25) * 100) / 100);
-    else if (action === 'reset') state.zoom = 1;
-    else if (action === 'fit-width' || action === 'fit-page') {
-        state.fit = action === 'fit-page' ? 'page' : 'width';
+    else if (action === 'zoom-in' || action === 'zoom-out') {
+        const step = action === 'zoom-in' ? 0.25 : -0.25;
+        setOfpManualZoom(state, state.zoom + step);
+        preservePan = true;
+    } else if (action === 'reset') {
         state.zoom = 1;
+        state.manualScale = null;
+    } else if (action === 'fit-width' || action === 'fit-page' || action === 'actual-size') {
+        state.fit = action === 'fit-page' ? 'page' : action === 'fit-width' ? 'width' : 'actual';
+        state.zoom = 1;
+        state.manualScale = null;
     } else return;
-    await renderOfpPage(state);
+    await renderOfpPage(state, preservePan);
 }
 
 /**
@@ -389,9 +470,9 @@ function attachOfpTouchZoom(state) {
         const canvas = stage.querySelector('canvas');
         const factor = Number(canvas?.style.transform.match(/scale\(([^)]+)\)/)?.[1]) || 1;
         if (canvas) canvas.style.transform = '';
-        state.zoom = Math.max(0.5, Math.min(5, Math.round(state.pinch.zoom * factor * 100) / 100));
+        setOfpManualZoom(state, state.pinch.zoom * factor);
         state.pinch = null;
-        void renderOfpPage(state);
+        void renderOfpPage(state, true);
     }, {passive: true});
 }
 
@@ -406,6 +487,9 @@ async function closeOfpViewer(state) {
     state.closed = true;
     ++state.generation;
     state.resizeObserver?.disconnect();
+    window.removeEventListener('resize', state.resizeHandler);
+    document.removeEventListener('fullscreenchange', state.fullscreenHandler);
+    if (state.layoutFrame !== null) cancelAnimationFrame(state.layoutFrame);
     document.removeEventListener('keydown', state.keyHandler, true);
     state.renderTask?.cancel();
     if (document.fullscreenElement === state.dialog) {

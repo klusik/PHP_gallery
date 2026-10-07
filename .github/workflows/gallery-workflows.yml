@@ -367,8 +367,10 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: required-chromium
+          # Keep the central browser fixture log in the uploaded artifact on failure.
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            cache/test-audit/**/browser-map.log
           if-no-files-found: ignore
           retention-days: 7

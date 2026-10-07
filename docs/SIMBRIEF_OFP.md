@@ -39,9 +39,11 @@ The viewer uses locally distributed Mozilla PDF.js, with the original vendor lic
 The overlay shares the visual language of the existing photo lightbox, but owns its own **document-only page sequence**. Navigating from the first/last PDF page never enters the parent's photographs. It has:
 
 - Document page counter and previous/next page navigation
-- Zoom in/out and zoom reset, fit-width/fit-page
-- Panning, pinch zoom, fullscreen and keyboard shortcuts
-- Responsive layout, lazy per-page rendering, bounded 16-megapixel canvas
+- **Fit whole page** is the initial mode. It computes the smaller width/height scale from the actual scroll-stage client dimensions, canvas padding and clearance, centering the entire page without covering edges with the header or toolbar.
+- **Fit width** is an explicit alternative allowing vertical scrolling. **Actual size (100%)** uses PDF.js's 96-CSS-pixel/inch scale. View-mode buttons expose the active automatic mode with `aria-pressed`.
+- Zoom in/out reports percentages relative to the last fit; **Reset zoom (100%)** restores that fit. Pinch zoom, manual panning, fullscreen, and keyboard shortcuts remain independent of gallery-photo navigation.
+- Automatic fit modes recompute for every PDF page's dimensions/orientation, stage resize, device rotation, and fullscreen transitions. Manual zoom retains its chosen CSS scale and scroll position across ordinary stage resizing until an explicit fit or reset.
+- Responsive layout, lazy per-page rendering, bounded 16-megapixel high-DPI canvas
 - Cleanup of page/worker resources on navigation and close
 - Original PDF download link and browser-native PDF fallback
 
@@ -72,6 +74,7 @@ To deliberately regenerate, inspect/export and remove the old generated child th
 
 ## Regression and maintenance
 
+- tests/simbrief_ofp_lightbox_browser_test.mjs verifies portrait A4 and mixed-orientation whole-page geometry on a landscape stage, fit-width and actual-size modes, center/bounds, mode indication, manual resize persistence, simulated rotation/fullscreen changes, translations, download isolation and resource cleanup.
 - tests/simbrief_ofp_document_test.php covers manifest validation, PDF signature and symlink refusal, generated-gallery ownership checks, no-op idempotency and the separate viewer contract.
 - Existing gallery import/export, deletion, backup and thumbnail workflows should continue treating the OFP pages as an ordinary physical child gallery.
 - New production assets and PHP services must appear in the checked-in production inventory and core manifest.

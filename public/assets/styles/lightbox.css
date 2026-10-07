@@ -1491,6 +1491,8 @@
     margin-top: 1rem;
 }
 dialog.lightbox.simbrief-ofp-dialog {
+    /* The photo lightbox centers grid items; a document stage must fill its row. */
+    align-items: stretch;
     inset: 0;
     width: 100vw;
     height: 100vh;
@@ -1550,6 +1552,16 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     opacity: 0.35;
     cursor: not-allowed;
 }
+/* The active automatic view mode is announced by aria-pressed and visually distinct. */
+.simbrief-ofp-dialog button[aria-pressed="true"] {
+    background: rgba(126, 181, 255, 0.3);
+    border-color: #c6e0ff;
+    box-shadow: inset 0 0 0 1px rgba(198, 224, 255, 0.45);
+}
+.simbrief-ofp-dialog button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
 .simbrief-ofp-stage {
     position: relative;
     display: block;
@@ -1563,10 +1575,11 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
 }
 .simbrief-ofp-canvas-wrap {
     display: flex;
+    box-sizing: border-box;
     width: max-content;
     min-width: 100%;
     min-height: 100%;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     padding: 0.65rem;
 }
