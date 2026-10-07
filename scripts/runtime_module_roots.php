@@ -34,7 +34,14 @@ return [
             'Gallery\\Services\\gallery_access_assert_public_policy_available',
             'Gallery\\Services\\nsfw_guard_assert_public_policy_available',
         ],
-        'simbrief-ofp-attachments' => ['Gallery\\Services\\simbrief_ofp_local_pdf_path'],
+        // File attachment lookup uses the established routing-paths and DB
+        // closure. Share those files through their existing owner, not by
+        // directly duplicating bootstrap and filesystem helpers per route.
+        'simbrief-ofp-attachments' => [
+            'Gallery\\Services\\find_gallery_by_public_path',
+            'Gallery\\Services\\resolve_public_gallery_path',
+            'Gallery\\Services\\simbrief_ofp_local_pdf_path',
+        ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
         // Settings-only and rendering callers share each owner independently.
         'breadcrumb-policy' => [
