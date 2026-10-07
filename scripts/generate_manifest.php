@@ -312,6 +312,25 @@ function manifest_print_usage(): void
     echo "  --version=VERSION  Override the version detected from app/bootstrap.php.\n";
     echo "  --root=PATH        Read/write manifests under another project root.\n";
     echo "  --check            Exit with code 1 if the generated manifest differs.\n";
+    echo "  SOURCE_DATE_EPOCH  Optional bounded Unix epoch for a reproducible generated_at timestamp.\n";
+}
+
+/**
+ * Return the manifest timestamp from a bounded reproducible build epoch or the current clock.
+ *
+ * @return string UTC ISO 8601 timestamp for manifest generation.
+ */
+function manifest_generation_timestamp(): string
+{
+    $epoch = getenv('SOURCE_DATE_EPOCH');
+    if ($epoch === false || $epoch === '') {
+        return gmdate('c');
+    }
+    if (preg_match('/^(0|[1-9][0-9]{0,11})$/D', $epoch) !== 1 || (int) $epoch > 253402300799) {
+        throw new InvalidArgumentException('SOURCE_DATE_EPOCH must be a nonnegative Unix timestamp before year 10000.');
+    }
+
+    return gmdate('c', (int) $epoch);
 }
 
 if (manifest_has_flag('--help') || manifest_has_flag('-h')) {
@@ -333,7 +352,7 @@ $files = manifest_discover_files($rootPath);
 // $manifest stores an intermediate value used by the surrounding gallery workflow.
 $manifest = [
     'version' => $version,
-    'generated_at' => gmdate('c'),
+    'generated_at' => manifest_generation_timestamp(),
     'algorithm' => 'sha256',
     'hash_mode' => 'normalized-text-sha256',
     'files' => [],

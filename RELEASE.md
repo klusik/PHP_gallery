@@ -16,6 +16,80 @@ The release profile already contains the deterministic coverage from `full`, plu
 
 Strict MVC is part of release qualification. The release audit invokes `scripts/check_mvc_boundaries.php` against an intentionally empty baseline. A non-zero MVC finding is a release failure and must be corrected in source; release preparation must not reintroduce legacy baseline debt.
 
+
+## GitHub-hosted release qualification
+
+Issue [#100](https://github.com/klusik/PHP_gallery/issues/100) moves release work toward GitHub-hosted preparation, qualification and publication. The first implemented stage deliberately changes only qualification: an already prepared `release/v_X.Y.Z` branch can be qualified without running the long release audit on a maintainer workstation.
+
+`.github/workflows/release-qualification.yml` runs automatically on pushes to `release/v_*`. It validates the branch/version identity, refuses an already existing immutable `v_X.Y.Z` tag, requires the production inventory and integrity manifest to be current, and runs `scripts/check_release.php` before starting expensive jobs. When preflight passes it reuses `.github/workflows/gallery-workflows.yml` with `audit_profile=release`. Existing platform, database, runtime and required-Chromium jobs remain mandatory, and one additional `Authoritative release audit` job runs exactly `php scripts/audit.php --profile=release`. The caller exposes a single `Release qualification gate` for the complete result.
+
+The current GitHub stage now performs deterministic preparation on the release branch itself. It updates the registered version markers and release metadata, aligns all four maintained manual source editions, refreshes the production inventory and integrity manifest, and commits only the approved release-preparation paths back to the same `release/v_X.Y.Z` branch. The write-back job uses a branch-head lease check and refuses to overwrite concurrent maintainer changes.
+
+Editorial release-note prose is generated on GitHub when the target version section is absent or still contains the canonical scaffold. The workflow builds a bounded prompt from the previous stable tag-to-HEAD commit metadata, changed-path inventory, diff stat, text diff, `PATCH_NOTES_TEMPLATE.md`, and the previous release section as a style sample. Generated/binary release artifacts are excluded from the text diff, and repository evidence is explicitly treated as untrusted quoted data so source comments or strings cannot become model instructions.
+
+For this user-owned repository the Copilot CLI authenticates with the repository secret `COPILOT_GITHUB_TOKEN`, containing a fine-grained personal access token with the account-level **Copilot Requests** permission. The workflow requests `gpt-6-luna`, falls back to Copilot `auto` only for the explicit model-unavailable response, disables project prompt-mode extensions, grants no Copilot tools, and uses non-interactive mode. The model returns text only and cannot directly modify the checkout. `.github/scripts/patch_notes_ai.php` validates the exact target heading, one-version-only structure, required release sections, output bound, absence of placeholders/code fences/meta-commentary, and then replaces only an incomplete target section. A completed maintainer-authored target section skips the AI steps entirely and is preserved.
+
+After validated release notes exist, the workflow builds all four PDFs on GitHub, refreshes integrity data, runs `check_release.php`, commits the tracked release artifacts, and qualifies that exact prepared SHA. If the Copilot secret is unavailable, the AI request fails, or model output does not satisfy the validator, qualification is blocked rather than accepting partial notes. The maintainer can still complete the section manually and push it; the next run detects completed notes and does not call Copilot. A workflow-created commit uses the repository `GITHUB_TOKEN`; GitHub intentionally does not start another push workflow for that commit, so qualification continues inside the same run against the emitted prepared SHA.
+
+### Toolchain and fail-fast ordering
+
+Before deterministic preparation, Copilot or TeX, GitHub invokes
+`php scripts/audit.php --profile=release-preflight`. Its centrally registered
+static suites cover complete PHP syntax, changed declaration/policy documentation,
+source-contract inventory, the whole-tree Python import policy and the existing
+CI workflow contract. This early profile is an optimization; the complete
+matrix and final authoritative release profile still qualify the exact prepared SHA.
+
+Manuals use checksum-locked TinyTeX-1 2026.02 (TeX Live 2025) with the archived
+[TeX Live 2025 final repository](https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final/).
+The October 2026 bundle against a rolling repository allowed package-manager drift;
+the selected February bundle already has the final repository's `texlive.infra`
+revision 76780. `.github/texlive-lock.json` pins the bundle URL/SHA256 and frozen
+repository database SHA256. `.github/texlive-packages.txt` records verified
+TeX Live package names, including Czech, German and Swedish language/hyphenation support.
+Base packages are aligned to that same frozen repository before explicit installation.
+There is no live-repository fallback or automatic `tlmgr` self-update.
+Updating the toolchain requires a reviewed lock change and fresh qualification.
+
+The cache holds `~/.TinyTeX`. Its exact `tinytex-v2-ubuntu24.04-x86_64-` key
+hashes the lock, package manifest and provisioning helper. No restore prefix is used.
+A miss downloads/verifies the bundle and repository metadata, then installs against
+the frozen repository. Downloads have a 20-second connect timeout, 180-second
+attempt limit, two retries and a 240-second retry budget; the complete bundle step
+is limited to 300 seconds and frozen package provisioning to 600 seconds.
+A hit skips both network steps, verifies provenance, local package inventory,
+required resources and executable availability, then activates the same binary path.
+Corrupt/stale cache data fails closed; invalidate the key rather than silently
+repairing an existing cache entry. Cache save uses the restored primary key and
+requires successful completion of all four manuals.
+
+All editions retain `pdflatex -> makeindex -> pdflatex -> pdflatex`.
+`SOURCE_DATE_EPOCH` comes from the stable release timestamp, making PDF timestamps
+repeatable across cache miss/hit and reruns. The manifest generator uses the same
+validated epoch for its generation timestamp; an already-current manifest is preserved. All PDFs are rebuilt on each preparation;
+no unchanged-document shortcut may accept PDFs with stale version/date markers.
+An identical prepared tree already at the branch head may be reused on a rerun
+without a write. A differing tree still fails the write-back lease.
+The final gate checks that the release branch still points to the qualified candidate.
+
+### Branch lifecycle
+
+The canonical lifecycle from [#101](https://github.com/klusik/PHP_gallery/issues/101)
+is `develop -> release/v_X.Y.Z -> main -> develop`. The active release line owns
+release-critical fixes and is not routinely rebased onto newer develop work.
+A qualified candidate is never rebased. Any candidate mutation needs fresh
+qualification; future promotion must originate from that exact release candidate,
+followed by post-publication `main -> develop` reconciliation.
+Do not duplicate a release fix independently on develop. The current v_0.122
+bootstrap divergence is a documented exception; this qualification stage does not
+perform promotion, reconciliation, tagging or publication.
+
+This stage still does **not** merge to `main`, create tags, publish a GitHub Release, or bypass failed checks. Those promotion/publication steps remain later #100 phases.
+
+The workflow also supports `workflow_dispatch` for explicit reruns. GitHub only exposes manual dispatch for workflow files present on the repository default branch. During the bootstrap release that first carries this workflow from `develop` to `main`, create/push the prepared `release/v_X.Y.Z` branch and let the push trigger run it automatically. After the workflow exists on `main`, later releases can also use **Actions > Release qualification > Run workflow**, select the release branch, and optionally supply the version as an additional cross-check.
+
+A successful GitHub gate is automated qualification evidence only. Required human/manual acceptance remains separate, and a changed release candidate SHA must be qualified again.
+
 ## Default artifact policy
 
 Normal release preparation does not create a deployment folder, ZIP, packaging staging tree, checksum file or handoff bundle in `deploy/`. Packaging phases below apply only when the user explicitly requests a specific package/archive. Audit and qualification evidence stay in the existing ignored `cache/` locations.

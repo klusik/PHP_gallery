@@ -1,0 +1,35 @@
+# TinyTeX/TeX Live packages required by the four maintained PHP Gallery manuals.
+# Keep this list explicit: its hash is part of the GitHub Actions cache key.
+# Bundle and frozen TeX Live 2025 repository are locked in texlive-lock.json.
+# Names verified against the checksum-pinned tlnet-final database (revision 78234).
+# TinyTeX-1 already contains several of these; tlmgr treats them as satisfied.
+
+babel
+babel-czech
+babel-english
+babel-german
+babel-swedish
+bookmark
+booktabs
+ec
+enumitem
+etoolbox
+fancyhdr
+footmisc
+geometry
+graphics
+hyphen-czech
+hyphen-english
+hyphen-german
+hyphen-swedish
+hyperref
+latex
+latex-bin
+listings
+lm
+makeindex
+microtype
+ragged2e
+titlesec
+tools
+xcolor

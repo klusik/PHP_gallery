@@ -76,6 +76,10 @@ sort($registeredNodeNames, SORT_STRING);
 audit_test_assert($actualNodeNames === $registeredNodeNames, 'Every tests/*_test.mjs file must have exactly one explicit audit registry entry.');
 
 $profiles = $registry['profiles'] ?? [];
+audit_test_assert(($profiles['release-preflight'] ?? []) === [
+    'php-lint', 'source-documentation-changed', 'source-policy-changed',
+    'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
+], 'Release preflight must own the complete cheap static gate centrally, without expensive artifact-dependent suites.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
 audit_test_assert(in_array('php-fast', $profiles['quick'], true) && !in_array('php-regression', $profiles['quick'], true), 'Quick must use curated PHP feedback instead of the complete regression tree.');
 foreach (['full', 'release'] as $profile) {
