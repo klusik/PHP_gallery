@@ -1,0 +1,31 @@
+# TinyTeX/TeX Live packages required by the four maintained PHP Gallery manuals.
+# Keep this list explicit: its hash is part of the GitHub Actions cache key.
+# TinyTeX-1 already contains several of these; tlmgr treats them as satisfied.
+
+babel
+babel-czech
+babel-german
+babel-swedish
+bookmark
+booktabs
+ec
+enumitem
+etoolbox
+fancyhdr
+footmisc
+geometry
+graphics
+hyphen-czech
+hyphen-german
+hyphen-swedish
+hyperref
+latex
+latex-bin
+listings
+lm
+makeindex
+microtype
+ragged2e
+titlesec
+tools
+xcolor

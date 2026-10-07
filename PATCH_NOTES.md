@@ -27,6 +27,7 @@ Version 0.122 added GitHub-hosted release preparation and qualification for rele
 - Added `.github/scripts/patch_notes_ai.php` to prepare bounded release evidence and validate generated Markdown before applying it.
 - Configured `.github/workflows/gallery-workflows.yml` as a reusable workflow with explicit audit profile, checkout reference, and source-base inputs; retained `full` as its default audit profile.
 - Added `.github/workflows/release-qualification.yml` to prepare release candidates, build all four manuals, refresh generated integrity data, and run qualification against the prepared commit.
+- Replaced repeated Ubuntu `apt-get` TeX Live provisioning with pinned TinyTeX 2026.10, an explicit manual-package manifest, bounded installation time, and GitHub Actions cache restore/save around successful manual builds.
 - Configured generated release notes to use the Copilot CLI with `gpt-6-luna` and fall back to automatic model selection when that model was unavailable. The workflow blocked qualification when required authentication, generation, or output validation failed.
 
 #### Tests and documentation

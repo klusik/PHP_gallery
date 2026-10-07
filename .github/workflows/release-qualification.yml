@@ -183,16 +183,50 @@ jobs:
               && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
           ' "${RELEASE_VERSION}"
           echo "complete=true" >> "${GITHUB_OUTPUT}"
-      - name: Install LaTeX for completed release notes
+      - id: tinytex-cache
+        name: Restore cached TinyTeX
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.TinyTeX
+          key: tinytex-v2026.10-linux-x86_64-${{ hashFiles('.github/texlive-packages.txt') }}
+      - name: Install pinned TinyTeX on cache miss
+        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        env:
+          TINYTEX_VERSION: '2026.10'
+          TINYTEX_INSTALLER: TinyTeX-1
+        run: |
+          set -euo pipefail
+          command -v perl >/dev/null
+          command -v xz >/dev/null
+          installer="${RUNNER_TEMP}/install-tinytex.sh"
+          curl --fail --location --silent --show-error --retry 3 --retry-delay 2 \
+            https://tinytex.yihui.org/install-bin-unix.sh -o "${installer}"
+          timeout 300 sh "${installer}" --no-path
+
+          tex_bin="$(find "${HOME}/.TinyTeX/bin" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          if [[ -z "${tex_bin}" ]]; then
+            echo "TinyTeX binary directory was not created." >&2
+            exit 1
+          fi
+
+          mapfile -t packages < <(grep -Ev '^[[:space:]]*(#|$)' .github/texlive-packages.txt)
+          if [[ "${#packages[@]}" -gt 0 ]]; then
+            timeout 300 "${tex_bin}/tlmgr" install "${packages[@]}"
+          fi
+      - name: Activate TinyTeX
         if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
-            texlive-fonts-recommended texlive-lang-european texlive-lang-czechslovak \
-            texlive-lang-german lmodern
+          tex_bin="$(find "${HOME}/.TinyTeX/bin" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          if [[ -z "${tex_bin}" || ! -x "${tex_bin}/pdflatex" || ! -x "${tex_bin}/makeindex" ]]; then
+            echo "Cached TinyTeX is incomplete: pdflatex/makeindex unavailable." >&2
+            exit 1
+          fi
+          echo "${tex_bin}" >> "${GITHUB_PATH}"
+          "${tex_bin}/pdflatex" --version | head -n 1
       - name: Build all maintained manuals
         if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
@@ -205,6 +239,12 @@ jobs:
             pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
             pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
           done
+      - name: Save TinyTeX cache after successful manual build
+        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.TinyTeX
+          key: tinytex-v2026.10-linux-x86_64-${{ hashFiles('.github/texlive-packages.txt') }}
       - name: Refresh final integrity data after manual build
         if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
