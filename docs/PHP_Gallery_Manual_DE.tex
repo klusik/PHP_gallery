@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.121.2}
-\newcommand{\manualdate}{6.~Oktober~2026}
+\newcommand{\version}{0.121.3}
+\newcommand{\manualdate}{7.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1827,6 +1827,8 @@ Papierkorbdaten liegen im geschützten dauerhaften Speicher \filepath{data/galle
 
 Öffnen Sie \ui{Wartung > Wartungszentrale} für einen geführten Ablauf \ui{Analysieren}, \ui{Prüfen}, \ui{Ausführen} und \ui{Verifizieren} über die Verantwortungsbereiche regelmäßiger Wartung. Analysieren ist für Galerie-, Telemetrie-, Protokoll-, Papierkorb-, Cache-, Vorschaubild- und Datenbankinhalte schreibgeschützt; geschrieben wird nur der dauerhafte Kontrollpunkt der Wartungszentrale zur Fortsetzung der Prüfung. Der Prüfschritt gruppiert Aufgaben nach Bereich, kennzeichnet erforderliche automatische Schritte und fasst verfügbare optionale Aufgaben ohne erkannten Arbeitsbedarf in einem eingeklappten Abschnitt zusammen. Erforderliche, standardmäßige und optionale Aufgaben bleiben vor Beginn der Bereinigung klar erkennbar; tiefe Medienprüfung und vollständige Datenbankoptimierung bleiben bei Verfügbarkeit auffindbar, auch wenn sie nicht automatisch ausgewählt werden.
 
+Der Server lädt vor jeder Aufgabe die geprüften Abhängigkeiten des jeweiligen Bereichs erneut für jede separate Analyse- oder Ausführungsanfrage. Die Prüfung ausstehender Migrationen liest nur die Migrationstabelle; eine fehlende Tabelle oder eine fehlgeschlagene Prüfung gilt als ausstehende Arbeit. Wenden Sie Migrationen über den ausdrücklichen Migrationsablauf an; die Analyse erstellt oder repariert keinen Migrationsspeicher.
+
 Der geprüfte Plan ist an aktuelle Anwendungsversion, angewandte Migrationsrevision, Registrierungsrevision der Wartungszentrale und Planinhalt gebunden. Ändert sich einer dieser Eingänge, lehnt die Ausführung den veralteten Plan ab und fordert neue Analyse. Der Server prüft bei der Ausführung erneut Aufgabenabhängigkeiten, Fähigkeitszustand und Datenbanktabelleneignung; Browserkontrollkästchen sind Präsentationseingaben, keine Autorisierung.
 
 Die Ausführung schreitet durch begrenzte Kontrollpunkte fort, sodass Sie die Seite neu laden oder schließen und denselben Auftrag später fortsetzen können. Nur ein laufender oder pausierter zentraler Auftrag hält den dauerhaften Änderungsanspruch; zwei Browserregister können einen Auftrag nicht gleichzeitig vorantreiben. Automatische Websitewartung gibt vor ihrer ersten Änderung nach, solange dieser Anspruch gehalten wird. Öffentliche schreibgeschützte Galerieanfragen bleiben verfügbar.
@@ -1987,6 +1989,8 @@ Bereitstellungshelfer & Windows-/Linux-Bereitstellungsskripte, Veröffentlichung
 \subsection{Anwendungsaktualisierungen}
 
 Die kompakte Versionsübersicht fasst installierte und verfügbare Version, Kanal, Status und Hauptaktionen zusammen; Repository- und GitHub-API-Details bleiben in einem eingeklappten Diagnosebereich. Nach Abschluss eines Auftrags aktualisiert der Browser die Übersicht direkt aus lokalen Metadaten, hält das Panel offen und die URL unverändert und blendet eine überholte Aktion für stabile Updates aus. Dabei erfolgt keine weitere GitHub-Prüfung. Schlägt das Laden fehl, wiederholt die Schaltfläche zur Statusaktualisierung nur den lokalen Lesevorgang, ohne die Installation zu wiederholen.
+
+Unter Windows sind für das atomare Ersetzen eines Aktualisierungs-Kontrollpunkts bis zu zehn Versuche mit Pausen von 50~ms und einer gesamten Pausengrenze von 450~ms zulässig, um kurze Dateifreigabesperren zu überbrücken. Scheitert der Schreibvorgang weiterhin, bleibt der vorherige Kontrollpunkt erhalten. Bei dauerhaften Berechtigungsproblemen muss vor einem erneuten Versuch der Speicherzugriff korrigiert werden. Windows verwendet dieselbe begrenzte Wiederholungsregel bei der Migration von Ausrichtungsmetadaten in \filepath{gallery.json}; eine gleichzeitige Änderung oder dauerhafte Verweigerung bewahrt das vorhandene Dokument und stoppt die Migration.
 
 Das Aktualisierungssystem prüft konfigurierte Kanäle, validiert Pakete, bereitet Inhalte vor, prüft erforderliche Laufzeitdateien und Größen, bewahrt überschriebene Dateien im Wiederherstellungsspeicher auf und aktiviert die Aktualisierung. Ratenbegrenzungsbehandlung und Wiederholungszustand verhindern wiederholte entfernte Anfragen während Anbieterwartezeiten. Eine fortsetzbare Auftragskarte erscheint sowohl unter \ui{Status} als auch unter \ui{Erweiterte Werkzeuge}, sodass Beta-Installation, Wiederherstellung oder Neuinstallation ihren Fortschritt weiterhin am Ausgangsort zeigt. Die Seite darf geschlossen und wieder geöffnet werden, ohne abgeschlossene Kontrollpunkte zu verwerfen.
 

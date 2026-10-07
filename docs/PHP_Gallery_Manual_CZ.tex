@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.121.2}
-\newcommand{\manualdate}{6.~října~2026}
+\newcommand{\version}{0.121.3}
+\newcommand{\manualdate}{7.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1821,6 +1821,8 @@ Obsah Koše je v~chráněném trvalém úložišti \filepath{data/gallery-trash/
 
 Otevřete \ui{Údržba > Centrum údržby} pro řízený postup \ui{Analyzovat}, \ui{Zkontrolovat}, \ui{Provést} a~\ui{Ověřit} napříč oblastmi běžné údržby. Analýza je pouze pro čtení obsahu galerií, telemetrie, protokolů, Koše, mezipaměti, náhledů a~databáze; zapisuje jen trvalý kontrolní bod Centra údržby potřebný k~pokračování průzkumu. Kontrola seskupuje úkoly podle oblasti, označuje povinné automatické kroky a~dostupné volitelné úkoly bez zjištěné práce přesouvá do sbaleného oddílu. Povinné, výchozí a~volitelné úkoly zůstávají před úklidem jasné. Hloubkové ověření médií a~úplná optimalizace databáze zůstávají při dostupnosti dohledatelné, i~když se ve výchozím stavu nevybírají.
 
+Server před spuštěním úkolu znovu načte schválené závislosti příslušné oblasti v~každém samostatném požadavku analýzy nebo provádění. Kontrola čekajících migrací pouze čte jejich evidenční tabulku; chybějící tabulka nebo neúspěšný průzkum se považují za čekající práci. Migrace použijte výslovným migračním postupem; analýza nevytváří ani neopravuje úložiště migrací.
+
 Zkontrolovaný plán je svázán s~aktuální verzí aplikace, revizí použitých migrací, revizí registru Centra údržby a~obsahem plánu. Změní-li se některý vstup, provádění zastaralý plán odmítne a~požádá o~novou analýzu. Server při provádění znovu kontroluje závislosti úkolů, stav schopností a~způsobilost databázových tabulek; zaškrtávací pole prohlížeče jsou vstupem prezentace, nikoli oprávněním.
 
 Provádění postupuje přes omezené kontrolní body, takže můžete stránku obnovit či zavřít a~později pokračovat ve stejné úloze. Trvalý nárok na změny vlastní pouze jedna běžící nebo pozastavená centrální úloha a~dvě karty prohlížeče nemohou současně posouvat jednu úlohu. Automatická údržba webu ustoupí před první změnou, dokud je tento nárok držen. Veřejné požadavky galerie pouze pro čtení zůstávají dostupné.
@@ -1981,6 +1983,8 @@ Pomocné nástroje nasazení & Skripty nasazení Windows/Linux, metadata vydán�
 \subsection{Aktualizace aplikace}
 
 Kompaktní přehled vydání sdružuje nainstalovanou a~dostupnou verzi, kanál, stav a~hlavní akce; podrobnosti repozitáře a~GitHub API zůstávají ve sbalené diagnostické sekci. Po dokončení úlohy prohlížeč obnoví přehled z~místních metadat přímo na místě, ponechá panel otevřený a~URL beze změny a~skryje již neaktuální akci stabilní aktualizace. Obnova neprovádí další kontrolu GitHubu. Pokud selže, tlačítkem obnovení stavu zopakujte místní načtení bez opakování instalace.
+
+Ve Windows může zápis kontrolního bodu aktualizátoru provést až deset pokusů o~atomické nahrazení s~pauzami 50~ms a~celkovým limitem pauz 450~ms, aby překlenul krátké zámky sdílení souborů. Pokud zápis stále selhává, předchozí kontrolní bod zůstane zachován. Trvalý problém s~oprávněními vyžaduje opravit přístup k~úložišti před opakováním úlohy. Stejný omezený postup používá Windows při migraci metadat orientace v~\filepath{gallery.json}; souběžná změna nebo trvalé odmítnutí zachová stávající dokument a~zastaví migraci.
 
 Aktualizátor kontroluje nastavené kanály, ověřuje balíčky, připravuje obsah, ověřuje požadované běhové soubory a~velikosti, uchovává přepsané soubory v~úložišti obnovy a~aktivuje aktualizaci. Obsluha omezení četnosti a~stav opakovaných pokusů brání opakovaným vzdáleným požadavkům během čekacích období poskytovatele. Karta úlohy s~možností pokračování se objevuje ve \ui{Stav} i~\ui{Pokročilé nástroje}, takže instalace beta, obnova nebo přeinstalace nadále ukazuje průběh tam, kde začala. Stránku lze zavřít a~znovu otevřít bez zahození dokončených kontrolních bodů.
 

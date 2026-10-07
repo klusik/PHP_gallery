@@ -89,6 +89,17 @@ Author: Rudolf Klusal
         while (!predicate() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 35));
         check(Boolean(predicate()), message);
     }
+    /**
+     * Read initiated media requests from this fixture's owned loopback server.
+     * @return {Promise<number>} Count independent of when older transfers finish.
+     */
+    async function readMediaRequestCount() {
+        const response = await fetch('/fixture-media-request-count', {cache: 'no-store'});
+        check(response.ok, 'owned media request counter is available');
+        const payload = await response.json();
+        check(Number.isSafeInteger(payload.count) && payload.count >= 0, 'owned media request counter is valid');
+        return payload.count;
+    }
     try {
         // Disabled DEV must neither create a dashboard nor fetch its presentation module.
         setupGalleryLightbox(); cards[0].click();
@@ -135,9 +146,11 @@ Author: Rudolf Klusal
         next.click(); next.click(); next.click();
         await until(() => value('photo').includes('ID 6'), 'rapid navigation retains newest displayed owner');
         check(value('target').includes('ID 6'), 'navigation target agrees after completion');
-        const resources = performance.getEntriesByType('resource').filter(entry => entry.name.includes('/media/')).length;
+        // Completed ResourceTiming entries can arrive after navigation from older requests.
+        // Observe request initiation at the owned server so those completions cannot look new.
+        const mediaRequests = await readMediaRequestCount();
         await new Promise(resolve => setTimeout(resolve, 800));
-        check(performance.getEntriesByType('resource').filter(entry => entry.name.includes('/media/')).length === resources, 'idle dashboard rendering creates no media requests');
+        check(await readMediaRequestCount() === mediaRequests, 'idle dashboard rendering creates no media requests');
         overlay.classList.add('is-fullscreen');
         check(panel.closest('[data-lightbox]') === overlay && panel.getBoundingClientRect().right <= innerWidth, 'fullscreen panel stays in owned subtree and viewport');
         overlay.classList.remove('is-fullscreen');

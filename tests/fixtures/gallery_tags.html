@@ -470,10 +470,20 @@ async function runFixture() {
     check(keyboard.ok, 'trusted Enter key reaches native summary');
     await settle();
     check(details.open, 'keyboard Enter expands details without JavaScript-owned disclosure logic');
+    let escapeStartedClosing = false;
+    // Observe the transient closing state in the trusted key event itself: the
+    // protocol response and two layout frames may arrive after animation ends.
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && event.isTrusted) {
+            escapeStartedClosing = details.dataset.galleryCardInfoState === 'closing'
+                && summary.getAttribute('aria-expanded') === 'false'
+                && document.activeElement === summary;
+        }
+    }, {once: true});
     const closeKeyboard = await fetch('/__key?key=Escape');
     check(closeKeyboard.ok, 'trusted Escape key reaches the open public-info panel');
     await settle();
-    check(details.dataset.galleryCardInfoState === 'closing', 'Escape starts closing the public-info panel immediately');
+    check(escapeStartedClosing, 'Escape synchronously starts closing the public-info panel and restores accessible summary focus');
     const escapedCloseFinished = await waitForDisclosureClose(details);
     check(escapedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape finishes closing the public-info panel and restores the original card geometry');
     const refreshedHero = heroRoot.cloneNode(true);

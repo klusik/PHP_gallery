@@ -1,5 +1,63 @@
 # Patch notes
 
+## Version 0.121.3
+
+Version 0.121.3 fixes Maintenance Center analysis and execution under selective runtime loading, keeps migration inspection read-only, and protects Windows updater checkpoints and gallery-layout sidecar replacement from transient sharing locks. Ref: [#97](https://github.com/klusik/PHP_gallery/issues/97).
+
+### Highlights
+
+#### Reliable Maintenance Center steps
+
+- Fixed missing subsystem functions during separate Analyze and Execute requests by loading the reviewed dependencies for the current task before its callback runs.
+- Preserved bounded checkpoints, resumable jobs, existing capability checks, central mutation locking and server-authorized plans.
+- Removed table creation from the pending-migration check so Analyze inspects migration state without repairing or creating schema storage.
+
+#### Windows updater reliability
+
+- Fixed brief Windows file-sharing locks during durable updater checkpoint replacement with at most ten atomic rename attempts and a 450 ms total pause budget.
+- Preserved the previous checkpoint on persistent refusal and removed only the failed staging file; no delete-before-replace fallback was introduced.
+- Fixed the same short Windows sharing refusal in legacy gallery-layout sidecar migration, with bounded retries, concurrent-edit rechecks and cleanup of only the owned staging file.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/admin_maintenance_center.php` to inject the active request kernel's logical-module loader into analysis and execution steps.
+- Added task/phase dependency mapping in `app/services/maintenance_center.php` for `site-maintenance-work`, `archive-maintenance-work` and `domain-admin-database-maintenance`; updated the analysis/execution workers to load their dependencies before invoking task callbacks.
+- Updated `gallery_description_layout_apply_sidecar_plan()` in `app/services/gallery_description_layout_compatibility.php`; retained full preflight, prior document/mode preservation and replay markers, and refused concurrent edits before retrying.
+- Updated `application_update_write_json_atomic()` in `app/services/updates_jobs/state.php` and its module-owned retry limits; Windows retries reuse the same complete staging bytes, while other platforms retain one commit attempt. Permanent permission failure remains an explicit refusal.
+- Registered the injected loader in `scripts/runtime_dynamic_dependencies.php`. Reused the existing generated runtime modules and retained selective loading without an umbrella-loader fallback.
+- Retained the optional null loader for full-bootstrap CLI/test consumers whose dependencies are already loaded. The Maintenance Center service owns this compatibility path; its usage is unknown, and retirement requires migrating those consumers and proving their include contracts remain supported.
+
+#### Database and frontend
+
+- Updated `pending_migrations_exist()` in `app/migrations.php` to read the migration ledger without `CREATE TABLE`. A missing ledger or failed inspection remains fail-closed as pending work; the explicit migration runners retain ownership of ledger creation.
+- Added no migration, schema column, setting, capability or browser asset change. Existing Admin authentication, CSRF, mutation responses and in-place browser continuation remain in force.
+- Preserved the independent WinApp 0.3.2 version and existing installer.
+
+#### Tests and documentation
+
+- Extended `tests/gallery_description_layout_compatibility_test.php` with deterministic first-rename refusal, bounded Windows recovery, unchanged non-Windows refusal, concurrent-edit preservation, read-only refusal and staging cleanup.
+- Extended `tests/updater_resumable_state_machine_test.php` with complete atomic replacement, failed-commit staging cleanup, destination preservation and Windows read-only checkpoint refusal.
+- Updated `tests/admin_panel_lifecycle_browser_test.mjs` and `tests/support/headless_browser_fixture.mjs` to attach to a fresh blank tab and activate its headless focus and navigate the owned localhost fixture exactly once through DevTools. Preserved browser sandboxing, endpoint/profile confinement and all assertions, including authenticated workflows.
+- Updated the isolated DEV-dashboard browser fixture to measure media request initiation at its owned loopback server, preventing old transfer completions from being misreported as new diagnostic requests. Retained the idle assertion and all existing workflow checks.
+- Updated the gallery-tag browser fixture to observe synchronous Escape dismissal inside the trusted key event, retaining accessible focus and final geometry checks even when protocol acknowledgment arrives after the animation.
+- Registered a 240-second `runtime_module_plan_test.php` limit in `scripts/audit_registry.php` for full dependency compilation and both loaders across all logical modules; the focused Windows run completed in 72 seconds, beyond the former 45-second default.
+- Extended `tests/maintenance_center_test.php` to cover task/phase module selection, controller loader injection, dependency loading before callbacks, bounded analysis diagnostics and reviewed dynamic-loader policy.
+- Updated architecture, database, code-map and verification guidance, the compatibility register, all four manual editions and PDFs, release metadata and `app/core-manifest.json`.
+
+### User Impact
+
+#### For administrators
+
+- Fixed Maintenance Center steps that could fail when a new browser request had not loaded the required maintenance subsystem.
+- Improved Windows updater checkpoint and layout-migration sidecar commits while preserving prior state on storage refusal and rejecting concurrent metadata edits.
+- Kept Analyze read-only for application content and migration storage; pending migrations still require the explicit migration workflow.
+
+#### For visitors
+
+- Preserved public gallery rendering and media access behavior.
+
 ## Version 0.121.2
 
 Version 0.121.2 fixes inline links and code in gallery descriptions, accepts Windows checkout line endings in production-inventory checks, and reduces avoidable sequential work in the central audit.
@@ -3837,6 +3895,7 @@ Version 0.96.3 is a maintenance release with no schema or migration changes. It 
 
 ### Tests
 
+- Extended `tests/gallery_description_layout_compatibility_test.php` with deterministic first-rename refusal, bounded Windows recovery, unchanged non-Windows refusal, concurrent-edit preservation, read-only refusal and staging cleanup.
 - Extended `tests/updater_resumable_state_machine_test.php` with source-level assertions confirming that finalization still clears the stale cache, immediately refreshes it with a fresh GitHub result for the activated version, and keeps that refresh guarded by the non-fatal `catch` block.
 
 ### User Impact
