@@ -397,6 +397,28 @@ if (manifest_has_flag('--check')) {
     ];
 
     if ($currentComparable !== $generatedComparable) {
+        // Report actionable membership/hash differences without dumping entire manifests.
+        // This remains a read-only check; release preparation owns regeneration.
+        $actualFiles = is_array($currentComparable['files']) ? $currentComparable['files'] : [];
+        $expectedFiles = $generatedComparable['files'];
+        $missing = array_keys(array_diff_key($expectedFiles, $actualFiles));
+        $extra = array_keys(array_diff_key($actualFiles, $expectedFiles));
+        $changed = [];
+        foreach ($expectedFiles as $file => $hash) {
+            if (array_key_exists($file, $actualFiles) && $actualFiles[$file] !== $hash) {
+                $changed[] = $file;
+            }
+        }
+        foreach (['missing' => $missing, 'extra' => $extra, 'changed' => $changed] as $label => $paths) {
+            if ($paths !== []) {
+                fwrite(STDERR, "Manifest {$label} paths (" . count($paths) . '): '
+                    . implode(', ', array_slice($paths, 0, 16))
+                    . (count($paths) > 16 ? ', ...' : '') . "\n");
+            }
+        }
+        if ($currentComparable['version'] !== $generatedComparable['version']) {
+            fwrite(STDERR, "Manifest version mismatch: expected " . $generatedComparable['version'] . "\n");
+        }
         fwrite(STDERR, "Manifest is not current. Run php scripts/generate_manifest.php.\n");
         exit(1);
     }

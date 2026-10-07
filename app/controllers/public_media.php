@@ -552,10 +552,64 @@ function cms_gallery_branding_asset(): void
 
 
 /**
- * Handles cms media logic for the gallery application.
+ * Stream the locally stored SimBrief OFP only after normal gallery access checks.
+ *
+ * @return void Send an inline or attachment PDF response, or an opaque 404.
+ */
+function cms_gallery_ofp_pdf(): void
+{
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method !== 'GET' && $method !== 'HEAD') {
+        header('Allow: GET, HEAD');
+        http_response_code(405);
+        return;
+    }
+
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    $isAdmin = current_user() !== null
+        && !\Gallery\Core\admin_anonymous_preview_active()
+        && !current_user_is_known_under_18();
+    // Use the exact visitor policy without an implicit administrator bypass.
+    // A password/share-token grant may authorize a gallery even when its normal
+    // direct public URL is not accessible. Anonymous admin preview is not a grant.
+    if (!$gallery || (!$isAdmin && !\Gallery\Services\visitor_can_access_gallery_without_admin_bypass($gallery))) {
+        cms_not_found();
+        return;
+    }
+
+    require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
+    $path = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    if ($path === null) {
+        cms_not_found();
+        return;
+    }
+
+    $download = (string) ($_GET['download'] ?? '') === '1';
+    header('Content-Type: application/pdf');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: same-origin');
+    header('Cache-Control: private, no-store, max-age=0');
+    header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="simbrief-ofp.pdf"');
+    header('Content-Length: ' . (int) filesize($path));
+    cms_release_public_media_session_lock();
+    if ($method === 'GET') {
+        readfile($path);
+    }
+}
+
+/**
+ * Dispatch authorized public media, including imported OFP PDFs, through the
+ * existing gallery visibility, ownership and image-access controller.
+ *
+ * @return void Streams permitted media or sends an access-controlled failure.
  */
 function cms_media(): void
 {
+    if ((string) ($_GET['ofp'] ?? '') === '1') {
+        cms_gallery_ofp_pdf();
+        return;
+    }
     $benchmarkMediaRequest = gallery_benchmark_media_request_begin('media');
     // Variable $image stores this steps working value.
     $image = find_image((int) ($_GET['id'] ?? 0));
