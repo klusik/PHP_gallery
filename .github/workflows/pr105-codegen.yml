@@ -1,0 +1,33 @@
+# Temporary deterministic codegen handoff for issue #103.
+# This file is removed after the generated source plan has been committed.
+name: PR105 generated plans
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: ${{ github.event.pull_request.number == 105 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Generate reviewed runtime modules and core manifest
+        run: |
+          php scripts/generate_runtime_modules.php
+          php scripts/generate_manifest.php
+          php scripts/generate_runtime_modules.php --check
+          php scripts/generate_manifest.php --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr105-generated-runtime-plan
+          path: |
+            app/runtime/modules.php
+            app/core-manifest.json
+          retention-days: 1
+          if-no-files-found: error
