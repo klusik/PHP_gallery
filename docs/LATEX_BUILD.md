@@ -1,6 +1,6 @@
 # Building the PHP Gallery manual
 
-During ordinary development, update and review manual sources without compiling a PDF after every code or documentation edit. Keep all four source editions aligned; their tracked PDFs may lag until final release preparation. A local TeX installation is not required for routine documentation work.
+During ordinary development, treat all four TeX manual sources as living documentation. When source changes affect public or administrator behavior, architecture, security, deployment, runtime dependencies, CI qualification, or developer/maintainer workflows, update the corresponding current-behavior sections in all four languages as part of the same source candidate. Review that impact before final candidate preparation, even for internal-only tooling fixes. If no TeX content is affected, record a brief reason in the issue or handoff. Do not rely on the release workflow to compose documentation: it updates edition metadata and builds existing sources, but does not write technical prose. Do not alter `PATCH_NOTES.md` for routine development. Do not compile PDFs after ordinary code or documentation edits; tracked PDFs may lag until final release preparation, and a local TeX installation is not required.
 
 The GitHub-hosted release workflow compiles all four manuals together after the final release source/metadata edits and before the final manifest and exact-candidate audit. It uses the locked TinyTeX/TeX Live toolchain documented in `RELEASE.md`.
 

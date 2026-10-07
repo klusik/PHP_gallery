@@ -178,6 +178,8 @@ Remove temporary implementation roadmaps, scratch migration plans, and other exp
 
 Do not mechanically rewrite historical version references. For schema changes, describe the new migration and final schema accurately instead of merely replacing the document's current-version marker. For frontend module changes, verify the deployed browser entrypoint or import chain receives the required cache-busting update.
 
+The release scripts never compose missing TeX manual prose. They update edition markers, may create release notes, and compile PDFs from existing sources. Every material feature, bug fix, runtime/CI/developer workflow change, and relevant documentation change should already have updated the appropriate sections in all four TeX source editions during ordinary development. Before release qualification, review the changed-scope documentation for completeness, including maintainer-facing topics; correct any omissions in the release branch before its final generated artifacts and audit. PDF build success and release version consistency are not evidence of up-to-date explanations.
+
 ### 4. Build the manuals and check compilation
 
 During ordinary development, maintain the Markdown/LaTeX sources and keep all four manual source editions aligned without rebuilding PDFs after each change. Tracked PDFs may lag behind draft sources until this final release phase; routine documentation edits do not require a local TeX installation.

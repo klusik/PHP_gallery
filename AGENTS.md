@@ -186,11 +186,44 @@ After changing zoom markup, geometry, quality promotion, fullscreen CSS, or even
 browser matrix in `TESTING.md`. Preserve browser Ctrl/Command-wheel zoom, 100% mobile swipe navigation, maps, voting,
 strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
 
+## Continuous Documentation Synchronization
+
+Every implementation batch that materially changes product behavior, administrator
+operations, security or compatibility policy, runtime ownership, migrations,
+deployment, updater behavior, CI, testing, tooling, or the developer workflow
+must review and update its permanent documentation **during that same batch**.
+This applies to maintainer-facing infrastructure changes even when the public
+UI does not change. Do not defer such explanations to a future release branch.
+
+Update the relevant Markdown references (for example `README.md`,
+`ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and applicable
+`docs/*.md`) and the corresponding sections of **all four** maintained
+`docs/PHP_Gallery_Manual*.tex` sources whenever their current behavior,
+instructions, safety requirements, or architecture would otherwise be stale.
+A change to generated-artifact preparation or CI gating, for example, belongs
+in the TeX manuals' developer/maintainer reference, not only in `AGENTS.md`.
+Describe the current supported behavior in the existing topical sections;
+never append an issue-by-issue change log to a permanent manual.
+
+Review documentation impact before the final `prepare_candidate.php` run and
+the authoritative handoff audit. The documentation updates belong in the same
+source candidate as the implementation. If no TeX section is affected by a
+truly internal change, explicitly record `No TeX manual impact` with a brief
+reason in the implementation handoff or issue instead of silently omitting it.
+An internal-only or CI-only label does not by itself justify omission.
+
+During ordinary development update **TeX sources only**, preserving existing
+edition version/date markers. Do not compile, rewrite, inspect, or commit
+manual PDFs as part of routine source changes. The release workflow only
+updates release/version metadata and compiles existing TeX to PDF; it does
+not author the technical/manual prose. `PATCH_NOTES.md` remains reserved
+for explicit maintainer requests or the separate release preparation process;
+do not modify it for ordinary feature, bug-fix, or documentation batches.
 ## LaTeX Manual Typography
 
 ### All manual language editions
 
-Every release preparation and every user-facing manual content change must update all four maintained source editions together: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep edition versions, localized dates, feature coverage, compatibility notes, and operational instructions aligned. `scripts/prepare_release.php` currently updates only the English source; agents must explicitly update the translated editions as well. Updating English alone is not a completed manual-source handoff.
+Every relevant product, operational, developer, testing, or release documentation change must keep all four maintained source editions aligned: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep feature coverage, compatibility notes, operating instructions, and developer workflows equivalent across languages. `scripts/prepare_release.php` updates only the English edition markers, while hosted release preparation aligns all four version/date markers; neither writes missing manual prose. Updating English alone is not a completed manual-source handoff.
 
 During ordinary development, edit and review the Markdown/LaTeX sources without rebuilding tracked PDFs after each code or documentation change. PDF artifacts may intentionally lag behind their sources until final release preparation; routine documentation work does not require a local TeX installation. Build all four maintained PDFs together once after the final release source/metadata edits, before the final manifest and exact-candidate release audit. The GitHub-hosted release workflow owns this batch compilation and checks compiler success and relevant warnings. Use the local commands in `docs/LATEX_BUILD.md` only when an explicit local build is requested or a concrete compilation/layout failure needs diagnosis. Later changes to frozen release inputs require a new preparation and qualification run.
 

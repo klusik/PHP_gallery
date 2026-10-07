@@ -27,8 +27,12 @@ architecture documentation before changing code. In particular:
 - Add schema changes as new timestamp-prefixed migration files. Preserve
   upgrade compatibility and cover behavior through the central audit where
   practical.
-- When changing user-facing manual content, update all four maintained manual
-  editions together as described in `AGENTS.md` and `docs/LATEX_BUILD.md`.
+- For any material change to user/admin behavior, architecture, runtime,
+  security, deployment, CI, or developer workflows, update relevant permanent
+  Markdown documentation and all four maintained TeX manual source editions
+  in the same batch. Do not wait for release automation to author the prose.
+  Ordinary development does not rebuild PDFs or update `PATCH_NOTES.md`.
+  See `AGENTS.md` and `docs/LATEX_BUILD.md`.
 - Keep changes focused. Do not include local configuration, credentials,
   uploads, caches, generated deployment archives, or unrelated formatting
   changes.
@@ -40,6 +44,11 @@ architecture documentation before changing code. In particular:
   that the recorded condition is met.
 
 ## Preparing an ordinary source candidate
+
+Complete the permanent documentation impact review, including all four TeX
+manual sources when affected, before the final preparation run. If no TeX
+content applies, document the reason in the handoff. Leave PDFs, manual
+version/date metadata and `PATCH_NOTES.md` to release preparation.
 
 Do not publish an intermediate source commit with stale generated state.
 After final source or documentation edits, stage any newly created/deleted
