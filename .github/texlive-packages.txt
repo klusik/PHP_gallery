@@ -1,6 +1,7 @@
 # TinyTeX/TeX Live packages required by the four maintained PHP Gallery manuals.
 # Keep this list explicit: its hash is part of the GitHub Actions cache key.
-# TinyTeX bundle pinned by the workflow: 2026.10.
+# Bundle and frozen TeX Live 2025 repository are locked in texlive-lock.json.
+# Names verified against the checksum-pinned tlnet-final database (revision 78234).
 # TinyTeX-1 already contains several of these; tlmgr treats them as satisfied.
 
 babel

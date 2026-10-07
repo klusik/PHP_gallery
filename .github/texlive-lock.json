@@ -1,0 +1,10 @@
+{
+    "schema_version": 1,
+    "bundle_version": "2026.02",
+    "bundle_url": "https://github.com/rstudio/tinytex-releases/releases/download/v2026.02/TinyTeX-1-v2026.02.tar.gz",
+    "bundle_sha256": "b56079da87a6d26a18fe8f4a751fde7a5f3596c93260bc1dd3663f7590aef44c",
+    "texlive_year": 2025,
+    "infra_revision": 76780,
+    "repository": "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final",
+    "repository_metadata_sha256": "74b5744d2ff1386138d5361d3af49179f921dbbc953e449324d99448af092f41"
+}

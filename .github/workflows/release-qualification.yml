@@ -82,6 +82,12 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "base_tag=${base_tag}" >> "${GITHUB_OUTPUT}"
           echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
+      - name: Cheap release source preflight
+        shell: bash
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ steps.release.outputs.source_base }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --profile=release-preflight
       - name: Apply deterministic release preparation
         shell: bash
         env:
@@ -187,64 +193,58 @@ jobs:
         name: Restore cached TinyTeX
         if: ${{ steps.notes.outputs.complete == 'true' }}
         uses: actions/cache/restore@v6.1.0
+        timeout-minutes: 3
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '2'
         with:
           path: ~/.TinyTeX
-          key: tinytex-v2026.10-linux-x86_64-${{ hashFiles('.github/texlive-packages.txt') }}
-      - name: Install pinned TinyTeX on cache miss
+          key: tinytex-v2-ubuntu24.04-x86_64-${{ hashFiles('.github/texlive-lock.json', '.github/texlive-packages.txt', '.github/scripts/provision_tinytex.sh') }}
+      - name: Install locked TinyTeX bundle on cache miss
         if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
         shell: bash
+        timeout-minutes: 6
+        run: timeout --kill-after=15s 300 bash .github/scripts/provision_tinytex.sh install
+      - name: Provision frozen TeX Live packages on cache miss
+        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        timeout-minutes: 11
+        run: timeout --kill-after=15s 600 bash .github/scripts/provision_tinytex.sh provision
+      - name: Activate and verify locked TinyTeX
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: bash .github/scripts/provision_tinytex.sh verify
+      - id: manuals
+        name: Build all maintained manuals
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        timeout-minutes: 3
         env:
-          TINYTEX_VERSION: '2026.10'
-          TINYTEX_INSTALLER: TinyTeX-1
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          command -v perl >/dev/null
-          command -v xz >/dev/null
-          installer="${RUNNER_TEMP}/install-tinytex.sh"
-          curl --fail --location --silent --show-error --retry 3 --retry-delay 2 \
-            https://tinytex.yihui.org/install-bin-unix.sh -o "${installer}"
-          timeout 300 sh "${installer}"
-
-          tex_bin="$(find "${HOME}/.TinyTeX/bin" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-          if [[ -z "${tex_bin}" ]]; then
-            echo "TinyTeX binary directory was not created." >&2
-            exit 1
-          fi
-
-          mapfile -t packages < <(grep -Ev '^[[:space:]]*(#|$)' .github/texlive-packages.txt)
-          if [[ "${#packages[@]}" -gt 0 ]]; then
-            timeout 300 "${tex_bin}/tlmgr" install "${packages[@]}"
-          fi
-      - name: Activate TinyTeX
-        if: ${{ steps.notes.outputs.complete == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tex_bin="$(find "${HOME}/.TinyTeX/bin" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-          if [[ -z "${tex_bin}" || ! -x "${tex_bin}/pdflatex" || ! -x "${tex_bin}/makeindex" ]]; then
-            echo "Cached TinyTeX is incomplete: pdflatex/makeindex unavailable." >&2
-            exit 1
-          fi
-          echo "${tex_bin}" >> "${GITHUB_PATH}"
-          "${tex_bin}/pdflatex" --version | head -n 1
-      - name: Build all maintained manuals
-        if: ${{ steps.notes.outputs.complete == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          # Stable release metadata fixes PDF timestamps across cache miss/hit and reruns.
+          export SOURCE_DATE_EPOCH="$(php -r '
+            $metadata = json_decode(file_get_contents("release-metadata.json"), true, 512, JSON_THROW_ON_ERROR);
+            $moment = new DateTimeImmutable($metadata[$argv[1]]["released_at"], new DateTimeZone("Europe/Prague"));
+            echo $moment->getTimestamp();
+          ' "${RELEASE_VERSION}")"
+          export FORCE_SOURCE_DATE=1
           cd docs
           for base in PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV; do
+            echo "Manual ${base}: START"
             pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
             makeindex "${base}.idx"
             pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
             pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            echo "Manual ${base}: COMPLETE"
           done
       - name: Save TinyTeX cache after successful manual build
-        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        if: ${{ success() && steps.manuals.outcome == 'success' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6.1.0
+        timeout-minutes: 3
         with:
           path: ~/.TinyTeX
-          key: tinytex-v2026.10-linux-x86_64-${{ hashFiles('.github/texlive-packages.txt') }}
+          key: ${{ steps.tinytex-cache.outputs.cache-primary-key }}
       - name: Refresh final integrity data after manual build
         if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
@@ -293,6 +293,14 @@ jobs:
           git fetch origin "${GITHUB_REF_NAME}"
           remote_sha="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
           if [[ "${remote_sha}" != "${ORIGINAL_SHA}" ]]; then
+            # A rerun may rebuild the identical tree already committed by this workflow.
+            # Reuse that current SHA without writing; any differing tree still fails the lease.
+            if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "origin/${GITHUB_REF_NAME}^{tree}")" ]]; then
+              echo "Prepared tree already exists at current release head; reusing exact SHA."
+              echo "changed=false" >> "${GITHUB_OUTPUT}"
+              echo "candidate_sha=${remote_sha}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
             echo "Release branch changed during preparation; refusing stale write-back." >&2
             exit 1
           fi
@@ -370,7 +378,9 @@ jobs:
           MATRIX_RESULT: ${{ needs.qualification.result }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           {
             echo "### Release qualification gate"
             echo ""
@@ -394,4 +404,9 @@ jobs:
             exit 1
           fi
 
+          current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ "${current_sha}" != "${CANDIDATE_SHA}" ]]; then
+            echo "Release branch changed after preparation; this qualification is stale." >&2
+            exit 1
+          fi
           echo "Release candidate is eligible for the next promotion stage."
