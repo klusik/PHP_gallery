@@ -531,11 +531,11 @@ function simbrief_description_extract_details(array $payload): array
  * When the OFP payload exposes a PDF document URL, the original PDF is saved
  * beside it for direct long-term reference.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $payload Payload value.
- * @param array $identifier Identifier value.
- * @param array $details Details value.
- * @param array $routeResult Route result value.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $payload Payload value.
+ * @param array<string,mixed> $identifier Identifier value.
+ * @param array<string,mixed> $details Details value.
+ * @param array<string,mixed> $routeResult Route result value.
  * @return array{saved:bool,path:string,manifest_path?:string,filename:string,pdf_saved?:bool,pdf_path?:string,pdf_filename?:string,pdf_url?:string,pdf_error?:string,error:string} Source OFP attachment paths and optional PDF download status.
  */
 function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
