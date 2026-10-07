@@ -123,12 +123,22 @@ server-global settings. Never repurpose an administrator or production account.
 It is also a reusable workflow. Direct PR/push/manual CI keeps the safe `full`
 profile behavior. `.github/workflows/release-qualification.yml` can call it with
 `audit_profile=release`; that preserves the normal matrix and adds one isolated
-`Authoritative release audit` job running the central `release` profile. The
-release caller first requires an already prepared `release/v_X.Y.Z` branch,
-current production inventory and manifest, and a passing `check_release.php`
-preflight. Its final `Release qualification gate` succeeds only when both the
-preflight and the complete reusable matrix succeed. The release caller remains
-read-only in this first implementation and does not commit, merge, tag or publish.
+`Authoritative release audit` job running the central `release` profile. The release caller owns deterministic preparation of the trusted
+`release/v_X.Y.Z` branch. If the target patch-note section is incomplete, it
+builds bounded previous-tag-to-HEAD evidence for GitHub Copilot CLI through
+`.github/scripts/patch_notes_ai.php`. The personal-repository workflow expects
+a fine-grained PAT in the `COPILOT_GITHUB_TOKEN` repository secret, selects
+`gpt-6-luna`, disables project prompt-mode extensions and grants no Copilot
+tools. The model output is validated as data before only the incomplete target
+release section may be replaced; completed maintainer-authored notes skip AI.
+Missing authentication, oversized evidence, AI failure or invalid output blocks
+qualification. Once release notes are valid, GitHub builds all four PDFs,
+refreshes production inventory and the integrity manifest, passes
+`check_release.php`, commits only reviewed release-preparation paths and calls
+the reusable matrix with the exact prepared candidate SHA and previous-tag source
+base. The final `Release qualification gate` succeeds only when preparation and
+the complete reusable matrix succeed. This stage still does not merge, tag or
+publish.
 The exact PHP representatives and qualification categories are defined in
 [Database support](DATABASE_SUPPORT.md).
 The fixed service bootstrap password is a disposable CI fixture value, not an
