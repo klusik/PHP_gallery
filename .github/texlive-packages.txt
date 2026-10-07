@@ -1,5 +1,6 @@
 # TinyTeX/TeX Live packages required by the four maintained PHP Gallery manuals.
 # Keep this list explicit: its hash is part of the GitHub Actions cache key.
+# TinyTeX bundle pinned by the workflow: 2026.10.
 # TinyTeX-1 already contains several of these; tlmgr treats them as satisfied.
 
 babel
