@@ -60,13 +60,13 @@ namespace {
         $status = \Gallery\Services\check_application_update(true);
         metadata_budget_assert(count($GLOBALS['budget_calls']) === 1 && $status['branch'] === 'main', 'A valid preferred marker must spend one API request and skip master.');
         $notes = \Gallery\Services\application_patch_notes_viewer_data('main', 0);
-        metadata_budget_assert(count($GLOBALS['budget_calls']) === 1 && str_contains($notes['versions']['1.0']['html'], 'Installed package notes'), 'A passive page without remote notes cache must stay offline.');
+        metadata_budget_assert(count($GLOBALS['budget_calls']) === 1 && str_contains($notes['versions']['1.0']['markdown'], 'Installed package notes') && !isset($notes['versions']['1.0']['html']), 'A passive page must return raw installed notes offline; HTML belongs to the view.');
         $GLOBALS['budget_remote_version'] = '2.0';
         $GLOBALS['budget_calls'] = [];
         \Gallery\Services\check_application_update(true);
         metadata_budget_assert(count($GLOBALS['budget_calls']) === 2, 'A newly discovered release may fetch bootstrap and missing release history once each.');
         $notes = \Gallery\Services\application_patch_notes_viewer_data('main');
-        metadata_budget_assert(count($GLOBALS['budget_calls']) === 2 && isset($notes['versions']['2.0']) && str_contains($notes['versions']['1.0']['html'], 'Installed package notes'), 'Viewer must reuse pending history while preferring installed package notes.');
+        metadata_budget_assert(count($GLOBALS['budget_calls']) === 2 && isset($notes['versions']['2.0']) && str_contains($notes['versions']['1.0']['markdown'], 'Installed package notes'), 'Viewer must reuse pending history while preferring installed package notes.');
         $GLOBALS['budget_calls'] = [];
         \Gallery\Services\check_application_update(true);
         metadata_budget_assert(count($GLOBALS['budget_calls']) === 1, 'Repeated discovery must reuse already cached pending notes.');

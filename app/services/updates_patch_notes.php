@@ -8,7 +8,7 @@
  * Module Type: Service
  *
  * Purpose:
- *   Handles patch-note retrieval, caching, parsing, release metadata, and safe HTML rendering.
+ *   Handles patch-note retrieval, caching, raw Markdown parsing and release metadata.
  *
  * Responsibilities:
  *   - Keep domain logic reusable outside controllers
@@ -83,6 +83,13 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
     $currentVersion = cms_current_version();
     if (isset($localVersions[$currentVersion])) {
         $versions[$currentVersion] = $localVersions[$currentVersion];
+    }
+    // Older caches also stored rendered HTML. Present their raw Markdown with
+    // the current view renderer instead of retaining obsolete or unsafe markup.
+    foreach ($versions as $version => $entry) {
+        $entry = (array) $entry;
+        unset($entry['html']);
+        $versions[$version] = $entry;
     }
     uksort($versions, /** Sort newest release first. @param string $left First version. @param string $right Second version. @return int Version order. */ static fn (string $left, string $right): int => version_compare($right, $left));
     return [
@@ -230,7 +237,7 @@ function application_patch_notes_clear_cache(?string $branch = null): void
  * Parse PATCH_NOTES.md into normalized version sections.
  *
  * @param string $markdown Markdown value.
- * @return array Structured result data for the caller.
+ * @return array<string,array{version:string,title:string,released_at:?string,released_label:string,markdown:string}> Raw release sections keyed by normalized version.
  */
 function application_patch_notes_parse_versions(string $markdown): array
 {
@@ -255,7 +262,6 @@ function application_patch_notes_parse_versions(string $markdown): array
                     'released_at' => $releaseMetadata['released_at'],
                     'released_label' => $releaseMetadata['released_label'],
                     'markdown' => trim(implode("\n", $buffer)),
-                    'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
                 ];
             }
             $currentVersion = application_update_normalize_version((string) $match[1]);
@@ -277,7 +283,6 @@ function application_patch_notes_parse_versions(string $markdown): array
             'released_at' => $releaseMetadata['released_at'],
             'released_label' => $releaseMetadata['released_label'],
             'markdown' => trim(implode("\n", $buffer)),
-            'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
         ];
     }
 
@@ -329,111 +334,4 @@ function application_patch_notes_release_metadata_for_version(string $version): 
 
     $cache[$version] = $metadata;
     return $metadata;
-}
-
-/**
- * Convert the limited PATCH_NOTES.md syntax into safe admin HTML.
- *
- * @param string $markdown Markdown value.
- * @return string Text result for the caller.
- */
-function application_patch_notes_markdown_to_html(string $markdown): string
-{
-    if ($markdown === '') {
-        return '<p class="muted">' . e(t('admin.updates.patch_notes_empty', 'No patch notes were found for this version.')) . '</p>';
-    }
-
-    // $html stores the generated safe HTML fragments.
-    $html = [];
-    // $inList tracks whether a Markdown list is currently open.
-    $inList = false;
-    // $inCode tracks whether a fenced code section is currently open.
-    $inCode = false;
-    // $codeLines stores raw lines inside a fenced code section.
-    $codeLines = [];
-
-    foreach (preg_split('/\R/u', $markdown) ?: [] as $line) {
-        // $rawLine stores the unmodified Markdown line for code fences.
-        $rawLine = (string) $line;
-        // $trimmed stores a whitespace-trimmed copy for syntax checks.
-        $trimmed = trim($rawLine);
-
-        if (str_starts_with($trimmed, '```')) {
-            if ($inCode) {
-                $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
-                $codeLines = [];
-                $inCode = false;
-            } else {
-                if ($inList) {
-                    $html[] = '</ul>';
-                    $inList = false;
-                }
-                $inCode = true;
-            }
-            continue;
-        }
-
-        if ($inCode) {
-            $codeLines[] = $rawLine;
-            continue;
-        }
-
-        if ($trimmed === '') {
-            if ($inList) {
-                $html[] = '</ul>';
-                $inList = false;
-            }
-            continue;
-        }
-
-        if (preg_match('/^(#{3,6})\s+(.+)$/', $trimmed, $headingMatch)) {
-            if ($inList) {
-                $html[] = '</ul>';
-                $inList = false;
-            }
-            // $level stores a bounded heading level suitable inside the update panel.
-            $level = min(5, max(3, strlen((string) $headingMatch[1])));
-            $html[] = '<h' . $level . '>' . application_patch_notes_inline_markdown((string) $headingMatch[2]) . '</h' . $level . '>';
-            continue;
-        }
-
-        if (preg_match('/^[-*]\s+(.+)$/', $trimmed, $listMatch)) {
-            if (!$inList) {
-                $html[] = '<ul>';
-                $inList = true;
-            }
-            $html[] = '<li>' . application_patch_notes_inline_markdown((string) $listMatch[1]) . '</li>';
-            continue;
-        }
-
-        if ($inList) {
-            $html[] = '</ul>';
-            $inList = false;
-        }
-        $html[] = '<p>' . application_patch_notes_inline_markdown($trimmed) . '</p>';
-    }
-
-    if ($inCode) {
-        $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
-    }
-    if ($inList) {
-        $html[] = '</ul>';
-    }
-
-    return implode("\n", $html);
-}
-
-/**
- * Convert safe inline Markdown emphasis and code spans for patch notes.
- *
- * @param string $text Text value.
- * @return string Text result for the caller.
- */
-function application_patch_notes_inline_markdown(string $text): string
-{
-    // $escaped stores HTML-safe text before tiny Markdown replacements are applied.
-    $escaped = e($text);
-    $escaped = preg_replace('/`([^`]+)`/', '<code>$1</code>', $escaped) ?? $escaped;
-    $escaped = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $escaped) ?? $escaped;
-    return $escaped;
 }

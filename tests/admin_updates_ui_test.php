@@ -77,7 +77,7 @@ namespace Gallery\Services {
     /** Supply offline release history. @param ?string $branch Requested branch. @param int $ttl Compatibility lifetime. @return array<string,mixed> Fixture notes. */
     function application_patch_notes_viewer_data(?string $branch, int $ttl): array
     {
-        return ['source' => 'local', 'versions' => ['0.113.1' => ['title' => 'Version 0.113.1', 'html' => '<p>Activated release notes</p>'], '0.112.0' => ['title' => 'Version 0.112.0', 'html' => '<p>Old notes</p>']]];
+        return ['source' => 'local', 'versions' => ['0.113.1' => ['title' => 'Version 0.113.1', 'markdown' => 'Activated release notes. Ref: [#101](https://github.com/klusik/PHP_gallery/issues/101).', 'html' => '<p>Stale cached HTML</p>'], '0.112.0' => ['title' => 'Version 0.112.0', 'markdown' => 'Old notes']]];
     }
     /** Normalize a fixture version. @param string $version Requested version. @return ?string Version identifier. */
     function application_update_normalize_version(string $version): ?string { return $version; }
@@ -129,6 +129,11 @@ namespace {
     update_ui_assert(str_contains($fragment['notes_html'], 'Activated release notes') && str_contains($fragment['notes_html'], 'value="0.113.1" data-patch-notes-input'), 'Completion must select and display newly installed notes.');
     update_ui_assert(str_contains($fragment['notes_html'], 'is-installed') && $fragment['notes_count'] === 2, 'Completion must refresh picker badges and history together.');
     update_ui_assert(str_contains($fragment['html'], 'action="/index.php?page=admin_update"'), 'Refreshed forms must preserve the updater endpoint inside public-page drawers.');
+
+    $notesModel = \Gallery\Controllers\cms_update_patch_notes_model(['branch' => 'main']);
+    $notesFragment = \Gallery\Controllers\cms_render_update_patch_notes_fragment($notesModel);
+    update_ui_assert(str_contains($notesFragment, 'href="https://github.com/klusik/PHP_gallery/issues/101" target="_blank"'), 'Controller-prepared patch notes must expose issue links in the AJAX fragment.');
+    update_ui_assert(!str_contains($notesFragment, 'Stale cached HTML'), 'Patch-note fragments must render Markdown instead of old cached markup.');
 
     $model = array_merge($pending, [
         'repository' => 'klusik/PHP_gallery',
