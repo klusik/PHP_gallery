@@ -227,6 +227,8 @@ return [
     'language.english' => 'English',
     'language.czech' => 'Česky',
     'gallery.actions' => 'Akce galerie',
+    'simbrief.ofp.view' => 'Zobrazit letový plán (OFP)',
+    'simbrief.ofp.download' => 'Stáhnout OFP PDF',
     'gallery.download' => 'Stáhnout galerii',
     'gallery.show_map' => 'Zobrazit mapu galerie',
     'gallery.play_picture_game' => 'Spustit obrázkovou hru',

@@ -224,6 +224,8 @@ return [
     'admin.gallery_editor.nsfw_change_inspection_failed' => 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.',
     'admin.gallery_editor.nsfw_change_migration_required' => 'NSFW Guard was not changed because its database migration has not been applied.',
     'gallery.actions' => 'Gallery actions',
+    'simbrief.ofp.view' => 'View flight plan (OFP)',
+    'simbrief.ofp.download' => 'Download OFP PDF',
     'gallery.download' => 'Download gallery',
     'gallery.show_map' => 'Show gallery map',
     'gallery.play_picture_game' => 'Play picture game',

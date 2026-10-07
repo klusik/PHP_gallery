@@ -161,6 +161,8 @@ return [
     'admin.gallery_editor.nsfw_change_inspection_failed' => 'NSFW Guard ändrades inte eftersom det nödvändiga databasschemat inte kunde kontrolleras. Kontrollera Systemhälsa och försök igen.',
     'admin.gallery_editor.nsfw_change_migration_required' => 'NSFW Guard ändrades inte eftersom dess databasmigrering ännu inte har körts.',
     'gallery.actions' => 'Galleriåtgärder',
+    'simbrief.ofp.view' => 'Visa färdplan (OFP)',
+    'simbrief.ofp.download' => 'Ladda ned OFP-PDF',
     'gallery.download' => 'Ladda ner galleri',
     'gallery.show_map' => 'Visa gallerikarta',
     'gallery.play_picture_game' => 'Starta bildduell',

@@ -161,6 +161,8 @@ return [
     'admin.gallery_editor.nsfw_change_inspection_failed' => 'NSFW Guard wurde nicht geändert, weil das erforderliche Datenbankschema nicht geprüft werden konnte. Prüfen Sie den Systemstatus und versuchen Sie es erneut.',
     'admin.gallery_editor.nsfw_change_migration_required' => 'NSFW Guard wurde nicht geändert, weil die zugehörige Datenbankmigration noch nicht angewendet wurde.',
     'gallery.actions' => 'Galerieaktionen',
+    'simbrief.ofp.view' => 'Flugdurchführungsplan (OFP) anzeigen',
+    'simbrief.ofp.download' => 'OFP-PDF herunterladen',
     'gallery.download' => 'Galerie herunterladen',
     'gallery.show_map' => 'Galeriekarte anzeigen',
     'gallery.play_picture_game' => 'Bilder-Spiel spielen',
