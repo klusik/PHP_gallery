@@ -46,8 +46,9 @@ export function setupSimbriefOfpViewer() {
     document.addEventListener('submit', async (event) => {
         const form = event.target instanceof HTMLFormElement
             ? event.target.closest('[data-ofp-convert-form]') : null;
-        if (!form || form.dataset.ofpConverting === '1') return;
+        if (!form) return;
         event.preventDefault();
+        if (form.dataset.ofpConverting === '1') return;
         const button = form.querySelector('button[type="submit"]');
         const output = form.querySelector('[data-ofp-convert-result]');
         form.dataset.ofpConverting = '1';
