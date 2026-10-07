@@ -180,7 +180,9 @@ Do not mechanically rewrite historical version references. For schema changes, d
 
 ### 4. Build the manuals and check compilation
 
-After the final manual source edit, rebuild the tracked PDF according to `docs/LATEX_BUILD.md`:
+During ordinary development, maintain the Markdown/LaTeX sources and keep all four manual source editions aligned without rebuilding PDFs after each change. Tracked PDFs may lag behind draft sources until this final release phase; routine documentation edits do not require a local TeX installation.
+
+After all release source, documentation and metadata edits are complete, build all four tracked PDFs together once before the final integrity manifest and exact-candidate qualification. The GitHub-hosted release preparation workflow owns this batch build. For an explicitly requested local release build or diagnosis of a concrete compiler/layout failure, use `docs/LATEX_BUILD.md`:
 
 ```text
 cd docs

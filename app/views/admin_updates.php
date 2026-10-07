@@ -43,6 +43,171 @@ use function Gallery\Core\render_admin_tabs;
 use function Gallery\Services\t;
 
 /**
+ * Convert the limited PATCH_NOTES.md syntax into safe admin HTML.
+ *
+ * @param string $markdown Markdown value.
+ * @return string Text result for the caller.
+ */
+function view_update_patch_notes_markdown_html(string $markdown): string
+{
+    if ($markdown === '') {
+        return '<p class="muted">' . e(t('admin.updates.patch_notes_empty', 'No patch notes were found for this version.')) . '</p>';
+    }
+
+    // $html stores the generated safe HTML fragments.
+    $html = [];
+    // $inList tracks whether a Markdown list is currently open.
+    $inList = false;
+    // $inCode tracks whether a fenced code section is currently open.
+    $inCode = false;
+    // $codeLines stores raw lines inside a fenced code section.
+    $codeLines = [];
+
+    foreach (preg_split('/\R/u', $markdown) ?: [] as $line) {
+        // $rawLine stores the unmodified Markdown line for code fences.
+        $rawLine = (string) $line;
+        // $trimmed stores a whitespace-trimmed copy for syntax checks.
+        $trimmed = trim($rawLine);
+
+        if (str_starts_with($trimmed, '```')) {
+            if ($inCode) {
+                $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
+                $codeLines = [];
+                $inCode = false;
+            } else {
+                if ($inList) {
+                    $html[] = '</ul>';
+                    $inList = false;
+                }
+                $inCode = true;
+            }
+            continue;
+        }
+
+        if ($inCode) {
+            $codeLines[] = $rawLine;
+            continue;
+        }
+
+        if ($trimmed === '') {
+            if ($inList) {
+                $html[] = '</ul>';
+                $inList = false;
+            }
+            continue;
+        }
+
+        if (preg_match('/^(#{3,6})\s+(.+)$/', $trimmed, $headingMatch)) {
+            if ($inList) {
+                $html[] = '</ul>';
+                $inList = false;
+            }
+            // $level stores a bounded heading level suitable inside the update panel.
+            $level = min(5, max(3, strlen((string) $headingMatch[1])));
+            $html[] = '<h' . $level . '>' . view_update_patch_notes_inline_markdown((string) $headingMatch[2]) . '</h' . $level . '>';
+            continue;
+        }
+
+        if (preg_match('/^[-*]\s+(.+)$/', $trimmed, $listMatch)) {
+            if (!$inList) {
+                $html[] = '<ul>';
+                $inList = true;
+            }
+            $html[] = '<li>' . view_update_patch_notes_inline_markdown((string) $listMatch[1]) . '</li>';
+            continue;
+        }
+
+        if ($inList) {
+            $html[] = '</ul>';
+            $inList = false;
+        }
+        $html[] = '<p>' . view_update_patch_notes_inline_markdown($trimmed) . '</p>';
+    }
+
+    if ($inCode) {
+        $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
+    }
+    if ($inList) {
+        $html[] = '</ul>';
+    }
+
+    return implode("\n", $html);
+}
+
+/**
+ * Protect one safe HTTP(S) anchor or escaped rejected markup from later formatting.
+ *
+ * @param string $url HTML-escaped URL captured from the source Markdown.
+ * @param string $label Escaped caption, possibly containing protected code tokens.
+ * @param string $fallback Escaped original markup for a rejected target.
+ * @param array<string,string> $linkTokens Mutable map of protected inline fragments.
+ * @param string $prefix Unique prefix for the current inline render.
+ * @return string Opaque fragment token restored after emphasis formatting.
+ */
+function view_update_patch_notes_link_token(string $url, string $label, string $fallback, array &$linkTokens, string $prefix): string
+{
+    // Undo the renderer's escape, then resolve entities written in the source URL.
+    $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $parts = parse_url($url);
+    $html = $fallback;
+    if (preg_match('~^https?://~i', $url) === 1
+        && preg_match('/[\x00-\x20<>]/u', $url) !== 1
+        && strpbrk($url, "\"'") === false
+        && !str_contains($url, $prefix)
+        && is_array($parts) && !empty($parts['host'])) {
+        $label = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $label) ?? $label;
+        $html = '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer">' . $label . '</a>';
+    }
+    $token = $prefix . 'L' . count($linkTokens) . 'Z';
+    $linkTokens[$token] = $html;
+    return $token;
+}
+
+/**
+ * Render safe inline patch-note links, emphasis and literal code spans.
+ *
+ * @param string $text Raw inline Markdown from a release-note section.
+ * @return string Escaped HTML with HTTP(S) links opened in a new tab.
+ */
+function view_update_patch_notes_inline_markdown(string $text): string
+{
+    // Protect code and complete anchors before emphasis can modify URL bytes.
+    $prefix = 'PATCHNOTES' . bin2hex(random_bytes(8)) . 'X';
+    $codeTokens = [];
+    $linkTokens = [];
+    $escaped = e($text);
+    $escaped = preg_replace_callback('/`([^`]+)`/u', static function (array $match) use (&$codeTokens, $prefix): string {
+        $token = $prefix . 'C' . count($codeTokens) . 'Z';
+        $codeTokens[$token] = '<code>' . $match[1] . '</code>';
+        return $token;
+    }, $escaped) ?? $escaped;
+    // Support Markdown references and one level of balanced URL parentheses.
+    $escaped = preg_replace_callback('~\[([^\]\r\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)~u',
+        static function (array $match) use (&$linkTokens, $prefix): string {
+            return view_update_patch_notes_link_token($match[2], $match[1], $match[0], $linkTokens, $prefix);
+        }, $escaped) ?? $escaped;
+    $escaped = preg_replace_callback('~&lt;(https?://[^\s<>]+?)&gt;~iu',
+        static function (array $match) use (&$linkTokens, $prefix): string {
+            return view_update_patch_notes_link_token($match[1], $match[1], $match[0], $linkTokens, $prefix);
+        }, $escaped) ?? $escaped;
+    // Stop at escaped HTML delimiters and protected code, and retain prose punctuation.
+    $barePattern = '~https?://(?:(?!' . preg_quote($prefix, '~') . '|&(?:lt|gt|quot);|&#(?:0*39|x0*27);)[^\s<>])+~iu';
+    $escaped = preg_replace_callback($barePattern, static function (array $match) use (&$linkTokens, $prefix): string {
+        $url = rtrim($match[0], '.,!');
+        foreach ([')' => '(', ']' => '[', '}' => '{'] as $closing => $opening) {
+            while (str_ends_with($url, $closing) && substr_count($url, $closing) > substr_count($url, $opening)) {
+                $url = substr($url, 0, -1);
+            }
+        }
+        return view_update_patch_notes_link_token($url, $url, $url, $linkTokens, $prefix) . substr($match[0], strlen($url));
+    }, $escaped) ?? $escaped;
+    $escaped = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $escaped) ?? $escaped;
+    // Restore captions before their code tokens; never parse generated HTML again.
+    return strtr(strtr($escaped, $linkTokens), $codeTokens);
+}
+
+/**
  * Render only the currently selected patch notes section.
  *
  * @param array<string, mixed> $patchNotesModel Controller-prepared patch notes model.
@@ -72,7 +237,7 @@ function view_render_update_patch_notes_fragment(array $patchNotesModel): string
         if (!empty($selectedEntry['released_label'])) {
             echo '<p class="muted patch-notes-release-label">' . e(t('admin.updates.patch_notes_released', 'Released: {date}', ['date' => (string) $selectedEntry['released_label']])) . '</p>';
         }
-        echo (string) ($selectedEntry['html'] ?? '');
+        echo view_update_patch_notes_markdown_html((string) ($selectedEntry['markdown'] ?? ''));
         echo '</article>';
     } else {
         echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_unavailable', 'No patch notes are available yet.')) . '</p>';

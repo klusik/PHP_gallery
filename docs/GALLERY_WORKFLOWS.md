@@ -139,6 +139,10 @@ the reusable matrix with the exact prepared candidate SHA and previous-tag sourc
 base. The final `Release qualification gate` succeeds only when preparation and
 the complete reusable matrix succeed. This stage still does not merge, tag or
 publish.
+During ordinary development, edit the Markdown/LaTeX sources without compiling PDFs
+after each change. All four manual source editions stay aligned, while tracked PDFs
+may lag until the final hosted release preparation builds them together before the manifest.
+
 Before AI/TeX, the caller invokes the centrally owned `release-preflight` static profile;
 the final exact-SHA matrix remains complete. TinyTeX provisioning uses the checksum-locked
 2026.02 / TeX Live 2025 final toolchain, never a rolling package repository.
