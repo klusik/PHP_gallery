@@ -21,6 +21,16 @@ on:
         required: false
         type: string
         default: full
+      checkout_ref:
+        description: Exact commit SHA/ref to qualify; direct CI defaults to the event SHA.
+        required: false
+        type: string
+        default: ''
+      source_base:
+        description: Explicit Git comparison base used by source-policy/documentation checks.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -29,7 +39,7 @@ permissions:
 env:
   # PRs compare against the target SHA; pushes include every commit since the prior head.
   # Manual runs compare against the first parent. Missing history blocks the source audit.
-  PHP_GALLERY_SOURCE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
+  PHP_GALLERY_SOURCE_BASE: ${{ inputs.source_base || github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
   # Preserve bounded packaging child timings when a full audit fails or times out.
   PHP_GALLERY_DEPLOY_TEST_TIMINGS: '1'
 
@@ -44,6 +54,8 @@ jobs:
         os: [ubuntu-24.04, windows-2025, macos-latest]
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
@@ -116,6 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
@@ -160,6 +173,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
@@ -207,6 +221,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
@@ -249,6 +264,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:

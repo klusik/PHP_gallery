@@ -2,10 +2,12 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/release-qualification.yml
 # Module Type: Release Qualification Workflow
-# Purpose: Qualify an already prepared release branch entirely on GitHub-hosted runners.
+# Purpose: Prepare and qualify a release branch entirely on GitHub-hosted runners.
 # Responsibilities:
-#   - Validate immutable release inputs before expensive CI starts
-#   - Reuse the existing central CI workflow with one authoritative release audit
+#   - Validate mutable release branch identity before repository writes
+#   - Apply deterministic release preparation and commit it back only to the same release branch
+#   - Stop at the editorial patch-note gate until release notes are complete
+#   - Reuse the existing central CI workflow against the exact prepared candidate SHA
 #   - Expose one aggregate release qualification gate
 # Author: Rudolf Klusal
 name: Release qualification
@@ -29,13 +31,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Release preflight
+  prepare:
+    name: Prepare release candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
+    permissions:
+      contents: write
     outputs:
-      version: ${{ steps.release.outputs.version }}
-      candidate_sha: ${{ steps.release.outputs.candidate_sha }}
+      version: ${{ steps.final.outputs.version }}
+      candidate_sha: ${{ steps.final.outputs.candidate_sha }}
+      source_base: ${{ steps.release.outputs.source_base }}
+      ready: ${{ steps.final.outputs.ready }}
+      preparation_changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -53,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
-            echo "Release qualification must run from a branch." >&2
+            echo "Release preparation must run from a branch." >&2
             exit 1
           fi
           if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v_((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.((0|[1-9][0-9]*)))?)$ ]]; then
@@ -66,48 +73,176 @@ jobs:
             exit 1
           fi
           if git show-ref --verify --quiet "refs/tags/v_${version}"; then
-            echo "Refusing qualification because immutable tag v_${version} already exists." >&2
+            echo "Refusing preparation because immutable tag v_${version} already exists." >&2
             exit 1
           fi
+          base_tag="$(git describe --tags --abbrev=0 --match='v_*' "${GITHUB_SHA}")"
+          source_base="$(git rev-parse "${base_tag}^{commit}")"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "candidate_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-      - name: Require frozen release inputs
+          echo "base_tag=${base_tag}" >> "${GITHUB_OUTPUT}"
+          echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
+      - name: Apply deterministic release preparation
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          php scripts/generate_production_files.php --check
-          php scripts/generate_manifest.php --check
-          php scripts/check_release.php "${RELEASE_VERSION}"
-      - name: Publish preflight summary
+          php .github/scripts/prepare_release_candidate.php "${RELEASE_VERSION}"
+          php scripts/generate_production_files.php
+          php scripts/generate_manifest.php
+      - id: notes
+        name: Check editorial release notes
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
+          set -euo pipefail
+          if php -r '
+            require "scripts/release_lib.php";
+            $section = \PhpGallery\Release\patch_notes_section(getcwd(), $argv[1]);
+            exit($section !== null
+              && !str_contains($section, "RELEASE_NOTES_TODO")
+              && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
+          ' "${RELEASE_VERSION}"; then
+            echo "complete=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "complete=false" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Install LaTeX for completed release notes
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-lang-european texlive-lang-czechslovak \
+            texlive-lang-german lmodern
+      - name: Build all maintained manuals
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd docs
+          for base in PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV; do
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            makeindex "${base}.idx"
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+          done
+      - name: Refresh final integrity data after manual build
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          php scripts/generate_production_files.php
+          php scripts/generate_manifest.php
+      - id: commit
+        name: Commit deterministic preparation to the release branch
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          ORIGINAL_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          allowed='^(app/bootstrap\.php|app/core-manifest\.json|app/production-files\.json|README\.md|TESTING\.md|DATABASE\.md|ARCHITECTURE\.md|PATCH_NOTES\.md|release-metadata\.json|docs/PHP_Gallery_Manual(_CZ|_DE|_SV)?\.(tex|pdf))$'
+          unexpected="$(
+            git status --porcelain=v1 --untracked-files=all |
+              sed -E 's/^.. //' |
+              grep -Ev "${allowed}" || true
+          )"
+          if [[ -n "${unexpected}" ]]; then
+            echo "Release preparation produced unexpected workspace paths:" >&2
+            printf '%s\n' "${unexpected}" >&2
+            exit 1
+          fi
+
+          git add -- \
+            app/bootstrap.php app/core-manifest.json app/production-files.json \
+            README.md TESTING.md DATABASE.md ARCHITECTURE.md PATCH_NOTES.md release-metadata.json \
+            docs/PHP_Gallery_Manual.tex docs/PHP_Gallery_Manual.pdf \
+            docs/PHP_Gallery_Manual_CZ.tex docs/PHP_Gallery_Manual_CZ.pdf \
+            docs/PHP_Gallery_Manual_DE.tex docs/PHP_Gallery_Manual_DE.pdf \
+            docs/PHP_Gallery_Manual_SV.tex docs/PHP_Gallery_Manual_SV.pdf
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "chore(release): prepare v_${RELEASE_VERSION}"
+
+          git fetch origin "${GITHUB_REF_NAME}"
+          remote_sha="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
+          if [[ "${remote_sha}" != "${ORIGINAL_SHA}" ]]; then
+            echo "Release branch changed during preparation; refusing stale write-back." >&2
+            exit 1
+          fi
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+      - id: final
+        name: Verify prepared candidate state
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          NOTES_COMPLETE: ${{ steps.notes.outputs.complete }}
+          PREPARED_SHA: ${{ steps.commit.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=${PREPARED_SHA}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${NOTES_COMPLETE}" != "true" ]]; then
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+            {
+              echo "### Release preparation"
+              echo ""
+              echo "- Version: \`${RELEASE_VERSION}\`"
+              echo "- Candidate SHA: \`${PREPARED_SHA}\`"
+              echo "- Deterministic preparation: committed"
+              echo "- Editorial patch notes: **pending**"
+              echo "- Qualification matrix: not started"
+              echo ""
+              echo "Complete the \`PATCH_NOTES.md\` section for Version ${RELEASE_VERSION} and push it to this release branch."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          php scripts/generate_production_files.php --check
+          php scripts/generate_manifest.php --check
+          php scripts/check_release.php "${RELEASE_VERSION}"
+          echo "ready=true" >> "${GITHUB_OUTPUT}"
           {
-            echo "### Release qualification preflight"
+            echo "### Release preparation"
             echo ""
             echo "- Version: \`${RELEASE_VERSION}\`"
-            echo "- Branch: \`${GITHUB_REF_NAME}\`"
-            echo "- Candidate SHA: \`${GITHUB_SHA}\`"
+            echo "- Candidate SHA: \`${PREPARED_SHA}\`"
             echo "- Production inventory: current"
             echo "- Integrity manifest: current"
             echo "- Release consistency: passed"
+            echo "- Editorial patch notes: complete"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   qualification:
     name: Complete release matrix
-    needs: validate
+    needs: prepare
+    if: ${{ needs.prepare.outputs.ready == 'true' }}
     uses: ./.github/workflows/gallery-workflows.yml
     with:
       audit_profile: release
+      checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
+      source_base: ${{ needs.prepare.outputs.source_base }}
 
   release-gate:
     name: Release qualification gate
     if: ${{ always() }}
     needs:
-      - validate
+      - prepare
       - qualification
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -115,22 +250,32 @@ jobs:
       - name: Summarize aggregate qualification
         shell: bash
         env:
-          PREFLIGHT_RESULT: ${{ needs.validate.result }}
+          PREPARATION_RESULT: ${{ needs.prepare.result }}
+          READY: ${{ needs.prepare.outputs.ready }}
           MATRIX_RESULT: ${{ needs.qualification.result }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          CANDIDATE_SHA: ${{ needs.validate.outputs.candidate_sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
         run: |
           {
             echo "### Release qualification gate"
             echo ""
             echo "- Version: \`${RELEASE_VERSION:-unresolved}\`"
             echo "- Candidate SHA: \`${CANDIDATE_SHA:-unresolved}\`"
-            echo "- Preflight: **${PREFLIGHT_RESULT}**"
+            echo "- Preparation: **${PREPARATION_RESULT}**"
+            echo "- Release inputs ready: **${READY:-false}**"
             echo "- Full release matrix: **${MATRIX_RESULT}**"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if [[ "${PREFLIGHT_RESULT}" != "success" || "${MATRIX_RESULT}" != "success" ]]; then
-            echo "Release qualification did not pass." >&2
+          if [[ "${PREPARATION_RESULT}" != "success" ]]; then
+            echo "Release preparation failed." >&2
+            exit 1
+          fi
+          if [[ "${READY}" != "true" ]]; then
+            echo "Release preparation is committed, but editorial release notes are still pending." >&2
+            exit 1
+          fi
+          if [[ "${MATRIX_RESULT}" != "success" ]]; then
+            echo "Release qualification matrix did not pass." >&2
             exit 1
           fi
 

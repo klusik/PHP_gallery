@@ -228,8 +228,10 @@ namespace {
         'Workflow-global browser disablement would invalidate required Chromium coverage.');
     check(str_contains($workflowHeader, 'workflow_call:')
         && str_contains($workflowHeader, 'audit_profile:')
+        && str_contains($workflowHeader, 'checkout_ref:')
+        && str_contains($workflowHeader, 'source_base:')
         && str_contains($workflowHeader, 'default: full'),
-        'The central CI workflow must remain reusable with full as its safe default profile.');
+        'The central CI workflow must remain reusable with full as its safe default profile and explicit release SHA/base inputs.');
     $jobBlocks = [];
     preg_match_all('/^  ([a-z][a-z0-9-]+):\s*\n(.*?)(?=^  [a-z][a-z0-9-]+:\s*\n|\z)/ms', $workflow, $jobMatches, PREG_SET_ORDER);
     foreach ($jobMatches as $jobMatch) {
@@ -274,15 +276,20 @@ namespace {
     $releaseWorkflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml');
     check(str_contains($releaseWorkflow, "      - 'release/v_*'")
         && str_contains($releaseWorkflow, 'workflow_dispatch:')
-        && str_contains($releaseWorkflow, 'php scripts/generate_production_files.php --check')
-        && str_contains($releaseWorkflow, 'php scripts/generate_manifest.php --check')
-        && str_contains($releaseWorkflow, 'php scripts/check_release.php')
+        && str_contains($releaseWorkflow, 'name: Prepare release candidate')
+        && str_contains($releaseWorkflow, 'contents: write')
+        && str_contains($releaseWorkflow, 'prepare_release_candidate.php')
+        && str_contains($releaseWorkflow, 'Release branch changed during preparation; refusing stale write-back.')
+        && str_contains($releaseWorkflow, 'Editorial patch notes: **pending**')
         && str_contains($releaseWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
         && str_contains($releaseWorkflow, 'audit_profile: release')
+        && str_contains($releaseWorkflow, 'checkout_ref:')
+        && str_contains($releaseWorkflow, 'source_base:')
         && str_contains($releaseWorkflow, 'name: Release qualification gate')
-        && str_contains($releaseWorkflow, 'permissions:')
-        && str_contains($releaseWorkflow, 'contents: read'),
-        'Release workflow must validate a frozen release branch, reuse central CI and expose a read-only aggregate gate.');
+        && !str_contains($releaseWorkflow, 'refs/heads/main')
+        && !str_contains($releaseWorkflow, 'gh release create')
+        && !str_contains($releaseWorkflow, 'git tag '),
+        'Release workflow must write back only deterministic preparation to its release branch, preserve the editorial gate, reuse central CI and avoid main/tag/publication actions.');
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
