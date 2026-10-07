@@ -1,0 +1,46 @@
+# Temporary PR #105 deterministic generator. Removed after green CI.
+name: PR105 runtime ratchet candidate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: write
+jobs:
+  runtime:
+    if: ${{ github.event.pull_request.number == 105 && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Regenerate runtime and integrity plans
+        run: |
+          php scripts/generate_runtime_modules.php
+          php scripts/generate_manifest.php
+          php scripts/generate_runtime_modules.php --check
+          php scripts/generate_manifest.php --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr105-runtime-ratchet-candidate
+          path: |
+            app/runtime/modules.php
+            app/core-manifest.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Verify runtime decomposition ratchet
+        run: php tests/runtime_plan_ratchet_test.php
+      - name: Commit validated generated sources to PR branch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/runtime/modules.php app/core-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(runtime): update shared OFP module composition (#103)'
+            git push origin HEAD:${{ github.head_ref }}
+          fi
