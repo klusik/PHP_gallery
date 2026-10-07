@@ -28,6 +28,13 @@ require_once dirname(__DIR__, 2) . '/scripts/release_lib.php';
 use function PhpGallery\Release\patch_notes_section;
 use function PhpGallery\Release\valid_version;
 
+/**
+ * Run one Git command for release evidence and return bounded stdout.
+ *
+ * @param list<string> $command Argument-vector Git command executed without a shell.
+ * @param int $maxBytes Maximum accepted stdout size in bytes.
+ * @return string Command stdout.
+ */
 function patch_notes_ai_git(array $command, int $maxBytes): string
 {
     $process = proc_open(
@@ -60,6 +67,13 @@ function patch_notes_ai_git(array $command, int $maxBytes): string
     return $stdout;
 }
 
+/**
+ * Return the previous stable release section for use only as a style sample.
+ *
+ * @param string $root Repository root.
+ * @param string $baseTag Previous stable tag in v_X.Y or v_X.Y.Z form.
+ * @return string Previous release Markdown section, or an empty string when unavailable.
+ */
 function patch_notes_ai_previous_section(string $root, string $baseTag): string
 {
     if (!str_starts_with($baseTag, 'v_')) {
@@ -72,6 +86,14 @@ function patch_notes_ai_previous_section(string $root, string $baseTag): string
     return patch_notes_section($root, $version) ?? '';
 }
 
+/**
+ * Build the bounded Copilot prompt from immutable Git comparison evidence.
+ *
+ * @param string $version Target release version.
+ * @param string $baseTag Previous stable release tag.
+ * @param string $repository Repository identity in owner/name form.
+ * @return string Complete text-only prompt for release-note generation.
+ */
 function patch_notes_ai_build_prompt(string $version, string $baseTag, string $repository): string
 {
     if (!valid_version($version)) {
@@ -187,6 +209,13 @@ Now return only the final Markdown section for Version {$version}.
 PROMPT;
 }
 
+/**
+ * Validate and normalize one model-produced target-version Markdown section.
+ *
+ * @param string $version Target release version.
+ * @param string $response Raw Copilot response.
+ * @return string Validated Markdown ending with one newline.
+ */
 function patch_notes_ai_validate_response(string $version, string $response): string
 {
     if (!valid_version($version)) {
@@ -228,6 +257,13 @@ function patch_notes_ai_validate_response(string $version, string $response): st
     return $response . "\n";
 }
 
+/**
+ * Apply validated generated notes only when the target section is still incomplete.
+ *
+ * @param string $version Target release version.
+ * @param string $responsePath Path to the captured Copilot Markdown response.
+ * @return void
+ */
 function patch_notes_ai_apply(string $version, string $responsePath): void
 {
     $root = dirname(__DIR__, 2);
