@@ -5,14 +5,16 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 permissions:
-  contents: read
+  contents: write
 jobs:
   snapshot:
-    if: ${{ github.event.pull_request.number == 105 }}
+    if: ${{ github.event.pull_request.number == 105 && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
@@ -23,6 +25,16 @@ jobs:
           php scripts/generate_manifest.php
           php scripts/generate_runtime_modules.php --check
           php scripts/generate_manifest.php --check
+      - name: Commit generated sources to PR head
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/runtime/modules.php app/core-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(runtime): regenerate module plan and integrity hashes (#103)'
+            git push origin HEAD:${{ github.head_ref }}
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: pr105-generated-runtime-plan
