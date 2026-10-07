@@ -174,16 +174,20 @@ const html = String.raw`<!doctype html>
       await waitUntil(() => zoom() === 'Zoom 125%' && settled(), 'zoom-in control');
       check(!active('fit-page') && !active('fit-width'), 'Manual zoom still indicates auto fit');
       const originalWidth = canvas().getBoundingClientRect().width;
-      stage().scrollTo({top: 40});
-      const originalPan = stage().scrollTop;
+      stage().scrollTo({top: 40, behavior: 'instant'});
       await pause(100);
+      const originalPan = stage().scrollTop;
+      check(originalPan > 0, 'Manual zoom does not allow expected vertical panning');
       previousRender = rendered;
       document.querySelector('dialog').style.height = '480px';
       await pause(160);
       check(rendered === previousRender, 'Manual zoom rerendered after ordinary resize');
       check(Math.abs(canvas().getBoundingClientRect().width - originalWidth) < 1,
           'Manual zoom scale changed after ordinary resize');
-      check(stage().scrollTop >= originalPan - 2, 'Manual pan reset after resize');
+      check(stage().scrollTop >= Math.min(originalPan, Math.max(0, stage().scrollHeight - stage().clientHeight)) - 2,
+          'Manual pan reset after resize: before=' + originalPan + ', after=' + stage().scrollTop
+          + ', scrollHeight=' + stage().scrollHeight + ', clientHeight=' + stage().clientHeight
+          + ', rendered=' + rendered);
 
       previousRender = rendered;
       button('reset').click();
