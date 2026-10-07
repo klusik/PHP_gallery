@@ -73,10 +73,10 @@ case "${mode}" in
             [[ -z "${package}" || "${package}" == \#* ]] && continue
             grep -Fxq "name ${package}" "${tex_root}/tlpkg/texlive.tlpdb" || { echo "Missing locked package: ${package}" >&2; exit 1; }
         done < "${packages}"
-        for resource in czech.ldf ngerman.ldf swedish.ldf lmodern.sty microtype.sty footmisc.sty titlesec.sty; do
+        for resource in english.ldf czech.ldf ngerman.ldf swedish.ldf lmodern.sty microtype.sty footmisc.sty titlesec.sty; do
             [[ -n "$("${tex_bin}/kpsewhich" "${resource}")" ]] || { echo "Missing manual resource: ${resource}" >&2; exit 1; }
         done
-        "${tex_bin}/pdflatex" --version | head -n 1
+        "${tex_bin}/pdflatex" --version | sed -n '1p'
         echo "${tex_bin}" >> "${GITHUB_PATH}"
         ;;
     *)

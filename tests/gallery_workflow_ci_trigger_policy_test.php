@@ -348,6 +348,14 @@ namespace {
         && !str_contains($texHelper, 'tlnet.yihui.org')
         && !str_contains($texHelper, 'install-bin-unix.sh'),
         'TinyTeX must verify locked downloads, bound network work and refuse live/self-update fallbacks.');
+    $texPackages = (string) file_get_contents(dirname(__DIR__) . '/.github/texlive-packages.txt');
+    foreach (['english', 'czech', 'german', 'swedish'] as $language) {
+        check(str_contains($texPackages, 'babel-' . $language . "\n")
+            && str_contains($texPackages, 'hyphen-' . $language . "\n"),
+            'Every manual language must explicitly own its Babel and hyphenation packages.');
+    }
+    check(str_contains($texHelper, 'english.ldf czech.ldf ngerman.ldf swedish.ldf'),
+        'Cache activation must verify resources for all four manual languages.');
     $verifyStart = strpos($texHelper, '    verify)');
     $verifyEnd = strpos($texHelper, '    *)', $verifyStart === false ? 0 : $verifyStart);
     check($verifyStart !== false && $verifyEnd !== false

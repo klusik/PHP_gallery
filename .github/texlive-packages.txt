@@ -6,6 +6,7 @@
 
 babel
 babel-czech
+babel-english
 babel-german
 babel-swedish
 bookmark
@@ -18,6 +19,7 @@ footmisc
 geometry
 graphics
 hyphen-czech
+hyphen-english
 hyphen-german
 hyphen-swedish
 hyperref
