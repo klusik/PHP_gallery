@@ -839,7 +839,7 @@
         "scripts/gallery_workflow_ci.php": "sha256:7aea08ed58356c3e60990f13f0932e10d5e8ee5b8c916b7fc264ec7f19417c18",
         "scripts/gallery_workflow_mysql.php": "sha256:f0074ac706b9bc5fd8660bf2f10153ccc1ef2511bec4ecbdaf14f80177eab88d",
         "scripts/gallery_workflow_run.php": "sha256:de15cc1a7e9731e262f6c2c339bca2acecd81c9ff57c399d8d5e3762469cb8f8",
-        "scripts/generate_manifest.php": "sha256:6a978875f72ace5f27144ffbacb155ef0ad2efd5473ec53fdc5392c331befca8",
+        "scripts/generate_manifest.php": "sha256:07d3f9704e3d0a02d7b77db40e0686d1e36f3e61703dc91d045192e83c211d7a",
         "scripts/generate_production_files.php": "sha256:9f02204bc3ac2702b3d66f223356d6400fe28f1d7c0e9c57f9b64aecb7a89afc",
         "scripts/generate_runtime_modules.php": "sha256:0f3d01b0ad88ad3ea68aad6023aca01dba0e565f9e3fd6666b5bd0644bcc196b",
         "scripts/generate_source_debt_baseline.php": "sha256:2ffa0c741637af23c0b5b25cf9fdfa29f80c7efa365ba37fe59b7c7b3ac3711d",
