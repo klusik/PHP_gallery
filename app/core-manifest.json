@@ -807,7 +807,7 @@
         "public/assets/telemetry.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/usage.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/vendor/pdfjs/pdf.min.js": "sha256:7662af706ecbf4ae9ba0f4f4ea50636617646c31d6c67aeca2338b1805a11c07",
-        "public/assets/vendor/pdfjs/pdf.worker.min.js": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "public/assets/vendor/pdfjs/pdf.worker.min.js": "sha256:4efa4f25d5f14e309922fb568e3b653ebc53cdb0d60b85bdefd22b30cb0a7a22",
         "public/assets/viewer-anti-automation.js": "sha256:65f07049be85a788734981efc9624f5952ab7d1f31553cb11b9a56373b4fc44c",
         "public/index.php": "sha256:bd0317aafbf247fa71414be98251091644551953ce5ccc464e438e586b51eccb",
         "reset.php": "sha256:27202e2849b07721750fcc4cf9c836a26384dc17f86c5a03d104a24e099e190b",
