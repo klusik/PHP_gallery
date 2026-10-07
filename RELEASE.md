@@ -16,6 +16,19 @@ The release profile already contains the deterministic coverage from `full`, plu
 
 Strict MVC is part of release qualification. The release audit invokes `scripts/check_mvc_boundaries.php` against an intentionally empty baseline. A non-zero MVC finding is a release failure and must be corrected in source; release preparation must not reintroduce legacy baseline debt.
 
+
+## GitHub-hosted release qualification
+
+Issue [#100](https://github.com/klusik/PHP_gallery/issues/100) moves release work toward GitHub-hosted preparation, qualification and publication. The first implemented stage deliberately changes only qualification: an already prepared `release/v_X.Y.Z` branch can be qualified without running the long release audit on a maintainer workstation.
+
+`.github/workflows/release-qualification.yml` runs automatically on pushes to `release/v_*`. It validates the branch/version identity, refuses an already existing immutable `v_X.Y.Z` tag, requires the production inventory and integrity manifest to be current, and runs `scripts/check_release.php` before starting expensive jobs. When preflight passes it reuses `.github/workflows/gallery-workflows.yml` with `audit_profile=release`. Existing platform, database, runtime and required-Chromium jobs remain mandatory, and one additional `Authoritative release audit` job runs exactly `php scripts/audit.php --profile=release`. The caller exposes a single `Release qualification gate` for the complete result.
+
+This stage is intentionally read-only. It does **not** generate editorial patch notes, modify or commit release files, merge to `main`, create tags, publish a GitHub Release, or bypass failed checks. Continue to perform phases 1-6 below before expecting the GitHub qualification to pass. Later #100 phases will move those preparation and publication steps into protected GitHub workflows.
+
+The workflow also supports `workflow_dispatch` for explicit reruns. GitHub only exposes manual dispatch for workflow files present on the repository default branch. During the bootstrap release that first carries this workflow from `develop` to `main`, create/push the prepared `release/v_X.Y.Z` branch and let the push trigger run it automatically. After the workflow exists on `main`, later releases can also use **Actions > Release qualification > Run workflow**, select the release branch, and optionally supply the version as an additional cross-check.
+
+A successful GitHub gate is automated qualification evidence only. Required human/manual acceptance remains separate, and a changed release candidate SHA must be qualified again.
+
 ## Default artifact policy
 
 Normal release preparation does not create a deployment folder, ZIP, packaging staging tree, checksum file or handoff bundle in `deploy/`. Packaging phases below apply only when the user explicitly requests a specific package/archive. Audit and qualification evidence stay in the existing ignored `cache/` locations.

@@ -1,0 +1,137 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/release-qualification.yml
+# Module Type: Release Qualification Workflow
+# Purpose: Qualify an already prepared release branch entirely on GitHub-hosted runners.
+# Responsibilities:
+#   - Validate immutable release inputs before expensive CI starts
+#   - Reuse the existing central CI workflow with one authoritative release audit
+#   - Expose one aggregate release qualification gate
+# Author: Rudolf Klusal
+name: Release qualification
+
+on:
+  push:
+    branches:
+      - 'release/v_*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional X.Y or X.Y.Z cross-check; the selected branch remains authoritative.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Release preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      candidate_sha: ${{ steps.release.outputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - id: release
+        name: Validate release branch identity
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
+            echo "Release qualification must run from a branch." >&2
+            exit 1
+          fi
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v_((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.((0|[1-9][0-9]*)))?)$ ]]; then
+            echo "Expected release/v_X.Y or release/v_X.Y.Z branch, got: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#release/v_}"
+          if [[ -n "${REQUESTED_VERSION}" && "${REQUESTED_VERSION}" != "${version}" ]]; then
+            echo "Requested version ${REQUESTED_VERSION} does not match branch version ${version}." >&2
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/v_${version}"; then
+            echo "Refusing qualification because immutable tag v_${version} already exists." >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+      - name: Require frozen release inputs
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          php scripts/generate_production_files.php --check
+          php scripts/generate_manifest.php --check
+          php scripts/check_release.php "${RELEASE_VERSION}"
+      - name: Publish preflight summary
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          {
+            echo "### Release qualification preflight"
+            echo ""
+            echo "- Version: \`${RELEASE_VERSION}\`"
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Candidate SHA: \`${GITHUB_SHA}\`"
+            echo "- Production inventory: current"
+            echo "- Integrity manifest: current"
+            echo "- Release consistency: passed"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  qualification:
+    name: Complete release matrix
+    needs: validate
+    uses: ./.github/workflows/gallery-workflows.yml
+    with:
+      audit_profile: release
+
+  release-gate:
+    name: Release qualification gate
+    if: ${{ always() }}
+    needs:
+      - validate
+      - qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Summarize aggregate qualification
+        shell: bash
+        env:
+          PREFLIGHT_RESULT: ${{ needs.validate.result }}
+          MATRIX_RESULT: ${{ needs.qualification.result }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          CANDIDATE_SHA: ${{ needs.validate.outputs.candidate_sha }}
+        run: |
+          {
+            echo "### Release qualification gate"
+            echo ""
+            echo "- Version: \`${RELEASE_VERSION:-unresolved}\`"
+            echo "- Candidate SHA: \`${CANDIDATE_SHA:-unresolved}\`"
+            echo "- Preflight: **${PREFLIGHT_RESULT}**"
+            echo "- Full release matrix: **${MATRIX_RESULT}**"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${PREFLIGHT_RESULT}" != "success" || "${MATRIX_RESULT}" != "success" ]]; then
+            echo "Release qualification did not pass." >&2
+            exit 1
+          fi
+
+          echo "Release candidate is eligible for the next promotion stage."

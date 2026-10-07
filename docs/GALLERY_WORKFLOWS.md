@@ -120,6 +120,15 @@ server-global settings. Never repurpose an administrator or production account.
 
 .github/workflows/gallery-workflows.yml creates independent MySQL 8.4, MariaDB
 10.11 and MariaDB 11.4 service containers on port 13316, without host data volumes.
+It is also a reusable workflow. Direct PR/push/manual CI keeps the safe `full`
+profile behavior. `.github/workflows/release-qualification.yml` can call it with
+`audit_profile=release`; that preserves the normal matrix and adds one isolated
+`Authoritative release audit` job running the central `release` profile. The
+release caller first requires an already prepared `release/v_X.Y.Z` branch,
+current production inventory and manifest, and a passing `check_release.php`
+preflight. Its final `Release qualification gate` succeeds only when both the
+preflight and the complete reusable matrix succeed. The release caller remains
+read-only in this first implementation and does not commit, merge, tag or publish.
 The exact PHP representatives and qualification categories are defined in
 [Database support](DATABASE_SUPPORT.md).
 The fixed service bootstrap password is a disposable CI fixture value, not an

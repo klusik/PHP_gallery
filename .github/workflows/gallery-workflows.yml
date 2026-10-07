@@ -14,6 +14,13 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      audit_profile:
+        description: Central audit profile used by reusable release qualification.
+        required: false
+        type: string
+        default: full
 
 permissions:
   contents: read
@@ -139,6 +146,44 @@ jobs:
             cache/test-audit/**/runtime-performance.log
           if-no-files-found: ignore
           retention-days: 7
+
+  release-audit:
+    name: Authoritative release audit
+    if: ${{ inputs.audit_profile == 'release' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      # Browser and real-database coverage are mandatory sibling jobs in the same reusable workflow.
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_SESSION_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          ini-values: error_reporting=E_ALL, display_errors=On
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Authoritative central release audit
+        run: php scripts/audit.php --profile=release
+      - name: Upload authoritative release evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: authoritative-release-audit
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/*
+          if-no-files-found: ignore
+          retention-days: 30
 
   runtime-compatibility:
     name: PHP ${{ matrix.php }} source (${{ matrix.normalization }})

@@ -226,6 +226,10 @@ namespace {
     check(is_string($workflowHeader) && !str_contains($workflowHeader, 'PHP_GALLERY_BROWSER: disabled')
         && !str_contains($workflowHeader, 'GALLERY_WORKFLOW_BROWSER: disabled'),
         'Workflow-global browser disablement would invalidate required Chromium coverage.');
+    check(str_contains($workflowHeader, 'workflow_call:')
+        && str_contains($workflowHeader, 'audit_profile:')
+        && str_contains($workflowHeader, 'default: full'),
+        'The central CI workflow must remain reusable with full as its safe default profile.');
     $jobBlocks = [];
     preg_match_all('/^  ([a-z][a-z0-9-]+):\s*\n(.*?)(?=^  [a-z][a-z0-9-]+:\s*\n|\z)/ms', $workflow, $jobMatches, PREG_SET_ORDER);
     foreach ($jobMatches as $jobMatch) {
@@ -257,6 +261,28 @@ namespace {
         && !str_contains($browserJob, '--no-sandbox')
         && !str_contains($browserJob, 'npm install'),
         'Browser CI must preserve full database/source coverage, sandboxing and the existing dependency-free fixtures.');
+
+    $releaseAuditJob = $jobBlocks['release-audit'] ?? '';
+    check(str_contains($releaseAuditJob, "inputs.audit_profile == 'release'")
+        && str_contains($releaseAuditJob, 'php scripts/audit.php --profile=release')
+        && str_contains($releaseAuditJob, 'PHP_GALLERY_BROWSER: disabled')
+        && str_contains($releaseAuditJob, 'GALLERY_WORKFLOW_BROWSER: disabled')
+        && str_contains($releaseAuditJob, 'authoritative-release-audit')
+        && str_contains($releaseAuditJob, 'retention-days: 30'),
+        'Reusable release qualification must own exactly one explicit release-profile audit and retain its evidence.');
+
+    $releaseWorkflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml');
+    check(str_contains($releaseWorkflow, "      - 'release/v_*'")
+        && str_contains($releaseWorkflow, 'workflow_dispatch:')
+        && str_contains($releaseWorkflow, 'php scripts/generate_production_files.php --check')
+        && str_contains($releaseWorkflow, 'php scripts/generate_manifest.php --check')
+        && str_contains($releaseWorkflow, 'php scripts/check_release.php')
+        && str_contains($releaseWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
+        && str_contains($releaseWorkflow, 'audit_profile: release')
+        && str_contains($releaseWorkflow, 'name: Release qualification gate')
+        && str_contains($releaseWorkflow, 'permissions:')
+        && str_contains($releaseWorkflow, 'contents: read'),
+        'Release workflow must validate a frozen release branch, reuse central CI and expose a read-only aggregate gate.');
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
