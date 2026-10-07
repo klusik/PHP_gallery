@@ -6,7 +6,8 @@
 # Responsibilities:
 #   - Validate mutable release branch identity before repository writes
 #   - Apply deterministic release preparation and commit it back only to the same release branch
-#   - Stop at the editorial patch-note gate until release notes are complete
+#   - Generate missing release-note prose through tightly scoped GitHub Copilot CLI
+#   - Preserve completed maintainer-authored release notes without invoking AI
 #   - Reuse the existing central CI workflow against the exact prepared candidate SHA
 #   - Expose one aggregate release qualification gate
 # Author: Rudolf Klusal
@@ -90,8 +91,8 @@ jobs:
           php .github/scripts/prepare_release_candidate.php "${RELEASE_VERSION}"
           php scripts/generate_production_files.php
           php scripts/generate_manifest.php
-      - id: notes
-        name: Check editorial release notes
+      - id: notes-before
+        name: Check existing editorial release notes
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
@@ -108,6 +109,68 @@ jobs:
           else
             echo "complete=false" >> "${GITHUB_OUTPUT}"
           fi
+      - name: Set up Node.js for AI release notes
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install GitHub Copilot CLI
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        run: npm install -g @github/copilot
+      - name: Build bounded release-note evidence prompt
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          BASE_TAG: ${{ steps.release.outputs.base_tag }}
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai.php prompt \
+            "${RELEASE_VERSION}" "${BASE_TAG}" "${GITHUB_REPOSITORY}" \
+            "${RUNNER_TEMP}/release-notes-prompt.txt"
+      - name: Generate release notes with GPT-6 Luna
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_AUTO_UPDATE: 'false'
+          COPILOT_MODEL: gpt-6-luna
+          GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS: 'false'
+        run: |
+          set -euo pipefail
+          if [[ -z "${COPILOT_GITHUB_TOKEN:-}" ]]; then
+            echo "::error::COPILOT_GITHUB_TOKEN is required for AI release-note generation in this personal repository." >&2
+            exit 1
+          fi
+          copilot -s --model gpt-6-luna --no-ask-user \
+            < "${RUNNER_TEMP}/release-notes-prompt.txt" \
+            > "${RUNNER_TEMP}/release-notes-response.md"
+      - name: Validate and apply generated release notes
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai.php apply \
+            "${RELEASE_VERSION}" "${RUNNER_TEMP}/release-notes-response.md"
+      - id: notes
+        name: Verify editorial release notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          php -r '
+            require "scripts/release_lib.php";
+            $section = \PhpGallery\Release\patch_notes_section(getcwd(), $argv[1]);
+            exit($section !== null
+              && !str_contains($section, "RELEASE_NOTES_TODO")
+              && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
+          ' "${RELEASE_VERSION}"
+          echo "complete=true" >> "${GITHUB_OUTPUT}"
       - name: Install LaTeX for completed release notes
         if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
