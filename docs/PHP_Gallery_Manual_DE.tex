@@ -2174,10 +2174,23 @@ Eine typische Funktionsänderung folgt dieser Abfolge:
   \item Ergänzen Sie nur neue Migrationen, wenn dauerhafte Schemaänderungen erforderlich sind.
   \item Ergänzen Sie übersetzte Oberflächentexte.
   \item Ergänzen Sie gezielte automatisierte Tests und dokumentierte manuelle Prüfung.
-  \item Aktualisieren Sie Architektur, Codeübersicht, Datenbank-, Test- und Benutzerhinweise gemäß jeweiliger Zuständigkeit.
-  \item Erzeugen Sie Integritätsmetadaten nach endgültigen Laufzeitänderungen neu.
-  \item Prüfen Sie den vollständigen Diff und führen Sie die relevante lokale Testsuite aus.
+  \item Aktualisieren Sie dauerhafte Markdown-Referenzen und~alle vier TeX-Handbuchquellen, wenn sich Benutzer-, Admin-, Architektur- oder Entwickleranweisungen ändern.
+  \item Bereiten Sie den endgültigen Quellkandidaten mit \filepath{scripts/prepare_candidate.php} vor, sodass Laufzeitplan, Paketinventar und~Integritätsdaten in~dieser Reihenfolge erneuert werden.
+  \item Prüfen Sie den vollständigen Diff und~verwenden Sie den zentralen Audit \codeword{--profile=full} vor der endgültigen Quellübergabe.
 \end{enumerate}
+
+\subsection{Quellkandidaten für CI vorbereiten}
+
+Während der Entwicklung sind kleine, getrennte Commits erlaubt. Die Qualifikation muss sich jedoch auf~eine konkrete Quellrevision beziehen, zu~der alle generierten Artefakte passen. Dauerhafte technische Dokumentation gehört zur~gleichen Änderungsgruppe. Änderungen an~Administration, Architektur, Laufzeitabhängigkeiten, Sicherheit, Paketierung oder CI erfordern die~Prüfung aller vier TeX-Handbuchquellen, nicht nur der~sichtbaren Benutzeroberfläche. Bei normaler Entwicklung bleiben \filepath{PATCH_NOTES.md} und~die gespeicherten Handbuch-PDFs unverändert.
+
+\begin{enumerate}
+  \item Schließen Sie Quell- und~Dokumentationsänderungen ab. Nehmen Sie neue oder entfernte Produktionsdateien in~den Git-Index auf, damit die~Inventarerzeugung deren Mitgliedschaft berücksichtigt. Passen Sie bei neuen Routen die~geprüften Laufzeitwurzeln und~Abhängigkeitsdeklarationen an.
+  \item Starten Sie \filepath{scripts/prepare_candidate.php}. Zuerst wird \filepath{app/runtime/modules.php} erzeugt, danach \filepath{app/production-files.json} aus dem~Git-Index aktualisiert und~\emph{zuletzt} \filepath{app/core-manifest.json} berechnet. Hashes stammen aus~den vollständigen Dateien des~Checkouts, niemals aus~verkürzten API-Antworten.
+  \item Prüfen Sie alle drei Artefakte schreibgeschützt mit \codeword{php scripts/prepare_candidate.php --check}. Dieselben sachlichen Eingaben erzeugen bei Wiederholung weder neue Inhalte noch einen geänderten Manifest-Zeitstempel. Nach jeder späteren Quellkorrektur muss die~Vorbereitung erneut laufen.
+  \item Committen Sie nur tatsächlich geänderte generierte Dateien und~bewahren Sie die~getrennten Quellcommits. Führen Sie zur~endgültigen Übergabe den maßgeblichen Audit \codeword{php scripts/audit.php --profile=full} für den vorbereiteten Kandidaten aus.
+\end{enumerate}
+
+Der~stabile GitHub-Workflow \filepath{.github/workflows/candidate-preparation.yml} kann Feature- und~Fix-Branches vorbereiten und~die exakte SHA des~veröffentlichten Kandidaten qualifizieren. Er~prüft die~Branchidentität, verweigert veraltete Schreibvorgänge und~führt weder Merge noch Squash oder erzwungene Pushes aus. Das~zentrale schreibgeschützte Gate \codeword{--profile=candidate-preflight} erkennt veraltete Manifeste, Laufzeitpläne, Inventare und~Quellrichtlinienverstöße vor der~aufwendigen CI-Matrix. Prüfungsrunner dürfen fehlende Artefakte nicht stillschweigend reparieren. Die~spätere Release-Vorbereitung aktualisiert nur Handbuchversionen und~Datumsangaben und~kompiliert die~vorhandenen TeX-Quellen zu~PDF; fehlende Fachtexte erstellt sie nicht.
 
 \section{Ihre Galerie vor der Veröffentlichung prüfen}
 \label{sec:testing}

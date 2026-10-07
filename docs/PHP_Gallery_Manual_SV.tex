@@ -2168,10 +2168,23 @@ En typisk funktionsändring följer denna ordning:
   \item Lägg till migreringsarbete enbart genom nya filer där beständiga schemaändringar krävs.
   \item Lägg till översatta gränssnittssträngar.
   \item Lägg till riktade automatiserade tester och dokumenterad manuell verifiering.
-  \item Uppdatera arkitektur, kodkarta, databas, testning och användarvägledning enligt respektive ansvar.
-  \item Generera om integritetsmetadata efter slutliga körningsändringar.
-  \item Granska hela skillnaden och kör relevant lokal testsvit.
+  \item Uppdatera permanenta Markdown-referenser och~alla fyra TeX-manualkällor när aktuella användar-, administratörs-, arkitektur- eller utvecklarinstruktioner ändras.
+  \item Förbered den slutliga källkodskandidaten med \filepath{scripts/prepare_candidate.php}; återskapa körningsplan, paketförteckning och~integritetsdata i~rätt ordning.
+  \item Granska hela ändringen och~använd den centrala granskningen \codeword{--profile=full} före slutlig källkodsöverlämning.
 \end{enumerate}
+
+\subsection{Förbereda källkodskandidater för CI}
+
+Under utvecklingen får ändringar delas upp i~små fristående commits, men kvalificeringen måste gälla en~bestämd källkodsrevision där alla genererade artefakter stämmer överens. Permanent teknisk dokumentation hör till samma ändringsomgång. Ändringar i~administration, arkitektur, körningsberoenden, säkerhet, paketering eller CI kräver granskning av~alla fyra TeX-manualkällor, inte bara synliga användarsidor. Vanligt utvecklingsarbete ändrar varken \filepath{PATCH_NOTES.md} eller de~versionshanterade PDF-manualerna.
+
+\begin{enumerate}
+  \item Slutför källkods- och~dokumentationsändringarna. Lägg till nya eller borttagna produktionsfiler i~Git-indexet så~att inventeringsgeneratorn ser medlemskapet. Justera granskade körningsrötter och~beroendedeklarationer när en~rutts ansvar ändras.
+  \item Kör \filepath{scripts/prepare_candidate.php}. Först genereras \filepath{app/runtime/modules.php}, sedan uppdateras \filepath{app/production-files.json} från Git-indexet och~\emph{sist} beräknas \filepath{app/core-manifest.json}. Hashvärdena bygger på~fullständiga filer i~checkouten, aldrig på~avkortade API-svar.
+  \item Verifiera alla tre artefakter utan skrivning med \codeword{php scripts/prepare_candidate.php --check}. Upprepad förberedelse med oförändrade sakliga indata ändrar varken filer eller manifestets tidsstämpel. Kör förberedelsen på~nytt efter varje senare källkodsrättning.
+  \item Committera endast genererade filer som faktiskt har ändrats och~bevara separata källkodskommittar. Använd den~auktoritativa granskningen \codeword{php scripts/audit.php --profile=full} för slutlig överlämning av~den förberedda kandidaten.
+\end{enumerate}
+
+Det~stabila GitHub-arbetsflödet \filepath{.github/workflows/candidate-preparation.yml} kan förbereda funktions- och~rättningsgrenar och~kvalificera den~publicerade kandidatens exakta SHA. Det~kontrollerar grenens identitet, avvisar föråldrade skrivningar och~gör varken merge, squash eller tvingad push. Den~centrala skrivskyddade kontrollen \codeword{--profile=candidate-preflight} avvisar gamla manifest, körningsplaner, inventeringar och~brott mot källkodspolicyn innan den~kostsamma CI-matrisen startar. Testkörningar får inte tyst reparera saknade artefakter. Senare uppdaterar releaseförberedelsen manualernas versions- och~datummarkörer och~kompilerar befintliga TeX-källor till PDF; den~skriver inte saknade tekniska förklaringar.
 
 \section{Kontrollera galleriet före publicering}
 \label{sec:testing}

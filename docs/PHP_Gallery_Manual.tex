@@ -2190,10 +2190,23 @@ A~typical feature change follows this sequence:
   \item Add append-only migration work where persistent schema changes are~required.
   \item Add translated interface strings.
   \item Add focused automated tests and~documented manual verification.
-  \item Update architecture, code map, database, testing, and~user guidance according to~their ownership.
-  \item Regenerate integrity metadata after final runtime changes.
-  \item Review the~complete diff and~run the~relevant local test suite.
+  \item Update permanent Markdown references and~all~four TeX manual sources whenever current user, administrator, architecture, or~maintainer guidance changes.
+  \item Prepare the~final source candidate through \filepath{scripts/prepare_candidate.php}, regenerating runtime plans, package inventory, and~integrity data in~order.
+  \item Review the~complete diff and~use the~central \codeword{--profile=full} audit for~final source handoff.
 \end{enumerate}
+
+\subsection{Preparing source candidates for~CI}
+
+Atomic source commits are~allowed during development, but~qualification must use a~candidate whose generated artifacts match the~exact source revision. Permanent technical documentation is~part of~the~source edit. Changes to~administrator behavior, architecture, runtime ownership, security, packaging, or~CI also require reviewing all~four TeX manual editions, not~only user-facing pages. Routine development leaves \filepath{PATCH_NOTES.md} and~the~tracked manual PDFs unchanged.
+
+\begin{enumerate}
+  \item Complete authored code and~documentation edits. Stage new or~deleted production paths so~the~inventory generator sees their Git-index membership. Update reviewed runtime roots and~dependency declarations when route ownership changes.
+  \item Run \filepath{scripts/prepare_candidate.php}. It~compiles \filepath{app/runtime/modules.php}, refreshes \filepath{app/production-files.json} from~the~Git index, and~generates \filepath{app/core-manifest.json} \emph{last}. Hashes use complete bytes from~the~checked-out source, never truncated API responses.
+  \item Run \codeword{php scripts/prepare_candidate.php --check} to~verify all~three artifacts without writing them. Repeating preparation on~unchanged substantive inputs is~a~no-op, including for~the~manifest generation timestamp. Repeat preparation after any later source fix.
+  \item Commit only changed generated files alongside the~focused source history. For~final handoff, run the~authoritative \codeword{php scripts/audit.php --profile=full} against the~prepared candidate.
+\end{enumerate}
+
+The~stable GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} can~prepare feature/fix branches and~qualify the~published candidate SHA. It~checks branch identity and~refuses a~stale write, without merging, squashing, or~force-pushing. The~central read-only \codeword{--profile=candidate-preflight} gate rejects stale manifests, runtime plans, inventories, and~source-policy violations before the~expensive CI matrix. Qualification runners must not~repair missing artifacts silently. Release preparation later updates manual version/date markers and~compiles the~existing TeX sources to~PDF; it~does not~write missing documentation prose.
 
 \section{Checking your gallery before publication}
 \label{sec:testing}

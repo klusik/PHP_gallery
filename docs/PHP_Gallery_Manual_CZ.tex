@@ -2168,10 +2168,23 @@ Typická změna funkce postupuje takto:
   \item Pokud jsou nutné změny trvalého schématu, přidejte nové migrace bez změn historie.
   \item Přidejte přeložené řetězce rozhraní.
   \item Přidejte cílené automatické testy a~dokumentované ruční ověření.
-  \item Aktualizujte architekturu, mapu kódu, databázi, testování a~uživatelské pokyny podle jejich vlastnictví.
-  \item Po konečných změnách běhového kódu obnovte metadata integrity.
-  \item Zkontrolujte úplný rozdíl změn a~spusťte příslušnou místní sadu testů.
+  \item Při změně aktuálních uživatelských, administračních, architektonických nebo vývojářských postupů aktualizujte trvalé dokumenty Markdown a~všechny čtyři zdroje příručky TeX.
+  \item Připravte konečného kandidáta pomocí \filepath{scripts/prepare_candidate.php}; postupně obnovte běhový plán, inventář balíčku a~data integrity.
+  \item Zkontrolujte úplný rozdíl změn a~pro konečné předání zdrojů použijte centrální audit \codeword{--profile=full}.
 \end{enumerate}
+
+\subsection{Příprava zdrojového kandidáta pro~CI}
+
+Při vývoji lze vytvářet malé samostatné commity, ale ověření se~musí vztahovat ke~konkrétní revizi zdrojů, se~kterou souhlasí všechny generované soubory. Trvalá technická dokumentace patří do~stejné dávky změn. Změny správy, architektury, běhových závislostí, zabezpečení, balení nebo CI vyžadují kontrolu všech čtyř jazykových zdrojů TeX, nejen uživatelsky viditelných obrazovek. Při běžném vývoji se~nemění \filepath{PATCH_NOTES.md} ani sledované soubory PDF příruček.
+
+\begin{enumerate}
+  \item Dokončete úpravy kódu a~dokumentace. Nové nebo odstraněné produkční soubory přidejte do~Git indexu, aby je generátor inventáře zahrnul. Při změně vlastníka trasy opravte zdrojová pravidla běhových kořenů a~závislostí.
+  \item Spusťte \filepath{scripts/prepare_candidate.php}. Příkaz nejprve sestaví \filepath{app/runtime/modules.php}, potom obnoví \filepath{app/production-files.json} podle Git indexu a~\emph{nakonec} vytvoří \filepath{app/core-manifest.json}. Hash se~počítá z~úplného obsahu souborů v~checkoutu, nikoli z~neúplné odpovědi API.
+  \item Příkazem \codeword{php scripts/prepare_candidate.php --check} ověřte všechny tři artefakty bez zápisu. Opakovaná příprava se~stejnými věcnými vstupy nic nepřepisuje ani nemění čas vytvoření manifestu. Po~každé pozdější opravě zdrojů přípravu zopakujte.
+  \item Commitněte pouze skutečně změněné generované soubory a~zachovejte samostatnou historii zdrojových úprav. Před konečným předáním spusťte autoritativní audit \codeword{php scripts/audit.php --profile=full} nad připraveným kandidátem.
+\end{enumerate}
+
+Stabilní GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} může připravit větve pro funkce a~opravy a~otestovat přesné SHA publikovaného kandidáta. Kontroluje identitu větve, odmítá zápis ze~zastaralé revize a~neprovádí merge, squash ani vynucený push. Centrální kontrola \codeword{--profile=candidate-preflight} pouze čte aktuální stav a~odmítá zastaralý manifest, běhový plán, inventář nebo porušení pravidel zdrojů ještě před nákladnou maticí CI. Testovací běh nesmí chybějící artefakty sám potichu opravovat. Až příprava vydání sjednotí verze a~data příruček a~přeloží existující TeX do~PDF; chybějící odborný text nevytváří.
 
 \section{Kontrola galerie před zveřejněním}
 \label{sec:testing}
