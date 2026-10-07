@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.122.1
+
+Version 0.122.1 updated Admin patch-note rendering to show safe, clickable HTTP(S) links and deferred manual PDF builds during ordinary development. Patch-note history now stays as raw Markdown until the Admin view renders it, including history from older caches.
+
+### Highlights
+
+#### Admin patch notes
+
+- Rendered Markdown references, autolinks, and plain HTTP(S) URLs as links that open in a new tab with `noopener noreferrer`.
+- Preserved code spans, URL bytes, emphasis, and existing headings, lists, and fenced-code presentation; rejected unsafe and non-HTTP(S) links as active links.
+- Re-rendered cached history from Markdown, discarding obsolete cached HTML during passive reads without requiring a network refresh or cache deletion.
+
+#### Manual build workflow
+
+- Kept all four manual source editions aligned while allowing tracked PDFs to lag during ordinary development.
+- Moved the manual PDF batch build to final hosted release preparation.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/updates_patch_notes.php` to parse and provide raw Markdown instead of generated HTML.
+- Removed obsolete cached HTML from version history returned to the viewer.
+
+#### Frontend
+
+- Moved patch-note Markdown rendering into `app/views/admin_updates.php`, where HTTP(S) links are rendered safely for the Admin view.
+- Documented the deferred four-manual PDF build workflow in `RELEASE.md`, `docs/GALLERY_WORKFLOWS.md`, and `docs/LATEX_BUILD.md`.
+
+#### Tests
+
+- Added `tests/patch_notes_links_render_test.php` for safe links, escaped unsafe input, code handling, and offline rendering of cached Markdown.
+- Updated `tests/admin_updates_ui_test.php` and `tests/updater_metadata_budget_test.php` to verify Markdown-based rendering and offline history behavior.
+
+### User Impact
+
+#### For administrators
+
+- Made issue references and other HTTP(S) links in Admin patch notes clickable without activating unsafe links or obsolete cached HTML.
+- Removed the need to rebuild manual PDFs after routine source or documentation edits; all four PDFs are built together during final hosted release preparation.
+
 ## Version 0.122
 
 Version 0.122 added GitHub-hosted release preparation and qualification for release branches. It prepared release metadata and manuals, preserved completed maintainer-authored notes, validated generated notes before applying them, and qualified the exact prepared commit through the existing CI matrix. Ref: [#100](https://github.com/klusik/PHP_gallery/issues/100).
