@@ -2192,6 +2192,7 @@
         "tests/simbrief_create_draft_test.php",
         "tests/simbrief_description_model_test.php",
         "tests/simbrief_ofp_document_test.php",
+        "tests/simbrief_ofp_lightbox_browser_test.mjs",
         "tests/simbrief_route_preview_test.php",
         "tests/site_maintenance_diagnostics_contract_test.php",
         "tests/site_url_config_test.php",
