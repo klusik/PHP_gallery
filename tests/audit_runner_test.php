@@ -81,6 +81,17 @@ audit_test_assert(($profiles['release-preflight'] ?? []) === [
     'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
 ], 'Release preflight must own the complete cheap static gate centrally, without expensive artifact-dependent suites.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
+audit_test_assert(($profiles['candidate-preflight'] ?? []) === [
+    'php-lint', 'js-lint', 'source-documentation-changed',
+    'source-policy-changed', 'source-contract-inventory', 'python-import-policy',
+    'mvc-boundaries', 'mutation-contracts', 'ci-workflow-contract', 'manifest',
+], 'Candidate preflight must enforce deterministic source and generated-artifact blockers without heavy CI jobs.');
+audit_test_assert(in_array('manifest', $profiles['full'], true),
+    'Authoritative full handoff must refuse stale runtime plans, production inventory and manifest.');
+audit_test_assert(str_contains((string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'),
+    "'scripts/prepare_candidate.php', ['--check']"),
+    'Central manifest suite must use the common read-only candidate preparation contract.');
+
 audit_test_assert(in_array('php-fast', $profiles['quick'], true) && !in_array('php-regression', $profiles['quick'], true), 'Quick must use curated PHP feedback instead of the complete regression tree.');
 foreach (['full', 'release'] as $profile) {
     audit_test_assert(in_array('php-regression', $profiles[$profile], true), 'Full and release must retain complete PHP regression coverage.');

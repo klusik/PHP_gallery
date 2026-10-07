@@ -48,6 +48,22 @@ $registry = [
             'python-import-policy',
             'ci-workflow-contract',
         ],
+        // Deterministic source/plan gate before any browser, database, or OS matrix.
+        // It qualifies the checked-out candidate and never repairs artifacts.
+        'candidate-preflight' => [
+            // CI checks out a clean commit, so uncommitted-only --changed lint selects
+            // zero files. Lint the full source before allowing costly matrix jobs.
+            'php-lint',
+            'js-lint',
+            'source-documentation-changed',
+            'source-policy-changed',
+            'source-contract-inventory',
+            'python-import-policy',
+            'mvc-boundaries',
+            'mutation-contracts',
+            'ci-workflow-contract',
+            'manifest',
+        ],
         'quick' => [
             'php-fast',
             'runtime-performance',
@@ -76,6 +92,7 @@ $registry = [
             'php-lint',
             'js-lint',
             'browser-map',
+            'manifest',
         ],
         'release' => [
             'php-regression',

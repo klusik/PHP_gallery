@@ -422,8 +422,10 @@ function main(array $arguments): int
             fwrite(STDERR, "Runtime module plans are stale; regenerate after dependency/route changes.\n");
             return 1;
         }
-    } elseif (file_put_contents($target, $source, LOCK_EX) === false) {
-        throw new \RuntimeException('Could not save runtime module plans.');
+    } elseif (!is_file($target) || file_get_contents($target) !== $source) {
+        if (is_link($target) || file_put_contents($target, $source, LOCK_EX) === false) {
+            throw new \RuntimeException('Could not save runtime module plans.');
+        }
     }
     fwrite(STDOUT, 'Runtime module plans current: ' . count($plans['route_modules']) . ' routes, '
         . count($plans['modules']) . " logical modules.\n");

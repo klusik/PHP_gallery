@@ -39,6 +39,41 @@ architecture documentation before changing code. In particular:
   Mark unmeasured usage and uncertain dates as unknown; removal needs evidence
   that the recorded condition is met.
 
+## Preparing an ordinary source candidate
+
+Do not publish an intermediate source commit with stale generated state.
+After final source or documentation edits, stage any newly created/deleted
+production files and run:
+
+```sh
+git add <new-or-removed-production-files>
+php scripts/prepare_candidate.php
+git diff -- app/runtime/modules.php app/production-files.json app/core-manifest.json
+git add app/runtime/modules.php app/production-files.json app/core-manifest.json
+git commit -m "chore(candidate): refresh generated artifacts" # only if changed
+php scripts/prepare_candidate.php --check
+```
+
+This uses the canonical generators in dependency order: runtime plan, Git-index
+production inventory, then core-manifest hashes from complete checkout bytes.
+Repeat it after any later source/test fix. Repeating without changes creates
+no diff or timestamp-only manifest update. The `--check` command is read-only.
+
+For a feature/fix branch, the stable hosted
+[Candidate preparation](.github/workflows/candidate-preparation.yml)
+automation can perform the generated-artifact commit for the exact pushed SHA
+and pass that prepared candidate to the reusable full CI workflow. It checks
+the remote branch head before a non-forced write and refuses superseded work.
+The ordinary CI preflight is read-only and blocks expensive jobs when the
+published candidate remains stale. GitHub Actions bot commits do not themselves
+trigger recursive workflow runs. Do not add PR-specific codegen workflows.
+
+Once prepared, run `php scripts/audit.php --profile=full` (only once at final
+handoff, rather than redundant direct test-tree walks) and record its result
+against the exact commit. For release preparation use `RELEASE.md` and the
+release audit instead. Nothing in candidate preparation merges, squashes,
+tags, or publishes an artifact.
+
 ## Verification
 
 The central audit is the project's authoritative automated verification

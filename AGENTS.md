@@ -6,6 +6,8 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 ## Build, Test, and Development Commands
 - `php -S localhost:8000 -t public public/index.php` - run the app locally with the `public/` directory as the web root.
 - `php -S localhost:8000 index.php` - alternate local run mode using the repository root router.
+- `php scripts/prepare_candidate.php` - regenerate reviewed runtime modules, production inventory, and the final integrity manifest in dependency order after staging new files.
+- `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
@@ -55,6 +57,43 @@ review convention; do not add a branch parser or blanket expiry dates.
 
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
+
+### Source Candidate Preparation (All Non-Release Branches)
+
+Finish authored edits before preparing the candidate. If new or deleted production
+files are involved, stage those paths first because `generate_production_files.php`
+intentionally reads the Git index. Resolve route/module ownership, runtime roots
+and dynamic dependency definitions in their authored files, never by editing
+`app/runtime/modules.php` directly.
+
+Run `php scripts/prepare_candidate.php` after every final source/documentation
+batch and **again after any later fix**. It compiles `app/runtime/modules.php`
+first, regenerates `app/production-files.json` from indexed membership second,
+and hashes complete checked-out bytes for `app/core-manifest.json` last.
+`--check` verifies all three in order without writing. Identical inputs must
+not rewrite files or change the manifest timestamp. Do not compute hashes from
+truncated GitHub Contents API responses, especially files larger than 1 MiB.
+Commit only the changed generated artifacts separately from focused authored
+changes; the command itself never commits or merges.
+
+For regular feature/fix branches, the stable
+`.github/workflows/candidate-preparation.yml` can prepare and commit generated
+artifacts on the exact pushed revision, then invoke the central CI workflow on
+the resulting candidate SHA. It uses branch concurrency, non-forced push,
+and a current-branch-head lease; it refuses outdated work rather than clobber
+newer commits. Bot commits made with `GITHUB_TOKEN` do not start another workflow.
+PR/direct CI is read-only and gates its expensive matrices through
+`php scripts/audit.php --profile=candidate-preflight`. Failing that gate
+means the published candidate is not qualified, not that the runner should
+silently repair it. Release branches use their separate preparation lifecycle
+in `RELEASE.md`, including editorial PDF generation.
+
+The agent handoff sequence is: **edit → stage membership changes → prepare →
+commit changed generated artifacts → run the required central full audit →
+verify the exact final candidate SHA → handoff**. Intermediate atomic commits
+may be incomplete; never hand off or qualify a stale final SHA. The workflow
+may qualify a prepared bot commit automatically; it does not merge, squash,
+tag, or publish. After a later source fix, repeat preparation and qualification.
 
 ### Mandatory Agent Verification Contract
 For automated agents, `php scripts/audit.php` is the authoritative test orchestration interface. This rule takes precedence over every later focused-test command or checklist in `AGENTS.md`, `TESTING.md`, architecture notes, and task-specific documentation. Do not enumerate `tests/`, loop over `*_test.php`/`*_test.mjs`, manually run every documented focused test, or separately lint the tree when the central audit already owns that coverage. Avoid duplicate verification because it wastes execution time and agent context without increasing coverage.

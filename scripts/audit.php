@@ -114,6 +114,7 @@ Profiles:
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
   release-preflight  Cheap static blockers before AI/TeX; final release qualification remains required.
+  candidate-preflight  Read-only source, runtime plan, inventory and manifest gate before heavy CI.
 TEXT
     );
     exit(0);
@@ -1098,7 +1099,7 @@ function audit_suite_console_label(string $suiteId): string
         'js-lint-changed' => 'JavaScript syntax (changed)',
         'ci-workflow-contract' => 'CI workflow contracts',
         'release-consistency' => 'Release consistency',
-        'manifest' => 'Core manifest freshness',
+        'manifest' => 'Generated candidate artifacts',
         'git-diff-check' => 'Git whitespace check',
         default => $suiteId,
     };
@@ -1150,7 +1151,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'php-lint-changed' => audit_run_php_lint(true),
         'js-lint' => audit_run_js_lint(false, $node),
         'js-lint-changed' => audit_run_js_lint(true, $node),
-        'manifest' => audit_run_php_command('manifest', 'Core manifest freshness', 'scripts/generate_manifest.php', ['--check'], 60),
+        'manifest' => audit_run_php_command('manifest', 'Generated candidate artifacts', 'scripts/prepare_candidate.php', ['--check'], 180),
         'git-diff-check' => audit_run_git_diff_check($git),
     };
     $tasks[] = $task;

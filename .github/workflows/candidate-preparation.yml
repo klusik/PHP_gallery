@@ -1,0 +1,198 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/candidate-preparation.yml
+# Module Type: Source Candidate Preparation Workflow
+# Purpose: Commit deterministic generated state and qualify the exact prepared feature/fix SHA.
+# Responsibilities:
+#   - Serialize source-batch preparation per branch and cancel superseded runs
+#   - Reject stale branch writers without force pushes or history rewrites
+#   - Delegate generated-state checks and full qualification to the central audit and CI
+# Author: Rudolf Klusal
+name: Candidate preparation
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'bugfix/**'
+      - 'hotfix/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-preparation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Prepare source candidate at event SHA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      source_base: ${{ steps.guard.outputs.source_base }}
+      candidate_sha: ${{ steps.publish.outputs.candidate_sha }}
+      preparation_changed: ${{ steps.publish.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip, mbstring
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: guard
+        name: Check branch identity and source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
+            echo "::error::Candidate preparation requires a mutable source branch." >&2
+            exit 1
+          fi
+          case "${GITHUB_REF_NAME}" in
+            feature/*|fix/*|bugfix/*|hotfix/*) ;;
+            *)
+              echo "::error::Candidate preparation refuses non-feature/fix branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          if [[ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Event SHA and actual checkout differ; refusing candidate preparation." >&2
+            exit 1
+          fi
+          remote_sha="$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [[ "${remote_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Source branch moved before preparation; do not write an older candidate." >&2
+            exit 1
+          fi
+          source_base="$(git merge-base "${GITHUB_SHA}" origin/main)"
+          if [[ -z "${source_base}" ]]; then
+            echo "::error::Could not find the reviewed source comparison base." >&2
+            exit 1
+          fi
+          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
+      - name: Cheap source-policy preflight before generation
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ steps.guard.outputs.source_base }}
+          PHP_GALLERY_BROWSER: disabled
+          GALLERY_WORKFLOW_BROWSER: disabled
+        run: php scripts/audit.php --profile=release-preflight
+      - name: Prepare and verify canonical candidate artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A rerun of the same input SHA must render the same generated tree.
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${GITHUB_SHA}")"
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+      - id: publish
+        name: Commit only generated artifacts with a non-forced branch lease
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.guard.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git add -- app/runtime/modules.php app/production-files.json app/core-manifest.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "All generated artifacts already match their authored inputs."
+          else
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'chore(candidate): refresh reviewed generated artifacts'
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+          candidate_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [[ "${remote_sha}" == "${SOURCE_SHA}" ]]; then
+            if [[ "${candidate_sha}" != "${SOURCE_SHA}" ]]; then
+              if ! git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+                echo "::error::Source branch advanced while publishing; refusing a stale candidate." >&2
+                exit 1
+              fi
+            fi
+          else
+            # Manual rerun of the same input can reuse an already-published tree,
+            # but a newer and different branch head must never be overwritten.
+            git fetch --no-tags origin "refs/heads/${GITHUB_REF_NAME}"
+            remote_tree="$(git rev-parse 'FETCH_HEAD^{tree}')"
+            if [[ "${remote_tree}" != "$(git rev-parse 'HEAD^{tree}')" ]]; then
+              echo "::error::Source branch changed during preparation; refusing an out-of-order write." >&2
+              exit 1
+            fi
+            candidate_sha="${remote_sha}"
+            echo "Candidate tree was already published at ${candidate_sha}."
+          fi
+          latest_sha="$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [[ "${latest_sha}" != "${candidate_sha}" ]]; then
+            echo "::error::Published branch head is not the prepared candidate SHA." >&2
+            exit 1
+          fi
+          echo "candidate_sha=${candidate_sha}" >> "${GITHUB_OUTPUT}"
+          echo "Prepared candidate SHA: ${candidate_sha}"
+      - name: Show source/preparation failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cache/test-audit/latest.md ]]; then
+            sed -n '1,150p' cache/test-audit/latest.md
+          fi
+      - name: Upload source preflight diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: candidate-source-preflight
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  qualify:
+    name: Full CI for the published prepared SHA
+    needs: prepare
+    uses: ./.github/workflows/gallery-workflows.yml
+    with:
+      audit_profile: full
+      checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
+      source_base: ${{ needs.prepare.outputs.source_base }}
+
+  gate:
+    name: Reject superseded qualification
+    needs: [prepare, qualify]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+      - name: Verify successful qualification and unchanged published branch head
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          QUALIFICATION_RESULT: ${{ needs.qualify.result }}
+        run: |
+          set -euo pipefail
+          if [[ "${QUALIFICATION_RESULT}" != "success" ]]; then
+            echo "::error::Prepared candidate did not pass the authoritative CI workflow." >&2
+            exit 1
+          fi
+          remote_sha="$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [[ "${remote_sha}" != "${CANDIDATE_SHA}" ]]; then
+            echo "::error::Source branch advanced after preparation; this qualification is stale." >&2
+            exit 1
+          fi
+          echo "PASS prepared candidate ${CANDIDATE_SHA}; remote branch head is unchanged."
