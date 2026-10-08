@@ -62,6 +62,9 @@ Short release summary paragraph explaining the purpose of the release, main feat
 
 ## Formatting rules
 
+- Always include all three main sections: `### Highlights`, `### Technical Details`, and `### User Impact`, including for releases limited to tests, documentation, or tooling.
+- In `### User Impact`, explain the evidenced visitor, administrator, or maintainer impact. Explicitly state when public or administrator behavior did not change instead of inventing a product improvement.
+- Only optional `####` subsections without relevant changes may be omitted; the three main sections remain mandatory.
 - Use Markdown headings exactly like existing `PATCH_NOTES.md` entries.
 - Use version heading level `##`.
 - Use main sections with `###`.

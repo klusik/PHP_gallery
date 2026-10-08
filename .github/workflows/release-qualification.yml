@@ -241,6 +241,14 @@ jobs:
           set -euo pipefail
           php .github/scripts/patch_notes_ai.php apply \
             "${RELEASE_VERSION}" "${RUNNER_TEMP}/release-notes-response.md"
+      - name: Upload rejected AI release-note response
+        if: ${{ failure() && steps.notes-before.outputs.complete == 'false' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-notes-rejected-response
+          path: ${{ runner.temp }}/release-notes-response.md
+          if-no-files-found: ignore
+          retention-days: 7
       - id: notes
         name: Verify editorial release notes
         shell: bash

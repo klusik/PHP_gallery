@@ -37,6 +37,7 @@ $check(mkdir($fixture, 0700), 'Could not create the isolated bounded-evidence fi
 $promptPath = $fixture . '/complete.prompt';
 $createPrompt = static function (string $diff) use ($promptPath, $check): void {
     $prompt = "You are generating canonical release notes.\n"
+        . "Always include all three main sections: ### Highlights, ### Technical Details, ### User Impact.\n"
         . "EVIDENCE - COMMIT METADATA:\n<<<COMMITS\nCOMMIT 123\nCOMMITS\n\n"
         . "EVIDENCE - TEXT DIFF:\n<<<DIFF\n"
         . $diff
@@ -79,6 +80,7 @@ try {
     patch_notes_chunks_advance($dir);
     $final = file_get_contents($dir . '/final.prompt');
     $check(is_string($final) && strlen($final) <= PATCH_NOTES_AI_FINAL_PROMPT_BYTES
+        && str_contains($final, 'Always include all three main sections: ### Highlights, ### Technical Details, ### User Impact.')
         && str_contains($final, 'Evidence slice 1:')
         && str_contains($final, 'Evidence slice ' . count($parts) . ':')
         && !str_contains($final, $longLine),
