@@ -75,6 +75,7 @@ return [
     'serial_tests' => [
         'cli_http_boundary_test.php' => 'Starts bounded isolated PHP and Apache HTTP children; exclusive execution prevents nested server/process contention.',
         'simbrief_ofp_public_http_test.php' => 'Starts a disposable loopback PHP HTTP server; run alone to avoid nested HTTP-child contention.',
+        'installer_first_install_test.php' => 'Starts a config-free HTTP installation and runs the complete migration chain in its own disposable database; exclusive execution prevents nested server contention.',
         'deploy_app_packaging_test.php' => 'Starts real Bash and PowerShell packaging children against an owned dirty fixture; exclusive execution avoids nested child-process contention.',
         'database_engine_contract_test.php' => 'Checks a migrated vote constraint inside a rolled-back transaction in the externally supplied disposable database; exclusive execution prevents fixture mutation overlap.',
         'runtime_module_plan_test.php' => 'Compiles the dependency inventory and runs its own bounded four-worker module fixtures; exclusive execution avoids nested pool contention.',

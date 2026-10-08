@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.124.3}
+\newcommand{\version}{0.124.4}
 \newcommand{\manualdate}{8~oktober~2026}
 
 \hypersetup{
@@ -275,6 +275,8 @@ Bygg vid behov distributionsmappar eller ZIP-filer med \filepath{app/production-
 \subsubsection{Installationsordning}
 
 Webbläsarinstallationen samlar in databasinställningar, initierar schemat genom migreringar, skapar den första administratören, förbereder skrivbara platser och skriver den lokala konfigurationen. En ny begäran omdirigeras till installationen när nödvändig konfiguration saknas.\footnote{Installationstillstånd och genererad konfiguration bör skyddas på samma sätt som inloggningsuppgifter. Källkodsarkiv ska fortsatt utesluta den lokala \filepath{config.php}.}
+
+Migreringarna slutförs före det~första administratörskontot, \filepath{config.php} och~installationslåset. Reparationer använder installationsprogrammets verifierade anslutning och~det gemensamma skrivlåset för~gallerier; före konfigurationen finns gallerilagringen i~installationens \filepath{galleries/}. Åtgärda orsaken om~en~migrering misslyckas och~skicka administratörssteget igen. Slutförda migreringar förblir registrerade och~den misslyckade återanropsfunktionen körs igen. Behåll migreringsloggen samt konfiguration och~lås för~slutförda installationer.
 
 Vanliga steg:
 
@@ -2202,9 +2204,17 @@ winapp/ & Windows-specifika verktyg och integrationer.\\
 
 Nya PHP-filer använder strikta typer och indrag med fyra blanksteg. Kontroller samordnar begärandebeteende, medan tjänster ansvarar för återanvändbar logik. Ny JavaScript och CSS förblir utan ramverk och hör hemma bland offentliga resurser. Migreringar använder filnamn med tidsstämpelprefix. Befintliga förklarande kommentarer, dokumentationssträngar och PHPDoc bevaras och rättas när beteendet utvecklas.
 
-Dokumentationssträngar krävs för namngivna funktioner, metoder och klasser eller liknande deklarationer, inklusive gränssnitt, traits och uppräkningstyper. Placera dokumentationen omedelbart ovanför deklarationen. Namngivna funktioner och metoder behöver en saklig beskrivning av syftet, en typad och beskriven post för varje uttrycklig parameter samt en typad returpost, inklusive void. Klasser behöver en saklig beskrivning av syftet. Anonyma funktioner, closures, pilfunktioner, callbacks, variabler, konstanter och klassegenskaper kräver inga dokumentationssträngar för deklarationen; namngivna deklarationer inuti callbacks kontrolleras fortfarande. Filhuvuden med författaruppgifter, inbyggda signaturtyper, kommentarer om driftpolicy och parsertäckning förblir separata krav.
+Dokumentationssträngar krävs för namngivna funktioner, metoder och klasser eller liknande deklarationer, inklusive gränssnitt, traits och uppräkningstyper. Placera PHPDoc/JSDoc omedelbart ovanför deklarationen och~Python-docstrings först i~dess kropp. Namngivna funktioner och metoder behöver en saklig beskrivning av syftet, en typad och beskriven post för varje uttrycklig parameter samt en typad returpost, inklusive void. Klasser behöver en saklig beskrivning av syftet. Anonyma funktioner, closures, pilfunktioner, callbacks, variabler, konstanter och klassegenskaper kräver inga dokumentationssträngar för deklarationen; namngivna deklarationer inuti callbacks kontrolleras fortfarande. Filhuvuden med författaruppgifter, inbyggda signaturtyper, kommentarer om driftpolicy och parsertäckning förblir separata krav.
 
 Atomära moduler ska ansvara för ett sammanhängande område. Gemensamma kontrakt behöver normaliserade indata, uttryckliga utdata och riktade tester. Dynamiska administrationsfragment och offentliga fragment kräver livscykelsäker initiering och avveckling.
+
+\subsection{Skriv kod före källkontrollen}
+
+Den~kanoniska filen \filepath{AGENTS.md} kräver namngivna deklarationer och~fullständig dokumentation i~samma ändring. Börja med ett sakligt syfte före taggarna; beskriv varje uttrycklig parameter inklusive standardvärden och~nya parametrar, verkliga returvarianter samt konkreta samlingselement och~objektfält. Inbyggda PHP/Python-typer är ett separat krav. Anonyma callbackar behöver ingen deklarationsdocstring; namngivna deklarationer inuti dem behöver det. Körningspolicyer behöver dessutom syfte, typ, enheter, omfattning, konsumenter och~motivering direkt före platsen. Exemplen i~\filepath{docs/AGENT_AUTHORING.md} kontrolleras med befintliga analysverktyg i~ett registrerat regressionstest; negativa fixturer bevarar fel för ofullständiga kontrakt.
+
+Använd den~befintliga profilen \codeword{--profile=release-preflight} för ren källåterkoppling; namnet innebär inga utgåveåtgärder. Den~kontrollerar PHP/JavaScript-syntax, ändrade deklarationer/policyer, inventeringskategoriernas budgetar, Pythons importpolicy och~arbetsflödeskontrakt utan regressions-, webbläsar-, databas-, paketerings- eller operativsystemmatriser. Välj denna eller quick för aktuell ändringsomgång; quick kontrollerar inte helhetsbudgetar. Vanliga funktions-/rättningsgrenar håller \codeword{PHP_GALLERY_SOURCE_BASE} på~oföränderlig merge-base med \codeword{origin/main}; saknad historik ger BLOCKED och~får inte ersättas med HEAD som döljer tidigare committade fel. Utgåvor behåller basen från föregående tagg. Det~exakta kommandot finns i~\filepath{TESTING.md}.
+
+Rapporter registrerar HEAD, upplöst jämförelse-SHA och~arbetskatalogens ändringsstatus. En~ändrad checkout ger återkoppling, inte kvalificering av~en ren commit. Den~länkade \filepath{source-failures.md} visar alla fynd från misslyckade ändringskontroller, blockerare och~fynd i~överskridna kategorier; fullständiga värdefria JSON-rapporter bevarar bevis och~markerar historisk skuld. Kandidatarbetsflöden laddar upp dem tillsammans. Rätta hela omgången före nästa körning; oförändrad indata är ingen rättning. Slutför alla fyra handbokskällor, förbered genererade artefakter efter sista ändringen och~kör fullständig granskning en~gång för exakt kandidat. Ange SHA, bas, profil/resultat och~väsentliga täckningsluckor. Mät resultat vid första försöket och~rättningscykler från faktiska rapporter; förväntade besparingar är okända tills de~har observerats.
 
 \subsection{Lägga till en funktion}
 
@@ -2269,7 +2279,8 @@ Den centrala granskningen täcker MIME-typer och namn från urklipp, syntetiska 
 Använd den~centrala granskaren \filepath{scripts/audit.php} för~normal verifiering, inte den~äldre omslutaren \filepath{tests/run.php}. Profilerna nedan är alternativ, inte tre steg som ska köras efter varandra. Använd vid behov snabbprofilen under utveckling, den~fullständiga profilen en~gång före vanlig överlämning eller~utgåveprofilen en~gång vid slutlig utgåvekvalificering. Kör enskilda tester bara för~att felsöka rapporterade fel eller~utveckla en~nyregistrerad testfixtur, inte som en~andra genomgång av~hela testträdet.
 
 \begin{lstlisting}[language=bash]
-# During development:
+# Source-only feedback (or quick for behavior checks):
+php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
 # Before ordinary code handoff:
 php scripts/audit.php --profile=full
@@ -2398,7 +2409,7 @@ Innan en återställd installation öppnas isolerar du e-post, schemalagda jobb,
 \index{u00260@utgåvekvalificering}
 \index{t00246@testning!t00247@tillfälliga arbetsflöden}
 
-Den centrala ingången \filepath{scripts/audit.php} erbjuder tre profiler. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, den rådgivande inventeringen, WinApp-tester, långsamma Node-testfall och Chromium. Använd \codeword{--profile=full} för fullständig överlämningskontroll och \codeword{--profile=release} för utgåveförberedelse; ett snabbt PASS ersätter ingen av dessa profiler.
+Den centrala ingången \filepath{scripts/audit.php} erbjuder tre regressions-/kvalificeringsprofiler samt källförkontroller. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, helhetsinventeringen och~kategoribudgetar, WinApp-tester, långsamma Node-testfall och Chromium. Använd \codeword{--profile=full} för fullständig överlämningskontroll och \codeword{--profile=release} för utgåveförberedelse; ett snabbt PASS ersätter ingen av dessa profiler.
 
 PHP-sviter använder fyra arbetsprocesser som standard. Sätt \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} till ett heltal från 1 till 8; ogiltiga värden blockerar körningen. Registrerade exklusiva tester körs ensamma efter att aktiva processer har avslutats. Varje underprocess behåller egen diagnostik och en tidsgräns från sin verkliga start; resultaten behåller stabil indataordning. Varje profil mäter också inkluderingsfaser i nya processer före \codeword{cms\_run()}: den tidiga körmiljön tillåter en PHP-fil och 16~MiB toppminne, programbootstrap 40 filer och 16~MiB. Förfluten tid är endast en observation; sonderna utför inget databas-, sessions- eller ruttarbete.
 

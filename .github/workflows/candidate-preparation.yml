@@ -157,6 +157,17 @@ jobs:
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/source-documentation-changed.log
+            cache/test-audit/**/source-policy-changed.log
+            cache/test-audit/**/source-contract-inventory.log
+            cache/test-audit/**/python-import-policy.log
+            cache/test-audit/**/source-documentation-changed.json
+            cache/test-audit/**/source-policy-changed.json
+            cache/test-audit/**/source-documentation.json
+            cache/test-audit/**/source-policy.json
+            cache/test-audit/**/source-debt-ratchet.json
+            cache/test-audit/**/python-import-policy.json
           if-no-files-found: ignore
           retention-days: 7
 

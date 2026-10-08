@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.124.3
+**Current Version:** 0.124.4
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -324,6 +324,14 @@ The bootstrap installer:
 
 After successful installation, you can delete `setup-gallery.php` via FTP as an extra hardening step.
 
+`install.php` applies migrations before creating the administrator, `config.php`,
+or the installation lock. Migration repairs use the verified installer database
+connection, including the shared gallery-writer lock, and the default gallery
+storage until configuration exists. If a migration fails, correct the reported
+cause and submit the administrator step again: completed migrations remain in
+`schema_migrations`, and the failed callback remains pending. Preserve that ledger;
+do not clear the database or remove configuration/locks from a completed site.
+
 ### Correcting the installed website address
 
 After installation, open **Admin > Settings > Website address** to correct the public URL. Enter an absolute address such as `https://example.com`, including a subdirectory only when the gallery is actually installed there. Saving updates only `base_url` in local `config.php`, preserves other configuration, and requires write access to the file and its directory. No database setting is created or changed. Computed/custom configuration that cannot be safely edited remains a manual file-editing task.
@@ -591,6 +599,8 @@ $config = [
 ```
 
 ## Architecture Overview
+
+Coding agents follow [AGENTS.md](AGENTS.md) and the [scanner-checked authoring examples](docs/AGENT_AUTHORING.md). Write complete declaration and runtime-policy contracts with the code; use the documented source-only feedback path before final candidate qualification.
 
 For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARCHITECTURE.md)** for:
 

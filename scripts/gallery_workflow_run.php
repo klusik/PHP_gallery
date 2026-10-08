@@ -79,7 +79,7 @@ try {
         if ($profile !== 'quick') {
             // Only explicit Chromium disablement omits browser evidence. Every real
             // database/HTTP and race PASS remains mandatory in both qualification profiles.
-            $requiredTests = array_merge($requiredTests, ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php']);
+            $requiredTests = array_merge($requiredTests, ['installer_first_install_test.php', 'gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php']);
             if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
                 $requiredTests[] = 'gallery_workflow_browser_test.php';
             }

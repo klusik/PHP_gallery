@@ -70,6 +70,7 @@ require_once __DIR__ . '/cli_guard.php';
 gallery_require_cli_sapi();
 
 require_once __DIR__ . '/audit_lib.php';
+require_once __DIR__ . '/audit_source_evidence.php';
 require_once __DIR__ . '/audit_route_performance.php';
 require_once __DIR__ . '/source_contracts/debt_ratchet.php';
 
@@ -92,7 +93,7 @@ if ($options['help']) {
 PHP Gallery central audit
 
 Usage:
-  php scripts/audit.php [--profile quick|full|release|release-preflight]
+  php scripts/audit.php [--profile quick|full|release|release-preflight|candidate-preflight]
   php scripts/audit.php --suite <suite-id>
   php scripts/audit.php --profile full --changed
 
@@ -108,12 +109,13 @@ Options:
 Environment overrides:
   PHP_GALLERY_NODE, PHP_GALLERY_PYTHON, PHP_GALLERY_GIT, PHP_GALLERY_BROWSER
   PHP_GALLERY_AUDIT_WORKERS (1..8, default 4), PHP_GALLERY_BROWSER_REQUIRED=1
+  PHP_GALLERY_SOURCE_BASE (immutable branch merge-base or previous release tag SHA)
 
 Profiles:
   quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
-  release-preflight  Cheap static blockers before AI/TeX; final release qualification remains required.
+  release-preflight  Source-only authoring/preparation feedback, including debt budgets; no release actions.
   candidate-preflight  Read-only source, runtime plan, inventory and manifest gate before heavy CI.
 TEXT
     );
@@ -189,6 +191,8 @@ $node = resolve_executable('PHP_GALLERY_NODE', ['node']);
 $python = resolve_python_command();
 $git = resolve_executable('PHP_GALLERY_GIT', ['git']);
 $browser = resolve_browser_executable();
+$sourceIdentity = PhpGallery\Audit\audit_source_identity($root, $git,
+    trim((string) getenv('PHP_GALLERY_SOURCE_BASE')) ?: 'HEAD');
 
 /**
  * Return a concise executable version string without exposing noisy tool output.
@@ -852,9 +856,10 @@ function audit_run_source_contract_inventory(): array
     $summary = $problems !== [] ? implode(' ', $problems)
         : $counts['documentation_findings'] . ' documentation / ' . $counts['policy_findings']
             . ' policy findings; ' . $counts['debt_growth_categories'] . ' reliable categories grew; noisy policy heuristics advisory';
+    $logPath = $status === STATUS_PASS ? null : audit_write_log('source-contract-inventory', [$summary]);
     return task_result('source-contract-inventory', 'Source contract inventory',
         $status, microtime(true) - $started,
-        $counts, $summary, null, ['problems' => $problems, 'artifacts' => $artifacts]);
+        $counts, $summary, $logPath, ['problems' => $problems, 'artifacts' => $artifacts]);
 }
 
 /**
@@ -872,11 +877,12 @@ function audit_run_source_contract_inventory(): array
  */
 function audit_run_source_contract(string $suiteId, string $label, string $script, string $artifactKey, bool $changedOnly = true): array
 {
-    global $root, $runDirectory;
+    global $root, $runDirectory, $sourceIdentity;
     $started = microtime(true);
     $command = [PHP_BINARY, $root . '/scripts/' . $script, '--json'];
     if ($changedOnly) {
         $command[] = '--changed';
+        $command[] = '--base=' . ($sourceIdentity['comparison_base'] ?? $sourceIdentity['requested_base']);
     }
     $process = run_process($command, $root, 90);
     $report = json_decode((string) $process['stdout'], true);
@@ -917,8 +923,9 @@ function audit_run_source_contract(string $suiteId, string $label, string $scrip
             $problems[] = ($blocker['path'] ?? '') . ': ' . ($blocker['reason'] ?? 'Source coverage unknown.');
         }
     }
+    $logPath = $status === STATUS_PASS ? null : audit_write_log($suiteId, [$summary, $process['stderr']]);
     return task_result($suiteId, $label,
-        $status, microtime(true) - $started, $counts, $summary, null,
+        $status, microtime(true) - $started, $counts, $summary, $logPath,
         ['artifacts' => $artifacts, 'problems' => $problems]);
 }
 
@@ -1207,6 +1214,7 @@ $report = [
     'profile' => $profileLabel,
     'started_at' => $startedAt->format(DATE_ATOM),
     'duration_seconds' => round($duration, 4),
+    'source' => $sourceIdentity,
     'environment' => $environment,
     'tasks' => $tasks,
     'slowest' => $slowChecks,
@@ -1224,6 +1232,10 @@ if ($profileLabel === 'release') {
 }
 
 if ($persistReports) {
+    $sourceFailuresPath = PhpGallery\Audit\write_source_failures($report, $root, $runDirectory);
+    if ($sourceFailuresPath !== null) {
+        $report['report_files']['source_failures'] = $sourceFailuresPath;
+    }
     $runJsonPath = $runDirectory . '/report.json';
     $runMarkdownPath = $runDirectory . '/report.md';
     $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -1244,6 +1256,9 @@ if ($manualReviewSummary !== null) {
 }
 if ($persistReports) {
     fwrite(STDOUT, 'Report: ' . relative_path($markdownPath, $root) . "\n");
+    if (isset($report['report_files']['source_failures'])) {
+        fwrite(STDOUT, 'Complete source failures: ' . $report['report_files']['source_failures'] . "\n");
+    }
 } else {
     @rmdir($runDirectory);
 }

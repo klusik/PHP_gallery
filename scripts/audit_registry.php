@@ -39,9 +39,10 @@ $phpRegistry = require __DIR__ . '/audit_php_registry.php';
 
 $registry = [
     'profiles' => [
-        // Static preparation blockers; this never substitutes for exact-SHA release qualification.
+        // Source-only authoring and preparation feedback; no release actions or heavy regressions.
         'release-preflight' => [
             'php-lint',
+            'js-lint',
             'source-documentation-changed',
             'source-policy-changed',
             'source-contract-inventory',

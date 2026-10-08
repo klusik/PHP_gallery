@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.124.3}
+\newcommand{\version}{0.124.4}
 \newcommand{\manualdate}{8.~října~2026}
 
 \hypersetup{
@@ -275,6 +275,8 @@ Nasazovací složky nebo ZIP vytvářejte podle potřeby pomocí schváleného s
 \subsubsection{Pořadí instalace}
 
 Instalátor v~prohlížeči shromáždí nastavení databáze, inicializuje schéma pomocí migrací, vytvoří prvního správce, připraví zapisovatelná umístění a~zapíše místní konfiguraci. Pokud požadovaná konfigurace chybí, nový požadavek přesměruje na instalaci.\footnote{Stav instalace a~vygenerovaná konfigurace vyžadují stejnou ochranu jako přihlašovací údaje. Zdrojové archivy musí nadále vynechávat místní \filepath{config.php}.}
+
+Migrace se~dokončí před vytvořením prvního správce, \filepath{config.php} a~instalačního zámku. Opravy používají ověřené spojení instalátoru a~sdílený zámek zápisu galerií; před vytvořením konfigurace ukládají galerie do~adresáře \filepath{galleries/} v~instalaci. Pokud migrace selže, odstraňte příčinu a~znovu odešlete krok vytvoření správce. Dokončené migrace zůstávají zaznamenané a~neúspěšný callback se~zopakuje. Zachovejte migrační evidenci a~u~dokončené instalace ponechte konfiguraci i~zámky.
 
 Obvyklý postup:
 
@@ -2202,9 +2204,17 @@ winapp/ & Nástroje a~integrace specifické pro Windows.\\
 
 Nové soubory PHP používají přísné typy a~odsazení čtyřmi mezerami. Řadiče koordinují chování požadavků, služby vlastní opakovaně použitelnou logiku. Nový JavaScript a~CSS zůstávají bez frameworku a~patří pod veřejné podklady. Migrace používají názvy souborů s~časovým razítkem na začátku. Existující vysvětlující komentáře, dokumentační řetězce a~PHPDoc se při vývoji chování zachovávají a~opravují.
 
-Dokumentační řetězce deklarací jsou povinné pro pojmenované funkce, metody a~deklarace tříd či obdobných struktur, včetně rozhraní, traitů a~výčtových typů. Dokumentaci umístěte bezprostředně nad deklaraci. Pojmenované funkce a~metody potřebují věcný popis účelu, typovaný a~popsaný záznam každého explicitního parametru a~typovaný záznam návratové hodnoty, včetně void. Třídy potřebují věcný popis účelu. Anonymní funkce, uzávěry, šipkové funkce, callbacky, proměnné, konstanty a~vlastnosti tříd dokumentační řetězce deklarací nevyžadují; pojmenované deklarace vnořené do callbacků se nadále kontrolují. Hlavičky s~autorstvím souborů, nativní typování signatur, komentáře provozních pravidel a~pokrytí parseru zůstávají samostatnými požadavky.
+Dokumentační řetězce deklarací jsou povinné pro pojmenované funkce, metody a~deklarace tříd či obdobných struktur, včetně rozhraní, traitů a~výčtových typů. PHPDoc/JSDoc umístěte bezprostředně nad deklaraci, dokumentační řetězec Pythonu na~začátek jejího těla. Pojmenované funkce a~metody potřebují věcný popis účelu, typovaný a~popsaný záznam každého explicitního parametru a~typovaný záznam návratové hodnoty, včetně void. Třídy potřebují věcný popis účelu. Anonymní funkce, uzávěry, šipkové funkce, callbacky, proměnné, konstanty a~vlastnosti tříd dokumentační řetězce deklarací nevyžadují; pojmenované deklarace vnořené do callbacků se nadále kontrolují. Hlavičky s~autorstvím souborů, nativní typování signatur, komentáře provozních pravidel a~pokrytí parseru zůstávají samostatnými požadavky.
 
 Samostatné moduly by měly vlastnit jednu soudržnou odpovědnost. Společné kontrakty si zaslouží normalizované vstupy, výslovné výstupy a~cílené testy. Dynamické fragmenty administrace a~veřejnosti vyžadují bezpečnou inicializaci a~úklid podle životního cyklu.
+
+\subsection{Psaní kódu před kontrolou zdrojů}
+
+Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou dokumentaci ve~stejné úpravě. Před značkami uveďte věcný účel, popište každý explicitní parametr včetně výchozích a~přidaných parametrů, skutečné návratové varianty a~konkrétní prvky kolekcí či~pole objektů. Nativní typy PHP/Python jsou samostatný požadavek. Anonymní callbacky dokumentační řetězec nepotřebují; pojmenované deklarace uvnitř ano. Běhové zásady samostatně vyžadují účel, typ, jednotky, rozsah, konzumenty a~zdůvodnění přímo před daným místem. Příklady v~\filepath{docs/AGENT_AUTHORING.md} ověřuje registrovaný test existujícími analyzátory; negativní fixtury zachovávají selhání neúplných kontraktů.
+
+Pro~kontrolu samotných zdrojů použijte existující \codeword{--profile=release-preflight}; název neznamená přípravu vydání. Kontroluje syntaxi PHP/JavaScript, změněné deklarace a~zásady, rozpočty kategorií inventáře, importy Pythonu a~kontrakty workflow bez regresní, prohlížečové, databázové, balicí nebo systémové matice. Pro~aktuální dávku zvolte tuto nebo rychlou kontrolu; quick celkové rozpočty neověřuje. Běžné větve funkcí a~oprav používají v~\codeword{PHP_GALLERY_SOURCE_BASE} neměnné SHA společného předka s~\codeword{origin/main}; chybějící historie znamená BLOCKED, nikoli nahrazení základu HEAD, které skryje dříve commitnuté chyby. Vydání zachovávají základ předchozího tagu. Přesný příkaz uvádí \filepath{TESTING.md}.
+
+Report uvádí HEAD, vyřešené SHA základu a~stav pracovní kopie. Změněný checkout poskytuje zpětnou vazbu, ne~kvalifikaci čistého commitu. Odkazovaný \filepath{source-failures.md} obsahuje všechna zjištění selhaných kontrol změn, blokátory a~zjištění nadlimitních kategorií; úplné JSON reporty bez hodnot zachovávají důkazy a~odlišují historický dluh. Workflow kandidáta je nahrávají společně. Opravte celou dávku před opakováním; nezměněný vstup není oprava. Dokončete všechny čtyři zdroje příručky, po~poslední úpravě připravte generované artefakty a~jednou spusťte úplný audit přesného kandidáta. Uveďte SHA, základ, profil/výsledek a~významné mezery pokrytí. Úspěch prvního pokusu a~opravné cykly měřte ze~skutečných reportů; očekávané úspory zůstávají neznámé, dokud nejsou pozorovány.
 
 \subsection{Přidání funkce}
 
@@ -2269,7 +2279,8 @@ Centrální audit pokrývá typy MIME a~názvy ze schránky, syntetické událos
 K~běžnému ověřování používejte centrální audit \filepath{scripts/audit.php}, nikoli starší obalový skript \filepath{tests/run.php}. Následující profily jsou alternativy, ne tři postupné kontroly. Při vývoji podle potřeby spusťte rychlý profil, před běžným předáním jednou úplný profil a~při závěrečné kvalifikaci vydání jednou profil vydání. Jednotlivé testy spouštějte jen při diagnostice zjištěného selhání nebo vývoji nově registrovaného testu, nikoli k~opětovnému procházení celé sady.
 
 \begin{lstlisting}[language=bash]
-# During development:
+# Source-only feedback (or quick for behavior checks):
+php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
 # Before ordinary code handoff:
 php scripts/audit.php --profile=full
@@ -2398,7 +2409,7 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 \index{k00072@kvalifikace vydání}
 \index{t00234@testování!d00031@dočasné postupy}
 
-Centrální vstup \filepath{scripts/audit.php} nabízí tři profily. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, poradní inventář, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
+Centrální vstup \filepath{scripts/audit.php} nabízí tři regresní a~kvalifikační profily a~zdrojové předběžné kontroly. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, celkový inventář a~rozpočty kategorií, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
 
 Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 40 souborů a~16~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
 

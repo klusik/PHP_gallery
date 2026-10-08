@@ -17,6 +17,7 @@ namespace Gallery\Models;
 
 use RuntimeException;
 use Throwable;
+use PDO;
 use function Gallery\Core\db;
 use const Gallery\Core\GALLERY_EDIT_LOCK_SUFFIX;
 use const Gallery\Core\GALLERY_EDIT_LOCK_WAIT_SECONDS;
@@ -79,12 +80,13 @@ function gallery_edit_model_reserve(int $galleryId, string $expectedRevision): a
  * Reentrant acquisition on the same connection is paired with one release per
  * acquisition. Callers must acquire before starting their own transactions.
  *
+ * @param PDO|null $pdo Explicit migration/installer connection; null uses the configured application connection.
  * @return string|null Owned lock name, or null when another connection owns it.
  * @throws RuntimeException When ownership cannot be observed.
  */
-function gallery_edit_model_lock(): ?string
+function gallery_edit_model_lock(?PDO $pdo = null): ?string
 {
-    $pdo = db();
+    $pdo ??= db();
     $databaseName = (string) $pdo->query('SELECT DATABASE()')->fetchColumn();
     $name = hash('sha256', $databaseName . GALLERY_EDIT_LOCK_SUFFIX);
     $stmt = $pdo->prepare('SELECT GET_LOCK(?, ?)');
@@ -100,10 +102,12 @@ function gallery_edit_model_lock(): ?string
  * Release the exact connection-owned lock after every editor side effect has finished.
  *
  * @param string $lockName Owned opaque advisory-lock name returned by reserve.
- * @return void
+ * @param PDO|null $pdo Connection that acquired the lock; null uses the configured application connection.
+ * @return void Releases one acquisition on the owning connection.
  */
-function gallery_edit_model_release(string $lockName): void
+function gallery_edit_model_release(string $lockName, ?PDO $pdo = null): void
 {
-    $stmt = db()->prepare('SELECT RELEASE_LOCK(?)');
+    $pdo ??= db();
+    $stmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
     $stmt->execute([$lockName]);
 }

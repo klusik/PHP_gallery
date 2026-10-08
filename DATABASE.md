@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.124.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.124.4. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -69,6 +69,14 @@ Applied migrations are recorded in:
 ```sql
 schema_migrations(version, applied_at)
 ```
+
+The standalone `install.php` runner executes the complete chain before writing
+configuration or creating the administrator. The layout-semantics repair acquires
+the canonical gallery-writer advisory lock on the runner's explicit PDO connection;
+acquisition and release use that same connection, without opening the configured
+application database. Its transaction/checkpoint and sidecar replay markers remain
+unchanged. A refused or failed callback is not recorded, so a retry resumes pending
+migrations. This repair requires no new migration, trigger or elevated server role.
 
 Migration files are PHP files returning validated definitions with SQL statements and optional repair callbacks. Legacy statement-list files remain supported. Files are sorted by filename and applied in order.
 

@@ -24,6 +24,11 @@ architecture documentation before changing code. In particular:
   view ownership rules documented in `AGENTS.md`.
 - Follow existing naming, formatting, source documentation, and compatibility
   conventions. Do not add `from __future__ import annotations` to Python code.
+  Write each named declaration and its complete contract in the same edit:
+  purpose before tags, every parameter, actual return variants, concrete shapes
+  and native types. Runtime policy sites independently need purpose, type, units,
+  scope, consumers and rationale. Use the scanner-checked examples in
+  [the authoring reference](docs/AGENT_AUTHORING.md); tag-only comments are incomplete.
 - Add schema changes as new timestamp-prefixed migration files. Preserve
   upgrade compatibility and cover behavior through the central audit where
   practical.
@@ -89,11 +94,23 @@ The central audit is the project's authoritative automated verification
 interface:
 
 ```text
+php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
 php scripts/audit.php --profile=full
 ```
 
-Use `quick` during implementation and `full` for a final deterministic check
+Choose `release-preflight` for source-only authoring feedback or `quick` for
+behavior/regression feedback during implementation; do not run both mechanically.
+The historical preflight name does not imply release actions. It includes the
+whole-tree category budgets that quick omits. Freeze `PHP_GALLERY_SOURCE_BASE`
+to the branch merge-base with `origin/main`, as shown in
+[the authoring reference](docs/AGENT_AUTHORING.md#source-feedback-and-comparison-base),
+so already committed omissions remain visible. Missing history is BLOCKED.
+On source failure inspect the linked `source-failures.md`, repair all applicable
+findings in the batch, then rerun after the fixes. Reports identify source HEAD,
+comparison SHA and dirty state; checkout feedback is not clean-commit qualification.
+
+Use `full` for a final deterministic check
 when the required runtimes are available. The `release` profile is reserved for
 maintainer release preparation. Read [TESTING.md](TESTING.md) for audit scope,
 environment requirements, and manual acceptance boundaries. If a required
@@ -116,7 +133,8 @@ to pass an audit; preserve meaningful existing documentation when moving code.
 3. Describe schema, filesystem, compatibility, security, or configuration
    effects when applicable.
 4. State the audit profile and result, plus any relevant skips or manual checks
-   that remain.
+   that remain. Record the final candidate SHA and immutable comparison base,
+   and identify the applicable authoring contracts reviewed.
 5. Include before/after screenshots for visible UI changes when useful, and
    mention any setup needed to reproduce them.
 

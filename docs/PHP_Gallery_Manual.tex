@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.124.3}
+\newcommand{\version}{0.124.4}
 \newcommand{\manualdate}{8 October 2026}
 
 \hypersetup{
@@ -277,6 +277,8 @@ Prepare deployment folders or~ZIPs only when needed, using the~reviewed file lis
 \subsubsection{Installation sequence}
 
 The~browser installer gathers database settings, initializes the~schema through migrations, creates the~first administrator, prepares writable locations, and~writes local configuration. A~fresh request redirects to~installation when required configuration is~absent.\footnote{Installation state and~generated configuration should receive the~same protection as~credentials. Source archives should continue excluding the~local \filepath{config.php}.}
+
+Migrations finish before the~first administrator, \filepath{config.php}, and~the~installation lock are~created. Repairs use the~verified installer connection and~the~shared gallery-writer lock; before configuration exists, gallery storage is~the~installation's \filepath{galleries/} directory. If~a~migration fails, correct its cause and~submit the~administrator step again. Completed migrations remain recorded and~the~failed callback is~retried. Preserve the~migration ledger and~leave completed installations' configuration and~locks in~place.
 
 Typical steps are:
 
@@ -2224,9 +2226,17 @@ winapp/ & Windows-specific tools and~integrations.\\
 
 New PHP files use strict types and~four-space indentation. Controllers coordinate request behavior, while services own reusable logic. New JavaScript and~CSS remain framework-free and~belong under public assets. Migrations use timestamp-prefixed filenames. Existing explanatory comments, docstrings, and~PHPDoc receive preservation and~correction as~behavior evolves.
 
-Declaration docstrings are~required for~named functions, methods, and~class-like declarations, including interfaces, traits, and~enums. Place documentation immediately above the~declaration. Named functions and~methods need a~factual purpose summary, a~typed and~described parameter entry for~each explicit parameter, and~a~typed return entry, including void. Classes need a~factual purpose summary. Anonymous functions, closures, arrow functions, callbacks, variables, constants, and~class properties do~not~require declaration docstrings; named declarations nested inside callbacks remain checked. File attribution, native signature typing, operational-policy comments, and~parser coverage remain separate requirements.
+Declaration docstrings are~required for~named functions, methods, and~class-like declarations, including interfaces, traits, and~enums. Place PHPDoc/JSDoc immediately above the~declaration and~Python docstrings first inside its~body. Named functions and~methods need a~factual purpose summary, a~typed and~described parameter entry for~each explicit parameter, and~a~typed return entry, including void. Classes need a~factual purpose summary. Anonymous functions, closures, arrow functions, callbacks, variables, constants, and~class properties do~not~require declaration docstrings; named declarations nested inside callbacks remain checked. File attribution, native signature typing, operational-policy comments, and~parser coverage remain separate requirements.
 
 Atomic modules should own one cohesive responsibility. Shared contracts deserve normalized inputs, explicit outputs, and~focused tests. Dynamic Admin and~public fragments require lifecycle-safe setup and~teardown.
+
+\subsection{Authoring code before source checks}
+
+The~canonical \filepath{AGENTS.md} requires each named declaration and~its~complete documentation in~the~same edit. Start with a~factual purpose before tags, document every explicit parameter (including defaults and~added parameters), actual return variants and~concrete collection/object shapes. PHP/Python native types remain independent. Anonymous callbacks need no~declaration docstring; named declarations inside them still do. Runtime policy sites independently need purpose, type, units, scope, consumers and~rationale immediately before the~site. Checked examples in~\filepath{docs/AGENT_AUTHORING.md} are~parsed by~the~existing scanners in~a~registered regression, with negative fixtures preserving failures for~incomplete contracts.
+
+For~source-only authoring feedback, use the~existing \codeword{--profile=release-preflight}; its~name implies no~release actions. It~checks PHP/JavaScript syntax, changed declarations/policy, inventory category budgets, Python import policy and~workflow contracts without regression, browser, database, packaging or~OS matrices. Choose it~or~quick feedback for~the~current batch; quick omits whole-tree budgets. Ordinary feature/fix checks keep \codeword{PHP_GALLERY_SOURCE_BASE} set to~the~immutable merge-base with \codeword{origin/main}; missing history is~BLOCKED, not~a~reason to~hide committed omissions behind HEAD. Releases keep their previous-tag base. See \filepath{TESTING.md} for~the~exact command.
+
+Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources, prepare generated artifacts after the~final edit and~run the~full audit once for~the~exact candidate. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
 
 \subsection{Adding a~feature}
 
@@ -2291,7 +2301,8 @@ The~central audit covers clipboard MIME/name handling and~synthetic browser past
 Use the~central audit \filepath{scripts/audit.php}, not~the~legacy \filepath{tests/run.php} wrapper, for~routine verification. The~profiles below are~alternatives, not~three successive gates. Use the~quick profile during development when useful, the~full profile once before a~normal handoff, or~the~release profile once for~final release qualification. Individual tests are~for~diagnosing a~reported failure or~developing a~newly registered fixture, not~for~a~second sweep of~the~test tree.
 
 \begin{lstlisting}[language=bash]
-# During development:
+# Source-only feedback (or quick for behavior checks):
+php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
 # Before ordinary code handoff:
 php scripts/audit.php --profile=full
@@ -2436,10 +2447,10 @@ procedure. Updater file rollback still does~not~reverse database migrations.
 \index{release qualification}
 \index{testing!disposable workflows}
 
-The~central entry point \filepath{scripts/audit.php} provides three profiles.
+The~central entry point \filepath{scripts/audit.php} provides three qualification/regression profiles plus source preflights.
 \codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
 contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax
-checks. It~omits the~complete PHP suite, advisory inventory, WinApp tests,
+checks. It~omits the~complete PHP suite, whole-tree inventory/category budgets, WinApp tests,
 slow Node fixtures, and~Chromium. Use \codeword{--profile=full} for~complete
 handoff verification and~\codeword{--profile=release} for~release preparation;
 a~quick PASS does~not~replace either.
@@ -2451,7 +2462,7 @@ active workers finish. Each child retains separate diagnostics and~a~timeout
 measured from~its actual start; results stay in~deterministic input order.
 
 PHP and~JavaScript syntax checks and~independent Node/Chromium fixtures use the~same worker limit. Parallel PHP tests are~grouped before exclusive fixtures, so~the~pool drains once; reports retain their original order. Syntax checking never executes the~source. Complete database and~contention qualification remains dependent on~fixture cost and~machine performance. Production inventory checks accept LF and~CRLF checkout line endings but~still refuse content or~membership changes. The~MVC checker resolves namespace and~import contexts once per~file, preserving alias and~PDO checks without rescanning preceding tokens for~each call. The~complete compiler and~composed/legacy loading matrix for~every module runs in~full and~release profiles. Quick feedback retains dependency, graph, kernel, and~bootstrap contracts without starting every module twice.
-Every profile also measures fresh-process include phases before
+The~quick/full/release profiles also measure fresh-process include phases before
 \codeword{cms\_run()}: early runtime permits one PHP file and~16~MiB peak memory,
 and~application bootstrap permits 40 files and~16~MiB. Elapsed time is~observational;
 these probes perform no~database, session, or~route work.

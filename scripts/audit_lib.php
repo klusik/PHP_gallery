@@ -77,7 +77,7 @@ function render_console_problems(array $task): string
         $lines[] = '  - ' . (strlen($line) > 1200 ? substr($line, 0, 1197) . '...' : $line);
     }
     if (count($problems) > 5) {
-        $lines[] = '  - ' . (count($problems) - 5) . ' more problems; see the suite log.';
+        $lines[] = '  - ' . (count($problems) - 5) . ' more problems; see the complete evidence linked in the report.';
     }
     if ($lines !== [] && !empty($task['log'])) {
         $lines[] = '  Log: ' . $task['log'];
@@ -680,12 +680,23 @@ function render_markdown_report(array $report): string
         '- Started: `' . $report['started_at'] . '`',
         '- Duration: `' . format_duration((float) $report['duration_seconds']) . '`',
         '',
-        '## Environment',
-        '',
-        '| Component | Status | Value |',
-        '| --- | --- | --- |',
     ];
 
+    if (isset($report['source'])) {
+        $source = $report['source'];
+        $lines[] = '- Source HEAD: `' . ($source['head_sha'] ?? 'unavailable') . '`';
+        $lines[] = '- Comparison base: `' . ($source['comparison_base'] ?? 'unavailable') . '`';
+        $lines[] = '- Working tree at start: ' . match ($source['worktree_dirty']) {
+            true => 'modified (checkout feedback, not clean-HEAD qualification)',
+            false => 'clean', default => 'unavailable',
+        };
+        if (isset($report['report_files']['source_failures'])) {
+            $lines[] = '- Complete source findings: `' . $report['report_files']['source_failures'] . '`';
+        }
+        $lines[] = '';
+    }
+
+    array_push($lines, '## Environment', '', '| Component | Status | Value |', '| --- | --- | --- |');
     foreach ($report['environment'] as $item) {
         $lines[] = '| ' . markdown_cell((string) $item['component']) . ' | ' . markdown_cell((string) $item['status']) . ' | ' . markdown_cell((string) $item['value']) . ' |';
     }
