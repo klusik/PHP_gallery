@@ -2105,6 +2105,7 @@
         "tests/image_decode_upload_pipeline_test.php",
         "tests/image_deletion_cache_safety_test.php",
         "tests/image_path_symlink_containment_test.php",
+        "tests/installer_first_install_test.php",
         "tests/leaflet_marker_rendering_model_test.php",
         "tests/legacy_download_cache_health_test.php",
         "tests/legacy_upload_navigation_test.php",

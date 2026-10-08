@@ -70,6 +70,14 @@ Applied migrations are recorded in:
 schema_migrations(version, applied_at)
 ```
 
+The standalone `install.php` runner executes the complete chain before writing
+configuration or creating the administrator. The layout-semantics repair acquires
+the canonical gallery-writer advisory lock on the runner's explicit PDO connection;
+acquisition and release use that same connection, without opening the configured
+application database. Its transaction/checkpoint and sidecar replay markers remain
+unchanged. A refused or failed callback is not recorded, so a retry resumes pending
+migrations. This repair requires no new migration, trigger or elevated server role.
+
 Migration files are PHP files returning validated definitions with SQL statements and optional repair callbacks. Legacy statement-list files remain supported. Files are sorted by filename and applied in order.
 
 Current migration sequence:

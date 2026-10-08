@@ -280,6 +280,8 @@ Erstellen Sie Bereitstellungsordner oder ZIP-Dateien bei Bedarf aus der geprüft
 
 Das browserbasierte Installationsprogramm erfasst Datenbankeinstellungen, initialisiert das Schema durch Migrationen, erstellt den ersten Administrator, bereitet beschreibbare Speicherorte vor und schreibt die lokale Konfiguration. Fehlt eine erforderliche Konfiguration, leitet eine neue Anfrage zur Installation weiter.\footnote{Installationszustand und erzeugte Konfiguration sollten ebenso geschützt werden wie Zugangsdaten. Quellcodearchive sollten die lokale \filepath{config.php} weiterhin ausschließen.}
 
+Migrationen werden vor~dem ersten Administratorkonto, \filepath{config.php} und~der Installationssperre abgeschlossen. Reparaturen verwenden die~geprüfte Installer-Verbindung und~die~gemeinsame Schreibsperre für~Galerien; vor~der Konfiguration liegt der~Galeriespeicher im~Installationsordner \filepath{galleries/}. Beheben Sie~bei einer fehlgeschlagenen Migration die~Ursache und~senden Sie~den Administratorschritt erneut. Abgeschlossene Migrationen bleiben protokolliert, der~fehlgeschlagene Callback wird erneut ausgeführt. Bewahren Sie~das Migrationsprotokoll sowie Konfiguration und~Sperren abgeschlossener Installationen auf.
+
 Typische Schritte sind:
 
 \begin{enumerate}

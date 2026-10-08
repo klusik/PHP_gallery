@@ -32,10 +32,6 @@ namespace Gallery\Models {
 }
 
 namespace Gallery\Services {
-    /** Acquire an isolated writer lease. @return string Fixture lease name. */
-    function gallery_edit_writer_begin(): string { return 'fixture'; }
-    /** Release the fixture lease. @param string $lockName Fixture lease. @return void Records no persistent state. */
-    function gallery_edit_writer_end(string $lockName): void {}
     /**
      * Inject one owned sidecar sharing refusal without changing other file moves.
      * @param string $source Owned staging file.
@@ -67,10 +63,30 @@ namespace {
     use function Gallery\Services\gallery_description_layout_migrate_legacy;
     use function Gallery\Views\view_public_gallery_description_layout_hook;
 
-    /** Empty PDO subclass avoids any live connection. */
+    /** Supply only the connection-local advisory-lock results used by the real model. */
+    final class LayoutLockFixtureStatement extends \PDOStatement {
+        /** Construct one scalar result. @param string|int $value Database identity or lock result. @return void Stores the scalar. */
+        public function __construct(private string|int $value) {}
+        /** Accept advisory-lock bindings. @param array<int,string|int>|null $params Lock name and optional wait. @return bool Successful fixture execution. */
+        public function execute(?array $params = null): bool { return true; }
+        /** Return the owned scalar. @param int $column Scalar column index. @return string|int Fixture scalar result. */
+        public function fetchColumn(int $column = 0): mixed { return $this->value; }
+    }
+
+    /** PDO double exercises the real advisory-lock model without application bootstrap. */
     final class LayoutFixturePdo extends \PDO {
         /** Construct the inert fixture. @return void Opens no database connection. */
         public function __construct() {}
+        /** Return this connection's database identity. @param string $query Identity SQL. @param int|null $fetchMode Optional PDO fetch mode. @param int|string ...$fetchModeArgs Optional mode arguments. @return \PDOStatement Identity statement. */
+        public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): \PDOStatement|false {
+            if ($query !== 'SELECT DATABASE()') throw new \RuntimeException('Unexpected layout lock query.');
+            return new LayoutLockFixtureStatement('layout_fixture');
+        }
+        /** Prepare this connection's lock acquisition or release. @param string $query Advisory-lock SQL. @param array<int,int> $options Driver options. @return \PDOStatement Advisory-lock statement. */
+        public function prepare(string $query, array $options = []): \PDOStatement|false {
+            if (!in_array($query, ['SELECT GET_LOCK(?, ?)', 'SELECT RELEASE_LOCK(?)'], true)) throw new \RuntimeException('Unexpected layout lock prepare.');
+            return new LayoutLockFixtureStatement(1);
+        }
     }
     /** Assert one compatibility postcondition. @param bool $condition Expected condition. @param string $message Failure description. @return void Throws on regression. */
     function layout_assert(bool $condition, string $message): void { if (!$condition) throw new \RuntimeException($message); }

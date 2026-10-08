@@ -324,6 +324,14 @@ The bootstrap installer:
 
 After successful installation, you can delete `setup-gallery.php` via FTP as an extra hardening step.
 
+`install.php` applies migrations before creating the administrator, `config.php`,
+or the installation lock. Migration repairs use the verified installer database
+connection, including the shared gallery-writer lock, and the default gallery
+storage until configuration exists. If a migration fails, correct the reported
+cause and submit the administrator step again: completed migrations remain in
+`schema_migrations`, and the failed callback remains pending. Preserve that ledger;
+do not clear the database or remove configuration/locks from a completed site.
+
 ### Correcting the installed website address
 
 After installation, open **Admin > Settings > Website address** to correct the public URL. Enter an absolute address such as `https://example.com`, including a subdirectory only when the gallery is actually installed there. Saving updates only `base_url` in local `config.php`, preserves other configuration, and requires write access to the file and its directory. No database setting is created or changed. Computed/custom configuration that cannot be safely edited remains a manual file-editing task.

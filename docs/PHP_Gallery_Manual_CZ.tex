@@ -276,6 +276,8 @@ Nasazovací složky nebo ZIP vytvářejte podle potřeby pomocí schváleného s
 
 Instalátor v~prohlížeči shromáždí nastavení databáze, inicializuje schéma pomocí migrací, vytvoří prvního správce, připraví zapisovatelná umístění a~zapíše místní konfiguraci. Pokud požadovaná konfigurace chybí, nový požadavek přesměruje na instalaci.\footnote{Stav instalace a~vygenerovaná konfigurace vyžadují stejnou ochranu jako přihlašovací údaje. Zdrojové archivy musí nadále vynechávat místní \filepath{config.php}.}
 
+Migrace se~dokončí před vytvořením prvního správce, \filepath{config.php} a~instalačního zámku. Opravy používají ověřené spojení instalátoru a~sdílený zámek zápisu galerií; před vytvořením konfigurace ukládají galerie do~adresáře \filepath{galleries/} v~instalaci. Pokud migrace selže, odstraňte příčinu a~znovu odešlete krok vytvoření správce. Dokončené migrace zůstávají zaznamenané a~neúspěšný callback se~zopakuje. Zachovejte migrační evidenci a~u~dokončené instalace ponechte konfiguraci i~zámky.
+
 Obvyklý postup:
 
 \begin{enumerate}

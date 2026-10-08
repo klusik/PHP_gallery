@@ -29,6 +29,13 @@ reading mutable state and retain it through their last database/file side effect
 `Gallery\Core\GALLERY_EDIT_LOCK_SUFFIX` in `app/policy_constants.php` owns the
 protocol suffix used by those application writer boundaries.
 
+`gallery_edit_model_lock()` and `gallery_edit_model_release()` accept an optional
+explicit PDO connection. Ordinary writers retain the configured connection;
+the layout migration supplies its runner connection for both calls. This keeps
+the same database-specific lock and nonblocking policy available to `install.php`
+before `config.php` exists. Missing ownership or a busy peer refuses the callback
+before layout writes; it never skips the lock for a fresh installation.
+
 This deliberately serializes operations across the whole installation,
 including unrelated galleries. Public-path rebuilds can invalidate forms for
 several galleries. A validation failure after reservation also invalidates the

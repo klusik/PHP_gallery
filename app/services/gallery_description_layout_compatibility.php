@@ -30,6 +30,12 @@ use function Gallery\Models\gallery_layout_migration_model_state;
 use function Gallery\Models\gallery_layout_migration_model_begin;
 use function Gallery\Models\gallery_layout_migration_model_apply;
 use function Gallery\Models\gallery_layout_migration_model_finish;
+use function Gallery\Models\gallery_edit_model_lock;
+use function Gallery\Models\gallery_edit_model_release;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_has_config;
+
+require_once dirname(__DIR__) . '/models/gallery_edit_concurrency.php';
 
 /**
  * Purpose: Identify canonical gallery-card orientation semantics independently of document structure versions.
@@ -251,17 +257,41 @@ function gallery_description_layout_upgrade_json_rows(array $rows, string $colum
 }
 
 /**
+ * Resolve layout-repair storage before or after the installation configuration exists.
+ * The installer owns the default galleries directory before writing config.php;
+ * upgrades use the configured gallery root. Persistent and legacy Trash locations
+ * remain project-owned, and resolving these paths creates no directories.
+ * @return array<int,string> Gallery, persistent Trash and legacy Trash roots.
+ */
+function gallery_description_layout_migration_roots(): array
+{
+    require_once dirname(__DIR__) . '/bootstrap/configuration.php';
+    $projectRoot = dirname(__DIR__, 2);
+    $galleryRoot = cms_has_config() ? (string) cms_config()['galleries_root'] : $projectRoot . '/galleries';
+    return [$galleryRoot, $projectRoot . '/data/gallery-trash', $projectRoot . '/cache/gallery-trash'];
+}
+
+/**
  * Preserve established installations' card appearance through the canonical migration runner.
  * Fresh setup executes before its first administrator exists and keeps the new vertical default.
  * The database transaction and completion marker prevent repeated scalar swaps; filesystem
  * documents carry their own marker in case PHP stops before the database commit.
+ * The shared writer lock is acquired and released on this explicit connection,
+ * including first installation before application database/configuration bootstrap.
  * @param PDO $pdo Canonical migration connection with the required storage migrations applied.
  * @param array<int,string>|null $sidecarRoots Explicit isolated storage roots for migration recovery/tests; null uses canonical live roots.
  * @return void Completes the conversion or leaves the migration retryable.
  */
 function gallery_description_layout_migrate_legacy(PDO $pdo, ?array $sidecarRoots = null): void
 {
-    $lease = gallery_edit_writer_begin();
+    try {
+        $lease = gallery_edit_model_lock($pdo);
+    } catch (Throwable) {
+        throw new RuntimeException('Gallery layout migration edit protection could not be verified.');
+    }
+    if ($lease === null) {
+        throw new RuntimeException('Another gallery operation is still running. Retry the layout migration after it finishes.');
+    }
     try {
         gallery_layout_migration_model_begin($pdo);
         try {
@@ -272,7 +302,7 @@ function gallery_description_layout_migrate_legacy(PDO $pdo, ?array $sidecarRoot
             }
             $smart = gallery_description_layout_upgrade_json_rows($state['smart'], 'presentation_json');
             $trash = gallery_description_layout_upgrade_json_rows($state['trash'], 'snapshot_json');
-            $roots = $sidecarRoots ?? [galleries_root(), dirname(__DIR__, 2) . '/data/gallery-trash', gallery_trash_legacy_root()];
+            $roots = $sidecarRoots ?? gallery_description_layout_migration_roots();
             $sidecars = gallery_description_layout_sidecar_plan($roots);
             $upgrade = $state['upgrade'] || $sidecars['has_sidecars'];
             $settings = ['gallery_description_layout_semantics_version' => '2'];
@@ -297,6 +327,10 @@ function gallery_description_layout_migrate_legacy(PDO $pdo, ?array $sidecarRoot
             throw $error;
         }
     } finally {
-        gallery_edit_writer_end($lease);
+        try {
+            gallery_edit_model_release($lease, $pdo);
+        } catch (Throwable) {
+            throw new RuntimeException('Gallery layout migration connection was interrupted. Verify migration state before retrying.');
+        }
     }
 }

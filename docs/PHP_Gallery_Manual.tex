@@ -278,6 +278,8 @@ Prepare deployment folders or~ZIPs only when needed, using the~reviewed file lis
 
 The~browser installer gathers database settings, initializes the~schema through migrations, creates the~first administrator, prepares writable locations, and~writes local configuration. A~fresh request redirects to~installation when required configuration is~absent.\footnote{Installation state and~generated configuration should receive the~same protection as~credentials. Source archives should continue excluding the~local \filepath{config.php}.}
 
+Migrations finish before the~first administrator, \filepath{config.php}, and~the~installation lock are~created. Repairs use the~verified installer connection and~the~shared gallery-writer lock; before configuration exists, gallery storage is~the~installation's \filepath{galleries/} directory. If~a~migration fails, correct its cause and~submit the~administrator step again. Completed migrations remain recorded and~the~failed callback is~retried. Preserve the~migration ledger and~leave completed installations' configuration and~locks in~place.
+
 Typical steps are:
 
 \begin{enumerate}

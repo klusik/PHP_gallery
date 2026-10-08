@@ -120,6 +120,23 @@ not a source parser or a commitment to remove anything on a calendar date.
   equivalent, equally durable partial-DDL recovery guarantee replaces it.
   A single-engine transaction assumption is not a retirement proof.
 
+### DB-5 — Layout repair before first-install configuration
+
+- **Reason / protected scenario:** `install.php` runs the layout-semantics
+  callback before `config.php` and the first administrator exist. The repair must
+  use the installer PDO for the shared writer lock and the installer-owned
+  `galleries/` root rather than assume application bootstrap has run. Configured
+  upgrades retain their configured gallery root and legacy/persistent Trash roots.
+- **Era / owner:** Repair for issue #123, reported on 0.124.3. Owner:
+  `gallery_description_layout_compatibility.php` and the canonical gallery edit model.
+- **Evidence / tests:** `installer_first_install_test.php` exercises config-free
+  HTTP installation, busy refusal and retry; `gallery_description_layout_compatibility_test.php`
+  retains upgrade, fresh-state and interrupted sidecar/database replay coverage.
+- **Usage:** Unknown; the issue documents one failed installation.
+- **Lifecycle:** Permanent while standalone pre-configuration installation is
+  supported. Retirement requires an equivalent tested installation protocol that
+  supplies configuration before callbacks without weakening writer exclusion or replay.
+
 ### DB-4 — Unsupported database-floor and former query-workaround rationale
 
 - **Reason / protected scenario:** Historical support notes explain old server

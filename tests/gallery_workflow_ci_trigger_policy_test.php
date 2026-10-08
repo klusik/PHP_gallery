@@ -399,7 +399,7 @@ namespace {
     $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (string $profile): array {' . $selectionBody . 'return $requiredTests;};');
     check($selection instanceof Closure, 'Actual central evidence selector did not compile.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = 'disabled';
-    $requiredDatabaseTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
+    $requiredDatabaseTests = ['installer_first_install_test.php', 'gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
     check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests],
         'Explicit browser disablement changed database/HTTP or race PASS requirements.');
     check($selection('quick') === ['database_engine_contract_test.php'],

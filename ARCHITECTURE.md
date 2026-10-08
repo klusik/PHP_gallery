@@ -1961,6 +1961,13 @@ and deployment prerequisite are documented in
 [edit concurrency](docs/GALLERY_EDIT_CONCURRENCY.md). This does not version every
 independent tag, translation or Smart Gallery entity.
 
+The layout compatibility callback runs during standalone installation as well
+as configured upgrades. It acquires/releases the canonical writer lock on its
+explicit migration PDO, so it needs neither `db()` nor a full application
+bootstrap. Before `config.php` exists it resolves the installer-owned gallery
+directory; afterward it uses the configured gallery root. A busy or unverified
+lock leaves the callback pending before layout mutations.
+
 The Admin panel composes open-generation ownership with the existing mutation
 completion coordinator. Drafts are bounded in memory and exclude private fields;
 the submitting form receives its acknowledged revision before delayed refresh.

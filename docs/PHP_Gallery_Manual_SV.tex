@@ -276,6 +276,8 @@ Bygg vid behov distributionsmappar eller ZIP-filer med \filepath{app/production-
 
 Webbläsarinstallationen samlar in databasinställningar, initierar schemat genom migreringar, skapar den första administratören, förbereder skrivbara platser och skriver den lokala konfigurationen. En ny begäran omdirigeras till installationen när nödvändig konfiguration saknas.\footnote{Installationstillstånd och genererad konfiguration bör skyddas på samma sätt som inloggningsuppgifter. Källkodsarkiv ska fortsatt utesluta den lokala \filepath{config.php}.}
 
+Migreringarna slutförs före det~första administratörskontot, \filepath{config.php} och~installationslåset. Reparationer använder installationsprogrammets verifierade anslutning och~det gemensamma skrivlåset för~gallerier; före konfigurationen finns gallerilagringen i~installationens \filepath{galleries/}. Åtgärda orsaken om~en~migrering misslyckas och~skicka administratörssteget igen. Slutförda migreringar förblir registrerade och~den misslyckade återanropsfunktionen körs igen. Behåll migreringsloggen samt konfiguration och~lås för~slutförda installationer.
+
 Vanliga steg:
 
 \begin{enumerate}
