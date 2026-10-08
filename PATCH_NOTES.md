@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.124.1
+
+Version 0.124.1 strengthened release-note qualification and audit diagnostics. It required complete, correctly structured release notes and retained rejected AI-generated prose for maintainers to diagnose failures.
+
+### Highlights
+
+#### Release-note qualification
+
+- Required the exact `### Highlights`, `### Technical Details`, and `### User Impact` sections, including for test-, documentation-, and tooling-only releases.
+- Rejected missing, renamed, inline, or incorrectly leveled required headings, and required user impact to be evidence-based and explicit when visitor or administrator behavior did not change.
+- Retained incomplete or invalid AI-generated notes as a failure-only Actions artifact for seven days; invalid notes continued to block release preparation and were not applied.
+
+### Technical Details
+
+#### Release tooling
+
+- Updated `.github/scripts/patch_notes_ai.php`, `.github/workflows/release-qualification.yml`, `PATCH_NOTES_TEMPLATE.md`, and `RELEASE.md` to enforce complete release notes and preserve rejected prose for failure diagnosis.
+
+#### Audit diagnostics
+
+- Updated `scripts/audit.php` and `scripts/audit_lib.php` to print up to five bounded audit failure details, with a suite-log pointer when available.
+- Added specific assertion or runtime errors to Node fixture diagnostics.
+
+#### Tests
+
+- Expanded `tests/audit_runner_test.php`, `tests/patch_notes_ai_chunks_test.php`, and `tests/patch_notes_ai_evidence_test.php` to cover audit reporting and release-note requirements.
+- Updated `tests/admin_panel_lifecycle_browser_test.mjs` and its fixture to report bounded Chromium stderr and page exceptions, and the last assertion progress on timeout.
+- Extended the Admin panel lifecycle fixture to check SimBrief review dismissal across viewport sizes and after editor replacement, including URL, drawer, focus, background isolation, and dispatch-submission assertions. These changes expanded test coverage and did not establish a product behavior change.
+
+#### Documentation
+
+- Updated `TESTING.md` and all four maintained `docs/PHP_Gallery_Manual*.tex` editions with the corresponding testing and release-qualification guidance.
+
+### User Impact
+
+#### For visitors
+
+- Public visitor behavior did not change.
+
+#### For administrators
+
+- Administrator-facing behavior did not change.
+
+#### For maintainers
+
+- Received clearer, bounded audit failure details and more actionable browser-test diagnostics.
+- Could inspect retained AI-generated release-note prose when qualification failed, while incomplete or invalid notes remained unapplied.
+
 ## Version 0.124
 
 Version 0.124 completed the legacy-gallery SimBrief OFP workflow, adding a reviewable dispatch prefill and a guarded per-gallery PDF attachment flow for administrators. The update also tightened validation, localized the workflow across English, Czech, German and Swedish, and expanded regression coverage for historical dispatch data, drawer focus behavior, and responsive Admin layouts.
