@@ -200,9 +200,6 @@ function bindModalKeys(panel) {
     }, true);
     window.addEventListener('keydown', /** Contain focus and close only for keys unclaimed by nested widgets. @param {KeyboardEvent} event Bubbled keyboard event. @return {void} Preserves composing/modifier and widget-specific behavior. */ (event) => {
         if (!captureAdminPanelOwner(panel).isCurrent() || event.defaultPrevented || event.isComposing) return;
-        // A nested native top-layer modal owns its own Tab cycle and Escape.
-        // Do not close the drawer or redirect focus while the modal is active.
-        if (panel.querySelector('dialog:modal')?.contains(event.target)) return;
         if (event.key === 'Escape') {
             if (widgetEscapes.has(event) || event.ctrlKey || event.altKey || event.metaKey) return;
             event.preventDefault();
