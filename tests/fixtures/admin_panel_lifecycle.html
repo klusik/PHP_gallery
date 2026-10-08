@@ -14,6 +14,7 @@ Author: Rudolf Klusal
 <meta charset="utf-8">
 <title>Disposable Admin panel lifecycle fixture</title>
 <link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-gallery-api.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
 <style>
     [hidden] { display: none !important; }
@@ -33,6 +34,7 @@ Author: Rudolf Klusal
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
 import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
 import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
+import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
 import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20261003-compact-tables-v1';
 import {ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT} from '/public/assets/gallery-modules/admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
@@ -104,6 +106,19 @@ function check(condition, message) {
  */
 function wait(milliseconds = settleMs) { return new Promise(/** Yield until the requested fixture delay has elapsed. @param {function(): void} resolve Resume queued assertions. @return {number} Browser timer handle ignored by the executor. */ resolve => setTimeout(resolve, milliseconds)); }
 /**
+ * Await an observable completion within a bounded fixture deadline.
+ * @param {function(): boolean} condition Postcondition read without modifying production state.
+ * @param {string} message Diagnostic assertion to report if completion never arrives.
+ * @return {Promise<void>} Resolves on completion or rejects after two seconds.
+ */
+async function waitUntil(condition, message) {
+    const deadline = performance.now() + 2000;
+    while (!condition()) {
+        if (performance.now() >= deadline) throw new Error(message);
+        await wait(20);
+    }
+}
+/**
  * Produce ordinary server-shaped editor HTML with identity, revision and secret exclusions.
  * @param {string} id Synthetic gallery identity.
  * @return {string} Disposable fragment.
@@ -127,7 +142,33 @@ function editor(id) {
         <fieldset disabled><button type="button">Disabled fieldset</button></fieldset></section>
         <section class="panel admin-tab-panel" id="admin-edit-access" role="tabpanel" aria-labelledby="admin-edit-access-control" data-admin-tab-panel>Access settings</section>
         <div class="admin-edit-gallery-savebar" data-admin-gallery-savebar><button type="submit">Save gallery</button></div></form>
-        <section class="panel admin-tab-panel" id="admin-edit-api" role="tabpanel" aria-labelledby="admin-edit-api-control" data-admin-tab-panel><div data-admin-copy-row><label>Endpoint<input data-admin-copy-input readonly value="https://fixture.invalid/upload/${id}"></label><button type="button" data-admin-copy-button data-copy-success="Copied" aria-label="Copy endpoint"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status"></span></div><form><button type="button">Generate API key</button></form></section>
+        <section class="panel admin-tab-panel" id="admin-edit-api" role="tabpanel" aria-labelledby="admin-edit-api-control" data-admin-tab-panel>
+        <div data-admin-copy-row><label>Endpoint<input data-admin-copy-input readonly value="https://fixture.invalid/upload/${id}"></label><button type="button" data-admin-copy-button data-copy-success="Copied" aria-label="Copy endpoint"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status"></span></div><form><button type="button">Generate API key</button></form>
+        <section data-simbrief-legacy-panel>
+            <a href="/fixture-ofp?id=${id}">View OFP</a>
+            <button type="button" data-simbrief-dispatch-open>Prepare revised OFP in SimBrief</button>
+            <p>The current PDF remains unchanged until you explicitly upload and confirm a replacement.</p>
+            <details class="admin-simbrief-legacy-replace"><summary>Replace existing OFP PDF</summary>
+                <form data-simbrief-ofp-upload-form><input type="file" name="simbrief_ofp_pdf" accept=".pdf,application/pdf" required>
+                    <select name="ofp_provenance"><option value="retrospective_user_generated">Newly generated retrospective OFP</option><option value="manually_supplied">Manually supplied document</option></select>
+                    <input type="checkbox" name="confirm_replace" required><button type="submit">Replace PDF</button>
+                </form>
+            </details>
+            <template data-simbrief-dispatch-template>
+                <dialog class="admin-simbrief-dispatch-dialog" data-simbrief-dispatch-dialog aria-label="Review SimBrief dispatch inputs">
+                    <form method="dialog" data-simbrief-dispatch-form>
+                        <div class="admin-simbrief-dispatch-fields">
+                            <label class="admin-simbrief-dispatch-field"><span>Departure ICAO</span><input name="orig" value="LKPR"></label>
+                            <label class="admin-simbrief-dispatch-field"><span>Arrival ICAO</span><input name="dest" value="ESSA"></label>
+                            <label class="admin-simbrief-dispatch-field admin-simbrief-dispatch-field-date"><span>Departure date</span><input type="date" name="date" value="2026-06-03"></label>
+                        </div>
+                        <footer><button type="button" data-simbrief-dispatch-cancel>Cancel</button>
+                        <button type="submit" data-simbrief-dispatch-confirm>Open SimBrief</button></footer>
+                        <output data-simbrief-dispatch-error></output>
+                    </form>
+                </dialog>
+            </template>
+        </section></section>
         ${toolForms(id)}<div data-gallery-search-picker data-search-url="/picker" data-page-size="30" data-search-delay="0">
         <input data-gallery-search-picker-value type="hidden" value="0"><input id="destination" data-gallery-search-picker-input aria-expanded="false">
         <div data-gallery-search-picker-menu hidden><button type="button" data-gallery-search-picker-option data-gallery-search-picker-root data-gallery-id="0" data-gallery-label="Root">Root</button></div>
@@ -388,6 +429,7 @@ function submitTool(selector) {
 try {
     Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: writeFixtureClipboard}});
     setupAdminGalleryCompactEditor(); setupAdminGalleryCompactEditor();
+    setupSimbriefDescriptionGenerator(); setupSimbriefDescriptionGenerator();
     setupAdminGallerySidePanel(); setupAdminGallerySidePanel();
     setupAdminGalleryTitleCompletion();
     setupAdminMetadataOrganizer();
@@ -612,7 +654,11 @@ try {
     release('organizer', '2'); await wait(100); holdOrganizer = false;
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === false, 'Organizer completion retains the owner captured before its batch loop');
     check(field('form') === organizerReplacement && field('[data-admin-side-panel-status]').textContent === organizerStatus, 'Late organizer completion cannot redraw the replacement editor');
-    submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(150);
+    lastOrganizerDetail = null;
+    submitTool('[data-admin-metadata-organizer-apply-form]');
+    await waitUntil(() => lastOrganizerDetail?.panelOwner?.isCurrent() === true
+        && field('form') !== organizerReplacement,
+        'Current organizer completion did not reach the canonical panel refresh within two seconds');
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === true && field('form') !== organizerReplacement, 'Current organizer completion reaches the canonical panel refresh');
     check(organizerResultTableAtCompletion && location.href === originalUrl && !panel().hidden && panel().classList.contains('is-open'), 'Organizer apply renders result rows in the scroll wrapper before refresh while keeping the panel open and URL unchanged');
 
@@ -725,6 +771,55 @@ try {
     check(getComputedStyle(savebar).display !== 'none', 'API keeps the gallery settings save bar available across tabs');
     tabBody.querySelector('[data-admin-copy-button]').click(); await wait();
     check(clipboardValue === 'https://fixture.invalid/upload/1' && location.href === originalUrl && !panel().hidden, 'Copy endpoint stays in the open drawer without navigation');
+    // Real nested native modal: focus, Tab and Escape must belong to the review,
+    // not to the persistent drawer and its background-inert/focus-trap owner.
+    const reviewButton = tabBody.querySelector('[data-simbrief-dispatch-open]');
+    reviewButton.click();
+    const reviewDialog = panel().querySelector('dialog[data-simbrief-dispatch-dialog]');
+    check(reviewDialog instanceof HTMLDialogElement && reviewDialog.open && reviewDialog.matches(':modal')
+        && reviewDialog.parentElement === panel(), 'Historical OFP review is modal inside the active drawer, not an inert body sibling');
+    const departure = reviewDialog.querySelector('input[name="orig"]');
+    const arrival = reviewDialog.querySelector('input[name="dest"]');
+    const date = reviewDialog.querySelector('input[name="date"]');
+    check(reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('input[name="simbrief_ofp_pdf"][required]') !== null
+        && reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('input[name="confirm_replace"][required]') !== null
+        && reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('select[name="ofp_provenance"]') !== null
+        && reviewDialog.querySelector('input[type="file"]') === null,
+        'An attached OFP offers independent reviewed re-dispatch and separate confirmed file replacement');
+    check(document.activeElement === departure && !reviewDialog.inert && document.getElementById('background').inert,
+        'Dialog inputs receive focus while the drawer keeps the real background isolated');
+    type(departure, 'EGLL');
+    check(document.activeElement === departure && departure.value === 'EGLL',
+        'Typing into review inputs is not redirected to the drawer Close button');
+    await trustedKey('Tab');
+    check(document.activeElement === arrival && departure.value === 'EGLL' && panel().classList.contains('is-open'),
+        'Native Tab moves between review inputs without drawer focus trap');
+    // Segmented native date controls must not protrude beyond the dialog.
+    for (const width of [390, 320, 1280]) {
+        const resized = await fixtureFetch('/__viewport?width=' + width);
+        check(resized.ok, 'Owned Chromium viewport can switch to ' + width + 'px');
+        await wait();
+        const modalBox = reviewDialog.getBoundingClientRect();
+        const dateBox = date.getBoundingClientRect();
+        const dateFieldBox = date.closest('.admin-simbrief-dispatch-field-date').getBoundingClientRect();
+        check(dateBox.width >= 180 && dateBox.left >= modalBox.left + 4
+            && dateBox.right <= modalBox.right - 4
+            && dateFieldBox.right <= modalBox.right - 4
+            && reviewDialog.scrollWidth <= reviewDialog.clientWidth + 1,
+            'Native date input and its whole field stay inside the review overlay at ' + width + 'px');
+    }
+    await trustedKey('Escape');
+    check(!reviewDialog.open && !reviewDialog.isConnected && panel().classList.contains('is-open')
+        && panel().contains(document.activeElement) && document.getElementById('background').inert,
+        'Native Escape dismisses only SimBrief review and restores drawer focus');
+    reviewButton.click();
+    const reopenedReview = panel().querySelector('dialog[data-simbrief-dispatch-dialog]');
+    check(reopenedReview?.open && reopenedReview.querySelector('input[name="orig"]').value === 'LKPR',
+        'Reopening the transient modal resets unsaved reviewed values');
+    reopenedReview.querySelector('[data-simbrief-dispatch-cancel]').click();
+    await wait();
+    check(!reopenedReview.isConnected && panel().classList.contains('is-open') && location.href === originalUrl,
+        'Cancel closes only the review without navigating or closing the editor');
     tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').click();
     check(tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').getAttribute('aria-selected') === 'true' && !tabBody.querySelector('#admin-edit-access').hidden && tabBody.querySelector('#admin-edit-api').hidden, 'Access anchor switches back into the shared settings form');
     check(getComputedStyle(savebar).display !== 'none', 'Access shows the shared settings save bar');

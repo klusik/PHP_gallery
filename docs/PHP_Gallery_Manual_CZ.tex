@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.123}
+\newcommand{\version}{0.124}
 \newcommand{\manualdate}{8.~října~2026}
 
 \hypersetup{
@@ -1353,7 +1353,21 @@ Náhled SimBrief vyplní stávající editor trasy úplnou podanou trasou. Chyb�
 
 Pokud má galerie místně uložený soubor SimBrief OFP PDF, ve~veřejném popisu nabízí \ui{Zobrazit letový plán (OFP)} a~\ui{Stáhnout OFP PDF}, i~když ještě neobsahuje fotografie. Dokument se otevírá v~samostatném prohlížeči PDF se vzhledem lightboxu; přechod mezi stránkami nikdy nepřepíná fotografie galerie. Výchozí režim \ui{Zobrazit celou stránku} přizpůsobí rozměry PDF současně dostupné šířce i~výšce prostoru mezi záhlavím a~lištou ovládání a~stránku vystředí. \ui{Přizpůsobit šířce} umožňuje svislé posouvání, \ui{Skutečná velikost (100\%)} používá standardní obrazovkové měřítko PDF. Aktivní režim je na~liště zvýrazněn. K~dispozici zůstává přiblížení/oddálení, obnovení 100\% posledního přizpůsobení, dotykové gesto a~posouvání, klávesová navigace mezi stránkami i~celá obrazovka.
 
-Původní PDF se~poskytuje samostatnou trasou galerie \codeword{gallery\_ofp\_pdf} na~stejné doméně a~portu jako veřejná galerie. Odkazy s~\codeword{index.php} fungují také v~podadresáři bez přepisování URL. Čerstvý anonymní návštěvník může bez přihlášení správce zobrazit i~stáhnout OFP veřejné i~nezveřejněné galerie dostupné přímým odkazem. Stav „nezveřejněná“ znamená skrytí z~běžného seznamu, nikoli soukromý přístup: původní PDF podléhá stejným pravidlům jako galerie, včetně hesla, sdílecího tokenu a~omezení NSFW. Skutečně soukromé galerie bez platného oprávnění návštěvníka a~soukromé podgalerie vygenerovaných stránek zůstávají chráněné. Ověřený správce může prohlížet soukromé PDF mimo anonymní náhled. Zamítnutý přístup, chybějící i~neplatné PDF vracejí stejnou neukládanou textovou odpověď \codeword{404}, nikoli stránku HTML nebo cestu k~souboru. Starší odkazy \codeword{media} s~parametrem \codeword{ofp=1} zůstávají funkční.
+\paragraph{Historické OFP a~kontrola před otevřením SimBriefu.}
+\index{s00207@SimBrief!h00027@historické OFP}
+U~existující galerie bez platného OFP PDF otevřete v~administraci kartu \ui{API} a~zvolte \ui{Vytvořit historické OFP / Otevřít předvyplněný SimBrief}. Nejdříve se~otevře modální kontrolní okno s~identitou galerie a~upravitelnými kódy ICAO odletu a~příletu, datem, časem odletu v~UTC, typem letadla, číslem letu a~volacím znakem, trasou, letovou hladinou, náhradním letištěm a~počtem cestujících. Ověřená uložená data OFP jsou označená; údaje z~mapy trasy nebo datum galerie jsou označené jako nejisté. Neznámé údaje zůstávají prázdné, nic se~nehádá z~názvu galerie nebo času EXIF. \ui{Zrušit / Zpět} nic neodesílá a~galerii nemění.
+
+Kontrolní okno funguje i~nad otevřeným pravým administračním panelem bez jeho zavření. Do~polí lze psát a~přecházet klávesou \codeword{Tab}; klávesa \codeword{Escape} nebo~\ui{Zrušit / Zpět} zavře pouze kontrolní okno a~vrátí zaměření do~editoru.
+
+I~když už galerie platné PDF obsahuje, tlačítko \ui{Připravit upravené OFP v SimBriefu} otevře stejné upravitelné kontrolní okno, aniž by~změnilo uložený dokument. Nové PDF nejprve vygenerujte a~stáhněte na~webu SimBrief; potom použijte samostatné \ui{Nahradit existující OFP PDF} s~výslovným potvrzením. Volba \ui{Původ nahrávaného PDF} slouží pouze k~evidenci, sama nic negeneruje ani nestahuje. Pole data odletu má vlastní řádek, aby se~nativní výběr data vešel do~dialogu i~na~užším displeji.
+
+Cestovní letovou hladinu zadejte ve~stovkách stop, například \codeword{350}; přesměrování odešle dokumentovaný formát \codeword{fl=FL350}. Nepřihlášený prohlížeč nejprve zobrazí přihlášení SimBriefu. Samotná přihlašovací obrazovka neověřuje přijetí historického data; datum zkontrolujte po~přihlášení a~před generováním.
+
+Teprve \ui{Otevřít SimBrief Dispatch} předá právě zkontrolované hodnoty bezpečně zakódovanou adresou oficiální stránky SimBriefu do~nové chráněné karty. Přihlášení a~vlastní \ui{Generovat} provádí uživatel na~stránce poskytovatele. Vývojářský klíč, OAuth ani dotazy na~pozadí nejsou potřebné. Historická data používají formát DDMMMYY, ale SimBrief může staré datum odmítnout nebo upravit. Nově vygenerované retrospektivní OFP není původní plán ze~dne letu: počasí, NOTAMy, AIRAC, trasa a~palivo se~mohou lišit.
+
+Po stažení PDF se~vraťte na~kartu \ui{API} stejné galerie a~zvolte \ui{Nahrát OFP PDF}; jeden ověřený soubor smí mít nejvýše 25\,MiB. Vyberte původ: retrospektivně vygenerovaný nebo ručně dodaný dokument. Platné existující PDF nabízí \ui{Zobrazit OFP}, \ui{Stáhnout PDF} a~samostatné sbalené \ui{Nahradit existující OFP PDF} s~výslovným potvrzením. Původ se~ukládá do~kanonického manifestu; datum, popis, fotografie, trasa, viditelnost ani původní JSON galerie se~nemění. Funkce nikdy nezpracovává galerie hromadně.
+
+Uložené PDF se~poskytuje samostatnou trasou galerie \codeword{gallery\_ofp\_pdf} na~stejné doméně a~portu jako veřejná galerie. Odkazy s~\codeword{index.php} fungují také v~podadresáři bez přepisování URL. Čerstvý anonymní návštěvník může bez přihlášení správce zobrazit i~stáhnout OFP veřejné i~nezveřejněné galerie dostupné přímým odkazem. Stav „nezveřejněná“ znamená skrytí z~běžného seznamu, nikoli soukromý přístup: původní PDF podléhá stejným pravidlům jako galerie, včetně hesla, sdílecího tokenu a~omezení NSFW. Skutečně soukromé galerie bez platného oprávnění návštěvníka a~soukromé podgalerie vygenerovaných stránek zůstávají chráněné. Ověřený správce může prohlížet soukromé PDF mimo anonymní náhled. Zamítnutý přístup, chybějící i~neplatné PDF vracejí stejnou neukládanou textovou odpověď \codeword{404}, nikoli stránku HTML nebo cestu k~souboru. Starší odkazy \codeword{media} s~parametrem \codeword{ofp=1} zůstávají funkční.
 
 Kompaktní tlačítka \ui{Zobrazit letový plán (OFP)} a~\ui{Stáhnout OFP PDF} jsou vedle sebe. Správce může volitelně vytvořit soukromou podgalerii stránek PDF samostatným tlačítkem pod nimi. Lokalizovaný otazníček zobrazí vysvětlení při najetí myší, klávesovém zaměření nebo klepnutí, aby dlouhý text nezabíral místo v~popisu galerie.
 

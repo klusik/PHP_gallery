@@ -87,6 +87,10 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     }
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
+    if (in_array((string) ($_POST['simbrief_action'] ?? ''), ['upload_pdf', 'replace_pdf'], true)) {
+        admin_edit_gallery_handle_ofp_upload($gallery);
+        return;
+    }
     if ((string) ($_POST['simbrief_action'] ?? '') === 'convert_pdf_pages') {
         admin_edit_gallery_handle_ofp_convert($gallery);
         return;
@@ -129,6 +133,87 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
         return;
     }
     admin_edit_gallery_handle_save($gallery, $returnTab);
+}
+
+/**
+ * Attach a manually supplied OFP PDF without invoking the photo pipeline.
+ *
+ * The editor already verified admin membership, resolved the gallery by ID and
+ * checked CSRF before this handler is called. Uploads are not implicit gallery
+ * saves: gallery metadata, media, route and old SimBrief JSON remain untouched.
+ *
+ * @param array<string,mixed> $gallery Persisted, authorized physical gallery.
+ * @return void Render an AJAX in-place update or a standard POST redirect.
+ */
+function admin_edit_gallery_handle_ofp_upload(array $gallery): void
+{
+    $ajax = admin_wants_json();
+    $galleryId = (int) $gallery['id'];
+    try {
+        if (!feature_capability_effective_enabled('simbrief')) {
+            throw new \RuntimeException(t('admin.legacy_ofp.disabled', 'SimBrief integration is disabled.'));
+        }
+        if ((int) ($_POST['id'] ?? 0) !== $galleryId) {
+            throw new \RuntimeException(t('admin.legacy_ofp.gallery_mismatch', 'The selected gallery changed. Reload this editor before uploading an OFP.'));
+        }
+        $action = (string) ($_POST['simbrief_action'] ?? '');
+        $replace = $action === 'replace_pdf';
+        if ($replace && (string) ($_POST['confirm_replace'] ?? '') !== '1') {
+            throw new \RuntimeException(t('admin.legacy_ofp.confirm_required', 'Confirm the separate PDF replacement action.'));
+        }
+        $upload = $_FILES['simbrief_ofp_pdf'] ?? null;
+        if (!is_array($upload) || !is_string($upload['tmp_name'] ?? null)
+            || (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+            || !is_uploaded_file($upload['tmp_name'])) {
+            throw new \RuntimeException(t('admin.legacy_ofp.invalid_upload', 'Select a PDF of up to 25 MiB and check PHP upload limits.'));
+        }
+        require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
+        $provenance = (string) ($_POST['ofp_provenance'] ?? 'retrospective_user_generated');
+        $outcome = \Gallery\Services\simbrief_ofp_attach_manual_pdf($gallery, $upload['tmp_name'], $provenance, $replace);
+        $message = t('admin.legacy_ofp.upload_complete', 'The OFP PDF was attached to this gallery. Existing photos, dates and routes were preserved.');
+        admin_log_event('info', 'simbrief.ofp_manual_pdf_attached', 'Administrator attached an OFP PDF.', [
+            'gallery_id' => $galleryId,
+            'bytes' => $outcome['bytes'],
+            'sha256' => $outcome['sha256'],
+            'provenance' => $outcome['provenance'],
+            'replacement' => $replace,
+        ]);
+        if ($ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store');
+            echo json_encode([
+                'ok' => true,
+                'message' => $message,
+                'panel_html' => admin_edit_gallery_simbrief_legacy_panel_html($gallery),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        flash_message('admin_notice', $message);
+    } catch (Throwable $error) {
+        admin_log_event('warning', 'simbrief.ofp_manual_pdf_failed', 'Administrator OFP attachment failed.', [
+            'gallery_id' => $galleryId,
+            'reason' => $error->getMessage(),
+        ]);
+        $localizedErrors = [
+            'An OFP PDF is already attached. Use the separate confirmed replacement action.' => t('admin.legacy_ofp.duplicate_pdf', 'An OFP PDF is already attached. Use the separate replacement action.'),
+            'No PDF exists to replace. Reload the gallery editor.' => t('admin.legacy_ofp.missing_replace', 'No PDF exists to replace. Reload the gallery editor.'),
+            'The file is not a valid PDF document.' => t('admin.legacy_ofp.invalid_pdf', 'The uploaded file is not a valid PDF.'),
+            'The PDF must be between 16 bytes and 25 MiB.' => t('admin.legacy_ofp.size_limit', 'The PDF must be at most 25 MiB.'),
+            'Choose a valid OFP document origin.' => t('admin.legacy_ofp.invalid_provenance', 'Choose a valid OFP origin.'),
+            'The existing OFP manifest is invalid and was preserved.' => t('admin.legacy_ofp.manifest_invalid', 'The existing OFP manifest is invalid. Repair it before replacing the attachment.'),
+        ];
+        $publicError = $localizedErrors[$error->getMessage()]
+            ?? t('admin.legacy_ofp.upload_failed', 'The PDF could not be attached. Check the file and gallery storage.');
+        if ($ajax) {
+            http_response_code(422);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store');
+            echo json_encode(['ok' => false, 'error' => $publicError], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        flash_message('admin_notice', $publicError);
+    }
+    redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-api'));
 }
 
 /**

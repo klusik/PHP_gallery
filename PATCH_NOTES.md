@@ -1,5 +1,52 @@
 # Patch notes
 
+## Version 0.124
+
+Version 0.124 completed the legacy-gallery SimBrief OFP workflow, adding a reviewable dispatch prefill and a guarded per-gallery PDF attachment flow for administrators. The update also tightened validation, localized the workflow across English, Czech, German and Swedish, and expanded regression coverage for historical dispatch data, drawer focus behavior, and responsive Admin layouts.
+
+### Highlights
+
+#### Legacy gallery SimBrief OFP workflow [#104](https://github.com/klusik/PHP_gallery/issues/104)
+
+- Added a reviewed dispatch prefill for legacy galleries that let administrators edit transient flight details before opening the official SimBrief redirect in a protected tab.
+- Added per-gallery PDF attachment handling with explicit provenance selection, upload validation, and confirmed replacement for existing attachments.
+- Kept gallery metadata, photos, routes and saved SimBrief JSON unchanged while the upload was staged and rolled back on failure.
+- Updated Admin drawer and mobile layouts so the nested review modal stayed inside the active drawer and preserved Tab and Escape behavior without navigation.
+
+### Technical Details
+
+#### Backend
+
+- Extended `app/services/simbrief_ofp_attachments.php` to validate saved SimBrief data, normalize legacy cruise levels to `FLxxx`, reject stale gallery submissions, and preserve the last working attachment when an install failed.
+- Updated `app/controllers/admin_galleries_edit_page/post_actions.php` and `app/controllers/admin_galleries_edit_page/tab_tools.php` to expose the review, upload, replacement and provenance workflow in the Admin API tab.
+- Indexed attachment provenance and timestamps in the canonical manifest while keeping the source gallery access and PDF validation checks aligned with the documented public HTTP behavior.
+- Added the corresponding localized strings in `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json` and `app/lang/sv.json`.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/admin-simbrief-description.js` and updated `public/assets/gallery.js` and `public/assets/styles/admin-gallery-api.css` for the review dialog, responsive date/layout handling, and drawer-safe key isolation.
+- Updated `app/views/admin_gallery_edit_tabs.php` to show the canonical legacy dispatch and PDF actions in the Admin gallery editor.
+- Documented the revised workflow in `docs/SIMBRIEF_OFP.md` and the four maintained manual editions under `docs/`.
+
+#### Tests
+
+- Added `tests/simbrief_legacy_dispatch_browser_test.mjs` for historical dispatch redirect encoding, validation and gallery isolation.
+- Expanded `tests/simbrief_ofp_document_test.php` to cover legacy dispatch prefill, normalized saved dates, PDF validation, provenance and confirmed replacement.
+- Updated the Admin panel lifecycle checks and documentation in `TESTING.md` to cover drawer focus behavior and responsive date layout.
+
+### User Impact
+
+#### For visitors
+
+- Continued to rely on the source gallery’s visitor-access rules for saved OFP PDFs, and invalid, missing or rejected attachments returned the same no-store plain-text 404 behavior as the existing public route.
+- Kept the review and upload workflow restricted to administrators; public HTTP coverage exercised access gates, admin preview isolation, and root/subdirectory URL handling.
+
+#### For administrators
+
+- Reviewed and edited transient historical SimBrief dispatch fields before redirecting to the official SimBrief site, without persisting gallery data during the review.
+- Uploaded or replaced gallery-scoped OFP PDFs with explicit provenance confirmation, while preserving the last valid attachment if installation failed.
+- Used the localized review, upload and validation flow across the supported Admin languages, and followed the updated documentation for legacy dispatch and PDF attachment behavior.
+
 ## Version 0.123
 
 Version 0.123 added a self-hosted viewer for saved SimBrief OFP PDFs, improved photo-lightbox gestures, and strengthened candidate preparation and release-note evidence handling. Administrators gained an optional way to convert OFP pages into a private child gallery; visitors could view or download saved PDFs subject to the source gallery’s access rules.
