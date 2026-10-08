@@ -132,13 +132,22 @@ function editor(id) {
         <section class="panel admin-tab-panel" id="admin-edit-api" role="tabpanel" aria-labelledby="admin-edit-api-control" data-admin-tab-panel>
         <div data-admin-copy-row><label>Endpoint<input data-admin-copy-input readonly value="https://fixture.invalid/upload/${id}"></label><button type="button" data-admin-copy-button data-copy-success="Copied" aria-label="Copy endpoint"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status"></span></div><form><button type="button">Generate API key</button></form>
         <section data-simbrief-legacy-panel>
-            <button type="button" data-simbrief-dispatch-open>Review historical OFP</button>
+            <a href="/fixture-ofp?id=${id}">View OFP</a>
+            <button type="button" data-simbrief-dispatch-open>Prepare revised OFP in SimBrief</button>
+            <p>The current PDF remains unchanged until you explicitly upload and confirm a replacement.</p>
+            <details class="admin-simbrief-legacy-replace"><summary>Replace existing OFP PDF</summary>
+                <form data-simbrief-ofp-upload-form><input type="file" name="simbrief_ofp_pdf" accept=".pdf,application/pdf" required>
+                    <select name="ofp_provenance"><option value="retrospective_user_generated">Newly generated retrospective OFP</option><option value="manually_supplied">Manually supplied document</option></select>
+                    <input type="checkbox" name="confirm_replace" required><button type="submit">Replace PDF</button>
+                </form>
+            </details>
             <template data-simbrief-dispatch-template>
                 <dialog class="admin-simbrief-dispatch-dialog" data-simbrief-dispatch-dialog aria-label="Review SimBrief dispatch inputs">
                     <form method="dialog" data-simbrief-dispatch-form>
                         <div class="admin-simbrief-dispatch-fields">
                             <label class="admin-simbrief-dispatch-field"><span>Departure ICAO</span><input name="orig" value="LKPR"></label>
                             <label class="admin-simbrief-dispatch-field"><span>Arrival ICAO</span><input name="dest" value="ESSA"></label>
+                            <label class="admin-simbrief-dispatch-field admin-simbrief-dispatch-field-date"><span>Departure date</span><input type="date" name="date" value="2026-06-03"></label>
                         </div>
                         <footer><button type="button" data-simbrief-dispatch-cancel>Cancel</button>
                         <button type="submit" data-simbrief-dispatch-confirm>Open SimBrief</button></footer>
@@ -754,6 +763,12 @@ try {
         && reviewDialog.parentElement === panel(), 'Historical OFP review is modal inside the active drawer, not an inert body sibling');
     const departure = reviewDialog.querySelector('input[name="orig"]');
     const arrival = reviewDialog.querySelector('input[name="dest"]');
+    const date = reviewDialog.querySelector('input[name="date"]');
+    check(reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('input[name="simbrief_ofp_pdf"][required]') !== null
+        && reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('input[name="confirm_replace"][required]') !== null
+        && reviewButton.closest('[data-simbrief-legacy-panel]').querySelector('select[name="ofp_provenance"]') !== null
+        && reviewDialog.querySelector('input[type="file"]') === null,
+        'An attached OFP offers independent reviewed re-dispatch and separate confirmed file replacement');
     check(document.activeElement === departure && !reviewDialog.inert && document.getElementById('background').inert,
         'Dialog inputs receive focus while the drawer keeps the real background isolated');
     type(departure, 'EGLL');
@@ -762,6 +777,20 @@ try {
     await trustedKey('Tab');
     check(document.activeElement === arrival && departure.value === 'EGLL' && panel().classList.contains('is-open'),
         'Native Tab moves between review inputs without drawer focus trap');
+    // Segmented native date controls must not protrude beyond the dialog.
+    for (const width of [390, 320, 1280]) {
+        const resized = await fixtureFetch('/__viewport?width=' + width);
+        check(resized.ok, 'Owned Chromium viewport can switch to ' + width + 'px');
+        await wait();
+        const modalBox = reviewDialog.getBoundingClientRect();
+        const dateBox = date.getBoundingClientRect();
+        const dateFieldBox = date.closest('.admin-simbrief-dispatch-field-date').getBoundingClientRect();
+        check(dateBox.width >= 180 && dateBox.left >= modalBox.left + 4
+            && dateBox.right <= modalBox.right - 4
+            && dateFieldBox.right <= modalBox.right - 4
+            && reviewDialog.scrollWidth <= reviewDialog.clientWidth + 1,
+            'Native date input and its whole field stay inside the review overlay at ' + width + 'px');
+    }
     await trustedKey('Escape');
     check(!reviewDialog.open && !reviewDialog.isConnected && panel().classList.contains('is-open')
         && panel().contains(document.activeElement) && document.getElementById('background').inert,
