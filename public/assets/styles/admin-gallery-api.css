@@ -321,3 +321,104 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* #104: per-gallery retrospective OFP actions, independent from theme colors. */
+.admin-simbrief-legacy-card {
+    margin: 0 0 1rem;
+    padding: 1rem;
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid #d6dfe9;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #172439;
+}
+.admin-simbrief-legacy-card h3,
+.admin-simbrief-legacy-card h4,
+.admin-simbrief-legacy-card p { margin: 0; }
+.admin-simbrief-legacy-card h3 { font-size: 1.05rem; }
+.admin-simbrief-legacy-card h4 { font-size: 0.95rem; }
+.admin-simbrief-legacy-card .muted,
+.admin-simbrief-legacy-card small { color: #475569; }
+.admin-simbrief-legacy-present { display: grid; gap: 0.25rem; }
+.admin-simbrief-legacy-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.admin-simbrief-legacy-card form { display: grid; gap: 0.75rem; }
+.admin-simbrief-legacy-card form > label:not(.checkbox-label) { display: grid; gap: 0.3rem; font-weight: 600; }
+.admin-simbrief-legacy-card select,
+.admin-simbrief-legacy-card input[type=file] { max-width: 100%; min-width: 0; width: 100%; }
+.admin-simbrief-legacy-card output { display: block; color: #1d4ed8; overflow-wrap: anywhere; }
+.admin-simbrief-legacy-replace { padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 8px; }
+.admin-simbrief-legacy-replace summary { cursor: pointer; font-weight: 650; margin-bottom: 0.5rem; }
+.admin-simbrief-legacy-warning { color: #854d0e; font-weight: 600; }
+dialog.admin-simbrief-dispatch-dialog {
+    box-sizing: border-box;
+    width: min(880px, calc(100vw - 1.5rem));
+    max-width: 880px;
+    max-height: min(90dvh, 900px);
+    padding: 0;
+    overflow: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 24px 80px #0006;
+    font: inherit;
+}
+dialog.admin-simbrief-dispatch-dialog::backdrop { background: #0f172abf; }
+dialog.admin-simbrief-dispatch-dialog form { padding: clamp(0.85rem, 3vw, 1.5rem); }
+dialog.admin-simbrief-dispatch-dialog header h2 { margin: 0 0 0.5rem; font-size: 1.3rem; color: #0f172a; }
+dialog.admin-simbrief-dispatch-dialog header p { margin: 0.45rem 0; line-height: 1.5; }
+dialog.admin-simbrief-dispatch-dialog .admin-simbrief-legacy-warning {
+    background: #fffbeb;
+    border-left: 3px solid #b45309;
+    border-radius: 3px;
+    padding: 0.65rem 0.8rem;
+}
+.admin-simbrief-dispatch-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 225px), 1fr));
+    gap: 0.85rem;
+    margin: 1rem 0;
+}
+.admin-simbrief-dispatch-field { min-width: 0; display: grid; gap: 0.2rem; align-content: start; }
+.admin-simbrief-dispatch-field > span { color: #0f172a; font-size: 0.85rem; font-weight: 650; }
+.admin-simbrief-dispatch-field input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+    background: #fff !important;
+    color: #0f172a !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 6px;
+    padding: 0.45rem 0.65rem;
+    font: inherit;
+}
+.admin-simbrief-dispatch-field small { color: #475569; line-height: 1.35; }
+.admin-simbrief-dispatch-field input:focus-visible { outline: 3px solid #93c5fd; outline-offset: 1px; }
+.admin-simbrief-dispatch-error { display: block; color: #b91c1c; font-weight: 600; }
+dialog.admin-simbrief-dispatch-dialog footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: flex-end;
+    padding-top: 0.8rem;
+    border-top: 1px solid #e2e8f0;
+}
+dialog.admin-simbrief-dispatch-dialog button {
+    background: #1d4ed8;
+    color: #fff;
+    border: 1px solid #1d4ed8;
+    min-height: 2.5rem;
+}
+dialog.admin-simbrief-dispatch-dialog button.secondary {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+@media (max-width: 520px) {
+    dialog.admin-simbrief-dispatch-dialog { width: calc(100vw - 0.5rem); max-height: 96dvh; }
+    dialog.admin-simbrief-dispatch-dialog footer > button { flex: 1 1 auto; }
+    .admin-simbrief-legacy-card { padding: 0.7rem; }
+}
+
