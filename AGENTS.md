@@ -24,9 +24,9 @@ insert placeholder prose, or weaken types/baselines to obtain PASS.
 
 **Before handing off:** review the whole changed batch, fix every occurrence of
 an identified problem, and finish permanent documentation. Use the central
-verification contract below; prepare generated artifacts after the final edit,
-then qualify the exact final candidate. Report the candidate SHA, comparison
-base, audit profile/result, and material incomplete coverage. A later edit
+verification contract below: push the authorized working branch for hosted
+preparation and exact-candidate qualification. Report workflow URL, branch,
+candidate SHA, comparison base, required job results and incomplete coverage. A later edit
 invalidates earlier qualification. A source preflight PASS is feedback only.
 
 ## Project Structure & Module Organization
@@ -103,53 +103,75 @@ Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable
 
 ### Source Candidate Preparation (All Non-Release Branches)
 
-Finish authored edits before preparing the candidate. If new or deleted production
-files are involved, stage those paths first because `generate_production_files.php`
-intentionally reads the Git index. Resolve route/module ownership, runtime roots
-and dynamic dependency definitions in their authored files, never by editing
-`app/runtime/modules.php` directly.
+Complete authored source and permanent documentation before committing. Stage
+new/deleted production membership in the source commit because the canonical
+inventory reads Git's index. Edit authored runtime roots/dependencies rather
+than generated `app/runtime/modules.php`.
 
-Run `php scripts/prepare_candidate.php` after every final source/documentation
-batch and **again after any later fix**. It compiles `app/runtime/modules.php`
-first, regenerates `app/production-files.json` from indexed membership second,
-and hashes complete checked-out bytes for `app/core-manifest.json` last.
-`--check` verifies all three in order without writing. Identical inputs must
-not rewrite files or change the manifest timestamp. Do not compute hashes from
-truncated GitHub Contents API responses, especially files larger than 1 MiB.
-Commit only the changed generated artifacts separately from focused authored
-changes; the command itself never commits or merges.
+The default sequence is **edit -> commit -> exact working-branch push -> hosted
+preparation -> exact candidate CI -> inspect/fix -> handoff**. The stable
+`.github/workflows/candidate-preparation.yml` prepares runtime modules, production
+inventory and complete-file manifest hashes in dependency order, commits changed
+generated artifacts separately, and invokes full CI for that published SHA.
+Identical inputs must not rewrite artifacts or manifest timestamps. Bot commits
+do not recursively trigger CI; the caller explicitly invokes the reusable matrix.
 
-For regular feature/fix branches, the stable
-`.github/workflows/candidate-preparation.yml` can prepare and commit generated
-artifacts on the exact pushed revision, then invoke the central CI workflow on
-the resulting candidate SHA. It uses branch concurrency, non-forced push,
-and a current-branch-head lease; it refuses outdated work rather than clobber
-newer commits. Bot commits made with `GITHUB_TOKEN` do not start another workflow.
-PR/direct CI is read-only and gates its expensive matrices through
-`php scripts/audit.php --profile=candidate-preflight`. Failing that gate
-means the published candidate is not qualified, not that the runner should
-silently repair it. Release branches use their separate preparation lifecycle
-in `RELEASE.md`, including editorial PDF generation.
-
-The agent handoff sequence is: **edit → stage membership changes → prepare →
-commit changed generated artifacts → run the required central full audit →
-verify the exact final candidate SHA → handoff**. Intermediate atomic commits
-may be incomplete; never hand off or qualify a stale final SHA. The workflow
-may qualify a prepared bot commit automatically; it does not merge, squash,
-tag, or publish. After a later source fix, repeat preparation and qualification.
+Read-only `candidate-preflight` refuses stale generated state before expensive
+jobs. Preparation and final gates reject stale remote branch heads and use normal
+non-forced writes. A later fix repeats hosted preparation and qualification.
+Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
+explicitly requested or hosted preparation is unavailable; agents do not routinely
+duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
 
 ### Mandatory Agent Verification Contract
-For automated agents, `php scripts/audit.php` is the authoritative test orchestration interface. This rule takes precedence over every later focused-test command or checklist in `AGENTS.md`, `TESTING.md`, architecture notes, and task-specific documentation. Do not enumerate `tests/`, loop over `*_test.php`/`*_test.mjs`, manually run every documented focused test, or separately lint the tree when the central audit already owns that coverage. Avoid duplicate verification because it wastes execution time and agent context without increasing coverage.
 
-Use exactly this workflow unless the user explicitly requests something else:
+**CI-first and working-branch-only writes take precedence over every later local
+test command in this repository.** GitHub Actions is the default and authoritative
+verification environment for coding agents. `scripts/audit.php` remains the sole
+test orchestrator inside CI; no YAML-maintained parallel test registry is allowed.
 
-1. During implementation, choose `php scripts/audit.php --profile=release-preflight` for source/documentation/policy feedback, or `--profile=quick` when behavior/regression feedback is useful. These are alternatives for the current batch, not a compulsory sequence. The static preflight includes category budgets that quick omits. For ordinary feature/fix work, freeze `PHP_GALLERY_SOURCE_BASE` to `git merge-base HEAD origin/main` as shown in [the authoring reference](docs/AGENT_AUTHORING.md#source-feedback-and-comparison-base); keep it for subsequent checks so committed earlier violations remain visible. Missing history/base is BLOCKED, not permission to substitute HEAD and hide the branch diff. Release preparation uses its previous-tag comparison base.
-2. Before handing off code or building an affected ZIP, run `php scripts/audit.php --profile=full` once.
-3. For any actual release-preparation or release-readiness task, read `RELEASE.md` before editing release metadata. Use `php scripts/prepare_release.php <version>` for registered mechanical version changes, complete the editorial/manual steps in `RELEASE.md`, regenerate the manifest, and run `php scripts/audit.php --profile=release` once. Audit profiles are alternatives, not a staircase: do not run `quick` or `full` before `release`. The release profile already includes release consistency through `scripts/check_release.php`.
-4. Read the compact console summary first. On a source-contract failure, read the linked `source-failures.md` once for all findings in the failed source suites and over-budget categories; the linked JSON artifacts retain complete evidence. Fix the entire batch before rerunning the appropriate central profile. Do not rerun unchanged input hoping for PASS. Read `cache/test-audit/latest.md` only when more detail is needed; open an individual suite log only for `FAIL`, `BLOCKED`, or a material `SKIP`. Do not read passing child-process logs.
-5. Run an individual PHP, Node, Python, syntax, contract, or browser test only to reproduce/diagnose a specific failure reported by the central audit, to develop a newly added test before it is registered, or when the user explicitly asks for that focused check. After fixing a diagnosed failure, return to the appropriate central audit instead of manually replaying the rest of the test tree.
-6. If the central runner itself cannot execute because a required runtime such as PHP is unavailable, report that verification as blocked. Do not replace it with a token-heavy manual walk of the regression tree and do not claim the central audit passed.
-7. Never create a release commit, tag, push, hosted release, or publication merely because release preparation/audit passed. Perform those actions only when the user explicitly requests them.
+1. Before any write, identify the current branch, HEAD, exact remote repository
+   and remote branch HEAD. Obtain explicit user authorization and usable write
+   permission for that exact working branch. Supported ordinary targets are
+   `feature/*`, `fix/*`, `bugfix/*`, `hotfix/*`, and `codex/*`. Missing or ambiguous
+   branch identity, authorization or permission means **BLOCKED / not CI-qualified**;
+   stop before writes and request the specific missing branch-scoped access.
+2. **NEVER directly mutate `develop` or `main` as an agent**, through Git or an
+   API: no push, force-push, fast-forward, reset, deletion, ref update or merge.
+   Broad credentials do not grant authorization. Creating/switching branches,
+   release operations, squash, tags and publication require separate explicit
+   authorization. Maintainer-dispatched protected release workflows are the
+   documented release path; ordinary implementation does not invoke them.
+3. Finish source, tests and permanent documentation; commit focused batches and
+   push only the authorized branch with an exact ref, for example
+   `git push origin HEAD:refs/heads/feature/example`. Check the remote head before
+   each write, use non-forced pushes, and integrate concurrent candidate-bot
+   commits before adding fixes. Never overwrite another writer.
+4. Use **Candidate preparation -> central GitHub CI qualification**. Hosted
+   preparation owns generated artifacts and qualifies its emitted candidate SHA.
+   Inspect the run summary, required jobs and actionable failure artifacts; fix
+   the complete source batch, commit and push the same branch until fresh CI is
+   green. CI freezes `PHP_GALLERY_SOURCE_BASE` to the merge-base with `origin/main`;
+   release CI uses the previous stable tag. Missing history/base is BLOCKED.
+5. **Do not run local audits, test loops or duplicate syntax checks by default**,
+   including `quick`, `full`, `release-preflight` and `release`. A focused local
+   diagnostic is exceptional: an observed CI failure needs environment-specific
+   reproduction, CI is genuinely inaccessible, or the user explicitly requests
+   it. Red or slow CI is not unavailable CI. Limited local evidence never replaces
+   hosted qualification; report BLOCKED when CI cannot be used.
+6. Read the compact hosted summary first. For source failures read
+   `source-failures.md` once for the entire failed batch; use linked JSON for
+   complete evidence. Read raw child logs only for FAIL, BLOCKED or material SKIP.
+   Do not enumerate tests or replay the test tree. After a fix, push for fresh CI.
+7. Handoff must include workflow URL, checked branch, exact prepared candidate
+   SHA, immutable comparison base, required jobs/result and missing/manual
+   coverage. FAIL, BLOCKED, missing, cancelled, skipped or stale mandatory checks
+   cannot be called green. Earlier/source-event SHAs do not qualify a later bot
+   candidate. A later edit invalidates earlier evidence.
+
+GitHub branch protections/rulesets are separate server controls. Repository
+instructions alone are not access control. Follow `RELEASE.md` for the recommended
+protected-branch and release-environment setup; never enable bypass for agents.
 
 The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Deployment packages exclude `tests/` by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
 
@@ -160,9 +182,12 @@ PHP suites share a portable bounded worker pool: default four workers, configura
 The dedicated `browser-tests` CI job requires Chromium with `PHP_GALLERY_BROWSER_REQUIRED=1` and invokes `php scripts/audit.php --suite=browser-map`. Missing, unstartable, or silently skipped browser coverage must make this job nonzero. Database/runtime matrix jobs disable browsers explicitly at job scope. Local optional browser discovery and the separate disposable database browser journey remain supported; an isolated browser fixture PASS does not qualify a live installation.
 
 ### PHP Syntax Validation
-PHP syntax validation is mandatory, but agents normally satisfy it through the central audit. `quick` checks the appropriate changed-file syntax set when Git metadata is available and safely falls back when it is not; `full` validates the complete PHP/JavaScript source tree. Do not run a second manual `php -l` loop after a successful central audit merely to duplicate the same result.
 
-A direct `php -l path/to/file.php` is appropriate while diagnosing a syntax failure, while developing `scripts/audit.php` itself, or when the central runner is temporarily unusable but PHP CLI is available. If PHP is unavailable, do not claim syntax validation passed; report the central verification as blocked.
+Hosted central audits own mandatory PHP/JavaScript syntax validation. `full`
+checks the entire tree; quick diagnostic coverage retains its changed-file rules.
+Do not duplicate a green CI matrix with local lint loops. A direct focused lint
+command is reserved for the exceptional diagnostic paths in the CI-first contract.
+Missing required hosted runtimes or syntax coverage is BLOCKED, not PASS.
 
 ## Capability Policy Guidelines
 
@@ -190,7 +215,7 @@ Because side-panel content is injected dynamically, bind handlers in a way that 
 
 Persistent mutations launched from the right-side panel, including review/ignore ledgers and reset actions, must use the JSON/AJAX path as the primary browser pipeline and replace only the owned panel fragment or affected page elements. Treat the POST/redirect implementation as fallback compatibility. For every new panel button, test that the browser URL is unchanged, the panel remains open, and a dynamically re-rendered copy of the same control is still intercepted without rebinding the whole page.
 
-Every successful persistent side-panel AJAX mutation must return the canonical envelope built by `app/helpers_mutation.php`: `ok`, `message`, typed `mutation` metadata with stable `entity_ids`, optional `panel` refresh metadata, explicit affected `contexts` with observable postconditions where meaningful, and `fallback` metadata for direct-page use. Browser code must preserve that envelope through batching/aggregation and pass it to `public/assets/gallery-modules/admin-mutation-completion.js`; do not reconstruct completion semantics from workflow-specific top-level URLs, counters, or flags. Public refresh retry, cache/stale-read handling, postcondition verification, and stale/out-of-order suppression belong only to the shared coordinator. Workflow modules may own progress UI and their panel fragment, but must not add a parallel refresh/retry pipeline. Run `php scripts/check_admin_mutation_contracts.php` whenever a persistent side-panel mutation, its response shape, or its dynamic form wiring changes.
+Every successful persistent side-panel AJAX mutation must return the canonical envelope built by `app/helpers_mutation.php`: `ok`, `message`, typed `mutation` metadata with stable `entity_ids`, optional `panel` refresh metadata, explicit affected `contexts` with observable postconditions where meaningful, and `fallback` metadata for direct-page use. Browser code must preserve that envelope through batching/aggregation and pass it to `public/assets/gallery-modules/admin-mutation-completion.js`; do not reconstruct completion semantics from workflow-specific top-level URLs, counters, or flags. Public refresh retry, cache/stale-read handling, postcondition verification, and stale/out-of-order suppression belong only to the shared coordinator. Workflow modules may own progress UI and their panel fragment, but must not add a parallel refresh/retry pipeline. The hosted central mutation-contract suite must cover `scripts/check_admin_mutation_contracts.php` whenever persistent panel responses or wiring change.
 
 Do not invent browser confirmation dialogs or extra intermediate navigation for an explicitly requested one-click/in-place panel action unless the feature requirements specifically call for confirmation. Destructive operations must still use the existing authentication, CSRF, authorization, path-safety, and mutation services.
 
@@ -251,8 +276,8 @@ in the TeX manuals' developer/maintainer reference, not only in `AGENTS.md`.
 Describe the current supported behavior in the existing topical sections;
 never append an issue-by-issue change log to a permanent manual.
 
-Review documentation impact before the final `prepare_candidate.php` run and
-the authoritative handoff audit. The documentation updates belong in the same
+Review documentation impact before the final source commit and hosted preparation and
+the authoritative hosted handoff qualification. The documentation updates belong in the same
 source candidate as the implementation. If no TeX section is affected by a
 truly internal change, explicitly record `No TeX manual impact` with a brief
 reason in the implementation handoff or issue instead of silently omitting it.
@@ -291,7 +316,7 @@ Release preparation must not create deployment folders, release ZIPs, clean pack
 The only normally needed distributable build artifact is the Windows installer in `winapp/dist/`, and rebuild it only when shipped WinApp code, assets, dependencies, runtime binaries or installer/build behavior changed since the previous installer. CMS-only release markers, documentation changes and test-only fixes do not require a new installer. Preserve the independent WinApp version unless the user requests its change; when no installer change is needed, leave `winapp/dist/` untouched. This default overrides packaging suggestions in `RELEASE.md`; release metadata, all four manual editions/PDFs, manifest freshness and the authoritative release audit remain required.
 
 ## Release Manifest Handoff Requirement
-Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Use the canonical `php scripts/prepare_candidate.php` after the final source edit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
+Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Hosted candidate preparation runs the canonical `php scripts/prepare_candidate.php` after the source commit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
 
 ## Commit & Pull Request Guidelines
 Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.

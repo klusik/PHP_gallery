@@ -8,6 +8,24 @@ existing product metric actually observes adoption.
 
 ## Policy
 
+### CI-1 — Local maintainer recovery after CI-first migration
+
+- **Reason / protected environment:** Maintainers may need existing local
+  generators/audits when GitHub is genuinely inaccessible or for explicitly
+  requested environment-specific diagnosis. Red or slow CI is not inaccessible CI.
+- **Owner:** AGENTS.md owns agent execution; RELEASE.md and the existing canonical
+  generator/audit scripts own recovery. No parallel runner or test registry exists.
+- **Permanent support rationale:** Keep local development and emergency recovery
+  possible without treating local PASS as hosted qualification. Ordinary agents
+  commit/push only an explicitly authorized working branch; protected release
+  workflows own approved promotion/publication. Production-host smoke stays manual.
+- **Regression evidence:** `tests/hosted_release_policy_test.mjs` exercises missing,
+  stale and red evidence refusal, exact overrides and CI-first/branch contracts
+  through the central hosted Node registry. Actual hosted write-mode acceptance
+  requires configured server protections and independent environment approval.
+- **Usage / introduction:** Local recovery usage is unknown; this policy transition
+  was authored for #100/#124 on 2026-10-08, without inferring older adoption.
+
 Compatibility is a supported behavior when users, installed data, older
 clients, host configurations, or documented no-JavaScript flows rely on it.
 Keep such behavior until its owner demonstrates the retirement condition below.

@@ -42,6 +42,7 @@ jobs:
       version: ${{ steps.final.outputs.version }}
       candidate_sha: ${{ steps.final.outputs.candidate_sha }}
       source_base: ${{ steps.release.outputs.source_base }}
+      base_tag: ${{ steps.release.outputs.base_tag }}
       ready: ${{ steps.final.outputs.ready }}
       preparation_changed: ${{ steps.commit.outputs.changed }}
     steps:
@@ -58,8 +59,14 @@ jobs:
         shell: bash
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          permission="$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${GITHUB_ACTOR}/permission" --jq '.permission')"
+          if [[ "${permission}" != admin && "${permission}" != maintain ]]; then
+            echo "Release preparation requires a trusted maintainer." >&2
+            exit 1
+          fi
           if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
             echo "Release preparation must run from a branch." >&2
             exit 1
@@ -376,7 +383,7 @@ jobs:
             echo "Release branch changed during preparation; refusing stale write-back." >&2
             exit 1
           fi
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
 
           echo "changed=true" >> "${GITHUB_OUTPUT}"
           echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
@@ -441,8 +448,13 @@ jobs:
       - qualification
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     steps:
-      - name: Summarize aggregate qualification
+      - id: gate
+        name: Summarize aggregate qualification
         shell: bash
         env:
           PREPARATION_RESULT: ${{ needs.prepare.result }}
@@ -482,3 +494,40 @@ jobs:
             exit 1
           fi
           echo "Release candidate is eligible for the next promotion stage."
+      - name: Bind the result and retained record to the prepared SHA
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          BASE_TAG: ${{ needs.prepare.outputs.base_tag }}
+          READY: ${{ needs.prepare.outputs.ready }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {writeFileSync} from 'node:fs';
+          const e = process.env;
+          const record = {repository:e.GITHUB_REPOSITORY, branch:e.GITHUB_REF_NAME,
+            candidate_sha:e.CANDIDATE_SHA, source_base:e.SOURCE_BASE, version:e.RELEASE_VERSION,
+            previous_stable_tag:e.BASE_TAG, run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
+            ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
+            manual_review:'PENDING', promotion:'NOT_REQUESTED', override:false};
+          writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');
+          writeFileSync(e.RUNNER_TEMP + '/release-check.json', JSON.stringify({name:'Release qualification',
+            head_sha:e.CANDIDATE_SHA, status:'completed', conclusion:e.GATE_OUTCOME === 'success' ? 'success' : 'failure',
+            details_url:`https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
+            output:{title:'Exact prepared release candidate', summary:JSON.stringify(record,null,2)}}));
+          NODE
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/release-check.json"
+      - name: Retain prepared candidate identity even when qualification is red
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-qualification-record
+          overwrite: true
+          path: ${{ runner.temp }}/release-candidate.json
+          if-no-files-found: error
+          retention-days: 90

@@ -1,5 +1,22 @@
 # PHP Gallery Code Map
 
+Hosted source/release lifecycle ownership:
+
+- `.github/workflows/candidate-preparation.yml`: source-only preflight, canonical
+  generated-state commit on authorized feature/fix/codex branches, exact-SHA full
+  matrix and stale-head gate; agents follow the CI-first contract in AGENTS.md.
+- `.github/workflows/release-qualification.yml`: release preparation/manual batch,
+  authoritative release matrix, candidate-bound check and qualification record.
+- `.github/workflows/release-promotion.yml`: read-only evidence inspection/builds
+  followed by separately approved maintainer promotion/publication from main.
+- `.github/scripts/release-promotion.mjs`: immutable run/attempt/branch validation,
+  server protection checks, SHA-bound PR promotion, identical-main-tree check,
+  immutable tags and durable evidence publication. No ordinary agent bypass.
+- `.github/scripts/release-assets.mjs`: canonical integrity/package checks and
+  public report archive/hash preparation without publication credentials.
+- `tests/hosted_release_policy_test.mjs`: central Node regression for stale/red/
+  missing evidence, exact overrides, CI-first instructions and branch safety.
+
 This file maps features to source files. It is optimized for fast maintenance and AI-assisted code changes.
 
 ## How to Use This Map

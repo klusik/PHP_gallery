@@ -2244,7 +2244,7 @@ Atomic modules should own one cohesive responsibility. Shared contracts deserve 
 
 The~canonical \filepath{AGENTS.md} requires each named declaration and~its~complete documentation in~the~same edit. Start with a~factual purpose before tags, document every explicit parameter (including defaults and~added parameters), actual return variants and~concrete collection/object shapes. PHP/Python native types remain independent. Anonymous callbacks need no~declaration docstring; named declarations inside them still do. Runtime policy sites independently need purpose, type, units, scope, consumers and~rationale immediately before the~site. Checked examples in~\filepath{docs/AGENT_AUTHORING.md} are~parsed by~the~existing scanners in~a~registered regression, with negative fixtures preserving failures for~incomplete contracts.
 
-For~source-only authoring feedback, use the~existing \codeword{--profile=release-preflight}; its~name implies no~release actions. It~checks PHP/JavaScript syntax, changed declarations/policy, inventory category budgets, Python import policy and~workflow contracts without regression, browser, database, packaging or~OS matrices. Choose it~or~quick feedback for~the~current batch; quick omits whole-tree budgets. Ordinary feature/fix checks keep \codeword{PHP_GALLERY_SOURCE_BASE} set to~the~immutable merge-base with \codeword{origin/main}; missing history is~BLOCKED, not~a~reason to~hide committed omissions behind HEAD. Releases keep their previous-tag base. See \filepath{TESTING.md} for~the~exact command.
+GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
 Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources, prepare generated artifacts after the~final edit and~run the~full audit once for~the~exact candidate. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
 
@@ -2260,8 +2260,8 @@ A~typical feature change follows this sequence:
   \item Add translated interface strings.
   \item Add focused automated tests and~documented manual verification.
   \item Update permanent Markdown references and~all~four TeX manual sources whenever current user, administrator, architecture, or~maintainer guidance changes.
-  \item Prepare the~final source candidate through \filepath{scripts/prepare_candidate.php}, regenerating runtime plans, package inventory, and~integrity data in~order.
-  \item Review the~complete diff and~use the~central \codeword{--profile=full} audit for~final source handoff.
+  \item Hosted Candidate preparation runs \filepath{scripts/prepare_candidate.php} and~its read-only check: runtime modules, indexed production inventory and~complete-byte integrity hashes are~generated in~dependency order. It~commits only changed artifacts back to~the~same authorized branch, refuses concurrent writers, and~qualifies the~exact resulting SHA. Agents push focused source commits and~inspect CI; they do~not~duplicate generation locally.
+  \item Report the~GitHub Actions URL, checked working branch, exact prepared candidate SHA, immutable comparison base, required job results and~manual or~missing coverage. A~stale, missing, skipped, cancelled, failed or~blocked mandatory job is~not~green qualification. Fix source and~push the~same branch for~fresh CI.
 \end{enumerate}
 
 \subsection{Preparing source candidates for~CI}
@@ -2269,10 +2269,8 @@ A~typical feature change follows this sequence:
 Atomic source commits are~allowed during development, but~qualification must use a~candidate whose generated artifacts match the~exact source revision. Permanent technical documentation is~part of~the~source edit. Changes to~administrator behavior, architecture, runtime ownership, security, packaging, or~CI also require reviewing all~four TeX manual editions, not~only user-facing pages. Routine development leaves \filepath{PATCH_NOTES.md} and~the~tracked manual PDFs unchanged.
 
 \begin{enumerate}
-  \item Complete authored code and~documentation edits. Stage new or~deleted production paths so~the~inventory generator sees their Git-index membership. Update reviewed runtime roots and~dependency declarations when route ownership changes.
-  \item Run \filepath{scripts/prepare_candidate.php}. It~compiles \filepath{app/runtime/modules.php}, refreshes \filepath{app/production-files.json} from~the~Git index, and~generates \filepath{app/core-manifest.json} \emph{last}. Hashes use complete bytes from~the~checked-out source, never truncated API responses.
-  \item Run \codeword{php scripts/prepare_candidate.php --check} to~verify all~three artifacts without writing them. Repeating preparation on~unchanged substantive inputs is~a~no-op, including for~the~manifest generation timestamp. Repeat preparation after any later source fix.
-  \item Commit only changed generated files alongside the~focused source history. For~final handoff, run the~authoritative \codeword{php scripts/audit.php --profile=full} against the~prepared candidate.
+  \item Hosted Candidate preparation runs \filepath{scripts/prepare_candidate.php} and~its read-only check: runtime modules, indexed production inventory and~complete-byte integrity hashes are~generated in~dependency order. It~commits only changed artifacts back to~the~same authorized branch, refuses concurrent writers, and~qualifies the~exact resulting SHA. Agents push focused source commits and~inspect CI; they do~not~duplicate generation locally.
+  \item Report the~GitHub Actions URL, checked working branch, exact prepared candidate SHA, immutable comparison base, required job results and~manual or~missing coverage. A~stale, missing, skipped, cancelled, failed or~blocked mandatory job is~not~green qualification. Fix source and~push the~same branch for~fresh CI.
 \end{enumerate}
 
 The~stable GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} can~prepare feature/fix branches and~qualify the~published candidate SHA. It~checks branch identity and~refuses a~stale write, without merging, squashing, or~force-pushing. The~central read-only \codeword{--profile=candidate-preflight} gate rejects stale manifests, runtime plans, inventories, and~source-policy violations before the~expensive CI matrix. Qualification runners must not~repair missing artifacts silently. Release preparation later updates manual version/date markers and~compiles the~existing TeX sources to~PDF; it~does not~write missing documentation prose.
@@ -2310,15 +2308,15 @@ The~central audit covers clipboard MIME/name handling and~synthetic browser past
 
 The~registered miniature tests cover bounded raster headers, cancellation and~resource disposal. The~Chromium fixtures also check 100-item FileList parity, a~320-pixel drawer, reset/navigation cleanup, focus and~classic/prepared retry without duplicate ingestion. Observed URL/decode counts are~not~a~whole-process memory measurement; real OS clipboard delivery and~Firefox/Safari checks remain manual.
 
-Use the~central audit \filepath{scripts/audit.php}, not~the~legacy \filepath{tests/run.php} wrapper, for~routine verification. The~profiles below are~alternatives, not~three successive gates. Use the~quick profile during development when useful, the~full profile once before a~normal handoff, or~the~release profile once for~final release qualification. Individual tests are~for~diagnosing a~reported failure or~developing a~newly registered fixture, not~for~a~second sweep of~the~test tree.
+For~coding agents, GitHub Actions is~the~default and~authoritative verification environment (CI-first). The~central audit commands below describe the~hosted runner; agents do~not~execute them locally by~default. Focused local reproduction is~reserved for~an~observed environment-specific CI failure, genuinely inaccessible CI or~an~explicit request. Local evidence never replaces required hosted coverage.
 
 \begin{lstlisting}[language=bash]
-# Source-only feedback (or quick for behavior checks):
+# Hosted source feedback (exceptional local diagnosis only):
 php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
-# Before ordinary code handoff:
+# Hosted full source qualification:
 php scripts/audit.php --profile=full
-# Final release qualification only:
+# Hosted authoritative release job:
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
@@ -2337,6 +2335,8 @@ For~public thumbnail rendering, inspect the~Elements and~Network panels. Respons
 \subsection{Release hygiene}
 
 Follow \filepath{RELEASE.md} for~the~complete release sequence. Compare the~exact previous stable tag, complete the~release notes and~permanent documentation, and~align all~four maintained manual editions. Rebuild each PDF with the~indexed multi-pass sequence in~\filepath{docs/LATEX_BUILD.md} and~check compiler success, references, index entries, and~layout warnings. Visual PDF review is~reserved for~an~explicit request or~diagnosis of~a~concrete layout problem; routine successful builds need no~additional visual-approval gate.
+
+The commands in this section describe hosted release ownership and the retained local maintainer recovery path. Normal preparation and qualification run on GitHub; agents do not execute these commands locally by default. Local recovery requires an explicit request or genuinely unavailable CI and remains BLOCKED / not CI-qualified until hosted evidence exists. Protected promotion/publication follows the release-promotion workflow described later.
 
 After the~final edits, generate the~manifest, pass the~release/manifest/whitespace preflight, initialize the~qualification fingerprint, and~freeze the~inputs. Run exactly one central \codeword{--profile=release} audit, directly or~through the~configured disposable workflow fixture. The~audit owns syntax, regression, contracts, browser fixtures, and~release consistency; do~not~add a~second manual test-tree sweep. Attach its report to~the~unchanged fingerprint and~report coverage gaps and~pending operational reviews separately.
 
@@ -2525,6 +2525,8 @@ to~publish, and~the~tool never commits, tags, uploads, or~publishes
 the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record commands.
 
 \subsection{GitHub-hosted release preparation and~qualification}
+
+The~maintainer dispatches \filepath{.github/workflows/release-promotion.yml} from~\codeword{main} with the~completed qualification run, exact candidate SHA and~release branch. Plan mode reads evidence only. Promote uses an~independently approved \codeword{release-promotion} environment, verifies active PR/status rules and~enables a~release PR's protected merge. Publish runs after merge, checks identical candidate/main trees, creates an~immutable tag and~publishes verified packages with permanent evidence. An~override requires a~reason and~every exact red/skipped job name; original failures stay red. Human acceptance and~production-host smoke remain separately recorded. Missing server controls block writes; agents never directly push to~develop/main.
 
 The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
 

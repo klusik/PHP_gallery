@@ -1,5 +1,12 @@
 # PHP Gallery CMS
 
+Coding agents use [CI-first, working-branch-only verification](AGENTS.md#mandatory-agent-verification-contract):
+commit and push the explicitly authorized feature/fix/codex branch, then inspect
+hosted candidate preparation and full qualification for the exact prepared SHA.
+Agents never directly mutate develop/main. Normal releases use GitHub-hosted
+preparation and [protected promotion/publication](RELEASE.md#protected-promotion-and-publication);
+local audits remain exceptional diagnostics or maintainer recovery.
+
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
 PHP 8.1 is the compatibility minimum. For deployment, use the latest patch release

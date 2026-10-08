@@ -47,20 +47,33 @@ The relevant automated owners are `tests/gallery_creation_preferences_test.php`,
 
 ### Agent execution rule
 
-Automated agents must use the central audit runner as the default and authoritative verification interface. **This rule overrides later wording such as "run these tests", "run", or lists of focused PHP/Node commands elsewhere in this guide.** Those lists document coverage ownership and give humans/agents precise reproduction commands after a failure; they are not instructions to replay the regression tree before or after a successful central audit.
+**GitHub Actions is the default and authoritative agent test environment.** The
+[CI-first and branch-write contract](AGENTS.md#mandatory-agent-verification-contract)
+overrides every later instruction to run focused/local commands in this guide.
 
-For normal agent work:
+Before writes verify current working branch/HEAD, exact remote head, explicit user
+authorization and usable branch-scoped push permission. Agents never directly
+mutate `develop` or `main`. Missing/ambiguous access means BLOCKED before writes.
+Commit source/tests/docs and push only the exact authorized working ref.
 
-```text
-source-only feedback      php scripts/audit.php --profile=release-preflight
-edit/debug cycle          php scripts/audit.php --profile=quick
-final code handoff/ZIP    php scripts/audit.php --profile=full
-actual release            php scripts/audit.php --profile=release
-```
+| Hosted owner | Verification |
+| --- | --- |
+| Candidate preparation | Central source preflight; canonical generators; leased bot commit |
+| Reusable ordinary CI | Read-only candidate preflight; complete full matrix |
+| Release qualification | Hosted preparation/manual builds; authoritative release audit and matrix |
+| Final gate | Exact prepared SHA still equals current branch head |
 
-Do not enumerate `tests/`, do not create shell/PowerShell loops over test files, do not run every focused command listed in a feature section, and do not separately run whole-tree `php -l`/`node --check` passes when the selected audit profile already performs them. Run a focused command only to reproduce a specific audit failure, develop/register a new test, perform genuinely manual/browser acceptance outside the automated runner, or satisfy an explicit user request. Once diagnosis is complete, rerun the appropriate central profile once rather than manually replaying sibling tests.
+Inspect hosted jobs and failure artifacts, fix the full batch, commit and push the
+same branch for fresh CI. Do not routinely run local audits, test loops, generators
+or lint passes. A focused local diagnostic is exceptional for an observed
+environment-specific failure, genuinely inaccessible CI or explicit user request.
+Red/slow CI is not unavailable CI; local PASS never substitutes for hosted evidence.
 
-The central runner intentionally suppresses passing child stdout to protect agent context. Read the console summary first; read `cache/test-audit/latest.md` only when needed; open raw suite logs only for `FAIL`, `BLOCKED`, or a materially relevant `SKIP`. A successful suite does not justify reading its raw log.
+Report workflow URL, branch, prepared SHA, immutable comparison base, required job
+results and manual/material gaps. Required FAIL, BLOCKED, SKIP, missing, cancelled
+or stale evidence cannot be green. Read summaries and `source-failures.md` first;
+raw suite logs are for failures/blocked/material skips only. Preserve central audit
+ownership and every existing mandatory matrix environment.
 
 The MVC boundary suite is a zero-baseline contract. `scripts/mvc_boundary_baseline.json` contains no reviewed legacy occurrences; therefore every strict scanner finding is new and must fail the audit. Do not add exemptions or repopulate the baseline to make a change pass. Refactor the ownership violation instead. The same suite now writes `<run-directory>/mvc-architecture.json`, a machine-readable whole-runtime inventory produced with `token_get_all()` without including or executing the inspected PHP files. Its `runtime_inventory.review_candidates` section is advisory historical debt, not a pass/fail baseline; the compact audit summary reports the candidate count so it can be driven toward zero and later promoted into hard rules.
 
@@ -81,49 +94,22 @@ The release-note evidence regression also verifies that the generation contract 
 
 ### Source-only authoring feedback
 
-Use the existing `release-preflight` profile for source/documentation/policy
-feedback before candidate preparation. Its historical name does not imply any
-release actions. It runs PHP/JavaScript syntax, changed declaration and runtime
-policy gates, whole-tree source inventory/category budgets, Python import policy
-and workflow contracts. It runs no regression/browser/database/packaging/OS
-matrix. Choose this or quick feedback according to the current batch, not as
-mandatory successive steps; full final handoff remains required.
+`tests/hosted_release_policy_test.mjs` is registered in the central Node suite.
+It executes the real release identity and PR/publication orchestration with inert
+API/command adapters: stale/foreign/missing jobs and mismatched final trees fail;
+exact overrides preserve red evidence; interrupted uploads retain a draft; identical
+retries are read-only; conflicting immutable tags/assets fail. It also checks
+CI-first agent entrypoints, all approved branch triggers and all four manual sources.
+These fixtures never merge, tag or publish on GitHub. Live release-write acceptance
+remains pending until server protections and independent approval are configured.
 
-Freeze the ordinary feature/fix comparison base to match hosted preparation:
-
-```sh
-gallery_source_base=$(git merge-base HEAD origin/main) || exit 2
-test -n "$gallery_source_base" || exit 2
-export PHP_GALLERY_SOURCE_BASE="$gallery_source_base"
-php scripts/audit.php --profile=release-preflight
-```
-
-Keep this SHA for the batch and its full audit; deliberately resolve it again
-when rebasing or updating target history. Missing history is BLOCKED. Releases
-retain their previous-tag base. HEAD-only feedback misses omissions committed
-earlier in a branch. The central runner resolves the requested base once and
-passes its immutable SHA to both changed-source checkers. Reports record source
-HEAD, comparison base and dirty state; a modified checkout is feedback rather
-than qualification of clean HEAD.
-
-On a source failure, the summary links the run's `source-failures.md`. Read it
-once for all findings from failed changed-source suites, blockers and findings
-in over-budget categories. The report distinguishes historical category debt
-and links the complete value-free JSON inventories/ratchet. Candidate workflows
-upload these reports together, without requiring passing child logs. Fix the
-whole batch before rerunning after the source changes; unchanged input is not a
-repair. No source-only PASS replaces prepared-candidate full/hosted evidence.
-
-[Checked authoring examples](docs/AGENT_AUTHORING.md) are parsed directly by
-`agent_authoring_examples_test.php`, included in the complete PHP suite.
-The existing scanners validate PHP, JavaScript, Python, headers and policy
-examples without executing source. Negative fixtures preserve tag-only summary,
-added-parameter, opaque-shape and missing-policy failures. The same regression
-proves that an immutable branch base catches an already committed omission,
-that dirty/untracked input is reported, and that complete evidence preserves
-findings beyond console limits while excluding passing suites and unrelated debt.
-Use existing audit reports/history for a small documented first-attempt/repair
-sample; expected savings are not measurements. No additional telemetry is added.
+Hosted preparation uses `release-preflight` for syntax, changed declarations/policy,
+whole-tree budgets, Python imports and workflow contracts before generation. This
+is source feedback, not full qualification. The immutable merge-base with origin/main
+is retained for ordinary branches; releases use the previous stable tag. Missing
+history blocks qualification. Agents inspect the hosted artifact rather than run
+the same profile locally. Exceptional local diagnostics remain explicitly limited
+by AGENTS.md and cannot replace hosted CI.
 
 ### Clean PHP include-phase probes
 

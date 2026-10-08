@@ -2222,7 +2222,7 @@ Samostatné moduly by měly vlastnit jednu soudržnou odpovědnost. Společné k
 
 Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou dokumentaci ve~stejné úpravě. Před značkami uveďte věcný účel, popište každý explicitní parametr včetně výchozích a~přidaných parametrů, skutečné návratové varianty a~konkrétní prvky kolekcí či~pole objektů. Nativní typy PHP/Python jsou samostatný požadavek. Anonymní callbacky dokumentační řetězec nepotřebují; pojmenované deklarace uvnitř ano. Běhové zásady samostatně vyžadují účel, typ, jednotky, rozsah, konzumenty a~zdůvodnění přímo před daným místem. Příklady v~\filepath{docs/AGENT_AUTHORING.md} ověřuje registrovaný test existujícími analyzátory; negativní fixtury zachovávají selhání neúplných kontraktů.
 
-Pro~kontrolu samotných zdrojů použijte existující \codeword{--profile=release-preflight}; název neznamená přípravu vydání. Kontroluje syntaxi PHP/JavaScript, změněné deklarace a~zásady, rozpočty kategorií inventáře, importy Pythonu a~kontrakty workflow bez regresní, prohlížečové, databázové, balicí nebo systémové matice. Pro~aktuální dávku zvolte tuto nebo rychlou kontrolu; quick celkové rozpočty neověřuje. Běžné větve funkcí a~oprav používají v~\codeword{PHP_GALLERY_SOURCE_BASE} neměnné SHA společného předka s~\codeword{origin/main}; chybějící historie znamená BLOCKED, nikoli nahrazení základu HEAD, které skryje dříve commitnuté chyby. Vydání zachovávají základ předchozího tagu. Přesný příkaz uvádí \filepath{TESTING.md}.
+Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 
 Report uvádí HEAD, vyřešené SHA základu a~stav pracovní kopie. Změněný checkout poskytuje zpětnou vazbu, ne~kvalifikaci čistého commitu. Odkazovaný \filepath{source-failures.md} obsahuje všechna zjištění selhaných kontrol změn, blokátory a~zjištění nadlimitních kategorií; úplné JSON reporty bez hodnot zachovávají důkazy a~odlišují historický dluh. Workflow kandidáta je nahrávají společně. Opravte celou dávku před opakováním; nezměněný vstup není oprava. Dokončete všechny čtyři zdroje příručky, po~poslední úpravě připravte generované artefakty a~jednou spusťte úplný audit přesného kandidáta. Uveďte SHA, základ, profil/výsledek a~významné mezery pokrytí. Úspěch prvního pokusu a~opravné cykly měřte ze~skutečných reportů; očekávané úspory zůstávají neznámé, dokud nejsou pozorovány.
 
@@ -2238,8 +2238,8 @@ Typická změna funkce postupuje takto:
   \item Přidejte přeložené řetězce rozhraní.
   \item Přidejte cílené automatické testy a~dokumentované ruční ověření.
   \item Při změně aktuálních uživatelských, administračních, architektonických nebo vývojářských postupů aktualizujte trvalé dokumenty Markdown a~všechny čtyři zdroje příručky TeX.
-  \item Připravte konečného kandidáta pomocí \filepath{scripts/prepare_candidate.php}; postupně obnovte běhový plán, inventář balíčku a~data integrity.
-  \item Zkontrolujte úplný rozdíl změn a~pro konečné předání zdrojů použijte centrální audit \codeword{--profile=full}.
+  \item Hostovaný postup Candidate preparation spouští \filepath{scripts/prepare_candidate.php} a~kontrolu bez zápisu: postupně generuje běhové moduly, produkční inventář podle indexu a~hash úplných souborů. Commitne pouze změněné artefakty do téže povolené větve, odmítne souběžné změny a~ověří přesné výsledné SHA. Agenti pushují cílené zdrojové commity a~čtou CI; generování běžně neopakují lokálně.
+  \item Předání uvádí URL GitHub Actions, ověřenou pracovní větev, přesné připravené SHA, neměnný základ porovnání, povinné joby a~ruční či chybějící pokrytí. Zastaralý, chybějící, přeskočený, zrušený, neúspěšný nebo blokovaný povinný job není zelená kvalifikace. Opravte zdroj a~pushněte stejnou větev pro nové CI.
 \end{enumerate}
 
 \subsection{Příprava zdrojového kandidáta pro~CI}
@@ -2247,10 +2247,8 @@ Typická změna funkce postupuje takto:
 Při vývoji lze vytvářet malé samostatné commity, ale ověření se~musí vztahovat ke~konkrétní revizi zdrojů, se~kterou souhlasí všechny generované soubory. Trvalá technická dokumentace patří do~stejné dávky změn. Změny správy, architektury, běhových závislostí, zabezpečení, balení nebo CI vyžadují kontrolu všech čtyř jazykových zdrojů TeX, nejen uživatelsky viditelných obrazovek. Při běžném vývoji se~nemění \filepath{PATCH_NOTES.md} ani sledované soubory PDF příruček.
 
 \begin{enumerate}
-  \item Dokončete úpravy kódu a~dokumentace. Nové nebo odstraněné produkční soubory přidejte do~Git indexu, aby je generátor inventáře zahrnul. Při změně vlastníka trasy opravte zdrojová pravidla běhových kořenů a~závislostí.
-  \item Spusťte \filepath{scripts/prepare_candidate.php}. Příkaz nejprve sestaví \filepath{app/runtime/modules.php}, potom obnoví \filepath{app/production-files.json} podle Git indexu a~\emph{nakonec} vytvoří \filepath{app/core-manifest.json}. Hash se~počítá z~úplného obsahu souborů v~checkoutu, nikoli z~neúplné odpovědi API.
-  \item Příkazem \codeword{php scripts/prepare_candidate.php --check} ověřte všechny tři artefakty bez zápisu. Opakovaná příprava se~stejnými věcnými vstupy nic nepřepisuje ani nemění čas vytvoření manifestu. Po~každé pozdější opravě zdrojů přípravu zopakujte.
-  \item Commitněte pouze skutečně změněné generované soubory a~zachovejte samostatnou historii zdrojových úprav. Před konečným předáním spusťte autoritativní audit \codeword{php scripts/audit.php --profile=full} nad připraveným kandidátem.
+  \item Hostovaný postup Candidate preparation spouští \filepath{scripts/prepare_candidate.php} a~kontrolu bez zápisu: postupně generuje běhové moduly, produkční inventář podle indexu a~hash úplných souborů. Commitne pouze změněné artefakty do téže povolené větve, odmítne souběžné změny a~ověří přesné výsledné SHA. Agenti pushují cílené zdrojové commity a~čtou CI; generování běžně neopakují lokálně.
+  \item Předání uvádí URL GitHub Actions, ověřenou pracovní větev, přesné připravené SHA, neměnný základ porovnání, povinné joby a~ruční či chybějící pokrytí. Zastaralý, chybějící, přeskočený, zrušený, neúspěšný nebo blokovaný povinný job není zelená kvalifikace. Opravte zdroj a~pushněte stejnou větev pro nové CI.
 \end{enumerate}
 
 Stabilní GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} může připravit větve pro funkce a~opravy a~otestovat přesné SHA publikovaného kandidáta. Kontroluje identitu větve, odmítá zápis ze~zastaralé revize a~neprovádí merge, squash ani vynucený push. Centrální kontrola \codeword{--profile=candidate-preflight} pouze čte aktuální stav a~odmítá zastaralý manifest, běhový plán, inventář nebo porušení pravidel zdrojů ještě před nákladnou maticí CI. Testovací běh nesmí chybějící artefakty sám potichu opravovat. Až příprava vydání sjednotí verze a~data příruček a~přeloží existující TeX do~PDF; chybějící odborný text nevytváří.
@@ -2288,15 +2286,15 @@ Centrální audit pokrývá typy MIME a~názvy ze schránky, syntetické událos
 
 Registrované testy miniatur ověřují omezené hlavičky rastrů, rušení a~uvolnění prostředků. Testy Chromia kontrolují také shodu fronty 100 položek s~FileList, panel široký 320 pixelů, úklid při resetu a~navigaci, zaměření a~opakování klasického i~připraveného nahrávání bez duplicit. Počty URL a~dekodérů nejsou měřením paměti celého procesu; skutečná systémová schránka a~kontroly Firefoxu/Safari zůstávají ruční.
 
-K~běžnému ověřování používejte centrální audit \filepath{scripts/audit.php}, nikoli starší obalový skript \filepath{tests/run.php}. Následující profily jsou alternativy, ne tři postupné kontroly. Při vývoji podle potřeby spusťte rychlý profil, před běžným předáním jednou úplný profil a~při závěrečné kvalifikaci vydání jednou profil vydání. Jednotlivé testy spouštějte jen při diagnostice zjištěného selhání nebo vývoji nově registrovaného testu, nikoli k~opětovnému procházení celé sady.
+Pro agenty je GitHub Actions výchozí a~autoritativní ověřovací prostředí (CI-first). Níže uvedené příkazy popisují hostovaný centrální audit; agent je běžně lokálně nespouští. Cílená lokální reprodukce je výjimka pro zjištěný problém závislý na prostředí, skutečně nedostupné CI nebo výslovný požadavek. Lokální výsledky nenahrazují povinné hostované pokrytí.
 
 \begin{lstlisting}[language=bash]
-# Source-only feedback (or quick for behavior checks):
+# Hosted source feedback (exceptional local diagnosis only):
 php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
-# Before ordinary code handoff:
+# Hosted full source qualification:
 php scripts/audit.php --profile=full
-# Final release qualification only:
+# Hosted authoritative release job:
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
@@ -2315,6 +2313,8 @@ U~veřejného vykreslování náhledů prozkoumejte panely Prvky a~Síť. Respon
 \subsection{Čistota vydání}
 
 Úplný postup vydání určuje \filepath{RELEASE.md}. Porovnejte přesný předchozí stabilní tag, dokončete poznámky k~vydání a~trvalou dokumentaci a~slaďte všechny čtyři udržované příručky. Každé PDF sestavte víceprůchodovým postupem s~rejstříkem podle \filepath{docs/LATEX_BUILD.md}; ověřte úspěch kompilace, odkazy, položky rejstříku a~varování sazby. Vizuální kontrola PDF je vyhrazena výslovné žádosti nebo diagnostice konkrétního problému sazby; běžné úspěšné sestavení nevyžaduje další vizuální schvalování.
+
+Příkazy v této části popisují hostovanou přípravu vydání a zachovaný lokální postup obnovy pro správce. Běžná příprava a kvalifikace běží na GitHubu; agenti tyto příkazy běžně lokálně nespouštějí. Lokální obnova vyžaduje výslovný požadavek nebo skutečně nedostupné CI a zůstává BLOCKED bez hostovaných důkazů. Chráněnou propagaci a publikaci zajišťuje níže popsaný postup release-promotion.
 
 Po posledních úpravách vygenerujte manifest, proveďte předběžné kontroly vydání, manifestu a~bílých znaků, inicializujte kvalifikační otisk a~zmrazte vstupy. Spusťte právě jeden centrální audit \codeword{--profile=release}, přímo nebo prostřednictvím nakonfigurované izolované testovací instalace. Audit vlastní syntaxi, regrese, kontrakty, prohlížečové testy a~konzistenci vydání; nepřidávejte další ruční průchod stromem testů. Připojte jeho zprávu k~nezměněnému otisku a~oddělte mezery pokrytí od čekajících provozních kontrol.
 
@@ -2444,6 +2444,8 @@ Kvalifikační nástroj \filepath{scripts/release_qualification.php} zaznamenáv
 Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice konkrétního problému sazby; volitelná pole kontroly PDF mohou zůstat čekající. Ověřte reprezentativní postupy prohlížeče. Zaznamenejte, co bylo skutečně zkontrolováno, kým a~s~jakým výsledkem. Nevyřešené kontroly ponechte čekající a~základní test aktualizátoru po zveřejnění oddělený. Zelená automatická zpráva není svolením ke zveřejnění a~nástroj nikdy nevytváří commity ani tagy, nenahrává ani nepublikuje vydání. Příkazy záznamů najdete v~\filepath{docs/RELEASE_QUALIFICATION.md}.
 
 \subsection{Příprava a~kvalifikace vydání na GitHubu}
+
+Správce spouští \filepath{.github/workflows/release-promotion.yml} z~\codeword{main} s~dokončeným během kvalifikace, přesným SHA a~větví vydání. Režim plan pouze čte důkazy. Promote vyžaduje nezávisle schválené prostředí \codeword{release-promotion}, ověří aktivní pravidla PR a~stavových kontrol a~povolí chráněné sloučení release PR. Publish po sloučení ověří shodný obsah kandidáta/main, vytvoří neměnný tag a~zveřejní ověřené balíčky s~trvalými důkazy. Override vyžaduje důvod a~přesné názvy všech červených/přeskočených jobů; původní selhání zůstanou červená. Ruční přijetí a~kontrola produkčního hostingu zůstávají zvlášť. Bez serverových ochran jsou zápisy blokovány; agenti přímo do develop/main nepushují.
 
 Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
 

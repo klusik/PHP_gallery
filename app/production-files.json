@@ -2108,6 +2108,7 @@
         "tests/gallery_workflow_safety_test.php",
         "tests/google_auth_state_context_test.php",
         "tests/hero_tag_theme_model_test.php",
+        "tests/hosted_release_policy_test.mjs",
         "tests/image_decode_imagick_fallback_test.php",
         "tests/image_decode_pipeline_test.php",
         "tests/image_decode_policy_test.php",

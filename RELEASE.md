@@ -1,12 +1,16 @@
 # PHP Gallery Release Workflow
 
-This document is the authoritative maintainer and agent playbook for preparing and qualifying a PHP Gallery release. `AGENTS.md` points here for release work. The mechanical release scripts intentionally do not replace editorial review, release-note writing, manual inspection, Git review, packaging inspection, or post-publication smoke testing.
+This document is the authoritative maintainer and agent playbook. GitHub Actions
+owns normal preparation, qualification, protected promotion and publication.
+`AGENTS.md` owns CI-first agent work and working-branch-only writes. Human review
+and actual hosting smoke tests remain separate from automated qualification.
 
 ## Core rule
 
 Audit profiles are alternatives, not a staircase.
 
-For an actual release, do **not** run `quick`, then `full`, then `release`. Complete the release preparation workflow below and finish with exactly one:
+The hosted release job runs one authoritative release profile. Do **not** run
+local quick/full/release audits before or after it by default:
 
 ```text
 php scripts/audit.php --profile=release
@@ -19,7 +23,9 @@ Strict MVC is part of release qualification. The release audit invokes `scripts/
 
 ## GitHub-hosted release qualification
 
-Issue [#100](https://github.com/klusik/PHP_gallery/issues/100) moves release work toward GitHub-hosted preparation, qualification and publication. The first implemented stage deliberately changes only qualification: an already prepared `release/v_X.Y.Z` branch can be qualified without running the long release audit on a maintainer workstation.
+Issue [#100](https://github.com/klusik/PHP_gallery/issues/100) provides GitHub-hosted
+preparation, exact-candidate qualification and a separately authorized protected
+promotion/publication path. No long local audit is part of the normal process.
 
 `.github/workflows/release-qualification.yml` runs automatically on pushes to `release/v_*`. It validates the branch/version identity, refuses an already existing immutable `v_X.Y.Z` tag, requires the production inventory and integrity manifest to be current, and runs `scripts/check_release.php` before starting expensive jobs. When preflight passes it reuses `.github/workflows/gallery-workflows.yml` with `audit_profile=release`. Existing platform, database, runtime and required-Chromium jobs remain mandatory, and one additional `Authoritative release audit` job runs exactly `php scripts/audit.php --profile=release`. The caller exposes a single `Release qualification gate` for the complete result.
 
@@ -91,14 +97,130 @@ A qualified candidate is never rebased. Any candidate mutation needs fresh
 qualification; future promotion must originate from that exact release candidate,
 followed by post-publication `main -> develop` reconciliation.
 Do not duplicate a release fix independently on develop. The current v_0.122
-bootstrap divergence is a documented exception; this qualification stage does not
-perform promotion, reconciliation, tagging or publication.
+bootstrap divergence is a documented exception. Reconciliation remains a separate
+maintainer operation after publication; agents do not directly update develop/main.
 
-This stage still does **not** merge to `main`, create tags, publish a GitHub Release, or bypass failed checks. Those promotion/publication steps remain later #100 phases.
+Preparation and qualification alone do not request publication. The protected
+promotion workflow below owns the separately approved release actions.
 
 The workflow also supports `workflow_dispatch` for explicit reruns. GitHub only exposes manual dispatch for workflow files present on the repository default branch. During the bootstrap release that first carries this workflow from `develop` to `main`, create/push the prepared `release/v_X.Y.Z` branch and let the push trigger run it automatically. After the workflow exists on `main`, later releases can also use **Actions > Release qualification > Run workflow**, select the release branch, and optionally supply the version as an additional cross-check.
 
 A successful GitHub gate is automated qualification evidence only. Required human/manual acceptance remains separate, and a changed release candidate SHA must be qualified again.
+
+## Protected promotion and publication
+
+The normal lifecycle is:
+
+1. A maintainer creates/selects `release/v_X.Y[.Z]` and runs **Release qualification**.
+   Preparation commits only its approved generated paths to that same branch,
+   builds all four manuals and qualifies the emitted exact SHA.
+2. Inspect the required matrix and **Release qualification gate**. The gate also
+   creates the **Release qualification** check on the prepared SHA, including a bot
+   commit, and retains `release-qualification-record` for 90 days. Failed checks
+   remain failures; preparation failure never yields an eligible candidate.
+3. From `main`, dispatch **Protected release promotion** with the completed run ID,
+   exact candidate SHA, release branch and `plan`. This performs read-only evidence
+   validation: current workflow attempt, every required job, branch identity and
+   unchanged branch head. It refuses incomplete/missing/stale evidence.
+4. Dispatch `promote` with a human acceptance evidence/reference. The independently
+   reviewed `release-promotion` environment authorizes writes. The workflow
+   verifies active server controls, current maintainer permission and branch head,
+   creates/reuses a release PR to main, requires main to be an ancestor of the
+   candidate, and enables protected merge-commit auto-merge. GitHub waits for
+   required PR checks/reviews. Do not squash/rebase an already qualified candidate.
+5. After the PR merges, dispatch `publish` with the same identity. Reader jobs
+   perform canonical generated-state/release integrity checks and build the
+   positive-inventory production ZIP; a Windows job builds the installer only
+   when shipped WinApp inputs changed since the qualification base. No writer
+   credential is available to candidate code or build jobs.
+6. The approved write job revalidates all evidence, requires current main to be
+   exactly that PR's merge commit and requires its Git tree to equal the qualified
+   candidate tree. It verifies asset hashes, creates the immutable `v_<version>`
+   tag, creates/reuses a draft GitHub Release, uploads complete public evidence
+   and packages, rechecks both branch heads, publishes the draft, and checks
+   uploaded sizes/digests. Unexpected merge content or moved main blocks tagging.
+
+Promotion and publication are deliberately separate dispatches because PR reviews
+and auto-merge may finish asynchronously. A green candidate can merge automatically
+through GitHub protections; publication consumes the exact resulting main commit.
+Normal implementation of release tooling does not invoke either write mode.
+New dispatch workflows become available after a maintainer promotes their reviewed
+implementation to the default branch. Bootstrap is not permission for an agent
+to update main/develop directly.
+
+### Required server setup and least privilege
+
+Before using a write mode, maintainers must configure the following. The example
+`.github/release-ruleset.example.json` is reviewable configuration, not an applied
+ruleset; verify repository-specific actors and existing maintainer flows first.
+
+- Active rules for `main` require PRs and the exact **Release qualification** check,
+  strict current-base checks, no force pushes and no deletion. Use merge commits
+  for releases and enable repository auto-merge. Keep routine feature PRs targeted
+  at develop: requiring this release check on main intentionally reserves main
+  for qualified releases.
+- Protect `develop` with PRs, required **Candidate qualification** or the existing
+  reviewed CI requirements, no force pushes/deletion, and no agent bypass. Give
+  agents a distinct principal restricted to authorized working-branch operations.
+  A shared maintainer credential cannot make GitHub distinguish human and agent
+  intent; documentation is not server-enforced credential isolation.
+- Create `release-promotion` with independent required reviewers, prevent
+  self-review, disallow administrator environment bypass, and exactly one custom
+  deployment branch policy: branch `main`. The script rechecks these controls and
+  refuses writes if they are absent. A single-maintainer repository must arrange
+  an independent reviewer before enabling this path.
+- Enable Actions PR creation. If necessary, store a dedicated GitHub App token or
+  fine-grained token as environment secret `RELEASE_PROMOTION_TOKEN` with only
+  repository contents/PR write and Actions/environment/metadata read permissions.
+  Use a distinct authorized maintainer/App principal for ruleset bypass; never
+  give it to ordinary agents or reader/build jobs. Without this secret, the job
+  uses its narrow GITHUB_TOKEN and reports any unavailable action as BLOCKED.
+  GITHUB_TOKEN-created PRs/commits do not start recursive workflows; the release
+  check is explicitly created on the prepared SHA. If additional PR checks are
+  required, use an approved App token or explicitly dispatch those checks.
+
+At implementation inspection on 2026-10-08, main and develop had no protection and
+the only environment was github-pages. Server setup was therefore pending; this
+is a dated observation, not a claim that the example is currently enforced.
+
+### Explicit red-check override
+
+Set `override_ack=true`, supply a nonempty reason, and list **every exact failed,
+skipped or cancelled job name**, one per line, from the current qualification
+attempt. The recorded candidate must still be the release head. Missing job
+evidence, cancelled/unfinished workflows and failed preparation cannot be
+overridden. Independent environment approval is still mandatory.
+
+The override path writes the actor/reason/original red outcomes into the release PR
+and immutable publication evidence, then requests a SHA-bound PR merge using the
+explicitly configured maintainer bypass principal. No check is rewritten as PASS.
+If GitHub protection refuses the merge, the workflow stays BLOCKED. Publication
+still requires current main/candidate content identity and all technically possible
+final integrity/package checks. Both override and normal publication preserve human
+review text and mark actual production hosting smoke as pending.
+
+### Durable evidence, retries and stale runs
+
+Public assets include `production.zip`, manifest and inventory, release metadata,
+notes, SHA-256 checksums, complete `qualification-evidence.zip`, final integrity
+record, and `release-evidence.json` containing candidate/main/tree identity,
+qualification run/attempt, base, actor, manual review and original override failures.
+Required rebuilt WinApp installer/update metadata are attached separately. These
+GitHub Release assets survive expiration of ordinary Actions artifacts. Evidence
+archives include all uploaded audit/source/browser/database reports and detailed
+failure logs available from the qualification run, including red evidence.
+
+Per-branch/version concurrency serializes write actions without cancelling an
+in-flight upload. Every write checks fresh refs after approval; a new candidate
+needs a fresh run. Existing PRs are reused only for the exact head. A tag is never
+moved: an existing different target is a hard collision. Interrupted uploads leave
+a draft; retries accept identical existing assets by size/digest, refuse conflicting
+assets and never use clobber. An already published matching release is checked
+without replacement. Fixes to frozen inputs require fresh preparation/qualification.
+
+No production/WEDOS credentials or live installation are used. Post-publication
+repository tag/release/asset checks are automated; updater/hosting/browser acceptance
+against a real installation remains pending until separately performed.
 
 ## Default artifact policy
 
@@ -106,7 +228,12 @@ Normal release preparation does not create a deployment folder, ZIP, packaging s
 
 Rebuild the Windows installer in `winapp/dist/` only when shipped companion code, assets, dependencies, runtime binaries or build/installer behavior changed since its previous build. CMS metadata, documentation and test-only fixes do not trigger an installer rebuild. Keep its independent version unless the user requests a change; otherwise leave `winapp/dist/` untouched.
 
-## Release phases
+## Local fallback/recovery phases
+
+The commands below document the retained maintainer recovery path. They are used
+only for an explicitly requested local operation or genuinely unavailable hosted
+CI, not as routine agent steps. Local PASS does not establish hosted qualification;
+report **BLOCKED / not CI-qualified** until the required hosted run is available.
 
 ### 1. Establish the release scope
 
@@ -360,7 +487,7 @@ Record environment-dependent checks that could not be performed locally.
 
 Do not weaken or bypass a consistency invariant merely to make the release audit green. If an invariant becomes obsolete because the release process changes, update the tooling, tests, and this document together.
 
-## Agent efficiency contract
+## Recovery efficiency contract
 
 For release work, follow these gates in order. The final audit starts only after the editorial and generated data are complete:
 

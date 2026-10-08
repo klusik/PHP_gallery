@@ -2222,7 +2222,7 @@ Atomära moduler ska ansvara för ett sammanhängande område. Gemensamma kontra
 
 Den~kanoniska filen \filepath{AGENTS.md} kräver namngivna deklarationer och~fullständig dokumentation i~samma ändring. Börja med ett sakligt syfte före taggarna; beskriv varje uttrycklig parameter inklusive standardvärden och~nya parametrar, verkliga returvarianter samt konkreta samlingselement och~objektfält. Inbyggda PHP/Python-typer är ett separat krav. Anonyma callbackar behöver ingen deklarationsdocstring; namngivna deklarationer inuti dem behöver det. Körningspolicyer behöver dessutom syfte, typ, enheter, omfattning, konsumenter och~motivering direkt före platsen. Exemplen i~\filepath{docs/AGENT_AUTHORING.md} kontrolleras med befintliga analysverktyg i~ett registrerat regressionstest; negativa fixturer bevarar fel för ofullständiga kontrakt.
 
-Använd den~befintliga profilen \codeword{--profile=release-preflight} för ren källåterkoppling; namnet innebär inga utgåveåtgärder. Den~kontrollerar PHP/JavaScript-syntax, ändrade deklarationer/policyer, inventeringskategoriernas budgetar, Pythons importpolicy och~arbetsflödeskontrakt utan regressions-, webbläsar-, databas-, paketerings- eller operativsystemmatriser. Välj denna eller quick för aktuell ändringsomgång; quick kontrollerar inte helhetsbudgetar. Vanliga funktions-/rättningsgrenar håller \codeword{PHP_GALLERY_SOURCE_BASE} på~oföränderlig merge-base med \codeword{origin/main}; saknad historik ger BLOCKED och~får inte ersättas med HEAD som döljer tidigare committade fel. Utgåvor behåller basen från föregående tagg. Det~exakta kommandot finns i~\filepath{TESTING.md}.
+GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 
 Rapporter registrerar HEAD, upplöst jämförelse-SHA och~arbetskatalogens ändringsstatus. En~ändrad checkout ger återkoppling, inte kvalificering av~en ren commit. Den~länkade \filepath{source-failures.md} visar alla fynd från misslyckade ändringskontroller, blockerare och~fynd i~överskridna kategorier; fullständiga värdefria JSON-rapporter bevarar bevis och~markerar historisk skuld. Kandidatarbetsflöden laddar upp dem tillsammans. Rätta hela omgången före nästa körning; oförändrad indata är ingen rättning. Slutför alla fyra handbokskällor, förbered genererade artefakter efter sista ändringen och~kör fullständig granskning en~gång för exakt kandidat. Ange SHA, bas, profil/resultat och~väsentliga täckningsluckor. Mät resultat vid första försöket och~rättningscykler från faktiska rapporter; förväntade besparingar är okända tills de~har observerats.
 
@@ -2238,8 +2238,8 @@ En typisk funktionsändring följer denna ordning:
   \item Lägg till översatta gränssnittssträngar.
   \item Lägg till riktade automatiserade tester och dokumenterad manuell verifiering.
   \item Uppdatera permanenta Markdown-referenser och~alla fyra TeX-manualkällor när aktuella användar-, administratörs-, arkitektur- eller utvecklarinstruktioner ändras.
-  \item Förbered den slutliga källkodskandidaten med \filepath{scripts/prepare_candidate.php}; återskapa körningsplan, paketförteckning och~integritetsdata i~rätt ordning.
-  \item Granska hela ändringen och~använd den centrala granskningen \codeword{--profile=full} före slutlig källkodsöverlämning.
+  \item Värdbaserad Candidate preparation kör \filepath{scripts/prepare_candidate.php} och skrivskyddad kontroll: körningsmoduler, Git-indexets produktionsinventering och hela filers hashvärden skapas i beroendeordning. Endast ändrade artefakter committas på samma godkända gren; samtidiga ändringar avvisas och exakt förberett SHA kvalificeras. Agenter pushar källcommittar och granskar CI i stället för upprepad lokal generering.
+  \item Överlämningen anger GitHub Actions-URL, arbetsgren, exakt förberett SHA, oföränderlig jämförelsebas, obligatoriska jobb och manuell/saknad täckning. Föråldrade, saknade, överhoppade, avbrutna, röda eller blockerade obligatoriska kontroller är inte grön kvalificering. Rätta källan och pusha samma gren för nytt CI.
 \end{enumerate}
 
 \subsection{Förbereda källkodskandidater för CI}
@@ -2247,10 +2247,8 @@ En typisk funktionsändring följer denna ordning:
 Under utvecklingen får ändringar delas upp i~små fristående commits, men kvalificeringen måste gälla en~bestämd källkodsrevision där alla genererade artefakter stämmer överens. Permanent teknisk dokumentation hör till samma ändringsomgång. Ändringar i~administration, arkitektur, körningsberoenden, säkerhet, paketering eller CI kräver granskning av~alla fyra TeX-manualkällor, inte bara synliga användarsidor. Vanligt utvecklingsarbete ändrar varken \filepath{PATCH_NOTES.md} eller de~versionshanterade PDF-manualerna.
 
 \begin{enumerate}
-  \item Slutför källkods- och~dokumentationsändringarna. Lägg till nya eller borttagna produktionsfiler i~Git-indexet så~att inventeringsgeneratorn ser medlemskapet. Justera granskade körningsrötter och~beroendedeklarationer när en~rutts ansvar ändras.
-  \item Kör \filepath{scripts/prepare_candidate.php}. Först genereras \filepath{app/runtime/modules.php}, sedan uppdateras \filepath{app/production-files.json} från Git-indexet och~\emph{sist} beräknas \filepath{app/core-manifest.json}. Hashvärdena bygger på~fullständiga filer i~checkouten, aldrig på~avkortade API-svar.
-  \item Verifiera alla tre artefakter utan skrivning med \codeword{php scripts/prepare_candidate.php --check}. Upprepad förberedelse med oförändrade sakliga indata ändrar varken filer eller manifestets tidsstämpel. Kör förberedelsen på~nytt efter varje senare källkodsrättning.
-  \item Committera endast genererade filer som faktiskt har ändrats och~bevara separata källkodskommittar. Använd den~auktoritativa granskningen \codeword{php scripts/audit.php --profile=full} för slutlig överlämning av~den förberedda kandidaten.
+  \item Värdbaserad Candidate preparation kör \filepath{scripts/prepare_candidate.php} och skrivskyddad kontroll: körningsmoduler, Git-indexets produktionsinventering och hela filers hashvärden skapas i beroendeordning. Endast ändrade artefakter committas på samma godkända gren; samtidiga ändringar avvisas och exakt förberett SHA kvalificeras. Agenter pushar källcommittar och granskar CI i stället för upprepad lokal generering.
+  \item Överlämningen anger GitHub Actions-URL, arbetsgren, exakt förberett SHA, oföränderlig jämförelsebas, obligatoriska jobb och manuell/saknad täckning. Föråldrade, saknade, överhoppade, avbrutna, röda eller blockerade obligatoriska kontroller är inte grön kvalificering. Rätta källan och pusha samma gren för nytt CI.
 \end{enumerate}
 
 Det~stabila GitHub-arbetsflödet \filepath{.github/workflows/candidate-preparation.yml} kan förbereda funktions- och~rättningsgrenar och~kvalificera den~publicerade kandidatens exakta SHA. Det~kontrollerar grenens identitet, avvisar föråldrade skrivningar och~gör varken merge, squash eller tvingad push. Den~centrala skrivskyddade kontrollen \codeword{--profile=candidate-preflight} avvisar gamla manifest, körningsplaner, inventeringar och~brott mot källkodspolicyn innan den~kostsamma CI-matrisen startar. Testkörningar får inte tyst reparera saknade artefakter. Senare uppdaterar releaseförberedelsen manualernas versions- och~datummarkörer och~kompilerar befintliga TeX-källor till PDF; den~skriver inte saknade tekniska förklaringar.
@@ -2288,15 +2286,15 @@ Den centrala granskningen täcker MIME-typer och namn från urklipp, syntetiska 
 
 De registrerade miniatyrtesterna kontrollerar begränsade rasterhuvuden, avbrott och resursfrigöring. Chromium-fixturerna kontrollerar även FileList-paritet med 100 poster, en 320 pixlar bred panel, städning vid återställning och navigering, fokus samt klassiska och förberedda återförsök utan dubbla bilder. Antal URL:er och avkodare mäter inte hela processens minne; verkligt operativsystemsurklipp och Firefox/Safari återstår att kontrollera manuellt.
 
-Använd den~centrala granskaren \filepath{scripts/audit.php} för~normal verifiering, inte den~äldre omslutaren \filepath{tests/run.php}. Profilerna nedan är alternativ, inte tre steg som ska köras efter varandra. Använd vid behov snabbprofilen under utveckling, den~fullständiga profilen en~gång före vanlig överlämning eller~utgåveprofilen en~gång vid slutlig utgåvekvalificering. Kör enskilda tester bara för~att felsöka rapporterade fel eller~utveckla en~nyregistrerad testfixtur, inte som en~andra genomgång av~hela testträdet.
+GitHub Actions är agenternas normala och auktoritativa verifieringsmiljö (CI-first). Audit-kommandona nedan beskriver den värdbaserade köraren; agenter kör dem normalt inte lokalt. Lokal reproduktion är ett undantag för observerade miljöberoende CI-fel, faktiskt oåtkomligt CI eller uttrycklig begäran. Lokala resultat ersätter aldrig obligatorisk värdbaserad täckning.
 
 \begin{lstlisting}[language=bash]
-# Source-only feedback (or quick for behavior checks):
+# Hosted source feedback (exceptional local diagnosis only):
 php scripts/audit.php --profile=release-preflight
 php scripts/audit.php --profile=quick
-# Before ordinary code handoff:
+# Hosted full source qualification:
 php scripts/audit.php --profile=full
-# Final release qualification only:
+# Hosted authoritative release job:
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
@@ -2315,6 +2313,8 @@ För offentlig miniatyrbildsrendering undersöker du panelerna Elements och Netw
 \subsection{Rutiner vid utgivning}
 
 Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föregående stabila tagg, färdigställ versionsanteckningar och permanent dokumentation och samordna alla fyra handboksutgåvor. Bygg varje PDF med index och flera körningar enligt \filepath{docs/LATEX_BUILD.md}; kontrollera kompilering, referenser, indexposter och layoutvarningar. Visuell PDF-granskning görs endast på uttrycklig begäran eller för att undersöka ett konkret layoutproblem; en lyckad rutinbyggnad kräver inget ytterligare visuellt godkännande.
+
+Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens bevarade lokala återställningsväg. Normal förberedelse och kvalificering körs på GitHub; agenter kör inte dessa kommandon lokalt som standard. Lokal återställning kräver uttrycklig begäran eller faktiskt oåtkomligt CI och förblir BLOCKED utan värdbaserade bevis. Skyddad promotion och publicering följer det senare beskrivna release-promotion-flödet.
 
 Generera manifestet efter sista ändringen, godkänn förkontroller för utgåva, manifest och blanksteg, initiera kvalificeringens fingeravtryck och frys underlaget. Kör exakt en central granskning med \codeword{--profile=release}, direkt eller genom den konfigurerade isolerade testinstallationen. Granskningen äger syntax, regressioner, kontrakt, webbläsartestfall och utgåvekonsekvens; lägg inte till en andra manuell genomgång av testträdet. Koppla rapporten till det oförändrade fingeravtrycket och redovisa täckningsluckor separat från väntande driftgranskningar.
 
@@ -2444,6 +2444,8 @@ Kvalificeringsverktyget \filepath{scripts/release_qualification.php} registrerar
 Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera ett konkret layoutproblem; valfria PDF-granskningsfält får förbli väntande. Granska representativa webbläsarflöden. Registrera vad som faktiskt kontrollerades, av vem och med vilket resultat. Låt olösta kontroller vara väntande och håll grundläggande funktionstest av uppdateraren efter publicering separat. En grön automatiserad rapport är inte tillstånd att publicera, och verktyget gör aldrig commit, taggar, laddar upp eller publicerar utgåvan. Se \filepath{docs/RELEASE_QUALIFICATION.md} för postkommandona.
 
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
+
+Underhållaren startar \filepath{.github/workflows/release-promotion.yml} från \codeword{main} med avslutad kvalificeringskörning, exakt SHA och utgåvegren. Plan läser bara bevis. Promote kräver oberoende godkännande i miljön \codeword{release-promotion}, aktiva PR/statusregler och aktiverar skyddad sammanslagning av utgåvens PR. Publish verifierar identiska kandidat/main-träd efter sammanslagningen, skapar en oföränderlig tagg och publicerar verifierade paket med permanenta bevis. Override kräver skäl och exakta namn på alla röda/överhoppade jobb; ursprungliga fel förblir röda. Mänsklig acceptans och produktionsvärdens smoke-test förblir separata. Saknade serverskydd blockerar skrivning; agenter pushar aldrig direkt till develop/main.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 

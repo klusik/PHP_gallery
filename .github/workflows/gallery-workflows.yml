@@ -224,6 +224,7 @@ jobs:
         with:
           name: gallery-workflows-${{ strategy.job-index }}
           path: |
+            cache/test-audit/**/*
             cache/test-audit/latest.json
             cache/test-audit/latest.md
             cache/test-audit/**/source-documentation.json
@@ -271,6 +272,7 @@ jobs:
             cache/test-audit/latest.json
             cache/test-audit/latest.md
             cache/test-audit/**/*
+            cache/release-qualification/**/*
           if-no-files-found: ignore
           retention-days: 30
 
@@ -319,6 +321,7 @@ jobs:
         with:
           name: runtime-source-${{ strategy.job-index }}
           path: |
+            cache/test-audit/**/*
             cache/test-audit/latest.json
             cache/test-audit/latest.md
             cache/test-audit/**/source-documentation.json
@@ -328,6 +331,32 @@ jobs:
             cache/test-audit/**/runtime-performance.log
           if-no-files-found: ignore
           retention-days: 7
+
+  ci-gate:
+    name: Complete required CI matrix
+    if: ${{ always() }}
+    needs: [preflight, production-package, real-database-browser, runtime-compatibility, browser-tests, release-audit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Refuse failed, blocked, missing or skipped mandatory owners
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          AUDIT_PROFILE: ${{ inputs.audit_profile || 'full' }}
+          CANDIDATE_SHA: ${{ inputs.checkout_ref || github.sha }}
+          SOURCE_BASE: ${{ env.PHP_GALLERY_SOURCE_BASE }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          const results = JSON.parse(process.env.RESULTS);
+          const required = ['preflight','production-package','real-database-browser','runtime-compatibility','browser-tests'];
+          if (process.env.AUDIT_PROFILE === 'release') required.push('release-audit');
+          const bad = required.filter(owner => results[owner]?.result !== 'success');
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `Candidate: ${process.env.CANDIDATE_SHA}\nComparison base: ${process.env.SOURCE_BASE}\n` +
+            required.map(owner => `- ${owner}: ${results[owner]?.result ?? 'MISSING'}`).join('\n') + '\n');
+          if (bad.length) throw new Error('BLOCKED required CI owners: ' + bad.join(', '));
+          NODE
 
   browser-tests:
     needs: preflight
@@ -378,6 +407,7 @@ jobs:
           name: required-chromium
           # Keep the central browser fixture log in the uploaded artifact on failure.
           path: |
+            cache/test-audit/**/*
             cache/test-audit/latest.json
             cache/test-audit/latest.md
             cache/test-audit/**/browser-map.log

@@ -188,56 +188,34 @@ example therefore cannot silently drift away from the implemented checkers.
 
 ## Source feedback and comparison base
 
-For ordinary feature/fix work, resolve the same branch comparison base as hosted
-candidate preparation. Run from the repository root:
+The [CI-first contract](../AGENTS.md#mandatory-agent-verification-contract) owns
+agent execution. Verify branch identity, HEAD, remote head and explicit push
+authorization before writes. Commit authored source, tests and documentation;
+push only the exact authorized working ref. Never directly mutate develop/main.
+Missing access means BLOCKED, before writes.
 
-```sh
-gallery_source_base=$(git merge-base HEAD origin/main) || exit 2
-test -n "$gallery_source_base" || exit 2
-export PHP_GALLERY_SOURCE_BASE="$gallery_source_base"
-php scripts/audit.php --profile=release-preflight
-```
+Hosted candidate preparation resolves `git merge-base HEAD origin/main` once and
+retains its immutable SHA through preparation and qualification. Release workflows
+use their previous stable tag. Missing history/base blocks CI; substituting HEAD
+would hide already committed omissions. The central runner passes the same base
+to declaration/policy checkers and records candidate identity and dirty state.
 
-Keep this immutable SHA for subsequent checks and final qualification in this
-batch. Resolve a new base deliberately after rebasing or updating the target
-history. Use the configured target remote if it differs from `origin`; do not
-silently choose a different branch. Missing Git history/base is BLOCKED until
-restored. The command does not fetch, modify a branch or contact a live database.
-For release preparation keep the workflow's previous-release-tag base instead.
+GitHub uses source-only `release-preflight` before generation, read-only
+`candidate-preflight` before expensive jobs, and full coverage for ordinary
+handoff. These profiles do not establish release approval. No local audit or
+generator is a default agent step, and successful hosted coverage is not repeated
+locally. Focused local diagnostics follow only the explicit exceptional paths in
+AGENTS.md; unavailable CI remains BLOCKED regardless of local evidence.
 
-`release-preflight` is the existing **source-only** authoring/preparation profile
-despite its historical name. It runs PHP/JavaScript syntax, changed declaration
-documentation, changed runtime policy, whole-tree inventory/category budgets,
-Python import policy and CI workflow contracts. It neither prepares a release
-nor runs regression, browser, database, packaging or OS matrices. A source-only
-PASS is feedback, not final qualification.
+Read hosted `source-failures.md` once for all failed declarations, policy sites,
+blocked coverage and over-budget categories. Repair the entire relevant batch,
+commit and push the same branch for fresh preparation/qualification. Do not read
+passing child logs. Finish all permanent Markdown/all-four-TeX source edits before
+the source commit; ordinary development leaves PDFs and release markers/notes alone.
 
-Without an explicit override, changed-source checkers use HEAD. That can be
-useful for an uncommitted edit, but misses violations committed earlier in the
-branch. The central runner resolves the requested base once and passes its SHA
-to both changed-source checkers; reports retain HEAD, actual comparison base and
-dirty state. A dirty tree is checkout feedback, not proof of a clean commit.
-
-Choose `quick` instead when behavior/regression feedback is useful. It omits the
-whole-tree inventory/category budgets, so its PASS cannot prove those budgets
-will pass. Do not mechanically run every profile after each comment change.
-Full handoff coverage and mandatory hosted jobs remain required.
-
-On source failure, open the reported `source-failures.md` once. It lists every
-finding in failed changed-source suites, blocked coverage and findings in
-over-budget inventory categories, including identities and missing policy fields.
-Historical debt in those categories is marked as such. Links retain the complete
-value-free JSON reports and ratchet evaluation; no passing child logs are needed.
-Candidate workflows upload those artifacts together. Repair all relevant
-occurrences, then rerun the appropriate central profile after the source changes.
-
-Finish authored code and permanent Markdown/all-four-TeX documentation, stage
-production membership changes, run `php scripts/prepare_candidate.php`, commit
-changed generated artifacts separately, and run the central full audit once on
-the exact final candidate. A later fix requires preparation and qualification
-again. Record SHA, comparison base, profile/result and material skipped/blocked
-coverage. Keep PDFs, edition version/date markers and release notes unchanged
-during ordinary development.
+Handoff records workflow URL, branch, exact prepared candidate SHA, immutable base,
+full hosted job results and material skipped/blocked/manual coverage. A source-event
+SHA, earlier green run or stale candidate cannot qualify the current branch.
 
 ## Measuring prevention
 
