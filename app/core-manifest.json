@@ -523,7 +523,7 @@
         "app/views/admin_gallery_dates.php": "sha256:9310fa5449f904044e1ae0a5a848faf98cfaefcc8622abff91a6d760462ef91c",
         "app/views/admin_gallery_discovery.php": "sha256:8e9a0a036b264c2b09652b9c02598b496fef1945b139941133c8ab10760ed125",
         "app/views/admin_gallery_edit_components.php": "sha256:295f430b17c7a6fe8359d18e682592af69b1db67ca9b72dfaa1f2bdccc33c9ba",
-        "app/views/admin_gallery_edit_tabs.php": "sha256:21da47148f03b6f8ca11a760465ce947419926ee8081d5168ee8dfc3fdcc0f43",
+        "app/views/admin_gallery_edit_tabs.php": "sha256:aca618efce5eab7597213459410aad41bac8b3c0273768cd0f72828a6e2ac563",
         "app/views/admin_gallery_forms.php": "sha256:e0aa43064127bf9c43d439be636639c3594e614eca59c2af4df51f7fec09206f",
         "app/views/admin_gallery_metadata_organizer.php": "sha256:38d5e81e7124ca7544166c80fa6364b4833592ce1b4d9f9301f6ad58f47396f5",
         "app/views/admin_gallery_migration.php": "sha256:9a901050e5c7b55d36c9a67a5c9f8c99b2d38eb44bcd524aa0d77ae0407312ff",
