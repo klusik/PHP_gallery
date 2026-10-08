@@ -385,9 +385,9 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
     } finally {
         fclose($handle);
     }
-    $mime = function_exists('finfo_open') ? (new \finfo(FILEINFO_MIME_TYPE))->file($source) : '';
+    $mime = function_exists('finfo_open') ? (new \finfo(FILEINFO_MIME_TYPE))->file($source) : null;
     if ($magic !== '%PDF-' || !is_string($tail) || !str_contains($tail, '%%EOF')
-        || !in_array($mime, ['application/pdf', 'application/x-pdf'], true)) {
+        || ($mime !== null && !in_array($mime, ['application/pdf', 'application/x-pdf'], true))) {
         throw new \RuntimeException('The file is not a valid PDF document.');
     }
 
