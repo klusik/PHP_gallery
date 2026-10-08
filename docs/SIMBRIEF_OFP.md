@@ -8,13 +8,27 @@ An administrator imports the latest SimBrief flight using the existing gallery e
 
 The rendered gallery description area exposes **View flight plan (OFP)** and **Download OFP PDF** only if a valid local document exists. Both work even when the parent gallery contains no photographs. The link comes from locally persisted attachment data, not an expiring SimBrief download link written into editable Markdown.
 
+## Historical galleries: administrator-guided dispatch and PDF upload
+
+Issue [#104](https://github.com/klusik/PHP_gallery/issues/104) adds a **single-gallery, optional manual workflow** for galleries created before an OFP was saved. It neither scans galleries in bulk nor invokes an automatic SimBrief generation API.
+
+1. Open the existing gallery in Admin and go to the **API** editor tab. With SimBrief enabled, the **Legacy flight plan (OFP)** panel checks the same local PDF resolver used by the public gallery. If a valid PDF already exists, use **View OFP** or **Download PDF**. There is no regeneration prompt. The existing PDF, source JSON, images and description remain intact.
+2. If no valid PDF exists, select **Create historical OFP / Open prefilled SimBrief**. A local **modal review dialog** opens first. It identifies the gallery and displays precisely the supported fields that could be sent to SimBrief: departure/destination ICAO, date and UTC departure hour/minute, aircraft ICAO type, airline and flight number, callsign, registration, filed route, flight level, alternate and passengers. Known fields come from that gallery's saved OFP JSON and structured route information. An unambiguous stored gallery date can be offered **as uncertain**, requiring administrator verification. Missing values are blank; titles and EXIF timestamps are never guessed as flight facts.
+3. Edit, clear, confirm or cancel the transient fields. **Cancel** and opening/editing the dialog make no remote requests and do not save gallery data. Only **Open SimBrief Dispatch** assembles safely encoded parameters for the fixed official URL https://dispatch.simbrief.com/options/custom and opens it in a protected new tab. SimBrief may require login, and the administrator must independently review options and select **Generate** there. A link requires no API key or OAuth. Dates are encoded as SimBrief's DDMMMYY (for example 03JUN26), but **acceptance of old departure dates on SimBrief itself remains unverified**. A historical date might be rejected or normalized there.
+4. Download the newly generated PDF from SimBrief. Return to the same gallery and select **Upload OFP PDF**. The independent upload form accepts one PDF of up to 25 MiB and requires an explicit provenance selection: **newly generated retrospective OFP** or **manually supplied document**. The successful attachment is stored in the selected source gallery and indexed in the existing canonical OFP manifest. The same access-controlled viewer/download routes then serve it.
+5. An existing PDF is **never silently overwritten**. A separate collapsed **Replace existing OFP PDF** action requires a check-box confirmation. PDF storage uses per-gallery locking, content checks (signature, EOF, MIME when fileinfo is present, maximum size), bounded staging, symlink/path restrictions and rollback on write failure. No photo pipeline, original raw OFP JSON, route data, gallery date, description or publication status is modified.
+
+**Provenance is essential:** an imported original flight-day OFP is an archival document, while a retrospective dispatch is a **new approximation**. Present-day weather, AIRAC, NOTAMs, routes, payload and fuel do not reconstruct conditions on the original flight day. The manifest preserves the provenance and attachment timestamp for manually supplied attachments; original imports without a provenance field are treated as the existing original SimBrief import.
+
+No bulk fetch, refresh timer, periodic polling, automatic generation, developer key or Navigraph OAuth is involved. Recovering exact past documents from a saved link or importing a later **latest** OFP automatically is deliberately not part of this version.
+
 ## Storage
 
 Each source gallery folder may contain:
 
 - simbrief-ofp.json: raw OFP data
 - simbrief-ofp-manifest.json: OFP metadata, route and attachment index
-- simbrief-ofp.pdf: original downloaded PDF
+- simbrief-ofp.pdf: original downloaded PDF **or** explicitly attached retrospective/manual PDF (see manifest provenance)
 - ofp-pages/: optional *physical child gallery* of generated JPEG images
 
 The local PDF is retained as the canonical original. Reimporting flight data does not automatically regenerate an existing OFP page gallery.
@@ -83,7 +97,7 @@ To deliberately regenerate, inspect/export and remove the old generated child th
 ## Regression and maintenance
 
 - tests/simbrief_ofp_lightbox_browser_test.mjs verifies stage-native scrolling versus Ctrl-only PDF zoom, theme-independent HUD contrast, help visibility, portrait A4 and mixed-orientation whole-page geometry on a landscape stage, fit-width and actual-size modes, center/bounds, mode indication, manual resize persistence, simulated rotation/fullscreen changes, translations, download isolation and resource cleanup.
-- tests/simbrief_ofp_document_test.php covers manifest validation, PDF signature and symlink refusal, generated-gallery ownership checks, no-op idempotency and the separate viewer contract.
+- tests/simbrief_ofp_document_test.php covers manifest validation, PDF signature and symlink refusal, generated-gallery ownership checks, no-op idempotency, **manual upload/explicit replacement, provenance, local historical prefill and gallery isolation**, and the separate viewer contract.
 - tests/simbrief_ofp_public_http_test.php starts a disposable real PHP HTTP server with isolated gallery fixtures. It checks clean-cookie anonymous GET/HEAD and downloads for public, unpublished, unlisted and legacy draft sources; old links; private/NSFW/password/share gates; invalid/missing PDFs; admin preview isolation; root/subdirectory paths and non-rewrite URLs. tests/public_media_authorization_contract_test.php exercises the same PDF authorization helper against the actual gallery-access policy.
 - Existing gallery import/export, deletion, backup and thumbnail workflows should continue treating the OFP pages as an ordinary physical child gallery.
 - New production assets and PHP services must appear in the checked-in production inventory and core manifest.
