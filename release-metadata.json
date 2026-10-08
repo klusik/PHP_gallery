@@ -1,4 +1,9 @@
 {
+    "0.123": {
+        "released_at": "2026-10-08 05:44:08",
+        "released_label": "8 October 2026, 05:44",
+        "tag": "v_0.123"
+    },
     "0.122.1": {
         "released_at": "2026-10-07 19:39:07",
         "released_label": "7 October 2026, 19:39",

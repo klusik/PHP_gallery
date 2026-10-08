@@ -1,5 +1,63 @@
 # Patch notes
 
+## Version 0.123
+
+Version 0.123 added a self-hosted viewer for saved SimBrief OFP PDFs, improved photo-lightbox gestures, and strengthened candidate preparation and release-note evidence handling. Administrators gained an optional way to convert OFP pages into a private child gallery; visitors could view or download saved PDFs subject to the source gallery’s access rules.
+
+### Highlights
+
+#### SimBrief OFP documents [#103](https://github.com/klusik/PHP_gallery/issues/103)
+
+- Added separate view and download actions for saved OFP PDFs, including on galleries without photos.
+- Added a PDF viewer with page navigation, whole-page, fit-width and actual-size modes, zoom, fullscreen and download controls.
+- Added an optional administrator conversion workflow that created a private child gallery from PDF pages; existing OFP subgalleries remained unchanged, and administrators could publish generated galleries separately.
+- Limited conversion to 40 pages, 9 million pixels per page, 64 MiB of JPEG output and 60 seconds.
+
+#### Photo lightbox [#111](https://github.com/klusik/PHP_gallery/issues/111) [#112](https://github.com/klusik/PHP_gallery/issues/112) [#113](https://github.com/klusik/PHP_gallery/issues/113)
+
+- Updated enlarged-photo gestures so ordinary wheel and trackpad scrolling panned, while Ctrl+wheel and trackpad pinch zoomed.
+- Added Safari gesture-event support and mobile touch handoff between pinch and one-finger pan.
+
+#### Candidate preparation and release evidence [#106](https://github.com/klusik/PHP_gallery/issues/106)
+
+- Added hosted candidate preparation and qualification for feature and fix branches, with generated artifacts prepared on the pushed revision and qualification run against the exact published candidate SHA.
+- Updated release-note generation to process complete long diffs through bounded, verified evidence stages rather than truncating source input.
+
+### Technical Details
+
+#### Backend
+
+- Added the `gallery_ofp_pdf` route and shared SimBrief OFP attachment and conversion services.
+- Served saved PDFs from same-origin URLs that supported subdirectory installations without URL rewriting; retained compatibility with `media&ofp=1` links.
+- Applied source-gallery visitor access rules to PDF delivery. Denied, missing and invalid PDFs returned the same no-store plain-text 404.
+- Limited SimBrief PDF downloads to 25 MiB, required HTTPS and successful non-redirect responses, and staged downloads before replacement so a failed download preserved the last saved attachment.
+
+#### Frontend
+
+- Added the self-hosted PDF.js viewer and responsive document controls, with fullscreen, zoom and page-display modes.
+- Added localized OFP viewing, download and conversion controls in English, Czech, German and Swedish.
+- Updated lightbox styles and input handling for wheel, trackpad and touch interactions.
+
+#### Tests
+
+- Added HTTP and browser regressions for OFP delivery, viewer interactions, access grants, root and subdirectory mounts, and legacy URL compatibility.
+- Added conversion and attachment tests, including private subgallery behavior and preservation of the last saved attachment.
+- Added release-evidence tests for bounded diff slicing, evidence reduction, Git output limits and large diffs.
+- Added candidate-preparation tests for complete hashing, idempotence and stale-input refusal.
+
+### User Impact
+
+#### For visitors
+
+- Viewed or downloaded saved SimBrief OFP PDFs directly from gallery pages, including galleries without photos.
+- Used PDF-specific page fitting, zoom, navigation and fullscreen controls without interfering with photo navigation.
+- Continued to use supported legacy PDF links; access restrictions followed the source gallery’s visitor-access rules.
+
+#### For administrators
+
+- Optionally converted saved OFPs into private child galleries without replacing existing OFP subgalleries.
+- Used updated contributor and maintainer guidance for candidate preparation, exact-SHA qualification and bounded release-note evidence processing.
+
 ## Version 0.122.1
 
 Version 0.122.1 updated Admin patch-note rendering to show safe, clickable HTTP(S) links and deferred manual PDF builds during ordinary development. Patch-note history now stays as raw Markdown until the Admin view renders it, including history from older caches.
