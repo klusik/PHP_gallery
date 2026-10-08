@@ -337,8 +337,10 @@ function setSimbriefStatus(tool, message, failed) {
 /**
  * Open or cancel a one-gallery pre-dispatch dialog without any remote action.
  *
- * The inert template is cloned into body because an admin side panel may clip
- * descendants, and the native modal dialog handles focus trapping and Escape.
+ * Append the native top-layer modal to the active drawer root when present.
+ * The drawer isolates body siblings with inert and enforces focus containment;
+ * appending outside it makes every review input inaccessible. The drawer root
+ * is outside its scroll-clipped content, while showModal() escapes stacking.
  *
  * @param {MouseEvent} event Delegated click event.
  * @returns {void} Opens or dismisses the review dialog.
@@ -363,7 +365,9 @@ function handleLegacyOfpDispatchClick(event) {
     const copy = template.content.cloneNode(true);
     const dialog = copy.querySelector('[data-simbrief-dispatch-dialog]');
     if (!(dialog instanceof HTMLDialogElement)) return;
-    document.body.append(dialog);
+    const drawer = card.closest('[data-admin-side-panel]');
+    const host = drawer instanceof HTMLElement ? drawer : document.body;
+    host.append(dialog);
     dialog.addEventListener('close', /** Destroy the detached modal and its edited-only data.
      * @returns {void} Clear the transient review without persisting to the gallery.
      */ () => dialog.remove(), {once: true});
