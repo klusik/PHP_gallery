@@ -50,6 +50,7 @@ import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation,
 import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261003-scoped-i18n-v1';
 import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
 import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
+import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261008-clipboard-v1';
 
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.
@@ -194,6 +195,7 @@ import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=
  * @return {void} Marks forms bound and installs their submit listener.
  */
 export function setupGalleryUploadProgress() {
+    setupGalleryUploadClipboard();
     document.querySelectorAll('[data-gallery-upload-form]').forEach(/** Bind each mounted upload form at most once. @param {Element} form Candidate upload form. @return {void} Marks valid forms bound before installing submission handling. */ (form) => {
         if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;

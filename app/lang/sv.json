@@ -1,4 +1,7 @@
 {
+    "admin.upload.clipboard_hint": "Välj eller dra in bilder, eller klistra in från urklipp med Ctrl+V (Windows/Linux) eller Cmd+V (macOS). Fokusera uppladdningsområdet för att lägga till bilder; i textfält klistras text in.",
+    "admin.upload.clipboard_added": "{count} bild(er) från urklipp har lagts till. Skicka formuläret för att ladda upp.",
+    "admin.upload.clipboard_unavailable": "Webbläsaren kunde inte lägga till bilder från urklipp. Välj eller dra in filer i stället.",
     "admin.galleries.create_hint": "Börja med ett namn. Lägg till foton från galleriet när det har skapats.",
     "admin.galleries.create_content": "Galleriets innehåll",
     "admin.galleries.create_settings": "Placering och synlighet",

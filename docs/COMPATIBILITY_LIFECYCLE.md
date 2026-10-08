@@ -24,6 +24,14 @@ include migration and release-note implications where applicable, and a
 regression/acceptance proof for the retired scenario. This is review metadata,
 not a source parser or a commitment to remove anything on a calendar date.
 
+### UI-3 — Clipboard exposure and writable FileList availability
+
+- **Reason / protected environment:** Desktop browsers or clipboard sources may expose no image files, and older/restricted browsers may not construct a DataTransfer or assign an input FileList. Their established chooser/drop and ordinary no-JavaScript POST uploads remain usable.
+- **Owner:** `admin-upload-selection.js` owns selection only; existing upload controllers/services and the side-panel completion owner retain persistence and security.
+- **Evidence:** `admin_upload_clipboard_test.mjs` and the registered `admin_upload_clipboard_browser_test.mjs` cover file-only exposure, selection preservation on assignment failure, ordinary multipart submission and dynamic panel controls. The OS/browser matrix in `TESTING.md` remains manual evidence.
+- **Usage:** Clipboard API availability and fallback frequency are `unknown`; no new telemetry is collected.
+- **Support rationale:** Chooser/drop and no-JavaScript POST remain permanently supported input methods. Clipboard input is additive and may never require permission polling or a second upload endpoint.
+
 ## Database and migrations
 
 ### UI-2 — Authored metadata language and source-field compatibility

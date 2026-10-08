@@ -170,7 +170,7 @@ assert.match(
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20261003-theme-motion-v1/,
+    /admin-side-panel\.js\?v=20261008-clipboard-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
@@ -180,7 +180,7 @@ assert.match(
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20261003-theme-motion-v1/,
+    /admin-operations\.js\?v=20261008-clipboard-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

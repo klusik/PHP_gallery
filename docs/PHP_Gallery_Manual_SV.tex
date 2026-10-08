@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.124.2}
+\newcommand{\version}{0.124.3}
 \newcommand{\manualdate}{8~oktober~2026}
 
 \hypersetup{
@@ -1071,6 +1071,8 @@ Vid upptäckt och reparation av saknade övergallerier kan PHP Gallery läsa st�
 \securitynote{Åtgärden \ui{Radera från disk} på upptäcktsskärmen är en riktig rekursiv filsystemsradering av ohanterade kandidatmappar. Granska de valda relativa sökvägarna innan du bekräftar. Skyddet mot kända importerade gallerisökvägar är en ytterligare säkerhetsgräns, inte en ersättning för säkerhetskopiering.}
 
 Webbläsaruppladdning är det mest lättanvända valet för vanligt arbete. Den kan ladda upp till ett befintligt galleri eller skapa ett undergalleri och ladda upp valfria fotografier i samma sidopanelflöde. Välj destination, välj filer och följ förloppsvisningen. Programmet kontrollerar destinationen och filinformationen innan varje resultat accepteras.
+
+Med JavaScript aktiverat fokuserar du uppladdningsområdet och klistrar in en bild eller skärmbild med Ctrl+V i Windows/Linux eller Cmd+V i macOS. Det fokuserade eller senast använda synliga uppladdningsformuläret tar emot bilderna; en öppen sidopanel bestämmer sitt eget uppladdningsmål. Alla stödda bildobjekt som webbläsaren tillhandahåller läggs till i samma filurval som filväljaren. JPEG, PNG, GIF och WebP följer väljarens policy; HEIC, HEIF och DNG kräver dessutom uttrycklig information om serverstöd. Filnamn från webbläsaren bevaras; namnlösa bilddata får ett unikt namn med tidsstämpel, löpnummer och motsvarande filändelse. Skicka det vanliga formuläret genom den valda webbläsar-/serverpipelinen med befintlig validering, storleksgränser, metadata, miniatyrbilder, förlopp och felhantering. Textfält behåller vanlig inklistring; innehåll som inte stöds och inklistring under pågående uppladdning ignoreras. Om webbläsaren inte kan tillhandahålla eller lägga till urklippsbilder använder du filväljaren eller drar in filer. Uppladdningar i sidopanelen behåller den öppna panelen och aktuell URL.
 
 Enbart komprimerad filstorlek bevisar inte att en bild är säker att avkoda. Innan GD eller valfri Imagick allokerar ett helt raster kontrollerar PHP Gallery format, mått, pixelberäkningar, konfigurerad minnesbudget och körningsminnesbudget samt pipelinegränser. En fil som inte kan behandlas säkert nekas innan dess original eller genererade derivat lagras slutgiltigt i målgalleriet. Policyn gäller klassisk och webbläsarförberedd inläsning; den påstår inte att varje extern RAW-avkodare har samma minnesmodell i processen.
 
@@ -2261,6 +2263,8 @@ För en galleriägare innebär testning att gå igenom webbplatsen som den avsed
 Be någon annan prova galleriet utan instruktioner. Personens första klick och första fråga avslöjar ofta navigering eller formuleringar som bara ägaren tyckte var självklara.
 
 \subsection{Automatiserade kontroller för programunderhållare}
+
+Den centrala granskningen täcker MIME-typer och namn från urklipp, syntetiska inklistringshändelser i webbläsaren, vanlig multipart-uppladdning och bevarad sidopanel. Testerna läser inte operativsystemets urklipp. Registrera faktiska resultat för Windows Chrome/Edge/Firefox, Linux Chromium/Firefox och macOS Safari/Chrome/Firefox enligt den manuella matrisen i \filepath{TESTING.md}, med både webbläsar- och serverförberedelse på direkt sida och i sidopanel. Ej utförda kontroller förblir väntande.
 
 Använd den~centrala granskaren \filepath{scripts/audit.php} för~normal verifiering, inte den~äldre omslutaren \filepath{tests/run.php}. Profilerna nedan är alternativ, inte tre steg som ska köras efter varandra. Använd vid behov snabbprofilen under utveckling, den~fullständiga profilen en~gång före vanlig överlämning eller~utgåveprofilen en~gång vid slutlig utgåvekvalificering. Kör enskilda tester bara för~att felsöka rapporterade fel eller~utveckla en~nyregistrerad testfixtur, inte som en~andra genomgång av~hela testträdet.
 

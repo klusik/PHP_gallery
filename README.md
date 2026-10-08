@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.124.2
+**Current Version:** 0.124.3
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -230,6 +230,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 
 #### Upload Interface
 - Multi-file upload to existing or new gallery
+- Paste clipboard images/screenshots with Ctrl+V (Windows/Linux) or Cmd+V (macOS) into the focused upload area; images join the same file selection and upload workflow
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes

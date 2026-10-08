@@ -1,4 +1,7 @@
 {
+    "admin.upload.clipboard_hint": "Vyberte nebo přetáhněte obrázky, případně je vložte ze schránky pomocí Ctrl+V (Windows/Linux) nebo Cmd+V (macOS). Pro přidání obrázků zaměřte oblast nahrávání; v textových polích se vkládá text.",
+    "admin.upload.clipboard_added": "Přidáno obrázků ze schránky: {count}. Pro nahrání odešlete formulář.",
+    "admin.upload.clipboard_unavailable": "Tento prohlížeč nedokázal přidat obrázky ze schránky. Vyberte nebo přetáhněte soubory.",
     "admin.galleries.create_hint": "Začněte názvem. Po vytvoření přidejte fotografie přímo z galerie.",
     "admin.galleries.create_content": "Obsah galerie",
     "admin.galleries.create_settings": "Umístění a viditelnost",

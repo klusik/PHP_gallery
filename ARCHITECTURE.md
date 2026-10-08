@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.124.2';
+const CMS_VERSION = '0.124.3';
 ```
 
 Update-related code uses:
@@ -1240,6 +1240,8 @@ When adding a setting:
 5. Do not create new config.php values for mutable runtime options.
 
 ## Browser-Prepared Upload Path
+
+The upload page and dynamically mounted side-panel forms share clipboard selection in `public/assets/gallery-modules/admin-upload-selection.js`. A document-delegated `paste` handler appends supported image `DataTransfer` items to the ordinary `images[]` FileList, then emits native input/change events. Both classic multipart and browser-prepared uploads read that same queue; clipboard paste does not persist or submit anything. The open panel owns target selection; otherwise the focused/recent visible upload form is used, defaulting to the first visible form. Text editors, hidden/disabled inputs, in-flight uploads, and unsupported clipboard content are left alone. JPEG/PNG/GIF/WebP are accepted within the picker policy; HEIC/HEIF/DNG additionally need its explicit server-capability extension hint. Browser filenames are preserved, while unnamed/blob images receive a timestamp/sequence filename with a MIME-matched extension. Browsers without clipboard image exposure or writable FileList support retain the chooser/drop path. Existing authentication, CSRF, target ownership, file validation, limits, metadata/previews, progress and canonical mutation completion remain with their current owners.
 
 The default upload form uses browser-side preparation when the browser pipeline is enabled and selected for the request. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives using the admin ZIP size as a soft packing target and the admin maximum-images-per-batch cap. If one atomic image package (original plus its prepared thumbnails) is larger than the normal ZIP target, it is emitted as a singleton batch; the detected PHP upload limit remains the hard ceiling. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. Unchecking it before submission explicitly selects the normal server-side `admin_upload` path. When browser preparation remains selected and files are present, a browser capability or preparation failure stops before persistence instead of silently changing the selected execution path. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
 

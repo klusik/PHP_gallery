@@ -36,6 +36,16 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Services\t;
 
+/**
+ * Render clipboard instructions and a localized live status for an upload selection.
+ * @return void Emit presentation metadata consumed by the clipboard selection module.
+ */
+function view_render_admin_upload_clipboard_hint(): void
+{
+    echo '<p class="muted">' . e(t('admin.upload.clipboard_hint', 'Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.')) . '</p>';
+    echo '<p class="muted" role="status" data-gallery-upload-selection-status data-added="' . e(t('admin.upload.clipboard_added', 'Added {count} clipboard image(s). Submit the form to upload.')) . '" data-unavailable="' . e(t('admin.upload.clipboard_unavailable', 'This browser could not add clipboard images. Choose or drop files instead.')) . '"></p>';
+}
+
 /** @param array<string,mixed> $viewModel Controller-prepared full upload page. */
 function view_render_admin_upload_page(array $viewModel): void
 {
@@ -103,7 +113,8 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     } else {
         echo '<label' . ($panelMode ? ' class="admin-side-panel-field admin-side-panel-field-wide"' : '') . '><span>' . e(t('admin.upload.gallery', 'Gallery')) . '</span><select name="gallery_id" required>' . (string) ($viewModel['gallery_options_html'] ?? '') . '</select></label>';
     }
-    echo '<label' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
+    echo '<label tabindex="0" data-gallery-upload-drop-zone' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
+    view_render_admin_upload_clipboard_hint();
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     if ($panelMode) {
@@ -114,7 +125,11 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     echo '</form></section>';
 }
 
-/** @param array<string,mixed> $viewModel Controller-prepared create-gallery upload form. */
+/**
+ * Render the create-gallery upload form from controller-prepared presentation data.
+ * @param array<string,mixed> $viewModel Controller-prepared create-gallery upload form.
+ * @return void Emit the native/AJAX-compatible upload controls.
+ */
 function view_render_admin_upload_new_gallery_form(array $viewModel): void
 {
     $panelMode = !empty($viewModel['panel_mode']);
@@ -123,7 +138,8 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
         echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . (string) ($viewModel['csrf_html'] ?? '');
         echo '<input type="hidden" name="upload_mode" value="new">';
         echo (string) ($viewModel['gallery_fields_html'] ?? '');
-        echo '<label>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
+        echo '<label tabindex="0" data-gallery-upload-drop-zone>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
+        view_render_admin_upload_clipboard_hint();
         echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
         echo (string) ($viewModel['browser_checkbox_html'] ?? '');
         echo '<button type="submit">' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
@@ -137,7 +153,8 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
     echo (string) ($viewModel['gallery_fields_html'] ?? '');
     echo '<div class="admin-side-panel-card admin-side-panel-upload-card">';
     echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';
-    echo '<label class="admin-side-panel-file-drop"><span class="admin-side-panel-file-title">' . e(t('admin.upload.choose_images', 'Choose images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple><span class="muted">' . e(t('admin.upload.multiple_files_help', 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.')) . '</span></label>';
+    echo '<label tabindex="0" data-gallery-upload-drop-zone class="admin-side-panel-file-drop"><span class="admin-side-panel-file-title">' . e(t('admin.upload.choose_images', 'Choose images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple><span class="muted">' . e(t('admin.upload.multiple_files_help', 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.')) . '</span></label>';
+    view_render_admin_upload_clipboard_hint();
     echo '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     echo '</div>';

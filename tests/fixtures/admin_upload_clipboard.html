@@ -1,0 +1,162 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_upload_clipboard.html
+Module Type: Browser Test Fixture
+Purpose: Exercise clipboard images with real FileList, paste events and production upload handlers.
+Responsibilities: Confine uploads to synthetic transport and preserve panel URL and persistence.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Disposable clipboard upload fixture</title>
+<style>[hidden] { display: none !important; } label { display: block; padding: 8px; }</style>
+<main id="page" tabindex="0"></main>
+<div data-admin-side-panel hidden><div class="admin-side-panel-dialog" data-admin-side-panel-body></div></div>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupGalleryUploadProgress} from '/public/assets/gallery-modules/admin-side-panel.js';
+import {clipboardUploadFiles} from '/public/assets/gallery-modules/admin-upload-selection.js?v=20261008-clipboard-v1';
+import {browserUploadZipSelected} from '/public/assets/gallery-modules/admin-browser-upload.js';
+let assertions = 0;
+const posts = [], completions = [];
+let finishRequest = null, responseStatus = 200;
+const originalUrl = location.href;
+const page = document.querySelector('#page');
+const panel = document.querySelector('[data-admin-side-panel]');
+const panelBody = panel.querySelector('[data-admin-side-panel-body]');
+const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='), char => char.charCodeAt(0));
+/** Assert a browser postcondition.
+ * @param {boolean} condition Expected state.
+ * @param {string} message Failure description.
+ * @return {void} Counts passing assertions or throws.
+ */
+function check(condition, message) { if (!condition) throw new Error(message); assertions++; }
+/** Mount ordinary production upload controls.
+ * @param {Element} root Confined page or panel body.
+ * @param {number} id Gallery target ID.
+ * @return {HTMLFormElement} Mounted disposable form.
+ */
+function mount(root, id) {
+    const form = document.createElement('form');
+    form.dataset.galleryUploadForm = '';
+    if (root === panelBody) form.dataset.galleryPanelCloseOnSuccess = '1';
+    form.action = '/fixture-clipboard-upload';
+    form.innerHTML = `<input type="hidden" name="operation_key" data-admin-operation-key value="${'a'.repeat(64)}">
+        <input type="hidden" name="csrf_token" value="fixture-only"><input type="hidden" name="upload_mode" value="existing">
+        <input type="hidden" name="gallery_id" value="${id}"><input name="title" value="Fixture gallery">
+        <textarea></textarea><div contenteditable="true"><span>Editable</span></div>
+        <label tabindex="0" data-gallery-upload-drop-zone>Images<input type="file" name="images[]" accept=".jpg,.png,.webp,.gif,image/*" multiple required></label>
+        <p role="status" data-gallery-upload-selection-status data-added="Added {count}" data-unavailable="Choose files instead"></p>
+        <input type="checkbox" name="create_thumbnails"><input type="checkbox" data-browser-upload-toggle><button>Upload</button>`;
+    root.append(form); return form;
+}
+/** Dispatch a paste exposing only synthetic clipboard data.
+ * @param {Element} target Paste target.
+ * @param {File[]} files Disposable clipboard files.
+ * @param {boolean} text Whether plain text accompanies the images.
+ * @return {ClipboardEvent} Delivered cancelable event.
+ */
+function paste(target, files, text = false) {
+    const transfer = new DataTransfer();
+    for (const file of files) transfer.items.add(file);
+    if (text) transfer.items.add('ordinary text', 'text/plain');
+    const event = new ClipboardEvent('paste', {clipboardData: transfer, bubbles: true, cancelable: true});
+    target.dispatchEvent(event); return event;
+}
+/** Yield for pending production upload callbacks.
+ * @return {Promise<void>} Resolves after an event-loop cycle.
+ */
+async function settle() { await new Promise(resolve => setTimeout(resolve, 30)); }
+/** Capture production multipart requests without network persistence. */
+class FixtureXHR extends EventTarget {
+    /** Initialize request-local progress events. @return {FixtureXHR} Synthetic transport. */
+    constructor() { super(); this.upload = new EventTarget(); }
+    /** Verify the confined request boundary.
+     * @param {string} method HTTP method.
+     * @param {string} url Endpoint URL.
+     * @return {void} Checks the ordinary POST target.
+     */
+    open(method, url) { check(method === 'POST' && new URL(url).pathname === '/fixture-clipboard-upload', 'Classic POST endpoint'); }
+    /** Accept the ordinary header API.
+     * @param {string} name Header name.
+     * @param {string} value Header value.
+     * @return {void} Keeps the fixture inert.
+     */
+    setRequestHeader(name, value) {}
+    /** Expose the synthetic JSON content type.
+     * @param {string} name Requested header name.
+     * @return {string} JSON response type.
+     */
+    getResponseHeader(name) { return 'application/json'; }
+    /** Capture one request for explicit acknowledgment.
+     * @param {FormData} body Actual production multipart body.
+     * @return {void} Holds the synthetic response for busy-state checks.
+     */
+    send(body) {
+        posts.push(body);
+        finishRequest = () => {
+            this.status = responseStatus;
+            this.responseText = JSON.stringify(responseStatus === 200
+                ? {ok: true, message: 'Uploaded', uploaded: 1, scanned: 1, gallery_id: 99, image_ids: [posts.length], mutation: {type: 'image.upload', entity: 'image', action: 'upload', entity_ids: [posts.length]}, panel: null, contexts: [], fallback: {redirect_url: '/fixture-direct-fallback'}}
+                : {ok: false, error: 'Fixture upload size limit'});
+            this.dispatchEvent(new Event('load'));
+        };
+    }
+}
+window.XMLHttpRequest = FixtureXHR;
+document.addEventListener('php-gallery:side-panel-success', event => completions.push(event.detail.result));
+try {
+    const first = mount(page, 1), second = mount(page, 2);
+    setupGalleryUploadProgress(); setupGalleryUploadProgress();
+    const named = new File([bytes], 'screenshot.png', {type: 'image/png'});
+    const unnamed = new File([bytes], '', {type: 'image/png'});
+    const input = first.querySelector('[type="file"]');
+    const selected = new DataTransfer(); selected.items.add(new File([bytes], 'picker.png', {type: 'image/png'})); input.files = selected.files;
+    let changes = 0, inputs = 0;
+    input.addEventListener('change', () => changes++); input.addEventListener('input', () => inputs++);
+    const zone = first.querySelector('label'); zone.focus();
+    check(paste(zone, [named, unnamed], true).defaultPrevented, 'Multi-image paste is handled');
+    check(input.files.length === 3 && input.files[0].name === 'picker.png' && input.files[1].name === 'screenshot.png', 'Append to picker queue and preserve names');
+    check(/^clipboard-.*\.png$/.test(input.files[2].name), 'Unnamed screenshot receives PNG name');
+    check(changes === 1 && inputs === 1, 'One event pair despite repeated setup');
+    check(new FormData(first).getAll('images[]').length === 3 && input.checkValidity(), 'Native multipart and required validation see pasted files');
+    check(!browserUploadZipSelected(first), 'Prepared uploader reads the same selection');
+    for (const target of [first.querySelector('[name="title"]'), first.querySelector('textarea'), first.querySelector('[contenteditable] span')]) {
+        target.focus(); check(!paste(target, [named], true).defaultPrevented, 'Text editors keep native paste');
+    }
+    check(!paste(zone, [], true).defaultPrevented, 'Text is ignored');
+    check(!paste(zone, [new File(['svg'], 'bad.svg', {type: 'image/svg+xml'})]).defaultPrevented, 'Unsupported images ignored');
+    check(input.files.length === 3 && posts.length === 0, 'Paste never submits');
+    second.querySelector('label').focus();
+    check(paste(page, [named]).defaultPrevented && second.querySelector('[type="file"]').files.length === 1, 'Page targets recent uploader');
+    first.hidden = true; second.hidden = true;
+    check(!paste(page, [named]).defaultPrevented, 'Hidden uploaders ignored');
+    first.hidden = false; second.hidden = false; panel.hidden = false;
+    check(!paste(page, [named]).defaultPrevented, 'Unrelated panel blocks background uploads');
+    const dynamic = mount(panelBody, 99), dynamicInput = dynamic.querySelector('[type="file"]');
+    check(paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'New panel is handled without rebinding');
+    dynamicInput.disabled = true;
+    check(!paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'Disabled selection preserved');
+    dynamicInput.disabled = false;
+    const NativeTransfer = window.DataTransfer;
+    window.DataTransfer = () => { throw new Error('Unavailable FileList'); };
+    panelBody.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: selected}));
+    check(dynamicInput.files.length === 1 && dynamic.querySelector('[role="status"]').textContent === 'Choose files instead', 'Unsupported assignment preserves chooser workflow');
+    window.DataTransfer = NativeTransfer;
+    setupGalleryUploadProgress(); dynamic.requestSubmit();
+    check(posts.length === 1 && posts[0].get('gallery_id') === '99' && posts[0].get('csrf_token') === 'fixture-only', 'Original target and CSRF reused');
+    check(posts[0].get('images[]').name === 'screenshot.png', 'Classic workflow receives clipboard file');
+    check(!paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'Busy upload selection preserved');
+    finishRequest(); await settle();
+    check(completions.length === 1 && completions[0].mutation.entity_ids.length === 1 && typeof completions[0].fallback === 'object', 'Canonical completion preserved');
+    check(!panel.hidden && location.href === originalUrl, 'Panel stays open and URL unchanged');
+    panelBody.replaceChildren(); const replacement = mount(panelBody, 100);
+    check(paste(panelBody, [unnamed]).defaultPrevented && replacement.querySelector('[type="file"]').files.length === 1, 'Re-rendered control remains intercepted');
+    setupGalleryUploadProgress(); responseStatus = 413; replacement.requestSubmit(); finishRequest(); await settle();
+    check(completions.length === 1 && replacement.textContent.includes('Fixture upload size limit'), 'Existing size-limit/error pipeline reused');
+    check(location.href === originalUrl && !panel.hidden, 'Error also preserves panel and URL');
+    check(clipboardUploadFiles({files: [named]}, dynamicInput).length === 1, 'File-only clipboard exposure');
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
+</script>

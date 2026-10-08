@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.124.2}
+\newcommand{\version}{0.124.3}
 \newcommand{\manualdate}{8 October 2026}
 
 \hypersetup{
@@ -1078,6 +1078,8 @@ During discovery and~missing-parent repair, PHP Gallery can~read supported value
 \securitynote{The~\ui{Delete from disk} action on~the~discovery screen is~a~real recursive filesystem deletion for~unmanaged candidate folders. Review the~selected relative paths before confirming it. The~guard against known imported gallery paths is~an~additional safety boundary, not~a~replacement for~a~backup.}
 
 Browser upload is~the~friendliest choice for~routine work. It~can~upload into an~existing gallery or~create a~child gallery and~upload optional photographs in~the~same side-panel workflow. Select the~destination, choose files, and~follow the~progress display. The~application checks the~destination and~file information before accepting each result.
+
+With JavaScript enabled, focus the~upload area and~paste an~image or~screenshot using Ctrl+V on~Windows/Linux or~Cmd+V on~macOS. The~focused or~most recently used visible uploader receives the~images; an~open side panel owns its upload target. Paste appends all supported image items exposed by~the~browser to~the~same file selection used by~the~chooser. JPEG, PNG, GIF and~WebP follow the~picker policy; HEIC, HEIF and~DNG additionally require an~explicit server-capability hint. Browser-provided filenames are~retained; unnamed image data receives a~distinct timestamp/sequence name with the~matching extension. Submit the~ordinary form to~upload through the~selected browser/server pipeline, with its usual validation, size limits, metadata, thumbnails, progress and~errors. Text fields keep ordinary text paste; unsupported content and~paste during an~active upload are~ignored. If~the~browser cannot expose or~add clipboard images, use the~chooser or~file drop. Side-panel uploads retain the~open panel and~current URL.
 
 Compressed file size alone does~not~prove that an~image is~safe to~decode. Before GD or~optional Imagick allocates a~full raster, PHP Gallery checks the~format, dimensions, pixel arithmetic, configured/runtime memory budget, and~pipeline limits. A~file that cannot~be~admitted safely is~refused before its original or~generated derivatives are~committed to~the~target gallery. This policy applies to~classic and~browser-prepared ingestion; it~does not~claim that every external RAW decoder has~the~same in-process memory model.
 
@@ -2283,6 +2285,8 @@ Open a~private browser window and~follow the~same link you plan to~share. Check:
 Ask another person to~try the~gallery without instructions. Their first click and~first question often reveal navigation or~wording that felt obvious only to~the~owner.
 
 \subsection{Automated checks for~software maintainers}
+
+The~central audit covers clipboard MIME/name handling and~synthetic browser paste events, ordinary multipart upload and~panel persistence. These fixtures do~not~read the~operating-system clipboard. Record actual Windows Chrome/Edge/Firefox, Linux Chromium/Firefox and~macOS Safari/Chrome/Firefox results using the~manual matrix in~\filepath{TESTING.md}, for~both browser and~server preparation on~direct-page and~side-panel forms. Unexecuted checks remain pending.
 
 Use the~central audit \filepath{scripts/audit.php}, not~the~legacy \filepath{tests/run.php} wrapper, for~routine verification. The~profiles below are~alternatives, not~three successive gates. Use the~quick profile during development when useful, the~full profile once before a~normal handoff, or~the~release profile once for~final release qualification. Individual tests are~for~diagnosing a~reported failure or~developing a~newly registered fixture, not~for~a~second sweep of~the~test tree.
 

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.124.2}
+\newcommand{\version}{0.124.3}
 \newcommand{\manualdate}{8.~října~2026}
 
 \hypersetup{
@@ -1071,6 +1071,8 @@ Při vyhledání a~opravě chybějících rodičů může PHP Gallery číst pod
 \securitynote{Akce \ui{Odstranit z~disku} na obrazovce vyhledání je skutečným rekurzivním odstraněním nespravovaných kandidátních složek ze souborového systému. Před potvrzením zkontrolujte vybrané relativní cesty. Ochrana známých cest importovaných galerií je dodatečnou bezpečnostní hranicí, nikoli náhradou zálohy.}
 
 Nahrávání v~prohlížeči je pro běžnou práci nejpřívětivější. Může nahrávat do existující galerie nebo vytvořit podřízenou galerii a~nahrát volitelné fotografie ve stejném postupu postranního panelu. Vyberte cíl, zvolte soubory a~sledujte průběh. Aplikace před přijetím každého výsledku kontroluje cíl a~informace o~souboru.
+
+S~JavaScriptem zaměřte oblast nahrávání a~vložte obrázek nebo snímek obrazovky pomocí Ctrl+V ve Windows/Linuxu nebo Cmd+V v~macOS. Obrázky přijme zaměřený nebo naposledy použitý viditelný formulář; otevřený postranní panel určuje vlastní cíl nahrávání. Vložení přidá všechny podporované obrázky zpřístupněné prohlížečem ke stejnému výběru jako volič souborů. JPEG, PNG, GIF a~WebP respektují pravidla voliče; HEIC, HEIF a~DNG navíc vyžadují výslovnou informaci o~podpoře serverem. Názvy dodané prohlížečem se zachovají; bezejmenná data získají jedinečný název s~časem, pořadovým číslem a~odpovídající příponou. Běžný formulář odešlete pro nahrání zvoleným postupem v~prohlížeči nebo na serveru se stávajícím ověřováním, limity velikosti, metadaty, náhledy, průběhem a~chybami. Textová pole zachovávají běžné vkládání textu; nepodporovaný obsah a~vkládání během aktivního nahrávání se ignorují. Pokud prohlížeč obrázky ze schránky nezpřístupní nebo nepřidá, použijte volič či přetažení souborů. Nahrávání z~panelu zachovává otevřený panel a~aktuální adresu.
 
 Samotná velikost komprimovaného souboru nedokazuje, že lze obrázek bezpečně dekódovat. Než GD nebo volitelný Imagick alokuje úplný rastr, PHP Gallery kontroluje formát, rozměry, výpočty počtu pixelů, nastavený a~běhový rozpočet paměti a~limity zpracování. Soubor, který nelze bezpečně přijmout, je odmítnut před potvrzením originálu či generovaných odvozenin v~cílové galerii. Tato pravidla platí pro klasický příjem i~příjem připravený prohlížečem; netvrdí, že každý externí dekodér RAW má stejný paměťový model uvnitř procesu.
 
@@ -2261,6 +2263,8 @@ Otevřete soukromé okno prohlížeče a~přejděte stejným odkazem, který pl�
 Požádejte další osobu o~vyzkoušení galerie bez pokynů. Její první kliknutí a~první otázka často odhalí navigaci či formulaci, která byla zřejmá pouze vlastníkovi.
 
 \subsection{Automatické kontroly pro správce softwaru}
+
+Centrální audit pokrývá typy MIME a~názvy ze schránky, syntetické události vložení v~prohlížeči, běžné multipart nahrávání a~zachování panelu. Tyto testy nečtou systémovou schránku. Zaznamenejte skutečné výsledky pro Windows Chrome/Edge/Firefox, Linux Chromium/Firefox a~macOS Safari/Chrome/Firefox podle ruční matice v~\filepath{TESTING.md}, pro přípravu v~prohlížeči i~na serveru na přímé stránce a~v~panelu. Neprovedené kontroly zůstávají čekající.
 
 K~běžnému ověřování používejte centrální audit \filepath{scripts/audit.php}, nikoli starší obalový skript \filepath{tests/run.php}. Následující profily jsou alternativy, ne tři postupné kontroly. Při vývoji podle potřeby spusťte rychlý profil, před běžným předáním jednou úplný profil a~při závěrečné kvalifikaci vydání jednou profil vydání. Jednotlivé testy spouštějte jen při diagnostice zjištěného selhání nebo vývoji nově registrovaného testu, nikoli k~opětovnému procházení celé sady.
 

@@ -1,4 +1,7 @@
 {
+    "admin.upload.clipboard_hint": "Wählen Sie Bilder aus, ziehen Sie sie hierher oder fügen Sie sie mit Strg+V (Windows/Linux) oder Cmd+V (macOS) aus der Zwischenablage ein. Fokussieren Sie den Uploadbereich, um Bilder hinzuzufügen; in Textfeldern wird Text eingefügt.",
+    "admin.upload.clipboard_added": "{count} Bild(er) aus der Zwischenablage hinzugefügt. Senden Sie das Formular zum Hochladen ab.",
+    "admin.upload.clipboard_unavailable": "Dieser Browser konnte keine Bilder aus der Zwischenablage hinzufügen. Wählen Sie Dateien aus oder ziehen Sie sie hierher.",
     "admin.galleries.create_hint": "Beginnen Sie mit einem Namen. Fügen Sie nach dem Erstellen Fotos direkt in der Galerie hinzu.",
     "admin.galleries.create_content": "Galerieinhalt",
     "admin.galleries.create_settings": "Position und Sichtbarkeit",

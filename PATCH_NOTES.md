@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.124.3
+
+Version 0.124.3 added clipboard image pasting to the existing gallery upload workflow, with localized instructions and regression coverage for upload selection and side-panel behavior.
+
+### Highlights
+
+#### Clipboard image uploads
+- Added support for pasting clipboard images or screenshots into the focused or most recently used visible gallery uploader with Ctrl+V or Cmd+V.
+- Added pasted images to the existing file selection; pasting alone did not submit the upload.
+- Kept upload targeting predictable: an open side panel took precedence over background upload forms, and text editors retained normal paste behavior.
+- Preserved existing filenames and assigned unique, MIME-matched filenames to images without names.
+- Kept file chooser and drag-and-drop uploads available when clipboard image access or writable file selection was unavailable.
+
+### Technical Details
+
+#### Frontend
+- Added `public/assets/gallery-modules/admin-upload-selection.js` and updated `app/views/admin_uploads.php` and the Admin JavaScript modules to support clipboard selection.
+- Added localized clipboard instructions and status messages in `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json`.
+- Kept clipboard filtering aligned with picker rules; HEIC, HEIF, and DNG required an explicit server-capability hint. Unsupported content, hidden or disabled controls, and paste during an upload were ignored.
+- Preserved side-panel completion behavior so uploads kept the panel open and the browser URL unchanged.
+
+#### Tests
+- Added `tests/admin_upload_clipboard_test.mjs`, `tests/admin_upload_clipboard_browser_test.mjs`, and `tests/fixtures/admin_upload_clipboard.html` for clipboard filtering, filenames, multiple images, upload integration, dynamic controls, errors, and panel persistence.
+- Updated related side-panel lifecycle and operational-policy regression coverage.
+- Documented a manual browser and operating-system test matrix; automated browser fixtures used synthetic paste events and did not verify operating-system clipboard delivery.
+
+#### Documentation
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, and all four maintained PHP Gallery manual sources.
+- Refreshed the prepared runtime inventory and integrity manifest artifacts.
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change; clipboard image pasting applied to administrator gallery uploads.
+
+#### For administrators
+- Administrators could paste screenshots and other supported clipboard images directly into an uploader and then submit them through the existing classic or browser-prepared upload workflow.
+- Upload chooser and drag-and-drop alternatives remained available, and side-panel uploads completed without closing the panel or changing the URL.
+
+#### For maintainers
+- Maintainers received automated coverage for clipboard selection and upload integration, plus documented manual checks for browser and operating-system clipboard behavior.
+
 ## Version 0.124.2
 
 Version 0.124.2 hardened gallery media, upload integrity, migration safety, and the OFP viewer after the v0.124.1 release. The work focused on filesystem containment, archive validation, trusted HTTPS/proxy handling, and stricter authorization for Theme and gallery assets.

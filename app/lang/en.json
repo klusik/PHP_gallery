@@ -1,4 +1,7 @@
 {
+    "admin.upload.clipboard_hint": "Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.",
+    "admin.upload.clipboard_added": "Added {count} clipboard image(s). Submit the form to upload.",
+    "admin.upload.clipboard_unavailable": "This browser could not add clipboard images. Choose or drop files instead.",
     "admin.galleries.create_hint": "Start with a name. Add photos from the gallery after creating it.",
     "admin.galleries.create_content": "Gallery content",
     "admin.galleries.create_settings": "Location and visibility",
