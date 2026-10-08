@@ -578,3 +578,141 @@ function view_render_admin_gallery_editor_notices(array $viewModel): void
     }
     echo (string) ($viewModel['migration_notice_html'] ?? '');
 }
+
+/**
+ * Render an isolated manual OFP attachment and reviewed SimBrief dispatch card.
+ *
+ * The card is outside the gallery-settings form, including when rendered inside
+ * the admin side panel. No control mutates dates, route geometry, descriptions,
+ * the original imported OFP JSON, or gallery images.
+ *
+ * @param array<string,mixed> $viewModel Source gallery and validated document state.
+ * @return void Safe, accessible admin-only document controls.
+ */
+function view_render_admin_simbrief_legacy_panel(array $viewModel): void
+{
+    $gallery = (array) ($viewModel['gallery'] ?? []);
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    $galleryTitle = trim((string) ($gallery['title'] ?? ''));
+    $hasPdf = !empty($viewModel['has_pdf']);
+    $occupied = !empty($viewModel['occupied']);
+    $prefill = (array) ($viewModel['prefill'] ?? []);
+    $fields = (array) ($prefill['fields'] ?? []);
+    $action = (string) ($viewModel['action_url'] ?? '');
+    $csrf = (string) ($viewModel['csrf_html'] ?? '');
+    $provenance = (string) ($viewModel['provenance'] ?? '');
+    $labels = [
+        'orig' => t('admin.legacy_ofp.field_orig', 'Departure ICAO'),
+        'dest' => t('admin.legacy_ofp.field_dest', 'Arrival ICAO'),
+        'date' => t('admin.legacy_ofp.field_date', 'Departure date'),
+        'deph' => t('admin.legacy_ofp.field_deph', 'Departure hour (UTC)'),
+        'depm' => t('admin.legacy_ofp.field_depm', 'Departure minute (UTC)'),
+        'type' => t('admin.legacy_ofp.field_type', 'Aircraft ICAO type'),
+        'airline' => t('admin.legacy_ofp.field_airline', 'Airline ICAO'),
+        'fltnum' => t('admin.legacy_ofp.field_fltnum', 'Flight number'),
+        'callsign' => t('admin.legacy_ofp.field_callsign', 'Callsign'),
+        'reg' => t('admin.legacy_ofp.field_reg', 'Aircraft registration'),
+        'route' => t('admin.legacy_ofp.field_route', 'Planned route'),
+        'fl' => t('admin.legacy_ofp.field_fl', 'Cruise flight level'),
+        'altn' => t('admin.legacy_ofp.field_altn', 'Alternate ICAO'),
+        'pax' => t('admin.legacy_ofp.field_pax', 'Passengers'),
+    ];
+    $sourceLabels = [
+        'saved_ofp' => t('admin.legacy_ofp.source_saved_ofp', 'Saved SimBrief snapshot'),
+        'route_map' => t('admin.legacy_ofp.source_route_map', 'Stored route map, verify'),
+        'gallery_date' => t('admin.legacy_ofp.source_gallery_date', 'Gallery date, confirm it is the departure date'),
+        'missing' => t('admin.legacy_ofp.source_missing', 'Unknown, leave blank or enter manually'),
+    ];
+
+    echo '<section class="admin-edit-card admin-simbrief-legacy-card" data-simbrief-legacy-panel aria-label="' . e(t('admin.legacy_ofp.title', 'Legacy flight plan (OFP)')) . '">';
+    echo '<div class="admin-simbrief-legacy-header"><div><h3>' . e(t('admin.legacy_ofp.title', 'Legacy flight plan (OFP)')) . '</h3>';
+    echo '<p class="muted">' . e(t('admin.legacy_ofp.description', 'Attach a saved PDF or prepare a new historical SimBrief dispatch for this gallery only. No bulk requests are made.')) . '</p></div></div>';
+
+    if ($hasPdf) {
+        $provenanceLabels = [
+            'original_simbrief_import' => t('admin.legacy_ofp.provenance_original', 'Original saved SimBrief import'),
+            'retrospective_user_generated' => t('admin.legacy_ofp.provenance_retrospective', 'Newly generated retrospective OFP'),
+            'manually_supplied' => t('admin.legacy_ofp.provenance_manual', 'Manually supplied document'),
+        ];
+        echo '<p class="admin-simbrief-legacy-present">' . e(t('admin.legacy_ofp.pdf_present', 'A valid PDF is attached to this gallery.')) . ' <small>' . e($provenanceLabels[$provenance] ?? t('admin.legacy_ofp.provenance_unspecified', 'Existing attachment, origin not recorded')) . '</small></p>';
+        echo '<div class="admin-simbrief-legacy-actions">';
+        echo '<a class="button secondary" target="_blank" rel="noopener noreferrer" href="' . e((string) ($viewModel['pdf_view_url'] ?? '')) . '">' . e(t('admin.legacy_ofp.view', 'View OFP')) . '</a>';
+        echo '<a class="button secondary" href="' . e((string) ($viewModel['pdf_download_url'] ?? '')) . '" download="simbrief-ofp.pdf">' . e(t('admin.legacy_ofp.download', 'Download PDF')) . '</a>';
+        echo '</div>';
+    } elseif ($occupied) {
+        echo '<p class="admin-simbrief-legacy-warning">' . e(t('admin.legacy_ofp.pdf_invalid', 'A PDF file exists but failed validation. It will not be served; repair requires explicit replacement.')) . '</p>';
+    } else {
+        echo '<p class="muted">' . e(!empty($prefill['has_snapshot'])
+            ? t('admin.legacy_ofp.pdf_missing_snapshot', 'No valid PDF is attached. Saved SimBrief data is available for reviewing the dispatch inputs.')
+            : t('admin.legacy_ofp.pdf_missing', 'No OFP PDF or saved SimBrief snapshot is available. Fill in only details you can confirm.')) . '</p>';
+    }
+
+    if (!$hasPdf) {
+        echo '<div class="admin-simbrief-legacy-actions"><button type="button" class="button secondary" data-simbrief-dispatch-open>' . e(t('admin.legacy_ofp.open_review', 'Create historical OFP / Open prefilled SimBrief')) . '</button></div>';
+        echo '<p class="muted">' . e(t('admin.legacy_ofp.dispatch_no_generation', 'You will review the fields here first. SimBrief opens in a new tab, where you must sign in if required and select Generate yourself.')) . '</p>';
+    }
+
+    $uploadAction = $occupied ? 'replace_pdf' : 'upload_pdf';
+    if ($hasPdf) {
+        echo '<details class="admin-simbrief-legacy-replace"><summary>' . e(t('admin.legacy_ofp.replace_toggle', 'Replace existing OFP PDF (separate action)')) . '</summary>';
+    } else {
+        echo '<h4>' . e($occupied
+            ? t('admin.legacy_ofp.replace_toggle', 'Replace existing OFP PDF (separate action)')
+            : t('admin.legacy_ofp.upload_title', 'Upload OFP PDF')) . '</h4>';
+    }
+    echo '<form method="post" enctype="multipart/form-data" action="' . e($action) . '" data-simbrief-ofp-upload-form>';
+    echo $csrf . '<input type="hidden" name="id" value="' . $galleryId . '"><input type="hidden" name="simbrief_action" value="' . e($uploadAction) . '">';
+    echo '<label>' . e(t('admin.legacy_ofp.choose_pdf', 'Select PDF (maximum 25 MiB)')) . '<input type="file" name="simbrief_ofp_pdf" accept=".pdf,application/pdf" required></label>';
+    echo '<label>' . e(t('admin.legacy_ofp.origin_label', 'Document origin')) . '<select name="ofp_provenance">';
+    echo '<option value="retrospective_user_generated">' . e(t('admin.legacy_ofp.provenance_retrospective', 'Newly generated retrospective OFP')) . '</option>';
+    echo '<option value="manually_supplied">' . e(t('admin.legacy_ofp.provenance_manual', 'Manually supplied document')) . '</option></select></label>';
+    echo '<p class="muted">' . e(t('admin.legacy_ofp.not_original', 'A newly generated OFP is not the original flight-day plan. Weather, NOTAMs, AIRAC, fuel and routing may differ.')) . '</p>';
+    if ($occupied) {
+        echo '<label class="checkbox-label"><input type="checkbox" name="confirm_replace" value="1" required> '
+            . e(t('admin.legacy_ofp.confirm_replace', 'I confirm I want to replace the existing PDF. This does not modify the saved SimBrief JSON or gallery details.')) . '</label>';
+    }
+    echo '<div class="admin-simbrief-legacy-actions"><button type="submit" class="button secondary">'
+        . e($occupied ? t('admin.legacy_ofp.replace_button', 'Confirm PDF replacement') : t('admin.legacy_ofp.upload_button', 'Attach PDF to this gallery'))
+        . '</button></div><output role="status" aria-live="polite" data-simbrief-ofp-upload-status></output></form>';
+    if ($hasPdf) {
+        echo '</details>';
+    }
+
+    if (!$hasPdf) {
+        // Template content is inert until the administrator explicitly opens
+        // the modal. JS moves one clone to <body> to escape drawer clipping.
+        echo '<template data-simbrief-dispatch-template>';
+        echo '<dialog class="admin-simbrief-dispatch-dialog" data-simbrief-dispatch-dialog aria-labelledby="admin-simbrief-dispatch-title-' . $galleryId . '">';
+        echo '<form method="dialog" data-simbrief-dispatch-form>';
+        echo '<header><h2 id="admin-simbrief-dispatch-title-' . $galleryId . '">' . e(t('admin.legacy_ofp.review_title', 'Review SimBrief dispatch inputs')) . '</h2>';
+        echo '<p>' . e(t('admin.legacy_ofp.gallery_identity', 'Gallery')) . ': <strong>' . e($galleryTitle) . '</strong> (#' . $galleryId . ')</p>';
+        echo '<p class="admin-simbrief-legacy-warning">' . e(t('admin.legacy_ofp.historical_warning', 'This creates a new retrospective flight plan. Historical dates may be unsupported or adjusted by SimBrief. Current weather, AIRAC, routing, NOTAMs and fuel will not match the original flight day.')) . '</p>';
+        echo '<p class="muted">' . e(t('admin.legacy_ofp.review_help', 'Only the edited values below will be sent to the official SimBrief dispatch options page. Fields are not saved to the gallery. Empty optional fields are omitted.')) . '</p></header>';
+        echo '<div class="admin-simbrief-dispatch-fields">';
+        foreach ($labels as $key => $label) {
+            $entry = (array) ($fields[$key] ?? []);
+            $value = (string) ($entry['value'] ?? '');
+            $source = (string) ($entry['source'] ?? 'missing');
+            $inputType = $key === 'date' ? 'date' : (in_array($key, ['deph', 'depm', 'fl', 'pax'], true) ? 'number' : 'text');
+            $attributes = '';
+            if ($key === 'deph' || $key === 'depm' || $key === 'pax' || $key === 'fl') {
+                $attributes = ' min="0" max="' . ($key === 'deph' ? '23' : ($key === 'depm' ? '59' : ($key === 'fl' ? '600' : '999'))) . '" step="1"';
+            }
+            if ($key === 'route') {
+                $attributes = ' maxlength="500"';
+            } elseif ($inputType === 'text') {
+                $attributes = ' maxlength="32"';
+            }
+            $required = in_array($key, ['orig', 'dest'], true) ? ' required' : '';
+            echo '<label class="admin-simbrief-dispatch-field"><span>' . e($label) . ($required !== '' ? ' *' : '') . '</span>';
+            echo '<input name="' . e($key) . '" type="' . $inputType . '" value="' . e($value) . '" autocomplete="off"' . $attributes . $required . '>';
+            echo '<small>' . e($sourceLabels[$source] ?? $sourceLabels['missing']) . '</small></label>';
+        }
+        echo '</div><output class="admin-simbrief-dispatch-error" role="alert" data-simbrief-dispatch-error></output>';
+        echo '<footer><button type="button" class="button secondary" data-simbrief-dispatch-cancel>' . e(t('admin.legacy_ofp.cancel', 'Cancel / Back')) . '</button>';
+        echo '<button type="submit" class="button" data-simbrief-dispatch-confirm>' . e(t('admin.legacy_ofp.confirm_dispatch', 'Open SimBrief Dispatch')) . '</button></footer>';
+        echo '</form></dialog></template>';
+    }
+    echo '</section>';
+}
+
