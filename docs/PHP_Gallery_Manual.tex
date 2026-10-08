@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.124.1}
+\newcommand{\version}{0.124.2}
 \newcommand{\manualdate}{8 October 2026}
 
 \hypersetup{
@@ -339,6 +339,8 @@ For~the~first session, keep the~scope small: create one gallery, add a~few photo
 \index{Admin login}
 
 Choose \ui{Admin login} from the~public header and~enter the~account created during installation. The~dashboard is~the~starting point for~everyday ownership. It~summarizes galleries, photos, system state, and~available maintenance actions.\footnote{The~exact dashboard contents depend on~enabled features, completed migrations, and~development settings. A~healthy installation can~still display informational notices that invite an~administrator to~complete optional work.}
+
+After authentication, a~return link can~open a~local page of~this installation. External URLs and~return paths containing backslashes are~refused; the~application instead uses the~safe local fallback of~the~login workflow.
 
 Spend a~few minutes identifying these areas:
 
@@ -1083,6 +1085,8 @@ The~upload settings distinguish the~ordinary server path from~browser-assisted p
 
 Browser-assisted preparation is~enabled independently and~is~checked by~default in~the~upload workflow. The~browser can~prepare optimized thumbnails and~bounded ZIP batches before sending them. If~browser preparation fails before any server-side write starts, ordinary image selections can~fall back automatically to~the~classic server upload path. Administrators can~bound the~default and~maximum browser worker counts, images per~batch, ZIP-to-PHP-upload-limit ratio, maximum ZIP batch bytes, and~source chunk size used by~browser-side thumbnail rebuild. The~normalizer also enforces a~hard worker cap so~an~accidental setting cannot create unbounded parallel requests on~shared hosting.
 
+Server-side acceptance of~browser-prepared ZIP batches also verifies the~CRC-32 of~every stored file and~requires a~complete central directory and~end record matching entry names, offsets, sizes, and~counts. A~damaged or~inconsistent prepared batch is~rejected before gallery files are~written; rebuild and~retry the~batch in~the~browser.
+
 Current browser-pipeline defaults are~8 workers, an~80\% target of~the~detected PHP upload limit for~each store-only ZIP batch, at~most 8 images per~ZIP batch, and~a~24~MiB absolute ZIP-batch cap. The~validated ranges are~1--32 workers, 10--95\% of~the~PHP upload limit, 1--64 images per~batch, and~1--128~MiB for~the~absolute ZIP cap. Browser thumbnail rebuilding uses a~512~MiB source-ZIP chunk by~default, clamped to~16~MiB--3~GiB, and~the~source builder normally caps a~chunk at~96 items with an~internal hard limit of~512. These are safety ceilings and~defaults, not~a~recommendation to~raise a~slow shared host to~the~maximum.
 
 When browser-assisted upload is~enabled, the~chooser also accepts ZIP archives such as~an~iCloud Photos export. The~browser inspects the~archive locally, adds supported JPEG, PNG, WebP, and~GIF images to~the~ordinary preparation queue, and~skips folders, hidden metadata, and~unsupported entries. The~selected ZIP itself is~never uploaded to~PHP. Stored and~Deflate archives are~supported; encrypted, multi-disk, ZIP64, damaged, suspiciously compressed, or~excessively large archives are~rejected before any server-side upload begins. ZIP import has~no~classic-PHP fallback, so~keep browser-assisted preparation enabled when selecting an~archive.
@@ -1381,7 +1385,7 @@ The~saved PDF is~served through the~gallery-scoped \codeword{gallery\_ofp\_pdf} 
 
 The~compact \ui{View flight plan} and~\ui{Download OFP PDF} buttons share one row. An~administrator can~optionally create a~private OFP-page subgallery from a~separate action below them. A~localized question-mark help button explains the~conversion on~hover, keyboard focus, or~tap without occupying space in~the~gallery description.
 
-Automatic whole-page and~width fits recompute for~each PDF page's actual dimensions and~orientation, window resizing, device rotation, and~fullscreen transitions. Manual zoom retains its chosen CSS scale and~pan during ordinary resizes; selecting a~fit mode or~resetting zoom restores automatic fitting. When document rendering fails, the~viewer offers the~original protected PDF. The~existing gallery visibility, password, and~NSFW authorization rules still guard viewing and~downloading. In~CI, the~required Chromium job retains the~detailed \codeword{browser-map.log} as~an artifact whenever the~document-viewer browser contract needs diagnosis.
+Automatic whole-page and~width fits recompute for~each PDF page's actual dimensions and~orientation, window resizing, device rotation, and~fullscreen transitions. Manual zoom retains its chosen CSS scale and~pan during ordinary resizes; selecting a~fit mode or~resetting zoom restores automatic fitting. The~automatic calculation excludes the~previous manual pan margins, so~reset and~width/page fitting keep the~PDF readable and~proportional even after resizing a~zoomed document. When document rendering fails, the~viewer offers the~original protected PDF. The~existing gallery visibility, password, and~NSFW authorization rules still guard viewing and~downloading. In~CI, the~required Chromium job retains the~detailed \codeword{browser-map.log} as~an artifact whenever the~document-viewer browser contract needs diagnosis.
 
 The~\codeword{F} shortcut and~the~fullscreen button control only the~OFP document viewer; \codeword{Escape} first leaves fullscreen and~then, in~normal view, closes the~document. Typing in~editable fields, modifier shortcuts, and~repeated keys do~not~activate fullscreen. If~the~browser refuses a~native fullscreen request, the~same viewer uses a~CSS-only fullscreen layout. In~fullscreen, the~header and~toolbar float above the~PDF, fade after a~short period of~pointer inactivity, and~reappear on~pointer or~keyboard activity. Hovered or~keyboard-focused controls remain visible; showing the~controls does~not~resize or~rescale the~PDF.
 
@@ -1459,6 +1463,8 @@ Admin operations require an~authenticated account. Forms include a~private reque
 \index{share links}
 
 Protected galleries store password hashes and~grant session-scoped access after successful verification. Share links use server-generated token state and~expiry policy. Password reset uses one-time hashed tokens, an~optional recovery email, configured lifetime, and~the~selected mail transport. Use HTTPS, strong administrator credentials, restricted database accounts, and~protected mail/API secrets.
+
+Administrator cookie protection, generated URL schemes and~viewer HTTPS checks share one transport policy. Direct TLS is~recognized without proxy settings. When a~reverse proxy terminates TLS and~forwards HTTP to~PHP, configure its exact IP address or~CIDR in~\codeword{security.trusted_proxies} and~enable the~actual protocol header in~\codeword{security.trusted_proxy_protocol_headers} before upgrading. Supported headers are~\codeword{x-forwarded-proto} and~\codeword{x-forwarded-ssl}; client-IP header trust is~configured separately. The~proxy must overwrite client-supplied values in~enabled headers. Untrusted, malformed, multiple or~conflicting protocol assertions cannot prove HTTPS. Both configured proxy hosting and~direct HTTPS remain supported; forwarded headers alone no~longer upgrade public URLs or~set the~administrator cookie Secure flag.
 
 \subsection{Viewer accounts and~invite-only registration}
 \index{viewer accounts}
@@ -1613,6 +1619,14 @@ Recommended practices include:
   \item Test protected galleries through anonymous visitor sessions.
   \item Maintain coordinated filesystem and~database backups.
 \end{itemize}
+
+\subsection{Media storage boundaries and recoverable migration}
+\index{media!filesystem containment}
+\index{gallery migration!atomic installation}
+
+Public gallery media, covers, and gallery branding are authorized before streaming. Restricted or age-gated gallery images use private cache semantics even when an administrator is viewing them; an authenticated response is not automatically safe for shared caches. Stored cover, branding, and image paths are confined to their owning gallery directory, including checks of actual symbolic-link targets. Global Theme backgrounds and branding resolve only within their owned cache directories, and image responses accept supported raster types rather than active SVG content. The retained original Theme background is available only to an authenticated administrator; the normal public derivative remains viewable.
+
+During gallery-to-gallery migration, asset manifest enumeration and authenticated API-key file delivery independently verify the final file's containment in the source gallery. An incoming asset is copied to a unique temporary file in its destination directory; its copied byte count and any manifest SHA-256 are checked before installation by rename. A failed copy removes the staging file without creating a partial final asset. Matching installed files are reused on retry, while conflicting files and symbolic-link destinations are refused. Browser-prepared store-only ZIP uploads also reject duplicate normalized entry names, invalid CRC-32, and incomplete or inconsistent central-directory records.
 
 \section{Theme, presentation, and~localization}
 \label{sec:theme}

@@ -49,7 +49,7 @@ use function Gallery\Services\gallery_branding_asset_abs_path;
 use function Gallery\Services\gallery_branding_asset_kind;
 use function Gallery\Services\gallery_branding_mime_extension;
 use function Gallery\Services\gallery_branding_schema_ready;
-use function Gallery\Services\gallery_cover_path;
+use function Gallery\Services\gallery_cover_asset_abs_path;
 use function Gallery\Services\gallery_benchmark_media_request_begin;
 use function Gallery\Services\gallery_benchmark_media_request_finish;
 use function Gallery\Services\gallery_benchmark_media_request_mark;
@@ -420,7 +420,9 @@ function cms_public_media(): void
 }
 
 /**
- * Handles cms gallery cover asset logic for the gallery application.
+ * Stream an authorized gallery cover image from a canonical gallery-local path.
+ *
+ * @return void Sends the image or an opaque not-found response.
  */
 function cms_gallery_cover_asset(): void
 {
@@ -438,15 +440,9 @@ function cms_gallery_cover_asset(): void
         cms_not_found();
         return;
     }
-    // $coverPath stores an intermediate value used by the surrounding gallery workflow.
-    $coverPath = gallery_cover_path($gallery);
-    if ($coverPath === null) {
-        cms_not_found();
-        return;
-    }
-    // $path stores an intermediate value used by the surrounding gallery workflow.
-    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $coverPath);
-    if (!is_file($path)) {
+    // A persisted cover must resolve to a real file inside this gallery, never to a redirected path.
+    $path = gallery_cover_asset_abs_path($gallery);
+    if ($path === null) {
         cms_not_found();
         return;
     }
@@ -454,7 +450,7 @@ function cms_gallery_cover_asset(): void
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
-    if (!str_starts_with($mime, 'image/')) {
+    if (gallery_branding_mime_extension($mime) === null) {
         cms_not_found();
         return;
     }
@@ -500,7 +496,9 @@ function cms_gallery_cover_asset(): void
 
 
 /**
- * Stream one stored gallery branding asset.
+ * Stream an authorized gallery branding asset with gallery-level cache privacy.
+ *
+ * @return void Sends the image or an opaque not-found response.
  */
 function cms_gallery_branding_asset(): void
 {
@@ -543,7 +541,7 @@ function cms_gallery_branding_asset(): void
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores a conservative policy for protected or restricted galleries.
-    $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=86400';
+    $cacheControl = public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400';
     cms_release_public_media_session_lock();
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . (string) filesize($path));

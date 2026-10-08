@@ -339,6 +339,22 @@ const html = String.raw`<!doctype html>
       check(zoom() === 'Zoom 100%', 'Reset did not restore last fit');
       wholePage('reset to whole page', 600, 1100);
 
+      previousRender = rendered;
+      button('zoom-in').click();
+      await afterRender(previousRender, 'manual zoom before width refit');
+      previousRender = rendered;
+      button('fit-width').click();
+      await afterRender(previousRender, 'fit width after manual pan gutters');
+      const refittedPage = canvas().getBoundingClientRect();
+      check(active('fit-width') && refittedPage.width > stage().clientWidth * 0.9,
+          'Fit-width transition retained manual pan gutters or collapsed the page');
+      check(Math.abs(refittedPage.width / refittedPage.height - 600 / 1100) < 0.01,
+          'Fit-width transition distorted the PDF page');
+      previousRender = rendered;
+      button('fit-page').click();
+      await afterRender(previousRender, 'whole page after width refit');
+      wholePage('whole page after manual width refit', 600, 1100);
+
       const dialog = document.querySelector('dialog');
       previousRender = rendered;
       dialog.style.width = '360px';

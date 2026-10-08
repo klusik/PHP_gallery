@@ -37,11 +37,13 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use InvalidArgumentException;
+use function Gallery\Core\current_user;
 use function Gallery\Core\css_value;
 use function Gallery\Views\view_browser_i18n_javascript;
 use function Gallery\Views\view_cms_browser_i18n_strings;
 use function Gallery\Services\favicon_path;
 use function Gallery\Services\favicon_safe_size;
+use function Gallery\Services\gallery_branding_mime_extension;
 use function Gallery\Services\link_favicon_public_asset;
 use function Gallery\Services\theme_background_asset_url;
 use function Gallery\Services\theme_background_original_path;
@@ -108,13 +110,18 @@ function cms_browser_i18n(): void
  */
 
 /**
- * Stream the stored global theme background image.
+ * Stream the public theme background or an administrator-only original preview.
+ *
+ * @return void Sends the selected background or an opaque not-found response.
  */
 function cms_theme_background_asset(): void
 {
-    // $relative stores an intermediate value used by the surrounding gallery workflow.
-    // $variant stores an optional admin preview mode for the saved original upload.
+    // $variant stores an optional administrator preview mode for the saved original upload.
     $variant = (string) ($_GET['variant'] ?? '');
+    if ($variant === 'original' && !current_user()) {
+        cms_not_found();
+        return;
+    }
     // $relative stores the selected background derivative path.
     $relative = $variant === 'original' ? theme_background_original_path() : theme_background_served_path();
     if ($relative === null) {
@@ -127,8 +134,12 @@ function cms_theme_background_asset(): void
         cms_not_found();
         return;
     }
-    // $mime stores an intermediate value used by the surrounding gallery workflow.
+    // Theme backgrounds must be supported raster media, never arbitrary saved files.
     $mime = mime_content_type($absolute) ?: 'application/octet-stream';
+    if (gallery_branding_mime_extension($mime) === null) {
+        cms_not_found();
+        return;
+    }
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($absolute));
     // $cacheControl stores the public immutable policy for versioned background derivatives and a conservative policy for admin original previews.
@@ -140,7 +151,9 @@ function cms_theme_background_asset(): void
 
 
 /**
- * Stream one stored global theme branding fallback image.
+ * Stream one validated, browser-safe global Theme branding raster image.
+ *
+ * @return void Sends the stored image or an opaque not-found response.
  */
 function cms_theme_branding_asset(): void
 {
@@ -159,7 +172,7 @@ function cms_theme_branding_asset(): void
     }
     // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = mime_content_type($absolute) ?: 'application/octet-stream';
-    if (!str_starts_with($mime, 'image/')) {
+    if (gallery_branding_mime_extension($mime) === null) {
         cms_not_found();
         return;
     }

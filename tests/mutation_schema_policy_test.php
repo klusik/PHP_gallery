@@ -268,8 +268,8 @@ mutation_policy_assert_true($webdavIngestion !== false && $webdavTargetMove !== 
 $migrationSource = module_source(__DIR__ . '/../app/services/gallery_migration.php');
 $migrationInstallStart = strpos($migrationSource, 'function gallery_migration_install_asset_file_owned');
 $migrationIngestion = strpos($migrationSource, 'gallery_migration_schema_status()', $migrationInstallStart);
-$migrationCopy = strpos($migrationSource, 'copy($sourcePath, $targetPath)', $migrationInstallStart);
-mutation_policy_assert_true($migrationIngestion !== false && $migrationCopy !== false && $migrationIngestion < $migrationCopy, 'migration source identity preflight precedes original target copy');
+$migrationCopy = strpos($migrationSource, 'copy($sourcePath, $stagePath)', $migrationInstallStart);
+mutation_policy_assert_true($migrationIngestion !== false && $migrationCopy !== false && $migrationIngestion < $migrationCopy, 'migration schema preflight precedes original staging copy');
 $scanSource = module_source(__DIR__ . '/../app/services/image_scanning.php');
 $scanFunctionStart = strpos($scanSource, 'function scan_gallery_image_file_entry');
 $scanExisting = strpos($scanSource, 'scan_gallery_image_row_by_path($galleryId, $relative)', $scanFunctionStart);

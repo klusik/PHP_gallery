@@ -153,7 +153,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Viewer identity/config/session/CSRF/account-cap boundary | `app/services/viewer_accounts.php`, migrations `202608180001_viewer_security_foundations.php`, `202608180003_viewer_authentication_foundations.php` |
 | Opaque authority-token primitive | `app/services/security_tokens.php` |
 | Viewer verification/reset/remember-token storage | `app/services/viewer_tokens.php` |
-| Trusted-proxy-aware client IP + strict viewer HTTPS protocol resolver | `app/services/client_ip.php`, `config.example.php` |
+| Trusted-proxy-aware client IP + shared Admin/Viewer/URL HTTPS resolver | `app/services/client_ip.php`, `app/helpers_request.php`, `config.example.php` |
 | Bounded viewer abuse controls | `app/services/viewer_rate_limits.php`, tables `viewer_rate_limit_buckets`, `viewer_rate_limits` |
 | Viewer security-event storage | `app/services/viewer_security_events.php`, table `viewer_security_events` |
 | Pending registration and invitation state | `app/services/viewer_registration.php`, migrations `202608180002_viewer_registration_foundations.php`, `202608180005_viewer_invitation_admin_management.php`, tables `viewer_registration_requests`, `viewer_invitations`, `viewer_registration_state` |

@@ -306,25 +306,76 @@ function gallery_migration_install_image_asset(int $targetGalleryId, array $mani
 }
 
 /**
- * Copy a source file to a target path, allowing idempotent retry.
+ * Atomically install a migration asset, retaining idempotent existing-file semantics.
  *
- * @param string $sourcePath Source filesystem path.
- * @param string $targetPath Target filesystem path.
- * @param string $expectedChecksum Expected checksum value.
+ * An incomplete source copy is kept in a uniquely named temporary file in the
+ * destination directory. Only verified complete bytes may replace the missing
+ * final target. Existing symlinks are never considered successful installs.
+ *
+ * @param string $sourcePath Verified received migration asset file.
+ * @param string $targetPath Expected destination within an authorized gallery folder.
+ * @param string $expectedChecksum Optional manifest SHA-256 checksum.
+ * @return void Writes a fully staged file or preserves an already matching target.
  */
 function gallery_migration_copy_if_same_or_missing(string $sourcePath, string $targetPath, string $expectedChecksum): void
 {
+    $conflict = gallery_migration_t('gallery_migration.error.asset_conflict', 'A different file already exists at the target asset path.');
+    $storeFailed = gallery_migration_t('gallery_migration.error.asset_store_failed', 'Could not store the migration asset.');
+    if (is_link($targetPath)) {
+        throw new RuntimeException($conflict);
+    }
     if (is_file($targetPath)) {
         if ($expectedChecksum === '' || (hash_file('sha256', $targetPath) ?: '') === $expectedChecksum) {
             return;
         }
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_conflict', 'A different file already exists at the target asset path.'));
+        throw new RuntimeException($conflict);
+    }
+    if (file_exists($targetPath)) {
+        throw new RuntimeException($conflict);
     }
 
-    if (!@copy($sourcePath, $targetPath)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_store_failed', 'Could not store the migration asset.'));
+    $parent = dirname($targetPath);
+    $parentReal = realpath($parent);
+    if ($parentReal === false || !is_dir($parentReal)) {
+        throw new RuntimeException($storeFailed);
     }
-    @touch($targetPath, time());
+    $stagePath = @tempnam($parent, '.gallery-migration-');
+    if ($stagePath === false) {
+        throw new RuntimeException($storeFailed);
+    }
+
+    try {
+        // tempnam() may fall back to the system temp directory; never cross filesystems.
+        if (realpath(dirname($stagePath)) !== $parentReal || is_link($stagePath)) {
+            throw new RuntimeException($storeFailed);
+        }
+        if (!@copy($sourcePath, $stagePath)) {
+            throw new RuntimeException($storeFailed);
+        }
+        clearstatcache(true, $stagePath);
+        $sourceSize = @filesize($sourcePath);
+        $stageSize = @filesize($stagePath);
+        if ($sourceSize === false || $stageSize === false || $sourceSize !== $stageSize
+            || ($expectedChecksum !== '' && (hash_file('sha256', $stagePath) ?: '') !== $expectedChecksum)) {
+            throw new RuntimeException($storeFailed);
+        }
+        // A late external writer must not cause a non-idempotent overwrite.
+        if (file_exists($targetPath) || is_link($targetPath)) {
+            throw new RuntimeException($conflict);
+        }
+        // tempnam creates a private staging inode; preserve normal readable media
+        // permissions after installation on shared hosting file-serving setups.
+        @chmod($stagePath, 0644);
+        if (!@rename($stagePath, $targetPath)) {
+            throw new RuntimeException($storeFailed);
+        }
+        $stagePath = '';
+        @touch($targetPath, time());
+    } finally {
+        if ($stagePath !== '' && is_file($stagePath)) {
+            @unlink($stagePath);
+        }
+    }
 }
 
 /**

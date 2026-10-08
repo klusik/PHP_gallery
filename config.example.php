@@ -119,9 +119,11 @@ return [
         'max_active_viewer_collection_shares_per_collection' => 1,
     ],
 
-    // Forwarded client-IP headers are ignored unless both the direct peer and
-    // header family are explicitly trusted here. Exact IPs and CIDRs are valid.
-    // This leaves normal non-proxy installations on REMOTE_ADDR behavior.
+    // Forwarded client-IP and HTTPS headers are ignored unless both the direct
+    // peer and header family are explicitly trusted here. Exact IPs and CIDRs
+    // are valid. HTTPS policy is shared by Admin cookies, URLs and Viewer login.
+    // TLS-terminating proxies must set trusted_proxy_protocol_headers separately
+    // from trusted_proxy_headers and overwrite the enabled incoming headers.
     'security' => [
         'trusted_proxies' => [],
         'trusted_proxy_headers' => [], // x-forwarded-for, x-real-ip, cf-connecting-ip

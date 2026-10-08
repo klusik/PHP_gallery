@@ -171,6 +171,13 @@ function theme_background_optimized_path(): ?string
 function theme_background_delete_optimized(): void
 {
     $relative = theme_background_optimized_path();
+    // An existing file deliberately placed outside owned storage must be refused,
+    // not silently forgotten simply because the read-only asset resolver hides it.
+    $configured = trim((string) app_setting('theme_background_optimized_path', ''));
+    if ($relative === null && $configured !== ''
+        && file_exists(dirname(__DIR__, 2) . '/' . ltrim($configured, '/'))) {
+        throw new \RuntimeException('The optimized background identity could not be verified.');
+    }
     if ($relative !== null) {
         $path = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
         $resolved = realpath($path);
@@ -201,9 +208,13 @@ function theme_background_existing_path(string $path): ?string
     if ($path === '') {
         return null;
     }
-    // $absolute stores an intermediate value used by the surrounding gallery workflow.
+    // Compare canonical paths without relying on unrelated Core runtime imports.
+    // Theme background uploads always use flat filenames in this owned directory.
+    $storage = realpath(dirname(__DIR__, 2) . '/cache/theme-background');
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
-    return is_file($absolute) ? $path : null;
+    $resolved = realpath($absolute);
+    return $storage !== false && $resolved !== false
+        && dirname($resolved) === $storage && is_file($absolute) ? $path : null;
 }
 
 /**
@@ -293,9 +304,9 @@ function theme_background_storage_dir(): string
 /**
  * Store one uploaded global theme background image in private cache storage.
  *
- * @param array $file File value.
- * @param ?int $maxSide Max side value.
- * @return string Text result for the caller.
+ * @param array{name?:string,tmp_name?:string} $file Verified PHP upload descriptor.
+ * @param ?int $maxSide Maximum side length for the optional WebP derivative.
+ * @return string Gallery-relative path of the successfully installed original image.
  */
 function store_uploaded_theme_background(array $file, ?int $maxSide = null): string
 {
@@ -305,12 +316,26 @@ function store_uploaded_theme_background(array $file, ?int $maxSide = null): str
     $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
     // $filename stores an intermediate value used by the surrounding gallery workflow.
     $filename = 'background-original.' . $safeExtension;
-    // $target stores an intermediate value used by the surrounding gallery workflow.
-    $target = theme_background_storage_dir() . DIRECTORY_SEPARATOR . $filename;
-    theme_background_clear_stored_files($target);
-    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
+    // Keep the previous background and optimized derivative intact until the
+    // replacement upload has reached a unique staging file and been installed.
+    $storageDir = theme_background_storage_dir();
+    $target = $storageDir . DIRECTORY_SEPARATOR . $filename;
+    $stage = $storageDir . DIRECTORY_SEPARATOR . '.background-upload-' . bin2hex(random_bytes(12)) . '.' . $safeExtension;
+    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $stage)) {
+        @unlink($stage);
         throw new RuntimeException(t('theme.background.error_store_failed', 'Could not store theme background image.'));
     }
+    try {
+        if (!@rename($stage, $target)) {
+            throw new RuntimeException(t('theme.background.error_store_failed', 'Could not store theme background image.'));
+        }
+    } finally {
+        if (is_file($stage)) {
+            @unlink($stage);
+        }
+    }
+    // Remove obsolete originals and derivatives only after the new original exists.
+    theme_background_clear_stored_files($target);
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'cache/theme-background/' . $filename;
     set_app_setting('theme_background_path', $relative);

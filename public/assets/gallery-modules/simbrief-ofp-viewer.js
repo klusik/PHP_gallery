@@ -620,6 +620,8 @@ async function renderOfpPage(state, anchor = null) {
     }
     const stage = state.dialog.querySelector('[data-ofp-stage]');
     const wrap = state.dialog.querySelector('[data-ofp-canvas-wrap]');
+    // Retire manual pan gutters before measuring a new automatic fit.
+    updateOfpPanLayout(state);
     const unit = page.getViewport({scale: 1});
     const scale = ofpViewportScale(state, unit, stage, wrap);
     const viewport = page.getViewport({scale});

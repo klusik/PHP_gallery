@@ -30,6 +30,7 @@ return [
         'mvc_pdo_provenance_test.php',
         'session_context_test.php',
         'request_session_helpers_test.php',
+        'request_https_proxy_test.php',
         'source_contract_debt_ratchet_test.php',
         'policy_constants_changes_test.php',
         'policy_constants_cli_base_test.php',

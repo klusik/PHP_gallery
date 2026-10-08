@@ -312,15 +312,15 @@ function request_trusted_forwarded_protocol_state(string $header): array
 }
 
 /**
- * Resolve HTTPS for viewer authentication using only direct transport or explicitly trusted proxy metadata.
+ * Resolve HTTPS using only direct transport or explicitly trusted proxy metadata.
  *
- * The historical generic request_is_https() remains unchanged for compatibility. Forwarded
- * protocol headers are considered here only when REMOTE_ADDR is an explicitly configured
- * trusted proxy and the specific protocol-header family is explicitly enabled.
+ * Admin cookies, request-aware URLs and Viewer authentication share this policy.
+ * Forwarded protocol headers are considered only when REMOTE_ADDR is an explicitly
+ * configured trusted proxy and the specific protocol-header family is enabled.
  *
  * @return bool True only for direct HTTPS or unambiguous trusted forwarded HTTPS.
  */
-function viewer_request_is_https(): bool
+function request_transport_is_https(): bool
 {
     $https = strtolower(trim((string) (request_data('server')['HTTPS'] ?? '')));
     if ($https !== '' && $https !== 'off' && $https !== '0') {
@@ -360,6 +360,16 @@ function viewer_request_is_https(): bool
     }
 
     return $resolved === true;
+}
+
+/**
+ * Preserve the Viewer HTTPS entry point through the shared transport policy.
+ *
+ * @return bool True only for direct HTTPS or unambiguous trusted forwarded HTTPS.
+ */
+function viewer_request_is_https(): bool
+{
+    return request_transport_is_https();
 }
 
 /**

@@ -63,6 +63,7 @@ use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_sitemap_entries;
 use function Gallery\Services\public_sitemap_image_last_modified;
 use function Gallery\Services\public_sitemap_lastmod;
+use function Gallery\Services\request_transport_is_https;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
 use function Gallery\Services\theme_branding_asset_url;
@@ -156,26 +157,15 @@ function apply_response_header_intents(array $instructions): void
 }
 
 /**
- * Return whether the current request reached the app through HTTPS.
+ * Resolve HTTPS through the shared direct-transport and trusted-proxy policy.
  *
- * @return bool True when the condition matches.
+ * @return bool True for direct HTTPS or unambiguous explicitly trusted proxy metadata.
  */
 function request_is_https(): bool
 {
-    // $https stores an intermediate value used by the surrounding gallery workflow.
-    $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
-    if ($https !== '' && $https !== 'off') {
-        return true;
-    }
-    if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
-        return true;
-    }
-    // $forwardedProto stores an intermediate value used by the surrounding gallery workflow.
-    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
-    if ($forwardedProto === 'https') {
-        return true;
-    }
-    return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
+    // Session startup also calls this helper before route-owned service loading.
+    require_once __DIR__ . '/services/client_ip.php';
+    return request_transport_is_https();
 }
 
 /**
@@ -323,8 +313,10 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
         return $fallback;
     }
 
-    // Reject control characters before parsing so headers cannot be polluted.
-    if (preg_match('/[\x00-\x1F\x7F]/', $target)) {
+    // HTTP(S) browsers treat backslashes as path separators. "/\host" is
+    // therefore a network-path redirect even though PHP sees a local path.
+    // Refuse it before normalizing any submitted relative return path.
+    if (str_contains($target, '\\') || preg_match('/[\x00-\x1F\x7F]/', $target)) {
         return $fallback;
     }
 
