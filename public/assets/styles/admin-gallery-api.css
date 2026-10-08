@@ -365,7 +365,12 @@ dialog.admin-simbrief-dispatch-dialog {
     font: inherit;
 }
 dialog.admin-simbrief-dispatch-dialog::backdrop { background: #0f172abf; }
-dialog.admin-simbrief-dispatch-dialog form { padding: clamp(0.85rem, 3vw, 1.5rem); }
+dialog.admin-simbrief-dispatch-dialog form {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding: clamp(0.85rem, 3vw, 1.5rem);
+}
 dialog.admin-simbrief-dispatch-dialog header h2 { margin: 0 0 0.5rem; font-size: 1.3rem; color: #0f172a; }
 dialog.admin-simbrief-dispatch-dialog header p { margin: 0.45rem 0; line-height: 1.5; }
 dialog.admin-simbrief-dispatch-dialog .admin-simbrief-legacy-warning {
@@ -376,11 +381,24 @@ dialog.admin-simbrief-dispatch-dialog .admin-simbrief-legacy-warning {
 }
 .admin-simbrief-dispatch-fields {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 225px), 1fr));
+    /* A native date control needs more width than small text-only ICAO inputs. */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    min-width: 0;
+    max-width: 100%;
     gap: 0.85rem;
     margin: 1rem 0;
 }
 .admin-simbrief-dispatch-field { min-width: 0; display: grid; gap: 0.2rem; align-content: start; }
+/* Give Safari/Chromium's segmented native date picker its own full grid row. */
+.admin-simbrief-dispatch-field-date { grid-column: 1 / -1; }
+.admin-simbrief-dispatch-field-date input[type="date"] {
+    display: block;
+    box-sizing: border-box;
+    width: min(100%, 22rem);
+    min-width: 0;
+    max-width: 100%;
+    font-size: max(1rem, 16px);
+}
 .admin-simbrief-dispatch-field > span { color: #0f172a; font-size: 0.85rem; font-weight: 650; }
 .admin-simbrief-dispatch-field input {
     box-sizing: border-box;
