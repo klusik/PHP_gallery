@@ -24,6 +24,10 @@ The native departure-date input has a dedicated full grid row, avoiding browser 
 
 No bulk fetch, refresh timer, periodic polling, automatic generation, developer key or Navigraph OAuth is involved. Recovering exact past documents from a saved link or importing a later **latest** OFP automatically is deliberately not part of this version.
 
+The cruise flight-level input uses hundreds of feet (for example `350`). The redirect converts it to the documented `fl=FL350` representation; a bare `fl=350` is not the documented altitude format. Blank flight levels are omitted. See the [official Dispatch Redirect Guide](https://forum.navigraph.com/t/dispatch-redirect-guide/5299).
+
+Provider check on 2026-10-08: an unsigned browser opened the official redirect with synthetic `LKPR`, `ESSA`, `date=03JUN26` and UTC `07:20` inputs and reached the SimBrief sign-in screen. This confirms the login gate, **not acceptance or preservation of the historical date**. Complete that check in an authenticated session: inspect the prefilled date before Generate, record any rejection or normalization, and retain the source gallery's historical date unchanged. No plan was generated during this check.
+
 ## Storage
 
 Each source gallery folder may contain:

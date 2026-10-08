@@ -454,7 +454,8 @@ export function buildSimbriefDispatchRedirectUrl(form) {
                 throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_date', 'Enter a valid date from 2000 to 2099.'));
             }
         } else {
-            endpoint.searchParams.set(key, value);
+            // The review uses flight-level hundreds; SimBrief expects FL350 or 35000.
+            endpoint.searchParams.set(key, key === 'fl' ? 'FL' + Number(value) : value);
         }
     }
     return endpoint.href;

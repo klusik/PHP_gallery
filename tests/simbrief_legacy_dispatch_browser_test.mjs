@@ -122,13 +122,17 @@ assert.equal(complete.searchParams.get('deph'), '7');
 assert.equal(complete.searchParams.get('depm'), '20');
 assert.equal(complete.searchParams.get('route'), 'DCT OKL+ DCT');
 assert.equal(complete.searchParams.get('type'), 'A320');
-assert.equal(complete.searchParams.get('fl'), '350');
+assert.equal(complete.searchParams.get('fl'), 'FL350');
 assert.equal(complete.searchParams.get('reg'), 'OK-HEA');
 assert.equal(complete.searchParams.get('unsupported'), null);
 assert.match(complete.href, /route=DCT\+OKL%2B\+DCT/);
 
 const minimum = new URL(build(makeForm({orig: 'LKPR', dest: 'ESSA'})));
 assert.deepEqual([...minimum.searchParams.keys()], ['orig', 'dest']);
+for (const [input, expected] of [['035', 'FL35'], ['350', 'FL350'], ['600', 'FL600']]) {
+    const redirect = new URL(build(makeForm({orig: 'LKPR', dest: 'ESSA', fl: input})));
+    assert.equal(redirect.searchParams.get('fl'), expected, 'Reviewed level must use the documented FL prefix.');
+}
 rejects(build, {orig: 'LKPR', dest: 'ESS'}, /ICAO/i);
 rejects(build, {orig: 'LKPR', dest: 'ESSA', deph: '10'}, /hour and minute/i);
 rejects(build, {orig: 'LKPR', dest: 'ESSA', deph: '25', depm: '00'}, /hour/i);
