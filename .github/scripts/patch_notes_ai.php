@@ -216,6 +216,8 @@ function patch_notes_ai_build_prompt(string $version, string $baseTag, string $r
         $previous = substr($previous, 0, 28000) . "\n[STYLE SAMPLE TRUNCATED]\n";
     }
 
+    $requiredSections = implode(', ', array_map(static fn(string $section): string => '"' . $section . '"', patch_notes_ai_required_sections()));
+
     return <<<PROMPT
 You are generating the canonical PHP Gallery release-note section for Version {$version}.
 
@@ -226,10 +228,12 @@ OUTPUT CONTRACT - FOLLOW EXACTLY:
 - Do not use Markdown code fences.
 - Do not emit TODO, RELEASE_NOTES_TODO, placeholders, apologies, analysis, commentary, confidence statements, or instructions to the maintainer.
 - Follow PATCH_NOTES_TEMPLATE.md structure and established project style.
+- Always include all three main sections with exactly these headings: {$requiredSections}.
+- Main sections are mandatory even for test-only, documentation-only or tooling-only releases; do not omit or rename them.
 - Use past tense and concrete completed actions.
-- Include user/admin impact when supported by evidence.
+- In User Impact, describe the evidenced impact on visitors, administrators or maintainers. If there is no direct visitor or administrator behavior change, state that explicitly; do not invent a product improvement.
 - Include backend/frontend/database/test/compatibility details only when supported by evidence.
-- If an area had no relevant change, omit that subsection rather than inventing content.
+- If an area had no relevant change, omit only its optional #### subsection rather than inventing content; retain every required ### main section.
 - Link an issue/PR only when its number is explicitly evidenced in the commit metadata below.
 - For evidenced issue #N in this repository, use https://github.com/{$repository}/issues/N.
 - Never claim an issue was closed unless the evidence explicitly says so.
@@ -280,6 +284,16 @@ PROMPT;
 }
 
 /**
+ * Return the main release-note headings shared by generation and validation.
+ *
+ * @return list<string> Mandatory third-level Markdown headings in template order.
+ */
+function patch_notes_ai_required_sections(): array
+{
+    return ['### Highlights', '### Technical Details', '### User Impact'];
+}
+
+/**
  * Validate and normalize one model-produced target-version Markdown section.
  *
  * @param string $version Target release version.
@@ -312,8 +326,8 @@ function patch_notes_ai_validate_response(string $version, string $response): st
     if (str_contains($response, 'RELEASE_NOTES_TODO') || preg_match('/\bTODO\b/i', $response) === 1) {
         throw new RuntimeException('Generated release notes contain unresolved placeholder text.');
     }
-    foreach (['### Highlights', '### Technical Details', '### User Impact'] as $required) {
-        if (!str_contains($response, $required)) {
+    foreach (patch_notes_ai_required_sections() as $required) {
+        if (preg_match('/^[ \t]*' . preg_quote($required, '/') . '[ \t]*$/m', $response) !== 1) {
             throw new RuntimeException('Generated release notes are missing required section: ' . $required);
         }
     }

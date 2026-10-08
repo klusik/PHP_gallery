@@ -43,6 +43,48 @@ const STATUS_FAIL = 'FAIL';
 const STATUS_SKIP = 'SKIP';
 const STATUS_BLOCKED = 'BLOCKED';
 
+/**
+ * Extract a bounded, single-line failure reason from a Node fixture's output.
+ *
+ * @param string $output Captured stdout and stderr from the owned child.
+ * @return string Assertion or runtime error text, empty when no recognized reason exists.
+ */
+function node_failure_detail(string $output): string
+{
+    $output = preg_replace('/\x1B\[[0-?]*[ -\/]*[@-~]/', '', $output) ?? $output;
+    if (preg_match('/^(?:BROWSER FAIL(?: #[0-9]+)?|AssertionError(?: \[[^\r\n]+\])?|Error|TypeError|SyntaxError|RangeError):[^\r\n]*/m', $output, $matches) !== 1) {
+        return '';
+    }
+    $detail = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $matches[0]) ?? '';
+    return strlen($detail) > 1000 ? substr($detail, 0, 997) . '...' : $detail;
+}
+
+/**
+ * Render actionable failure details without flooding the audit console.
+ *
+ * @param array<string,mixed> $task Normalized suite result and its recorded problems.
+ * @return string At most five bounded problem lines and a pointer to any remaining details.
+ */
+function render_console_problems(array $task): string
+{
+    if (!in_array($task['status'] ?? '', [STATUS_FAIL, STATUS_BLOCKED], true)) {
+        return '';
+    }
+    $problems = $task['details']['problems'] ?? [];
+    $lines = [];
+    foreach (array_slice($problems, 0, 5) as $problem) {
+        $line = preg_replace('/[\x00-\x1F\x7F]+/', ' ', (string) $problem) ?? '';
+        $lines[] = '  - ' . (strlen($line) > 1200 ? substr($line, 0, 1197) . '...' : $line);
+    }
+    if (count($problems) > 5) {
+        $lines[] = '  - ' . (count($problems) - 5) . ' more problems; see the suite log.';
+    }
+    if ($lines !== [] && !empty($task['log'])) {
+        $lines[] = '  Log: ' . $task['log'];
+    }
+    return $lines === [] ? '' : implode("\n", $lines) . "\n";
+}
+
 require_once __DIR__ . '/audit_process.php';
 require_once __DIR__ . '/audit_performance.php';
 

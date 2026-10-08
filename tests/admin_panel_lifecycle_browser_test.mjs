@@ -63,6 +63,10 @@ let browserReady;
 let readFixtureResult = null;
 /** @type {function(): Promise<Object>|null} Close only the disposable browser through its own socket. */
 let closeOwnedBrowser = null;
+/** Bounded runtime exceptions from the isolated fixture page, printed only on failure. */
+const pageErrors = [];
+/** Tail of the owned browser's stderr for startup/crash diagnosis. */
+let browserStderr = '';
 
 /**
  * Attach to the fresh owned tab, navigate once, and expose Chromium's native key dispatch.
@@ -74,6 +78,9 @@ async function attachKeyboard(profilePath) {
     const deadline = Date.now() + browserStartupTimeoutMs;
     let endpoint;
     while (Date.now() < deadline) {
+        if (browser.exitCode !== null || browser.signalCode !== null) {
+            throw new Error('Owned Chromium exited before debugging startup (exit=' + browser.exitCode + ', signal=' + browser.signalCode + ')');
+        }
         try {
             const [port, socketPath] = (await readFile(path.join(profilePath, 'DevToolsActivePort'), 'utf8')).trim().split(/\r?\n/);
             if (/^[0-9]+$/.test(port) && socketPath.startsWith('/devtools/browser/')) {
@@ -83,7 +90,7 @@ async function attachKeyboard(profilePath) {
         } catch { /* Chromium has not finished creating this owned profile. */ }
         await new Promise(/** Poll only this owned profile's endpoint file. @param {function(): void} resolve Continue the bounded discovery loop. @return {NodeJS.Timeout} Timer handle ignored by the promise executor. */ resolve => setTimeout(resolve, 20));
     }
-    if (!endpoint) throw new Error('Owned Chromium debugging endpoint unavailable');
+    if (!endpoint) throw new Error('Owned Chromium debugging endpoint unavailable after ' + browserStartupTimeoutMs + 'ms');
     debuggingSocket = new WebSocket(endpoint);
     await new Promise(/** Await the owned debugging connection before sending commands. @param {function(Event): void} resolve Accept socket-open notification. @param {function(Event): void} reject Reject socket setup failure. @return {void} Installs one-shot connection handlers. */ (resolve, reject) => {
         debuggingSocket.addEventListener('open', resolve, {once: true});
@@ -93,6 +100,10 @@ async function attachKeyboard(profilePath) {
     const requests = new Map();
     debuggingSocket.addEventListener('message', /** Resolve the matching owned DevTools command and release its timeout. @param {MessageEvent<string>} event Protocol response JSON. @return {void} Ignores unsolicited events without a pending command. */ event => {
         const message = JSON.parse(event.data);
+        if (message.method === 'Runtime.exceptionThrown' && pageErrors.length < 5) {
+            const detail = message.params.exceptionDetails;
+            pageErrors.push(String(detail.exception?.description || detail.text || 'Unhandled fixture exception').slice(0, 1500));
+        }
         const pending = requests.get(message.id);
         if (!pending) return;
         requests.delete(message.id);
@@ -110,7 +121,7 @@ async function attachKeyboard(profilePath) {
     function command(method, params = {}, sessionId = undefined) {
         const id = ++sequence;
         return new Promise(/** Register one command before writing its protocol request. @param {function(Record<string, unknown>): void} resolve Matching response consumer. @param {function(Error): void} reject Protocol failure consumer. @return {void} Stores request-local completion callbacks and timeout. */ (resolve, reject) => {
-            const timer = setTimeout(/** Reject only the expired command and release its registry entry. @return {void} Does not close a user-owned browser. */ () => { requests.delete(id); reject(new Error('Owned Chromium protocol timeout')); }, 5000);
+            const timer = setTimeout(/** Reject only the expired command and release its registry entry. @return {void} Does not close a user-owned browser. */ () => { requests.delete(id); reject(new Error('Owned Chromium protocol timeout: ' + method)); }, 5000);
             requests.set(id, {resolve, reject, timer});
             debuggingSocket.send(JSON.stringify({id, method, params, sessionId}));
         });
@@ -120,6 +131,7 @@ async function attachKeyboard(profilePath) {
     if (!target) throw new Error('Owned fixture page not found');
     const {sessionId} = await command('Target.attachToTarget', {targetId: target.targetId, flatten: true});
     await command('Page.enable', {}, sessionId);
+    await command('Runtime.enable', {}, sessionId);
     // Keep native focus and :focus-visible behavior available in this owned headless page.
     await command('Emulation.setFocusEmulationEnabled', {enabled: true}, sessionId);
     // Drive exactly one initial navigation after attaching; command-line URL startup
@@ -145,7 +157,7 @@ async function attachKeyboard(profilePath) {
     };
     /** Read only the fixture's bounded result text from its attached page. @return {Promise<string>} Current assertion summary, never application data. */
     readFixtureResult = async () => {
-        const response = await command('Runtime.evaluate', {expression: 'document.getElementById("results")?.textContent || ""', returnByValue: true}, sessionId);
+        const response = await command('Runtime.evaluate', {expression: '(document.getElementById("results")?.textContent || "").slice(0, 4096)', returnByValue: true}, sessionId);
         return String(response.result.value || '');
     };
     /** Close only the disposable browser attached through its own profile socket. @return {Promise<Record<string, unknown>>} Browser-close protocol acknowledgment. */
@@ -183,7 +195,7 @@ async function serveFixture(request, response) {
         catch { response.writeHead(500).end('Viewport fixture unavailable'); }
         return;
     }
-    if (pathname === '/__mouse' && ['admin_gallery_tree.html', 'theme_appearance.html'].includes(fixtureName)) {
+    if (pathname === '/__mouse' && ['admin_gallery_tree.html', 'theme_appearance.html', 'admin_panel_lifecycle.html'].includes(fixtureName)) {
         const parameters = new URL(request.url, 'http://localhost').searchParams;
         const type = parameters.get('type');
         const x = Number(parameters.get('x'));
@@ -230,7 +242,7 @@ try {
     // The HTTP keyboard boundary reports setup failure without an unhandled rejection.
     browserReady.catch(/** Consume the setup rejection already reported at the HTTP keyboard boundary. @return {void} Avoids an unhandled rejection without treating setup as successful. */ () => {});
     browser.stdout.resume();
-    browser.stderr.resume();
+    browser.stderr.on('data', chunk => { browserStderr = (browserStderr + chunk.toString()).slice(-16384); });
     browserExit = new Promise(/** Observe only the disposable Chromium process lifetime. @param {function(number|null): void} resolve Process-close exit code consumer. @param {function(Error): void} reject Spawn failure consumer. @return {void} Binds process-local completion handlers. */ (resolve, reject) => { browser.on('error', reject); browser.on('close', resolve); });
     const timer = setTimeout(/** Enforce the owned fixture's wall-clock deadline. @return {boolean} Whether the process termination signal was sent. */ () => browser.kill(), browserTimeoutMs);
     try {
@@ -240,7 +252,11 @@ try {
         while (Date.now() < deadline) {
             result = await readFixtureResult();
             if (/^BROWSER (PASS|FAIL)/.test(result)) break;
+            if (pageErrors.length > 0) throw new Error('Unhandled fixture exception: ' + pageErrors[0]);
             await new Promise(/** Pace bounded assertion-result polling. @param {function(): void} resolve Continue the result loop. @return {NodeJS.Timeout} Timer handle ignored by the promise executor. */ resolve => setTimeout(resolve, 100));
+        }
+        if (!/^BROWSER (PASS|FAIL)/.test(result)) {
+            result = 'BROWSER FAIL: fixture deadline 30000ms expired; last progress: ' + (result || 'no assertion output');
         }
         console.log(result || 'BROWSER FAIL: fixture did not produce a result');
         await closeOwnedBrowser();
@@ -248,6 +264,11 @@ try {
         assert.equal(code, 0, 'Owned Chromium process exits successfully');
         assert.ok(result?.startsWith('BROWSER PASS'), 'Production drawer fixture must finish every assertion');
     } finally { clearTimeout(timer); }
+} catch (error) {
+    console.error('BROWSER FAIL: ' + fixtureName + ': ' + error.message);
+    if (pageErrors.length > 0) console.error('Fixture runtime exceptions:\n' + pageErrors.join('\n'));
+    if (browserStderr.trim()) console.error('Owned Chromium stderr (last 16 KiB):\n' + browserStderr.trim());
+    throw error;
 } finally {
     debuggingSocket?.close();
     server.close();

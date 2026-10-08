@@ -221,7 +221,7 @@ namespace {
                 'CI child retained root authority, lost explicit browser disablement or optionalized database/HTTP coverage.');
         }
     }
-    $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml');
+    $workflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml'));
     $workflowHeader = strstr($workflow, "\njobs:", true);
     check(is_string($workflowHeader) && !str_contains($workflowHeader, 'PHP_GALLERY_BROWSER: disabled')
         && !str_contains($workflowHeader, 'GALLERY_WORKFLOW_BROWSER: disabled'),
@@ -273,7 +273,7 @@ namespace {
         && str_contains($releaseAuditJob, 'retention-days: 30'),
         'Reusable release qualification must own exactly one explicit release-profile audit and retain its evidence.');
 
-    $releaseWorkflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml');
+    $releaseWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml'));
     check(str_contains($releaseWorkflow, "      - 'release/v_*'")
         && str_contains($releaseWorkflow, 'workflow_dispatch:')
         && str_contains($releaseWorkflow, 'name: Prepare release candidate')
@@ -350,7 +350,7 @@ namespace {
         && !str_contains($texHelper, 'tlnet.yihui.org')
         && !str_contains($texHelper, 'install-bin-unix.sh'),
         'TinyTeX must verify locked downloads, bound network work and refuse live/self-update fallbacks.');
-    $texPackages = (string) file_get_contents(dirname(__DIR__) . '/.github/texlive-packages.txt');
+    $texPackages = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/texlive-packages.txt'));
     foreach (['english', 'czech', 'german', 'swedish'] as $language) {
         check(str_contains($texPackages, 'babel-' . $language . "\n")
             && str_contains($texPackages, 'hyphen-' . $language . "\n"),
@@ -366,6 +366,11 @@ namespace {
         'A TinyTeX cache hit must verify local provenance and resources without provisioning.');
 
     $patchNotesAi = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/patch_notes_ai.php');
+    check(str_contains($releaseWorkflow, 'name: Upload rejected AI release-note response')
+        && str_contains($releaseWorkflow, "failure() && steps.notes-before.outputs.complete == 'false'")
+        && str_contains($releaseWorkflow, 'name: release-notes-rejected-response')
+        && str_contains($releaseWorkflow, 'path: ${{ runner.temp }}/release-notes-response.md'),
+        'Rejected AI prose must remain available as a failure-only artifact without uploading prompts or authentication diagnostics.');
     check(preg_match('/name: Build complete release-note evidence prompt\n(?:(?!      - name:).)*timeout-minutes: 2/s', $releaseWorkflow) === 1,
         'Local release evidence collection must have its own two-minute workflow deadline.');
     check(str_contains($patchNotesAi, 'EVIDENCE - TEXT DIFF:')
