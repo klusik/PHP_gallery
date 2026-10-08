@@ -6787,5 +6787,11 @@
     "admin.legacy_ofp.error_flight_level": "Letová hladina nesmí překročit FL600.",
     "admin.legacy_ofp.error_pax": "Počet cestujících musí být od 0 do 999.",
     "admin.legacy_ofp.error_hour": "Hodina odletu v UTC musí být 0 až 23.",
-    "admin.legacy_ofp.error_minute": "Minuta odletu v UTC musí být 0 až 59."
+    "admin.legacy_ofp.error_minute": "Minuta odletu v UTC musí být 0 až 59.",
+    "admin.legacy_ofp.duplicate_pdf": "OFP PDF již existuje. Použijte samostatnou akci nahrazení.",
+    "admin.legacy_ofp.missing_replace": "Není co nahradit. Znovu načtěte editor galerie.",
+    "admin.legacy_ofp.invalid_pdf": "Nahraný soubor není platné PDF.",
+    "admin.legacy_ofp.size_limit": "PDF nesmí přesáhnout 25 MiB.",
+    "admin.legacy_ofp.invalid_provenance": "Vyberte platný původ dokumentu.",
+    "admin.legacy_ofp.manifest_invalid": "Existující manifest OFP není platný. Před nahrazením opravte manifest."
 }
