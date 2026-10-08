@@ -59,6 +59,10 @@ export function setupSimbriefDescriptionGenerator() {
         await generateSimbriefDescription(tool, button);
     });
     document.addEventListener('input', clearSimbriefDraftOnIdentifierInput);
+    document.addEventListener('click', handleLegacyOfpDispatchClick);
+    document.addEventListener('submit', handleLegacyOfpDispatchConfirm);
+    document.addEventListener('submit', handleLegacyOfpPdfUpload);
+
 }
 
 /**
@@ -329,3 +333,220 @@ function setSimbriefStatus(tool, message, failed) {
     status.textContent = message;
     status.classList.toggle('is-error', failed);
 }
+
+/**
+ * Open or cancel a one-gallery pre-dispatch dialog without any remote action.
+ *
+ * Append the native top-layer modal to the active drawer root when present.
+ * The drawer isolates body siblings with inert and enforces focus containment;
+ * appending outside it makes every review input inaccessible. The drawer root
+ * is outside its scroll-clipped content, while showModal() escapes stacking.
+ *
+ * @param {MouseEvent} event Delegated click event.
+ * @returns {void} Opens or dismisses the review dialog.
+ */
+function handleLegacyOfpDispatchClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const cancel = target.closest('[data-simbrief-dispatch-cancel]');
+    if (cancel) {
+        event.preventDefault();
+        const dialog = cancel.closest('[data-simbrief-dispatch-dialog]');
+        if (dialog instanceof HTMLDialogElement) dialog.close();
+        return;
+    }
+    const button = target.closest('[data-simbrief-dispatch-open]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    const card = button.closest('[data-simbrief-legacy-panel]');
+    const template = card?.querySelector('[data-simbrief-dispatch-template]');
+    if (!(template instanceof HTMLTemplateElement)) return;
+    event.preventDefault();
+    if (document.querySelector('dialog[data-simbrief-dispatch-dialog][open]')) return;
+    const copy = template.content.cloneNode(true);
+    const dialog = copy.querySelector('[data-simbrief-dispatch-dialog]');
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    const drawer = card.closest('[data-admin-side-panel]');
+    const host = drawer instanceof HTMLElement ? drawer : document.body;
+    host.append(dialog);
+    // Preserve native modal Tab/Escape instead of passing those keys to the
+    // enclosing Admin drawer's window-level keyboard trap and close handler.
+    dialog.addEventListener('keydown', /** Keep the review's native key ownership.
+     * @param {KeyboardEvent} keyEvent Keyboard event from the open review.
+     * @returns {void} Prevents drawer handling without preventing native behavior.
+     */ (keyEvent) => {
+        if (keyEvent.key === 'Tab' || keyEvent.key === 'Escape') keyEvent.stopPropagation();
+    });
+    dialog.addEventListener('close', /** Destroy the detached modal and its edited-only data.
+     * @returns {void} Clear the transient review without persisting to the gallery.
+     */ () => dialog.remove(), {once: true});
+    dialog.showModal();
+    dialog.querySelector('input[name="orig"]')?.focus();
+}
+
+/**
+ * Convert a verified ISO departure date into SimBrief's documented DDMMMYY.
+ *
+ * @param {string} input ISO date explicitly reviewed by the administrator.
+ * @returns {string} SimBrief date, or empty when omitted.
+ * @throws {Error} When a supplied date cannot be safely encoded.
+ */
+export function simbriefDispatchEncodeDate(input) {
+    if (input === '') return '';
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+    if (!match) throw new Error('Invalid departure date.');
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utc = new Date(Date.UTC(year, month - 1, day));
+    if (year < 2000 || year > 2099 || utc.getUTCFullYear() !== year
+        || utc.getUTCMonth() + 1 !== month || utc.getUTCDate() !== day) {
+        throw new Error('The SimBrief date must be a valid date between 2000 and 2099.');
+    }
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    return String(day).padStart(2, '0') + months[month - 1] + String(year % 100).padStart(2, '0');
+}
+
+/**
+ * Serialize only supported, confirmed SimBrief Dispatch Redirect options.
+ *
+ * @param {HTMLFormElement} form Reviewed transient form, never gallery settings.
+ * @returns {string} Fixed HTTPS origin and documented option names only.
+ * @throws {Error} On invalid supplied values or missing ICAO endpoints.
+ */
+export function buildSimbriefDispatchRedirectUrl(form) {
+    const endpoint = new URL('https://dispatch.simbrief.com/options/custom');
+    const patterns = {
+        orig: /^[A-Z]{4}$/, dest: /^[A-Z]{4}$/, type: /^[A-Z0-9]{2,8}$/,
+        airline: /^[A-Z0-9]{2,3}$/, fltnum: /^[A-Z0-9]{1,8}$/,
+        callsign: /^[A-Z0-9]{2,12}$/, reg: /^[A-Z0-9-]{2,12}$/,
+        route: /^[A-Z0-9 .\/+()-]{1,500}$/, altn: /^[A-Z]{4}$/,
+        pax: /^\d{1,3}$/, fl: /^\d{1,3}$/,
+        deph: /^\d{1,2}$/, depm: /^\d{1,2}$/,
+    };
+    const fields = {};
+    for (const key of [...Object.keys(patterns), 'date']) {
+        const input = form.elements.namedItem(key);
+        fields[key] = input instanceof HTMLInputElement ? input.value.trim().toUpperCase() : '';
+        if (fields[key] === '') continue;
+        if (key !== 'date' && !patterns[key].test(fields[key])) {
+            const message = (key === 'orig' || key === 'dest')
+                ? i18nForElement(form, 'admin.legacy_ofp.error_airports', 'Enter valid four-letter origin and destination ICAO codes.')
+                : i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', key);
+            throw new Error(message);
+        }
+        if (key === 'fl' && Number(fields[key]) > 600) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_flight_level', 'Flight level must not exceed FL600.'));
+        if (key === 'pax' && Number(fields[key]) > 999) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_pax', 'Passenger count must be between 0 and 999.'));
+        if (key === 'deph' && Number(fields[key]) > 23) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_hour', 'UTC departure hour must be 0 to 23.'));
+        if (key === 'depm' && Number(fields[key]) > 59) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_minute', 'UTC departure minute must be 0 to 59.'));
+    }
+    if (!fields.orig || !fields.dest) {
+        throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_airports', 'Enter valid four-letter origin and destination ICAO codes.'));
+    }
+    if (Boolean(fields.deph) !== Boolean(fields.depm)) {
+        throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_time_pair', 'Enter both UTC departure hour and minute, or leave both blank.'));
+    }
+    for (const [key, value] of Object.entries(fields)) {
+        if (value === '') continue;
+        if (key === 'date') {
+            try {
+                endpoint.searchParams.set('date', simbriefDispatchEncodeDate(value));
+            } catch {
+                throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_date', 'Enter a valid date from 2000 to 2099.'));
+            }
+        } else {
+            // The review uses flight-level hundreds; SimBrief expects FL350 or 35000.
+            endpoint.searchParams.set(key, key === 'fl' ? 'FL' + Number(value) : value);
+        }
+    }
+    return endpoint.href;
+}
+
+/**
+ * Submit the reviewed redirect once, synchronously from the actual click.
+ *
+ * No fetch, navigation or window opening happens during modal construction or
+ * editing. The new tab has neither opener access nor a referrer.
+ *
+ * @param {SubmitEvent} event Transient pre-dispatch form submit.
+ * @returns {void} Opens the official SimBrief Dispatch Redirect, not Generate.
+ */
+function handleLegacyOfpDispatchConfirm(event) {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-simbrief-dispatch-form]')) return;
+    event.preventDefault();
+    if (form.dataset.pending === '1') return;
+    const error = form.querySelector('[data-simbrief-dispatch-error]');
+    if (error) error.textContent = '';
+    try {
+        const url = buildSimbriefDispatchRedirectUrl(form);
+        const confirm = form.querySelector('[data-simbrief-dispatch-confirm]');
+        form.dataset.pending = '1';
+        if (confirm instanceof HTMLButtonElement) confirm.disabled = true;
+        window.open(url, '_blank', 'noopener,noreferrer');
+        form.closest('[data-simbrief-dispatch-dialog]')?.close();
+    } catch (failure) {
+        const message = failure instanceof Error ? failure.message : i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', '?');
+        if (error) error.textContent = message;
+    }
+}
+
+/**
+ * Upload one PDF through its dedicated CSRF-protected admin editor action.
+ *
+ * No gallery settings or photo upload fields are serialized. The selected
+ * panel is refreshed in place, including when hosted by the side drawer.
+ *
+ * @param {SubmitEvent} event Gallery-scoped PDF form submission.
+ * @returns {Promise<void>} Validated AJAX attachment outcome.
+ */
+async function handleLegacyOfpPdfUpload(event) {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-simbrief-ofp-upload-form]')) return;
+    event.preventDefault();
+    if (form.dataset.pending === '1') return;
+    const status = form.querySelector('[data-simbrief-ofp-upload-status]');
+    const file = form.querySelector('input[name="simbrief_ofp_pdf"]');
+    const button = form.querySelector('button[type="submit"]');
+    if (!(file instanceof HTMLInputElement) || !file.files?.length) {
+        if (status) status.textContent = i18nForElement(form, 'admin.legacy_ofp.invalid_upload', 'Select a PDF of up to 25 MiB and check PHP upload limits.');
+        return;
+    }
+    if (file.files[0].size > 26214400) {
+        if (status) status.textContent = i18nForElement(form, 'admin.legacy_ofp.invalid_upload', 'Select a PDF of up to 25 MiB and check PHP upload limits.');
+        return;
+    }
+    const data = new FormData(form);
+    data.set('ajax', '1');
+    form.dataset.pending = '1';
+    if (button instanceof HTMLButtonElement) button.disabled = true;
+    if (status) status.textContent = i18nForElement(form, 'admin.legacy_ofp.uploading', 'Attaching PDF to the selected gallery...');
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST', body: data, credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+            throw new Error(String(result.error || i18nForElement(form, 'admin.legacy_ofp.upload_failed', 'The PDF could not be attached.')));
+        }
+        const card = form.closest('[data-simbrief-legacy-panel]');
+        if (card && typeof result.panel_html === 'string' && result.panel_html !== '') {
+            const holder = document.createElement('div');
+            holder.innerHTML = result.panel_html;
+            const updated = holder.querySelector('[data-simbrief-legacy-panel]');
+            if (updated) {
+                card.replaceWith(updated);
+                const nextStatus = updated.querySelector('[data-simbrief-ofp-upload-status]');
+                if (nextStatus) nextStatus.textContent = String(result.message || '');
+                return;
+            }
+        }
+        if (status) status.textContent = String(result.message || '');
+    } catch (failure) {
+        if (status) status.textContent = failure instanceof Error ? failure.message : i18nForElement(form, 'admin.legacy_ofp.upload_failed', 'The PDF could not be attached.');
+    } finally {
+        form.dataset.pending = '0';
+        if (button instanceof HTMLButtonElement) button.disabled = false;
+    }
+}
+

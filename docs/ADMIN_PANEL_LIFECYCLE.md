@@ -211,6 +211,15 @@ before its target handler closes it, because that handler did not cancel Escape.
 An unclaimed Escape asks the same inline draft guard used by the Close button.
 The draft guard is an inline notice, not another modal or browser confirmation.
 
+An explicitly opened nested native `<dialog>` (such as the historical SimBrief
+pre-dispatch review) belongs to the drawer root instead of being appended as a
+new `<body>` sibling. Otherwise background isolation makes the inputs inert and
+the drawer's `focusin` guard steals their focus. Native top-layer rendering avoids
+clipping by the scrolling drawer. While this dialog is modal, native Tab and
+Escape take precedence over drawer-level key handling: Escape closes the review,
+not its parent drawer. When the editor is standalone the dialog may be appended
+to `<body>` normally.
+
 Accepted body replacement restores an equivalent visible control by id/name, or
 chooses a meaningful current control. Closing restores the connected opener or a
 visible replacement action/main landmark. Temporary landmark focusability lasts

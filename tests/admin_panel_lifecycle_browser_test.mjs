@@ -176,9 +176,9 @@ async function serveFixture(request, response) {
     if (pathname === '/__public_cards' && fixtureName === 'theme_appearance.html') {
         response.setHeader('Content-Type','text/html; charset=utf-8'); response.end(publicCardMarkup); return;
     }
-    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'admin_settings_workspace.html'].includes(fixtureName)) {
+    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'admin_settings_workspace.html', 'admin_panel_lifecycle.html'].includes(fixtureName)) {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
-        if (![390, 1280].includes(width)) { response.writeHead(400).end(); return; }
+        if (![390, 1280].includes(width) && !(fixtureName === 'admin_panel_lifecycle.html' && width === 320)) { response.writeHead(400).end(); return; }
         try { await browserReady; await setFixtureWidth(width); response.end('ok'); }
         catch { response.writeHead(500).end('Viewport fixture unavailable'); }
         return;
