@@ -1,6 +1,6 @@
 {
     "version": "0.123",
-    "generated_at": "2026-10-08T03:44:08+00:00",
+    "generated_at": "2026-10-08T06:20:17+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -719,7 +719,7 @@
         "public/assets/gallery-modules/admin-settings-workspace.js": "sha256:520c83956978384c6421190b453024bf36763cf8ae34c68f6fb155c08aece60a",
         "public/assets/gallery-modules/admin-setup-wizard.js": "sha256:3fd5fa1a8dd7aeefdc8b0092735ab8de5f9f3131390d74b7375caec3101aa585",
         "public/assets/gallery-modules/admin-side-panel.js": "sha256:32425aca2a71f9bbd86a02d9f3138b9bcceaa47dadb6fb6340524fac2bab6560",
-        "public/assets/gallery-modules/admin-simbrief-description.js": "sha256:c29d4198e7ec353e8ce56d4103c896a15a9b1f179f01a36d0a46163a4a5c2e73",
+        "public/assets/gallery-modules/admin-simbrief-description.js": "sha256:1af3f8765629400026bc5e9e3d3210854fd346636a990c608781418c9638fec9",
         "public/assets/gallery-modules/admin-smart-galleries.js": "sha256:54c5033cfa791e8d2741863a6b611cc4abf9fcb744007ccfa25cfb16009788f6",
         "public/assets/gallery-modules/admin-storage-statistics.js": "sha256:2a9d601822b356fd2990f9a9ba37637f7b3cdfd10b2132a808850de705ae5e14",
         "public/assets/gallery-modules/admin-table-drag-ghost.js": "sha256:d6c16337eeb1765bac2b299ff0cbfd0952be7ab4d6200a0ec437555639ecac7d",
@@ -760,7 +760,7 @@
         "public/assets/gallery-modules/viewer-favourites.js": "sha256:bb9b065201f000b65ae8db8fca2e6b9383ad98684f7cbc61507ba697c907a134",
         "public/assets/gallery-modules/votes.js": "sha256:23e1fc613c3300283c3262350a53045386364207d6fbfdda6299af94a7a0b5c7",
         "public/assets/gallery-modules/zip-stream-writer.js": "sha256:37bf18af124489aba21ad6b0171519404c5c9678bccc87b2fedf8cc9f72ec5a7",
-        "public/assets/gallery.js": "sha256:373d217f446705b5cea499ebb1cacc6d4689df05225564848a0aaa3b566081e8",
+        "public/assets/gallery.js": "sha256:96349a51a7bf77985a8f3a3b8ea135ac5190e3c4753648c395e9987186e8d8ac",
         "public/assets/link-icons/LICENSE.bootstrap-icons.md": "sha256:05495f1909a3994235a7e09fd258ad2d698243a715d9064c4322c487ee782687",
         "public/assets/link-icons/README.md": "sha256:8284031d7aa652834bc0db073b2d6a229a178f5decfffac018926e2c98ea3b43",
         "public/assets/link-icons/brands.svg": "sha256:9f8d56ae72c3ce3a9c8c2536688464b0ff2651616af208048856ca884a8ebeda",
