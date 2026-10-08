@@ -53,6 +53,11 @@ async function loadDispatchModel() {
  * @param {string} value Field value.
  */
 class MockInput {
+    /**
+     * Construct a test-only input with a concrete string value.
+     * @param {string} value Text entered in the dispatch form.
+     * @returns {void} Initialize a single fake input instance.
+     */
     constructor(value) {
         this.value = value;
     }
@@ -64,11 +69,16 @@ globalThis.HTMLInputElement = MockInput;
  * redirect model, without simulating any browser form submission.
  *
  * @param {Record<string,string>} fields Explicit admin-edited fields.
- * @returns {object} Form compatible with .elements.namedItem().
+ * @returns {{elements:{namedItem:Function}}} Form exposing one named input accessor.
  */
 function makeForm(fields) {
     return {
         elements: {
+            /**
+             * Return the typed fake input for one supported form control.
+             * @param {string} key Input name.
+             * @returns {MockInput|null} Field value or null when absent.
+             */
             namedItem(key) {
                 return Object.hasOwn(fields, key) ? new MockInput(fields[key]) : null;
             },
@@ -79,9 +89,10 @@ function makeForm(fields) {
 /**
  * Assert a malformed reviewed value fails before any external navigation.
  *
- * @param {(form:object)=>string} build Production URL function.
+ * @param {Function} build Production URL function.
  * @param {Record<string,string>} fields Explicit entered values.
  * @param {RegExp} message Required validation error family.
+ * @returns {void} Assert the production function rejects an invalid form.
  */
 function rejects(build, fields, message) {
     assert.throws(() => build(makeForm(fields)), message);
