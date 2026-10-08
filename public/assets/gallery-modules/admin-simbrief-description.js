@@ -417,23 +417,27 @@ export function buildSimbriefDispatchRedirectUrl(form) {
         fields[key] = input instanceof HTMLInputElement ? input.value.trim().toUpperCase() : '';
         if (fields[key] === '') continue;
         if (key !== 'date' && !patterns[key].test(fields[key])) {
-            throw new Error('Check the format of: ' + key);
+            throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', key));
         }
-        if (key === 'fl' && Number(fields[key]) > 600) throw new Error('Flight level must not exceed FL600.');
-        if (key === 'pax' && Number(fields[key]) > 999) throw new Error('Invalid passenger count.');
-        if (key === 'deph' && Number(fields[key]) > 23) throw new Error('UTC departure hour must be 0 to 23.');
-        if (key === 'depm' && Number(fields[key]) > 59) throw new Error('UTC departure minute must be 0 to 59.');
+        if (key === 'fl' && Number(fields[key]) > 600) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_flight_level', 'Flight level must not exceed FL600.'));
+        if (key === 'pax' && Number(fields[key]) > 999) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_pax', 'Passenger count must be between 0 and 999.'));
+        if (key === 'deph' && Number(fields[key]) > 23) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_hour', 'UTC departure hour must be 0 to 23.'));
+        if (key === 'depm' && Number(fields[key]) > 59) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_minute', 'UTC departure minute must be 0 to 59.'));
     }
     if (!fields.orig || !fields.dest) {
-        throw new Error('Enter valid four-letter origin and destination ICAO codes.');
+        throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_airports', 'Enter valid four-letter origin and destination ICAO codes.'));
     }
     if (Boolean(fields.deph) !== Boolean(fields.depm)) {
-        throw new Error('Enter both UTC departure hour and minute, or leave both blank.');
+        throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_time_pair', 'Enter both UTC departure hour and minute, or leave both blank.'));
     }
     for (const [key, value] of Object.entries(fields)) {
         if (value === '') continue;
         if (key === 'date') {
-            endpoint.searchParams.set('date', simbriefDispatchEncodeDate(value));
+            try {
+                endpoint.searchParams.set('date', simbriefDispatchEncodeDate(value));
+            } catch {
+                throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_date', 'Enter a valid date from 2000 to 2099.'));
+            }
         } else {
             endpoint.searchParams.set(key, value);
         }
@@ -465,7 +469,7 @@ function handleLegacyOfpDispatchConfirm(event) {
         window.open(url, '_blank', 'noopener,noreferrer');
         form.closest('[data-simbrief-dispatch-dialog]')?.close();
     } catch (failure) {
-        const message = failure instanceof Error ? failure.message : 'Invalid SimBrief dispatch fields.';
+        const message = failure instanceof Error ? failure.message : i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', '?');
         if (error) error.textContent = message;
     }
 }
@@ -507,7 +511,7 @@ async function handleLegacyOfpPdfUpload(event) {
         });
         const result = await response.json();
         if (!response.ok || !result.ok) {
-            throw new Error(String(result.error || 'PDF upload failed.'));
+            throw new Error(String(result.error || i18nForElement(form, 'admin.legacy_ofp.upload_failed', 'The PDF could not be attached.')));
         }
         const card = form.closest('[data-simbrief-legacy-panel]');
         if (card && typeof result.panel_html === 'string' && result.panel_html !== '') {
@@ -523,7 +527,7 @@ async function handleLegacyOfpPdfUpload(event) {
         }
         if (status) status.textContent = String(result.message || '');
     } catch (failure) {
-        if (status) status.textContent = failure instanceof Error ? failure.message : 'PDF upload failed.';
+        if (status) status.textContent = failure instanceof Error ? failure.message : i18nForElement(form, 'admin.legacy_ofp.upload_failed', 'The PDF could not be attached.');
     } finally {
         form.dataset.pending = '0';
         if (button instanceof HTMLButtonElement) button.disabled = false;
