@@ -79,7 +79,7 @@ audit_test_assert($actualNodeNames === $registeredNodeNames, 'Every tests/*_test
 
 $profiles = $registry['profiles'] ?? [];
 audit_test_assert(($profiles['release-preflight'] ?? []) === [
-    'php-lint', 'source-documentation-changed', 'source-policy-changed',
+    'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
     'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
 ], 'Release preflight must own the complete cheap static gate centrally, without expensive artifact-dependent suites.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');

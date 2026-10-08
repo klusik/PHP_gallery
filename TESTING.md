@@ -42,6 +42,7 @@ Automated agents must use the central audit runner as the default and authoritat
 For normal agent work:
 
 ```text
+source-only feedback      php scripts/audit.php --profile=release-preflight
 edit/debug cycle          php scripts/audit.php --profile=quick
 final code handoff/ZIP    php scripts/audit.php --profile=full
 actual release            php scripts/audit.php --profile=release
@@ -68,6 +69,52 @@ php scripts/audit.php --profile=release
 
 The release-note evidence regression also verifies that the generation contract and validator share all three mandatory main headings, including for tooling-only releases with no direct public behavior change. Missing headings, inline mentions, renamed headings and incorrect heading levels must be rejected with the exact section name. Bounded evidence reduction must preserve this contract in its final prompt. The CI workflow contract keeps failure-only retention of raw model prose in `release-notes-rejected-response` for seven days; prompts and authentication diagnostics are excluded. Real Copilot output remains subject to strict validation before any notes are applied.
 
+### Source-only authoring feedback
+
+Use the existing `release-preflight` profile for source/documentation/policy
+feedback before candidate preparation. Its historical name does not imply any
+release actions. It runs PHP/JavaScript syntax, changed declaration and runtime
+policy gates, whole-tree source inventory/category budgets, Python import policy
+and workflow contracts. It runs no regression/browser/database/packaging/OS
+matrix. Choose this or quick feedback according to the current batch, not as
+mandatory successive steps; full final handoff remains required.
+
+Freeze the ordinary feature/fix comparison base to match hosted preparation:
+
+```sh
+gallery_source_base=$(git merge-base HEAD origin/main) || exit 2
+test -n "$gallery_source_base" || exit 2
+export PHP_GALLERY_SOURCE_BASE="$gallery_source_base"
+php scripts/audit.php --profile=release-preflight
+```
+
+Keep this SHA for the batch and its full audit; deliberately resolve it again
+when rebasing or updating target history. Missing history is BLOCKED. Releases
+retain their previous-tag base. HEAD-only feedback misses omissions committed
+earlier in a branch. The central runner resolves the requested base once and
+passes its immutable SHA to both changed-source checkers. Reports record source
+HEAD, comparison base and dirty state; a modified checkout is feedback rather
+than qualification of clean HEAD.
+
+On a source failure, the summary links the run's `source-failures.md`. Read it
+once for all findings from failed changed-source suites, blockers and findings
+in over-budget categories. The report distinguishes historical category debt
+and links the complete value-free JSON inventories/ratchet. Candidate workflows
+upload these reports together, without requiring passing child logs. Fix the
+whole batch before rerunning after the source changes; unchanged input is not a
+repair. No source-only PASS replaces prepared-candidate full/hosted evidence.
+
+[Checked authoring examples](docs/AGENT_AUTHORING.md) are parsed directly by
+`agent_authoring_examples_test.php`, included in the complete PHP suite.
+The existing scanners validate PHP, JavaScript, Python, headers and policy
+examples without executing source. Negative fixtures preserve tag-only summary,
+added-parameter, opaque-shape and missing-policy failures. The same regression
+proves that an immutable branch base catches an already committed omission,
+that dirty/untracked input is reported, and that complete evidence preserves
+findings beyond console limits while excluding passing suites and unrelated debt.
+Use existing audit reports/history for a small documented first-attempt/repair
+sample; expected savings are not measurements. No additional telemetry is added.
+
 ### Clean PHP include-phase probes
 
 `production_file_policy_test.php` validates canonical positive membership, safe contained paths, additive companion membership and source-archive activation. `updater_inventory_compatibility_test.php` runs a trusted frozen pre-WinApp reader against the real incoming inventory and an extracted-source fixture: it reproduces the reported package rejection, checks compatible old/current activation sets, and retains unlisted-file refusal. Keep this installed-consumer proof when changing inventory schema or base path surfaces. `updates_path_safety_test.php` checks updater destination ancestors. The full/release regression `deploy_app_packaging_test.php` runs the actual deploy helpers on owned dirty fixtures and inspects folder/ZIP contents, required-file failures and local source-review/media choices; its complete-inventory proof has an exclusive 600-second process budget. The `production-package` CI job independently builds and verifies production folders on Linux, Windows and macOS. See [production file policy](docs/PRODUCTION_FILES.md).
@@ -83,7 +130,7 @@ checks public query-string routing. Set `PHP_GALLERY_APACHE` and
 discovery is unavailable. Missing Apache coverage is reported explicitly; it is
 separate from the always-required PHP HTTP boundary checks.
 
-Every profile starts `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. These include-only probes stop before `cms_run()` and do not start sessions, load installation configuration, access a database, or dispatch a request. The separate registered runtime-performance suite measures actual route lifecycles through the public entrypoint when the runner receives an owned disposable workflow fixture.
+The quick/full/release profiles start `scripts/audit_runtime_probe.php` as a fresh CLI child for the `early-runtime` and `application-bootstrap` entry sequences in `scripts/audit_performance_registry.php`. The first includes the real `app/early_runtime.php`; the second includes `app/early_runtime.php`, `app/diagnostics/admin_test_run_early.php`, then `app/bootstrap.php`. These include-only probes stop before `cms_run()` and do not start sessions, load installation configuration, access a database, or dispatch a request. The separate registered runtime-performance suite measures actual route lifecycles through the public entrypoint when the runner receives an owned disposable workflow fixture.
 
 The curated quick registry also runs the MVC scanner's paired fixtures. Ordinary
 route `prepare()` calls must remain distinct from typed PDO receivers, aliases,

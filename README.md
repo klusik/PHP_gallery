@@ -592,6 +592,8 @@ $config = [
 
 ## Architecture Overview
 
+Coding agents follow [AGENTS.md](AGENTS.md) and the [scanner-checked authoring examples](docs/AGENT_AUTHORING.md). Write complete declaration and runtime-policy contracts with the code; use the documented source-only feedback path before final candidate qualification.
+
 For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARCHITECTURE.md)** for:
 
 - Request routing and controller dispatch

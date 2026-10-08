@@ -1,5 +1,34 @@
 # Repository Guidelines
 
+## Authoring Contract (Read Before Editing)
+
+Root `AGENTS.md` is the canonical instruction for every coding agent in this
+repository. Read applicable scoped instructions and the relevant topical section
+before editing; use [the checked authoring examples](docs/AGENT_AUTHORING.md)
+for declaration, type, header, and runtime-policy syntax.
+
+**Before writing code:** locate the existing domain owner and a compliant nearby
+declaration. Identify the affected contracts: MVC, named declarations, native
+types, data shapes, attribution headers, runtime policy, route dependencies,
+Admin mutations, compatibility, and permanent documentation. Read only the
+references relevant to the change.
+
+**While writing code:** write each named declaration and its complete, factual
+documentation in the same edit. Start with a purpose sentence before tags;
+describe every explicit parameter and every return variant, including `void`.
+Update the contract when adding a defaulted parameter or changing behavior.
+Specify collection elements and object fields. Attach purpose, type, units,
+scope, consumers, and rationale to each affected runtime policy site. Preserve
+meaningful comments when moving code. Never defer these steps to an audit,
+insert placeholder prose, or weaken types/baselines to obtain PASS.
+
+**Before handing off:** review the whole changed batch, fix every occurrence of
+an identified problem, and finish permanent documentation. Use the central
+verification contract below; prepare generated artifacts after the final edit,
+then qualify the exact final candidate. Report the candidate SHA, comparison
+base, audit profile/result, and material incomplete coverage. A later edit
+invalidates earlier qualification. A source preflight PASS is feedback only.
+
 ## Project Structure & Module Organization
 This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. Core application code lives in `app/`, split into `controllers/`, `services/`, and `views/`. Database schema changes live in `database/migrations/` and must be added as new timestamped files. Public web assets are under `public/assets/`; writable runtime data is kept in `cache/`, `galleries/`, and `data/`. Standalone test scripts live in `tests/`. Deployment helpers and CLI utilities are in `scripts/`, with Windows-specific tooling in `winapp/`.
 
@@ -10,6 +39,7 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
+- `php scripts/audit.php --profile=release-preflight` - source-only feedback for ordinary authoring and release preparation; checks syntax, documentation, policy, and debt budgets without running regression matrices or preparing a release.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
@@ -38,11 +68,24 @@ Before adding a helper, search for the existing domain owner and extend/centrali
 
 ## Declaration Documentation
 
-Docstrings (PHPDoc, JSDoc, and Python docstrings) are required only for named functions, methods, and classes or class-like declarations such as interfaces, traits, and enums. Place the documentation immediately above the declaration. Named functions and methods need a factual purpose summary, a typed and described `@param` for each explicit parameter, and a typed `@return`/`@returns` (including `void`); Python may use the equivalent typed Google-style docstring. Classes need a factual purpose summary.
+Docstrings (PHPDoc, JSDoc, and Python docstrings) are required only for named functions, methods, and classes or class-like declarations such as interfaces, traits, and enums. Place PHPDoc/JSDoc immediately above the declaration and Python docstrings first inside its body. Write a factual purpose summary before any tags; a tag-only block is incomplete. Named functions and methods need a typed and described `@param` for each explicit parameter, with names matching the signature, and a typed `@return`/`@returns` (including `void`). Include defaulted, nullable, variadic, and newly added parameters, and describe actual return variants such as `null` or failure. Python may use equivalent typed Google-style docstrings. Classes need a factual purpose summary. Native PHP/Python signature types are independently required; PHP constructors/destructors cannot declare a native return type, but still need return documentation.
+
+Document structured parameters/results with concrete fields and collection element types, using inline shapes or genuinely documented reusable types. Bare `Object`, `Array`, `array`, `mixed`, `any`, and wildcards do not explain a structured contract. Alias resolution and semantic truthfulness still require review; scanner PASS is not full type checking. The existing opaque-unused-parameter exception applies only to its documented, lexically unused PHP input and must not become a general escape hatch. See [checked examples and language limits](docs/AGENT_AUTHORING.md).
 
 Anonymous functions, closures, arrow functions, and inline or variable-bound callbacks do not require docstrings, even when assigned to a named variable or object member. Variables, constants, and class properties do not require declaration docstrings either. Use ordinary comments for local reasoning when useful. Do not insert a docblock inside a call's argument list or extract a named helper solely to satisfy documentation checks. If an anonymous function contains a named function or class, that nested declaration still follows the named-declaration rule.
 
 File attribution headers, native signature typing, operational-policy comments, and parser coverage checks remain separate requirements. `scripts/check_source_documentation.php` and the historical named-function presence test must apply the same anonymous-function exemption.
+
+### Runtime Policy Explanations
+
+The declaration-docstring exemption for constants does not exempt runtime policy
+sites. For added or materially changed sites covered by the existing PHP/JS
+runtime-policy scanner, attach an explanation immediately before the site: a
+factual purpose sentence, type (`Type:` or `@var`/`@type`), `Units:`, `Scope:`,
+`Consumers:`, and `Rationale:`. Describe the actual bound/default and its owner;
+do not invent a reason or leave empty labels. A file header does not document an
+individual site. Tooling, fixtures, unsupported formats, and advisory heuristics
+retain their existing scope; this is not a blanket requirement for all constants.
 
 ## Compatibility Lifecycle
 
@@ -100,17 +143,17 @@ For automated agents, `php scripts/audit.php` is the authoritative test orchestr
 
 Use exactly this workflow unless the user explicitly requests something else:
 
-1. During implementation, run `php scripts/audit.php --profile=quick` when a verification pass is useful.
+1. During implementation, choose `php scripts/audit.php --profile=release-preflight` for source/documentation/policy feedback, or `--profile=quick` when behavior/regression feedback is useful. These are alternatives for the current batch, not a compulsory sequence. The static preflight includes category budgets that quick omits. For ordinary feature/fix work, freeze `PHP_GALLERY_SOURCE_BASE` to `git merge-base HEAD origin/main` as shown in [the authoring reference](docs/AGENT_AUTHORING.md#source-feedback-and-comparison-base); keep it for subsequent checks so committed earlier violations remain visible. Missing history/base is BLOCKED, not permission to substitute HEAD and hide the branch diff. Release preparation uses its previous-tag comparison base.
 2. Before handing off code or building an affected ZIP, run `php scripts/audit.php --profile=full` once.
 3. For any actual release-preparation or release-readiness task, read `RELEASE.md` before editing release metadata. Use `php scripts/prepare_release.php <version>` for registered mechanical version changes, complete the editorial/manual steps in `RELEASE.md`, regenerate the manifest, and run `php scripts/audit.php --profile=release` once. Audit profiles are alternatives, not a staircase: do not run `quick` or `full` before `release`. The release profile already includes release consistency through `scripts/check_release.php`.
-4. Read the compact console summary first. Read `cache/test-audit/latest.md` only when more detail is needed. Open an individual suite log only for `FAIL`, `BLOCKED`, or a `SKIP` that materially affects the task. Do not read passing child-process logs.
+4. Read the compact console summary first. On a source-contract failure, read the linked `source-failures.md` once for all findings in the failed source suites and over-budget categories; the linked JSON artifacts retain complete evidence. Fix the entire batch before rerunning the appropriate central profile. Do not rerun unchanged input hoping for PASS. Read `cache/test-audit/latest.md` only when more detail is needed; open an individual suite log only for `FAIL`, `BLOCKED`, or a material `SKIP`. Do not read passing child-process logs.
 5. Run an individual PHP, Node, Python, syntax, contract, or browser test only to reproduce/diagnose a specific failure reported by the central audit, to develop a newly added test before it is registered, or when the user explicitly asks for that focused check. After fixing a diagnosed failure, return to the appropriate central audit instead of manually replaying the rest of the test tree.
 6. If the central runner itself cannot execute because a required runtime such as PHP is unavailable, report that verification as blocked. Do not replace it with a token-heavy manual walk of the regression tree and do not claim the central audit passed.
 7. Never create a release commit, tag, push, hosted release, or publication merely because release preparation/audit passed. Perform those actions only when the user explicitly requests them.
 
 The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Deployment packages exclude `tests/` by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
 
-`quick` uses `php-fast`, the curated `quick_tests` registry in `scripts/audit_php_registry.php`; it does not execute the complete PHP regression tree, whole-tree advisory source inventory, WinApp suite, slow Node fixtures, or Chromium. `full` and `release` retain complete PHP regression, advisory inventory, and WinApp coverage. All profiles retain strict changed-source documentation/policy checks, the whole-tree Python import policy, MVC/mutation contracts, clean-child include-phase probes, and the registered runtime-performance route suite. Include probes enforce ceilings of 1 file/16 MiB for early runtime and 40 files/16 MiB for application bootstrap (24-file baseline). Route probes measure nine routes against an owned disposable workflow fixture; without that fixture the suite reports an explicit SKIP. Route ceilings range from 160–300 files and 32–48 MiB by route. Wall time is observational. A quick PASS is edit-cycle feedback, not full handoff evidence.
+`quick` uses `php-fast`, the curated `quick_tests` registry in `scripts/audit_php_registry.php`; it does not execute the complete PHP regression tree, whole-tree source inventory/category budgets, WinApp suite, slow Node fixtures, or Chromium. `full` and `release` retain complete PHP regression, enforced reliable inventory budgets, and WinApp coverage. A quick PASS cannot prove the inventory budgets pass. The quick/full/release profiles retain strict changed-source documentation/policy checks, the whole-tree Python import policy, MVC/mutation contracts, clean-child include-phase probes, and the registered runtime-performance route suite. Include probes enforce ceilings of 1 file/16 MiB for early runtime and 40 files/16 MiB for application bootstrap (24-file baseline). Route probes measure nine routes against an owned disposable workflow fixture; without that fixture the suite reports an explicit SKIP. Route ceilings range from 160–300 files and 32–48 MiB by route. Wall time is observational. A quick PASS is edit-cycle feedback, not full handoff evidence.
 
 PHP suites share a portable bounded worker pool: default four workers, configurable with `PHP_GALLERY_AUDIT_WORKERS=1` through `8`; invalid values block the suite. Explicit `serial_tests` reasons in `scripts/audit_php_registry.php` create exclusive barriers: active workers finish before a serial test starts, and no other test runs beside it. Add unsafe shared-resource, contention, or nested-process fixtures to that registry rather than encoding filenames in the scheduler. Each child retains separate captured stdout/stderr and a timeout measured from its own start; reports retain deterministic test order.
 
@@ -248,7 +291,7 @@ Release preparation must not create deployment folders, release ZIPs, clean pack
 The only normally needed distributable build artifact is the Windows installer in `winapp/dist/`, and rebuild it only when shipped WinApp code, assets, dependencies, runtime binaries or installer/build behavior changed since the previous installer. CMS-only release markers, documentation changes and test-only fixes do not require a new installer. Preserve the independent WinApp version unless the user requests its change; when no installer change is needed, leave `winapp/dist/` untouched. This default overrides packaging suggestions in `RELEASE.md`; release metadata, all four manual editions/PDFs, manifest freshness and the authoritative release audit remain required.
 
 ## Release Manifest Handoff Requirement
-Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Run `php scripts/generate_manifest.php` after the final source edit, then run `php scripts/generate_manifest.php --check`. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
+Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Use the canonical `php scripts/prepare_candidate.php` after the final source edit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
 
 ## Commit & Pull Request Guidelines
 Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.

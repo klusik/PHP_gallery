@@ -18,6 +18,8 @@ Compatibility changes (write `none` when not applicable):
 
 ## Verification
 
+- Applicable authoring contracts reviewed (declarations/types/shapes/policy, MVC and documentation as relevant):
+- Final candidate SHA and immutable source comparison base:
 - Audit profile and result:
 - Relevant skips or unavailable prerequisites:
 - Manual checks performed or still needed:
