@@ -1,6 +1,6 @@
 {
     "version": "0.122.1",
-    "generated_at": "2026-10-08T01:59:13+00:00",
+    "generated_at": "2026-10-08T02:47:37+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -231,7 +231,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:45918e455ccdb64652a91c0dc7f2e60c88ca86271be81e9010fc2bd71aa02389",
-        "app/production-files.json": "sha256:f5c0d0da9ea35b3b56d7e01a0e4feac4077b487673efb85bfceecb6d2697421c",
+        "app/production-files.json": "sha256:e81b9f7039960214903cbae73aa8f24dd2a49ea071c06f4128feb2a6dd1a9949",
         "app/release_file_policy.php": "sha256:6c55af107dc0075940c6096ae30a24d9ae56c2926cdefd502e09451b4ef1e979",
         "app/request_data.php": "sha256:b0236b57a40dfab623932c2fb945e3d784b603e5cf67d87199f1c534e124acff",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",
@@ -817,7 +817,7 @@
         "scripts/audit_lib.php": "sha256:728fed55991492337b34bccce84315af715e899a8a9a18dbc5225ba27ac94ee0",
         "scripts/audit_performance.php": "sha256:32b68d8206f3ffa9a9917886141b2c72368a71c0fb5ae6e7b03578be72a212ea",
         "scripts/audit_performance_registry.php": "sha256:0ad9b8d81e74d85acbfb4b4b480cf14f2fbdb8d709e712bb0b47fd8a9c058f47",
-        "scripts/audit_php_registry.php": "sha256:b93eff7c20e338ffde354dbbaf5dbe7bfb0ee79da37d750d47441f0baf1b4d46",
+        "scripts/audit_php_registry.php": "sha256:50b21d2e6f2621140564b9ced5f82be2a61e2e3b5f46746454b16784beb8a97a",
         "scripts/audit_process.php": "sha256:42373be3b20bf69553bbd9da015290c5790478e11766dfd9bfe4117dbbade165",
         "scripts/audit_registry.php": "sha256:7f3efd59f1744fea7c5407c5855eaa5610d3084cf72241fbc27ce0b120f7d765",
         "scripts/audit_route_performance.php": "sha256:6e9d9de8bad9121382caf92b0602f00470598f0de1f222ec6527b860fb756bc4",

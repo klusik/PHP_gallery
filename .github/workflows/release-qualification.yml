@@ -134,8 +134,10 @@ jobs:
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         shell: bash
         run: npm install -g @github/copilot
-      - name: Build bounded release-note evidence prompt
+      - name: Build complete release-note evidence prompt
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        # Bound the whole local evidence step independently of Copilot and TeX.
+        timeout-minutes: 2
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}

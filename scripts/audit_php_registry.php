@@ -78,6 +78,7 @@ return [
         'database_engine_contract_test.php' => 'Checks a migrated vote constraint inside a rolled-back transaction in the externally supplied disposable database; exclusive execution prevents fixture mutation overlap.',
         'runtime_module_plan_test.php' => 'Compiles the dependency inventory and runs its own bounded four-worker module fixtures; exclusive execution avoids nested pool contention.',
         'audit_runner_test.php' => 'Runs its own bounded scheduler fixtures and timeout children; isolation prevents nested-pool oversubscription.',
+        'patch_notes_ai_evidence_test.php' => 'Runs nested Git evidence children and forced timeout cleanup against an owned repository; isolation prevents nested-process contention.',
         'session_contention_test.php' => 'Measures lock acquisition and request timing; concurrent regression CPU load changes its control measurements.',
         'session_route_contention_test.php' => 'Measures actual-route session contention and mutates the shared disposable workflow fixture.',
         'route_navdata_background_test.php' => 'Acquires the repository cache/navdata-update.lock shared with the navdata importer.',
