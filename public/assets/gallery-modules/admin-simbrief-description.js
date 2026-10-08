@@ -368,6 +368,14 @@ function handleLegacyOfpDispatchClick(event) {
     const drawer = card.closest('[data-admin-side-panel]');
     const host = drawer instanceof HTMLElement ? drawer : document.body;
     host.append(dialog);
+    // Preserve native modal Tab/Escape instead of passing those keys to the
+    // enclosing Admin drawer's window-level keyboard trap and close handler.
+    dialog.addEventListener('keydown', /** Keep the review's native key ownership.
+     * @param {KeyboardEvent} keyEvent Keyboard event from the open review.
+     * @returns {void} Prevents drawer handling without preventing native behavior.
+     */ (keyEvent) => {
+        if (keyEvent.key === 'Tab' || keyEvent.key === 'Escape') keyEvent.stopPropagation();
+    });
     dialog.addEventListener('close', /** Destroy the detached modal and its edited-only data.
      * @returns {void} Clear the transient review without persisting to the gallery.
      */ () => dialog.remove(), {once: true});
