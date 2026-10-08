@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.124.2
+
+Version 0.124.2 hardened gallery media, upload integrity, migration safety, and the OFP viewer after the v0.124.1 release. The work focused on filesystem containment, archive validation, trusted HTTPS/proxy handling, and stricter authorization for Theme and gallery assets.
+
+### Highlights
+
+#### Security and asset hardening
+- Hardened gallery media and branding responses against path traversal, symlink escapes, and unsupported raster restrictions, including protected gallery branding and cached Theme background responses.
+- Restricted administrator-only access to retained original Theme background previews and enforced supported raster MIME types for gallery covers and Theme branding.
+- Tightened gallery cover and thumbnail resolution to the owning gallery scope and rejected unsafe symlink-containing paths without blocking normal cache generation. [#116](https://github.com/klusik/PHP_gallery/issues/116)
+
+#### Upload and migration safety
+- Added ZIP integrity validation for browser-prepared uploads, rejecting duplicate canonical paths, incomplete central-directory records, CRC mismatches, unsupported flags, and trailing archive data before ingestion.
+- Hardened migration asset staging with unique temporary files, byte-count and optional SHA-256 verification, conflict rejection, and idempotent retry behavior while preserving existing files on refusal.
+- Staged Theme replacements before removing prior files and removed incomplete staging artifacts on failure.
+
+#### HTTPS and OFP viewer
+- Unified HTTPS detection across Admin cookies, public URL generation, and Viewer authentication behind explicit trusted proxy and forwarded-header policy checks, with malformed or conflicting forwarded values rejected.
+- Rejected unsafe login-return redirect targets and preserved safe local navigation.
+- Corrected OFP fit/reset behavior after manual pan or zoom by clearing manual pan gutters before recalculating automatic fit.
+
+### Technical Details
+
+#### Backend
+- Updated `app/services/gallery_covers.php`, `app/services/gallery_branding.php`, `app/services/gallery_backgrounds.php`, `app/services/thumbnail_sources.php`, `app/services/gallery_paths.php`, and `app/services/gallery_migration/install.php` to validate canonical filesystem scope, reject symlink escapes, and preserve private-cache semantics for protected gallery media.
+- Updated `app/services/browser_uploads/zip_parsing.php`, `app/controllers/public_media.php`, `app/controllers/theme_assets.php`, and `app/helpers_request.php` to enforce archive integrity, safe return targets, and HTTPS/proxy policy.
+- Updated `app/services/client_ip.php` and request-aware URL/cookie logic to require explicit trusted proxy scope and reject forged or conflicting forwarded protocol headers.
+- Added or updated regression coverage in `tests/browser_upload_zip_parser_safety_test.php`, `tests/gallery_cover_asset_safety_test.php`, `tests/gallery_migration_asset_containment_test.php`, `tests/login_return_target_security_test.php`, `tests/request_https_proxy_test.php`, and related theme and thumbnail containment suites.
+
+#### Frontend
+- Updated `public/assets/gallery-modules/simbrief-ofp-viewer.js`, `public/assets/gallery.js`, and `public/assets/public-gallery.js` to recalculate automatic OFP fit correctly after manual zoom/pan and keep the refreshed browser fixture aligned with the queued request.
+- Kept the viewer changes scoped to the existing gallery viewer behavior; no new public feature or UI flow was introduced.
+
+#### Documentation
+- Synced `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, and all four maintained `docs/PHP_Gallery_Manual*.tex` sources with the supported proxy, Theme asset, and media containment behavior.
+- Retained the reviewed generated runtime module plan, production inventory, and final integrity manifest in `app/runtime/modules.php`, `app/production-files.json`, and `app/core-manifest.json`.
+
+#### Tests
+- Expanded the audit and browser regression coverage for ZIP integrity, filesystem path containment, migration atomic-copy safety, HTTPS/trusted-proxy policy, login return-target handling, Theme replacement safety, and OFP fit/refit after manual zoom. These tests defined the guardrails for the release and did not establish a new public feature.
+
+### User Impact
+
+#### For visitors
+- Public visitors were protected from unsafe gallery covers, branding, and protected-media responses that escaped the owning gallery or used unsupported MIME types.
+- Public visitor behavior did not add a new product feature; the work focused on preventing unsafe behavior and correcting existing gallery media and OFP viewing behavior.
+
+#### For administrators
+- Administrators saw tighter controls on Theme background previews, Theme replacement safety, and HTTPS handling for proxy-terminated deployments, with malformed or conflicting forwarded protocol values rejected instead of being trusted.
+- Admin login redirects now rejected unsafe targets and retained safe local navigation, preserving a safer return flow after authentication.
+- Administrative behavior did not gain a new interface; the release improved safety and correctness of existing admin workflows.
+
+#### For maintainers
+- Maintainers received stronger regression coverage and clearer safeguards for archive parsing, symlink and path containment, migration safety, Theme replacement, HTTPS trust configuration, and OFP viewer fit behavior.
+- The release also kept the reviewed generated runtime module plan and release-manifest artifacts synchronized with the source changes.
+
 ## Version 0.124.1
 
 Version 0.124.1 strengthened release-note qualification and audit diagnostics. It required complete, correctly structured release notes and retained rejected AI-generated prose for maintainers to diagnose failures.
