@@ -153,6 +153,9 @@ function admin_edit_gallery_handle_ofp_upload(array $gallery): void
         if (!feature_capability_effective_enabled('simbrief')) {
             throw new \RuntimeException(t('admin.legacy_ofp.disabled', 'SimBrief integration is disabled.'));
         }
+        if ((int) ($_POST['id'] ?? 0) !== $galleryId) {
+            throw new \RuntimeException(t('admin.legacy_ofp.gallery_mismatch', 'The selected gallery changed. Reload this editor before uploading an OFP.'));
+        }
         $action = (string) ($_POST['simbrief_action'] ?? '');
         $replace = $action === 'replace_pdf';
         if ($replace && (string) ($_POST['confirm_replace'] ?? '') !== '1') {
