@@ -719,7 +719,7 @@
         "public/assets/gallery-modules/admin-settings-workspace.js": "sha256:520c83956978384c6421190b453024bf36763cf8ae34c68f6fb155c08aece60a",
         "public/assets/gallery-modules/admin-setup-wizard.js": "sha256:3fd5fa1a8dd7aeefdc8b0092735ab8de5f9f3131390d74b7375caec3101aa585",
         "public/assets/gallery-modules/admin-side-panel.js": "sha256:32425aca2a71f9bbd86a02d9f3138b9bcceaa47dadb6fb6340524fac2bab6560",
-        "public/assets/gallery-modules/admin-simbrief-description.js": "sha256:64a07ed7851ad94113f703f659bc2dd91c8384903306091ee419d7d12daac105",
+        "public/assets/gallery-modules/admin-simbrief-description.js": "sha256:49ac7741c626408ff21dcbd3e6213b9f9707554417f6e31e6cc0c9a2ae80fc1a",
         "public/assets/gallery-modules/admin-smart-galleries.js": "sha256:54c5033cfa791e8d2741863a6b611cc4abf9fcb744007ccfa25cfb16009788f6",
         "public/assets/gallery-modules/admin-storage-statistics.js": "sha256:2a9d601822b356fd2990f9a9ba37637f7b3cdfd10b2132a808850de705ae5e14",
         "public/assets/gallery-modules/admin-table-drag-ghost.js": "sha256:d6c16337eeb1765bac2b299ff0cbfd0952be7ab4d6200a0ec437555639ecac7d",
