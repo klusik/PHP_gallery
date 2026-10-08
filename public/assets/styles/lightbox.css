@@ -1491,7 +1491,8 @@
     margin-top: 1rem;
 }
 dialog.lightbox.simbrief-ofp-dialog {
-    /* The photo lightbox centers grid items; a document stage must fill its row. */
+    /* Retain native modal focus/accessibility, with a non-dialog fullscreenable
+       inner root that owns the PDF stage and its fixed-scale HUD. */
     align-items: stretch;
     inset: 0;
     width: 100vw;
@@ -1500,19 +1501,65 @@ dialog.lightbox.simbrief-ofp-dialog {
     max-width: none;
     max-height: none;
     margin: 0;
-    padding: 0.75rem;
+    padding: 0;
     border: 0;
     border-radius: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: none;
-    gap: 0.75rem;
+    display: block;
     overflow: hidden;
     color: #f7f7f7;
     background: #101014;
     overscroll-behavior: contain;
 }
+.simbrief-ofp-root {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    overflow: hidden;
+    background: #101014;
+}
+.simbrief-ofp-root:fullscreen {
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+}
+/* The same document root provides native fullscreen and CSS fallback. */
+dialog.lightbox.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-root {
+    padding: 0;
+    gap: 0;
+    grid-template-rows: minmax(0, 1fr);
+}
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-stage {
+    grid-row: 1;
+    grid-column: 1;
+}
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-header,
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-toolbar {
+    position: absolute;
+    z-index: 3;
+    left: max(0.75rem, env(safe-area-inset-left));
+    right: max(0.75rem, env(safe-area-inset-right));
+}
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-header {
+    top: max(0.75rem, env(safe-area-inset-top));
+}
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-toolbar {
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
 dialog.lightbox.simbrief-ofp-dialog:not([open]) { display: none !important; }
 dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84); }
 .simbrief-ofp-header,
@@ -1525,6 +1572,8 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     border: 1px solid rgba(255,255,255,0.16);
     border-radius: var(--radius, 12px);
     background: rgba(255,255,255,0.06);
+    position: relative;
+    z-index: 3;
 }
 .simbrief-ofp-header {
     justify-content: space-between;
@@ -1572,6 +1621,7 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
     scrollbar-gutter: stable;
+    z-index: 0;
 }
 .simbrief-ofp-canvas-wrap {
     display: flex;
@@ -1583,6 +1633,13 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     justify-content: center;
     padding: 0.65rem;
 }
+/* In manual zoom, symmetric viewport-sized margins allow anchored pan at any
+   cursor position, even before the canvas grows beyond the stage dimensions. */
+.simbrief-ofp-dialog.is-ofp-manual-zoom .simbrief-ofp-canvas-wrap {
+    min-width: max-content;
+    min-height: max-content;
+    padding: var(--ofp-pan-y, 12px) var(--ofp-pan-x, 12px);
+}
 .simbrief-ofp-canvas-wrap canvas {
     display: block;
     flex: none;
@@ -1591,6 +1648,27 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     background: white;
     box-shadow: 0 0.6rem 2.5rem rgba(0,0,0,0.5);
     transform-origin: center center;
+}
+/* The HUD never takes layout space or rescales the PDF when hidden. */
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-header,
+.simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-toolbar {
+    /* On pointer movement, restore visibility and hit targets immediately.
+       When hiding, delay visibility:hidden until the fade-out finishes. */
+    transition: opacity 180ms ease, visibility 0s linear 0s;
+    pointer-events: auto;
+}
+.simbrief-ofp-dialog.is-ofp-fullscreen.is-ofp-hud-hidden .simbrief-ofp-header:not(:hover):not(:focus-within),
+.simbrief-ofp-dialog.is-ofp-fullscreen.is-ofp-hud-hidden .simbrief-ofp-toolbar:not(:hover):not(:focus-within) {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 180ms ease, visibility 0s linear 180ms;
+    pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-header,
+    .simbrief-ofp-dialog.is-ofp-fullscreen .simbrief-ofp-toolbar {
+        transition: none;
+    }
 }
 .simbrief-ofp-status {
     position: absolute;
@@ -1632,7 +1710,7 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     background: rgba(255,255,255,0.32);
 }
 @media (max-width: 700px) {
-    dialog.lightbox.simbrief-ofp-dialog { padding: 0.35rem; gap: 0.35rem; }
+    dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-root { padding: 0.35rem; gap: 0.35rem; }
     .simbrief-ofp-header { padding: 0.35rem; }
     .simbrief-ofp-header-actions { gap: 0.25rem; }
     .simbrief-ofp-toolbar { padding: 0.35rem; gap: 0.3rem; }

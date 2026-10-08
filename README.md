@@ -450,6 +450,8 @@ SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a Pil
 
 SimBrief draft import also fills the existing route editor with the complete filed route, adding missing departure and arrival airports without duplicating endpoint or runway tokens. Descriptions in every maintained language retain the full route, including long routes. Importing stages the OFP and map points until the gallery is saved; editing the route, identifier, description, or source language during a request preserves the entered values and asks for another import. Saved maps retain the original OFP coordinates.
 
+Saved SimBrief OFP PDFs open in an independent, gallery-authorized PDF.js lightbox. **F** toggles fullscreen, while **Escape** exits fullscreen before closing the document. In fullscreen, the PDF header and toolbar float above the document and automatically hide after pointer inactivity, revealing on pointer or keyboard interaction. The mouse wheel over a PDF page zooms **only the document** around the pointer; fine trackpad motion scrolls, while Ctrl/Command+wheel zooms. Controls retain their size and remain clickable above the content. Whole-page fit is the default; fit width, actual size, and zoom reset remain available. Navigating PDF pages does not navigate gallery photos.
+
 #### Adding Images
 
 **Option A: Upload from Admin**

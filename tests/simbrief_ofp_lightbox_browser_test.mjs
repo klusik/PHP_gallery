@@ -106,6 +106,22 @@ const html = String.raw`<!doctype html>
   const settled = () => canvas() && document.querySelector('[data-ofp-status]').textContent === '';
   const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   const afterRender = (oldCount, reason) => waitUntil(() => rendered > oldCount && settled(), reason);
+  const press = (name, target = stage(), options = {}) => {
+      const event = new KeyboardEvent('keydown', {key: name, bubbles: true, cancelable: true, ...options});
+      target.dispatchEvent(event);
+      return event;
+  };
+  const wheel = (x, y, dy, options = {}) => {
+      const event = new WheelEvent('wheel', {clientX: x, clientY: y, deltaY: dy,
+          bubbles: true, cancelable: true, ...options});
+      return {event, unhandled: stage().dispatchEvent(event)};
+  };
+  const point = (x, y) => {
+      const rect = canvas().getBoundingClientRect();
+      return [(x - rect.left) / rect.width, (y - rect.top) / rect.height];
+  };
+  const anchored = (before, x, y) => check(before.every((v, i) => Math.abs(v - point(x, y)[i]) < 0.03),
+      'Mouse-wheel zoom did not retain the PDF point under the cursor');
   const wholePage = (reason, width, height) => {
       const viewport = stage().getBoundingClientRect();
       const page = canvas().getBoundingClientRect();
@@ -126,8 +142,14 @@ const html = String.raw`<!doctype html>
           + width + ' × ' + height + ', stage '
           + stage().clientWidth + ' × ' + stage().clientHeight + ')');
       check(active('fit-page'), reason + ': expected whole-page view mode');
-      check(viewport.bottom <= document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().top + 1,
-          reason + ': toolbar overlaps PDF stage');
+      const toolbar = document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect();
+      if (document.querySelector('dialog').classList.contains('is-ofp-fullscreen')) {
+          const header = document.querySelector('.simbrief-ofp-header').getBoundingClientRect();
+          check(page.top >= header.bottom - 2 && page.bottom <= toolbar.top + 2,
+              reason + ': fullscreen HUD obscures the page');
+      } else {
+          check(viewport.bottom <= toolbar.top + 1, reason + ': toolbar overlaps PDF stage');
+      }
   };
 
   try {
@@ -212,6 +234,150 @@ const html = String.raw`<!doctype html>
       document.dispatchEvent(new Event('fullscreenchange'));
       await afterRender(previousRender, 'fullscreen relayout');
       wholePage('fullscreen relayout', 600, 1100);
+
+      // Native fullscreen is forbidden on <dialog> by the Fullscreen API.
+      // Verify that the same PDF + controls have a fullscreenable inner target.
+      const fullRoot = dialog.querySelector('[data-ofp-root]');
+      check(fullRoot instanceof HTMLElement && fullRoot.tagName !== 'DIALOG',
+          'Native fullscreen must target the document-and-HUD inner root');
+      // Emulate native Fullscreen API state (synthetic clicks lack user activation).
+      let fullscreenOwner = null;
+      const oldExit = document.exitFullscreen;
+      Object.defineProperty(document, 'fullscreenElement', {configurable: true,
+          get: () => fullscreenOwner});
+      fullRoot.requestFullscreen = async () => {
+          fullscreenOwner = fullRoot;
+          document.dispatchEvent(new Event('fullscreenchange'));
+      };
+      document.exitFullscreen = async () => {
+          fullscreenOwner = null;
+          document.dispatchEvent(new Event('fullscreenchange'));
+      };
+      const input = document.createElement('input');
+      dialog.querySelector('.simbrief-ofp-header').append(input);
+      check(!press('f', input).defaultPrevented && !fullscreenOwner,
+          'Editable input F toggled fullscreen');
+      input.remove();
+      for (const modifier of [{ctrlKey: true}, {metaKey: true}, {altKey: true}, {repeat: true}]) {
+          press('f', stage(), modifier);
+          check(!fullscreenOwner, 'Modified/repeated F toggled fullscreen');
+      }
+      previousRender = rendered;
+      check(press('F', stage(), {shiftKey: true}).defaultPrevented, 'F was not handled');
+      await waitUntil(() => fullscreenOwner === fullRoot && dialog.classList.contains('is-ofp-fullscreen'),
+          'F entered fullscreen');
+      await afterRender(previousRender, 'native fullscreen fit');
+      wholePage('native fullscreen whole page', 600, 1100);
+      check(button('fullscreen').getAttribute('aria-keyshortcuts') === 'F'
+          && button('fullscreen').getAttribute('aria-pressed') === 'true',
+          'Fullscreen button shortcut/state is not synchronized');
+
+      const pageBox = canvas().getBoundingClientRect();
+      const px = pageBox.left + pageBox.width * 0.70;
+      const py = pageBox.top + pageBox.height * 0.36;
+      const anchor = point(px, py);
+      const chromeFont = getComputedStyle(button('close')).fontSize;
+      const chromeWidth = document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().width;
+      previousRender = rendered;
+      const zoomEvent = wheel(px, py, -110);
+      check(!zoomEvent.unhandled && zoomEvent.event.defaultPrevented, 'Wheel did not zoom PDF');
+      await afterRender(previousRender, 'fullscreen content-only wheel zoom');
+      check(canvas().getBoundingClientRect().width > pageBox.width, 'PDF did not grow on wheel');
+      anchored(anchor, px, py);
+      check(getComputedStyle(button('close')).fontSize === chromeFont
+          && Math.abs(document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().width
+              - chromeWidth) < 2, 'Mouse wheel scaled fullscreen controls');
+      stage().dispatchEvent(new PointerEvent('pointermove', {bubbles: true}));
+      const hudRenders = rendered, hudWidth = canvas().getBoundingClientRect().width;
+      const stageHeight = stage().clientHeight;
+      await pause(2950);
+      check(dialog.classList.contains('is-ofp-hud-hidden'), 'Fullscreen HUD failed to hide');
+      check(rendered === hudRenders && canvas().getBoundingClientRect().width === hudWidth
+          && stage().clientHeight === stageHeight, 'HUD changed PDF viewport or rerendered it');
+      stage().dispatchEvent(new PointerEvent('pointermove', {bubbles: true}));
+      check(!dialog.classList.contains('is-ofp-hud-hidden'), 'Mouse did not reveal HUD');
+      const closeBox = button('close').getBoundingClientRect();
+      const closeHit = document.elementFromPoint(
+          closeBox.left + closeBox.width / 2, closeBox.top + closeBox.height / 2
+      );
+      check(closeHit === button('close') || button('close').contains(closeHit),
+          'Fullscreen PDF intercepts close button: ' + JSON.stringify({
+              hit: closeHit?.outerHTML?.slice(0, 180) ?? null,
+              button: button('close').outerHTML.slice(0, 180),
+              rect: closeBox.toJSON(),
+              header: document.querySelector('.simbrief-ofp-header').getBoundingClientRect().toJSON(),
+              stage: stage().getBoundingClientRect().toJSON(),
+              visibility: getComputedStyle(button('close')).visibility,
+              pointerEvents: getComputedStyle(button('close')).pointerEvents,
+              hudHidden: dialog.classList.contains('is-ofp-hud-hidden'),
+          }));
+      press('Escape');
+      await waitUntil(() => !fullscreenOwner && !dialog.classList.contains('is-ofp-fullscreen'),
+          'Escape exits native fullscreen');
+      check(dialog.open, 'Escape closed OFP while fullscreen');
+      press('f');
+      await waitUntil(() => fullscreenOwner === fullRoot, 'F reenters native fullscreen');
+      press('f');
+      await waitUntil(() => !fullscreenOwner, 'F exits native fullscreen');
+      fullRoot.requestFullscreen = async () => { throw new Error('Denied'); };
+      press('f');
+      await waitUntil(() => dialog.classList.contains('is-ofp-fullscreen'),
+          'native refusal uses CSS fallback');
+      check(!fullscreenOwner && button('fullscreen').getAttribute('aria-pressed') === 'true',
+          'CSS fullscreen fallback has stale state');
+      press('Escape');
+      await waitUntil(() => !dialog.classList.contains('is-ofp-fullscreen'),
+          'Escape exits CSS fullscreen');
+      check(dialog.open, 'CSS fullscreen Escape closed document');
+      fullRoot.requestFullscreen = async () => {
+          fullscreenOwner = fullRoot;
+          document.dispatchEvent(new Event('fullscreenchange'));
+      };
+      press('f');
+      await waitUntil(() => fullscreenOwner === fullRoot, 'native fullscreen before browser exit');
+      fullscreenOwner = null;
+      document.dispatchEvent(new Event('fullscreenchange'));
+      check(!dialog.classList.contains('is-ofp-fullscreen') && dialog.open,
+          'Browser fullscreen exit did not restore document');
+      delete document.fullscreenElement;
+      document.exitFullscreen = oldExit;
+
+      // Wheel gestures in the ordinary document lightbox keep controls at 100%.
+      previousRender = rendered;
+      button('fit-page').click();
+      await afterRender(previousRender, 'fit after fullscreen');
+      const page = canvas().getBoundingClientRect();
+      const wx = page.left + page.width * 0.68, wy = page.top + page.height * 0.33;
+      const originalPoint = point(wx, wy);
+      previousRender = rendered;
+      check(!wheel(wx, wy, -115).unhandled, 'Ordinary wheel not handled');
+      await afterRender(previousRender, 'normal wheel zoom');
+      anchored(originalPoint, wx, wy);
+      check(!active('fit-page'), 'Mouse wheel did not select manual zoom');
+      await pause(210);
+      previousRender = rendered;
+      wheel(wx, wy, -90);
+      await afterRender(previousRender, 'repeated cursor wheel zoom');
+      anchored(originalPoint, wx, wy);
+      await pause(210);
+      const trackpadZoom = zoom(), trackpadRenders = rendered;
+      const fine = wheel(wx, wy, 12, {deltaMode: 0});
+      check(fine.unhandled && !fine.event.defaultPrevented, 'Trackpad scroll trapped');
+      await pause(165);
+      check(zoom() === trackpadZoom && rendered === trackpadRenders,
+          'Fine trackpad movement changed zoom');
+      previousRender = rendered;
+      const ctrl = wheel(wx, wy, -35, {ctrlKey: true});
+      check(!ctrl.unhandled && ctrl.event.defaultPrevented, 'Ctrl+wheel did not zoom PDF');
+      await afterRender(previousRender, 'modifier wheel');
+      const next = button('next').getBoundingClientRect();
+      check(document.elementFromPoint(next.left + next.width / 2,
+          next.top + next.height / 2) === button('next'),
+          'PDF intercepts normal toolbar');
+      previousRender = rendered;
+      button('fit-page').click();
+      await afterRender(previousRender, 'return to whole page');
+      wholePage('after wheel to fit', 600, 1100);
 
       previousRender = rendered;
       button('actual-size').click();
