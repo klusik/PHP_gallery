@@ -323,7 +323,7 @@ const entry = await readFile(path.join(root, 'public/assets/gallery.js'), 'utf8'
 assert.ok(entry.includes('admin-settings-search.js?v=20261002-settings-workspace-v1'));
 assert.ok(entry.includes('admin-navdata-panel.js?v=20261002-navdata-layout-v1'));
 assert.ok(entry.includes('admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4'));
-assert.ok(entry.includes('admin-operations.js?v=20261008-clipboard-v1'));
+assert.ok(entry.includes('admin-operations.js?v=20261008-issue118-v5'));
 const operations = await readFile(path.join(directory, 'admin-operations.js'), 'utf8');
 assert.ok(operations.includes('admin-navdata-update.js?v=20261002-navdata-ajax-v1'));
 console.log('frontend_operational_policy_test: PASS (21 unchanged policy values, title/Settings/navigation consumer seams; report runtime has a separate fixture; not browser acceptance)');

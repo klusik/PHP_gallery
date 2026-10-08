@@ -40,7 +40,7 @@ export function setupGalleryUploadClipboard() {
         if (event.defaultPrevented || clipboardTextEditor(event.target)) return;
         const form = clipboardUploadForm(event.target);
         const input = form?.querySelector(uploadInputSelector);
-        if (!(input instanceof HTMLInputElement) || input.matches(':disabled') || form.classList.contains('is-uploading')) return;
+        if (!(input instanceof HTMLInputElement) || input.matches(':disabled') || form.classList.contains('is-uploading') || form.dataset.uploadSelectionLocked === '1') return;
         const files = clipboardUploadFiles(event.clipboardData, input);
         if (files.length === 0) return;
         try {

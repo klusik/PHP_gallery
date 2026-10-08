@@ -54,15 +54,16 @@ namespace {
         }
     }
 
-    $root = sys_get_temp_dir() . '/php-gallery-migration-guard-' . bin2hex(random_bytes(8));
-    $galleryRoot = $root . '/gallery';
-    $assetDir = $galleryRoot . '/branding';
+    // Physical expected paths follow the host separator without changing persisted asset identities.
+    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-migration-guard-' . bin2hex(random_bytes(8));
+    $galleryRoot = $root . DIRECTORY_SEPARATOR . 'gallery';
+    $assetDir = $galleryRoot . DIRECTORY_SEPARATOR . 'branding';
     if (!mkdir($assetDir, 0700, true)) {
         throw new \RuntimeException('Could not create migration containment fixture.');
     }
-    $validFile = $assetDir . '/cover.png';
-    $outsideFile = $root . '/outside.png';
-    $symlinkFile = $assetDir . '/banner.png';
+    $validFile = $assetDir . DIRECTORY_SEPARATOR . 'cover.png';
+    $outsideFile = $root . DIRECTORY_SEPARATOR . 'outside.png';
+    $symlinkFile = $assetDir . DIRECTORY_SEPARATOR . 'banner.png';
     $gallery = [
         'id' => 1,
         'folder_path' => 'gallery',

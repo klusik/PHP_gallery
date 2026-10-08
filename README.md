@@ -59,7 +59,7 @@ WinApp **0.3.2** loads Windows updater APIs explicitly from System32, retains co
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
 
 ### Image Management
-- **Upload interface** - Upload multiple images to a gallery via browser
+- **Upload interface** - Add multiple images to a gallery via browser; the right-hand Admin upload panel collects repeated pasted screenshots, picked files and dropped images into a removable, reorderable local preview queue before a single ordinary upload
 - **Automatic scanning** - Detect newly added files on the filesystem
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
@@ -231,6 +231,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 #### Upload Interface
 - Multi-file upload to existing or new gallery
 - Paste clipboard images/screenshots with Ctrl+V (Windows/Linux) or Cmd+V (macOS) into the focused upload area; images join the same file selection and upload workflow
+- In the right-hand upload drawer, repeated paste/picker/drop choices accumulate in one removable, reorderable preview queue. Submit once using the ordinary upload button. Unsupported or oversized previews keep the original file; an unresolved upload preserves its exact retry selection. The queue is local to the open page, not a persisted draft or a Commit/Reset publishing workflow. See [selection safety and limits](docs/UPLOAD_SELECTION.md).
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes

@@ -71,10 +71,11 @@ namespace {
         throw new RuntimeException($label);
     }
 
-    $root = sys_get_temp_dir() . '/gallery-thumbnail-path-' . bin2hex(random_bytes(8));
-    $galleryRoot = $root . '/gallery';
-    $thumbnailDir = $galleryRoot . '/thumbs';
-    $outsideDir = $root . '/outside';
+    // Native expected destinations also work for not-yet-created thumbnail directories and files.
+    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gallery-thumbnail-path-' . bin2hex(random_bytes(8));
+    $galleryRoot = $root . DIRECTORY_SEPARATOR . 'gallery';
+    $thumbnailDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbs';
+    $outsideDir = $root . DIRECTORY_SEPARATOR . 'outside';
     if (!mkdir($galleryRoot, 0700, true) || !mkdir($outsideDir, 0700, true)) {
         throw new RuntimeException('Cannot create isolated thumbnail storage.');
     }
@@ -82,8 +83,8 @@ namespace {
     $gallery = ['folder_path' => 'gallery'];
     $image = ['filename' => 'photo.jpg', 'thumbnail_source_identity_version' => 0];
     $photoName = 'photo_thumb300.jpg';
-    $outsideFile = $outsideDir . '/' . $photoName;
-    $insideFile = $thumbnailDir . '/' . $photoName;
+    $outsideFile = $outsideDir . DIRECTORY_SEPARATOR . $photoName;
+    $insideFile = $thumbnailDir . DIRECTORY_SEPARATOR . $photoName;
     try {
         file_put_contents($outsideFile, 'outside thumbnail fixture');
 

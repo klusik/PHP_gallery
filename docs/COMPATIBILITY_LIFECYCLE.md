@@ -27,10 +27,18 @@ not a source parser or a commitment to remove anything on a calendar date.
 ### UI-3 — Clipboard exposure and writable FileList availability
 
 - **Reason / protected environment:** Desktop browsers or clipboard sources may expose no image files, and older/restricted browsers may not construct a DataTransfer or assign an input FileList. Their established chooser/drop and ordinary no-JavaScript POST uploads remain usable.
-- **Owner:** `admin-upload-selection.js` owns selection only; existing upload controllers/services and the side-panel completion owner retain persistence and security.
+- **Owner:** `admin-upload-selection.js` owns clipboard extraction; `admin-upload-queue.js` and `admin-upload-preview.js` own the right-drawer local selection, previews and disposal. Existing upload controllers/services and the side-panel completion owner retain persistence, progress and security.
 - **Evidence:** `admin_upload_clipboard_test.mjs` and the registered `admin_upload_clipboard_browser_test.mjs` cover file-only exposure, selection preservation on assignment failure, ordinary multipart submission and dynamic panel controls. The OS/browser matrix in `TESTING.md` remains manual evidence.
 - **Usage:** Clipboard API availability and fallback frequency are `unknown`; no new telemetry is collected.
 - **Support rationale:** Chooser/drop and no-JavaScript POST remain permanently supported input methods. Clipboard input is additive and may never require permission polling or a second upload endpoint.
+
+### UI-4: Bounded local miniature fallback
+
+- **Reason / protected environment:** A browser may lack `createImageBitmap` or canvas encoding, reject a codec, or receive animated, oversized, unknown or metadata-heavy image data. Preview admission must not narrow the existing server upload formats or replace the original with a thumbnail.
+- **Owner:** `admin-upload-thumbnail.js` owns bounded raster admission and serialized decoding; `admin-upload-preview.js` owns format fallback and URL/callback disposal. Upload processing, metadata and authorization remain with the existing transport/service owners.
+- **Evidence:** Registered `admin_upload_thumbnail_test.mjs`, the expanded clipboard Chromium fixture, and the real Worker/ZIP operation-key fixture cover fallback, original preservation, resource bounds, reset and uncertain acknowledgment. Actual OS clipboard/browser results remain in the `TESTING.md` manual matrix.
+- **Usage:** Decoder support, oversized-image frequency, fallback usage and real browser-process memory are `unknown`; no telemetry is added.
+- **Support rationale:** A missing local miniature is permanently allowed for an otherwise uploadable original. Retirement would require a separate accepted browser/format support-policy change, not merely a passing Chromium test.
 
 ## Database and migrations
 
