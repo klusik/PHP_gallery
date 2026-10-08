@@ -75,7 +75,7 @@ This section has its own form, so saving the website address does not save the G
 | `theme_page_width` | `theme.php`; Theme Appearance | enum `default`, `wide`, `full`, `custom` | `default`; invalid becomes `default` | no revision; no migration | Summary | Theme Appearance | normal |
 | `theme_page_width_custom` | `theme.php`; Theme Appearance | integer 1024..2048 px | 1440; malformed/out-of-range normalized | no revision; no migration | Summary | Theme Appearance | normal |
 | `theme_gallery_description_layout` | `gallery_description_layout.php`; Theme Layout | enum `vertical`, `horizontal` | `vertical`; invalid normalized to fallback | Revision on change; no migration | Summary | Theme Layout | normal |
-| `theme_breadcrumb_style` | `breadcrumbs.php`; Theme Layout | enum `minimal`, `chevron`, `pills`, `surface` | `chevron`; unsupported global values normalize to `chevron` | Revision on change; no migration | Summary | Theme Layout | normal |
+| `theme_breadcrumb_style` | `breadcrumbs.php`; Theme Layout | enum `minimal`, `chevron`, `pills`, `surface`, `ribbon`, `nodes`, `tabs`, `tiles`, `gradient` | `chevron`; unsupported global values normalize to `chevron` | Revision on change; no migration | Summary | Theme Layout | normal |
 | `theme_gallery_count_badge_enabled` | Theme/Layout service; Theme Layout | boolean | enabled by default; shows the branch image count on gallery cards and in the opened-gallery hero unless a gallery override changes the effective state | no central mutation; no migration | Summary through Theme ownership | Theme Layout | normal |
 | `pagination_enabled` | `pagination.php`; Theme Layout | boolean | disabled unless configured | no revision; no migration | Summary | Theme Layout | normal |
 | `pagination_columns` | `pagination.php`; Theme Layout | integer 1..12 | 3; invalid uses default | no revision; no migration | Summary | Theme Layout | normal |
@@ -210,11 +210,17 @@ Maintenance run state, last-result and completion marker settings are runtime st
 2. Tag landing-page card layout inherits `theme_gallery_description_layout` when `tag_page_gallery_description_layout` is missing.
 3. Hero-tag settings are a separate Theme concern and never substitute for tag landing-page settings.
 4. Gallery description layout, lightbox mode and EXIF/GPS display can have per-gallery overrides. The central page displays the global fallback only and never rewrites per-gallery values.
-5. `gallery_breadcrumb_style.<gallery-id>` accepts the four registered style IDs or `inherit`. Missing or invalid gallery values inherit `theme_breadcrumb_style`; missing or invalid Theme values fall back to `chevron`.
+5. `gallery_breadcrumb_style.<gallery-id>` accepts `minimal`, `chevron`, `pills`, `surface`, `ribbon`, `nodes`, `tabs`, `tiles`, `gradient`, or `inherit`. The `inherit` sentinel applies only to gallery-level inheritance and is not a Theme visual style. Missing or invalid gallery values inherit `theme_breadcrumb_style`; missing or invalid Theme values fall back to `chevron`.
 6. `public_thumbnail_rendering_mode` accepts only `responsive` and `progressive`; invalid/missing state falls back to `progressive`, while `responsive` remains selectable as the legacy renderer.
 7. `theme_lightbox_browsing_mode` accepts only `single`, `picture_strip` and `3d_carousel`; invalid state falls back to `single` and the feature flag can force `single`.
 8. The viewer-language selector is independent from Admin language and the site-wide public default. Disabling the feature suppresses personal overrides; filtering its languages never removes maintained catalogs from administrative tools.
 9. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.
+
+`breadcrumb_style_registry()` in `app/services/breadcrumbs.php` is authoritative
+for the breadcrumb style IDs listed above. When adding a style, update both the
+Theme enum and the physical-gallery accepted values. The registered
+`breadcrumb_theme_settings_test.php` compares both lists with the live registry
+and protects the shared fallback and gallery-only inheritance sentinel.
 
 ## Feature capability ownership
 

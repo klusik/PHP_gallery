@@ -2302,6 +2302,8 @@ php scripts/audit.php --profile=release
 
 Det~värdbaserade utgåveflödet kör först den~särskilda policykontrollen \codeword{--profile=release-preflight} före resurskrävande AI- eller~TeX-steg. Den~förkontrollen ersätter inte hela utgåvematrisen för~den~exakta kandidaten.
 
+Det registrerade breadcrumb-tematestet jämför stillistorna för Tema och fysiska gallerier i \filepath{docs/ADMIN_SETTINGS_INVENTORY.md} med \codeword{breadcrumb_style_registry()}. Det skyddar även reservstilen \codeword{chevron} och värdet \codeword{inherit}, som endast gäller galleriers arv. Uppdatera båda dokumenterade listorna när en stil läggs till; \codeword{inherit} är ingen visuell temastil.
+
 \subsection{Manuell webbläsarverifiering}
 
 \subsubsection{Nätverks- och interaktionskontroller}

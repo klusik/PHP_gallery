@@ -2324,6 +2324,8 @@ php scripts/audit.php --profile=release
 
 The~hosted release workflow first runs the~special \codeword{--profile=release-preflight} policy gate before expensive AI or~TeX work. That preflight is~not~a~replacement for~the~full exact-candidate release matrix.
 
+The~registered breadcrumb Theme test compares the~Theme and~physical-gallery style lists in~\filepath{docs/ADMIN_SETTINGS_INVENTORY.md} with \codeword{breadcrumb_style_registry()}. It~also protects the~\codeword{chevron} fallback and~the~gallery-only \codeword{inherit} sentinel. When adding a~style, update both documented lists; \codeword{inherit} is~not~a~Theme visual style.
+
 \subsection{Manual browser verification}
 
 \subsubsection{Network and~interaction checks}

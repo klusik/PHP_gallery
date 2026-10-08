@@ -2302,6 +2302,8 @@ php scripts/audit.php --profile=release
 
 Hostovaný postup vydání nejprve spouští zvláštní kontrolu pravidel \codeword{--profile=release-preflight} před nákladnými kroky s~AI nebo TeX. Tato předběžná kontrola nenahrazuje úplnou matici testů přesného kandidáta.
 
+Registrovaný test nastavení drobečkové navigace porovnává seznamy stylů Vzhledu a~fyzických galerií v~\filepath{docs/ADMIN_SETTINGS_INVENTORY.md} s~\codeword{breadcrumb_style_registry()}. Hlídá také náhradní styl \codeword{chevron} a~hodnotu \codeword{inherit} určenou pouze pro dědičnost galerie. Při přidání stylu aktualizujte oba dokumentované seznamy; \codeword{inherit} není vizuální styl Vzhledu.
+
 \subsection{Ruční ověření v~prohlížeči}
 
 \subsubsection{Kontroly sítě a~interakcí}

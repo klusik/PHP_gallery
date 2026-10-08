@@ -2308,6 +2308,8 @@ php scripts/audit.php --profile=release
 
 Der~gehostete Veröffentlichungsablauf führt vor aufwendigen AI- oder~TeX-Schritten zunächst das~besondere Richtlinien-Gate \codeword{--profile=release-preflight} aus. Diese Vorprüfung ersetzt nicht die~vollständige Release-Matrix für~den~exakten Kandidaten.
 
+Der registrierte Breadcrumb-Designtest vergleicht die Stillisten für Design und physische Galerien in \filepath{docs/ADMIN_SETTINGS_INVENTORY.md} mit \codeword{breadcrumb_style_registry()}. Er schützt außerdem den Fallback \codeword{chevron} und den nur für Galerievererbung vorgesehenen Wert \codeword{inherit}. Ergänzen Sie bei einem neuen Stil beide dokumentierten Listen; \codeword{inherit} ist kein visueller Designstil.
+
 \subsection{Manuelle Browserprüfung}
 
 \subsubsection{Netzwerk- und Interaktionsprüfungen}
