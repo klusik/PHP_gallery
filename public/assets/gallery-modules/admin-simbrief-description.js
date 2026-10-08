@@ -417,7 +417,10 @@ export function buildSimbriefDispatchRedirectUrl(form) {
         fields[key] = input instanceof HTMLInputElement ? input.value.trim().toUpperCase() : '';
         if (fields[key] === '') continue;
         if (key !== 'date' && !patterns[key].test(fields[key])) {
-            throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', key));
+            const message = (key === 'orig' || key === 'dest')
+                ? i18nForElement(form, 'admin.legacy_ofp.error_airports', 'Enter valid four-letter origin and destination ICAO codes.')
+                : i18nForElement(form, 'admin.legacy_ofp.error_format', 'Check the format of {field}.').replace('{field}', key);
+            throw new Error(message);
         }
         if (key === 'fl' && Number(fields[key]) > 600) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_flight_level', 'Flight level must not exceed FL600.'));
         if (key === 'pax' && Number(fields[key]) > 999) throw new Error(i18nForElement(form, 'admin.legacy_ofp.error_pax', 'Passenger count must be between 0 and 999.'));
