@@ -260,7 +260,7 @@ function simbrief_ofp_dispatch_value(string $field, string $value): string
  *
  * @param array<string,mixed> $gallery Persisted selected gallery.
  * @param ?array<string,mixed> $flightMap Existing structured map, if loaded.
- * @return array{fields:array<string,array{value:string,source:string,uncertain:bool}>,has_snapshot:bool}
+ * @return array{fields:array<string,array{value:string,source:string,uncertain:bool}>,has_snapshot:bool} Validated value and provenance for every supported dispatch parameter.
  */
 function simbrief_ofp_dispatch_prefill(array $gallery, ?array $flightMap = null): array
 {
