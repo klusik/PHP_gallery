@@ -650,10 +650,10 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
     // A saved PDF does not prevent an explicitly requested revised dispatch.
     // Re-dispatch only prepares inputs; the archived PDF is never overwritten.
     $reviewLabel = $hasPdf
-        ? t('admin.legacy_ofp.revise_existing', 'Prepare a revised OFP in SimBrief')
+        ? t('admin.legacy_ofp.revise_existing', 'Prepare revised OFP in SimBrief')
         : t('admin.legacy_ofp.open_review', 'Create historical OFP / Open prefilled SimBrief');
     $reviewHelp = $hasPdf
-        ? t('admin.legacy_ofp.revise_existing_help', 'Review and edit the flight details in SimBrief. The attached PDF remains unchanged until you explicitly upload and confirm a replacement.')
+        ? t('admin.legacy_ofp.revise_existing_help', 'Review or change the flight details, then generate a new plan on the SimBrief site. The current PDF remains unchanged until you explicitly upload and confirm a replacement.')
         : t('admin.legacy_ofp.dispatch_no_generation', 'You will review the fields here first. SimBrief opens in a new tab, where you must sign in if required and select Generate yourself.');
     echo '<div class="admin-simbrief-legacy-actions"><button type="button" class="button secondary" data-simbrief-dispatch-open>' . e($reviewLabel) . '</button></div>';
     echo '<p class="muted">' . e($reviewHelp) . '</p>';
@@ -669,10 +669,10 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
     echo '<form method="post" enctype="multipart/form-data" action="' . e($action) . '" data-simbrief-ofp-upload-form>';
     echo $csrf . '<input type="hidden" name="id" value="' . $galleryId . '"><input type="hidden" name="simbrief_action" value="' . e($uploadAction) . '">';
     echo '<label>' . e(t('admin.legacy_ofp.choose_pdf', 'Select PDF (maximum 25 MiB)')) . '<input type="file" name="simbrief_ofp_pdf" accept=".pdf,application/pdf" required></label>';
-    echo '<label>' . e(t('admin.legacy_ofp.origin_label', 'Source of uploaded PDF (record only)')) . '<select name="ofp_provenance">';
+    echo '<label>' . e(t('admin.legacy_ofp.origin_label', 'Origin of the uploaded PDF (record only)')) . '<select name="ofp_provenance">';
     echo '<option value="retrospective_user_generated">' . e(t('admin.legacy_ofp.provenance_retrospective', 'Newly generated retrospective OFP')) . '</option>';
     echo '<option value="manually_supplied">' . e(t('admin.legacy_ofp.provenance_manual', 'Manually supplied document')) . '</option></select></label>';
-    echo '<p class="muted">' . e(t('admin.legacy_ofp.provenance_only', 'This choice only labels the uploaded PDF; it does not generate a document. To make a new OFP, use the SimBrief button above, download its PDF and select that file here.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.legacy_ofp.provenance_only', 'This selector only records where the uploaded PDF came from; it does not generate or download one. To create a new plan, use the SimBrief button above, download the PDF there, then select that file here.')) . '</p>';
     echo '<p class="muted">' . e(t('admin.legacy_ofp.not_original', 'A newly generated OFP is not the original flight-day plan. Weather, NOTAMs, AIRAC, fuel and routing may differ.')) . '</p>';
     if ($occupied) {
         echo '<label class="checkbox-label"><input type="checkbox" name="confirm_replace" value="1" required> '
