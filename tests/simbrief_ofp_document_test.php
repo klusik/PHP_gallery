@@ -281,6 +281,7 @@ namespace {
                 && \Gallery\Services\simbrief_ofp_dispatch_value('fl', 'FL350') === '350'
                 && \Gallery\Services\simbrief_ofp_dispatch_value('fl', '35000') === '350'
                 && \Gallery\Services\simbrief_ofp_dispatch_value('date', '2026-02-30') === ''
+                && \Gallery\Services\simbrief_ofp_dispatch_value('date', '03JUN26') === '2026-06-03'
                 && \Gallery\Services\simbrief_ofp_dispatch_value('route', 'DCT OKL DCT') === 'DCT OKL DCT'
                 && \Gallery\Services\simbrief_ofp_dispatch_value('route', 'https://example.com/') === '',
                 'Dispatch parameter normalization accepted an invalid field.'
