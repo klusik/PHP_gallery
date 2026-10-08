@@ -318,6 +318,15 @@ The only normally needed distributable build artifact is the Windows installer i
 ## Release Manifest Handoff Requirement
 Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Hosted candidate preparation runs the canonical `php scripts/prepare_candidate.php` after the source commit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
 
+## GitHub Issue Language
+
+GitHub issue titles, bodies, and **all issue comments MUST ALWAYS be written in
+English**, regardless of the language used in the chat. This includes progress
+updates, implementation plans, diagnostics, verification results, and handoff or
+closure comments. Apply this rule when creating or editing issue content, and
+check the language before submitting it. Conversations with the user may remain
+in the user's preferred language.
+
 ## Commit & Pull Request Guidelines
 Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.
 

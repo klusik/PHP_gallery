@@ -62,7 +62,7 @@ import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261008-legacy-ofp-dispatch-fl-v3';
-import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-fit-pan-layout';
+import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261003-images-v4';

@@ -60,6 +60,15 @@ const html = String.raw`<!doctype html>
   let documentRequests = 0;
   let rendered = 0;
   let destroys = 0;
+  let pageCount = 3;
+  let pageDelay = 0;
+  let renderDelay = 0;
+  let pageRequests = 0;
+  let pendingPages = 0;
+  let maxPendingPages = 0;
+  let pendingRenders = 0;
+  let maxPendingRenders = 0;
+  let failPage = false;
   document.addEventListener('keydown', (event) => {
       if (event.key === 'ArrowRight') photoShortcutEvents += 1;
   });
@@ -74,18 +83,42 @@ const html = String.raw`<!doctype html>
           }
           return {
               promise: Promise.resolve({
-                  numPages: 3,
+                  numPages: pageCount,
                   async getPage(index) {
-                      if (index < 1 || index > 3) throw new Error('Out of range PDF page');
+                      if (index < 1 || index > pageCount) throw new Error('Out of range PDF page');
+                      pageRequests += 1;
+                      pendingPages += 1;
+                      maxPendingPages = Math.max(maxPendingPages, pendingPages);
+                      if (pageDelay) await new Promise(resolve => setTimeout(resolve, pageDelay));
+                      pendingPages -= 1;
+                      if (failPage) throw new Error('Delayed PDF page unavailable');
                       return {
                           getViewport({scale}) {
                               const sizes = [[595, 842], [842, 595], [600, 1100]];
-                              return {width: sizes[index - 1][0] * scale, height: sizes[index - 1][1] * scale};
+                              return {width: sizes[(index - 1) % 3][0] * scale, height: sizes[(index - 1) % 3][1] * scale};
                           },
                           render({canvasContext}) {
                               rendered += 1;
                               canvasContext.fillRect(0, 0, 10, 10);
-                              return {promise: Promise.resolve(), cancel() {}};
+                              if (!renderDelay) return {promise: Promise.resolve(), cancel() {}};
+                              pendingRenders += 1;
+                              maxPendingRenders = Math.max(maxPendingRenders, pendingRenders);
+                              let timer, rejectRender, finished = false;
+                              const promise = new Promise((resolve, reject) => {
+                                  rejectRender = reject;
+                                  timer = setTimeout(() => {
+                                      finished = true;
+                                      pendingRenders -= 1;
+                                      resolve();
+                                  }, renderDelay);
+                              });
+                              return {promise, cancel() {
+                                  if (finished) return;
+                                  finished = true;
+                                  clearTimeout(timer);
+                                  pendingRenders -= 1;
+                                  rejectRender(Object.assign(new Error('Cancelled'), {name: 'RenderingCancelledException'}));
+                              }};
                           },
                           cleanup() {},
                       };
@@ -241,6 +274,17 @@ const html = String.raw`<!doctype html>
       unchangedPhoto();
       check(stage().clientWidth > stage().clientHeight, 'Landscape fixture was not landscape');
       wholePage('first A4 portrait page', 595, 842);
+      const initialPageRequests = pageRequests;
+      press('ArrowRight');
+      for (let i = 0; i < 20; i += 1) press('ArrowRight', stage(), {repeat: true});
+      await waitUntil(() => counter() === 'Page 2 of 3' && settled(), 'single arrow with immediate repeat burst');
+      check(pageRequests === initialPageRequests + 1, 'Unpaced repeat burst skipped a page');
+      stage().dispatchEvent(new KeyboardEvent('keyup', {key: 'ArrowRight', bubbles: true}));
+      await pause(200);
+      check(counter() === 'Page 2 of 3', 'Internal timer navigated without a native repeat');
+      press('ArrowLeft');
+      await waitUntil(() => counter() === 'Page 1 of 3' && settled(), 'single left arrow');
+      stage().dispatchEvent(new KeyboardEvent('keyup', {key: 'ArrowLeft', bubbles: true}));
       let previousRender = rendered;
       button('fit-width').click();
       await afterRender(previousRender, 'fit-width');
@@ -541,14 +585,17 @@ const html = String.raw`<!doctype html>
       button('fit-page').click();
       await afterRender(previousRender, 'return to whole-page fit');
       wholePage('return from actual size', 600, 1100);
-      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true, cancelable: true}));
+      const lastPageRequests = pageRequests;
+      press('ArrowRight');
+      for (let i = 0; i < 20; i += 1) press('ArrowRight', stage(), {repeat: true});
       await new Promise(resolve => setTimeout(resolve, 80));
       check(counter() === 'Page 3 of 3' && photoShortcutEvents === 0, 'Document shortcut leaked to photo handler');
+      check(pageRequests === lastPageRequests, 'Last-page held arrow rerendered or wrapped');
 
       button('previous').click();
       await waitUntil(() => counter() === 'Page 2 of 3' && settled(), 'previous page');
       wholePage('previous landscape page', 842, 595);
-      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+      press('Escape');
       await waitUntil(() => !document.querySelector('dialog'), 'document close');
       check(destroys >= 1 && rendered >= 4, 'PDF resources were not rendered or destroyed');
       unchangedPhoto();
@@ -574,6 +621,133 @@ const html = String.raw`<!doctype html>
           unchangedPhoto();
       }
       check(documentRequests === 5, 'Localized reopening created duplicate viewers');
+      // Slow PDF acquisition and rendering expose native-repeat queue/race bugs.
+      document.documentElement.lang = 'en';
+      pageCount = 150;
+      pageDelay = 45;
+      renderDelay = 180;
+      document.querySelector('[data-simbrief-ofp-open]').click();
+      await waitUntil(() => counter() === 'Page 1 of 150' && settled(), 'long OFP opens');
+      const release = (key) => stage().dispatchEvent(new KeyboardEvent('keyup', {key, bubbles: true}));
+      const pageMatches = (page) => check(counter() === 'Page ' + page + ' of 150'
+          && canvas().getAttribute('aria-label') === counter(), 'PDF bitmap and counter disagree');
+      const step = async (key, page, repeat = false) => {
+          check(press(key, stage(), {repeat}).defaultPrevented, 'Arrow was not owned by OFP');
+          await waitUntil(() => counter() === 'Page ' + page + ' of 150' && settled(), 'held arrow page ' + page);
+          pageMatches(page);
+      };
+      await pause(100); // Settle any initial ResizeObserver fitting before the queue budget.
+      maxPendingPages = maxPendingRenders = 0;
+      await step('ArrowRight', 2);
+      const beforeBurst = pageRequests;
+      for (let i = 0; i < 30; i += 1) press('ArrowRight', stage(), {repeat: true});
+      await waitUntil(() => counter() === 'Page 3 of 150' && settled(), 'one accepted repeat burst');
+      check(pageRequests === beforeBurst + 1, 'Repeat burst created queued or duplicate page requests');
+      for (const page of [4, 5, 6]) await step('ArrowRight', page, true);
+      release('ArrowRight');
+      await pause(220);
+      press('ArrowRight', stage(), {repeat: true});
+      pageMatches(6);
+      check(maxPendingPages <= 1 && maxPendingRenders <= 1, 'Held arrow created concurrent PDF work');
+      for (const page of [5, 4, 3, 2, 1]) await step('ArrowLeft', page, page !== 5);
+      const boundaryRequests = pageRequests, boundaryRenders = rendered;
+      await pause(170);
+      press('ArrowLeft', stage(), {repeat: true});
+      await pause(220);
+      pageMatches(1);
+      check(pageRequests === boundaryRequests && rendered === boundaryRenders, 'First-page boundary rerendered');
+      release('ArrowLeft');
+
+      press('ArrowRight');
+      window.dispatchEvent(new Event('blur'));
+      await waitUntil(() => counter() === 'Page 2 of 150' && settled(), 'page started before blur');
+      press('ArrowRight', stage(), {repeat: true});
+      await pause(220);
+      pageMatches(2);
+      await step('ArrowRight', 3);
+      Object.defineProperty(document, 'hidden', {configurable: true, value: true});
+      document.dispatchEvent(new Event('visibilitychange'));
+      delete document.hidden;
+      document.dispatchEvent(new Event('visibilitychange'));
+      press('ArrowRight', stage(), {repeat: true});
+      await pause(200);
+      pageMatches(3);
+      const longDialog = document.querySelector('dialog');
+      longDialog.querySelector('[data-ofp-root]').requestFullscreen = async () => { throw new Error('Denied'); };
+      press('f');
+      await waitUntil(() => longDialog.classList.contains('is-ofp-fullscreen') && settled(), 'held-key fullscreen transition');
+      await pause(170);
+      press('ArrowRight', stage(), {repeat: true});
+      pageMatches(3);
+      for (const fullscreen of [true, false]) {
+          check(longDialog.classList.contains('is-ofp-fullscreen') === fullscreen, 'Unexpected focus test mode');
+          stage().focus();
+          check(getComputedStyle(stage()).outlineStyle === 'none', 'Keyboard focus framed the PDF stage');
+          button('close').focus();
+          const focusStyle = getComputedStyle(button('close'));
+          check(button('close').matches(':focus-visible') && focusStyle.outlineStyle === 'solid'
+              && parseFloat(focusStyle.outlineWidth) >= 2, 'Interactive control lost visible keyboard focus');
+          const tab = press('Tab', button('close'));
+          const shiftTab = press('Tab', button('close'), {shiftKey: true});
+          check(!tab.defaultPrevented && !shiftTab.defaultPrevented, 'Tab traversal was intercepted');
+          if (fullscreen) {
+              press('Escape', button('close'));
+              await waitUntil(() => !longDialog.classList.contains('is-ofp-fullscreen') && settled(), 'focus returns from fullscreen');
+          }
+      }
+      for (const tag of ['input', 'textarea', 'select', 'div']) {
+          const editable = document.createElement(tag);
+          if (tag === 'div') editable.contentEditable = 'true';
+          longDialog.append(editable);
+          editable.focus();
+          check(!press('ArrowRight', editable).defaultPrevented, 'Arrow hijacked editable ' + tag);
+          editable.remove();
+      }
+      const nested = document.createElement('div');
+      nested.setAttribute('role', 'dialog');
+      nested.tabIndex = 0;
+      longDialog.append(nested);
+      nested.focus();
+      check(!press('ArrowRight', nested).defaultPrevented, 'Arrow hijacked another dialog');
+      nested.remove();
+      const foreign = document.createElement('button');
+      document.body.append(foreign);
+      check(!press('ArrowLeft', foreign).defaultPrevented, 'Arrow hijacked unrelated UI');
+      foreign.remove();
+      stage().focus();
+      press('ArrowRight', stage(), {repeat: true});
+      pageMatches(3);
+      for (const options of [{ctrlKey: true}, {altKey: true}, {metaKey: true}, {isComposing: true}]) {
+          check(!press('ArrowLeft', stage(), options).defaultPrevented, 'Modified/composing arrow was hijacked');
+      }
+      previousRender = rendered;
+      button('zoom-in').click();
+      await afterRender(previousRender, 'long document manual zoom');
+      await step('ArrowRight', 4);
+      check(zoom() === 'Zoom 125%' && !active('fit-page'), 'Paging lost manual zoom');
+      // A newer discrete key must beat delayed acquisitions and cancelled renders.
+      press('ArrowRight');
+      press('ArrowRight');
+      press('ArrowLeft');
+      await waitUntil(() => counter() === 'Page 5 of 150' && settled(), 'latest rapid page wins');
+      pageMatches(5);
+      failPage = true;
+      press('ArrowRight');
+      await waitUntil(() => !document.querySelector('[data-ofp-fallback]').hidden, 'failed page has protected fallback');
+      failPage = false;
+      await step('ArrowLeft', 5);
+      release('ArrowLeft');
+      const detachedStage = stage();
+      press('ArrowRight');
+      button('close').click();
+      await waitUntil(() => !document.querySelector('dialog') && pendingPages === 0 && pendingRenders === 0,
+          'close cancels delayed page work');
+      const afterClose = rendered;
+      press('ArrowRight', detachedStage, {repeat: true});
+      await pause(300);
+      check(rendered === afterClose, 'Detached viewer kept paging after close');
+      check(photoShortcutEvents === 0, 'Active OFP keyboard leaked into photo viewer');
+      unchangedPhoto();
       results.textContent = 'BROWSER PASS SimBrief OFP full-page geometry, modes, resize, fullscreen and isolation';
   } catch (error) {
       results.textContent = 'BROWSER FAIL ' + (error?.stack || String(error));

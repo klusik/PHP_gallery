@@ -44,6 +44,14 @@ const OFP_HUD_IDLE_MS = 2600;
  * Consumers: attachOfpWheelZoom(). Rationale: a 95 ms idle delay avoids rerendering every mouse-wheel event.
  */
 const OFP_WHEEL_RENDER_DELAY_MS = 95;
+/**
+ * Pace native held-arrow events without queuing PDF page renders.
+ * Type: number. Units: milliseconds. Scope: one active OFP document viewer.
+ * Consumers: handleOfpKeyboard().
+ * Rationale: a 150 ms minimum interval keeps long documents readable while
+ * allowing the renderer to finish before accepting another held-key page step.
+ */
+const OFP_PAGE_REPEAT_INTERVAL_MS = 150;
 let pdfjsPromise = null;
 let activeViewer = null;
 
@@ -239,7 +247,8 @@ async function openOfpViewer(link) {
         link, copy, loadingTask: null, pdf: null, renderTask: null,
         page: 1, total: 0, zoom: 1, fit: 'page', manualScale: null, renderScale: null,
         generation: 0, closed: false,
-        keyHandler: null, resizeObserver: null, resizeHandler: null,
+        keyHandler: null, keyboardPageKey: null, keyboardPageAt: 0, keyboardPageTask: null,
+        resizeObserver: null, resizeHandler: null,
         fullscreenHandler: null, fullscreenErrorHandler: null, fullscreenNative: false,
         fullscreenTransition: false, layoutFrame: null, pinch: null,
         listeners: new AbortController(), hudTimer: null, wheelRenderTimer: null,
@@ -262,6 +271,21 @@ async function openOfpViewer(link) {
     dialog.addEventListener('keydown', (event) => event.stopPropagation());
     state.keyHandler = (event) => handleOfpKeyboard(state, event);
     document.addEventListener('keydown', state.keyHandler, true);
+    document.addEventListener('keyup', (event) => {
+        if (event.key === state.keyboardPageKey) state.keyboardPageKey = null;
+    }, {capture: true, signal: state.listeners.signal});
+    window.addEventListener('blur', () => { state.keyboardPageKey = null; },
+        {signal: state.listeners.signal});
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) state.keyboardPageKey = null;
+    }, {signal: state.listeners.signal});
+    document.addEventListener('focusin', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || target.closest('dialog, [role="dialog"]') !== dialog
+            || target.closest('input, textarea, select, [contenteditable]')) {
+            state.keyboardPageKey = null;
+        }
+    }, {signal: state.listeners.signal});
     attachOfpWheelZoom(state);
     attachOfpHud(state);
     state.resizeHandler = () => scheduleOfpFit(state);
@@ -613,7 +637,16 @@ async function renderOfpPage(state, anchor = null) {
         state.renderTask = null;
     }
     setOfpStatus(state, state.copy.rendering);
-    const page = await state.pdf.getPage(state.page);
+    let page;
+    try {
+        page = await state.pdf.getPage(state.page);
+    } catch (error) {
+        if (!state.closed && generation === state.generation) {
+            console.warn('SimBrief PDF page:', error);
+            setOfpStatus(state, state.copy.error, true);
+        }
+        return;
+    }
     if (state.closed || generation !== state.generation) {
         page.cleanup();
         return;
@@ -718,6 +751,7 @@ function isOfpFullscreen(state) {
  */
 function syncOfpFullscreen(state) {
     if (state.closed) return;
+    state.keyboardPageKey = null;
     const native = document.fullscreenElement === state.fullscreenTarget;
     if (native) {
         state.fullscreenNative = true;
@@ -747,6 +781,7 @@ function syncOfpFullscreen(state) {
  */
 async function toggleOfpFullscreen(state) {
     if (state.closed || state.fullscreenTransition) return;
+    state.keyboardPageKey = null;
     state.fullscreenTransition = true;
     try {
         if (isOfpFullscreen(state)) {
@@ -795,9 +830,11 @@ async function runOfpAction(state, action) {
     }
     state.webkitGesture = null;
     let anchor = null;
-    if (action === 'previous') state.page = Math.max(1, state.page - 1);
-    else if (action === 'next') state.page = Math.min(state.total, state.page + 1);
-    else if (action === 'zoom-in' || action === 'zoom-out') {
+    if (action === 'previous' || action === 'next') {
+        const page = Math.max(1, Math.min(state.total, state.page + (action === 'next' ? 1 : -1)));
+        if (page === state.page) return;
+        state.page = page;
+    } else if (action === 'zoom-in' || action === 'zoom-out') {
         const stage = state.dialog.querySelector('[data-ofp-stage]');
         const rect = stage.getBoundingClientRect();
         anchor = captureOfpAnchor(state, rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -814,17 +851,22 @@ async function runOfpAction(state, action) {
 }
 
 /**
- * Intercept the document keys before the photo lightbox global shortcuts.
+ * Intercept only the active document's keys before photo lightbox shortcuts.
+ * Native arrow repeats are paced and wait for the previous page step to finish;
+ * no timer advances pages after release, blur or a fullscreen/context change.
  *
- * @param {Record<string, unknown>} state Active viewer state with PDF, page, viewport and modal lifecycle.
+ * @param {{closed:boolean,dialog:HTMLDialogElement,fullscreenTransition:boolean,keyboardPageKey:string|null,keyboardPageAt:number,keyboardPageTask:Promise<void>|null}} state Active viewer and native-key repeat state.
  * @param {KeyboardEvent} event Keyboard event in capture phase.
  * @returns {void} Route the key to this document only.
  */
 function handleOfpKeyboard(state, event) {
-    if (state.closed || !state.dialog.open || event.altKey || event.ctrlKey || event.metaKey
-        || event.isComposing) return;
+    if (state.closed || activeViewer !== state || !state.dialog.open || document.hidden
+        || state.fullscreenTransition || event.defaultPrevented || event.altKey || event.ctrlKey
+        || event.metaKey || event.isComposing) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+    if (!target || !state.dialog.contains(target)
+        || target.closest('dialog, [role="dialog"]') !== state.dialog
+        || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="slider"]')
         || target?.isContentEditable) return;
     if (isOfpFullscreen(state)) revealOfpHud(state);
     const key = event.key.toLowerCase();
@@ -835,6 +877,19 @@ function handleOfpKeyboard(state, event) {
     if (!action) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (action === 'previous' || action === 'next') {
+        const now = performance.now();
+        if (!event.repeat) state.keyboardPageKey = event.key;
+        else if (state.keyboardPageKey !== event.key || state.keyboardPageTask !== null
+            || now - state.keyboardPageAt < OFP_PAGE_REPEAT_INTERVAL_MS) return;
+        state.keyboardPageAt = now;
+        const task = runOfpAction(state, action);
+        state.keyboardPageTask = task;
+        void task.finally(() => {
+            if (state.keyboardPageTask === task) state.keyboardPageTask = null;
+        });
+        return;
+    }
     if (event.repeat) return;
     void runOfpAction(state, action);
 }
@@ -964,6 +1019,7 @@ function attachOfpTouchZoom(state) {
 async function closeOfpViewer(state) {
     if (state.closed) return;
     state.closed = true;
+    state.keyboardPageKey = null;
     ++state.generation;
     state.resizeObserver?.disconnect();
     state.listeners.abort();
