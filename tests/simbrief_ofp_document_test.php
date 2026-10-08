@@ -31,6 +31,16 @@ declare(strict_types=1);
 
 namespace Gallery\Core {
     /**
+     * Escape fixture values exactly as the Admin presentation layer expects.
+     * @param string $value Escaped HTML source string.
+     * @return string Safe HTML attribute or text.
+     */
+    function e(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
      * Check an absolute fixture path against the fixture root.
      *
      * @param string $root Allowed root.
@@ -55,6 +65,17 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Return the maintained English fallback in isolated presentation tests.
+     * @param string $key Translation identity, unused in this English fixture.
+     * @param string $fallback English fallback to display.
+     * @return string Fallback user-visible label.
+     */
+    function t(string $key, string $fallback = ''): string
+    {
+        return $fallback;
+    }
+
     /**
      * Fixture-owned galleries directory.
      *
@@ -137,6 +158,7 @@ namespace Gallery\Services {
 namespace {
     require_once dirname(__DIR__) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__) . '/app/services/simbrief_ofp_conversion.php';
+    require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
 
     /**
      * Fail loudly if one OFP access or isolation postcondition fails.
@@ -302,6 +324,22 @@ namespace {
                 && $prefill['fields']['deph']['value'] === '07'
                 && $prefill['fields']['depm']['value'] === '20',
                 'Saved OFP data was not preferred to less-certain gallery fields.');
+            $panelInput = [
+                'gallery' => $historical, 'has_pdf' => false, 'occupied' => false,
+                'csrf_html' => '<input type="hidden" name="csrf_token" value="fixture">',
+                'action_url' => '/fixture-editor', 'prefill' => $prefill,
+            ];
+            ob_start();
+            \Gallery\Views\view_render_admin_simbrief_legacy_panel($panelInput);
+            $missingPdfHtml = (string) ob_get_clean();
+            ofp_document_assert(
+                str_contains($missingPdfHtml, 'data-simbrief-dispatch-open')
+                    && str_contains($missingPdfHtml, 'data-simbrief-dispatch-template')
+                    && str_contains($missingPdfHtml, 'admin-simbrief-dispatch-field-date')
+                    && !str_contains($missingPdfHtml, 'name="confirm_replace"'),
+                'A gallery without a PDF must offer reviewed dispatch, a native date field and initial attachment.'
+            );
+
             $legacyPdf = $legacyFolder . '/simbrief-ofp.pdf';
             $legacyManifest = $legacyFolder . '/simbrief-ofp-manifest.json';
             $uploadedPdf = $root . '/manual-upload.pdf';
@@ -313,6 +351,25 @@ namespace {
                 && $initial['sha256'] === hash_file('sha256', $legacyPdf)
                 && \Gallery\Services\simbrief_ofp_local_pdf_path($historical) === realpath($legacyPdf),
                 'Manual OFP upload was not stored via the canonical authorized resolver.');
+            $existingPanelInput = array_replace($panelInput, [
+                'has_pdf' => true, 'occupied' => true, 'provenance' => 'retrospective_user_generated',
+                'pdf_view_url' => '/fixture-ofp', 'pdf_download_url' => '/fixture-ofp?download=1',
+            ]);
+            ob_start();
+            \Gallery\Views\view_render_admin_simbrief_legacy_panel($existingPanelInput);
+            $existingPdfHtml = (string) ob_get_clean();
+            ofp_document_assert(
+                str_contains($existingPdfHtml, 'Prepare revised OFP in SimBrief')
+                    && str_contains($existingPdfHtml, 'data-simbrief-dispatch-open')
+                    && str_contains($existingPdfHtml, 'data-simbrief-dispatch-template')
+                    && str_contains($existingPdfHtml, 'admin-simbrief-dispatch-field-date')
+                    && str_contains($existingPdfHtml, 'Origin of the uploaded PDF (record only)')
+                    && str_contains($existingPdfHtml, 'This selector only records')
+                    && str_contains($existingPdfHtml, 'name="confirm_replace"')
+                    && strpos($existingPdfHtml, 'data-simbrief-dispatch-open')
+                        < strpos($existingPdfHtml, 'name="simbrief_ofp_pdf"'),
+                'Existing OFP must expose an independent reviewed re-dispatch and explain manual replacement provenance.'
+            );
             $firstPdf = file_get_contents($legacyPdf);
             $savedManifest = json_decode((string) file_get_contents($legacyManifest), true);
             ofp_document_assert($savedManifest['format'] === 'php_gallery_simbrief_ofp_manifest_v1'
