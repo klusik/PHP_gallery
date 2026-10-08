@@ -6793,5 +6793,6 @@
     "admin.legacy_ofp.invalid_pdf": "Den uppladdade filen är inte en giltig PDF.",
     "admin.legacy_ofp.size_limit": "PDF-filen får vara högst 25 MiB.",
     "admin.legacy_ofp.invalid_provenance": "Välj ett giltigt OFP-ursprung.",
-    "admin.legacy_ofp.manifest_invalid": "Det befintliga OFP-manifestet är ogiltigt. Reparera det före ersättning."
+    "admin.legacy_ofp.manifest_invalid": "Det befintliga OFP-manifestet är ogiltigt. Reparera det före ersättning.",
+    "admin.legacy_ofp.gallery_mismatch": "Det valda galleriet har ändrats. Ladda om redigeraren innan du laddar upp OFP."
 }
