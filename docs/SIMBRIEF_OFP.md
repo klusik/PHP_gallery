@@ -21,12 +21,16 @@ The local PDF is retained as the canonical original. Reimporting flight data doe
 
 ## Authorization and PDF serving
 
-The sole supported PDF delivery endpoint is:
+The canonical, gallery-scoped PDF delivery endpoint is:
 
-- View: index.php?page=media&id=GALLERY_ID&ofp=1
-- Download: index.php?page=media&id=GALLERY_ID&ofp=1&download=1
+- View: `index.php?page=gallery_ofp_pdf&id=GALLERY_ID`
+- Download: `index.php?page=gallery_ofp_pdf&id=GALLERY_ID&download=1`
 
-The PHP controller validates gallery visibility and existing password/NSFW access decisions. The attachment service validates a known local filename, gallery ownership, manifest marker, symlink/path boundaries, 25 MiB size limit and PDF signature. Responses use application/pdf, no-sniff and private no-store caching. Other local filenames or URLs cannot be requested via this endpoint.
+These links are **root-relative and same-origin**. They use the actual front-controller mount path (for example, `/galerie/index.php` on a subdirectory installation), not an absolute configured `base_url` that could send an anonymous PDF.js fetch to another host and cookie scope. URL rewriting is never required. Previously emitted `page=media&id=GALLERY_ID&ofp=1` links continue to work, but new HTML uses the unambiguous dedicated route so gallery IDs cannot be mistaken for image IDs when parameters are normalized.
+
+An anonymous visitor may view or download the **saved original PDF of a public or unpublished (unlisted) gallery** using its direct gallery URL without logging in. Unpublished galleries are absent from normal listings, but they are **not private**; their PDF has the same access rights as the gallery page. Password, share-token and NSFW access grants continue to apply, including when inherited from a parent. A private source or generated private `ofp-pages/` child stays inaccessible without an ordinary valid gallery grant. A verified administrator may inspect private source OFPs unless anonymous preview is enabled. PDF authorization never gains implicit administrator privileges from the page, a cached response or a visitor session.
+
+The PHP media controller checks the gallery policy **before** opening the validated local attachment. The attachment service validates a known local filename, manifest marker, symlink/path boundaries, 25 MiB size limit and PDF signature. Successful GET/HEAD replies use `application/pdf`, fixed inline/attachment disposition, no-sniff and `private, no-store`; HEAD returns metadata only. Forbidden, absent and invalid PDFs intentionally share an opaque, uncached **text/plain 404** response instead of rendering the normal HTML 404 page. This avoids exposing whether a protected gallery/PDF exists and prevents PDF.js from consuming an unrelated HTML document. File paths, tokens and the remote SimBrief URL are never serialized into the response.
 
 The galleries/.htaccess policy denies direct static PDF access. **Nginx/other servers ignoring Apache .htaccess require equivalent URL access restrictions for gallery PDF files.** Do not expose the gallery source folder without server-level access rules.
 
@@ -41,15 +45,19 @@ The overlay shares the visual language of the existing photo lightbox, but owns 
 - Document page counter and previous/next page navigation
 - **Fit whole page** is the initial mode. It computes the smaller width/height scale from the actual scroll-stage client dimensions, canvas padding and clearance, centering the entire page without covering edges with the header or toolbar.
 - **Fit width** is an explicit alternative allowing vertical scrolling. **Actual size (100%)** uses PDF.js's 96-CSS-pixel/inch scale. View-mode buttons expose the active automatic mode with `aria-pressed`.
-- Zoom in/out reports percentages relative to the last fit; **Reset zoom (100%)** restores that fit. Pinch zoom, manual panning, fullscreen, and keyboard shortcuts remain independent of gallery-photo navigation.
+- Zoom in/out reports percentages relative to the last fit; **Reset zoom (100%)** restores that fit. Ordinary mouse-wheel and two-finger trackpad gestures **scroll the PDF in both axes**; Ctrl+wheel or a trackpad pinch **zooms only the PDF** at the cursor, with Safari GestureEvent fallback. On touchscreens, one finger scrolls and two fingers pinch; releasing one finger during a pinch continues panning. All gestures remain independent of gallery-photo navigation.
 - Automatic fit modes recompute for every PDF page's dimensions/orientation, stage resize, device rotation, and fullscreen transitions. Manual zoom retains its chosen CSS scale and scroll position across ordinary stage resizing until an explicit fit or reset.
 - Responsive layout, lazy per-page rendering, bounded 16-megapixel high-DPI canvas
 - Cleanup of page/worker resources on navigation and close
 - Original PDF download link and browser-native PDF fallback
 
+The viewer's header, toolbar, zoom percentage and fit-mode labels use an isolated, fixed high-contrast dark palette. The gallery's theme accents and text colors do not override the PDF HUD, including native/fullscreen fallback, focus, hover, active and disabled controls. The header and toolbar do not scale with the PDF.
+
 The normal photo lightbox, map and slideshow state are not modified by PDF page navigation.
 
 ## Optional server-side PDF page conversion
+
+The public description displays compact **View** and **Download PDF** actions together. For administrators, the private-subgallery creation button appears separately below them, beside a localized, keyboard-accessible question-mark control. The help opens on hover, keyboard focus or tap, and closes on click-away or Escape without consuming a permanent description line.
 
 Only an authenticated administrator can manually request **Create private OFP subgallery** through a CSRF-protected action. Nothing is converted automatically. Hosts without Imagick plus working PDF and JPEG delegates show a capability notice and retain normal PDF viewing.
 
@@ -74,8 +82,9 @@ To deliberately regenerate, inspect/export and remove the old generated child th
 
 ## Regression and maintenance
 
-- tests/simbrief_ofp_lightbox_browser_test.mjs verifies portrait A4 and mixed-orientation whole-page geometry on a landscape stage, fit-width and actual-size modes, center/bounds, mode indication, manual resize persistence, simulated rotation/fullscreen changes, translations, download isolation and resource cleanup.
+- tests/simbrief_ofp_lightbox_browser_test.mjs verifies stage-native scrolling versus Ctrl-only PDF zoom, theme-independent HUD contrast, help visibility, portrait A4 and mixed-orientation whole-page geometry on a landscape stage, fit-width and actual-size modes, center/bounds, mode indication, manual resize persistence, simulated rotation/fullscreen changes, translations, download isolation and resource cleanup.
 - tests/simbrief_ofp_document_test.php covers manifest validation, PDF signature and symlink refusal, generated-gallery ownership checks, no-op idempotency and the separate viewer contract.
+- tests/simbrief_ofp_public_http_test.php starts a disposable real PHP HTTP server with isolated gallery fixtures. It checks clean-cookie anonymous GET/HEAD and downloads for public, unpublished, unlisted and legacy draft sources; old links; private/NSFW/password/share gates; invalid/missing PDFs; admin preview isolation; root/subdirectory paths and non-rewrite URLs. tests/public_media_authorization_contract_test.php exercises the same PDF authorization helper against the actual gallery-access policy.
 - Existing gallery import/export, deletion, backup and thumbnail workflows should continue treating the OFP pages as an ordinary physical child gallery.
 - New production assets and PHP services must appear in the checked-in production inventory and core manifest.
 - A complete hosted browser/integration test must also exercise a real multipage SimBrief PDF, restricted galleries, the zoom UI, and optional Imagick on a capable host.

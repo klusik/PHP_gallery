@@ -137,6 +137,7 @@ namespace {
 
     $root = dirname(__DIR__);
     require_once $root . '/app/services/gallery_access.php';
+    require_once $root . '/app/services/simbrief_ofp_attachments.php';
 
     $_SESSION = [];
     $_GET = [];
@@ -262,6 +263,52 @@ namespace {
     public_media_authorization_assert(
         substr_count($viewerContentSource, 'visitor_can_access_gallery_without_admin_bypass(') >= 2,
         'Viewer-owned source-image reference flows must continue to use the no-admin-bypass gallery policy.'
+    );
+
+    // The original OFP attachment inherits the gallery's direct-link policy.
+    // Unpublished means unlisted, not private, so anonymous access by URL works
+    // without any administrator cookie when all visitor grants are satisfied.
+    $_SESSION = [];
+    $_GET = [];
+    $GLOBALS['public_media_authorization_user'] = false;
+    public_media_authorization_assert(
+        \Gallery\Services\simbrief_ofp_visitor_access_allowed($public, false)
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($unpublished, false),
+        'Fresh anonymous visitors must read original PDFs of public and unpublished galleries.'
+    );
+    public_media_authorization_assert(
+        !\Gallery\Services\simbrief_ofp_visitor_access_allowed($private, false)
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($shareProtected, false),
+        'Ungated private galleries and locked private share galleries must not disclose PDFs.'
+    );
+    public_media_authorization_assert(
+        !\Gallery\Services\simbrief_ofp_visitor_access_allowed($password, false)
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordUnpublishedChild, false)
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($nsfw, false),
+        'Published and unpublished inherited-password PDFs and NSFW PDFs require visitor grants.'
+    );
+    grant_gallery_public_access(4);
+    grant_nsfw_guard_access();
+    public_media_authorization_assert(
+        \Gallery\Services\simbrief_ofp_visitor_access_allowed($password, false)
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordChild, false)
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordUnpublishedChild, false)
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($nsfw, false),
+        'Original PDFs inherit password and NSFW grants, including unpublished descendants.'
+    );
+    $_SESSION = [];
+    $_GET = ['share' => $shareToken];
+    public_media_authorization_assert(
+        \Gallery\Services\simbrief_ofp_visitor_access_allowed($shareProtected, false),
+        'A valid share token must authorize the original PDF when the private gallery page itself is accessible.'
+    );
+    public_media_authorization_assert(
+        \Gallery\Services\simbrief_ofp_visitor_access_allowed($private, true),
+        'Verified administrators must retain access to their private OFP attachments.'
+    );
+    public_media_authorization_assert(
+        !\Gallery\Services\simbrief_ofp_visitor_access_allowed($private, false),
+        'Anonymous Admin preview must not inherit administrator PDF permissions.'
     );
 
     echo "public_media_authorization_contract_test: ok\n";

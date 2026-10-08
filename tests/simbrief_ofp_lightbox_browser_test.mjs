@@ -39,10 +39,19 @@ const html = String.raw`<!doctype html>
 <body>
 <div id="results"></div>
 <div id="photo-sequence" data-selected-image="7" data-count="8">Existing photo #7</div>
+<main class="public-page"><div class="gallery-description-rich">
 <div class="simbrief-ofp-actions">
-<a data-simbrief-ofp-open href="/fixture/ofp.pdf">View flight plan</a>
-<a download="simbrief-ofp.pdf" href="/fixture/ofp.pdf?download=1">Download PDF</a>
+<div class="simbrief-ofp-primary-actions">
+<a class="button simbrief-ofp-open" data-simbrief-ofp-open href="/index.php?page=gallery_ofp_pdf&amp;id=42">View flight plan</a>
+<a class="button secondary" download="simbrief-ofp.pdf" href="/index.php?page=gallery_ofp_pdf&amp;id=42&amp;download=1">Download PDF</a>
 </div>
+<div class="simbrief-ofp-secondary-actions">
+<form class="simbrief-ofp-convert-form" data-ofp-convert-form>
+<button type="submit" class="button secondary">Create private OFP subgallery</button>
+<span class="simbrief-ofp-info"><button type="button" class="simbrief-ofp-info-toggle"
+ data-ofp-info-toggle aria-expanded="false" aria-controls="fixture-ofp-help" aria-label="About OFP conversion">?</button>
+<span class="simbrief-ofp-info-text" id="fixture-ofp-help" role="tooltip">Convert PDF pages into a private subgallery.</span></span>
+</form></div></div></div></main>
 <script type="module">
   import {setupSimbriefOfpViewer} from '/public/assets/gallery-modules/simbrief-ofp-viewer.js';
   const results = document.getElementById('results');
@@ -58,7 +67,9 @@ const html = String.raw`<!doctype html>
       GlobalWorkerOptions: {workerSrc: ''},
       getDocument(options) {
           documentRequests += 1;
-          if (!options.url.endsWith('/fixture/ofp.pdf') || options.isEvalSupported !== false) {
+          if (new URL(options.url, location.href).searchParams.get('page') !== 'gallery_ofp_pdf'
+               || new URL(options.url, location.href).searchParams.get('id') !== '42'
+               || options.isEvalSupported !== false) {
               throw new Error('Incorrect PDF source or missing eval protection');
           }
           return {
@@ -155,11 +166,77 @@ const html = String.raw`<!doctype html>
   try {
       setupSimbriefOfpViewer();
       setupSimbriefOfpViewer();
+      const attachmentGroup = document.querySelector('.simbrief-ofp-actions');
+      const firstRow = document.querySelector('.simbrief-ofp-primary-actions');
+      const secondRow = document.querySelector('.simbrief-ofp-secondary-actions');
+      const ofpActions = [
+          document.querySelector('[data-simbrief-ofp-open]'),
+          attachmentGroup.querySelector('a[download]'),
+          attachmentGroup.querySelector('button[type="submit"]'),
+          attachmentGroup.querySelector('[data-ofp-info-toggle]'),
+      ];
+      for (const width of [320, 375, 768]) {
+          attachmentGroup.style.width = width + 'px';
+          const group = attachmentGroup.getBoundingClientRect();
+          for (const control of ofpActions) {
+              const bounds = control.getBoundingClientRect();
+              check(bounds.left >= group.left - 2 && bounds.right <= group.right + 2,
+                  'OFP attachment action overflows ' + width + 'px group: ' + control.textContent);
+          }
+          check(secondRow.getBoundingClientRect().top >= firstRow.getBoundingClientRect().bottom - 2,
+              'Private subgallery action was not separated from public attachments at ' + width + 'px');
+      }
+      attachmentGroup.style.removeProperty('width');
+      const help = attachmentGroup.querySelector('[data-ofp-info-toggle]');
+      const helpText = document.getElementById('fixture-ofp-help');
+      check(help.getAttribute('aria-label')?.length > 0
+          && getComputedStyle(helpText).display === 'none', 'OFP help is not initially accessible and collapsed');
+      help.click();
+      check(help.getAttribute('aria-expanded') === 'true' && getComputedStyle(helpText).display !== 'none',
+          'Touch/primary-click OFP help did not expand');
+      help.click();
+      check(help.getAttribute('aria-expanded') === 'false' && getComputedStyle(helpText).display === 'none',
+          'Second tap did not close the OFP tooltip');
+      help.click();
+      document.getElementById('photo-sequence').click();
+      check(help.getAttribute('aria-expanded') === 'false', 'Outside click failed to dismiss OFP help');
+      help.focus();
+      check(getComputedStyle(helpText).display !== 'none', 'Keyboard focus failed to reveal OFP help');
+      help.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+      check(help.getAttribute('aria-expanded') === 'false' && getComputedStyle(helpText).display === 'none',
+          'Escape failed to dismiss focused OFP help');
       document.querySelector('[data-simbrief-ofp-open]').click();
       await waitUntil(() => counter() === 'Page 1 of 3' && document.querySelector('dialog')?.open, 'first PDF page');
       check(documentRequests === 1, 'Click handler was registered twice');
+      // A deliberately hostile gallery theme cannot contaminate the PDF HUD.
+      document.documentElement.style.setProperty('--accent', '#030712');
+      document.documentElement.style.setProperty('--accent-dark', '#030712');
+      const toRgb = (value) => (value.match(/\d+(?:\.\d+)?/g) || []).slice(0, 3).map(Number);
+      const luminance = (value) => {
+          const components = toRgb(value).map((channel) => {
+              const v = channel / 255;
+              return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * components[0] + 0.7152 * components[1] + 0.0722 * components[2];
+      };
+      const contrast = (foreground, background) => {
+          const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+          return (values[0] + 0.05) / (values[1] + 0.05);
+      };
+      for (const name of ['close', 'fullscreen', 'previous', 'next', 'fit-width', 'fit-page', 'actual-size', 'zoom-in']) {
+          const control = getComputedStyle(button(name));
+          check(contrast(control.color, control.backgroundColor) >= 4.5,
+              'OFP toolbar contrast below 4.5:1: ' + name + ' (' + control.color
+              + ' on ' + control.backgroundColor + ')');
+      }
+      const level = getComputedStyle(document.querySelector('[data-ofp-zoom]'));
+      check(contrast(level.color, 'rgb(33, 44, 61)') >= 4.5,
+          'Zoom percentage inherited unreadable theme color');
+      const selected = getComputedStyle(button('fit-page'));
+      check(selected.backgroundColor === 'rgb(29, 78, 216)' && selected.color === 'rgb(255, 255, 255)',
+          'Selected PDF mode must use a viewer-owned blue-and-white palette');
       check(button('previous').disabled, 'First page previous button must be disabled');
-      check(document.querySelector('[data-ofp-download]').href.endsWith('/fixture/ofp.pdf?download=1'),
+      check(new URL(document.querySelector('[data-ofp-download]').href).searchParams.get('download') === '1',
           'Download must preserve original link');
       unchangedPhoto();
       check(stage().clientWidth > stage().clientHeight, 'Landscape fixture was not landscape');
@@ -171,6 +248,51 @@ const html = String.raw`<!doctype html>
       check(stage().scrollHeight > stage().clientHeight + 10, 'Fit-width cannot scroll vertically');
       check(canvas().getBoundingClientRect().width <= stage().clientWidth - 10,
           'Fit width causes horizontal clipping');
+
+      // Synthetic TouchEvents cover deterministic mobile pan -> pinch -> pan
+      // handoff; physical iOS/Android testing remains a separate requirement.
+      check(getComputedStyle(stage()).touchAction === 'none', 'PDF stage touch actions leaked to browser');
+      const touch = (id, x, y) => new Touch({
+          identifier: id, target: stage(), clientX: x, clientY: y,
+          pageX: x, pageY: y, radiusX: 1, radiusY: 1, force: 1,
+      });
+      const touchEvent = (type, current, changed = current) => {
+          const event = new TouchEvent(type, {
+              bubbles: true, cancelable: true, touches: current,
+              targetTouches: current, changedTouches: changed,
+          });
+          stage().dispatchEvent(event);
+          return event;
+      };
+      const touchRect = stage().getBoundingClientRect();
+      const cx = touchRect.left + stage().clientWidth / 2;
+      const cy = touchRect.top + stage().clientHeight / 2;
+      stage().scrollTop = 0;
+      touchEvent('touchstart', [touch(11, cx, cy + 20)]);
+      const scrollTouch = touchEvent('touchmove', [touch(11, cx, cy - 70)]);
+      check(scrollTouch.defaultPrevented && stage().scrollTop > 0,
+          'One-finger drag failed to scroll the fit-width PDF');
+      touchEvent('touchend', [], [touch(11, cx, cy - 70)]);
+      const beforePinch = canvas().getBoundingClientRect().width;
+      const fingerA = touch(21, cx - 28, cy), fingerB = touch(22, cx + 28, cy);
+      touchEvent('touchstart', [fingerA, fingerB]);
+      const fingerMovedA = touch(21, cx - 72, cy);
+      const fingerMovedB = touch(22, cx + 72, cy);
+      const pinchMove = touchEvent('touchmove', [fingerMovedA, fingerMovedB]);
+      check(pinchMove.defaultPrevented && canvas().getBoundingClientRect().width > beforePinch * 1.2,
+          'Two-finger pinch did not zoom the PDF content');
+      touchEvent('touchend', [fingerMovedA], [fingerMovedB]);
+      stage().scrollTop = 0;
+      const handoff = touchEvent('touchmove', [touch(21, cx - 72, cy - 45)]);
+      check(handoff.defaultPrevented && stage().scrollTop > 0,
+          'Remaining pinch finger did not take over vertical PDF scrolling');
+      previousRender = rendered;
+      touchEvent('touchend', [], [touch(21, cx - 72, cy - 45)]);
+      await afterRender(previousRender, 'mobile pinch-to-pan rasterization');
+      previousRender = rendered;
+      button('fit-width').click();
+      await afterRender(previousRender, 'restore fit-width after mobile pinch');
+      check(active('fit-width'), 'Mobile pinch reset lost requested fit width');
 
       previousRender = rendered;
       button('next').click();
@@ -279,10 +401,10 @@ const html = String.raw`<!doctype html>
       const chromeFont = getComputedStyle(button('close')).fontSize;
       const chromeWidth = document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().width;
       previousRender = rendered;
-      const zoomEvent = wheel(px, py, -110);
-      check(!zoomEvent.unhandled && zoomEvent.event.defaultPrevented, 'Wheel did not zoom PDF');
-      await afterRender(previousRender, 'fullscreen content-only wheel zoom');
-      check(canvas().getBoundingClientRect().width > pageBox.width, 'PDF did not grow on wheel');
+      const zoomEvent = wheel(px, py, -110, {ctrlKey: true});
+      check(!zoomEvent.unhandled && zoomEvent.event.defaultPrevented, 'Ctrl+wheel did not zoom PDF');
+      await afterRender(previousRender, 'fullscreen content-only Ctrl+wheel zoom');
+      check(canvas().getBoundingClientRect().width > pageBox.width, 'PDF did not grow on Ctrl+wheel');
       anchored(anchor, px, py);
       check(getComputedStyle(button('close')).fontSize === chromeFont
           && Math.abs(document.querySelector('.simbrief-ofp-toolbar').getBoundingClientRect().width
@@ -342,7 +464,7 @@ const html = String.raw`<!doctype html>
       delete document.fullscreenElement;
       document.exitFullscreen = oldExit;
 
-      // Wheel gestures in the ordinary document lightbox keep controls at 100%.
+      // Native scrolling is never reinterpreted as mouse-wheel zoom.
       previousRender = rendered;
       button('fit-page').click();
       await afterRender(previousRender, 'fit after fullscreen');
@@ -350,14 +472,25 @@ const html = String.raw`<!doctype html>
       const wx = page.left + page.width * 0.68, wy = page.top + page.height * 0.33;
       const originalPoint = point(wx, wy);
       previousRender = rendered;
-      check(!wheel(wx, wy, -115).unhandled, 'Ordinary wheel not handled');
-      await afterRender(previousRender, 'normal wheel zoom');
+      const plain = wheel(wx, wy, -115);
+      check(plain.unhandled && !plain.event.defaultPrevented,
+          'Unmodified mouse wheel must remain native stage scroll');
+      const horizontal = wheel(wx, wy, 20, {deltaX: 65, deltaMode: 0});
+      check(horizontal.unhandled && !horizontal.event.defaultPrevented,
+          'Horizontal trackpad scroll must remain native');
+      await pause(170);
+      check(rendered === previousRender && active('fit-page') && zoom() === 'Zoom 100%',
+          'Unmodified wheel unexpectedly changed the PDF fit/scale');
+      previousRender = rendered;
+      const controlZoom = wheel(wx, wy, -115, {ctrlKey: true});
+      check(!controlZoom.unhandled && controlZoom.event.defaultPrevented, 'Ctrl+wheel was not captured');
+      await afterRender(previousRender, 'normal Ctrl+wheel PDF zoom');
       anchored(originalPoint, wx, wy);
-      check(!active('fit-page'), 'Mouse wheel did not select manual zoom');
+      check(!active('fit-page'), 'Ctrl+wheel did not select manual zoom');
       await pause(210);
       previousRender = rendered;
-      wheel(wx, wy, -90);
-      await afterRender(previousRender, 'repeated cursor wheel zoom');
+      wheel(wx, wy, -90, {ctrlKey: true});
+      await afterRender(previousRender, 'repeated cursor Ctrl+wheel zoom');
       anchored(originalPoint, wx, wy);
       await pause(210);
       const trackpadZoom = zoom(), trackpadRenders = rendered;
@@ -370,6 +503,9 @@ const html = String.raw`<!doctype html>
       const ctrl = wheel(wx, wy, -35, {ctrlKey: true});
       check(!ctrl.unhandled && ctrl.event.defaultPrevented, 'Ctrl+wheel did not zoom PDF');
       await afterRender(previousRender, 'modifier wheel');
+      const command = wheel(wx, wy, -30, {metaKey: true});
+      check(command.unhandled && !command.event.defaultPrevented,
+          'Command+wheel must remain a browser shortcut');
       const next = button('next').getBoundingClientRect();
       check(document.elementFromPoint(next.left + next.width / 2,
           next.top + next.height / 2) === button('next'),

@@ -22,6 +22,80 @@ use function GalleryWorkflow\fixtureDatabase;
 use function GalleryWorkflow\row;
 use function GalleryWorkflow\validateFixture;
 
+/**
+ * Produce a small valid one-page PDF with deterministic cross-reference offsets.
+ *
+ * @return string Original PDF bytes used to verify unmodified HTTP streaming.
+ */
+function galleryWorkflowOfpFixturePdf(): string
+{
+    $pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+    $objects = [
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>\nendobj\n",
+        "4 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n",
+    ];
+    $offsets = [];
+    foreach ($objects as $object) {
+        $offsets[] = strlen($pdf);
+        $pdf .= $object;
+    }
+    $xrefOffset = strlen($pdf);
+    $pdf .= "xref\n0 5\n0000000000 65535 f \n";
+    foreach ($offsets as $offset) {
+        $pdf .= sprintf("%010d 00000 n \n", $offset);
+    }
+    return $pdf . "trailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n"
+        . $xrefOffset . "\n%%EOF\n";
+}
+
+/**
+ * Read the real rendered OFP URLs from a gallery page in the same HTTP session.
+ *
+ * @param Http $visitor The cookie-isolated anonymous HTTP client.
+ * @param string $folderPath Physical gallery path in the migrated database.
+ * @param int $galleryId Expected PDF-owning gallery ID.
+ * @return array{inline:string,download:string} Root-relative public document links.
+ */
+function galleryWorkflowOfpLinks(Http $visitor, string $folderPath, int $galleryId): array
+{
+    $page = $visitor->request('/index.php?page=gallery&gallery_path=' . rawurlencode($folderPath));
+    check($page['status'] === 200, 'A visitor cannot open the source gallery by its direct URL.');
+    $document = new DOMDocument();
+    check(@$document->loadHTML($page['body']), 'Real gallery HTML cannot be parsed.');
+    $xpath = new DOMXPath($document);
+    $inline = $xpath->query('//a[@data-simbrief-ofp-open]')->item(0);
+    $download = $xpath->query('//a[@download="simbrief-ofp.pdf"]')->item(0);
+    check($inline instanceof DOMElement && $download instanceof DOMElement,
+        'Source gallery rendered without both OFP actions.');
+    $expected = '/index.php?page=gallery_ofp_pdf&id=' . $galleryId;
+    check($inline->getAttribute('href') === $expected
+        && $download->getAttribute('href') === $expected . '&download=1',
+        'The rendered OFP anchors do not identify the owner gallery or correct same-origin routes.');
+    return ['inline' => $inline->getAttribute('href'), 'download' => $download->getAttribute('href')];
+}
+
+/**
+ * Verify that a real runtime response streams the exact original PDF bytes.
+ *
+ * @param Http $visitor Cookie-isolated visitor context shared with the gallery view.
+ * @param string $route Route rendered in the source gallery or its legacy alias.
+ * @param string $expectedPdf Original persisted PDF file bytes.
+ * @param bool $download Whether the response must use attachment disposition.
+ * @return void Throws if the visitor cannot retrieve the original PDF.
+ */
+function galleryWorkflowOfpAssertPdf(Http $visitor, string $route, string $expectedPdf, bool $download = false): void
+{
+    $response = $visitor->request($route);
+    check($response['status'] === 200
+        && str_starts_with((string) ($response['headers']['content-type'] ?? ''), 'application/pdf')
+        && str_starts_with((string) ($response['headers']['content-disposition'] ?? ''),
+            $download ? 'attachment;' : 'inline;')
+        && hash_equals($expectedPdf, $response['body']),
+        'Real runtime OFP HTTP response is missing, not a PDF, or differs from the original file.');
+}
+
 if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
     $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1';
     echo ($required ? 'BLOCKED' : 'SKIP') . " gallery workflow real database and HTTP require disposable runner\n";
@@ -74,6 +148,30 @@ try {
     $original = $folder . '/' . $image['relative_path'];
     check(is_file($original) && hash_file('sha256', $original) === hash_file('sha256', $sample), 'Uploaded original hash mismatch.');
     echo "PASS gallery workflow multipart upload metadata and original hash\n";
+
+    $stage = 'real runtime OFP public HTTP and anonymous preflight';
+    $ofpBytes = galleryWorkflowOfpFixturePdf();
+    check(file_put_contents($folder . '/simbrief-ofp.pdf', $ofpBytes) === strlen($ofpBytes),
+        'Could not persist the original OFP bytes in the real fixture gallery.');
+    check(file_put_contents($folder . '/simbrief-ofp-manifest.json', json_encode([
+        'format' => 'php_gallery_simbrief_ofp_manifest_v1',
+        'ofp_pdf_file' => 'simbrief-ofp.pdf',
+    ], JSON_THROW_ON_ERROR)) !== false, 'Could not persist the real OFP attachment manifest.');
+    $ofpLinks = galleryWorkflowOfpLinks($anonymous, (string) $gallery['folder_path'], $id);
+    galleryWorkflowOfpAssertPdf($anonymous, $ofpLinks['inline'], $ofpBytes);
+    galleryWorkflowOfpAssertPdf($anonymous, $ofpLinks['download'], $ofpBytes, true);
+    $ofpHead = $anonymous->request($ofpLinks['inline'], null, false, 'HEAD');
+    check($ofpHead['status'] === 200 && $ofpHead['body'] === ''
+        && str_starts_with((string) ($ofpHead['headers']['content-type'] ?? ''), 'application/pdf')
+        && (int) ($ofpHead['headers']['content-length'] ?? -1) === strlen($ofpBytes),
+        'Real runtime OFP HEAD must expose PDF headers but no content.');
+    galleryWorkflowOfpAssertPdf($anonymous, '/index.php?page=media&id=' . $id . '&ofp=1', $ofpBytes);
+    galleryWorkflowOfpAssertPdf($anonymous, '/index.php?page=media&id=' . $id . '&ofp=1&download=1', $ofpBytes, true);
+    $unexpectedOFP = $anonymous->request($ofpLinks['inline'] . '&unexpected=1');
+    check($unexpectedOFP['status'] === 404 && $unexpectedOFP['body'] === "Not found.\n",
+        'The real anonymous SEO guard must continue rejecting unknown query keys.');
+    echo "PASS gallery workflow original OFP public GET/HEAD/download/legacy and SEO guard\n";
+
 
     $stage = 'missing-folder catalog preservation';
     $childFields = array_replace($fields, ['title' => 'HTTP nested', 'folder_name' => 'nested', 'parent_id' => $id,
@@ -145,11 +243,36 @@ try {
     check(($sidecar['title'] ?? '') === $edit['title'], 'Edited sidecar title mismatch.');
     // Unpublished is intentionally unlisted but accessible by direct URL in this CMS.
     check($anonymous->request('/index.php?page=media&id=' . $image['id'])['status'] === 200, 'Unpublished direct-access compatibility changed.');
+
+    $stage = 'real runtime unpublished OFP PDF against migrated gallery model';
+    $unpublishedLinks = galleryWorkflowOfpLinks($anonymous, (string) $updated['folder_path'], $id);
+    galleryWorkflowOfpAssertPdf($anonymous, $unpublishedLinks['inline'], $ofpBytes);
+    galleryWorkflowOfpAssertPdf($anonymous, $unpublishedLinks['download'], $ofpBytes, true);
+    $unpublishedHead = $anonymous->request($unpublishedLinks['inline'], null, false, 'HEAD');
+    check($unpublishedHead['status'] === 200 && $unpublishedHead['body'] === ''
+        && str_starts_with((string) ($unpublishedHead['headers']['content-type'] ?? ''), 'application/pdf')
+        && (int) ($unpublishedHead['headers']['content-length'] ?? -1) === strlen($ofpBytes),
+        'Unpublished direct-link OFP HEAD lost its original metadata.');
+    galleryWorkflowOfpAssertPdf($anonymous, '/index.php?page=media&id=' . $id . '&ofp=1', $ofpBytes);
+    galleryWorkflowOfpAssertPdf($anonymous, '/index.php?page=media&id=' . $id . '&ofp=1&download=1', $ofpBytes, true);
+    echo "PASS gallery workflow unpublished OFP same-session gallery/GET/HEAD/download/legacy\n";
+
     $edit['visibility'] = 'private';
     $edit['edit_revision'] = (string) $updated['edit_revision'];
     envelope($admin->request('/index.php?page=admin_edit_gallery&id=' . $id, $edit, true), 'Private');
     check(row($pdo, 'SELECT visibility FROM galleries WHERE id = ?', [$id])['visibility'] === 'private', 'Private visibility was not persisted.');
     check($anonymous->request('/index.php?page=media&id=' . $image['id'])['status'] === 404, 'Private original exposed.');
+
+    $stage = 'real runtime private OFP security boundary';
+    foreach ([$unpublishedLinks['inline'], $unpublishedLinks['download'],
+        '/index.php?page=media&id=' . $id . '&ofp=1'] as $privateRoute) {
+        $privatePdf = $anonymous->request($privateRoute);
+        check($privatePdf['status'] === 404 && $privatePdf['body'] === 'Flight plan unavailable.',
+            'Private source gallery PDF must not be disclosed to anonymous visitors.');
+    }
+    galleryWorkflowOfpAssertPdf($admin, $unpublishedLinks['inline'], $ofpBytes);
+    echo "PASS gallery workflow private OFP access control preserves real Admin access\n";
+
     $protectedImage = row($pdo, 'SELECT * FROM images WHERE gallery_id = ? LIMIT 1', [$seed['protected_id']]);
     foreach (['media', 'thumb'] as $route) {
         $denied = $anonymous->request('/index.php?page=' . $route . '&id=' . $protectedImage['id']);
@@ -160,6 +283,17 @@ try {
     envelope($admin->request('/index.php?page=admin_edit_gallery&id=' . $id, $edit, true), 'Publish');
     $public = $anonymous->request('/index.php?page=media&id=' . $image['id']);
     check($public['status'] === 200 && hash('sha256', $public['body']) === hash_file('sha256', $original), 'Published original unavailable or incorrect.');
+
+    $stage = 'real runtime republished and unlisted OFP';
+    $republishedLinks = galleryWorkflowOfpLinks($anonymous, (string) $gallery['folder_path'], $id);
+    galleryWorkflowOfpAssertPdf($anonymous, $republishedLinks['inline'], $ofpBytes);
+    $pdo->prepare("UPDATE galleries SET access_listing = 'unlisted' WHERE id = ?")->execute([$id]);
+    $unlistedLinks = galleryWorkflowOfpLinks($anonymous, (string) $gallery['folder_path'], $id);
+    galleryWorkflowOfpAssertPdf($anonymous, $unlistedLinks['inline'], $ofpBytes);
+    galleryWorkflowOfpAssertPdf($anonymous, $unlistedLinks['download'], $ofpBytes, true);
+    $pdo->prepare("UPDATE galleries SET access_listing = 'listed' WHERE id = ?")->execute([$id]);
+    echo "PASS gallery workflow original OFP republished/unlisted access\n";
+
     echo "PASS gallery workflow edit publish unpublish and protected media authorization\n";
 
     $stage = 'recoverable subtree delete and restore';

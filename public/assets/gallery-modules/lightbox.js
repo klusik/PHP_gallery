@@ -858,6 +858,7 @@ export function setupGalleryLightbox() {
     const lightboxZoomPointers = new Map();
     // lightboxZoomPinch stores the immutable start geometry for the active pinch.
     let lightboxZoomPinch = null;
+    let lightboxWebkitGesture = null;
     // lightboxZoomReclampFrame waits for fullscreen and responsive layout changes before measuring again.
     let lightboxZoomReclampFrame = 0;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
@@ -3839,11 +3840,13 @@ export function setupGalleryLightbox() {
      * Restore the canonical centered 100% state for navigation and teardown.
      *
      * @param {boolean} announce Whether to announce the reset.
+     * @returns {void} Recenter the photo without changing gallery navigation.
      */
     function resetLightboxZoom(announce = false) {
         cancelLightboxZoomReclamp();
         clearLightboxZoomPointers();
         clearLightboxZoomPan();
+        lightboxWebkitGesture = null;
         lightboxZoomState = createLightboxZoomState();
         if (lightboxZoomAnimationTimer) {
             window.clearTimeout(lightboxZoomAnimationTimer);
@@ -3933,45 +3936,84 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Zoom the active photograph around the wheel pointer without hijacking browser page zoom.
+     * Pan a zoomed photo on ordinary wheel input; zoom its content only on
+     * Ctrl+wheel (which also represents Chromium's synthetic trackpad pinch).
+     * Meta/Command and other modifiers remain browser-owned.
      *
-     * @param {WheelEvent} event Stage wheel or trackpad event.
+     * @param {WheelEvent} event Stage wheel or trackpad input.
+     * @returns {void} Update the bounded photo pan or pointer-anchored scale.
      */
     function handleLightboxZoomWheel(event) {
-        if (overlay.hidden || initialLightboxLoadActive || event.ctrlKey || event.metaKey || event.altKey) {
-            return;
-        }
+        if (overlay.hidden || initialLightboxLoadActive || event.altKey || event.metaKey || event.shiftKey) return;
         const target = event.target instanceof Element ? event.target : null;
-        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) {
-            return;
-        }
+        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) return;
         const metrics = measureLightboxZoomMetrics();
-        if (!metrics.viewportWidth || !metrics.viewportHeight) {
-            return;
-        }
-        rememberLightboxZoomPointerPosition(event);
-        const pointerAnchor = currentLightboxZoomPointerAnchor();
-        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-            ? 18
+        if (!metrics.viewportWidth || !metrics.viewportHeight) return;
+        const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18
             : (event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? metrics.viewportHeight : 1);
-        const normalizedDelta = event.deltaY * deltaUnit;
-        if (!Number.isFinite(normalizedDelta) || normalizedDelta === 0) {
+        const dx = event.deltaX * unit, dy = event.deltaY * unit;
+        if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+        // Own the media event at the limits too, so browser/site zoom or page
+        // scrolling cannot leak through the active modal. Outside it, do nothing.
+        if (event.cancelable) event.preventDefault();
+        if (event.ctrlKey) {
+            if (lightboxWebkitGesture || dy === 0) return;
+            rememberLightboxZoomPointerPosition(event);
+            const pointerAnchor = currentLightboxZoomPointerAnchor();
+            const nextState = lightboxZoomStateForAnchor(
+                lightboxZoomState.scale - Math.max(-360, Math.min(360, dy)) * 0.0025,
+                pointerAnchor || {x: metrics.viewportWidth / 2, y: metrics.viewportHeight / 2},
+                metrics,
+            );
+            if (nextState.scale === lightboxZoomState.scale) return;
+            lightboxZoomState = nextState;
+            requestLightboxQualityUpgradeNow();
+            applyLightboxZoomState(true, metrics);
+            showLightboxHud();
             return;
         }
-        const requestedScale = lightboxZoomState.scale - normalizedDelta * 0.0025;
-        const nextState = lightboxZoomStateForAnchor(
-            requestedScale,
-            pointerAnchor || {x: metrics.viewportWidth / 2, y: metrics.viewportHeight / 2},
-            metrics,
+        if (lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE || (!dx && !dy)) return;
+        lightboxZoomState = panLightboxZoomState(lightboxZoomState, -dx, -dy, metrics);
+        applyLightboxZoomState(false, metrics);
+        hideLightboxHud();
+    }
+
+    /**
+     * Handle WebKit's stage-scoped GestureEvents when Safari does not send the
+     * synthetic Ctrl+wheel of a MacBook trackpad pinch. Pointer-owned physical
+     * touchscreen pinches take precedence to avoid duplicate changes.
+     *
+     * @param {Event} event Safari gesture event with scale and client point.
+     * @returns {void} Change only the existing photo scale and translation.
+     */
+    function handleLightboxWebkitGesture(event) {
+        if (overlay.hidden || initialLightboxLoadActive || lightboxZoomPointers.size > 0) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) return;
+        if (event.cancelable) event.preventDefault();
+        if (event.type === 'gestureend') {
+            lightboxWebkitGesture = null;
+            syncLightboxZoomControls(true);
+            return;
+        }
+        const rect = stageLink.getBoundingClientRect();
+        const x = Number.isFinite(event.clientX) ? event.clientX : rect.left + rect.width / 2;
+        const y = Number.isFinite(event.clientY) ? event.clientY : rect.top + rect.height / 2;
+        if (event.type === 'gesturestart') {
+            lightboxWebkitGesture = {state: {...lightboxZoomState}, x, y,
+                distance: Math.max(0.01, Number(event.scale) || 1)};
+            return;
+        }
+        if (!lightboxWebkitGesture || event.type !== 'gesturechange') return;
+        const metrics = measureLightboxZoomMetrics();
+        const origin = lightboxWebkitGesture;
+        const scale = origin.state.scale * Math.max(0.01, Number(event.scale) || 1) / origin.distance;
+        const anchored = zoomLightboxStateAtPhotoAnchor(
+            origin.state, scale, {x: origin.x - rect.left, y: origin.y - rect.top}, metrics,
         );
-        if (nextState.scale === lightboxZoomState.scale) {
-            return;
-        }
-        event.preventDefault();
-        lightboxZoomState = nextState;
+        lightboxZoomState = panLightboxZoomState(anchored, x - origin.x, y - origin.y, metrics);
         requestLightboxQualityUpgradeNow();
-        applyLightboxZoomState(true, metrics);
-        showLightboxHud();
+        applyLightboxZoomState(false, metrics);
     }
 
     /**
@@ -4049,18 +4091,26 @@ export function setupGalleryLightbox() {
      * Finish or cancel a captured zoom pan without triggering fullscreen from the synthetic click.
      *
      * @param {PointerEvent} event Pointer completion event.
+     * @returns {void} Release the captured pointer and prevent a synthetic click.
      */
     function finishLightboxZoomPan(event) {
         if (!lightboxZoomPan || event.pointerId !== lightboxZoomPan.pointerId) {
             return;
         }
         const moved = lightboxZoomPan.moved;
+        const fromPinch = lightboxZoomPan.fromPinch === true;
+        const isTouchTap = event.pointerType === 'touch' && isMobileTouchDevice;
         clearLightboxZoomPan();
-        if (moved) {
-            event.preventDefault();
+        if (moved || fromPinch) {
+            if (event.cancelable) event.preventDefault();
             suppressNextStageClick = true;
+        } else if (isTouchTap && event.type !== 'pointercancel') {
+            if (event.cancelable) event.preventDefault();
+            suppressNextStageClick = true;
+            toggleLightboxHud();
+        } else {
+            showLightboxHud();
         }
-        showLightboxHud();
     }
 
     /**
@@ -4100,6 +4150,7 @@ export function setupGalleryLightbox() {
      * Track touch pointers and enter pinch mode when the second pointer arrives.
      *
      * @param {PointerEvent} event Stage pointer-down event.
+     * @returns {void} Begin the two-pointer photo pinch when eligible.
      */
     function startLightboxZoomPinch(event) {
         if (overlay.hidden || initialLightboxLoadActive || event.pointerType !== 'touch') {
@@ -4109,6 +4160,9 @@ export function setupGalleryLightbox() {
         if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) {
             return;
         }
+        // Physical screen pointers take ownership from the optional Safari
+        // trackpad gesture fallback; never process one pinch twice.
+        lightboxWebkitGesture = null;
         if (lightboxZoomPointers.size >= 2) {
             event.preventDefault();
             return;
@@ -4195,6 +4249,7 @@ export function setupGalleryLightbox() {
      * Remove a completed pinch pointer and leave the resulting bounded zoom state active.
      *
      * @param {PointerEvent} event Pointer completion or cancellation event.
+     * @returns {void} Finish the pinch and optionally hand off one finger to pan.
      */
     function finishLightboxZoomPinch(event) {
         const pointer = lightboxZoomPointers.get(event.pointerId);
@@ -4208,13 +4263,28 @@ export function setupGalleryLightbox() {
             // Ignore capture release failures after browser cancellation.
         }
         lightboxZoomPointers.delete(event.pointerId);
-        if (!wasPinching) {
-            return;
-        }
-        event.preventDefault();
+        if (!wasPinching) return;
+        if (event.cancelable) event.preventDefault();
         suppressNextStageClick = true;
         lightboxZoomPinch = null;
         overlay.classList.remove('is-zoom-pinching');
+        if (event.type === 'pointercancel') {
+            clearLightboxZoomPointers();
+            clearLightboxZoomPan();
+        } else if (lightboxZoomPointers.size === 1 && lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE) {
+            // When one finger remains, immediately hand it to two-axis pan,
+            // without resurrecting the old 100% gallery-swipe candidate.
+            const remaining = lightboxZoomPointers.values().next().value;
+            lightboxZoomPan = {
+                pointerId: remaining.pointerId,
+                captureElement: remaining.captureElement,
+                lastX: remaining.x,
+                lastY: remaining.y,
+                moved: false,
+                fromPinch: true,
+            };
+            overlay.classList.add('is-zoom-panning');
+        }
         requestLightboxQualityUpgradeNow();
         applyLightboxZoomState(true);
         showLightboxHud();
@@ -5075,6 +5145,9 @@ export function setupGalleryLightbox() {
             }
         }, {signal: controller.signal});
         stageLink.addEventListener('wheel', handleLightboxZoomWheel, {passive: false, signal: controller.signal});
+        for (const gesture of ['gesturestart', 'gesturechange', 'gestureend']) {
+            stageLink.addEventListener(gesture, handleLightboxWebkitGesture, {passive: false, signal: controller.signal});
+        }
         stageLink.addEventListener('pointermove', rememberLightboxZoomPointerPosition, {signal: controller.signal});
         stageLink.addEventListener('pointerleave', () => {
             lightboxZoomPointerPosition = null;
@@ -5504,13 +5577,15 @@ export function setupGalleryLightbox() {
      * Prevents mobile Chrome from scrolling or swiping the page behind the lightbox.
      *
      * @param {TouchEvent} event Browser touch movement event.
+     * @returns {void} Suppress scrolling only in the active photo stage.
      */
     function preventMobileLightboxPageGesture(event) {
-        if (!isActiveMobileLightbox()) {
-            return;
-        }
+        if (!isActiveMobileLightbox()) return;
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest('.lightbox-meta, .lightbox-map-split, .lightbox-hud')) {
+        // The photo page's touch guard must not intercept the independent
+        // OFP modal's native scrolling or unrelated page/overlay controls.
+        if (!target || !overlay.contains(target) || target.closest('.simbrief-ofp-dialog')) return;
+        if (target.closest('.lightbox-meta, .lightbox-map-split, .lightbox-hud')) {
             return;
         }
         event.preventDefault();
@@ -5592,13 +5667,16 @@ export function setupGalleryLightbox() {
         /**
      * Handles start touch gesture behavior for the gallery UI.
      *
-     * @param {*} event Value supplied by the caller or event context.
+     * @param {TouchEvent|PointerEvent} event Value supplied by the caller or event context.
+     * @returns {void} Capture a navigation swipe candidate or release it to pinch.
      */
     function startTouchGesture(event) {
         if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1 || lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE) {
             return;
         }
         if (event.touches && event.touches.length > 1) {
+            clearTouchGesture();
+            resetMobileSwipeVisuals(false);
             return;
         }
         if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0 || event.isPrimary === false)) {
@@ -5685,10 +5763,14 @@ export function setupGalleryLightbox() {
         /**
      * Handles finish touch gesture behavior for the gallery UI.
      *
-     * @param {*} event Value supplied by the caller or event context.
+     * @param {TouchEvent|PointerEvent} event Value supplied by the caller or event context.
+     * @returns {void} Complete a swipe without activating it after pinch or pan.
      */
     function finishTouchGesture(event) {
-        if (!touchGesture || !touchGesture.active) {
+        if (!touchGesture || !touchGesture.active) return;
+        if (lightboxZoomPinch || lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE) {
+            clearTouchGesture();
+            resetMobileSwipeVisuals(false);
             return;
         }
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {

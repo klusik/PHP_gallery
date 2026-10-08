@@ -183,6 +183,7 @@ return array (
     'gallery_migration_receive_manifest' => 'domain-gallery-migration',
     'gallery_migration_receive_package' => 'domain-gallery-migration',
     'gallery_migration_receive_status' => 'domain-gallery-migration',
+    'gallery_ofp_pdf' => 'public-media',
     'home' => 'public-home',
     'link_favicon_asset' => 'domain-theme-assets',
     'media' => 'public-media',

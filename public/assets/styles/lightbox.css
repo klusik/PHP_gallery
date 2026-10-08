@@ -1612,6 +1612,7 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     outline-offset: 2px;
 }
 .simbrief-ofp-stage {
+    /* Own pinch and drag inside the PDF; native desktop wheel scroll remains. */
     position: relative;
     display: block;
     min-width: 0;
@@ -1619,7 +1620,7 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     overflow: auto;
     text-align: center;
     overscroll-behavior: contain;
-    touch-action: pan-x pan-y;
+    touch-action: none;
     scrollbar-gutter: stable;
     z-index: 0;
 }
@@ -1721,4 +1722,230 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     }
     .simbrief-ofp-divider { display: none; }
     .simbrief-ofp-page-number { min-width: 5.5rem; }
+}
+
+
+/* OFP action layout and invariant document HUD (issues #111/#112). */
+/* Override the hero's inherited large type without changing other descriptions. */
+.public-page .gallery-description-rich .simbrief-ofp-actions {
+    display: grid;
+    justify-items: start;
+    align-items: start;
+    gap: 0.55rem;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 0.85rem;
+    font-size: 0.875rem;
+    line-height: 1.35;
+}
+.simbrief-ofp-primary-actions,
+.simbrief-ofp-convert-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    max-width: 100%;
+}
+.simbrief-ofp-secondary-actions { max-width: 100%; min-width: 0; }
+.public-page .gallery-description-rich .simbrief-ofp-actions :is(a.button, button.button) {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 2.25rem;
+    max-width: 100%;
+    margin: 0;
+    padding: 0.43rem 0.72rem;
+    border-radius: 0.6rem;
+    font-family: inherit;
+    font-size: 0.84rem;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+/* Fixed, legible controls even when gallery/theme accent colors are poor. */
+.public-page .gallery-description-rich .simbrief-ofp-actions a.button.simbrief-ofp-open {
+    border: 1px solid #1e40af !important;
+    background: #1d4ed8 !important;
+    color: #ffffff !important;
+}
+.public-page .gallery-description-rich .simbrief-ofp-actions :is(a.button.secondary, button.button.secondary) {
+    border: 1px solid #94a3b8 !important;
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+}
+.public-page .gallery-description-rich .simbrief-ofp-actions a.button.simbrief-ofp-open:hover {
+    border-color: #1e3a8a !important;
+    background: #1e40af !important;
+}
+.public-page .gallery-description-rich .simbrief-ofp-actions :is(a.button.secondary, button.button.secondary):hover {
+    border-color: #64748b !important;
+    background: #cbd5e1 !important;
+}
+.public-page .gallery-description-rich .simbrief-ofp-actions :is(a.button, button.button):focus-visible {
+    outline: 3px solid #60a5fa !important;
+    outline-offset: 2px;
+}
+.public-page .gallery-description-rich .simbrief-ofp-actions button.button:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+.simbrief-ofp-convert-result:empty { display: none; }
+.simbrief-ofp-convert-result:not(:empty) {
+    flex-basis: 100%;
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+.simbrief-ofp-info {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.public-page .gallery-description-rich .simbrief-ofp-info-toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #64748b;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+}
+.public-page .gallery-description-rich .simbrief-ofp-info-toggle:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 3px;
+}
+.simbrief-ofp-info-text {
+    display: none;
+    position: absolute;
+    z-index: 25;
+    inset-inline-end: 0;
+    bottom: calc(100% + 0.4rem);
+    box-sizing: border-box;
+    width: min(19rem, calc(100vw - 2rem));
+    max-width: none;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #64748b;
+    border-radius: 0.65rem;
+    background: #161b22;
+    color: #f9fafb;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    font-size: 0.82rem;
+    font-weight: 400;
+    line-height: 1.4;
+    text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.simbrief-ofp-info:hover .simbrief-ofp-info-text,
+.simbrief-ofp-info:focus-within .simbrief-ofp-info-text,
+.simbrief-ofp-info-toggle[aria-expanded="true"] + .simbrief-ofp-info-text {
+    display: block;
+}
+/* Tap-to-dismiss must override iOS Safari's persistent simulated :hover. */
+.simbrief-ofp-info-toggle[data-ofp-info-dismissed] + .simbrief-ofp-info-text {
+    display: none !important;
+}
+/* The PDF stage remains independently zoomable and scrollable. HUD never
+   inherits gallery accents, including in the CSS/native fullscreen fallback. */
+dialog.lightbox.simbrief-ofp-dialog {
+    --ofp-surface: #161b22;
+    --ofp-panel: #212c3d;
+    --ofp-border: #64748b;
+    --ofp-foreground: #f9fafb;
+    --ofp-muted: #cbd5e1;
+    --ofp-focus: #93c5fd;
+    color-scheme: dark;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ofp-foreground) !important;
+    background: var(--ofp-surface) !important;
+}
+dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-root {
+    color: var(--ofp-foreground) !important;
+    background: var(--ofp-surface) !important;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(.simbrief-ofp-header, .simbrief-ofp-toolbar) {
+    border-color: var(--ofp-border);
+    border-radius: 0.75rem;
+    background: rgba(33, 44, 61, 0.96);
+    color: var(--ofp-foreground) !important;
+    font-size: 0.88rem;
+    font-weight: 500;
+    line-height: 1.35;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(.simbrief-ofp-header strong, .simbrief-ofp-page-number, .simbrief-ofp-zoom-level) {
+    color: var(--ofp-foreground) !important;
+    opacity: 1;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(button, a.button) {
+    box-sizing: border-box;
+    min-width: 2.4rem;
+    min-height: 2.4rem;
+    padding: 0.43rem 0.7rem;
+    border: 1px solid var(--ofp-border) !important;
+    border-radius: 0.55rem;
+    background: #334155 !important;
+    color: var(--ofp-foreground) !important;
+    box-shadow: none !important;
+    font: 600 0.84rem/1.3 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-decoration: none;
+    opacity: 1;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(button, a.button):hover:not(:disabled) {
+    border-color: var(--ofp-focus) !important;
+    background: #475569 !important;
+    color: #ffffff !important;
+}
+dialog.lightbox.simbrief-ofp-dialog button[aria-pressed="true"],
+dialog.lightbox.simbrief-ofp-dialog button[aria-pressed="true"]:hover {
+    border-color: var(--ofp-focus) !important;
+    background: #1d4ed8 !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 0 0 1px #93c5fd !important;
+}
+dialog.lightbox.simbrief-ofp-dialog button:disabled {
+    border-color: #475569 !important;
+    background: #1e293b !important;
+    color: #94a3b8 !important;
+    opacity: 0.75;
+    cursor: not-allowed;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(button, a.button):focus-visible {
+    outline: 3px solid var(--ofp-focus) !important;
+    outline-offset: 2px;
+}
+dialog.lightbox.simbrief-ofp-dialog :is(.simbrief-ofp-status, .simbrief-ofp-fallback) {
+    color: var(--ofp-foreground) !important;
+}
+dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--ofp-border); }
+@media (max-width: 700px) {
+    /* A compact tooltip cannot overflow a narrow gallery-description row. */
+    .simbrief-ofp-info-text {
+        position: fixed;
+        inset: auto 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+        width: auto;
+        max-width: none;
+    }
+    dialog.lightbox.simbrief-ofp-dialog :is(.simbrief-ofp-header, .simbrief-ofp-toolbar) {
+        gap: 0.35rem;
+        padding: 0.35rem;
+    }
+    dialog.lightbox.simbrief-ofp-dialog :is(button, a.button) {
+        min-height: 2.4rem;
+        padding: 0.35rem 0.55rem;
+        font-size: 0.8rem;
+    }
+    dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-header-actions { flex-wrap: wrap; }
 }

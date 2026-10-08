@@ -31,10 +31,20 @@ final class Http
             CURLOPT_PROXY => '', CURLOPT_PROTOCOLS => CURLPROTO_HTTP]);
     }
 
-    /** Send one real application request, preserving status, headers and body privately. */
-    public function request(string $route, ?array $fields = null, bool $json = false): array
+    /**
+     * Send one real application request, preserving cookies, status, headers and body.
+     *
+     * @param string $route Loopback front-controller route.
+     * @param ?array<string,mixed> $fields Form fields, null for read-only methods.
+     * @param bool $json Whether to request the JSON transport envelope.
+     * @param string $method GET or HEAD; form submissions always use POST.
+     * @return array{status:int,body:string,headers:array<string,string>,json:mixed} Real HTTP result.
+     */
+    public function request(string $route, ?array $fields = null, bool $json = false, string $method = 'GET'): array
     {
         check(str_starts_with($route, '/index.php?'), 'Workflow HTTP calls must target the local application router.');
+        check(in_array($method, ['GET', 'HEAD'], true) && ($method !== 'HEAD' || $fields === null),
+            'Workflow HTTP method must be GET or HEAD without HEAD form fields.');
         $headers = [];
         curl_setopt_array($this->handle, [CURLOPT_URL => $this->origin . $route,
             CURLOPT_HTTPHEADER => $json ? ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'] : [],
@@ -49,13 +59,22 @@ final class Http
             $multipart = count(array_filter($fields, static fn ($value): bool => $value instanceof \CURLFile)) > 0;
             curl_setopt($this->handle, CURLOPT_POST, true);
             curl_setopt($this->handle, CURLOPT_POSTFIELDS, $multipart ? $fields : http_build_query($fields));
+        } elseif ($method === 'HEAD') {
+            curl_setopt($this->handle, CURLOPT_NOBODY, true);
         } else {
             curl_setopt($this->handle, CURLOPT_HTTPGET, true);
         }
-        $body = curl_exec($this->handle);
-        check(is_string($body), 'Isolated HTTP transport failed.');
-        return ['status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE), 'body' => $body,
-            'headers' => $headers, 'json' => json_decode($body, true)];
+        try {
+            $body = curl_exec($this->handle);
+            check(is_string($body), 'Isolated HTTP transport failed.');
+            return ['status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE), 'body' => $body,
+                'headers' => $headers, 'json' => json_decode($body, true)];
+        } finally {
+            if ($method === 'HEAD') {
+                // Restore reusable handle semantics for the next request.
+                curl_setopt($this->handle, CURLOPT_NOBODY, false);
+            }
+        }
     }
 
     /**

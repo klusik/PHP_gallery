@@ -1161,9 +1161,14 @@ Manual browser coverage remains required because the repository has no productio
 4. While zoomed, drag to all photograph edges. In fullscreen verify both horizontal and vertical pan are available for a
    wide image once zoom creates overflow. Confirm the close button and other fullscreen HUD controls remain clickable at
    125%, 200%, and 400%, and that photo pan does not steal their pointer events.
-5. Confirm Ctrl/Command-wheel still performs browser page zoom and scrolling outside the active photo stage is not
-   intercepted. At 100%, one-finger mobile swipe must retain photo navigation; above 100%, one pointer pans and two
-   pointers pinch.
+5. In desktop browsers, verify unmodified mouse-wheel and two-finger trackpad scrolling **do not zoom** an image.
+   They pan an enlarged image horizontally and vertically and have no scale effect at 100%. Ctrl+wheel and a physical
+   trackpad pinch zoom only the photograph at the pointer, even in fullscreen; Command+wheel remains browser-owned.
+   Neither gesture changes the HUD's size or navigates photographs. Check zoom limits at 100%/400%, including small
+   deltas, large mouse-wheel steps, Safari GestureEvents and scrolling entirely outside the photo stage.
+   On iPhone Safari/Chrome and Android Chrome, at 100% a one-finger horizontal swipe must navigate; at larger scales one
+   finger pans and two fingers pinch. Begin a swipe, add a second finger, pinch, then lift one finger and continue panning:
+   no accidental next/previous or synthetic stage-click/fullscreen toggle is allowed. Cancel a gesture mid-motion.
 6. With Network and Elements tools open, use an image substantially wider than the generated preview. A sufficiently
    small 100% stage may remain on the preview, while a large/high-DPI stage may be promoted passively. Perform one
    deliberate zoom-in action and confirm a high-priority request for the protected `data-full-src` begins in that same
@@ -2097,7 +2102,62 @@ SimBrief route preview coverage is part of the same central audit. `tests/simbri
 
 The registered `tests/simbrief_ofp_lightbox_browser_test.mjs` browser fixture exercises the separate, authorized OFP PDF viewer. It asserts that a portrait A4 page opens fully inside a landscape scroll stage, with centered page bounds and no overlap from the toolbar, then checks explicit fit-width scrolling, 100% actual size, and mode state. It also checks per-page mixed orientations, manual zoom/pan retention during ordinary resize, automatic refitting after viewport rotation and fullscreen change, all four supported labels, keyboard isolation from gallery photos, original download URL, and cleanup. The fixture stubs PDF.js, so release acceptance must additionally exercise a real multipage PDF on a configured host. On failure, the required Chromium GitHub Actions job retains its per-fixture diagnostic output in the `required-chromium` artifact (`browser-map.log`), alongside the central audit summary.
 
-OFP fullscreen/browser acceptance must assert that the Fullscreen API targets the non-dialog document-and-HUD root, never `<dialog>` itself. It checks **F** and the visible fullscreen control for native entry/exit, **Escape** exit-before-close behavior, editable field and modified/repeated keyboard isolation, Fullscreen API denial with CSS fallback, and native browser fullscreen exit. Wheel tests assert zoom around an off-center cursor in both normal and fullscreen views, no change to toolbar scale, zoom limits, a fine trackpad gesture left scrollable, Ctrl/Command+wheel, and no lost pan after fit/page/resize transitions. HUD controls must fade after inactivity, reveal on pointer or keyboard activity, remain clickable over the PDF, and avoid resizing or rerendering the page when shown/hidden. For release acceptance additionally verify real PDF.js output, real-device trackpad/touch pinch, different browser fullscreen permissions, narrow mobile wrapping, and focus accessibility; the Chromium fixture uses a mock PDF.js backend and synthetic fullscreen transitions.
+OFP fullscreen/browser acceptance must assert that the Fullscreen API targets the non-dialog document-and-HUD root, never `<dialog>` itself. It checks **F** and the visible fullscreen control for native entry/exit, **Escape** exit-before-close behavior, editable field and modified/repeated keyboard isolation, Fullscreen API denial with CSS fallback, and native browser fullscreen exit. Wheel tests must assert that **ordinary wheel** and both-axis **two-finger trackpad scrolling** remain native PDF stage scrolling at any fit/zoom level, even for large mouse-wheel deltas, without changing scale. **Ctrl+wheel or trackpad pinch** zooms only PDF content around an off-center pointer in both normal and fullscreen views; Command+wheel remains browser-owned. Check zoom limits, CSS/native fullscreen, stable toolbar scale/position, no lost pan after fit/page/resize transitions, active/disabled mode affordances and WCAG AA text contrast under deliberately unreadable gallery colors. HUD controls must fade after inactivity, reveal on pointer or keyboard activity, remain clickable over the PDF, and avoid resizing or rerendering the page when shown/hidden. For release acceptance additionally verify real PDF.js output, real-device trackpad/touch pinch, different browser fullscreen permissions, narrow mobile wrapping, and focus accessibility; the Chromium fixture uses a mock PDF.js backend and synthetic fullscreen transitions.
+
+### Saved OFP anonymous/public media delivery
+
+The central PHP audit includes `tests/simbrief_ofp_public_http_test.php`: it launches a disposable loopback
+PHP server for the real PDF media controller and checks **zero-cookie anonymous GET**, HEAD and download for
+public, unpublished, access-listing-unlisted and legacy draft galleries, legacy `media&ofp=1` links,
+password/share/NSFW grants, admin vs anonymous-preview authority, inaccessible private galleries,
+generated private page galleries, invalid/missing PDFs and root/subdirectory `index.php` URLs without rewriting. The separate public-media authorization contract invokes the PDF access helper
+against the actual gallery policy. These server-side tests do not replace hosted browser acceptance.
+
+On the deployed host, attach a real saved multipage SimBrief PDF to a **published, public gallery** that has
+no password/NSFW gate. In a fresh Chrome/Safari private window with no session cookies, open the gallery and
+activate View OFP, Download OFP and the native fallback separately. In DevTools, confirm the same-origin
+`?page=gallery_ofp_pdf&id=…` request returns 200, `application/pdf`, locally saved PDF bytes and
+`Content-Disposition: inline` or `attachment`; HEAD has metadata without a body. Verify that neither
+an Admin session nor a warm browser cache is required. Then repeat in a nested gallery and a deployment
+mounted below `/galerie/` without URL rewriting. A configured absolute `base_url` on a different host
+must never move the PDF fetch or its cookies to that host.
+
+Repeat with an unpublished source gallery in a **fresh anonymous window**: View, Download, HEAD and the old
+`media&ofp=1` URL must work there exactly as for a published gallery. Next repeat with a truly private
+source gallery, a generated private OFP child, a password-protected published/unpublished parent before and
+after a visitor unlock, a share-token grant, an NSFW gate, and an absent or invalid saved PDF.
+An unauthorized request or guessed private ID must return an opaque uncached `text/plain` 404,
+not a theme-rendered HTML page or a response containing a server path, remote SimBrief URL or token.
+Authorized visitors retain inline and download access; verified Admin users may inspect their private
+originals outside anonymous preview. The old `?page=media&id=…&ofp=1` form must still work.
+
+Record the actual HTTP status, content type, request path and cookie context if a hosted setup still reports
+`PDF not found`. A synthetic fixture PASS is evidence of the repository logic, not proof that a particular
+shared-host configuration serves the route correctly.
+
+### OFP UI and real-device gesture acceptance
+
+The description displays a compact View/Download row followed, for authorized administrators only, by a separate
+Create private OFP subgallery action. The explanatory question-mark is localized in EN/CS/DE/SV, reveals on pointer
+hover, keyboard focus or tap, and dismisses after click-away or Escape. Verify unavailable conversion leaves the
+read-only PDF controls operational and that submitting twice cannot create duplicate galleries.
+
+In Chromium/Edge, Firefox, macOS Safari and mobile Safari/Chrome, open the same multipage PDF in normal lightbox
+and fullscreen (native where supported, CSS fallback otherwise). Test both portrait and landscape pages and
+320px/375px/768px layouts with a high-contrast and an intentionally unreadable user theme. Labels, 100%, Fit width,
+Fit whole page, Actual size, download and close must remain legible, keyboard reachable and within viewport. Check
+that the PDF can scroll vertically and horizontally after zoom/fit-width while the header/toolbar and page itself
+remain at fixed UI scale.
+
+With a physical mouse, ordinary wheel scrolls PDF, never zooms. With a MacBook trackpad, two-finger scroll pans
+the document; spreading/pinching fingers zooms it without any full-page/browser zoom. Ctrl+mouse-wheel is an explicit
+zoom fallback; Command+wheel is reserved for browser behavior. Repeat at scale limits, over the toolbar and outside
+the PDF stage. On iPhone/iPad Safari, iOS Chrome and Android Chrome, a single finger pans the PDF and two fingers
+pinch; lift one finger during a pinch and continue panning with the remaining one, then cancel/retry the gesture.
+No photo navigation, page scrolling behind the modal, accidental form activation or detached HUD is acceptable.
+
+These are **manual acceptance requirements**, not claims that synthetic headless Chromium tests exercise genuine
+trackpad, Safari, touchscreen or hosted Imagick behavior.
 
 Windows output is `winapp/dist/<version>/PHPGalleryUploader-<version>-Setup.exe` plus generated `winapp-update.json`. Build verification checks installed dependencies, bundled SimConnect and copied-helper `--self-update-smoke`. `PHP_GALLERY_NATIVE_UPDATE_SMOKE=1` enables the central audit's read-only native version/process fixture. Installed update/UAC/restart and FS2020/FS2024 remain target-PC acceptance.
 

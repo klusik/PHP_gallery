@@ -106,10 +106,14 @@ function seo_request_guard_status(): array
  *
  * This is crawler hygiene only. Authorization remains entirely in the route
  * controllers/services and must not depend on robots metadata.
+ *
+ * @param string $page Public route identifier.
+ * @return bool Whether this route serves a non-indexable download.
  */
 function seo_request_guard_route_is_non_indexable_download(string $page): bool
 {
     return in_array($page, [
+        'gallery_ofp_pdf',
         'download_gallery_start',
         'download_gallery',
         'download_gallery_manifest',
@@ -197,8 +201,8 @@ function seo_request_guard_ignored_tracking_parameters(): array
 /**
  * Return public query parameters accepted by each route.
  *
- * @param string $page Page number or page data.
- * @return array<int string>.
+ * @param string $page Public route identifier.
+ * @return array<int,string> Allowed query parameter names for this route.
  */
 function seo_request_guard_allowed_parameters_for_page(string $page): array
 {
@@ -217,7 +221,8 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'vote' => ['id'],
         'gallery_access' => ['id', 'token', 'share', 'return'],
         'share' => ['token', 'id', 'view_as'],
-        'media' => ['id', 'v'],
+        'media' => ['id', 'v', 'ofp', 'download', 'share', 'token'],
+        'gallery_ofp_pdf' => ['id', 'download', 'share', 'token'],
         'thumb' => ['id', 'size', 'format', 'v'],
         'public_media' => ['public_path', 'v'],
         'public_thumb' => ['public_path', 'size', 'format', 'v'],

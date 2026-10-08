@@ -183,8 +183,11 @@ merely because the active photo is zoomed.
 
 After changing zoom markup, geometry, quality promotion, fullscreen CSS, or event routing, run the seven PHP
 `lightbox_zoom_*` contracts plus `node tests/lightbox_zoom_model_test.mjs`, JavaScript syntax checks, and the manual
-browser matrix in `TESTING.md`. Preserve browser Ctrl/Command-wheel zoom, 100% mobile swipe navigation, maps, voting,
-strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
+browser matrix in `TESTING.md`. Preserve the scoped gesture split: ordinary mouse-wheel and two-finger trackpad scrolling pan a photo only above 100%, while Ctrl+wheel (including Chromium trackpad pinch) zooms only the photograph. Safari GestureEvents are the fallback for trackpad pinch; Command+wheel stays browser-owned. At 100% keep one-finger mobile swipe navigation; above 100% allow one-finger pan and two-finger pinch, including swipe-to-pinch and pinch-to-pan handoff. Keep the OFP viewer independent: unmodified wheel scrolls only the document, Ctrl+wheel/trackpad pinch zooms at the PDF cursor, touch pan/pinch works within the document stage, and HUD colors/scale are independent of gallery themes. Preserve maps, voting, strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
+
+## Public SimBrief OFP Attachment Delivery
+
+Saved OFP PDF links use the dedicated, gallery-scoped `gallery_ofp_pdf` route. The public gallery controller emits a same-origin `index.php` URL from the actual script mount path rather than an absolute `base_url`; it must work on subdirectory installations with rewrite disabled and never expose the local PDF path or the remote SimBrief URL. The existing `media&ofp=1` form remains compatible. Enforce `simbrief_ofp_visitor_access_allowed()` against the **source gallery** before opening the validated local attachment: public and unpublished galleries work for fresh anonymous visitors through their direct URLs, access-gated galleries require the same password/share/NSFW grants, genuinely private galleries are unavailable without the normal gallery visitor grant, and administrator access must not leak into anonymous preview. The separate generated page subgallery remains private. Denied, missing and invalid PDF assets return the same no-store plain-text 404 without loading a gallery HTML template. Treat `gallery_ofp_pdf` as a public-policy media route in both dispatcher and authored runtime-module roots. Keep the real HTTP regression in the central PHP test registry, and update all four permanent TeX manuals for any future behavior changes.
 
 ## Continuous Documentation Synchronization
 

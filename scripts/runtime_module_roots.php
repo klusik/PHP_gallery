@@ -97,6 +97,7 @@ return [
         'Gallery\\Controllers\\cms_robots_txt' => 'public-robots',
         'Gallery\\Controllers\\cms_sitemap_xml' => 'public-sitemap',
         'Gallery\\Controllers\\cms_media' => 'public-media',
+        'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'public-media',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -114,7 +115,7 @@ return [
     'route_dependencies' => [
         'public-policy' => [
             'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap',
-            'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
+            'picture_game', 'media', 'gallery_ofp_pdf', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
             'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data',
             'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data',
             'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest',

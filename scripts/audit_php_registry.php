@@ -60,6 +60,7 @@ return [
         'breadcrumb_theme_settings_test.php',
         'thumbnail_source_identity_test.php',
         'thumbnail_format_metadata_consistency_test.php',
+        'simbrief_ofp_public_http_test.php',
         'lightbox_zoom_integration_test.php',
         'lightbox_zoom_lifecycle_test.php',
         'lightbox_zoom_quality_candidates_test.php',
@@ -72,6 +73,7 @@ return [
     // Exclusive means drain active jobs, run alone, then resume parallel dispatch.
     'serial_tests' => [
         'cli_http_boundary_test.php' => 'Starts bounded isolated PHP and Apache HTTP children; exclusive execution prevents nested server/process contention.',
+        'simbrief_ofp_public_http_test.php' => 'Starts a disposable loopback PHP HTTP server; run alone to avoid nested HTTP-child contention.',
         'deploy_app_packaging_test.php' => 'Starts real Bash and PowerShell packaging children against an owned dirty fixture; exclusive execution avoids nested child-process contention.',
         'database_engine_contract_test.php' => 'Checks a migrated vote constraint inside a rolled-back transaction in the externally supplied disposable database; exclusive execution prevents fixture mutation overlap.',
         'runtime_module_plan_test.php' => 'Compiles the dependency inventory and runs its own bounded four-worker module fixtures; exclusive execution avoids nested pool contention.',

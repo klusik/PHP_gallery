@@ -230,6 +230,35 @@ namespace {
         ofp_document_assert(str_contains($viewer, 'state.page') && str_contains($viewer, 'state.total')
             && !str_contains($viewer, 'galleryImageIndex'), 'OFP pages were mixed into photo navigation.');
 
+        // UI/gesture policy is also a security and accessibility boundary:
+        // photo navigation and page/browser zoom must not hijack this PDF.
+        $publicView = (string) file_get_contents(dirname(__DIR__) . '/app/views/public_gallery_controls.php');
+        $viewerCss = (string) file_get_contents(dirname(__DIR__) . '/public/assets/styles/lightbox.css');
+        ofp_document_assert(
+            str_contains($viewer, "|| !event.ctrlKey")
+                && str_contains($viewer, "if (event.cancelable) event.preventDefault();")
+                && str_contains($viewer, "stage.addEventListener('wheel'")
+                && str_contains($viewer, "['gesturestart', 'gesturechange', 'gestureend']")
+                && str_contains($viewer, 'state.touchPanAfterPinch')
+                && !str_contains($viewer, 'Math.abs(event.deltaY) >= 48'),
+            'OFP wheel must scroll natively; Ctrl+wheel, Safari trackpad pinch and mobile handoff must remain distinct.'
+        );
+        ofp_document_assert(
+            str_contains($publicView, 'simbrief-ofp-primary-actions')
+                && str_contains($publicView, 'simbrief-ofp-secondary-actions')
+                && str_contains($publicView, 'data-ofp-info-toggle')
+                && str_contains($publicView, 'simbrief.ofp.convert_help')
+                && str_contains($viewer, "event.key !== 'Escape'"),
+            'Conversion must keep a localized dismissible question-mark help apart from public OFP actions.'
+        );
+        ofp_document_assert(
+            str_contains($viewerCss, 'dialog.lightbox.simbrief-ofp-dialog')
+                && str_contains($viewerCss, 'color: var(--ofp-foreground) !important;')
+                && str_contains($viewerCss, 'background: #1d4ed8 !important;')
+                && str_contains($viewerCss, 'touch-action: none;'),
+            'OFP HUD contrast must be theme-independent and PDF touch events must be isolated.'
+        );
+        
         echo "SimBrief OFP attachment/private subgallery contracts: PASS\n";
     } finally {
         foreach ([$childFolder . '/ofp-page-001.jpg', $childFolder . '/ofp-page-002.jpg',

@@ -80,6 +80,7 @@ function cms_route_handlers(): array
         'sitemap' => '\\Gallery\\Controllers\\cms_sitemap_xml',
         'picture_game' => '\\Gallery\\Controllers\\cms_picture_game',
         'media' => '\\Gallery\\Controllers\\cms_media',
+        'gallery_ofp_pdf' => '\\Gallery\\Controllers\\cms_gallery_ofp_pdf',
         'thumb' => '\\Gallery\\Controllers\\cms_thumb',
         'public_media' => '\\Gallery\\Controllers\\cms_public_media',
         'public_thumb' => '\\Gallery\\Controllers\\cms_public_thumb',
@@ -324,7 +325,7 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
 
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['cooperative_gallery', 'cooperative_content_api', 'cooperative_metadata_api', 'cooperative_media', 'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
+        if (in_array($page, ['cooperative_gallery', 'cooperative_content_api', 'cooperative_metadata_api', 'cooperative_media', 'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'gallery_ofp_pdf', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
             $kernel->load('public-policy');
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();

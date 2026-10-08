@@ -119,11 +119,12 @@ $quickTests = $phpRegistry['quick_tests'];
  * Bound the explicit feedback subset without the complete module-loading matrix.
  * @var int Units: registered test cases. Scope: central quick registry contract.
  * Consumers: curated feedback cardinality assertion below.
- * Rationale: the reviewed subset has 46 cases, including the in-process description
- * renderer. Complete compilation and isolated comparison of every runtime module
+ * Rationale: the reviewed subset has 47 cases, including the HTTP-level anonymous
+ * OFP regression and the in-process description renderer. Complete compilation
+ * and isolated comparison of every runtime module
  * remain covered by full/release rather than repeated during each edit cycle.
  */
-const QUICK_REGISTRY_CASE_LIMIT = 46;
+const QUICK_REGISTRY_CASE_LIMIT = 47;
 audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= QUICK_REGISTRY_CASE_LIMIT && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
 audit_test_assert(!in_array('runtime_module_plan_test.php', $quickTests, true)
     && in_array('runtime_dependencies_test.php', $quickTests, true)

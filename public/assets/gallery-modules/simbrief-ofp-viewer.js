@@ -27,10 +27,10 @@
  */
 
 const locales = {
-    en: {title:'Operational flight plan',close:'Close',previous:'Previous page',next:'Next page',zoomIn:'Zoom in',zoomOut:'Zoom out',reset:'Reset zoom',fitWidth:'Fit width',fitPage:'Fit whole page',actualSize:'Actual size (100%)',fullscreen:'Fullscreen (F)',fullscreenExit:'Exit fullscreen (F)',download:'Download PDF',loading:'Loading flight plan…',rendering:'Rendering page…',error:'The PDF could not be displayed. Open the original PDF instead.',fallback:'Open original PDF',page:'Page {page} of {total}',zoom:'Zoom {percent}%',stageHelp:'PDF page; wheel to zoom, trackpad to scroll',wheelHelp:'Mouse wheel zooms at the pointer. Trackpad scrolls. Ctrl or Command + wheel zooms. F toggles fullscreen; Escape exits fullscreen or closes.'},
-    cs: {title:'Operační letový plán',close:'Zavřít',previous:'Předchozí stránka',next:'Další stránka',zoomIn:'Přiblížit',zoomOut:'Oddálit',reset:'Obnovit přiblížení',fitWidth:'Přizpůsobit šířce',fitPage:'Zobrazit celou stránku',actualSize:'Skutečná velikost (100 %)',fullscreen:'Celá obrazovka (F)',fullscreenExit:'Ukončit celou obrazovku (F)',download:'Stáhnout PDF',loading:'Načítání letového plánu…',rendering:'Vykreslování stránky…',error:'PDF nelze zobrazit. Otevřete původní soubor PDF.',fallback:'Otevřít původní PDF',page:'Stránka {page} z {total}',zoom:'Přiblížení {percent} %',stageHelp:'Stránka PDF; kolečkem přibližovat, touchpadem posouvat',wheelHelp:'Kolečko myši přibližuje v místě kurzoru. Touchpad posouvá dokument. Ctrl nebo Command + kolečko přibližuje. F přepíná celou obrazovku; Escape ji ukončí nebo zavře dokument.'},
-    de: {title:'Flugdurchführungsplan',close:'Schließen',previous:'Vorherige Seite',next:'Nächste Seite',zoomIn:'Vergrößern',zoomOut:'Verkleinern',reset:'Zoom zurücksetzen',fitWidth:'An Breite anpassen',fitPage:'Ganze Seite anpassen',actualSize:'Originalgröße (100 %)',fullscreen:'Vollbild (F)',fullscreenExit:'Vollbild beenden (F)',download:'PDF herunterladen',loading:'Flugplan wird geladen…',rendering:'Seite wird gerendert…',error:'Das PDF konnte nicht angezeigt werden. Öffnen Sie das Original-PDF.',fallback:'Original-PDF öffnen',page:'Seite {page} von {total}',zoom:'Zoom {percent} %',stageHelp:'PDF-Seite; Mausrad zum Zoomen, Touchpad zum Scrollen',wheelHelp:'Mausrad zoomt am Zeiger. Touchpad scrollt. Strg oder Command + Mausrad zoomt. F schaltet Vollbild um; Escape beendet Vollbild oder schließt das Dokument.'},
-    sv: {title:'Operativ färdplan',close:'Stäng',previous:'Föregående sida',next:'Nästa sida',zoomIn:'Zooma in',zoomOut:'Zooma ut',reset:'Återställ zoom',fitWidth:'Anpassa till bredd',fitPage:'Anpassa hela sidan',actualSize:'Faktisk storlek (100 %)',fullscreen:'Helskärm (F)',fullscreenExit:'Avsluta helskärm (F)',download:'Ladda ned PDF',loading:'Läser in färdplan…',rendering:'Renderar sida…',error:'PDF-filen kunde inte visas. Öppna originalfilen i stället.',fallback:'Öppna original-PDF',page:'Sida {page} av {total}',zoom:'Zoom {percent} %',stageHelp:'PDF-sida; mushjul för zoom, styrplatta för rullning',wheelHelp:'Mushjulet zoomar vid pekaren. Styrplattan rullar dokumentet. Ctrl eller Command + mushjul zoomar. F växlar helskärm; Escape lämnar helskärm eller stänger dokumentet.'},
+    en: {title:'Operational flight plan',close:'Close',previous:'Previous page',next:'Next page',zoomIn:'Zoom in',zoomOut:'Zoom out',reset:'Reset zoom',fitWidth:'Fit width',fitPage:'Fit whole page',actualSize:'Actual size (100%)',fullscreen:'Fullscreen (F)',fullscreenExit:'Exit fullscreen (F)',download:'Download PDF',loading:'Loading flight plan…',rendering:'Rendering page…',error:'The PDF could not be displayed. Open the original PDF instead.',fallback:'Open original PDF',page:'Page {page} of {total}',zoom:'Zoom {percent}%',stageHelp:'PDF page; scroll to pan, pinch to zoom',wheelHelp:'Wheel and two-finger scrolling pan the PDF. Ctrl + wheel or trackpad pinch zooms the PDF. F toggles fullscreen; Escape exits fullscreen or closes.'},
+    cs: {title:'Operační letový plán',close:'Zavřít',previous:'Předchozí stránka',next:'Další stránka',zoomIn:'Přiblížit',zoomOut:'Oddálit',reset:'Obnovit přiblížení',fitWidth:'Přizpůsobit šířce',fitPage:'Zobrazit celou stránku',actualSize:'Skutečná velikost (100 %)',fullscreen:'Celá obrazovka (F)',fullscreenExit:'Ukončit celou obrazovku (F)',download:'Stáhnout PDF',loading:'Načítání letového plánu…',rendering:'Vykreslování stránky…',error:'PDF nelze zobrazit. Otevřete původní soubor PDF.',fallback:'Otevřít původní PDF',page:'Stránka {page} z {total}',zoom:'Přiblížení {percent} %',stageHelp:'Stránka PDF; posouváním číst, roztažením prstů přibližovat',wheelHelp:'Kolečko a posun dvěma prsty posouvají PDF. Ctrl + kolečko nebo gesto roztažení prstů přibližují obsah. F přepíná celou obrazovku; Escape ji ukončí nebo zavře dokument.'},
+    de: {title:'Flugdurchführungsplan',close:'Schließen',previous:'Vorherige Seite',next:'Nächste Seite',zoomIn:'Vergrößern',zoomOut:'Verkleinern',reset:'Zoom zurücksetzen',fitWidth:'An Breite anpassen',fitPage:'Ganze Seite anpassen',actualSize:'Originalgröße (100 %)',fullscreen:'Vollbild (F)',fullscreenExit:'Vollbild beenden (F)',download:'PDF herunterladen',loading:'Flugplan wird geladen…',rendering:'Seite wird gerendert…',error:'Das PDF konnte nicht angezeigt werden. Öffnen Sie das Original-PDF.',fallback:'Original-PDF öffnen',page:'Seite {page} von {total}',zoom:'Zoom {percent} %',stageHelp:'PDF-Seite; scrollen zum Verschieben, Pinch zum Zoomen',wheelHelp:'Mausrad und Scrollen mit zwei Fingern verschieben das PDF. Strg + Mausrad oder Pinch zoomt den Inhalt. F schaltet Vollbild um; Escape beendet Vollbild oder schließt das Dokument.'},
+    sv: {title:'Operativ färdplan',close:'Stäng',previous:'Föregående sida',next:'Nästa sida',zoomIn:'Zooma in',zoomOut:'Zooma ut',reset:'Återställ zoom',fitWidth:'Anpassa till bredd',fitPage:'Anpassa hela sidan',actualSize:'Faktisk storlek (100 %)',fullscreen:'Helskärm (F)',fullscreenExit:'Avsluta helskärm (F)',download:'Ladda ned PDF',loading:'Läser in färdplan…',rendering:'Renderar sida…',error:'PDF-filen kunde inte visas. Öppna originalfilen i stället.',fallback:'Öppna original-PDF',page:'Sida {page} av {total}',zoom:'Zoom {percent} %',stageHelp:'PDF-sida; rulla för att panorera, nyp för att zooma',wheelHelp:'Mushjul och rullning med två fingrar flyttar PDF-sidan. Ctrl + mushjul eller nypgest zoomar innehållet. F växlar helskärm; Escape lämnar helskärm eller stänger dokumentet.'},
 };
 /** Fullscreen controls become transparent when the pointer is inactive.
  * Purpose: Time the PDF-only fullscreen HUD's inactivity transition.
@@ -55,6 +55,46 @@ let activeViewer = null;
 export function setupSimbriefOfpViewer() {
     if (!document.querySelector('[data-simbrief-ofp-open]') || document.body?.dataset.ofpViewerBound === '1') return;
     document.body.dataset.ofpViewerBound = '1';
+    // Only the pinned tooltip needs scripting: keyboard focus and hover use CSS.
+    document.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const toggle = target?.closest('[data-ofp-info-toggle]');
+        document.querySelectorAll('[data-ofp-info-toggle][aria-expanded="true"]').forEach((button) => {
+            if (button !== toggle) {
+                button.setAttribute('aria-expanded', 'false');
+                if (button === document.activeElement) button.blur();
+            }
+        });
+        if (toggle) {
+            const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+            toggle.setAttribute('aria-expanded', String(expanded));
+            // Mobile Safari may retain :hover after tapping. Explicitly hide
+            // a dismissed tooltip until the next focus, hover-entry or tap.
+            toggle.toggleAttribute('data-ofp-info-dismissed', !expanded);
+            if (!expanded) toggle.blur();
+        }
+    });
+    document.addEventListener('focusin', (event) => {
+        const toggle = event.target instanceof Element ? event.target.closest('[data-ofp-info-toggle]') : null;
+        toggle?.removeAttribute('data-ofp-info-dismissed');
+    });
+    document.addEventListener('pointerout', (event) => {
+        const parent = event.target instanceof Element ? event.target.closest('.simbrief-ofp-info') : null;
+        if (!parent || (event.relatedTarget instanceof Node && parent.contains(event.relatedTarget))) return;
+        parent.querySelector('[data-ofp-info-toggle]')?.removeAttribute('data-ofp-info-dismissed');
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        document.querySelectorAll('[data-ofp-info-toggle][aria-expanded="true"]').forEach((button) => {
+            button.setAttribute('aria-expanded', 'false');
+            button.setAttribute('data-ofp-info-dismissed', '');
+        });
+        const target = event.target instanceof Element ? event.target.closest('[data-ofp-info-toggle]') : null;
+        if (target) {
+            target.blur(); // Dismiss the focus-only tooltip, not an unrelated dialog.
+            event.stopPropagation();
+        }
+    });
     document.addEventListener('submit', async (event) => {
         const form = event.target instanceof HTMLFormElement
             ? event.target.closest('[data-ofp-convert-form]') : null;
@@ -203,7 +243,7 @@ async function openOfpViewer(link) {
         fullscreenHandler: null, fullscreenErrorHandler: null, fullscreenNative: false,
         fullscreenTransition: false, layoutFrame: null, pinch: null,
         listeners: new AbortController(), hudTimer: null, wheelRenderTimer: null,
-        wheelGesture: null, pageUnit: null,
+        webkitGesture: null, touchPanAfterPinch: null, pageUnit: null,
     };
     activeViewer = state;
     dialog.showModal();
@@ -427,28 +467,27 @@ function previewOfpScale(state, anchor) {
 }
 
 /**
- * Interpret large plain mouse-wheel steps as PDF zoom and fine trackpad gestures
- * as native document scrolling. Modifier + wheel always zooms over the PDF.
+ * Zoom only on Ctrl+wheel or synthesized trackpad pinch. Unmodified wheel
+ * events remain native stage scrolling in either axis and every fit mode.
+ * Modifier-agnostic delta heuristics are unreliable across mice/trackpads.
  *
- * @param {Record<string, unknown>} state Active OFP document and stage.
- * @returns {void} Register the cancelable, stage-scoped gesture handler.
+ * @param {Record<string, unknown>} state Active OFP viewer and scroll stage.
+ * @returns {void} Bind scoped wheel and Safari gesture events with teardown.
  */
 function attachOfpWheelZoom(state) {
     const stage = state.dialog.querySelector('[data-ofp-stage]');
     stage.addEventListener('wheel', (event) => {
-        if (state.closed || !state.pageUnit || !state.pdf || !event.cancelable || event.deltaY === 0) return;
+        if (state.closed || !state.pageUnit || !state.pdf || !event.ctrlKey
+            || event.altKey || event.metaKey || event.shiftKey) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('a, button, input, textarea, select, [contenteditable]')) return;
         const rect = stage.querySelector('canvas')?.getBoundingClientRect();
         if (!rect || event.clientX < rect.left || event.clientX > rect.right
             || event.clientY < rect.top || event.clientY > rect.bottom) return;
-        const elapsed = state.wheelGesture ? event.timeStamp - state.wheelGesture.at : Infinity;
-        const modifiedZoom = event.ctrlKey || event.metaKey;
-        const zoomGesture = modifiedZoom || (!(event.altKey || event.shiftKey || event.deltaX)
-            && (elapsed >= 180
-                ? (event.deltaMode !== 0 || Math.abs(event.deltaY) >= 48)
-                : state.wheelGesture.zoom));
-        state.wheelGesture = {zoom: zoomGesture, at: event.timeStamp};
-        if (!zoomGesture) return; // Fine trackpad scrolling stays native.
-        event.preventDefault();
+        // Also consume Ctrl+wheel at the zoom limits, to prevent browser zoom
+        // from escaping the active media stage.
+        if (event.cancelable) event.preventDefault();
+        if (state.webkitGesture || event.deltaY === 0) return;
         const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.clientHeight : 1;
         const delta = Math.max(-360, Math.min(360, event.deltaY * unit));
         const anchor = captureOfpAnchor(state, event.clientX, event.clientY);
@@ -463,6 +502,46 @@ function attachOfpWheelZoom(state) {
             void renderOfpPage(state, captureOfpAnchor(state, clientX, clientY));
         }, OFP_WHEEL_RENDER_DELAY_MS);
     }, {passive: false, signal: state.listeners.signal});
+
+    // Desktop Safari can emit WebKit GestureEvents instead of Ctrl+wheel.
+    // Ignore them when physical touchscreen fingers already own the pinch.
+    const onGesture = (event) => {
+        if (state.closed || !state.pdf || !state.pageUnit || state.pinch) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || !stage.contains(target)
+            || target.closest('a, button, input, textarea, select')) return;
+        const rect = stage.querySelector('canvas')?.getBoundingClientRect();
+        if (!rect) return;
+        const x = Number.isFinite(event.clientX) ? event.clientX : rect.left + rect.width / 2;
+        const y = Number.isFinite(event.clientY) ? event.clientY : rect.top + rect.height / 2;
+        if (event.cancelable) event.preventDefault();
+        if (event.type === 'gesturestart') {
+            state.webkitGesture = {
+                zoom: state.zoom, scale: Math.max(0.01, Number(event.scale) || 1),
+                anchor: captureOfpAnchor(state, x, y), x, y,
+            };
+            return;
+        }
+        if (!state.webkitGesture) return;
+        if (event.type === 'gesturechange') {
+            const gesture = state.webkitGesture;
+            setOfpManualZoom(state, gesture.zoom * Math.max(0.01, Number(event.scale) || 1) / gesture.scale);
+            if (gesture.anchor) {
+                gesture.anchor.clientX = x;
+                gesture.anchor.clientY = y;
+            }
+            gesture.x = x;
+            gesture.y = y;
+            previewOfpScale(state, gesture.anchor);
+        } else if (event.type === 'gestureend') {
+            const gesture = state.webkitGesture;
+            state.webkitGesture = null;
+            void renderOfpPage(state, captureOfpAnchor(state, gesture.x, gesture.y));
+        }
+    };
+    for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
+        stage.addEventListener(name, onGesture, {passive: false, signal: state.listeners.signal});
+    }
 }
 
 /**
@@ -712,7 +791,7 @@ async function runOfpAction(state, action) {
         clearTimeout(state.wheelRenderTimer);
         state.wheelRenderTimer = null;
     }
-    state.wheelGesture = null;
+    state.webkitGesture = null;
     let anchor = null;
     if (action === 'previous') state.page = Math.max(1, state.page - 1);
     else if (action === 'next') state.page = Math.min(state.total, state.page + 1);
@@ -774,38 +853,101 @@ function attachOfpTouchZoom(state) {
         y: (touches[0].clientY + touches[1].clientY) / 2,
     });
     const options = {signal: state.listeners.signal};
+    const renderAfterPinch = (center) => {
+        if (!state.pdf) return;
+        const anchor = captureOfpAnchor(state, center.x, center.y);
+        void renderOfpPage(state, anchor);
+    };
     stage.addEventListener('touchstart', (event) => {
-        if (event.touches.length !== 2) return;
-        const center = midpoint(event.touches);
-        state.pinch = {
-            distance: distance(event.touches),
-            zoom: state.zoom,
-            anchor: captureOfpAnchor(state, center.x, center.y),
-            center,
-        };
-        if (state.wheelRenderTimer !== null) {
-            clearTimeout(state.wheelRenderTimer);
-            state.wheelRenderTimer = null;
+        if (state.closed) return;
+        if (event.touches.length >= 2) {
+            const center = midpoint(event.touches);
+            state.webkitGesture = null;
+            state.touchPanAfterPinch = null;
+            state.pinch = {
+                distance: distance(event.touches),
+                zoom: state.zoom,
+                anchor: captureOfpAnchor(state, center.x, center.y),
+                center,
+            };
+            if (state.wheelRenderTimer !== null) {
+                clearTimeout(state.wheelRenderTimer);
+                state.wheelRenderTimer = null;
+            }
+        } else if (event.touches.length === 1 && !state.pinch) {
+            const finger = event.touches[0];
+            state.touchPanAfterPinch = {
+                identifier: finger.identifier, x: finger.clientX, y: finger.clientY,
+                fromPinch: false, center: null,
+            };
         }
     }, {...options, passive: true});
     stage.addEventListener('touchmove', (event) => {
-        if (!state.pinch || event.touches.length !== 2) return;
-        event.preventDefault();
-        const center = midpoint(event.touches);
-        const factor = distance(event.touches) / Math.max(1, state.pinch.distance);
-        setOfpManualZoom(state, state.pinch.zoom * factor);
-        if (state.pinch.anchor) {
-            state.pinch.anchor.clientX = center.x;
-            state.pinch.anchor.clientY = center.y;
+        if (state.closed) return;
+        if (state.pinch && event.touches.length >= 2) {
+            if (event.cancelable) event.preventDefault();
+            const center = midpoint(event.touches);
+            const factor = distance(event.touches) / Math.max(1, state.pinch.distance);
+            setOfpManualZoom(state, state.pinch.zoom * factor);
+            if (state.pinch.anchor) {
+                state.pinch.anchor.clientX = center.x;
+                state.pinch.anchor.clientY = center.y;
+            }
+            previewOfpScale(state, state.pinch.anchor);
+            state.pinch.center = center;
+            return;
         }
-        previewOfpScale(state, state.pinch.anchor);
-        state.pinch.center = center;
+        if (!state.pinch && event.touches.length === 1 && state.touchPanAfterPinch) {
+            const finger = event.touches[0];
+            const pan = state.touchPanAfterPinch;
+            if (finger.identifier !== pan.identifier) return;
+            if (event.cancelable) event.preventDefault();
+            // Explicit stage scrolling remains available in Fit width and manual
+            // zoom while touch-action:none prevents the underlying page moving.
+            stage.scrollLeft += pan.x - finger.clientX;
+            stage.scrollTop += pan.y - finger.clientY;
+            pan.x = finger.clientX;
+            pan.y = finger.clientY;
+        }
     }, {...options, passive: false});
     const complete = (event) => {
-        if (!state.pinch || event.touches.length >= 2) return;
-        const center = state.pinch.center;
-        state.pinch = null;
-        void renderOfpPage(state, captureOfpAnchor(state, center.x, center.y));
+        if (state.closed) return;
+        if (event.type === 'touchcancel') {
+            const pinchCenter = state.pinch?.center || state.touchPanAfterPinch?.center;
+            const changedScale = Boolean(state.pinch || state.touchPanAfterPinch?.fromPinch);
+            state.pinch = null;
+            state.touchPanAfterPinch = null;
+            if (changedScale && pinchCenter) renderAfterPinch(pinchCenter);
+            return;
+        }
+        if (state.pinch && event.touches.length < 2) {
+            const center = state.pinch.center;
+            state.pinch = null;
+            if (event.touches.length === 1) {
+                const finger = event.touches[0];
+                state.touchPanAfterPinch = {
+                    identifier: finger.identifier, x: finger.clientX, y: finger.clientY,
+                    fromPinch: true, center,
+                };
+            } else {
+                state.touchPanAfterPinch = null;
+                renderAfterPinch(center);
+            }
+            return;
+        }
+        if (event.touches.length === 0) {
+            const pan = state.touchPanAfterPinch;
+            state.touchPanAfterPinch = null;
+            if (pan?.fromPinch && pan.center) {
+                // Defer rasterization until the last finger lifts: rerendering
+                // midway through a one-finger pan would snap the scroll offset.
+                const rect = stage.getBoundingClientRect();
+                renderAfterPinch({
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                });
+            }
+        }
     };
     stage.addEventListener('touchend', complete, {...options, passive: true});
     stage.addEventListener('touchcancel', complete, {...options, passive: true});
@@ -825,7 +967,8 @@ async function closeOfpViewer(state) {
     state.listeners.abort();
     if (state.hudTimer !== null) clearTimeout(state.hudTimer);
     if (state.wheelRenderTimer !== null) clearTimeout(state.wheelRenderTimer);
-    state.wheelGesture = null;
+    state.webkitGesture = null;
+    state.touchPanAfterPinch = null;
     state.pinch = null;
     window.removeEventListener('resize', state.resizeHandler);
     document.removeEventListener('fullscreenchange', state.fullscreenHandler);

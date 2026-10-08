@@ -37,6 +37,33 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
+ * Determine whether a request may read the original gallery-owned OFP PDF.
+ *
+ * An authenticated administrator may inspect unpublished/private source
+ * galleries. Every other visitor follows the exact direct-gallery visitor
+ * access policy: public and unpublished (unlisted) galleries can be visited
+ * by direct URL, including their original OFP attachments, but password,
+ * share-token and NSFW requirements still apply. Private galleries without
+ * a valid visitor grant remain inaccessible. A generated private OFP-page
+ * child retains its own independent visibility restrictions.
+ *
+ * @param array<string,mixed> $gallery Physical gallery containing the PDF.
+ * @param bool $isAdmin Whether the caller has verified administrator authority
+ *                      outside anonymous-preview mode.
+ * @return bool True only when PDF download and inline reading are authorized.
+ */
+function simbrief_ofp_visitor_access_allowed(array $gallery, bool $isAdmin): bool
+{
+    if ($isAdmin) {
+        return true;
+    }
+    // This is the same no-admin-bypass decision used by the public gallery.
+    // An unpublished gallery is unlisted, not a private gallery: direct URLs
+    // can access its PDF whenever the gallery itself is visitor-accessible.
+    return visitor_can_access_gallery_without_admin_bypass($gallery);
+}
+
+/**
  * Resolve the valid locally stored original OFP PDF for one gallery.
  *
  * The manifest is a local attachment index. Never accept a file or URL supplied

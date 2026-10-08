@@ -398,6 +398,29 @@ function render_public_gallery_preview_toolbar(array $gallery): void
 }
 
 /**
+ * Build a stable same-origin URL for a gallery's protected original PDF.
+ *
+ * The route deliberately uses the actual front-controller base path rather
+ * than an absolute configured base_url host. That keeps anonymous PDF.js
+ * fetches and PDF download links on the same origin and cookie scope as the
+ * gallery page, including subdirectory installations without URL rewriting.
+ * Never serialize the original filesystem path or a remote SimBrief URL.
+ *
+ * @param int $galleryId Source gallery identifier, not a gallery image ID.
+ * @param bool $download Whether to request attachment disposition.
+ * @return string Root-relative URL for the dedicated OFP content route.
+ */
+function public_gallery_ofp_document_url(int $galleryId, bool $download = false): string
+{
+    $base = rtrim(\Gallery\Core\request_script_base_path(), '/');
+    $query = ['page' => 'gallery_ofp_pdf', 'id' => $galleryId];
+    if ($download) {
+        $query['download'] = 1;
+    }
+    return $base . '/index.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+}
+
+/**
  * Render the public gallery title area with optional banner and logo assets.
  *
  * The text title remains in the h1 for accessibility and SEO even when a banner
@@ -425,8 +448,8 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
-        'ofp_pdf_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1]) : '',
-        'ofp_pdf_download_url' => $ofpPath !== null ? url_for('media', ['id' => (int) $gallery['id'], 'ofp' => 1, 'download' => 1]) : '',
+        'ofp_pdf_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id']) : '',
+        'ofp_pdf_download_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id'], true) : '',
         'ofp_can_convert' => $ofpPath !== null && \Gallery\Core\current_user() !== null && !\Gallery\Core\admin_anonymous_preview_active(),
         'ofp_conversion_supported' => $conversionSupported,
         'ofp_conversion_url' => $ofpPath !== null ? url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]) : '',
