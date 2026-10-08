@@ -1969,6 +1969,24 @@ and ZIP contents, requiring ZIP support. Neither test uses live gallery storage.
 ranking; the registered Node counterpart checks server-owned batch defaults and
 browser retries. Run these through the central audit, not a separate test loop.
 
+## Clipboard image uploads
+
+The central quick/full audit includes `admin_upload_clipboard_test.mjs` for MIME/picker-policy filtering, optional-format capability hints, original names and bytes, distinct generated screenshot names, multi-image extraction, file-only exposure and non-image/null/empty inputs. The full audit browser suite includes `admin_upload_clipboard_browser_test.mjs`, using the confined `admin_upload_clipboard.html` fixture. Real browser FileLists, cancelable paste events and production upload handlers verify additive picker selection, native multipart/required validation, focus routing, text-editor exclusion, dynamic panel replacement, busy/disabled/hidden controls, unavailable FileList assignment, target/CSRF preservation, canonical classic completion and upload-limit failures. These synthetic events do not prove OS clipboard delivery.
+
+Record browser/OS versions and actual results for the manual matrix below; unexecuted cells remain pending. Use a disposable migrated installation and an authenticated administrator. Repeat each case with browser preparation checked and unchecked, on the direct upload page (existing and new gallery) and in the existing-gallery/create-and-upload side panel.
+
+| Platform | Browsers to check | Paste shortcut | Clipboard sources |
+| --- | --- | --- | --- |
+| Windows | Current Chrome, Edge, Firefox | Ctrl+V | Snipping Tool screenshot; copied raster image |
+| Linux | Current Chromium/Chrome, Firefox | Ctrl+V | Desktop screenshot copied to clipboard; copied raster image |
+| macOS | Current Safari, Chrome, Firefox | Cmd+V | Control+Shift+Cmd+4 screenshot; Preview/browser copied raster image |
+
+1. Focus the upload area, paste a screenshot, and confirm it appears in the ordinary file selection. Select/drop an image first and paste twice; all images must remain selected. Test a named image and multiple supported image items where the OS/browser exposes them. Confirm retained names or distinct `clipboard-...` names with the correct extension.
+2. On the direct page, focus each upload form and then its surrounding page; confirm only the intended form receives images. With a panel open, confirm its uploader receives them and the background page does not. Close/reopen or refresh the panel fragment and repeat paste.
+3. Paste ordinary text, HTML, a URL, PDF and SVG. None may become an upload. In title/description/contenteditable fields, ordinary paste must keep editing text. Browsers that expose no image clipboard data must still allow chooser/drop uploads.
+4. Submit to the selected gallery and confirm existing metadata/thumbnail processing, progress and final contents. During upload, paste again and confirm the captured selection stays unchanged. Force an ordinary upload-size/invalid-image failure and confirm existing error handling. For side-panel submission, the URL must remain unchanged, the panel stay open, and refreshed controls still accept paste.
+5. With JavaScript disabled, confirm ordinary file selection and POST still work. Do not record unsupported multi-item OS clipboard exposure as a passed multi-image test; distinguish supported, unavailable and pending evidence.
+
 ## Browser upload oversized-single-image batching
 
 For browser-assisted gallery uploads, treat the configured ZIP batch size (24 MB by default) as a soft packing target. A prepared image package is atomic because it contains the original plus all browser-generated thumbnail variants. If one package alone exceeds the target, it must be emitted as a one-image ZIP batch instead of failing. The client and server must still reject a prepared ZIP that exceeds the detected effective PHP upload limit. Multi-image batches must continue splitting at the configured target and maximum-images-per-batch setting. Run `php scripts/check_admin_mutation_contracts.php`, PHP/JavaScript syntax checks, and verify `app/core-manifest.json` after changes to this path.

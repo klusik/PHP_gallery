@@ -206,6 +206,11 @@ $registry = [
 
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
+        'admin_upload_clipboard_test.mjs' => [],
+        'admin_upload_clipboard_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'simbrief_legacy_dispatch_browser_test.mjs' => [],
         'admin_setup_wizard_browser_test.mjs' => [],
         'cooperative_gallery_browser_test.mjs' => [

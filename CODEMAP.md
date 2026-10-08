@@ -288,7 +288,7 @@ Disabling Trash affects future deletes only; existing trash entries remain visib
 
 | Task | Files |
 | --- | --- |
-| Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/browser_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-browser-upload.js`, `public/assets/gallery-modules/browser-image-worker.js` |
+| Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/browser_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-browser-upload.js`, `public/assets/gallery-modules/admin-upload-selection.js` (delegated clipboard-to-FileList selection), `public/assets/gallery-modules/browser-image-worker.js` |
 | Thumbnail maintenance and browser rebuild | `app/controllers/admin_thumbnails.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_sources.php`, `app/services/browser_thumbnail_rebuild.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/browser-image-worker.js` |
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |

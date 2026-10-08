@@ -112,7 +112,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261003-theme-motion-v1';
+} from './gallery-modules/admin-operations.js?v=20261008-clipboard-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
