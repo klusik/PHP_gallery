@@ -259,6 +259,133 @@ namespace {
             'OFP HUD contrast must be theme-independent and PDF touch events must be isolated.'
         );
         
+
+        // #104: historical prefill is local, uncertainty-labelled and bounded.
+        $legacyFolder = $root . '/historical';
+        ofp_document_assert(mkdir($legacyFolder, 0700), 'Could not stage historical OFP fixture.');
+        try {
+            $historical = [
+                'id' => 47, 'folder_path' => 'historical', 'gallery_date' => '2026-06-03',
+                'gallery_date_end' => null, 'title' => 'Never infer LKPR and ESSA from this title',
+            ];
+            $prefill = \Gallery\Services\simbrief_ofp_dispatch_prefill($historical);
+            ofp_document_assert(!$prefill['has_snapshot']
+                && $prefill['fields']['orig']['value'] === ''
+                && $prefill['fields']['dest']['value'] === ''
+                && $prefill['fields']['date']['value'] === '2026-06-03'
+                && $prefill['fields']['date']['uncertain'] === true,
+                'Legacy gallery metadata was guessed as confirmed flight data.');
+            ofp_document_assert(
+                \Gallery\Services\simbrief_ofp_dispatch_value('orig', 'LKPR') === 'LKPR'
+                && \Gallery\Services\simbrief_ofp_dispatch_value('orig', 'flight') === ''
+                && \Gallery\Services\simbrief_ofp_dispatch_value('fl', 'FL350') === '350'
+                && \Gallery\Services\simbrief_ofp_dispatch_value('fl', '35000') === '350'
+                && \Gallery\Services\simbrief_ofp_dispatch_value('date', '2026-02-30') === ''
+                && \Gallery\Services\simbrief_ofp_dispatch_value('route', 'DCT OKL DCT') === 'DCT OKL DCT'
+                && \Gallery\Services\simbrief_ofp_dispatch_value('route', 'https://example.com/') === '',
+                'Dispatch parameter normalization accepted an invalid field.'
+            );
+
+            $snapshot = ['origin' => ['icao_code' => 'LKPR'], 'destination' => ['icao_code' => 'ESSA'],
+                'aircraft' => ['icao_code' => 'A320'], 'general' => ['route' => 'DCT OKL DCT'],
+                'params' => ['fl' => '35000', 'deph' => '07', 'depm' => '20']];
+            $rawSnapshot = json_encode($snapshot, JSON_PRETTY_PRINT) . "\n";
+            file_put_contents($legacyFolder . '/simbrief-ofp.json', $rawSnapshot);
+            $routeMap = ['route_text' => 'LKPR@50.1,14.2 DCT ESSA@59.6,17.9'];
+            $prefill = \Gallery\Services\simbrief_ofp_dispatch_prefill($historical, $routeMap);
+            ofp_document_assert($prefill['has_snapshot']
+                && $prefill['fields']['orig']['value'] === 'LKPR'
+                && $prefill['fields']['dest']['value'] === 'ESSA'
+                && $prefill['fields']['type']['value'] === 'A320'
+                && $prefill['fields']['route']['source'] === 'saved_ofp'
+                && $prefill['fields']['deph']['value'] === '07'
+                && $prefill['fields']['depm']['value'] === '20',
+                'Saved OFP data was not preferred to less-certain gallery fields.');
+            $legacyPdf = $legacyFolder . '/simbrief-ofp.pdf';
+            $legacyManifest = $legacyFolder . '/simbrief-ofp-manifest.json';
+            $uploadedPdf = $root . '/manual-upload.pdf';
+            file_put_contents($uploadedPdf, "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n");
+            $initial = \Gallery\Services\simbrief_ofp_attach_manual_pdf(
+                $historical, $uploadedPdf, 'retrospective_user_generated'
+            );
+            ofp_document_assert($initial['bytes'] === filesize($uploadedPdf)
+                && $initial['sha256'] === hash_file('sha256', $legacyPdf)
+                && \Gallery\Services\simbrief_ofp_local_pdf_path($historical) === realpath($legacyPdf),
+                'Manual OFP upload was not stored via the canonical authorized resolver.');
+            $firstPdf = file_get_contents($legacyPdf);
+            $savedManifest = json_decode((string) file_get_contents($legacyManifest), true);
+            ofp_document_assert($savedManifest['format'] === 'php_gallery_simbrief_ofp_manifest_v1'
+                && $savedManifest['ofp_pdf_file'] === 'simbrief-ofp.pdf'
+                && $savedManifest['pdf_provenance'] === 'retrospective_user_generated'
+                && $savedManifest['ofp_file'] === 'simbrief-ofp.json'
+                && file_get_contents($legacyFolder . '/simbrief-ofp.json') === $rawSnapshot,
+                'Manual attachment lost provenance or modified the saved original JSON.');
+
+            $rejectedDuplicate = false;
+            try {
+                \Gallery\Services\simbrief_ofp_attach_manual_pdf($historical, $uploadedPdf, 'manually_supplied');
+            } catch (RuntimeException $error) {
+                $rejectedDuplicate = str_contains($error->getMessage(), 'already attached');
+            }
+            ofp_document_assert($rejectedDuplicate && file_get_contents($legacyPdf) === $firstPdf,
+                'A repeated ordinary upload overwrote a prior OFP.');
+            $rejectedUnconfirmed = false;
+            try {
+                \Gallery\Services\simbrief_ofp_attach_manual_pdf(
+                    ['id' => 48, 'folder_path' => '../not-this-gallery'], $uploadedPdf, 'manually_supplied'
+                );
+            } catch (RuntimeException $error) {
+                $rejectedUnconfirmed = true;
+            }
+            ofp_document_assert($rejectedUnconfirmed, 'Wrong-gallery traversal was not rejected.');
+            file_put_contents($uploadedPdf, "not a pdf");
+            $rejectedInvalid = false;
+            try {
+                \Gallery\Services\simbrief_ofp_attach_manual_pdf($historical, $uploadedPdf, 'manually_supplied', true);
+            } catch (RuntimeException $error) {
+                $rejectedInvalid = true;
+            }
+            ofp_document_assert($rejectedInvalid && file_get_contents($legacyPdf) === $firstPdf,
+                'Malformed PDF replaced the original attachment.');
+            file_put_contents($uploadedPdf, "%PDF-1.7\n1 0 obj\n<< /Type /Pages >>\nendobj\n%%EOF\n");
+            $replaced = \Gallery\Services\simbrief_ofp_attach_manual_pdf(
+                $historical, $uploadedPdf, 'manually_supplied', true
+            );
+            $replacementManifest = json_decode((string) file_get_contents($legacyManifest), true);
+            ofp_document_assert($replaced['provenance'] === 'manually_supplied'
+                && file_get_contents($legacyPdf) !== $firstPdf
+                && $replacementManifest['pdf_provenance'] === 'manually_supplied'
+                && file_get_contents($legacyFolder . '/simbrief-ofp.json') === $rawSnapshot,
+                'Explicit replacement did not preserve JSON and gallery isolation.');
+
+            $legacyJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js');
+            $legacyView = (string) file_get_contents(dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php');
+            $legacyPost = (string) file_get_contents(dirname(__DIR__) . '/app/controllers/admin_galleries_edit_page/post_actions.php');
+            ofp_document_assert(str_contains($legacyJs, 'dialog.showModal()')
+                && str_contains($legacyJs, 'https://dispatch.simbrief.com/options/custom')
+                && str_contains($legacyJs, "window.open(url, '_blank', 'noopener,noreferrer')")
+                && str_contains($legacyView, 'data-simbrief-dispatch-template')
+                && str_contains($legacyView, 'data-simbrief-ofp-upload-form')
+                && str_contains($legacyPost, 'is_uploaded_file(')
+                && str_contains($legacyPost, "['upload_pdf', 'replace_pdf']"),
+                'Legacy OFP flow lost modal confirmation, fixed redirect or admin upload isolation.');
+            foreach (['en', 'cs', 'de', 'sv'] as $language) {
+                $pack = json_decode((string) file_get_contents(dirname(__DIR__) . "/app/lang/$language.json"), true);
+                ofp_document_assert(is_array($pack)
+                    && isset($pack['admin.legacy_ofp.review_title'], $pack['admin.legacy_ofp.historical_warning'], $pack['admin.legacy_ofp.confirm_replace']),
+                    'A maintained UI language is missing the retrospective OFP dialog or PDF controls.');
+            }
+        } finally {
+            foreach (glob($legacyFolder . '/*') ?: [] as $path) {
+                if (is_file($path) || is_link($path)) @unlink($path);
+            }
+            foreach (glob($legacyFolder . '/.*') ?: [] as $path) {
+                if ($path !== $legacyFolder . '/.' && $path !== $legacyFolder . '/..' && is_file($path)) @unlink($path);
+            }
+            if (is_file($root . '/manual-upload.pdf')) @unlink($root . '/manual-upload.pdf');
+            if (is_dir($legacyFolder)) @rmdir($legacyFolder);
+        }
+
         echo "SimBrief OFP attachment/private subgallery contracts: PASS\n";
     } finally {
         foreach ([$childFolder . '/ofp-page-001.jpg', $childFolder . '/ofp-page-002.jpg',
