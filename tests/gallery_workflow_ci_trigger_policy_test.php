@@ -366,6 +366,8 @@ namespace {
         'A TinyTeX cache hit must verify local provenance and resources without provisioning.');
 
     $patchNotesAi = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/patch_notes_ai.php');
+    check(preg_match('/name: Build complete release-note evidence prompt\n(?:(?!      - name:).)*timeout-minutes: 2/s', $releaseWorkflow) === 1,
+        'Local release evidence collection must have its own two-minute workflow deadline.');
     check(str_contains($patchNotesAi, 'EVIDENCE - TEXT DIFF:')
         && str_contains($patchNotesAi, 'untrusted quoted repository data')
         && str_contains($patchNotesAi, "':(exclude)docs/*.pdf'")

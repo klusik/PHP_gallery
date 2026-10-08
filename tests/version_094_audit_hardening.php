@@ -61,9 +61,28 @@ $changed = $image;
 $changed['checksum_sha256'] = str_repeat('c', 64);
 $assert(!hash_equals($versionA, \Gallery\Core\image_public_asset_version($changed)), 'Changed source identity must change the media cache identity.');
 
-$seoGuard = file_get_contents($root . '/app/services/seo_request_guard.php') ?: '';
-foreach (["'media' => ['id', 'v']", "'public_media' => ['public_path', 'v']"] as $expected) {
-    $assert(str_contains($seoGuard, $expected), 'SEO guard must accept versioned media query parameter: ' . $expected);
+// Check the runtime route policy instead of freezing one historical array literal.
+// Versioned images retain their existing contract alongside authorized OFP PDFs.
+require_once $root . '/app/services/seo_request_guard.php';
+$mediaAllowed = \Gallery\Services\seo_request_guard_allowed_parameters_for_page('media');
+$publicMediaAllowed = \Gallery\Services\seo_request_guard_allowed_parameters_for_page('public_media');
+$ofpAllowed = \Gallery\Services\seo_request_guard_allowed_parameters_for_page('gallery_ofp_pdf');
+foreach (['id', 'v', 'ofp', 'download', 'share', 'token'] as $key) {
+    $assert(in_array($key, $mediaAllowed, true),
+        'Legacy media query guard must retain versioned image/OFP parameter: ' . $key);
+}
+foreach (['public_path', 'v'] as $key) {
+    $assert(in_array($key, $publicMediaAllowed, true),
+        'Public media query guard must retain versioned path parameter: ' . $key);
+}
+foreach (['id', 'download', 'share', 'token'] as $key) {
+    $assert(in_array($key, $ofpAllowed, true),
+        'Dedicated OFP query guard must accept documented parameter: ' . $key);
+}
+foreach (['media' => $mediaAllowed, 'public_media' => $publicMediaAllowed,
+    'gallery_ofp_pdf' => $ofpAllowed] as $route => $allowed) {
+    $assert(!in_array('unexpected', $allowed, true),
+        'SEO guard must continue rejecting unknown query parameters on route: ' . $route);
 }
 
 $canonicalCallSites = [

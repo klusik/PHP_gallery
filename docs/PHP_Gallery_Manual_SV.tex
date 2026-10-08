@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.122.1}
-\newcommand{\manualdate}{7~oktober~2026}
+\newcommand{\version}{0.123}
+\newcommand{\manualdate}{8~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1320,7 +1320,7 @@ Medan ett nytt fotografi förbereds använder visaren samma förloppsområde som
 
 Ljuslådans zoomintervall är 100--400~\%. Använd minus- och pluskontrollerna, eller välj procentkontrollen för att återgå till 100~\%. Tangentbordsgenvägarna är \codeword{+} eller \codeword{=} för att zooma in, \codeword{-} eller \codeword{\_} för att zooma ut och \codeword{0} för återställning. Fokusindikatorer och aktuell procentsats är fortsatt tillgängliga för hjälpmedel.
 
-Zoomning med mushjul och styrplatta följer pekaren: delen av fotografiet under markören stannar på samma plats när skalan ändras, även under flera snabba zoomsteg. Nypzoom använder gestens mittpunkt. När fotografiet är förstorat kan det dras vågrätt och lodrätt. Vid 100~\% på pekenheter fortsätter vanlig vågrät svepning att byta fotografi. Hjulinmatning med Control/Command förblir tillgänglig för webbläsarens sidzoom.
+På~datorer flyttar vanligt mushjul och~rullning med två fingrar på~styrplattan ett~förstorat fotografi i~båda riktningarna; vid~100~\% ändras inte skalan. Att~dra isär fingrarna på~styrplattan eller~använda \codeword{Ctrl} med mushjulet zoomar fotografiet kring pekaren, medan \codeword{Command} med mushjulet förblir ett~webbläsarkommando. På~pekskärmar zoomar två fingrar kring gestens mittpunkt, medan ett finger flyttar en~förstorad bild. Vid~100~\% byter ett~vågrätt svep med ett finger fotografi; växling från svep till nypning eller från nypning till panorering byter inte bild.
 
 Vid 100~\% passas fotografiet in och centreras i visaren. Helskärmsläget använder samma zoom- och panoreringsbeteende, och dess Stäng-kontroll och övriga kontroller går att klicka på när bilden är förstorad.
 
@@ -1350,6 +1350,18 @@ Ett galleri med sparad flygrutt kan öppna kartan innan det första fotot laddas
 Flyginriktade samlingar kan använda den valfria SimBrief-integrationen för att hämta senaste operativa färdplanen för ett~pilot-ID eller pilotnamn. Den kompakta redigeraren accepterar en synlig identifierare: enbart siffror väljer vägen för pilot-ID; annan text väljer vägen för pilotnamn. Befintliga integrationer som skickar separata fält förblir kompatibla, med pilot-ID som förstahandsval när båda anges. Redigeraren skapar ett redigerbart Markdown-beskrivnings- och ruttutkast; OFP och tillgängliga ruttkoordinater kopplas först efter att galleriet sparats. En misslyckad SimBrief-begäran lämnar det vanliga beskrivningsfältet och den manuella ruttredigeraren tillgängliga. Utkastet före skapande är privat och tillfälligt enligt avsnittet om galleriskapande.
 
 SimBrief-förhandsvisningen fyller den befintliga ruttredigeraren med hela den inlämnade rutten. Saknade avgångs- och ankomstflygplatser läggs till en gång vardera, medan ruttinstruktioner och flygplats-/banangivelser bevaras. Beskrivningsutkast på alla språk som underhålls behåller hela rutten, inklusive destinationen vid långa rutter. Statusen förklarar att OFP och tillgängliga kartpunkter kopplas när du sparar galleriet; själva importen sparar dem inte. Om du ändrar rutt, identifierare, beskrivning eller källspråk medan begäran pågår bevaras formulärvärdena och svaret ber dig importera igen. Efter sparandet behåller kartan de ursprungliga OFP-koordinaterna.
+
+Om ett galleri har en lokalt sparad SimBrief OFP-PDF visas \ui{Visa färdplan (OFP)} och~\ui{Ladda ned OFP-PDF} i~beskrivningen, även om galleriet saknar foton. PDF-filen öppnas i~en separat dokumentljuslåda; sidbläddringen kan inte växla till galleriets fotografier. Standardläget \ui{Anpassa hela sidan} beräknar skalan utifrån både bredd och~höjd i~det tillgängliga utrymmet mellan sidhuvudet och~verktygsfältet och~centrerar sidan. \ui{Anpassa till bredd} medger vertikal rullning, medan \ui{Faktisk storlek (100\%)} använder PDF-visarens vanliga skärmpixelskala. Aktivt läge markeras tydligt. In- och~utzoomning, återställning till 100\% av~senast valt anpassningsläge, nypzoom/panorering, tangentbordsnavigering och~helskärm finns kvar.
+
+Original-PDF:en levereras via den~galleribundna rutten \codeword{gallery\_ofp\_pdf} på~samma ursprung som gallerisidan. Länkar med \codeword{index.php}-frågeparametrar fungerar även i~underkataloger utan URL-omskrivning. En~ny anonym besökare kan visa och~ladda ned ett~OFP från ett~offentligt eller~opublicerat galleri via dess direkta länk utan administratörsinloggning. Opublicerat innebär att galleriet inte är listat, inte att det är privat: original-PDF:en följer samma krav på~lösenord, delningstoken och~NSFW-behörighet som gallerisidan. Verkligt privata källgallerier utan giltigt besökartillstånd och~privata undergallerier med genererade OFP-sidor förblir skyddade. En~behörig administratör kan öppna privata original utom i~anonymt förhandsvisningsläge. Nekad åtkomst, saknade och~ogiltiga PDF-filer ger samma icke-cachelagrade textsvar \codeword{404}, utan HTML-gallerisida eller~sökväg till~filen. Äldre \codeword{media}-länkar med \codeword{ofp=1} fortsätter att~fungera.
+
+De~kompakta knapparna \ui{Visa färdplan (OFP)} och~\ui{Ladda ned OFP-PDF} visas på~samma rad. Administratören kan välja att~skapa ett~privat undergalleri av~PDF-sidor via en~separat knapp nedanför. En~lokaliserad frågeteckenknapp visar en~förklaring vid muspekning, tangentbordsfokus eller~tryckning utan att~ta plats i~galleribeskrivningen.
+
+Automatisk anpassning till hel sida eller bredd räknas om för~varje PDF-sidas faktiska mått och~orientering, efter fönsterstorleksändring, när enheten roteras och~vid växling till eller från helskärm. Manuell zoom behåller sin CSS-pixelskala och~rullningsposition när fönstret ändras; ett nytt anpassningsval eller återställning återgår till automatisk beräkning. Om visningen misslyckas finns fortfarande en länk till den skyddade original-PDF-filen. Galleriets åtkomstregler för synlighet, lösenord och~NSFW gäller även fortsättningsvis för visning och~nedladdning. Det obligatoriska Chromium-testet i~CI sparar den~detaljerade loggen \codeword{browser-map.log} som~artefakt för~att felsöka fel i~dokumentvisaren.
+
+Tangenten \codeword{F} och~helskärmsknappen styr bara den~separata OFP-visaren. \codeword{Escape} lämnar först helskärmsläget och~stänger dokumentet först i~normalläget. Textinmatning i~redigerbara fält, genvägar med modifierartangenter och~automatiska tangentupprepningar växlar inte helskärm. Om webbläsaren nekar inbyggd helskärm används ett~CSS-baserat helskärmsläge i~samma PDF-visare. I~helskärm ligger sidhuvud och~verktygsfält ovanpå PDF-ytan, döljs efter en~kort stund utan pekarrörelse och~visas igen vid musrörelse eller~tangentbordsaktivitet. Kontroller som pekaren ligger över eller~som har tangentbordsfokus förblir synliga; visningen ändrar varken PDF-skalan eller~rullningsläget.
+
+Vanlig rullning med mushjul eller~två fingrar på~styrplattan flyttar endast PDF-sidan, även i~sidled och~läget \ui{Anpassa till bredd}; dokumentet, kontrollerna och~webbläsaren zoomas inte. \codeword{Ctrl} med mushjulet eller~en~nypgest på~styrplattan zoomar PDF-innehållet kring pekaren, medan \codeword{Command} med mushjulet fortfarande hör till webbläsaren. På~mobila enheter flyttar ett finger dokumentet, två fingrar zoomar och~det återstående fingret kan fortsätta panorera efter nypningen. PDF-verktygsfältet använder fasta, kontrastrika mörka färger oberoende av~galleriets tema och~behåller sin storlek i~normalt läge och~helskärm. \ui{Anpassa hela sidan}, \ui{Anpassa till bredd} och~\ui{Faktisk storlek (100\%)} återställer automatisk visning.
 
 Manuell rutttext tolkas i första hand offline. Importerade OurAirports-databasrader kontrolleras först, sedan den lilla medföljande CSV-reserven. Ett giltigt cachelagrat leverantörsresultat kan användas därefter; när en administratör har kopplat ett konfigurerat Navigraph-konto och fjärrsökning är tillåten kan en okänd identifierare slås upp genom Navigraph och cachelagras under känd AIRAC-cykel. Hanteraren för Navigeringsdata visar antal i lokal databas och medföljande data, ger ett uppslagstest för identifierare såsom flygplatser, navigeringshjälpmedel och fixpunkter och kan uppdatera det lokala OurAirports-underlaget för flygplatser och navigeringshjälpmedel. Lagring för Navigraph OAuth och konton är valfri och kan kopplas bort utan att lokala data tas bort.
 
@@ -1990,6 +2002,11 @@ Uppdateraren kontrollerar konfigurerade kanaler, validerar paket, förbereder in
 
 Administrationens uppdateringsområde visar också cachelagrad utgåveinformation och versionsbundna patchanteckningar för tillgänglig kanal, så att ägaren kan granska en utgåva innan jobbet startas. Stabila kanaler och betakanaler förblir separata val; etiketten Beta hör till utgåvevalet i administrationsgränssnittet och ändrar inte uppdaterarens terminologi för beständiga jobb eller manifest.
 
+Versionsanteckningarna sparas som rå Markdown i~den~installerade filen \filepath{PATCH_NOTES.md} och~i~den~versionsindelade cachen. Administrationsvyn renderar den~valda versionen först när den~visas, även för~poster från~äldre cachefiler; tidigare cachelagrad HTML kasseras i~stället för~att betros. Att bara öppna vyn använder lokala eller~redan cachelagrade anteckningar utan en~ny begäran till~GitHub. Ett~separat tidsbegränsat steg i~utgåvesökningen kan uppdatera fjärranteckningar; om~det misslyckas finns de~medföljande anteckningarna kvar.
+
+Markdown-länkar som~\codeword{[arende](https://example.org/issue/123)}, autolänkar i~vinkelparenteser och~rena HTTP(S)-adresser blir klickbara. De~öppnas på~en~ny flik med~skydden \codeword{noopener} och~\codeword{noreferrer}. Andra URL-scheman förblir escapad, inaktiv text. Renderingen bevarar rubriker, listor, betoning, kodblock och~bokstavlig inline-kod; adresser inuti kodspann blir inte länkar. Länkarnas skiljetecken, understreck och~frågeparametrar bevaras utan att godtycklig HTML tillåts.
+
+
 Tillfälliga hämtnings- eller webbhotellsfel kan försöks igen. Ett paket vars filer inte stämmer med dess eget integritetsmanifest är annorlunda: att hämta samma publicerade programbygge igen kan inte ändra dessa byte. PHP Gallery ber därför administratören att avbryta det förberedda jobbet och välja en nyare utgåva eller betakod i stället för att erbjuda en oändlig återförsöksslinga.
 
 Upptäckt av stabila utgåvor och paketarbete är separata begränsade åtgärder. En upptäcktsbegäran kan skapa ett beständigt bakgrundsjobb, medan en senare säker begäran eller CLI-köraren driver en kort del genom hämtning, arkivvalidering, uppackning, manifestverifiering, förberedelse, säkerhetskopiering för återställning, aktivering, migreringar och rensning. Range-begäranden kan återuppta avbrutna hämtningar, arbetarlås förhindrar samtidiga framsteg och ett gammalt lås kan återställas när dess ägare löpt ut. På inaktiva delade webbhotell schemalägger du \codeword{php scripts/application_update.php} från cron, t.ex. var femte minut. Varje anrop gör begränsad upptäckt eller driver befintligt bakgrundsarbete framåt; korrektheten beror inte på \codeword{set_time_limit()} eller \codeword{ignore_user_abort()}.
@@ -2014,6 +2031,8 @@ Om en uppdatering stoppades före aktivering, avbryt det gamla jobbet, tvinga fr
 \index{k00144@kärnmanifest}
 
 \filepath{app/core-manifest.json} registrerar programversionen och hashvärden för integritetshanterade kärnfiler. Den lokala generatorn under \filepath{scripts/generate_manifest.php} beräknar slutliga hashvärden efter körningsändringar. Inkludering av dokumentation och användardata följer generatorns etablerade policy.
+Vid deterministisk utgåveförberedelse accepterar manifestgeneratorn den~valfria byggtidsstämpeln \codeword{SOURCE_DATE_EPOCH} för~fältet \codeword{generated_at}; utan den~används aktuell tid. Det~värdbaserade flödet hämtar tidpunkten från~utgåvans metadata och~använder den~för~både handböckernas PDF-filer och~slutmanifestet, så~identiska förberedda indata får reproducerbara tidsstämplar. Manifestet måste ändå genereras om~när en~integritetsövervakad programfil har ändrats.
+
 \section{Valfri bakgrund: så fungerar PHP Gallery}
 \label{sec:architecture}
 \index{a00016@arkitektur}
@@ -2168,10 +2187,23 @@ En typisk funktionsändring följer denna ordning:
   \item Lägg till migreringsarbete enbart genom nya filer där beständiga schemaändringar krävs.
   \item Lägg till översatta gränssnittssträngar.
   \item Lägg till riktade automatiserade tester och dokumenterad manuell verifiering.
-  \item Uppdatera arkitektur, kodkarta, databas, testning och användarvägledning enligt respektive ansvar.
-  \item Generera om integritetsmetadata efter slutliga körningsändringar.
-  \item Granska hela skillnaden och kör relevant lokal testsvit.
+  \item Uppdatera permanenta Markdown-referenser och~alla fyra TeX-manualkällor när aktuella användar-, administratörs-, arkitektur- eller utvecklarinstruktioner ändras.
+  \item Förbered den slutliga källkodskandidaten med \filepath{scripts/prepare_candidate.php}; återskapa körningsplan, paketförteckning och~integritetsdata i~rätt ordning.
+  \item Granska hela ändringen och~använd den centrala granskningen \codeword{--profile=full} före slutlig källkodsöverlämning.
 \end{enumerate}
+
+\subsection{Förbereda källkodskandidater för CI}
+
+Under utvecklingen får ändringar delas upp i~små fristående commits, men kvalificeringen måste gälla en~bestämd källkodsrevision där alla genererade artefakter stämmer överens. Permanent teknisk dokumentation hör till samma ändringsomgång. Ändringar i~administration, arkitektur, körningsberoenden, säkerhet, paketering eller CI kräver granskning av~alla fyra TeX-manualkällor, inte bara synliga användarsidor. Vanligt utvecklingsarbete ändrar varken \filepath{PATCH_NOTES.md} eller de~versionshanterade PDF-manualerna.
+
+\begin{enumerate}
+  \item Slutför källkods- och~dokumentationsändringarna. Lägg till nya eller borttagna produktionsfiler i~Git-indexet så~att inventeringsgeneratorn ser medlemskapet. Justera granskade körningsrötter och~beroendedeklarationer när en~rutts ansvar ändras.
+  \item Kör \filepath{scripts/prepare_candidate.php}. Först genereras \filepath{app/runtime/modules.php}, sedan uppdateras \filepath{app/production-files.json} från Git-indexet och~\emph{sist} beräknas \filepath{app/core-manifest.json}. Hashvärdena bygger på~fullständiga filer i~checkouten, aldrig på~avkortade API-svar.
+  \item Verifiera alla tre artefakter utan skrivning med \codeword{php scripts/prepare_candidate.php --check}. Upprepad förberedelse med oförändrade sakliga indata ändrar varken filer eller manifestets tidsstämpel. Kör förberedelsen på~nytt efter varje senare källkodsrättning.
+  \item Committera endast genererade filer som faktiskt har ändrats och~bevara separata källkodskommittar. Använd den~auktoritativa granskningen \codeword{php scripts/audit.php --profile=full} för slutlig överlämning av~den förberedda kandidaten.
+\end{enumerate}
+
+Det~stabila GitHub-arbetsflödet \filepath{.github/workflows/candidate-preparation.yml} kan förbereda funktions- och~rättningsgrenar och~kvalificera den~publicerade kandidatens exakta SHA. Det~kontrollerar grenens identitet, avvisar föråldrade skrivningar och~gör varken merge, squash eller tvingad push. Den~centrala skrivskyddade kontrollen \codeword{--profile=candidate-preflight} avvisar gamla manifest, körningsplaner, inventeringar och~brott mot källkodspolicyn innan den~kostsamma CI-matrisen startar. Testkörningar får inte tyst reparera saknade artefakter. Senare uppdaterar releaseförberedelsen manualernas versions- och~datummarkörer och~kompilerar befintliga TeX-källor till PDF; den~skriver inte saknade tekniska förklaringar.
 
 \section{Kontrollera galleriet före publicering}
 \label{sec:testing}
@@ -2202,17 +2234,18 @@ Be någon annan prova galleriet utan instruktioner. Personens första klick och 
 
 \subsection{Automatiserade kontroller för programunderhållare}
 
-Utvecklare kan köra projektets körbara testskript efter ändringar i programkoden. Den samlade köraren omfattar projektsviten, medan riktade skript verifierar särskilda funktioner.
+Använd den~centrala granskaren \filepath{scripts/audit.php} för~normal verifiering, inte den~äldre omslutaren \filepath{tests/run.php}. Profilerna nedan är alternativ, inte tre steg som ska köras efter varandra. Använd vid behov snabbprofilen under utveckling, den~fullständiga profilen en~gång före vanlig överlämning eller~utgåveprofilen en~gång vid slutlig utgåvekvalificering. Kör enskilda tester bara för~att felsöka rapporterade fel eller~utveckla en~nyregistrerad testfixtur, inte som en~andra genomgång av~hela testträdet.
 
 \begin{lstlisting}[language=bash]
-php tests/run.php
-php tests/public_thumbnail_rendering_model_test.php
-php tests/public_thumbnail_markup_test.php
-php tests/duplicate_photo_detector_test.php
-php tests/duplicate_photo_ledger_test.php
-php tests/migration_consistency_test.php
-node tests/progressive_thumbnail_renderer_test.mjs
+# During development:
+php scripts/audit.php --profile=quick
+# Before ordinary code handoff:
+php scripts/audit.php --profile=full
+# Final release qualification only:
+php scripts/audit.php --profile=release
 \end{lstlisting}
+
+Det~värdbaserade utgåveflödet kör först den~särskilda policykontrollen \codeword{--profile=release-preflight} före resurskrävande AI- eller~TeX-steg. Den~förkontrollen ersätter inte hela utgåvematrisen för~den~exakta kandidaten.
 
 \subsection{Manuell webbläsarverifiering}
 
@@ -2229,6 +2262,10 @@ Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föreg
 Generera manifestet efter sista ändringen, godkänn förkontroller för utgåva, manifest och blanksteg, initiera kvalificeringens fingeravtryck och frys underlaget. Kör exakt en central granskning med \codeword{--profile=release}, direkt eller genom den konfigurerade isolerade testinstallationen. Granskningen äger syntax, regressioner, kontrakt, webbläsartestfall och utgåvekonsekvens; lägg inte till en andra manuell genomgång av testträdet. Koppla rapporten till det oförändrade fingeravtrycket och redovisa täckningsluckor separat från väntande driftgranskningar.
 
 Skapa distributionsmapp eller ZIP endast på uttrycklig begäran. Verktygen kräver aktuella integritetsdata och verifierar den kanoniska produktionslistan; kontrollera den begärda artefakten före användning. En ren CMS-utgåva kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. Kontrollera efter publicering uppdateringsidentifiering, migreringar, inloggning, offentliga gallerier, skyddade medier och integritet/status i den publicerade installationen.
+
+Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
+
+För~förberedelse på~GitHub skapar och~pushar du~en~gren med~namnet \codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~startar kvalificeringsflödet manuellt från~den~grenen. Flödet förbereder och~committar en~godkänd deterministisk kandidat tillbaka till~samma gren, bygger alla fyra PDF-filer tillsammans och~kvalificerar exakt den~commiten. Det~gör ingen merge till~\codeword{main}, skapar ingen tagg och~publicerar ingen utgåva.
 
 \section{Få galleriet att kännas snabbt}
 \label{sec:performance}
@@ -2346,6 +2383,21 @@ För utgåveförberedelse följer du \filepath{RELEASE.md}: slutför källkod oc
 Kvalificeringsverktyget \filepath{scripts/release_qualification.php} registrerar det exakta fingeravtrycket för källkod och PDF. Dess kommando \codeword{render} skapar begränsade sidförhandsvisningar; rendering ensam godkänner inte deras utseende. Kommandot \codeword{record-audit} accepterar endast den matchande centrala utgåverapporten, inte en äldre fullständig granskning. En ändrad källfil eller ombyggd PDF väljer nytt väntande underlag i stället för att tyst återanvända tidigare godkännande.
 
 Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera ett konkret layoutproblem; valfria PDF-granskningsfält får förbli väntande. Granska representativa webbläsarflöden. Registrera vad som faktiskt kontrollerades, av vem och med vilket resultat. Låt olösta kontroller vara väntande och håll grundläggande funktionstest av uppdateraren efter publicering separat. En grön automatiserad rapport är inte tillstånd att publicera, och verktyget gör aldrig commit, taggar, laddar upp eller publicerar utgåvan. Se \filepath{docs/RELEASE_QUALIFICATION.md} för postkommandona.
+
+\subsection{Utgåveförberedelse och~kvalificering på~GitHub}
+
+Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
+
+\begin{enumerate}
+  \item \textbf{Gren och~förkontroll.} En~push till~\codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~manuell start från~den~grenen, inleder förberedelsen. En~valfri angiven version måste motsvara grennamnet. Förberedelsen avvisar en~redan befintlig tagg \codeword{v_X.Y[.Z]}, hittar föregående utgåvetagg som~jämförelsebas och~kör \codeword{release-preflight} för~källsyntax, deklarationsdokumentation, filinventering, Pythons importpolicy och~arbetsflödeskontrakt före AI eller~TeX.
+  \item \textbf{Deterministiska metadata.} Hjälpskriptet samordnar programversion, utgåvemetadata, mall för~versionsanteckningar och~version-/datummarkeringar i~alla fyra handböcker och~uppdaterar produktionslistan. Det~skriver inte nytt sakligt innehåll i~TeX. Färdiga redaktionella anteckningar bevaras. Innehållet i~alla fyra handböcker måste vara samordnat före utgåvan.
+  \item \textbf{Redaktionella anteckningar.} Ett~färdigt avsnitt skrivet av~underhållaren lämnas oförändrat. Om~det saknas eller~är ofullständigt används GitHub Copilot CLI med~\codeword{gpt-6-luna}; automatiskt modellval används bara om~den~modellen är otillgänglig. Generering kräver \codeword{COPILOT_GITHUB_TOKEN}. Hela Git-textdiffen skickas utan trunkering efter byteantal; genererade och~binära utgåveartefakter utelämnas. Separata tillfälliga utdatafiler förhindrar blockerade rör. Varje Git-kommando har~en~tidsgräns på~30 sekunder; hela underlagssteget har~en~gräns på~två minuter. Överskridna gränser för~metadata eller~diagnostik stoppar förberedelsen uttryckligen. Strikt Markdown-validering avvisar platshållare, fel versioner, extra avsnitt och~assistentkommentarer. Misslyckad generering eller~validering blockerar kvalificeringen i~stället för~att släppa igenom ofullständiga anteckningar. Hjälpskriptet \filepath{.github/scripts/patch_notes_ai_chunks.php} skickar varje ursprunglig diffbyte exakt en~gång i~sammanhängande UTF-8-säkra delar om~högst 100~000~byte. Ett~SHA-256-manifest verifierar hela underlaget och~varje del; varje del kräver en~giltig faktasammanfattning om~högst 6~500~byte. Om~alla sammanfattningar inte ryms inom slutpromptens gräns på~180~000~byte sammanförs de~i~ytterligare begränsade steg utan att~någon diffdel utelämnas. Tidsgränser för~Copilot, saknade svar, ändrade kontrollsummor eller~ogiltig slutlig Markdown stoppar kvalificeringen; ursprungsdiffen kortas aldrig tyst.
+  \item \textbf{Reproducerbara handböcker.} Flödet använder checksummeverifierad TinyTeX och~en~låst uppsättning TeX Live-paket och~återanvänder giltig cache enligt låsfilen och~paketlistan. Engelska, tjeckiska, tyska och~svenska handböcker byggs var för~sig med~\codeword{pdflatex}, \codeword{makeindex} och~ytterligare två \codeword{pdflatex}-körningar. Tidpunkten i~utgåvans metadata ger reproducerbara PDF- och~manifesttidsstämplar. Efter bygget verifieras produktionslistan, integritetsmanifestet och~utgåvans konsekvens.
+  \item \textbf{Säker återskrivning.} Bara godkända förberedelsefiler läggs till~i~commiten. Om~fjärrgrenen har ändrats stoppas en~föråldrad push; ett~identiskt redan förberett träd får återanvända aktuell commit. Ändringar skrivs bara till~samma utgåvegren, inte till~\codeword{main}.
+  \item \textbf{Kontroll av~exakt kandidat.} Det~återanvändbara centrala CI-flödet checkar ut~det~exakta SHA-värdet för~förberedd commit och~kör hela utgåvematrisen inklusive obligatoriska Chromium-tester. Det~samlade kontrollsteget lyckas bara om~förberedelsen, anteckningarna och~hela matrisen lyckas och~grenen fortfarande pekar på~exakt samma commit. Merge, taggning och~publicering förblir underhållarens beslut.
+\end{enumerate}
+
+Detaljer finns i~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} och~\filepath{docs/LATEX_BUILD.md}. En~vanlig ändring i~TeX-källan kräver varken omedelbar PDF-kompilering eller~en~separat utgåvegranskning.
 
 \section{Ordlista}
 \label{sec:glossary}

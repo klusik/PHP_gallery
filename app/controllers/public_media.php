@@ -552,10 +552,91 @@ function cms_gallery_branding_asset(): void
 
 
 /**
- * Handles cms media logic for the gallery application.
+ * Emit one uniform, binary-safe 404 for a forbidden, absent, or invalid OFP.
+ *
+ * The response deliberately does not reveal whether a gallery or file exists.
+ * Rendering the ordinary HTML 404 page would confuse PDF.js and accidentally
+ * load gallery/theme data from a protected media request.
+ *
+ * @param bool $head Whether the request method is HEAD (no response body).
+ * @return void Emit an opaque, non-cacheable plain-text media failure.
+ */
+function cms_gallery_ofp_pdf_not_found(bool $head = false): void
+{
+    http_response_code(404);
+    clear_response_cache_headers();
+    header('Content-Type: text/plain; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Cache-Control: private, no-store, max-age=0');
+    if (!$head) {
+        echo 'Flight plan unavailable.';
+    }
+}
+
+/**
+ * Stream one saved SimBrief PDF via an explicit gallery-scoped route.
+ *
+ * Public requests use the original parent gallery's access policy, never an
+ * administrator-only endpoint or the visibility of a generated child. Retain
+ * compatibility with historical page=media&id=...&ofp=1 links.
+ *
+ * @return void Emit an authorized inline/attachment PDF, or an opaque media 404.
+ */
+function cms_gallery_ofp_pdf(): void
+{
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method !== 'GET' && $method !== 'HEAD') {
+        header('Allow: GET, HEAD');
+        http_response_code(405);
+        return;
+    }
+
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    $isAdmin = current_user() !== null
+        && !\Gallery\Core\admin_anonymous_preview_active()
+        && !current_user_is_known_under_18();
+    require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
+
+    if (!$gallery || !\Gallery\Services\simbrief_ofp_visitor_access_allowed($gallery, $isAdmin)) {
+        cms_gallery_ofp_pdf_not_found($method === 'HEAD');
+        return;
+    }
+
+    $path = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    if ($path === null) {
+        cms_gallery_ofp_pdf_not_found($method === 'HEAD');
+        return;
+    }
+
+    $download = (string) ($_GET['download'] ?? '') === '1';
+    clear_response_cache_headers();
+    header('Content-Type: application/pdf');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Referrer-Policy: same-origin');
+    header('Cache-Control: private, no-store, max-age=0');
+    header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="simbrief-ofp.pdf"');
+    header('Content-Length: ' . (int) filesize($path));
+    cms_release_public_media_session_lock();
+    if ($method === 'GET') {
+        readfile($path);
+    }
+}
+
+/**
+ * Dispatch authorized public media, including imported OFP PDFs, through the
+ * existing gallery visibility, ownership and image-access controller.
+ *
+ * @return void Streams permitted media or sends an access-controlled failure.
  */
 function cms_media(): void
 {
+    if ((string) ($_GET['ofp'] ?? '') === '1') {
+        cms_gallery_ofp_pdf();
+        return;
+    }
     $benchmarkMediaRequest = gallery_benchmark_media_request_begin('media');
     // Variable $image stores this steps working value.
     $image = find_image((int) ($_GET['id'] ?? 0));

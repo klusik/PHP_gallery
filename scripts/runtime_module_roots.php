@@ -34,6 +34,14 @@ return [
             'Gallery\\Services\\gallery_access_assert_public_policy_available',
             'Gallery\\Services\\nsfw_guard_assert_public_policy_available',
         ],
+        // File attachment lookup uses the established routing-paths and DB
+        // closure. Share those files through their existing owner, not by
+        // directly duplicating bootstrap and filesystem helpers per route.
+        'simbrief-ofp-attachments' => [
+            'Gallery\\Services\\find_gallery_by_public_path',
+            'Gallery\\Services\\resolve_public_gallery_path',
+            'Gallery\\Services\\simbrief_ofp_local_pdf_path',
+        ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
         // Settings-only and rendering callers share each owner independently.
         'breadcrumb-policy' => [
@@ -89,6 +97,7 @@ return [
         'Gallery\\Controllers\\cms_robots_txt' => 'public-robots',
         'Gallery\\Controllers\\cms_sitemap_xml' => 'public-sitemap',
         'Gallery\\Controllers\\cms_media' => 'public-media',
+        'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'public-media',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -96,7 +105,7 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization'],
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'simbrief-ofp-attachments'],
     'module_dependencies' => [
         'updater-work' => ['request-maintenance'],
         // Rendering follows view-model preparation and reuses its shared Core dependencies.
@@ -106,7 +115,7 @@ return [
     'route_dependencies' => [
         'public-policy' => [
             'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap',
-            'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
+            'picture_game', 'media', 'gallery_ofp_pdf', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
             'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data',
             'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data',
             'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest',

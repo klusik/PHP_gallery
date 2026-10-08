@@ -81,6 +81,17 @@ audit_test_assert(($profiles['release-preflight'] ?? []) === [
     'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
 ], 'Release preflight must own the complete cheap static gate centrally, without expensive artifact-dependent suites.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
+audit_test_assert(($profiles['candidate-preflight'] ?? []) === [
+    'php-lint', 'js-lint', 'source-documentation-changed',
+    'source-policy-changed', 'source-contract-inventory', 'python-import-policy',
+    'mvc-boundaries', 'mutation-contracts', 'ci-workflow-contract', 'manifest',
+], 'Candidate preflight must enforce deterministic source and generated-artifact blockers without heavy CI jobs.');
+audit_test_assert(in_array('manifest', $profiles['full'], true),
+    'Authoritative full handoff must refuse stale runtime plans, production inventory and manifest.');
+audit_test_assert(str_contains((string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'),
+    "'scripts/prepare_candidate.php', ['--check']"),
+    'Central manifest suite must use the common read-only candidate preparation contract.');
+
 audit_test_assert(in_array('php-fast', $profiles['quick'], true) && !in_array('php-regression', $profiles['quick'], true), 'Quick must use curated PHP feedback instead of the complete regression tree.');
 foreach (['full', 'release'] as $profile) {
     audit_test_assert(in_array('php-regression', $profiles[$profile], true), 'Full and release must retain complete PHP regression coverage.');
@@ -108,11 +119,12 @@ $quickTests = $phpRegistry['quick_tests'];
  * Bound the explicit feedback subset without the complete module-loading matrix.
  * @var int Units: registered test cases. Scope: central quick registry contract.
  * Consumers: curated feedback cardinality assertion below.
- * Rationale: the reviewed subset has 46 cases, including the in-process description
- * renderer. Complete compilation and isolated comparison of every runtime module
+ * Rationale: the reviewed subset has 47 cases, including the HTTP-level anonymous
+ * OFP regression and the in-process description renderer. Complete compilation
+ * and isolated comparison of every runtime module
  * remain covered by full/release rather than repeated during each edit cycle.
  */
-const QUICK_REGISTRY_CASE_LIMIT = 46;
+const QUICK_REGISTRY_CASE_LIMIT = 47;
 audit_test_assert(count($quickTests) >= 15 && count($quickTests) <= QUICK_REGISTRY_CASE_LIMIT && count($quickTests) === count(array_unique($quickTests)), 'Curated feedback must be a small explicit duplicate-free PHP list.');
 audit_test_assert(!in_array('runtime_module_plan_test.php', $quickTests, true)
     && in_array('runtime_dependencies_test.php', $quickTests, true)

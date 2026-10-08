@@ -35,7 +35,7 @@ jobs:
   prepare:
     name: Prepare release candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 110
     permissions:
       contents: write
     outputs:
@@ -134,8 +134,10 @@ jobs:
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         shell: bash
         run: npm install -g @github/copilot
-      - name: Build bounded release-note evidence prompt
+      - name: Build complete release-note evidence prompt
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        # Bound the whole local evidence step independently of Copilot and TeX.
+        timeout-minutes: 2
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
@@ -145,8 +147,18 @@ jobs:
           php .github/scripts/patch_notes_ai.php prompt \
             "${RELEASE_VERSION}" "${BASE_TAG}" "${GITHUB_REPOSITORY}" \
             "${RUNNER_TEMP}/release-notes-prompt.txt"
-      - name: Generate release notes with Copilot
+      - name: Prepare bounded Copilot evidence slices
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai_chunks.php prepare \
+            "${RUNNER_TEMP}/release-notes-prompt.txt" \
+            "${RUNNER_TEMP}/release-notes-evidence"
+      - name: Generate release notes with Copilot from every diff slice
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        timeout-minutes: 90
         shell: bash
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -155,25 +167,71 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${COPILOT_GITHUB_TOKEN:-}" ]]; then
-            echo "::error::COPILOT_GITHUB_TOKEN is required for AI release-note generation in this personal repository." >&2
+            echo "::error::COPILOT_GITHUB_TOKEN is required for GitHub release-note generation." >&2
             exit 1
           fi
 
+          evidence_dir="${RUNNER_TEMP}/release-notes-evidence"
           error_log="${RUNNER_TEMP}/copilot-release-notes.err"
-          if copilot -s --model gpt-6-luna --no-ask-user \
-            < "${RUNNER_TEMP}/release-notes-prompt.txt" \
-            > "${RUNNER_TEMP}/release-notes-response.md" \
-            2> "${error_log}"; then
-            echo "Copilot release notes generated with gpt-6-luna."
-          elif grep -Fq 'Model "gpt-6-luna" from --model flag is not available.' "${error_log}"; then
-            echo "::warning::gpt-6-luna is not selectable for this Copilot entitlement; falling back to Copilot auto model selection."
-            copilot -s --model auto --no-ask-user \
-              < "${RUNNER_TEMP}/release-notes-prompt.txt" \
-              > "${RUNNER_TEMP}/release-notes-response.md"
-          else
-            echo "::error::Copilot release-note generation failed before producing validated output." >&2
+          selected_model='gpt-6-luna'
+          run_copilot() {
+            local prompt_path="$1" response_path="$2" label="$3"
+            if timeout --kill-after=10s 240s \
+              copilot -s --model "${selected_model}" --no-ask-user \
+              < "${prompt_path}" > "${response_path}" 2> "${error_log}"; then
+              return 0
+            fi
+            if [[ "${selected_model}" == 'gpt-6-luna' ]] &&
+              grep -Fq 'Model "gpt-6-luna" from --model flag is not available.' "${error_log}"; then
+              selected_model='auto'
+              echo "::warning::gpt-6-luna is unavailable; using Copilot auto for all remaining evidence passes."
+              if timeout --kill-after=10s 240s \
+                copilot -s --model auto --no-ask-user \
+                < "${prompt_path}" > "${response_path}" 2> "${error_log}"; then
+                return 0
+              fi
+            fi
+            if grep -Fq "Request exceeds the model's prompt budget" "${error_log}"; then
+              echo "::error::Copilot prompt budget exceeded at ${label}; no diff bytes have been discarded." >&2
+            else
+              echo "::error::Copilot failed or timed out at ${label}; original diff and intermediate evidence remain unchanged." >&2
+            fi
+            return 1
+          }
+
+          # Each diff and reduction part must succeed; none may be skipped.
+          # Digest hierarchy reduces context without trimming any source slice.
+          shopt -s nullglob
+          completed=false
+          for ((level=0; level<12; level++)); do
+            printf -v stage '%02d' "${level}"
+            inputs=("${evidence_dir}/level-${stage}-"*.prompt)
+            if (( ${#inputs[@]} == 0 )); then
+              echo "::error::Missing Copilot evidence requests for level ${stage}." >&2
+              exit 1
+            fi
+            echo "Processing ${#inputs[@]} bounded Copilot evidence requests in level ${stage}."
+            for input_path in "${inputs[@]}"; do
+              output_path="${input_path%.prompt}.md"
+              label="$(basename "${input_path}")"
+              echo "Copilot evidence request: ${label}"
+              run_copilot "${input_path}" "${output_path}" "${label}"
+              php .github/scripts/patch_notes_ai_chunks.php validate-summary "${output_path}"
+            done
+            php .github/scripts/patch_notes_ai_chunks.php advance "${evidence_dir}"
+            if [[ -f "${evidence_dir}/final.prompt" ]]; then
+              completed=true
+              break
+            fi
+          done
+          if [[ "${completed}" != true ]]; then
+            echo "::error::Bounded Copilot evidence reduction did not finish." >&2
             exit 1
           fi
+
+          echo "Generating final editorial release notes from fully processed evidence."
+          run_copilot "${evidence_dir}/final.prompt" \
+            "${RUNNER_TEMP}/release-notes-response.md" 'final release-note synthesis'
       - name: Validate and apply generated release notes
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         shell: bash

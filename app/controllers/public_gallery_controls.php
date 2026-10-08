@@ -398,15 +398,39 @@ function render_public_gallery_preview_toolbar(array $gallery): void
 }
 
 /**
+ * Build a stable same-origin URL for a gallery's protected original PDF.
+ *
+ * The route deliberately uses the actual front-controller base path rather
+ * than an absolute configured base_url host. That keeps anonymous PDF.js
+ * fetches and PDF download links on the same origin and cookie scope as the
+ * gallery page, including subdirectory installations without URL rewriting.
+ * Never serialize the original filesystem path or a remote SimBrief URL.
+ *
+ * @param int $galleryId Source gallery identifier, not a gallery image ID.
+ * @param bool $download Whether to request attachment disposition.
+ * @return string Root-relative URL for the dedicated OFP content route.
+ */
+function public_gallery_ofp_document_url(int $galleryId, bool $download = false): string
+{
+    $base = rtrim(\Gallery\Core\request_script_base_path(), '/');
+    $query = ['page' => 'gallery_ofp_pdf', 'id' => $galleryId];
+    if ($download) {
+        $query['download'] = 1;
+    }
+    return $base . '/index.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+}
+
+/**
  * Render the public gallery title area with optional banner and logo assets.
  *
  * The text title remains in the h1 for accessibility and SEO even when a banner
  * image visually replaces it. The logo is decorative here because it appears
  * beside an existing text or banner title and would otherwise duplicate content.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $seo Seo value.
- * @param bool $publicOnly Public only value.
+ * @param array<string,mixed> $gallery Source gallery record and branding configuration.
+ * @param array<string,mixed> $seo SEO metadata for the public gallery title.
+ * @param bool $publicOnly Whether only visitor-visible assets should be used.
+ * @return void Emits the accessible gallery heading, description and OFP actions.
  */
 function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
 {
@@ -417,10 +441,20 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     view_render_gallery_date(gallery_date_view_model($gallery), 'hero-gallery-date');
     $dateHtml = (string) ob_get_clean();
 
+    require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
+    $ofpPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    $conversionSupported = $ofpPath !== null && \Gallery\Services\simbrief_ofp_conversion_supported();
     \Gallery\Views\view_render_public_gallery_branding_header([
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
+        'ofp_pdf_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id']) : '',
+        'ofp_pdf_download_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id'], true) : '',
+        'ofp_can_convert' => $ofpPath !== null && \Gallery\Core\current_user() !== null && !\Gallery\Core\admin_anonymous_preview_active(),
+        'ofp_conversion_supported' => $conversionSupported,
+        'ofp_conversion_url' => $ofpPath !== null ? url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]) : '',
+        'ofp_conversion_csrf' => $ofpPath !== null && \Gallery\Core\current_user() !== null ? \Gallery\Core\csrf_field() : '',
+        'ofp_gallery_id' => (int) $gallery['id'],
         'banner_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '',
         'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
         'date_html' => $dateHtml,

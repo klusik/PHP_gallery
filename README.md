@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.122.1
+**Current Version:** 0.123
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -91,7 +91,7 @@ The site-level `public_thumbnail_rendering_mode` setting controls photo cards in
 Progressive rendering prioritizes perceived initial responsiveness, not minimum total transfer. A visitor can download both the initial small thumbnail and a later larger replacement, so total transferred bytes can be higher than responsive mode even when the page feels ready sooner. Default and Legacy are Admin-facing status labels only; neither changes the permanent `progressive` and `responsive` machine values.
 
 ### Access Control
-- **Visibility modes** - Public, unpublished (admin-only), or private (password/token protected)
+- **Visibility modes** - Public, unpublished (unlisted but accessible by direct URL), or private (access restricted)
 - **Password protection** - Per-gallery passwords with session-scoped unlock
 - **Share links** - Generate time-limited or permanent share tokens
 - **Inheritance** - Child galleries inherit parent access rules
@@ -144,10 +144,13 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 ### Lightbox Image Zoom
 
 Open any public photograph and use the visible `−`, percentage/reset, and `+` controls to inspect details from 100% to
-400%. The same controls remain available in fullscreen. Keyboard users can press `+`/`=`, `-`/`_`, and `0`. Mouse-wheel
-and trackpad zoom keeps the photograph point under the pointer stable; touch pinch keeps the gesture midpoint stable.
-When no valid pointer anchor is available, discrete zoom uses the photograph center. An enlarged photograph can be dragged
-in both axes. Ctrl/Command-modified wheel gestures are left to the browser, so normal page zoom remains available.
+400%. The same controls remain available in fullscreen. Keyboard users can press `+`/`=`, `-`/`_`, and `0`.
+Ordinary mouse-wheel input or two-finger trackpad scrolling pans an enlarged photograph in both axes without changing
+its zoom; at 100% this leaves the fitted photograph unchanged. Ctrl+wheel or a trackpad pinch zooms the image around
+the pointer (including Safari's native gesture events), while Command+wheel remains browser-owned. Pinching on a
+touchscreen anchors the midpoint. A single finger drags an enlarged photograph; at 100% a horizontal swipe changes
+photos, and switching between swipe, pinch and pan never also navigates. When no valid pointer anchor is available,
+discrete zoom uses the photograph center.
 
 The 100% photograph is fitted and centered inside the stage. Zoom does not enlarge pixels inside a fixed 100% frame.
 Instead, the real `.lightbox-zoom-surface` grows symmetrically around the fitted photograph center and is translated only
@@ -449,6 +452,8 @@ The direct Admin create page remains available without the side panel. It offers
 SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a Pilot ID; other text is treated as a pilot name. An import into a new-gallery form creates an editable description preview and a private, 30-minute OFP draft bound to the current administrator session. The draft is attached only after gallery creation; a changed identifier invalidates it. If the remote request or optional attachment fails, the gallery can still be edited, and a successful creation reports any attachment warning. Saved creation defaults require migration `202609250001_gallery_creation_preferences.php`; when that storage is unavailable, ordinary name-first creation remains usable, while attempts to save new defaults are refused with migration guidance.
 
 SimBrief draft import also fills the existing route editor with the complete filed route, adding missing departure and arrival airports without duplicating endpoint or runway tokens. Descriptions in every maintained language retain the full route, including long routes. Importing stages the OFP and map points until the gallery is saved; editing the route, identifier, description, or source language during a request preserves the entered values and asks for another import. Saved maps retain the original OFP coordinates.
+
+Saved SimBrief OFP PDFs open in an independent, gallery-authorized PDF.js lightbox. **F** toggles fullscreen, while **Escape** exits fullscreen before closing the document. In fullscreen, the PDF header and toolbar float above the document and automatically hide after pointer inactivity, revealing on pointer or keyboard interaction. An ordinary mouse wheel or two-finger trackpad scroll moves the document without changing its scale; **Ctrl+wheel or trackpad pinch** zooms the PDF at the cursor. Command+wheel remains browser-owned. On touchscreens, one finger pans PDF pages and two fingers zoom, including one-finger continuation after a pinch. PDF controls retain a fixed, accessible high-contrast palette independent of gallery theme settings. Whole-page fit is the default; fit width, actual size, and zoom reset remain available. Navigating PDF pages does not navigate gallery photos. View/download links are compact; the separate admin-only private page-subgallery action has localized help under a question-mark control. A fresh anonymous visitor can view and download an OFP saved in a **public or unpublished (unlisted)** gallery through the dedicated same-origin `gallery_ofp_pdf` route, provided that the gallery is accessible to that visitor. The link is rooted at the real installation path, including `/galerie/index.php` without URL rewriting, rather than a possibly different configured host. Unpublished galleries remain accessible via their direct URLs; genuinely private galleries are denied without an existing gallery-access grant, and password, share and NSFW gates are enforced. Failed or unauthorized PDF requests return an opaque uncached text response instead of an HTML error page; historical `media&ofp=1` URLs remain accepted.
 
 #### Adding Images
 

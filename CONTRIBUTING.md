@@ -27,8 +27,12 @@ architecture documentation before changing code. In particular:
 - Add schema changes as new timestamp-prefixed migration files. Preserve
   upgrade compatibility and cover behavior through the central audit where
   practical.
-- When changing user-facing manual content, update all four maintained manual
-  editions together as described in `AGENTS.md` and `docs/LATEX_BUILD.md`.
+- For any material change to user/admin behavior, architecture, runtime,
+  security, deployment, CI, or developer workflows, update relevant permanent
+  Markdown documentation and all four maintained TeX manual source editions
+  in the same batch. Do not wait for release automation to author the prose.
+  Ordinary development does not rebuild PDFs or update `PATCH_NOTES.md`.
+  See `AGENTS.md` and `docs/LATEX_BUILD.md`.
 - Keep changes focused. Do not include local configuration, credentials,
   uploads, caches, generated deployment archives, or unrelated formatting
   changes.
@@ -38,6 +42,46 @@ architecture documentation before changing code. In particular:
   paths in [the compatibility registry](docs/COMPATIBILITY_LIFECYCLE.md).
   Mark unmeasured usage and uncertain dates as unknown; removal needs evidence
   that the recorded condition is met.
+
+## Preparing an ordinary source candidate
+
+Complete the permanent documentation impact review, including all four TeX
+manual sources when affected, before the final preparation run. If no TeX
+content applies, document the reason in the handoff. Leave PDFs, manual
+version/date metadata and `PATCH_NOTES.md` to release preparation.
+
+Do not publish an intermediate source commit with stale generated state.
+After final source or documentation edits, stage any newly created/deleted
+production files and run:
+
+```sh
+git add <new-or-removed-production-files>
+php scripts/prepare_candidate.php
+git diff -- app/runtime/modules.php app/production-files.json app/core-manifest.json
+git add app/runtime/modules.php app/production-files.json app/core-manifest.json
+git commit -m "chore(candidate): refresh generated artifacts" # only if changed
+php scripts/prepare_candidate.php --check
+```
+
+This uses the canonical generators in dependency order: runtime plan, Git-index
+production inventory, then core-manifest hashes from complete checkout bytes.
+Repeat it after any later source/test fix. Repeating without changes creates
+no diff or timestamp-only manifest update. The `--check` command is read-only.
+
+For a feature/fix branch, the stable hosted
+[Candidate preparation](.github/workflows/candidate-preparation.yml)
+automation can perform the generated-artifact commit for the exact pushed SHA
+and pass that prepared candidate to the reusable full CI workflow. It checks
+the remote branch head before a non-forced write and refuses superseded work.
+The ordinary CI preflight is read-only and blocks expensive jobs when the
+published candidate remains stale. GitHub Actions bot commits do not themselves
+trigger recursive workflow runs. Do not add PR-specific codegen workflows.
+
+Once prepared, run `php scripts/audit.php --profile=full` (only once at final
+handoff, rather than redundant direct test-tree walks) and record its result
+against the exact commit. For release preparation use `RELEASE.md` and the
+release audit instead. Nothing in candidate preparation merges, squashes,
+tags, or publishes an artifact.
 
 ## Verification
 

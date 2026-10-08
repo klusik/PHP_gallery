@@ -4,10 +4,10 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: .github/scripts/patch_notes_ai.php
  * Module Type: GitHub Release Notes AI Boundary
- * Purpose: Build bounded release evidence for Copilot and validate/apply its Markdown response.
+ * Purpose: Collect complete release evidence for Copilot and validate/apply its Markdown response.
  * Responsibilities:
  *   - Treat repository diffs as untrusted evidence, never as executable instructions
- *   - Bound AI context size and exclude generated/binary release artifacts
+ *   - Bound Git command runtime and exclude generated/binary release artifacts
  *   - Preserve already completed maintainer-authored release notes
  *   - Accept only one validated target-version Markdown section from the model
  * Author: Rudolf Klusal
@@ -29,42 +29,112 @@ use function PhpGallery\Release\patch_notes_section;
 use function PhpGallery\Release\valid_version;
 
 /**
- * Run one Git command for release evidence and return bounded stdout.
+ * Bound one local evidence command before Copilot is invoked.
+ * @var int Units: seconds. Scope: release-note Git collection.
+ * Consumers: patch_notes_ai_git() default deadline.
+ * Rationale: local Git evidence should finish promptly and must not consume the release job budget.
+ */
+const PATCH_NOTES_AI_GIT_DEADLINE_SECONDS = 30;
+
+/**
+ * Poll file-backed child status without busy-waiting.
+ * @var int Units: microseconds. Scope: release-note Git child supervision.
+ * Consumers: patch_notes_ai_git() status loop.
+ * Rationale: 10 ms keeps bounds and deadline checks responsive while yielding between observations.
+ */
+const PATCH_NOTES_AI_GIT_POLL_MICROSECONDS = 10000;
+
+/**
+ * Run one Git command with temporary output files, a deadline and optional metadata bounds.
  *
  * @param list<string> $command Argument-vector Git command executed without a shell.
- * @param int $maxBytes Maximum accepted stdout size in bytes.
- * @return string Command stdout.
+ * @param ?int $maxBytes Maximum accepted metadata stdout bytes; null retains the complete text diff.
+ * @param int $timeoutSeconds Per-command deadline in seconds; 30 bounds local Git collection before AI work.
+ * @return string Complete command stdout without truncation.
  */
-function patch_notes_ai_git(array $command, int $maxBytes): string
+function patch_notes_ai_git(array $command, ?int $maxBytes, int $timeoutSeconds = PATCH_NOTES_AI_GIT_DEADLINE_SECONDS): string
 {
-    $process = proc_open(
-        $command,
-        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-        $pipes,
-        dirname(__DIR__, 2),
-        null,
-        ['bypass_shell' => true]
-    );
-    if (!is_resource($process)) {
-        throw new RuntimeException('Unable to start Git evidence command.');
+    if (($maxBytes !== null && $maxBytes < 1) || $timeoutSeconds < 1) {
+        throw new RuntimeException('Git evidence bounds must be positive.');
     }
-    fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1], $maxBytes + 1);
-    $stderr = stream_get_contents($pipes[2], 8193);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    $exit = proc_close($process);
 
-    if ($exit !== 0) {
-        throw new RuntimeException('Git evidence command failed without exposing raw repository diagnostics.');
+    // File-backed descriptors work on Windows as well as Unix and cannot fill a pipe
+    // while PHP waits for the other stream. The text diff is retained in full.
+    $stdoutFile = tmpfile();
+    $stderrFile = tmpfile();
+    $process = null;
+    $running = false;
+    try {
+        if (!is_resource($stdoutFile) || !is_resource($stderrFile)) {
+            throw new RuntimeException('Unable to allocate temporary Git evidence output.');
+        }
+        $process = proc_open(
+            $command,
+            [0 => ['pipe', 'r'], 1 => $stdoutFile, 2 => $stderrFile],
+            $pipes,
+            dirname(__DIR__, 2),
+            null,
+            ['bypass_shell' => true]
+        );
+        if (!is_resource($process)) {
+            throw new RuntimeException('Unable to start Git evidence command.');
+        }
+        $running = true;
+        fclose($pipes[0]);
+        $deadline = hrtime(true) + $timeoutSeconds * 1_000_000_000;
+        do {
+            $status = proc_get_status($process);
+            if (!is_array($status)) {
+                throw new RuntimeException('Unable to inspect Git evidence command.');
+            }
+            $running = $status['running'];
+            $stdoutBytes = fstat($stdoutFile)['size'] ?? null;
+            $stderrBytes = fstat($stderrFile)['size'] ?? null;
+            if (!is_int($stdoutBytes) || !is_int($stderrBytes)) {
+                throw new RuntimeException('Unable to inspect Git evidence output.');
+            }
+            if ($maxBytes !== null && $stdoutBytes > $maxBytes) {
+                throw new RuntimeException('Release evidence exceeds the configured AI context bound.');
+            }
+            // Keep the existing 8 KiB diagnostic budget without retaining or exposing it.
+            if ($stderrBytes > 8192) {
+                throw new RuntimeException('Git evidence diagnostics exceeded the configured bound.');
+            }
+            if ($running && hrtime(true) >= $deadline) {
+                throw new RuntimeException('Git evidence command exceeded its ' . $timeoutSeconds . '-second deadline.');
+            }
+            if ($running) {
+                // Poll every 10 ms: local collection stays responsive without busy-waiting.
+                usleep(PATCH_NOTES_AI_GIT_POLL_MICROSECONDS);
+            }
+        } while ($running);
+
+        // Retain the first observed exit code: PHP 8.1 may not return it again at close.
+        if ($status['exitcode'] !== 0) {
+            throw new RuntimeException('Git evidence command failed without exposing raw repository diagnostics.');
+        }
+        rewind($stdoutFile);
+        $stdout = $maxBytes === null
+            ? stream_get_contents($stdoutFile)
+            : stream_get_contents($stdoutFile, $maxBytes + 1);
+        if (!is_string($stdout) || strlen($stdout) !== $stdoutBytes) {
+            throw new RuntimeException('Unable to read complete Git evidence output.');
+        }
+        return $stdout;
+    } finally {
+        if (is_resource($process)) {
+            if ($running) {
+                // Force-stop only this owned, shell-free Git child on refusal or timeout.
+                proc_terminate($process, 9);
+            }
+            proc_close($process);
+        }
+        foreach ([$stdoutFile, $stderrFile] as $file) {
+            if (is_resource($file)) {
+                fclose($file);
+            }
+        }
     }
-    if (!is_string($stdout) || strlen($stdout) > $maxBytes) {
-        throw new RuntimeException('Release evidence exceeds the configured AI context bound.');
-    }
-    if (is_string($stderr) && strlen($stderr) > 8192) {
-        throw new RuntimeException('Git evidence diagnostics exceeded the configured bound.');
-    }
-    return $stdout;
 }
 
 /**
@@ -87,7 +157,7 @@ function patch_notes_ai_previous_section(string $root, string $baseTag): string
 }
 
 /**
- * Build the bounded Copilot prompt from immutable Git comparison evidence.
+ * Build the Copilot prompt from complete immutable Git comparison evidence.
  *
  * @param string $version Target release version.
  * @param string $baseTag Previous stable release tag.
@@ -139,7 +209,7 @@ function patch_notes_ai_build_prompt(string $version, string $baseTag, string $r
         ':(exclude)app/production-files.json',
         ':(exclude)docs/*.pdf',
         ':(exclude)winapp/dist/**',
-    ], 300000);
+    ], null);
 
     $previous = patch_notes_ai_previous_section($root, $baseTag);
     if (strlen($previous) > 28000) {
@@ -308,6 +378,10 @@ function patch_notes_ai_apply(string $version, string $responsePath): void
     fwrite(STDOUT, 'Applied validated AI release notes for Version ' . $version . ".\n");
 }
 
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) !== __FILE__) {
+    return;
+}
+
 $args = array_values(array_slice($argv, 1));
 $command = array_shift($args);
 
@@ -318,11 +392,12 @@ try {
             || !is_string($outputPath) || $outputPath === '') {
             throw new RuntimeException('Usage: patch_notes_ai.php prompt VERSION BASE_TAG OWNER/REPO OUTPUT_PATH');
         }
+        fwrite(STDOUT, "Collecting complete release-note evidence from Git.\n");
         $prompt = patch_notes_ai_build_prompt($version, $baseTag, $repository);
         if (file_put_contents($outputPath, $prompt) === false) {
-            throw new RuntimeException('Unable to write bounded Copilot prompt.');
+            throw new RuntimeException('Unable to write complete Copilot prompt.');
         }
-        fwrite(STDOUT, 'Prepared bounded AI release-note context: ' . strlen($prompt) . " bytes.\n");
+        fwrite(STDOUT, 'Prepared complete AI release-note context: ' . strlen($prompt) . " bytes.\n");
         exit(0);
     }
 

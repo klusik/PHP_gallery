@@ -6,6 +6,8 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 ## Build, Test, and Development Commands
 - `php -S localhost:8000 -t public public/index.php` - run the app locally with the `public/` directory as the web root.
 - `php -S localhost:8000 index.php` - alternate local run mode using the repository root router.
+- `php scripts/prepare_candidate.php` - regenerate reviewed runtime modules, production inventory, and the final integrity manifest in dependency order after staging new files.
+- `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
@@ -55,6 +57,43 @@ review convention; do not add a branch parser or blanket expiry dates.
 
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
+
+### Source Candidate Preparation (All Non-Release Branches)
+
+Finish authored edits before preparing the candidate. If new or deleted production
+files are involved, stage those paths first because `generate_production_files.php`
+intentionally reads the Git index. Resolve route/module ownership, runtime roots
+and dynamic dependency definitions in their authored files, never by editing
+`app/runtime/modules.php` directly.
+
+Run `php scripts/prepare_candidate.php` after every final source/documentation
+batch and **again after any later fix**. It compiles `app/runtime/modules.php`
+first, regenerates `app/production-files.json` from indexed membership second,
+and hashes complete checked-out bytes for `app/core-manifest.json` last.
+`--check` verifies all three in order without writing. Identical inputs must
+not rewrite files or change the manifest timestamp. Do not compute hashes from
+truncated GitHub Contents API responses, especially files larger than 1 MiB.
+Commit only the changed generated artifacts separately from focused authored
+changes; the command itself never commits or merges.
+
+For regular feature/fix branches, the stable
+`.github/workflows/candidate-preparation.yml` can prepare and commit generated
+artifacts on the exact pushed revision, then invoke the central CI workflow on
+the resulting candidate SHA. It uses branch concurrency, non-forced push,
+and a current-branch-head lease; it refuses outdated work rather than clobber
+newer commits. Bot commits made with `GITHUB_TOKEN` do not start another workflow.
+PR/direct CI is read-only and gates its expensive matrices through
+`php scripts/audit.php --profile=candidate-preflight`. Failing that gate
+means the published candidate is not qualified, not that the runner should
+silently repair it. Release branches use their separate preparation lifecycle
+in `RELEASE.md`, including editorial PDF generation.
+
+The agent handoff sequence is: **edit → stage membership changes → prepare →
+commit changed generated artifacts → run the required central full audit →
+verify the exact final candidate SHA → handoff**. Intermediate atomic commits
+may be incomplete; never hand off or qualify a stale final SHA. The workflow
+may qualify a prepared bot commit automatically; it does not merge, squash,
+tag, or publish. After a later source fix, repeat preparation and qualification.
 
 ### Mandatory Agent Verification Contract
 For automated agents, `php scripts/audit.php` is the authoritative test orchestration interface. This rule takes precedence over every later focused-test command or checklist in `AGENTS.md`, `TESTING.md`, architecture notes, and task-specific documentation. Do not enumerate `tests/`, loop over `*_test.php`/`*_test.mjs`, manually run every documented focused test, or separately lint the tree when the central audit already owns that coverage. Avoid duplicate verification because it wastes execution time and agent context without increasing coverage.
@@ -144,14 +183,50 @@ merely because the active photo is zoomed.
 
 After changing zoom markup, geometry, quality promotion, fullscreen CSS, or event routing, run the seven PHP
 `lightbox_zoom_*` contracts plus `node tests/lightbox_zoom_model_test.mjs`, JavaScript syntax checks, and the manual
-browser matrix in `TESTING.md`. Preserve browser Ctrl/Command-wheel zoom, 100% mobile swipe navigation, maps, voting,
-strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
+browser matrix in `TESTING.md`. Preserve the scoped gesture split: ordinary mouse-wheel and two-finger trackpad scrolling pan a photo only above 100%, while Ctrl+wheel (including Chromium trackpad pinch) zooms only the photograph. Safari GestureEvents are the fallback for trackpad pinch; Command+wheel stays browser-owned. At 100% keep one-finger mobile swipe navigation; above 100% allow one-finger pan and two-finger pinch, including swipe-to-pinch and pinch-to-pan handoff. Keep the OFP viewer independent: unmodified wheel scrolls only the document, Ctrl+wheel/trackpad pinch zooms at the PDF cursor, touch pan/pinch works within the document stage, and HUD colors/scale are independent of gallery themes. Preserve maps, voting, strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
 
+## Public SimBrief OFP Attachment Delivery
+
+Saved OFP PDF links use the dedicated, gallery-scoped `gallery_ofp_pdf` route. The public gallery controller emits a same-origin `index.php` URL from the actual script mount path rather than an absolute `base_url`; it must work on subdirectory installations with rewrite disabled and never expose the local PDF path or the remote SimBrief URL. The existing `media&ofp=1` form remains compatible. Enforce `simbrief_ofp_visitor_access_allowed()` against the **source gallery** before opening the validated local attachment: public and unpublished galleries work for fresh anonymous visitors through their direct URLs, access-gated galleries require the same password/share/NSFW grants, genuinely private galleries are unavailable without the normal gallery visitor grant, and administrator access must not leak into anonymous preview. The separate generated page subgallery remains private. Denied, missing and invalid PDF assets return the same no-store plain-text 404 without loading a gallery HTML template. Treat `gallery_ofp_pdf` as a public-policy media route in both dispatcher and authored runtime-module roots. Keep the real HTTP regression in the central PHP test registry, and update all four permanent TeX manuals for any future behavior changes.
+
+## Continuous Documentation Synchronization
+
+Every implementation batch that materially changes product behavior, administrator
+operations, security or compatibility policy, runtime ownership, migrations,
+deployment, updater behavior, CI, testing, tooling, or the developer workflow
+must review and update its permanent documentation **during that same batch**.
+This applies to maintainer-facing infrastructure changes even when the public
+UI does not change. Do not defer such explanations to a future release branch.
+
+Update the relevant Markdown references (for example `README.md`,
+`ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and applicable
+`docs/*.md`) and the corresponding sections of **all four** maintained
+`docs/PHP_Gallery_Manual*.tex` sources whenever their current behavior,
+instructions, safety requirements, or architecture would otherwise be stale.
+A change to generated-artifact preparation or CI gating, for example, belongs
+in the TeX manuals' developer/maintainer reference, not only in `AGENTS.md`.
+Describe the current supported behavior in the existing topical sections;
+never append an issue-by-issue change log to a permanent manual.
+
+Review documentation impact before the final `prepare_candidate.php` run and
+the authoritative handoff audit. The documentation updates belong in the same
+source candidate as the implementation. If no TeX section is affected by a
+truly internal change, explicitly record `No TeX manual impact` with a brief
+reason in the implementation handoff or issue instead of silently omitting it.
+An internal-only or CI-only label does not by itself justify omission.
+
+During ordinary development update **TeX sources only**, preserving existing
+edition version/date markers. Do not compile, rewrite, inspect, or commit
+manual PDFs as part of routine source changes. The release workflow only
+updates release/version metadata and compiles existing TeX to PDF; it does
+not author the technical/manual prose. `PATCH_NOTES.md` remains reserved
+for explicit maintainer requests or the separate release preparation process;
+do not modify it for ordinary feature, bug-fix, or documentation batches.
 ## LaTeX Manual Typography
 
 ### All manual language editions
 
-Every release preparation and every user-facing manual content change must update all four maintained source editions together: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep edition versions, localized dates, feature coverage, compatibility notes, and operational instructions aligned. `scripts/prepare_release.php` currently updates only the English source; agents must explicitly update the translated editions as well. Updating English alone is not a completed manual-source handoff.
+Every relevant product, operational, developer, testing, or release documentation change must keep all four maintained source editions aligned: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep feature coverage, compatibility notes, operating instructions, and developer workflows equivalent across languages. `scripts/prepare_release.php` updates only the English edition markers, while hosted release preparation aligns all four version/date markers; neither writes missing manual prose. Updating English alone is not a completed manual-source handoff.
 
 During ordinary development, edit and review the Markdown/LaTeX sources without rebuilding tracked PDFs after each code or documentation change. PDF artifacts may intentionally lag behind their sources until final release preparation; routine documentation work does not require a local TeX installation. Build all four maintained PDFs together once after the final release source/metadata edits, before the final manifest and exact-candidate release audit. The GitHub-hosted release workflow owns this batch compilation and checks compiler success and relevant warnings. Use the local commands in `docs/LATEX_BUILD.md` only when an explicit local build is requested or a concrete compilation/layout failure needs diagnosis. Later changes to frozen release inputs require a new preparation and qualification run.
 

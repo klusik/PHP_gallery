@@ -35,6 +35,12 @@ on:
 permissions:
   contents: read
 
+# Later pushes replace obsolete runs; codegen checks always inspect the checkout,
+# never repair or commit files inside the authoritative qualification runner.
+concurrency:
+  group: gallery-qualification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # The helper actions use Node 24; node-version below selects the separate test runtime.
 env:
   # PRs compare against the target SHA; pushes include every commit since the prior head.
@@ -44,7 +50,65 @@ env:
   PHP_GALLERY_DEPLOY_TEST_TIMINGS: '1'
 
 jobs:
+  preflight:
+    name: Read-only generated-state and source preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip, mbstring
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify exact candidate checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.checkout_ref || github.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "${actual}" != "${EXPECTED_SHA}" ]]; then
+            echo "::error::Candidate checkout changed: expected ${EXPECTED_SHA}, got ${actual}." >&2
+            exit 1
+          fi
+          echo "Qualifying candidate ${actual}"
+      - name: Central candidate preflight (read only)
+        run: php scripts/audit.php --profile=candidate-preflight
+      - name: Show actionable failure summary
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cache/test-audit/latest.md ]]; then
+            sed -n '1,150p' cache/test-audit/latest.md
+          fi
+      - name: Upload preflight diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: candidate-preflight
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/manifest.log
+            cache/test-audit/**/source-documentation-changed.json
+            cache/test-audit/**/source-policy-changed.json
+            cache/test-audit/**/mvc-architecture.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   production-package:
+    needs: preflight
     name: Positive production package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -90,6 +154,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   real-database-browser:
+    needs: preflight
     name: PHP ${{ matrix.php }} workflows (${{ matrix.database }}, Unicode)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -161,6 +226,7 @@ jobs:
           retention-days: 7
 
   release-audit:
+    needs: preflight
     name: Authoritative release audit
     if: ${{ inputs.audit_profile == 'release' }}
     runs-on: ubuntu-24.04
@@ -200,6 +266,7 @@ jobs:
           retention-days: 30
 
   runtime-compatibility:
+    needs: preflight
     name: PHP ${{ matrix.php }} source (${{ matrix.normalization }})
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -254,6 +321,7 @@ jobs:
           retention-days: 7
 
   browser-tests:
+    needs: preflight
     name: Required Chromium fixtures
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -299,8 +367,10 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: required-chromium
+          # Keep the central browser fixture log in the uploaded artifact on failure.
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            cache/test-audit/**/browser-map.log
           if-no-files-found: ignore
           retention-days: 7

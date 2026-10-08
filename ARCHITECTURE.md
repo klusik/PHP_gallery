@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.122.1';
+const CMS_VERSION = '0.123';
 ```
 
 Update-related code uses:
@@ -1506,12 +1506,14 @@ with already-committed JavaScript state and drift toward a corner. `tests/lightb
 pan clamping, centered/fractional anchors, repeated off-center zoom through 400%, and quality-candidate math without a DOM.
 
 `public/assets/gallery-modules/lightbox.js` owns DOM state, status synchronization, wheel input, pointer pan, pinch capture,
-fullscreen remeasurement, and teardown. Wheel/trackpad input resolves the pointer against the current stage, while
-keyboard/discrete controls use the remembered in-stage pointer only when one is valid and otherwise fall back to the image
-center. `openAt()` is the reset boundary for direct opens, previous/next, picture-strip, 3D-carousel, lazy hydration,
-mobile swipe, and slideshow advance. `close()` clears zoom/pointer state. Pure fullscreen entry/exit preserves scale and
-reclamps translation. At 100%, the established one-finger horizontal swipe remains the navigation owner; above 100%, one
-pointer pans and two touch pointers own pinch.
+fullscreen remeasurement, and teardown. Ordinary wheel/trackpad deltas pan an enlarged stage in X/Y without zooming;
+Ctrl+wheel or trackpad pinch zooms at the stage pointer, with stage-only Safari GestureEvent fallback and browser-owned
+Command-wheel. Keyboard/discrete controls use the remembered in-stage pointer only when one is valid and otherwise fall
+back to the image center. `openAt()` is the reset boundary for direct opens, previous/next, picture-strip, 3D-carousel,
+lazy hydration, mobile swipe, and slideshow advance. `close()` clears zoom/pointer state. Pure fullscreen entry/exit
+preserves scale and reclamps translation. At 100%, the established one-finger horizontal swipe remains the navigation
+owner; above 100%, one pointer pans and two touch pointers own pinch. Switching from pinch to a remaining finger
+hands off to pan and clears the swipe candidate.
 
 Normal lightbox and fullscreen intentionally clip differently. The ordinary lightbox allows the enlarged zoom surface to
 extend beyond the original fitted stage so the photograph frame grows with zoom instead of behaving like a fixed window.
@@ -1682,6 +1684,8 @@ Aviation-related gallery features are intentionally modular.
 | Navigation data | `navigation_data.php`, `navigation_data.php` controller, navdata view | `navigation_data_cache`, `navigation_data_accounts`, bundled CSV data. |
 
 SimBrief drafts can be generated during gallery creation or from an existing gallery editor. The editable Markdown description uses the selected source language; when gallery translation storage is ready, maintained-language description fields are filled as well. Draft references remain private and session/admin-bound. Saving the gallery attaches the OFP and available route coordinates afterward, so an optional flight-data failure does not undo the gallery save. The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
+
+The public saved SimBrief OFP PDF viewer is owned by `public/assets/gallery-modules/simbrief-ofp-viewer.js` with its layout in `public/assets/styles/lightbox.css`. It is an independent PDF.js document sequence with gallery-authorized links, bounded high-DPI canvas rendering, generation-based stale render cancellation, stage-scoped zoom/pan, and no interaction with the photo-lightbox page sequence. Its modal dialog contains one fullscreenable non-dialog `.simbrief-ofp-root` holding both the PDF stage and its controls, because HTML `<dialog>` cannot be the Fullscreen API target. The document viewer manages `F` and `Escape`, native fullscreen transitions and a CSS fallback, an overlay HUD with idle timeout and focus/hover safeguards, and a single shared scale/fit model for fit width/page/actual size, buttons, Ctrl+wheel or trackpad pinch zoom, and touchscreen pinch. Unmodified physical mouse-wheel and two-finger trackpad input scroll the PDF in either axis through its native stage scrollbar. Safari's stage-scoped GestureEvents provide a trackpad pinch fallback; touch input stays within the PDF stage, with one-finger pan and pinch-to-pan handoff. PDF-relative pointer anchors preserve viewport focus during zoom; the header and toolbar retain a fixed high-contrast palette and UI scale above the scrollable stage even in fullscreen. The view/download actions are compact and separate from the administrator's CSRF-protected conversion form, whose localized help is revealed by hover, focus or tap. The lifecycle aborts document-only listeners and timers when closed. The original locally saved PDF is streamed by `cms_gallery_ofp_pdf()` in `app/controllers/public_media.php` through the distinct `gallery_ofp_pdf` public route; the old overloaded `media&ofp=1` form remains supported. `public_gallery_ofp_document_url()` generates a root-relative same-origin `index.php` link using the actual script mount path rather than configured host or the legacy image-ID route. The service `simbrief_ofp_visitor_access_allowed()` permits clean-cookie anonymous reads of direct-link-accessible public and unpublished source galleries, applies inherited password/share/NSFW authorization, denies private galleries without a normal visitor grant and private generated page children, and limits administrator-only bypass to verified administrators outside anonymous preview. The controller authorizes before resolving the symlink-safe local manifest and PDF; both forbidden and true-missing cases return an identical no-store, binary-safe text 404 with no filesystem disclosure. The explicit route, public-policy loader and URL generation are covered by a real isolated HTTP fixture for root and subdirectory installations.
 
 
 ## Admin Gallery Discovery

@@ -283,10 +283,22 @@ function manifest_discover_files(string $rootPath): array
  */
 function manifest_hash_file(string $absolutePath): string
 {
-    // $contents stores an intermediate value used by the surrounding gallery workflow.
-    $contents = file_get_contents($absolutePath);
-    if ($contents === false) {
-        throw new RuntimeException('Unable to read file: ' . $absolutePath);
+    // A manifest digest must come from complete checkout bytes, never a truncated
+    // transport/API representation (notably for files larger than 1 MiB).
+    clearstatcache(true, $absolutePath);
+    $before = @stat($absolutePath);
+    if (!is_array($before) || !is_file($absolutePath) || !is_readable($absolutePath)) {
+        throw new RuntimeException('Manifest input is missing or unreadable: ' . $absolutePath);
+    }
+    $contents = @file_get_contents($absolutePath);
+    clearstatcache(true, $absolutePath);
+    $after = @stat($absolutePath);
+    if (!is_string($contents) || !is_array($after)
+        || strlen($contents) !== (int) $before['size']
+        || (int) $before['size'] !== (int) $after['size']
+        || (int) $before['mtime'] !== (int) $after['mtime']
+        || (int) $before['ino'] !== (int) $after['ino']) {
+        throw new RuntimeException('Manifest input changed or was not read completely: ' . $absolutePath);
     }
 
     if (str_starts_with($contents, "\xEF\xBB\xBF")) {
@@ -371,38 +383,66 @@ if ($output === false) {
     exit(1);
 }
 
+// Compare substantive inputs in both modes. A reproducible candidate must keep
+// its existing generated_at when every version/hash/membership input is unchanged.
+$currentJson = is_file($outputPath) && !is_link($outputPath) ? file_get_contents($outputPath) : false;
+$currentManifest = is_string($currentJson) ? json_decode($currentJson, true) : null;
+$currentComparable = is_array($currentManifest) ? [
+    'version' => (string) ($currentManifest['version'] ?? ''),
+    'algorithm' => (string) ($currentManifest['algorithm'] ?? ''),
+    'hash_mode' => (string) ($currentManifest['hash_mode'] ?? ''),
+    'files' => $currentManifest['files'] ?? [],
+] : null;
+$generatedComparable = [
+    'version' => $manifest['version'],
+    'algorithm' => $manifest['algorithm'],
+    'hash_mode' => $manifest['hash_mode'],
+    'files' => $manifest['files'],
+];
+
 if (manifest_has_flag('--check')) {
-    // $currentJson stores an intermediate value used by the surrounding gallery workflow.
-    $currentJson = is_file($outputPath) ? file_get_contents($outputPath) : '';
-    // $currentManifest stores an intermediate value used by the surrounding gallery workflow.
-    $currentManifest = $currentJson === false ? null : json_decode($currentJson, true);
     if (!is_array($currentManifest)) {
-        fwrite(STDERR, "Manifest is missing or invalid. Run php scripts/generate_manifest.php.\n");
+        fwrite(STDERR, "Manifest is missing or invalid. Run php scripts/prepare_candidate.php.\n");
         exit(1);
     }
-
-    // $currentComparable stores an intermediate value used by the surrounding gallery workflow.
-    $currentComparable = [
-        'version' => (string) ($currentManifest['version'] ?? ''),
-        'algorithm' => (string) ($currentManifest['algorithm'] ?? ''),
-        'hash_mode' => (string) ($currentManifest['hash_mode'] ?? ''),
-        'files' => $currentManifest['files'] ?? [],
-    ];
-    // $generatedComparable stores an intermediate value used by the surrounding gallery workflow.
-    $generatedComparable = [
-        'version' => $manifest['version'],
-        'algorithm' => $manifest['algorithm'],
-        'hash_mode' => $manifest['hash_mode'],
-        'files' => $manifest['files'],
-    ];
-
     if ($currentComparable !== $generatedComparable) {
-        fwrite(STDERR, "Manifest is not current. Run php scripts/generate_manifest.php.\n");
+        // Report actionable membership/hash differences without dumping entire manifests.
+        // This remains a read-only check; release preparation owns regeneration.
+        $actualFiles = is_array($currentComparable['files']) ? $currentComparable['files'] : [];
+        $expectedFiles = $generatedComparable['files'];
+        $missing = array_keys(array_diff_key($expectedFiles, $actualFiles));
+        $extra = array_keys(array_diff_key($actualFiles, $expectedFiles));
+        $changed = [];
+        foreach ($expectedFiles as $file => $hash) {
+            if (array_key_exists($file, $actualFiles) && $actualFiles[$file] !== $hash) {
+                $changed[] = $file;
+            }
+        }
+        foreach (['missing' => $missing, 'extra' => $extra, 'changed' => $changed] as $label => $paths) {
+            if ($paths !== []) {
+                fwrite(STDERR, "Manifest {$label} paths (" . count($paths) . '): '
+                    . implode(', ', array_slice($paths, 0, 16))
+                    . (count($paths) > 16 ? ', ...' : '') . "\n");
+            }
+        }
+        if ($currentComparable['version'] !== $generatedComparable['version']) {
+            fwrite(STDERR, "Manifest version mismatch: expected " . $generatedComparable['version'] . "\n");
+        }
+        fwrite(STDERR, "Manifest is not current. Run php scripts/prepare_candidate.php.\n");
         exit(1);
     }
 
     echo "Manifest is current: " . count($manifest['files']) . " files.\n";
     exit(0);
+}
+
+if ($currentComparable === $generatedComparable) {
+    echo "Manifest already current; preserving generated_at (no write).\n";
+    exit(0);
+}
+if (is_link($outputPath)) {
+    fwrite(STDERR, "Refusing to overwrite a manifest symlink.\n");
+    exit(1);
 }
 
 if (file_put_contents($outputPath, $output, LOCK_EX) === false) {

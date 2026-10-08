@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.122.1}
-\newcommand{\manualdate}{7.~října~2026}
+\newcommand{\version}{0.123}
+\newcommand{\manualdate}{8.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1320,7 +1320,7 @@ Při přípravě nové fotografie prohlížeč používá stejnou oblast průbě
 
 Rozsah přiblížení lightboxu je 100--400~\%. Použijte ovládací prvky minus a~plus nebo výběrem procentního údaje obnovte 100~\%. Klávesové zkratky jsou \codeword{+} nebo \codeword{=} pro přiblížení, \codeword{-} nebo \codeword{\_} pro oddálení a~\codeword{0} pro obnovení. Ukazatele fokusu a~aktuální procento zůstávají dostupné asistivním technologiím.
 
-Přibližování kolečkem myši a~trackpadem sleduje ukazatel: část fotografie pod kurzorem při změně měřítka zůstává na místě, i~během několika rychlých kroků. Přiblížení sevřením prstů používá střed gesta. Po zvětšení lze fotografii přetahovat vodorovně i~svisle. Při 100~\% na dotykových zařízeních běžné vodorovné přejetí nadále mění fotografie. Kolečko s~modifikátorem Control/Command zůstává prohlížeči k~dispozici pro přiblížení stránky.
+Na~počítači běžné kolečko myši a~posun dvěma prsty na~trackpadu posouvají zvětšenou fotografii v~obou osách; při~100~\% nemění její měřítko. Roztažení prstů na~trackpadu nebo \codeword{Ctrl} s~kolečkem přibližuje fotografii kolem kurzoru; \codeword{Command} s~kolečkem zůstává zkratkou prohlížeče. Na~dotykových displejích dvěma prsty měníte přiblížení kolem jejich středu a~jedním prstem posouváte zvětšenou fotografii. Při~100~\% vodorovný tah jedním prstem přepíná fotografie; přechod z~přejetí na~pinch ani z~pinch na~posun nespouští navigaci.
 
 Při 100~\% je fotografie přizpůsobena prohlížeči a~vycentrována. Celoobrazovkový režim používá stejné přibližování a~posouvání a~jeho tlačítko Zavřít i~další ovládací prvky zůstávají při zvětšení obrázku klikatelné.
 
@@ -1350,6 +1350,18 @@ Galerie s~uloženou letovou trasou může otevřít mapu ještě před nahrání
 Sbírky zaměřené na létání mohou využít volitelnou integraci SimBrief k~načtení nejnovějšího provozního letového plánu pro ID nebo jméno pilota. Kompaktní editor přijímá jediný viditelný identifikátor: samotné číslice vybírají postup ID pilota, ostatní text postup jména pilota. Stávající integrace odesílající oddělená pole zůstávají kompatibilní, přičemž při zadání obou má ID pilota přednost. Editor vytváří upravitelný návrh popisu Markdown a~trasy; OFP i~dostupné souřadnice trasy se připojí až po uložení galerie. Neúspěšný požadavek SimBrief ponechává běžné pole popisu i~ruční editor trasy dostupné. Návrh před vytvořením je soukromý a~dočasný, jak popisuje oddíl o~vytváření galerií.
 
 Náhled SimBrief vyplní stávající editor trasy úplnou podanou trasou. Chybějící odletové a~cílové letiště doplní právě jednou a~zachová pokyny trasy i~zápis letiště s~dráhou. Návrhy popisu ve všech udržovaných jazycích obsahují celou trasu včetně cíle i~u~dlouhých tras. Stavová zpráva vysvětluje, že OFP a~dostupné body mapy se připojí při uložení galerie; samotný import je neukládá. Pokud během požadavku změníte trasu, identifikátor, popis nebo zdrojový jazyk, odpověď zachová hodnoty formuláře a~vyzve k~novému importu. Po uložení mapa zachovává původní souřadnice OFP.
+
+Pokud má galerie místně uložený soubor SimBrief OFP PDF, ve~veřejném popisu nabízí \ui{Zobrazit letový plán (OFP)} a~\ui{Stáhnout OFP PDF}, i~když ještě neobsahuje fotografie. Dokument se otevírá v~samostatném prohlížeči PDF se vzhledem lightboxu; přechod mezi stránkami nikdy nepřepíná fotografie galerie. Výchozí režim \ui{Zobrazit celou stránku} přizpůsobí rozměry PDF současně dostupné šířce i~výšce prostoru mezi záhlavím a~lištou ovládání a~stránku vystředí. \ui{Přizpůsobit šířce} umožňuje svislé posouvání, \ui{Skutečná velikost (100\%)} používá standardní obrazovkové měřítko PDF. Aktivní režim je na~liště zvýrazněn. K~dispozici zůstává přiblížení/oddálení, obnovení 100\% posledního přizpůsobení, dotykové gesto a~posouvání, klávesová navigace mezi stránkami i~celá obrazovka.
+
+Původní PDF se~poskytuje samostatnou trasou galerie \codeword{gallery\_ofp\_pdf} na~stejné doméně a~portu jako veřejná galerie. Odkazy s~\codeword{index.php} fungují také v~podadresáři bez přepisování URL. Čerstvý anonymní návštěvník může bez přihlášení správce zobrazit i~stáhnout OFP veřejné i~nezveřejněné galerie dostupné přímým odkazem. Stav „nezveřejněná“ znamená skrytí z~běžného seznamu, nikoli soukromý přístup: původní PDF podléhá stejným pravidlům jako galerie, včetně hesla, sdílecího tokenu a~omezení NSFW. Skutečně soukromé galerie bez platného oprávnění návštěvníka a~soukromé podgalerie vygenerovaných stránek zůstávají chráněné. Ověřený správce může prohlížet soukromé PDF mimo anonymní náhled. Zamítnutý přístup, chybějící i~neplatné PDF vracejí stejnou neukládanou textovou odpověď \codeword{404}, nikoli stránku HTML nebo cestu k~souboru. Starší odkazy \codeword{media} s~parametrem \codeword{ofp=1} zůstávají funkční.
+
+Kompaktní tlačítka \ui{Zobrazit letový plán (OFP)} a~\ui{Stáhnout OFP PDF} jsou vedle sebe. Správce může volitelně vytvořit soukromou podgalerii stránek PDF samostatným tlačítkem pod nimi. Lokalizovaný otazníček zobrazí vysvětlení při najetí myší, klávesovém zaměření nebo klepnutí, aby dlouhý text nezabíral místo v~popisu galerie.
+
+Automatické režimy po~každé změně stránky přepočítají skutečné rozměry a~orientaci PDF a~reagují také na~změnu velikosti okna, otočení zařízení či přechod do~režimu celé obrazovky a~zpět. Ruční přiblížení zachová při běžné změně rozměrů svou velikost v~CSS pixelech a~polohu posunu; volba režimu přizpůsobení nebo obnovení přiblížení znovu použije automatický výpočet. Při selhání prohlížeče zůstává dostupný odkaz na~původní chráněné PDF. Zobrazení i~stažení nadále podléhají pravidlům viditelnosti galerie, hesla a~ochrany NSFW. Povinná sada Chromium v~CI ukládá podrobný soubor \codeword{browser-map.log} do~artefaktů pro~diagnostiku selhání prohlížeče dokumentů.
+
+Klávesa \codeword{F} a~tlačítko celé obrazovky ovládají pouze samostatný prohlížeč OFP. \codeword{Escape} nejprve opustí celou obrazovku a~až v~běžném režimu zavře dokument. Psaní do~editovatelných polí, zkratky s~modifikátory ani opakování držené klávesy celou obrazovku nepřepínají. Pokud prohlížeč odmítne nativní celou obrazovku, stejný prohlížeč PDF použije náhradní rozložení CSS. Záhlaví a~ovládací lišta se v~celé obrazovce překrývají s~prostorem dokumentu, po~krátké nečinnosti ukazatele se skryjí a~po~pohybu myší nebo činnosti klávesnice se opět zobrazí. Ovládací prvky pod~kurzorem nebo s~klávesovým zaměřením zůstávají viditelné; jejich zobrazení nemění měřítko ani posun PDF.
+
+Běžné kolečko myši a~posun dvěma prsty na~trackpadu posouvají pouze obsah PDF, včetně vodorovného posunu a~režimu \ui{Přizpůsobit šířce}; nemění přiblížení dokumentu, ovládací lišty ani celé stránky. \codeword{Ctrl} s~kolečkem nebo roztažení prstů na~trackpadu přibližuje PDF v~místě kurzoru; \codeword{Command} s~kolečkem zůstává zkratkou prohlížeče. Na~mobilu jeden prst posouvá dokument, dva prsty mění přiblížení a~zbývající prst může po~pinch pokračovat v~posouvání. Ovládací lišta PDF používá pevné kontrastní tmavé barvy nezávislé na~motivu galerie a~v~běžném i~celoobrazovkovém režimu zachovává původní velikost. Automatický režim obnovíte volbami \ui{Zobrazit celou stránku}, \ui{Přizpůsobit šířce} nebo \ui{Skutečná velikost (100\%)}.
 
 Ruční text trasy se vyhodnocuje přednostně offline. Nejprve se kontrolují importované databázové řádky OurAirports a~poté malý přibalený náhradní soubor CSV. Dále lze použít platný výsledek poskytovatele z~mezipaměti; pokud správce propojil nakonfigurovaný účet Navigraph a~vzdálené vyhledávání je povoleno, neznámý identifikátor lze vyřešit prostřednictvím Navigraph a~uložit do mezipaměti pod známým cyklem AIRAC. Správce navigačních dat ukazuje počty v~místní databázi a~přibalených datech, nabízí tester vyhledávání identifikátorů, například letišť, radionavigačních prostředků a~bodů, a~může obnovit místní sadu letišť a~radionavigačních prostředků OurAirports. Úložiště OAuth a~účtů Navigraph je volitelné a~lze je odpojit bez odstranění místních dat.
 
@@ -1990,6 +2002,11 @@ Aktualizátor kontroluje nastavené kanály, ověřuje balíčky, připravuje ob
 
 Oblast aktualizací v~administraci také ukazuje informace o~vydání v~mezipaměti a~verzované poznámky k~vydání dostupného kanálu, aby si vlastník mohl vydání prohlédnout před zahájením úlohy. Stabilní a~beta kanály zůstávají samostatnými volbami; označení Beta náleží volbě vydání v~rozhraní administrace a~nemění terminologii trvalých úloh ani manifestu aktualizátoru.
 
+Poznámky k~vydání se uchovávají jako původní Markdown v~nainstalovaném souboru \filepath{PATCH_NOTES.md} a~v~mezipaměti jednotlivých verzí. Prohlížeč poznámek v~administraci vykreslí vybranou verzi až při zobrazení, včetně položek ze starších mezipamětí; dříve uložené HTML se zahodí a~nepovažuje se za důvěryhodné. Pouhé zobrazení používá místní nebo již uložená data bez dalšího požadavku na GitHub. Vzdálené poznámky lze obnovit v~samostatném časově omezeném kroku vyhledávání vydání; pokud selže, místní poznámky zůstanou dostupné.
+
+Odkazy Markdown, například \codeword{[odkaz](https://example.org/issue/123)}, odkazy v~ostrých závorkách a~samostatné adresy HTTP(S) se zobrazí jako klikatelné odkazy. Otevírají se v~nové kartě s~ochranami \codeword{noopener} a~\codeword{noreferrer}. Jiná schémata URL zůstávají bezpečně escapovaným neaktivním textem. Vykreslování zachovává nadpisy, seznamy, zvýraznění, bloky kódu a~doslovný kód uvnitř řádku; z~adres URL uvnitř kódu odkazy nevyrábí. Zachovává interpunkci odkazů, podtržítka a~parametry dotazu, ale nepovoluje libovolné HTML.
+
+
 Dočasná selhání stahování či hostingu lze opakovat. Balíček, jehož soubory neodpovídají vlastnímu manifestu integrity, je jiný případ: opětovné stažení stejného publikovaného sestavení nemůže změnit tyto bajty. PHP Gallery proto žádá správce o~zrušení připravené úlohy a~výběr novějšího vydání nebo beta kódu místo nabídky nekonečného opakování.
 
 Vyhledání stabilního vydání a~práce s~balíčkem jsou samostatné omezené operace. Požadavek vyhledání může vytvořit trvalou úlohu na pozadí, zatímco pozdější bezpečný požadavek nebo nástroj CLI posouvá krátký úsek přes stahování, ověření archivu, rozbalení, ověření manifestu, přípravu, zálohu pro vrácení, aktivaci, migrace a~úklid. Požadavky Range mohou obnovit přerušené stahování, zámky pracovních procesů brání souběžnému postupu a~zastaralý zámek lze obnovit po vypršení jeho vlastníka. Na nečinném sdíleném hostingu naplánujte \codeword{php scripts/application_update.php} z~cronu, například každých pět minut. Každé spuštění provádí omezené vyhledání nebo posouvá existující práci na pozadí; správnost nezávisí na \codeword{set_time_limit()} ani \codeword{ignore_user_abort()}.
@@ -2014,6 +2031,8 @@ Pokud aktualizace skončila před aktivací, zrušte starou úlohu, vynuťte nov
 \index{m00077@manifest jádra}
 
 \filepath{app/core-manifest.json} zaznamenává verzi aplikace a~hashe souborů jádra spravovaných integritou. Místní generátor pod \filepath{scripts/generate_manifest.php} počítá konečné hashe po změnách běhového kódu. Zahrnutí dokumentace a~uživatelských dat se řídí zavedenými pravidly generátoru.
+Při deterministické přípravě vydání přijímá generátor manifestu volitelný čas sestavení \codeword{SOURCE_DATE_EPOCH} pro položku \codeword{generated_at}; bez něj používá aktuální čas. Hostovaný postup odvozuje tento čas z~metadat vydání a~používá jej pro PDF příruček i~závěrečný manifest, takže stejné připravené vstupy zachovají reprodukovatelné časové údaje. Po změně souboru aplikace zahrnutého v~kontrole integrity je stále nutné manifest znovu vygenerovat.
+
 \section{Volitelné souvislosti: jak PHP Gallery funguje}
 \label{sec:architecture}
 \index{a00007@architektura}
@@ -2168,10 +2187,23 @@ Typická změna funkce postupuje takto:
   \item Pokud jsou nutné změny trvalého schématu, přidejte nové migrace bez změn historie.
   \item Přidejte přeložené řetězce rozhraní.
   \item Přidejte cílené automatické testy a~dokumentované ruční ověření.
-  \item Aktualizujte architekturu, mapu kódu, databázi, testování a~uživatelské pokyny podle jejich vlastnictví.
-  \item Po konečných změnách běhového kódu obnovte metadata integrity.
-  \item Zkontrolujte úplný rozdíl změn a~spusťte příslušnou místní sadu testů.
+  \item Při změně aktuálních uživatelských, administračních, architektonických nebo vývojářských postupů aktualizujte trvalé dokumenty Markdown a~všechny čtyři zdroje příručky TeX.
+  \item Připravte konečného kandidáta pomocí \filepath{scripts/prepare_candidate.php}; postupně obnovte běhový plán, inventář balíčku a~data integrity.
+  \item Zkontrolujte úplný rozdíl změn a~pro konečné předání zdrojů použijte centrální audit \codeword{--profile=full}.
 \end{enumerate}
+
+\subsection{Příprava zdrojového kandidáta pro~CI}
+
+Při vývoji lze vytvářet malé samostatné commity, ale ověření se~musí vztahovat ke~konkrétní revizi zdrojů, se~kterou souhlasí všechny generované soubory. Trvalá technická dokumentace patří do~stejné dávky změn. Změny správy, architektury, běhových závislostí, zabezpečení, balení nebo CI vyžadují kontrolu všech čtyř jazykových zdrojů TeX, nejen uživatelsky viditelných obrazovek. Při běžném vývoji se~nemění \filepath{PATCH_NOTES.md} ani sledované soubory PDF příruček.
+
+\begin{enumerate}
+  \item Dokončete úpravy kódu a~dokumentace. Nové nebo odstraněné produkční soubory přidejte do~Git indexu, aby je generátor inventáře zahrnul. Při změně vlastníka trasy opravte zdrojová pravidla běhových kořenů a~závislostí.
+  \item Spusťte \filepath{scripts/prepare_candidate.php}. Příkaz nejprve sestaví \filepath{app/runtime/modules.php}, potom obnoví \filepath{app/production-files.json} podle Git indexu a~\emph{nakonec} vytvoří \filepath{app/core-manifest.json}. Hash se~počítá z~úplného obsahu souborů v~checkoutu, nikoli z~neúplné odpovědi API.
+  \item Příkazem \codeword{php scripts/prepare_candidate.php --check} ověřte všechny tři artefakty bez zápisu. Opakovaná příprava se~stejnými věcnými vstupy nic nepřepisuje ani nemění čas vytvoření manifestu. Po~každé pozdější opravě zdrojů přípravu zopakujte.
+  \item Commitněte pouze skutečně změněné generované soubory a~zachovejte samostatnou historii zdrojových úprav. Před konečným předáním spusťte autoritativní audit \codeword{php scripts/audit.php --profile=full} nad připraveným kandidátem.
+\end{enumerate}
+
+Stabilní GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} může připravit větve pro funkce a~opravy a~otestovat přesné SHA publikovaného kandidáta. Kontroluje identitu větve, odmítá zápis ze~zastaralé revize a~neprovádí merge, squash ani vynucený push. Centrální kontrola \codeword{--profile=candidate-preflight} pouze čte aktuální stav a~odmítá zastaralý manifest, běhový plán, inventář nebo porušení pravidel zdrojů ještě před nákladnou maticí CI. Testovací běh nesmí chybějící artefakty sám potichu opravovat. Až příprava vydání sjednotí verze a~data příruček a~přeloží existující TeX do~PDF; chybějící odborný text nevytváří.
 
 \section{Kontrola galerie před zveřejněním}
 \label{sec:testing}
@@ -2202,17 +2234,18 @@ Požádejte další osobu o~vyzkoušení galerie bez pokynů. Její první klikn
 
 \subsection{Automatické kontroly pro správce softwaru}
 
-Vývojáři mohou po změně kódu aplikace spustit spustitelné testovací skripty projektu. Souhrnný nástroj pokrývá sadu projektu, cílené skripty ověřují jednotlivé funkce.
+K~běžnému ověřování používejte centrální audit \filepath{scripts/audit.php}, nikoli starší obalový skript \filepath{tests/run.php}. Následující profily jsou alternativy, ne tři postupné kontroly. Při vývoji podle potřeby spusťte rychlý profil, před běžným předáním jednou úplný profil a~při závěrečné kvalifikaci vydání jednou profil vydání. Jednotlivé testy spouštějte jen při diagnostice zjištěného selhání nebo vývoji nově registrovaného testu, nikoli k~opětovnému procházení celé sady.
 
 \begin{lstlisting}[language=bash]
-php tests/run.php
-php tests/public_thumbnail_rendering_model_test.php
-php tests/public_thumbnail_markup_test.php
-php tests/duplicate_photo_detector_test.php
-php tests/duplicate_photo_ledger_test.php
-php tests/migration_consistency_test.php
-node tests/progressive_thumbnail_renderer_test.mjs
+# During development:
+php scripts/audit.php --profile=quick
+# Before ordinary code handoff:
+php scripts/audit.php --profile=full
+# Final release qualification only:
+php scripts/audit.php --profile=release
 \end{lstlisting}
+
+Hostovaný postup vydání nejprve spouští zvláštní kontrolu pravidel \codeword{--profile=release-preflight} před nákladnými kroky s~AI nebo TeX. Tato předběžná kontrola nenahrazuje úplnou matici testů přesného kandidáta.
 
 \subsection{Ruční ověření v~prohlížeči}
 
@@ -2229,6 +2262,10 @@ U~veřejného vykreslování náhledů prozkoumejte panely Prvky a~Síť. Respon
 Po posledních úpravách vygenerujte manifest, proveďte předběžné kontroly vydání, manifestu a~bílých znaků, inicializujte kvalifikační otisk a~zmrazte vstupy. Spusťte právě jeden centrální audit \codeword{--profile=release}, přímo nebo prostřednictvím nakonfigurované izolované testovací instalace. Audit vlastní syntaxi, regrese, kontrakty, prohlížečové testy a~konzistenci vydání; nepřidávejte další ruční průchod stromem testů. Připojte jeho zprávu k~nezměněnému otisku a~oddělte mezery pokrytí od čekajících provozních kontrol.
 
 Nasazovací složku nebo ZIP vytvořte pouze na výslovnou žádost. Nástroje vyžadují aktuální integritní data a~ověřují kanonický produkční seznam; požadovaný artefakt před použitím zkontrolujte. Vydání samotného CMS nevyžaduje nový instalátor WinApp. Commit, tag, zveřejnění, nahrání a~nasazení provádějte pouze s~výslovným oprávněním. Po zveřejnění ověřte objevení aktualizace, migrace, přihlášení, veřejné galerie, chráněná média a~integritu či stav na zveřejněné instalaci.
+
+Při běžném vývoji současně upravujte a~kontrolujte obsah všech čtyř zdrojů \codeword{.tex}; po každé změně nesestavujte evidované soubory PDF. PDF mohou za zdroji zaostávat až do závěrečné přípravy vydání. Automatická změna verze a~data není generováním věcné dokumentace: správci softwaru musí nové funkce, zabezpečení, kompatibilitu a~provozní postupy sami doplnit do anglické, české, německé a~švédské příručky.
+
+Pro přípravu hostovanou na GitHubu vytvořte a~odešlete větev \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, případně ručně spusťte pracovní postup kvalifikace z~této větve. Postup připraví a~uloží schváleného deterministického kandidáta zpět do téže větve, sestaví společně všechna čtyři PDF a~ověří přesný výsledný commit. Neslučuje větev do \codeword{main}, nevytváří tag ani nezveřejňuje vydání.
 
 \section{Jak zajistit svižný dojem galerie}
 \label{sec:performance}
@@ -2346,6 +2383,21 @@ Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdr
 Kvalifikační nástroj \filepath{scripts/release_qualification.php} zaznamenává přesný otisk zdroje a~PDF. Jeho příkaz \codeword{render} vytváří omezené náhledy stránek; samotné vykreslení neschvaluje jejich vzhled. Příkaz \codeword{record-audit} přijímá pouze odpovídající centrální zprávu vydání, nikoli starší úplný audit. Změněný zdrojový soubor nebo znovu sestavené PDF vybírají nové čekající podklady místo tichého opětovného použití dřívějšího souhlasu.
 
 Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice konkrétního problému sazby; volitelná pole kontroly PDF mohou zůstat čekající. Ověřte reprezentativní postupy prohlížeče. Zaznamenejte, co bylo skutečně zkontrolováno, kým a~s~jakým výsledkem. Nevyřešené kontroly ponechte čekající a~základní test aktualizátoru po zveřejnění oddělený. Zelená automatická zpráva není svolením ke zveřejnění a~nástroj nikdy nevytváří commity ani tagy, nenahrává ani nepublikuje vydání. Příkazy záznamů najdete v~\filepath{docs/RELEASE_QUALIFICATION.md}.
+
+\subsection{Příprava a~kvalifikace vydání na GitHubu}
+
+Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
+
+\begin{enumerate}
+  \item \textbf{Větev a~předběžná kontrola.} Odeslání změn do \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, případně ruční spuštění z~této větve, zahájí přípravu. Volitelně zadaná verze musí odpovídat názvu větve. Příprava odmítne již existující tag \codeword{v_X.Y[.Z]}, určí předchozí tag vydání jako základ porovnání a~před AI nebo TeX spustí \codeword{release-preflight}, který ověřuje syntaxi, dokumentaci deklarací, soupis zdrojů, pravidla importu Pythonu a~kontrakty pracovních postupů.
+  \item \textbf{Deterministická metadata.} Pomocný skript sjednotí verzi aplikace, metadata vydání, kostru poznámek k~vydání a~označení verze a~data všech čtyř příruček. Obnoví i~produkční soupis souborů, ale nepíše věcná vysvětlení do TeXu. Již dokončené redakční poznámky zachová. Obsah všech čtyř příruček je třeba sladit před vydáním.
+  \item \textbf{Redakční poznámky.} Úplná ručně napsaná sekce vydání zůstává nedotčená. Pokud chybí nebo není dokončená, postup použije GitHub Copilot CLI s~modelem \codeword{gpt-6-luna}; k~automatickému výběru modelu přejde pouze při jeho nedostupnosti. Pro generování vyžaduje nastavený \codeword{COPILOT_GITHUB_TOKEN}. Textový diff Gitu se předává celý bez krácení podle počtu bajtů; generované a~binární artefakty vydání se vynechávají. Oddělené dočasné soubory pro výstupy brání zablokování rour. Každý příkaz Gitu má limit 30 sekund a~celý sběr podkladů dvě minuty. Překročení limitů metadat či diagnostiky přípravu výslovně zastaví. Přísné ověření Markdownu brání přijetí zástupných textů, nesprávných verzí, cizích sekcí a~komentářů asistenta. Selhání generování či ověření zastaví kvalifikaci, místo aby zveřejnilo neúplné poznámky. Pomocník \filepath{.github/scripts/patch_notes_ai_chunks.php} předává každý původní bajt diffu právě jednou v~navazujících částech UTF-8 o~velikosti nejvýše 100~000~bajtů. Manifest SHA-256 ověřuje úplnost všech částí i~původních podkladů; každá část musí mít platný věcný výtah o~velikosti nejvýše 6~500~bajtů. Pokud se souhrny nevejdou do~závěrečného limitu promptu 180~000~bajtů, další omezené průchody sloučí všechny výtahy bez vynechání části diffu. Časový limit požadavku Copilotu, chybějící odpověď, porušený hash nebo neplatný závěrečný Markdown kvalifikaci zastaví; žádný výřez původního diffu se potichu nezkracuje.
+  \item \textbf{Reprodukovatelná dokumentace.} Postup používá TinyTeX ověřený kontrolními součty a~pevně danou sadu balíčků TeX Live; platnou mezipaměť znovu použije podle otisku uzamčené konfigurace. Anglickou, českou, německou a~švédskou příručku sestaví pomocí \codeword{pdflatex}, \codeword{makeindex} a~dalších dvou průchodů \codeword{pdflatex} na každé vydání. Čas z~metadat vydání určuje reprodukovatelné časové údaje PDF i~manifestu. Po sestavení se kontrolují produkční soupis, manifest integrity a~konzistence vydání.
+  \item \textbf{Bezpečný zápis do větve.} K~uložení se připravují jen povolené soubory. Změní-li se vzdálená větev, zastaralý kandidát se neodešle; totožný již připravený strom může použít existující commit. Příprava ukládá změny pouze do stejné release větve, nikoli do \codeword{main}.
+  \item \textbf{Kontrola přesného kandidáta.} Sdílený centrální pracovní postup CI načte přesné SHA připraveného commitu a~spustí úplnou matici vydání včetně povinných testů Chromium. Souhrnná kontrola uspěje pouze při úspěšné přípravě, úplných poznámkách, zelené matici a~nezměněném SHA na konci větve. Slučování, označování tagem a~zveřejnění zůstávají v~rukou správce.
+\end{enumerate}
+
+Podrobnosti jsou v~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} a~\filepath{docs/LATEX_BUILD.md}. Pouhá úprava zdroje TeX není důvodem k~běžnému sestavení PDF ani samostatnému auditu vydání.
 
 \section{Slovník}
 \label{sec:glossary}

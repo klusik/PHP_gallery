@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Keep wheel and pointer interception scoped to the existing image stage
- *   - Preserve browser zoom modifiers and control-target exclusions
+ *   - Preserve browser Cmd-wheel shortcuts and Ctrl+wheel stage-only zoom
  *   - Recalculate zoom when fullscreen map split changes the image viewport
  *   - Prevent zoom state from adding persistence or media-fetch behavior
  *   - Preserve gallery and NSFW access checks in the existing lightbox endpoint
@@ -60,10 +60,22 @@ lightbox_zoom_integration_assert(
     'Wheel zoom must not intercept the document, map sibling, or complete overlay.'
 );
 lightbox_zoom_integration_assert(
-    str_contains($lightboxSource, 'event.ctrlKey || event.metaKey || event.altKey')
+    str_contains($lightboxSource, 'event.altKey || event.metaKey || event.shiftKey')
+        && str_contains($lightboxSource, 'if (event.ctrlKey)')
+        && str_contains($lightboxSource, 'panLightboxZoomState(lightboxZoomState, -dx, -dy, metrics)')
+        && str_contains($lightboxSource, 'if (event.cancelable) event.preventDefault();')
         && str_contains($lightboxSource, 'isLightboxZoomControlTarget(target)')
         && str_contains($lightboxSource, 'interactiveTarget !== stageLink'),
-    'Zoom events must preserve browser modifiers and exclude toolbar, map, voting, and form controls.'
+    'Plain photo wheel must pan, Ctrl+wheel must zoom only stage content, and unrelated controls must be excluded.'
+);
+lightbox_zoom_integration_assert(
+    str_contains($lightboxSource, "stageLink.addEventListener(gesture, handleLightboxWebkitGesture")
+        && str_contains($lightboxSource, 'lightboxZoomPointers.size > 0')
+        && str_contains($lightboxSource, 'if (event.touches && event.touches.length > 1)')
+        && str_contains($lightboxSource, 'lightboxZoomPan.fromPinch === true')
+        && str_contains($lightboxSource, 'remaining.pointerId')
+        && str_contains($lightboxSource, "!overlay.contains(target) || target.closest('.simbrief-ofp-dialog')"),
+    'Mac Safari pinch fallback, physical touch swipe/pinch/pan handoff and modal scroll isolation must remain wired.'
 );
 lightbox_zoom_integration_assert(
     str_contains($lightboxSource, "target?.closest('[data-lightbox-stage]') || isLightboxZoomControlTarget(target)"),

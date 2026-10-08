@@ -282,7 +282,12 @@ try {
         exit(0);
     }
 
-    if (file_put_contents($output, $content, LOCK_EX) === false) {
+    $existing = is_file($output) && !is_link($output) ? file_get_contents($output) : false;
+    if (production_files_inventory_content_matches(is_string($existing) ? $existing : null, $content)) {
+        echo "Production file inventory already current (no write).\n";
+        exit(0);
+    }
+    if (is_link($output) || file_put_contents($output, $content, LOCK_EX) === false) {
         throw new RuntimeException('Could not write app/production-files.json.');
     }
     echo 'Wrote app/production-files.json (' . (count($inventory['production_files']) + count($inventory['companion_files'])) . ' production files including '

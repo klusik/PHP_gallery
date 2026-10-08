@@ -125,13 +125,16 @@ profile behavior. `.github/workflows/release-qualification.yml` can call it with
 `audit_profile=release`; that preserves the normal matrix and adds one isolated
 `Authoritative release audit` job running the central `release` profile. The release caller owns deterministic preparation of the trusted
 `release/v_X.Y.Z` branch. If the target patch-note section is incomplete, it
-builds bounded previous-tag-to-HEAD evidence for GitHub Copilot CLI through
+builds complete previous-tag-to-HEAD text diff evidence for GitHub Copilot CLI through
 `.github/scripts/patch_notes_ai.php`. The personal-repository workflow expects
 a fine-grained PAT in the `COPILOT_GITHUB_TOKEN` repository secret, selects
 `gpt-6-luna` with an explicit model-unavailable fallback to `auto`, disables project prompt-mode extensions and grants no Copilot
 tools. The model output is validated as data before only the incomplete target
 release section may be replaced; completed maintainer-authored notes skip AI.
-Missing authentication, oversized evidence, AI failure or invalid output blocks
+The text diff has no byte truncation. Separate temporary stdout/diagnostic files
+avoid pipe deadlocks; each Git child has a 30-second deadline and the evidence
+step has a two-minute workflow limit. Metadata/diagnostic bounds fail explicitly
+instead of accepting partial evidence. Missing authentication, AI failure or invalid output blocks
 qualification. Once release notes are valid, GitHub builds all four PDFs,
 refreshes production inventory and the integrity manifest, passes
 `check_release.php`, commits only reviewed release-preparation paths and calls

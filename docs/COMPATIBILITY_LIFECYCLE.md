@@ -408,6 +408,28 @@ not a source parser or a commitment to remove anything on a calendar date.
   a tested, trustworthy alternative MIME detector; do not replace content
   detection with extension-based guesses.
 
+### MEDIA-4 — Previously emitted SimBrief PDF query URLs
+
+- **Reason / protected scenario:** Earlier OFP View/Download actions emitted
+  `index.php?page=media&id=GALLERY_ID&ofp=1`. Bookmarks, saved HTML, and
+  unmodified clients may continue using this overloaded image/PDF route.
+  Current actions use `gallery_ofp_pdf` with a gallery ID and a same-origin
+  URL derived from the actual mount path so visitors on host aliases or
+  non-root installations do not cross origins for PDF.js.
+- **Owner:** `app/controllers/public_media.php` retains the legacy dispatch;
+  `app/controllers/public_gallery_controls.php` authors current links;
+  `app/services/simbrief_ofp_attachments.php` enforces the shared gallery
+  authorization and local-file integrity policy.
+- **Evidence / tests:** `simbrief_ofp_public_http_test.php` exercises anonymous,
+  authenticated and denied legacy/current delivery on root/subdirectory
+  `index.php` routes. `public_media_authorization_contract_test.php` covers
+  the actual password, token, NSFW and visibility policy.
+- **Usage:** Unknown; no measurement of historical PDF URL usage is available.
+- **Support rationale / retirement:** Keep the old query branch until existing
+  links can be migrated or a versioned retirement with real hosted evidence
+  is approved. Both routes must remain equally protected; the compatibility
+  route must never become a public static-file bypass.
+
 ### ROUTE-1 — Query routes and clean URL aliases
 
 - **Reason / protected scenario:** Query routes remain the canonical
