@@ -1,5 +1,55 @@
 # Patch notes
 
+## Version 0.124.4
+
+Version 0.124.4 hardened first-install migration behavior and tightened repository authoring and audit evidence. It resolved installer lock handling before `config.php` exists and expanded the checked authoring guidance, audit reporting, and regression coverage for config-free installation and source diagnostics.
+
+### Highlights
+
+#### Installer setup safety [#123](https://github.com/klusik/PHP_gallery/issues/123)
+- Fixed the installer and migration runner to use the migration PDO for canonical gallery-writer lock acquisition and release before `config.php` exists.
+- Kept configured upgrade roots, replay checkpoints, and fail-closed locking behavior intact while refusing to proceed when lock ownership could not be verified.
+- Covered config-free HTTP installation, CSRF refusal, lock contention and retry, migration recording, administrator creation, fresh layout defaults, lock release, and post-install HTTP 403 in the installer regression test.
+
+#### Authoring and audit enforcement [#121](https://github.com/klusik/PHP_gallery/issues/121)
+- Added or expanded checked authoring guidance for declaration documentation, typing, structured-shape contracts, runtime-policy explanations, and source-feedback workflows.
+- Updated the central audit to record source HEAD, comparison base, and complete failure evidence, including changed-source checks and inventory budgets.
+- Refreshed contributor and maintainer documentation and the four manual editions to describe the updated authoring and diagnostics workflow.
+
+### Technical Details
+
+#### Backend
+- Updated the installer and migration lock flow in `app/models/gallery_edit_concurrency.php` and `app/services/gallery_description_layout_compatibility.php` so layout migration storage and lock handling work before configuration exists.
+- Preserved the configured upgrade root and fail-closed behavior when the lock cannot be acquired or ownership cannot be verified.
+- Kept migration callbacks pending for retry without introducing a new migration.
+
+#### Database
+- Reused the existing migration runner and ledger flow rather than adding a new schema change; the fix focused on lock ownership and migration completion semantics.
+- Confirmed the installer handles migration recording and retry safely during first setup and busy-lock recovery.
+
+#### Tests
+- Added `tests/installer_first_install_test.php` for config-free HTTP installation, CSRF refusal, connection-only setup, writer-lock contention and retry, migration-ledger completion, administrator password verification, fresh layout defaults, lock release, and post-install HTTP 403.
+- Updated `tests/audit_runner_test.php`, `tests/agent_authoring_examples_test.php`, and related compatibility/audit coverage for the new source-evidence and authoring-contract behavior.
+- Included a real HTTP installation regression in the database workflow qualification path and marked it as a required non-quick workflow check.
+
+#### Documentation
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `CONTRIBUTING.md`, `DATABASE.md`, `README.md`, `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `docs/GALLERY_EDIT_CONCURRENCY.md`, and all four maintained PHP Gallery manual sources.
+- Added `docs/AGENT_AUTHORING.md` and `scripts/audit_source_evidence.php` to document the checked authoring contracts and preserve complete source-failure evidence.
+- Refreshed generated candidate artifacts in `app/core-manifest.json` and `app/production-files.json`.
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change; this release addressed installation reliability and maintainer workflow enforcement rather than public gallery rendering or visitor-facing features.
+
+#### For administrators
+- Administrators could complete a first installation without an existing `config.php`, while the installer enforced CSRF refusal, lock contention handling, migration recording, and validation of created administrator credentials.
+- Busy lock conflicts now failed closed and could be retried without leaving the migration state ambiguous, and the install completed with protected defaults and lock release behavior consistent with the configured setup path.
+
+#### For maintainers
+- Maintainers gained clearer authoring contracts, stronger audited source feedback, and more explicit evidence retention for source checks and workflow failures.
+- The repository documentation and manual set now describe the updated installation, authoring, and audit expectations for future changes.
+
 ## Version 0.124.3
 
 Version 0.124.3 added clipboard image pasting to the existing gallery upload workflow, with localized instructions and regression coverage for upload selection and side-panel behavior.
