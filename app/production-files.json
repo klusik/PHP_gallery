@@ -2199,6 +2199,7 @@
         "tests/setup_lock_service_test.php",
         "tests/simbrief_create_draft_test.php",
         "tests/simbrief_description_model_test.php",
+        "tests/simbrief_legacy_dispatch_browser_test.mjs",
         "tests/simbrief_ofp_document_test.php",
         "tests/simbrief_ofp_lightbox_browser_test.mjs",
         "tests/simbrief_ofp_public_http_test.php",
