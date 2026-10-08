@@ -379,9 +379,9 @@ function unique_gallery_child_folder_path(?array $parent, string $folderName): s
 /**
  * Resolve an image record to its absolute file path inside its gallery folder.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{relative_path:string} $image Stored image location relative to its gallery.
+ * @param array{folder_path:string} $gallery Physical gallery owning the image file.
+ * @return string Canonical-gallery-contained existing image or validated future upload path.
  */
 function image_abs_path(array $image, array $gallery): string
 {
@@ -389,9 +389,14 @@ function image_abs_path(array $image, array $gallery): string
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     // Variable $path stores this steps working value.
     $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, normalize_relative_path((string) $image['relative_path']));
-    // Variable $parent stores this steps working value.
+    // The destination's parent must be in this gallery even before an upload exists.
     $parent = dirname($path);
     if (!path_inside($galleryRoot, $parent)) {
+        throw new RuntimeException('Image path is outside its gallery.');
+    }
+    // An existing image may be a symbolic link even when its parent is trusted.
+    // Validate the canonical final target while retaining safe missing upload paths.
+    if ((file_exists($path) || is_link($path)) && !path_inside($galleryRoot, $path)) {
         throw new RuntimeException('Image path is outside its gallery.');
     }
     return $path;

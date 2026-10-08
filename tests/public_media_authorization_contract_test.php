@@ -311,5 +311,27 @@ namespace {
         'Anonymous Admin preview must not inherit administrator PDF permissions.'
     );
 
+    // Cache privacy is a property of protected content, not the current caller's role.
+    $GLOBALS['public_media_authorization_user'] = ['id' => 1, 'username' => 'admin'];
+    public_media_authorization_assert(
+        !\Gallery\Services\public_media_needs_private_cache($public),
+        'Ordinary public gallery media must remain eligible for shared caching.'
+    );
+    public_media_authorization_assert(
+        \Gallery\Services\public_media_needs_private_cache($password)
+            && \Gallery\Services\public_media_needs_private_cache($passwordChild)
+            && \Gallery\Services\public_media_needs_private_cache($nsfw),
+        'Protected and NSFW gallery media must use private caching even for an authenticated administrator.'
+    );
+    $brandingStart = strpos($publicMediaSource, 'function cms_gallery_branding_asset(): void');
+    $brandingEnd = strpos($publicMediaSource, 'function cms_gallery_ofp_pdf_not_found(', $brandingStart === false ? 0 : $brandingStart);
+    $brandingSource = $brandingStart !== false && $brandingEnd !== false
+        ? substr($publicMediaSource, $brandingStart, $brandingEnd - $brandingStart)
+        : '';
+    public_media_authorization_assert(
+        str_contains($brandingSource, '$cacheControl = public_media_needs_private_cache($gallery)'),
+        'Branding asset responses must derive cache privacy from canonical gallery access, never from administrator identity.'
+    );
+
     echo "public_media_authorization_contract_test: ok\n";
 }

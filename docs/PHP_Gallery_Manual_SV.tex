@@ -338,6 +338,8 @@ Håll den första sessionen liten: skapa ett galleri, lägg till några fotograf
 
 Välj \ui{Administratörsinloggning} i den offentliga sidans sidhuvud och ange kontot som skapades vid installationen. Översikten är utgångspunkten för den dagliga driften. Den sammanfattar gallerier, fotografier, systemstatus och tillgängliga underhållsåtgärder.\footnote{Översiktens exakta innehåll beror på aktiverade funktioner, genomförda migreringar och utvecklingsinställningar. En välfungerande installation kan ändå visa informationsmeddelanden som uppmanar en administratör att slutföra valfritt arbete.}
 
+Efter inloggning kan en återkomstlänk öppna en lokal sida i denna installation. Externa URL:er och återkomstsökvägar med omvända snedstreck avvisas; i stället används inloggningsflödets säkra lokala reservadress.
+
 Ägna några minuter åt att hitta följande områden:
 
 \begin{itemize}
@@ -1076,6 +1078,8 @@ Uppladdningsinställningarna skiljer den vanliga servervägen från webbläsarst
 
 Webbläsarstödd förberedelse aktiveras oberoende och är markerad som standard i uppladdningsflödet. Webbläsaren kan förbereda optimerade miniatyrbilder och begränsade ZIP-omgångar innan de skickas. Om webbläsarförberedelsen misslyckas innan någon skrivning på servern börjar kan vanliga bildurval automatiskt falla tillbaka på klassisk serveruppladdning. Administratörer kan begränsa standard- och maxantalet webbläsararbetare, bilder per omgång, förhållandet mellan ZIP-storlek och PHP-uppladdningsgräns, högsta byteantal för ZIP-omgångar och originaldelstorleken som används vid webbläsarbaserad ombyggnad av miniatyrbilder. Normaliseraren tillämpar också ett hårt tak för arbetare så att en oavsiktlig inställning inte kan skapa obegränsade parallella begäranden på delade webbhotell.
 
+När en ZIP-omgång som har förberetts i webbläsaren tas emot kontrollerar servern även CRC-32 för varje lagrad fil och kräver en fullständig central katalog och slutpost med matchande filnamn, positioner, storlekar och antal poster. En skadad eller inkonsekvent omgång avvisas innan några gallerifiler skrivs; förbered och skicka om omgången i webbläsaren.
+
 Aktuella standardvärden för webbläsarpipelinen är 8 arbetare, ett mål på 80~\% av den upptäckta PHP-uppladdningsgränsen för varje ZIP-omgång utan komprimering, högst 8 bilder per ZIP-omgång och ett absolut tak på 24~MiB per ZIP-omgång. De validerade intervallen är 1--32 arbetare, 10--95~\% av PHP-uppladdningsgränsen, 1--64 bilder per omgång och 1--128~MiB för det absoluta ZIP-taket. Webbläsarbaserad ombyggnad av miniatyrbilder använder som standard en original-ZIP-del på 512~MiB, begränsad till 16~MiB--3~GiB, och originalbyggaren begränsar normalt en del till 96 objekt med en intern hård gräns på 512. Detta är säkerhetstak och standardvärden, inte en rekommendation att höja ett långsamt delat webbhotell till maximum.
 
 När webbläsarstödd uppladdning är~aktiverad accepterar väljaren även ZIP-arkiv, t.ex. en export från iCloud Photos. Webbläsaren undersöker arkivet lokalt, lägger till stödda JPEG-, PNG-, WebP- och GIF-bilder i den vanliga förberedelsekön och hoppar över mappar, dolda metadata och poster som inte stöds. Den valda ZIP-filen laddas aldrig själv upp till PHP. Arkiv utan komprimering och med Deflate stöds; krypterade arkiv, flerdiskarkiv, ZIP64-arkiv, skadade arkiv, misstänkt komprimerade arkiv eller alltför stora arkiv avvisas innan någon serveruppladdning börjar. ZIP-import har ingen klassisk PHP-reservväg, så låt webbläsarstödd förberedelse vara aktiverad när du väljer ett arkiv.
@@ -1371,7 +1375,7 @@ Den~sparade PDF-filen levereras via den~galleribundna rutten \codeword{gallery\_
 
 De~kompakta knapparna \ui{Visa färdplan (OFP)} och~\ui{Ladda ned OFP-PDF} visas på~samma rad. Administratören kan välja att~skapa ett~privat undergalleri av~PDF-sidor via en~separat knapp nedanför. En~lokaliserad frågeteckenknapp visar en~förklaring vid muspekning, tangentbordsfokus eller~tryckning utan att~ta plats i~galleribeskrivningen.
 
-Automatisk anpassning till hel sida eller bredd räknas om för~varje PDF-sidas faktiska mått och~orientering, efter fönsterstorleksändring, när enheten roteras och~vid växling till eller från helskärm. Manuell zoom behåller sin CSS-pixelskala och~rullningsposition när fönstret ändras; ett nytt anpassningsval eller återställning återgår till automatisk beräkning. Om visningen misslyckas finns fortfarande en länk till den skyddade original-PDF-filen. Galleriets åtkomstregler för synlighet, lösenord och~NSFW gäller även fortsättningsvis för visning och~nedladdning. Det obligatoriska Chromium-testet i~CI sparar den~detaljerade loggen \codeword{browser-map.log} som~artefakt för~att felsöka fel i~dokumentvisaren.
+Automatisk anpassning till hel sida eller bredd räknas om för~varje PDF-sidas faktiska mått och~orientering, efter fönsterstorleksändring, när enheten roteras och~vid växling till eller från helskärm. Manuell zoom behåller sin CSS-pixelskala och~rullningsposition när fönstret ändras; ett nytt anpassningsval eller återställning återgår till automatisk beräkning. Den automatiska beräkningen utesluter tidigare marginaler för manuell panorering, så återställning och anpassning till bredd eller hel sida håller PDF-filen läsbar och proportionerlig även efter storleksändring av ett zoomat dokument. Om visningen misslyckas finns fortfarande en länk till den skyddade original-PDF-filen. Galleriets åtkomstregler för synlighet, lösenord och~NSFW gäller även fortsättningsvis för visning och~nedladdning. Det obligatoriska Chromium-testet i~CI sparar den~detaljerade loggen \codeword{browser-map.log} som~artefakt för~att felsöka fel i~dokumentvisaren.
 
 Tangenten \codeword{F} och~helskärmsknappen styr bara den~separata OFP-visaren. \codeword{Escape} lämnar först helskärmsläget och~stänger dokumentet först i~normalläget. Textinmatning i~redigerbara fält, genvägar med modifierartangenter och~automatiska tangentupprepningar växlar inte helskärm. Om webbläsaren nekar inbyggd helskärm används ett~CSS-baserat helskärmsläge i~samma PDF-visare. I~helskärm ligger sidhuvud och~verktygsfält ovanpå PDF-ytan, döljs efter en~kort stund utan pekarrörelse och~visas igen vid musrörelse eller~tangentbordsaktivitet. Kontroller som pekaren ligger över eller~som har tangentbordsfokus förblir synliga; visningen ändrar varken PDF-skalan eller~rullningsläget.
 
@@ -1448,6 +1452,8 @@ Administrationsåtgärder kräver ett autentiserat konto. Formulär innehåller 
 \index{d00059@delningslänkar}
 
 Skyddade gallerier lagrar lösenordshashar och ger sessionsbegränsad åtkomst efter lyckad verifiering. Delningslänkar använder servergenererat tokentillstånd och utgångspolicy. Lösenordsåterställning använder engångstoken som lagras hashade, en valfri återställningsadress, konfigurerad giltighetstid och vald e-posttransport. Använd HTTPS, starka administratörsuppgifter, begränsade databaskonton och skyddade e-post- och API-hemligheter.
+
+Skyddet för administratörscookies, schemat i genererade adresser och besökarkontonas HTTPS-kontroll använder samma transportpolicy. Direkt TLS identifieras utan proxyinställningar. Om en omvänd proxy avslutar TLS och vidarebefordrar HTTP till PHP ska dess exakta IP-adress eller CIDR-nät anges i \codeword{security.trusted_proxies} och den använda protokollrubriken aktiveras i \codeword{security.trusted_proxy_protocol_headers} före uppdatering. \codeword{x-forwarded-proto} och \codeword{x-forwarded-ssl} stöds; tillit till klientens IP-rubriker konfigureras separat. Proxyn måste skriva över klientens värden i aktiverade rubriker. Obetrodda, ogiltiga, flerdubbla eller motstridiga protokolluppgifter bevisar inte HTTPS. Konfigurerade proxyservrar och direkt HTTPS stöds fortfarande; vidarebefordrade rubriker ensamma ändrar inte längre offentliga adresser till HTTPS och sätter inte Secure-flaggan på administratörscookien.
 
 \subsection{Besökarkonton och registrering endast via inbjudan}
 \index{b00028@besökarkonton}
@@ -1601,6 +1607,14 @@ Rekommenderade arbetssätt:
   \item Testa skyddade gallerier genom anonyma besökarsessioner.
   \item Ha samordnade säkerhetskopior av filsystem och databas.
 \end{itemize}
+\subsection{Filgränser för medier och återupptagbar migrering}
+\index{medier!filsystemgränser}
+\index{gallerimigrering!atomär installation}
+
+Behörighet kontrolleras innan offentliga galleribilder, omslagsbilder och galleriets profilbilder skickas. Skyddade och åldersbegränsade gallerier använder privata cacheregler även när en administratör visar innehållet. Sparade bild- och profilbildssökvägar måste ligga inom respektive gallerikatalog, och den verkliga målsökvägen för symboliska länkar kontrolleras. Globala temabakgrunder och profilbilder begränsas till sina egna cachekataloger. Offentliga bildsvar tillåter säkra rasterformat, inte aktiva SVG-filer. Den sparade ursprungliga temabakgrunden är bara tillgänglig för en inloggad administratör, medan den vanliga offentliga derivatbilden förblir tillgänglig.
+
+Vid migrering mellan gallerier kontrolleras den slutliga filens placering både när manifestet sammanställs och när en autentiserad API-nyckel används för att hämta filen. En mottagen fil kopieras först till en unik temporär fil i målkatalogen. Före den slutliga namnändringen verifieras antalet byte och eventuellt SHA-256-värde i manifestet. En avbruten kopiering lämnar ingen ofullständig målfil. Vid återförsök återanvänds en identisk installerad fil, medan konflikter och symboliska länkar avvisas. Webbläsarens okomprimerade ZIP-paket avvisar dessutom dubbla normaliserade filnamn, felaktig CRC-32 och ofullständiga eller inkonsekventa centralkataloger.
+
 \section{Tema, presentation och lokalisering}
 \label{sec:theme}
 \index{t00244@tema}

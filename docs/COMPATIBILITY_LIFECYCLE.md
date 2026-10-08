@@ -132,6 +132,37 @@ not a source parser or a commitment to remove anything on a calendar date.
   query and digest index. Keep current query and index behavior until that
   review supports a change.
 
+## Transport compatibility
+
+### HTTP-1 — Explicitly trusted TLS-terminating proxies and HTTPS wrappers
+
+- **Reason / protected scenario:** Shared-hosting proxies may deliver browser TLS
+  over HTTP to PHP. Core/Admin and Viewer transport use one resolver, accepting
+  this topology only with both `security.trusted_proxies` (exact IPv4/IPv6 or CIDR)
+  and `security.trusted_proxy_protocol_headers`. Client-IP header opt-in remains
+  independent. Direct TLS and HTTP installations retain their existing behavior.
+- **Owner:** `app/services/client_ip.php::request_transport_is_https()`;
+  `app/helpers_request.php::request_is_https()` and `viewer_request_is_https()`
+  retain their established caller entry points. Core loads the service lazily
+  before session startup without loading Viewer identity or account storage.
+- **Migration / safety:** Previously generic Core HTTPS detection accepted
+  forwarded protocol from any peer, including a forged direct-client assertion
+  (BH-03). Configure the actual proxy scope and protocol header opt-in before
+  upgrading a TLS-terminating installation. The proxy must overwrite enabled
+  client-supplied headers. Ambiguous or conflicting enabled values cannot prove
+  HTTPS. Existing configured HTTPS base URLs are not downgraded by the resolver.
+- **Evidence / tests:** `tests/request_https_proxy_test.php` first reproduced the
+  forged HTTPS assertion, then covers direct transport, exact/CIDR proxy trust,
+  IPv6, header opt-in/ambiguity, public URL schemes and Admin cookie Secure flags.
+  `viewer_authentication_phase06_test.php` retains Viewer policy coverage.
+- **Usage:** Proxy topology and wrapper adoption are unknown; no production
+  measurement is inferred from source age or test coverage.
+- **Support rationale / retirement:** Direct transport, explicitly configured
+  proxy hosting and both wrapper entry points are permanent supported contracts.
+  Wrapper removal needs complete caller migration and equivalent regression
+  coverage. Unrestricted forwarded-header acceptance is unsafe and is retired;
+  it is not retained as an implicit configuration fallback.
+
 ## Updater and release compatibility
 
 

@@ -38,6 +38,7 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\path_inside;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
 use function Gallery\Models\gallery_model_cover_image_path_column_exists;
@@ -77,6 +78,38 @@ function gallery_cover_path(array $gallery): ?string
     // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = trim((string) ($gallery['cover_image_path'] ?? ''));
     return $path !== '' ? $path : null;
+}
+
+/**
+ * Resolve a persisted cover image only when its canonical file remains inside this gallery.
+ *
+ * Normalization rejects traversal in imported or corrupted cover metadata. The
+ * resolved containment check also rejects symbolic links escaping the gallery.
+ *
+ * @param array<string,mixed> $gallery Persisted gallery row and cover metadata.
+ * @return string|null Existing safe cover image path, or null when unsafe or missing.
+ */
+function gallery_cover_asset_abs_path(array $gallery): ?string
+{
+    $relativePath = gallery_cover_path($gallery);
+    if ($relativePath === null) {
+        return null;
+    }
+    try {
+        $relativePath = normalize_relative_path($relativePath);
+    } catch (RuntimeException) {
+        return null;
+    }
+    if ($relativePath === '') {
+        return null;
+    }
+
+    $galleryRoot = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+    $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    if (!is_file($path) || !path_inside($galleryRoot, $path)) {
+        return null;
+    }
+    return $path;
 }
 
 /**

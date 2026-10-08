@@ -43,7 +43,7 @@ const optionalPublicModules = {
     heroTags: './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2',
     viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
-    ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261007-ofp-viewer-v1',
+    ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-fit-pan-layout',
 };
 
 /**

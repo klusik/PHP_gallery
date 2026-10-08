@@ -424,9 +424,10 @@ function theme_branding_asset_path(string $kind): ?string
     if ($path === '') {
         return null;
     }
-    // $absolute stores an intermediate value used by the surrounding gallery workflow.
+    // The setting is persisted state, not permission to stream files outside theme-branding.
+    $storage = dirname(__DIR__, 2) . '/cache/theme-branding';
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
-    return is_file($absolute) ? $path : null;
+    return is_file($absolute) && path_inside($storage, $absolute) ? $path : null;
 }
 
 /**
@@ -499,9 +500,9 @@ function theme_branding_storage_dir(): string
 /**
  * Store one uploaded global theme branding fallback image.
  *
- * @param string $kind Kind value.
- * @param array $file File value.
- * @return string Text result for the caller.
+ * @param string $kind Allowed global banner or separator asset kind.
+ * @param array{name?:string,tmp_name?:string,error?:int,size?:int} $file Verified PHP image-upload descriptor.
+ * @return string Gallery-relative path of the successfully installed Theme branding image.
  */
 function store_uploaded_theme_branding_asset(string $kind, array $file): string
 {
@@ -549,20 +550,23 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $stagedTarget stores the uploaded file before the previous asset is replaced.
     $stagedTarget = $storageDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
     if (!move_uploaded_file($tmpPath, $stagedTarget)) {
+        @unlink($stagedTarget);
         throw new RuntimeException(t('theme.branding.error_store_failed'));
     }
-    foreach (glob($storageDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
-        if (is_file($oldFile)) {
-            @unlink($oldFile);
-        }
-    }
+    // Do not delete old banner/separator files until the staged replacement
+    // has been installed. A failed rename must preserve the previous setting.
     if (!@rename($stagedTarget, $target)) {
         @unlink($stagedTarget);
         throw new RuntimeException(t('theme.branding.error_finalize_failed'));
     }
-    // $relative stores an intermediate value used by the surrounding gallery workflow.
+    // $relative stores the new validated source identity.
     $relative = 'cache/theme-branding/' . $stem . '.' . $extension;
     set_app_setting(theme_branding_asset_setting($kind), $relative);
+    foreach (glob($storageDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
+        if ($oldFile !== $target && is_file($oldFile)) {
+            @unlink($oldFile);
+        }
+    }
     return $relative;
 }
 

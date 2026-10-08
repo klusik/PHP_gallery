@@ -694,7 +694,12 @@ try {
     field('[data-admin-image-name-sort]').click(); await wait();
     check(lastOrderDetail?.panelOwner?.isCurrent() === true && field('form') !== orderReplacement, 'Current reorder event still refreshes its own editor');
 
-    holdOrganizer = true; submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(100);
+    holdOrganizer = true; submitTool('[data-admin-metadata-organizer-apply-form]');
+    // Production intentionally yields to two browser paints before its first batch fetch.
+    // Synchronize with the observable mocked request, not a timing-sensitive 100ms sleep.
+    await waitUntil(() => pending.some(gate => gate.kind === 'organizer' && gate.id === '2'),
+        'Organizer did not queue its first batch before the replacement panel was opened',
+        () => ({queuedKinds: pending.map(gate => gate.kind), formConnected: Boolean(field('[data-admin-metadata-organizer-apply-form]'))}));
     document.getElementById('open-c').click(); await wait();
     const organizerReplacement = field('form'); const organizerStatus = field('[data-admin-side-panel-status]').textContent;
     release('organizer', '2'); await wait(100); holdOrganizer = false;

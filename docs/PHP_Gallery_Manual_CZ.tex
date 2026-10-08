@@ -338,6 +338,8 @@ Při prvním použití zvolte malý rozsah: vytvořte jednu galerii, přidejte n
 
 Ve veřejném záhlaví zvolte \ui{Přihlášení správce} a~zadejte účet vytvořený při instalaci. Přehled je výchozím bodem každodenní správy. Shrnuje galerie, fotografie, stav systému a~dostupné činnosti údržby.\footnote{Přesný obsah přehledu závisí na povolených funkcích, dokončených migracích a~vývojových nastaveních. I~zdravá instalace může zobrazovat informační oznámení, která správce vybízejí k~dokončení volitelných úkolů.}
 
+Po přihlášení může návratový odkaz otevřít místní stránku této instalace. Externí URL a~návratové cesty obsahující zpětná lomítka jsou odmítnuty; aplikace místo nich použije bezpečnou místní náhradní adresu přihlašovacího postupu.
+
 Věnujte několik minut seznámení s~těmito oblastmi:
 
 \begin{itemize}
@@ -1076,6 +1078,8 @@ Nastavení nahrávání rozlišují běžný serverový postup od přípravy s~p
 
 Příprava s~pomocí prohlížeče se povoluje nezávisle a~v~postupu nahrávání je ve výchozím stavu zaškrtnutá. Prohlížeč může před odesláním připravit optimalizované náhledy a~omezené dávky ZIP. Pokud příprava selže před začátkem jakéhokoli zápisu na serveru, běžné výběry obrázků mohou automaticky přejít na klasické serverové nahrávání. Správci mohou omezit výchozí a~maximální počty pracovních procesů prohlížeče, obrázky v~dávce, poměr ZIP k~limitu nahrávání PHP, maximální počet bajtů dávky ZIP a~velikost zdrojového bloku při obnově náhledů v~prohlížeči. Normalizátor také vynucuje tvrdý limit pracovních procesů, aby náhodné nastavení nemohlo vytvořit neomezené souběžné požadavky na sdíleném hostingu.
 
+Při přijetí dávky ZIP připravené prohlížečem server také kontroluje CRC-32 každého uloženého souboru a~úplnost centrálního adresáře i~koncového záznamu včetně shody názvů, pozic, velikostí a~počtů položek. Poškozenou nebo nekonzistentní dávku odmítne před zápisem souborů do galerie; dávku v~prohlížeči znovu připravte a~odešlete.
+
 Současné výchozí hodnoty zpracování v~prohlížeči jsou 8 pracovních procesů, cílových 80~\% zjištěného limitu nahrávání PHP pro každou nekomprimovanou dávku ZIP, nejvýše 8 obrázků v~dávce ZIP a~absolutní limit dávky 24~MiB. Ověřené rozsahy jsou 1--32 pracovních procesů, 10--95~\% limitu nahrávání PHP, 1--64 obrázků v~dávce a~1--128~MiB pro absolutní limit ZIP. Obnova náhledů v~prohlížeči ve výchozím stavu používá zdrojový blok ZIP 512~MiB, omezený na 16~MiB--3~GiB, a~tvůrce zdroje běžně omezuje blok na 96 položek s~interním tvrdým limitem 512. Jde o~bezpečnostní stropy a~výchozí hodnoty, nikoli doporučení zvýšit pomalý sdílený hosting na maximum.
 
 Je-li nahrávání s~pomocí prohlížeče povoleno, výběr přijímá také archivy ZIP, například export iCloud Photos. Prohlížeč archiv prozkoumá místně, přidá podporované obrázky JPEG, PNG, WebP a~GIF do běžné fronty přípravy a~přeskočí složky, skrytá metadata a~nepodporované položky. Vybraný ZIP se nikdy nenahrává do PHP. Podporují se nekomprimované archivy a~archivy Deflate; šifrované, vícediskové, ZIP64, poškozené, podezřele komprimované nebo nadměrně velké archivy se odmítají před zahájením jakéhokoli serverového nahrávání. Import ZIP nemá náhradní klasický postup PHP, proto při výběru archivu ponechte přípravu v~prohlížeči povolenou.
@@ -1371,7 +1375,7 @@ Uložené PDF se~poskytuje samostatnou trasou galerie \codeword{gallery\_ofp\_pd
 
 Kompaktní tlačítka \ui{Zobrazit letový plán (OFP)} a~\ui{Stáhnout OFP PDF} jsou vedle sebe. Správce může volitelně vytvořit soukromou podgalerii stránek PDF samostatným tlačítkem pod nimi. Lokalizovaný otazníček zobrazí vysvětlení při najetí myší, klávesovém zaměření nebo klepnutí, aby dlouhý text nezabíral místo v~popisu galerie.
 
-Automatické režimy po~každé změně stránky přepočítají skutečné rozměry a~orientaci PDF a~reagují také na~změnu velikosti okna, otočení zařízení či přechod do~režimu celé obrazovky a~zpět. Ruční přiblížení zachová při běžné změně rozměrů svou velikost v~CSS pixelech a~polohu posunu; volba režimu přizpůsobení nebo obnovení přiblížení znovu použije automatický výpočet. Při selhání prohlížeče zůstává dostupný odkaz na~původní chráněné PDF. Zobrazení i~stažení nadále podléhají pravidlům viditelnosti galerie, hesla a~ochrany NSFW. Povinná sada Chromium v~CI ukládá podrobný soubor \codeword{browser-map.log} do~artefaktů pro~diagnostiku selhání prohlížeče dokumentů.
+Automatické režimy po~každé změně stránky přepočítají skutečné rozměry a~orientaci PDF a~reagují také na~změnu velikosti okna, otočení zařízení či přechod do~režimu celé obrazovky a~zpět. Ruční přiblížení zachová při běžné změně rozměrů svou velikost v~CSS pixelech a~polohu posunu; volba režimu přizpůsobení nebo obnovení přiblížení znovu použije automatický výpočet. Automatický výpočet nezapočítává předchozí okraje pro ruční posun, takže reset i~přizpůsobení šířce či celé stránce zachovají čitelné a~proporcionální PDF také po změně velikosti přiblíženého dokumentu. Při selhání prohlížeče zůstává dostupný odkaz na~původní chráněné PDF. Zobrazení i~stažení nadále podléhají pravidlům viditelnosti galerie, hesla a~ochrany NSFW. Povinná sada Chromium v~CI ukládá podrobný soubor \codeword{browser-map.log} do~artefaktů pro~diagnostiku selhání prohlížeče dokumentů.
 
 Klávesa \codeword{F} a~tlačítko celé obrazovky ovládají pouze samostatný prohlížeč OFP. \codeword{Escape} nejprve opustí celou obrazovku a~až v~běžném režimu zavře dokument. Psaní do~editovatelných polí, zkratky s~modifikátory ani opakování držené klávesy celou obrazovku nepřepínají. Pokud prohlížeč odmítne nativní celou obrazovku, stejný prohlížeč PDF použije náhradní rozložení CSS. Záhlaví a~ovládací lišta se v~celé obrazovce překrývají s~prostorem dokumentu, po~krátké nečinnosti ukazatele se skryjí a~po~pohybu myší nebo činnosti klávesnice se opět zobrazí. Ovládací prvky pod~kurzorem nebo s~klávesovým zaměřením zůstávají viditelné; jejich zobrazení nemění měřítko ani posun PDF.
 
@@ -1448,6 +1452,8 @@ Operace administrace vyžadují ověřený účet. Formuláře obsahují soukrom
 \index{o00118@odkazy pro sdílení}
 
 Chráněné galerie ukládají hashe hesel a~po úspěšném ověření udělují přístup omezený na relaci. Odkazy pro sdílení používají stav tokenu generovaný serverem a~pravidla vypršení platnosti. Obnova hesla používá jednorázové hashované tokeny, volitelný e-mail pro obnovu, nastavenou dobu platnosti a~vybraný poštovní transport. Používejte HTTPS, silné přihlašovací údaje správce, omezené databázové účty a~chráněné tajné údaje pošty a~API.
+
+Ochrana cookies správce, schéma generovaných adres a~kontroly HTTPS pro návštěvnické účty používají společná pravidla přenosu. Přímé TLS je rozpoznáno bez nastavení proxy. Pokud reverzní proxy ukončuje TLS a~předává PHP požadavky přes HTTP, před aktualizací nastavte její přesnou IP adresu nebo CIDR v~\codeword{security.trusted_proxies} a~povolte skutečně používanou hlavičku v~\codeword{security.trusted_proxy_protocol_headers}. Podporovány jsou \codeword{x-forwarded-proto} a~\codeword{x-forwarded-ssl}; důvěra v~hlavičky IP klienta se nastavuje samostatně. Proxy musí přepsat hodnoty povolených hlaviček dodané klientem. Nedůvěryhodná, neplatná, vícenásobná nebo protichůdná tvrzení o~protokolu neprokazují HTTPS. Nastavená proxy i~přímé HTTPS zůstávají podporované; samotné přeposílané hlavičky již nemění veřejné adresy na HTTPS ani nenastavují příznak Secure cookies správce.
 
 \subsection{Účty návštěvníků a~registrace pouze na pozvání}
 \index{u00237@účty návštěvníků}
@@ -1601,6 +1607,14 @@ Doporučené postupy:
   \item Testujte chráněné galerie prostřednictvím anonymních relací návštěvníků.
   \item Udržujte souběžné zálohy souborového systému a~databáze.
 \end{itemize}
+\subsection{Hranice mediálních souborů a~obnovitelný import}
+\index{média!hranice souborového systému}
+\index{migrace galerií!atomické uložení}
+
+Před odesláním veřejných obrázků galerie, titulních snímků a~grafických prvků galerie se~znovu ověřuje oprávnění k~přístupu. Soubory chráněných galerií nebo galerie s~věkovým omezením používají soukromé ukládání do~mezipaměti i~při zobrazení administrátorem. Uložené cesty ke~snímkům a~grafickým prvkům musí zůstat uvnitř příslušné galerie; kontroluje se~také skutečný cíl symbolických odkazů. Globální pozadí a~grafické prvky Vzhledu jsou omezeny na~své adresáře mezipaměti a~veřejné obrazové odpovědi povolují podporované rastrové formáty, nikoli aktivní SVG. Původní soubor pozadí Vzhledu smí zobrazit jen přihlášený administrátor, zatímco běžná veřejná odvozenina zůstává přístupná.
+
+Při migraci mezi instalacemi se~umístění zdrojových souborů ověřuje jak při sestavení manifestu, tak při jejich vydávání přes API klíč. Přijatý soubor se~nejprve zkopíruje do~jedinečného dočasného souboru ve~stejném cílovém adresáři. Před přejmenováním na~konečný název se~ověří počet bajtů a~případný otisk SHA-256 z~manifestu. Neúspěšný přenos nezanechá částečný cílový soubor. Opakování použije již uložený shodný soubor, ale odmítne konflikt i~symbolický odkaz. Balíčky ZIP vytvořené prohlížečem navíc odmítají duplicitní normalizované názvy, neplatné CRC-32 a~neúplný či nekonzistentní centrální adresář archivu.
+
 \section{Vzhled, prezentace a~lokalizace}
 \label{sec:theme}
 \index{v00268@vzhled}

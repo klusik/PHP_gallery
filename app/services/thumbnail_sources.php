@@ -230,12 +230,33 @@ function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thu
         return false;
     }
 
-    // $candidatePath is normalized textually because the thumbnail path may not exist.
+    // First enforce lexical ownership, including for destinations not yet created.
     $candidatePath = normalize_filesystem_path($thumbnailPath);
-    // $normalizedRoot is normalized the same way so prefix comparison is platform-consistent.
-    $normalizedRoot = normalize_filesystem_path($galleryRootReal);
+    $lexicalRoot = normalize_filesystem_path($galleryRoot);
+    if ($candidatePath !== $lexicalRoot
+        && !str_starts_with($candidatePath, rtrim($lexicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) {
+        return false;
+    }
 
-    return $candidatePath === $normalizedRoot || str_starts_with($candidatePath, rtrim($normalizedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
+    // Existing targets and their nearest existing ancestors need realpath() so
+    // a symlinked thumbs directory or image cannot redirect I/O outside this gallery.
+    // Walk only the candidate's ancestors; never create directories as a side effect.
+    $existing = $thumbnailPath;
+    while (!file_exists($existing) && !is_link($existing)) {
+        $parent = dirname($existing);
+        if ($parent === $existing) {
+            return false;
+        }
+        $existing = $parent;
+    }
+    $resolved = realpath($existing);
+    if ($resolved === false || ($existing !== $thumbnailPath && !is_dir($resolved))) {
+        return false;
+    }
+    $canonicalPath = normalize_filesystem_path($resolved);
+    $canonicalRoot = normalize_filesystem_path($galleryRootReal);
+    return $canonicalPath === $canonicalRoot
+        || str_starts_with($canonicalPath, rtrim($canonicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
 }
 
 /**
@@ -586,20 +607,28 @@ function thumbnail_assert_source_identity_owned(array $image): void
 }
 
 /**
- * Handles thumbnail abs path logic for the gallery application.
+ * Resolve an allowed thumbnail path and reject existing out-of-gallery symlinks.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $gallery Input used by this operation.
- * @param mixed $size Input used by this operation.
- * @param mixed $format Input used by this operation.
- * @return mixed Result produced by this operation.
+ * A missing generated file is allowed so writers may create thumbnails later.
+ *
+ * @param array<string,mixed> $image Persisted source image naming identity.
+ * @param array{folder_path:string} $gallery Physical gallery owning the source image.
+ * @param int $size Supported thumbnail width.
+ * @param string $format Supported output image format.
+ * @return string Existing safe thumbnail file or a safe future destination path.
  */
 function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
     if (!in_array($size, thumbnail_sizes(), true)) {
         throw new RuntimeException(t('thumbnails.error_unsupported_size'));
     }
-    return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
+    $thumbsDir = gallery_thumbs_dir($gallery, false);
+    $path = $thumbsDir . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
+    if ((file_exists($path) || is_link($path))
+        && !thumbnail_path_inside_existing_gallery(gallery_abs_path((string) $gallery['folder_path']), $path)) {
+        throw new RuntimeException(t('thumbnails.error_path_outside_gallery'));
+    }
+    return $path;
 }
 
 /**

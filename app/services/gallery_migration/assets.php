@@ -124,8 +124,8 @@ function gallery_migration_thumbnail_assets(array $image, array $gallery): array
 /**
  * Build descriptors for gallery-level visual assets stored under the gallery folder.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array<int array<string, mixed>>.
+ * @param array<string,mixed> $gallery Persisted gallery data including media asset paths.
+ * @return list<array<string,int|string>> Existing gallery asset descriptors from owned files.
  */
 function gallery_migration_gallery_assets(array $gallery): array
 {
@@ -138,7 +138,7 @@ function gallery_migration_gallery_assets(array $gallery): array
             continue;
         }
         $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-        if (!is_file($path) || !path_inside($galleryRoot, dirname($path))) {
+        if (!is_file($path) || !path_inside($galleryRoot, $path)) {
             continue;
         }
         $assets[] = [
@@ -283,10 +283,10 @@ function gallery_migration_source_gallery_allowed(int $rootGalleryId, int $sourc
 /**
  * Resolve a source-side asset request to a local file descriptor.
  *
- * @param int $galleryId Gallery identifier.
- * @param array $request Request data.
- * @param bool $includeSubgalleries Include descendant galleries value.
- * @return array{path:string,filename:string,mime_type:string} Structured result data for the caller.
+ * @param int $galleryId Authorized source gallery identifier.
+ * @param array<string,int|string> $request Requested asset scope, kind and source identity.
+ * @param bool $includeSubgalleries Whether authorized gallery descendants are exportable.
+ * @return array{path:string,filename:string,mime_type:string} Safe local source asset descriptor.
  */
 function gallery_migration_source_asset_descriptor(int $galleryId, array $request, bool $includeSubgalleries = true): array
 {
@@ -315,7 +315,7 @@ function gallery_migration_source_asset_descriptor(int $galleryId, array $reques
         }
         $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
         $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-        if (!is_file($path) || !path_inside($galleryRoot, dirname($path))) {
+        if (!is_file($path) || !path_inside($galleryRoot, $path)) {
             throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_missing', 'Requested migration asset is not available.'));
         }
         return ['path' => $path, 'filename' => basename($path), 'mime_type' => gallery_migration_asset_mime($path)];
