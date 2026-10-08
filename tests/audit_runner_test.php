@@ -53,6 +53,8 @@ use function PhpGallery\Audit\process_status;
 use function PhpGallery\Audit\run_process_pool;
 use function PhpGallery\Audit\run_file_checks;
 use function PhpGallery\Audit\worker_count;
+use function PhpGallery\Audit\node_failure_detail;
+use function PhpGallery\Audit\render_console_problems;
 
 /**
  * Throw when an audit-runner contract is not satisfied.
@@ -278,6 +280,29 @@ audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP unavailabl
 audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP Chromium unavailable\n"], true) === 'BLOCKED', 'Required child skip must become BLOCKED.');
 audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "BLOCKED missing runtime\n"]) === 'BLOCKED', 'Explicit blocked child output must remain BLOCKED.');
 audit_test_assert(process_status(['exit_code' => 124, 'timed_out' => true]) === 'FAIL', 'Timed out children must normalize to FAIL.');
+
+$browserReason = 'BROWSER FAIL #139: Cancel: editor remains open {"drawerOpen":false}';
+audit_test_assert(node_failure_detail("intro\n" . $browserReason . "\nAssertionError: wrapper failed\n") === $browserReason,
+    'The actual browser assertion and state flags must take precedence over its generic Node wrapper error.');
+audit_test_assert(node_failure_detail("\x1B[31mError: Owned Chromium debugging endpoint unavailable\x1B[0m\n")
+    === 'Error: Owned Chromium debugging endpoint unavailable', 'Startup errors must remain actionable without terminal colors.');
+audit_test_assert(node_failure_detail('BROWSER FAIL #1234: ' . str_repeat('x', 2000)) !== ''
+    && strlen(node_failure_detail('BROWSER FAIL: ' . str_repeat('x', 2000))) <= 1000,
+    'Browser reasons must support every fixture assertion number while bounding console output.');
+audit_test_assert(node_failure_detail('BROWSER PASS: complete') === '', 'Passing output must not be classified as a failure detail.');
+$consoleTask = \PhpGallery\Audit\task_result('browser-map', 'Chromium browser integration', 'FAIL', 0.1, [], '1 fail',
+    'cache/test-audit/fixture/browser-map.log', ['problems' => ['another_fixture.mjs: exit code 1. ' . $browserReason]]);
+audit_test_assert(str_contains(render_console_problems($consoleTask), 'another_fixture.mjs')
+    && str_contains(render_console_problems($consoleTask), $browserReason)
+    && str_contains(render_console_problems($consoleTask), 'browser-map.log'),
+    'Any fixture failure must expose its filename, specific assertion and drill-down log directly in the console.');
+audit_test_assert(render_console_problems(array_replace($consoleTask, ['status' => 'PASS'])) === '',
+    'Passing suites must not print failure details.');
+$consoleTask['details']['problems'] = array_fill(0, 8, "bounded\nproblem\0" . str_repeat('x', 2000));
+$boundedConsole = render_console_problems($consoleTask);
+audit_test_assert(substr_count($boundedConsole, '  - ') === 6 && str_contains($boundedConsole, '3 more problems')
+    && !str_contains($boundedConsole, "\0") && !str_contains($boundedConsole, "bounded\nproblem"),
+    'Console problems must bound line count and length and prevent injected control lines.');
 
 $fixtureDirectory = sys_get_temp_dir() . '/php-gallery-audit-' . bin2hex(random_bytes(6));
 mkdir($fixtureDirectory);

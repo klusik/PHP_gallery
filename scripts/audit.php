@@ -627,12 +627,9 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         if ((int) $process['exit_code'] !== 0) {
             $counts['failed']++;
             $problem = $name . ': exit code ' . $process['exit_code'] . '.';
-            if (in_array($name, ['admin_panel_lifecycle_browser_test.mjs', 'admin_operation_keys_browser_test.mjs'], true)) {
-                if (str_contains($output, 'Owned Chromium debugging endpoint unavailable')) {
-                    $problem .= ' Chromium did not expose its debugging endpoint before the startup deadline.';
-                } elseif (preg_match('/BROWSER FAIL #([0-9]{1,3}):/', $output, $matches) === 1) {
-                    $problem .= ' Browser fixture assertion #' . $matches[1] . ' failed.';
-                }
+            $detail = \PhpGallery\Audit\node_failure_detail($output);
+            if ($detail !== '') {
+                $problem .= ' ' . $detail;
             }
             $problems[] = $problem;
             $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
@@ -1162,6 +1159,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         '[' . $position . '/' . $suiteCount . '] ' . $statusText . ' ' . $task['label'] . ' '
         . format_duration((float) $task['duration_seconds']) . '  ' . $task['summary'] . "\n"
     );
+    fwrite(STDOUT, \PhpGallery\Audit\render_console_problems($task));
     fflush(STDOUT);
 }
 

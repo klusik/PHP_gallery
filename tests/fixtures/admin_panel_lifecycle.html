@@ -93,11 +93,13 @@ const fixtureFetch = window.fetch.bind(window);
  * Assert a named browser-visible postcondition.
  * @param {boolean} condition Observed result.
  * @param {string} message Diagnostic stage, never private form text.
+ * @param {object|null} details Optional safe state flags included only on failure.
  * @return {void}
  */
-function check(condition, message) {
-    if (!condition) throw new Error(message);
+function check(condition, message, details = null) {
+    if (!condition) throw new Error(message + (details ? ' ' + JSON.stringify(details) : ''));
     assertions++;
+    document.getElementById('results').textContent = 'RUNNING after #' + assertions + ': ' + message;
 }
 /**
  * Let queued UI work settle without relying on production network timing.
@@ -109,14 +111,42 @@ function wait(milliseconds = settleMs) { return new Promise(/** Yield until the 
  * Await an observable completion within a bounded fixture deadline.
  * @param {function(): boolean} condition Postcondition read without modifying production state.
  * @param {string} message Diagnostic assertion to report if completion never arrives.
+ * @param {function(): object|null} details Safe state snapshot read only on timeout.
  * @return {Promise<void>} Resolves on completion or rejects after two seconds.
  */
-async function waitUntil(condition, message) {
+async function waitUntil(condition, message, details = () => null) {
     const deadline = performance.now() + 2000;
     while (!condition()) {
-        if (performance.now() >= deadline) throw new Error(message);
+        if (performance.now() >= deadline) throw new Error(message + ' (deadline 2000ms) ' + JSON.stringify(details()));
         await wait(20);
     }
+}
+
+/**
+ * Capture modal lifecycle flags without logging input values or browsing URLs.
+ * @param {HTMLDialogElement} dialog Transient SimBrief review being checked.
+ * @return {Record<string, boolean>} Safe dialog, drawer, focus and navigation postconditions.
+ */
+function reviewState(dialog) {
+    return {dialogOpen: dialog.open, dialogConnected: dialog.isConnected,
+        drawerOpen: panel().classList.contains('is-open'), drawerHidden: panel().hidden,
+        urlUnchanged: location.href === originalUrl, focusInDrawer: panel().contains(document.activeElement),
+        backgroundInert: document.getElementById('background').inert};
+}
+
+/**
+ * Await native close-event cleanup and assert each independent panel invariant.
+ * @param {HTMLDialogElement} dialog Transient review to dismiss.
+ * @param {string} action Cancel or Escape stage used in failure diagnostics.
+ * @return {Promise<void>} Resolves after removal with the drawer and URL intact.
+ */
+async function checkReviewDismissed(dialog, action) {
+    await waitUntil(() => !dialog.isConnected, action + ': review cleanup did not finish', () => reviewState(dialog));
+    const state = reviewState(dialog);
+    check(!state.dialogOpen, action + ': review is closed', state);
+    check(state.drawerOpen && !state.drawerHidden, action + ': editor remains open', state);
+    check(state.urlUnchanged, action + ': URL is unchanged', state);
+    check(state.focusInDrawer && state.backgroundInert, action + ': drawer focus and background isolation survive', state);
 }
 /**
  * Produce ordinary server-shaped editor HTML with identity, revision and secret exclusions.
@@ -399,6 +429,22 @@ async function trustedKey(value, shift = false) {
     const response = await fixtureFetch(`/__key?key=${value}&shift=${shift ? '1' : '0'}`);
     check(response.ok, 'Owned native keyboard adapter is available');
     await wait();
+}
+/**
+ * Click a visible review control through the owned browser's native mouse adapter.
+ * @param {HTMLButtonElement} button Cancel control in the active top-layer review.
+ * @return {Promise<void>} Resolves after native press and release at its visible center.
+ */
+async function trustedReviewClick(button) {
+    const box = button.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    check(document.elementFromPoint(x, y)?.closest('[data-simbrief-dispatch-cancel]') === button,
+        'Native Cancel target is reachable above the drawer', {x, y, width: box.width, height: box.height});
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        const response = await fixtureFetch(`/__mouse?type=${type}&x=${x}&y=${y}`);
+        check(response.ok, 'Owned native mouse adapter delivers ' + type);
+    }
 }
 /**
  * Activate one of the explicit non-submitting draft choices.
@@ -798,7 +844,8 @@ try {
     for (const width of [390, 320, 1280]) {
         const resized = await fixtureFetch('/__viewport?width=' + width);
         check(resized.ok, 'Owned Chromium viewport can switch to ' + width + 'px');
-        await wait();
+        await waitUntil(() => window.innerWidth === width, 'Viewport did not reach ' + width + 'px',
+            () => ({expectedWidth: width, actualWidth: window.innerWidth}));
         const modalBox = reviewDialog.getBoundingClientRect();
         const dateBox = date.getBoundingClientRect();
         const dateFieldBox = date.closest('.admin-simbrief-dispatch-field-date').getBoundingClientRect();
@@ -809,17 +856,28 @@ try {
             'Native date input and its whole field stay inside the review overlay at ' + width + 'px');
     }
     await trustedKey('Escape');
-    check(!reviewDialog.open && !reviewDialog.isConnected && panel().classList.contains('is-open')
-        && panel().contains(document.activeElement) && document.getElementById('background').inert,
-        'Native Escape dismisses only SimBrief review and restores drawer focus');
+    await checkReviewDismissed(reviewDialog, 'Native Escape');
     reviewButton.click();
     const reopenedReview = panel().querySelector('dialog[data-simbrief-dispatch-dialog]');
     check(reopenedReview?.open && reopenedReview.querySelector('input[name="orig"]').value === 'LKPR',
         'Reopening the transient modal resets unsaved reviewed values');
     reopenedReview.querySelector('[data-simbrief-dispatch-cancel]').click();
-    await wait();
-    check(!reopenedReview.isConnected && panel().classList.contains('is-open') && location.href === originalUrl,
-        'Cancel closes only the review without navigating or closing the editor');
+    await checkReviewDismissed(reopenedReview, 'Cancel');
+    const postsBeforeCancelCycles = posts;
+    for (let cycle = 1; cycle <= 4; cycle++) {
+        const width = [390, 320, 1280, 1280][cycle - 1];
+        const resized = await fixtureFetch('/__viewport?width=' + width);
+        check(resized.ok, 'Cancel cycle viewport adapter is available');
+        await waitUntil(() => window.innerWidth === width, 'Cancel cycle viewport did not settle');
+        reviewButton.click();
+        const nextReview = panel().querySelector('dialog[data-simbrief-dispatch-dialog]');
+        check(nextReview?.open && nextReview.querySelector('input[name="orig"]').value === 'LKPR',
+            'Cancel cycle ' + cycle + ': reopening resets transient inputs');
+        type(nextReview.querySelector('input[name="orig"]'), 'EGLL');
+        await trustedReviewClick(nextReview.querySelector('[data-simbrief-dispatch-cancel]'));
+        await checkReviewDismissed(nextReview, 'Cancel cycle ' + cycle);
+    }
+    check(posts === postsBeforeCancelCycles, 'Cancel cycles never submit or persist a dispatch');
     tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').click();
     check(tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').getAttribute('aria-selected') === 'true' && !tabBody.querySelector('#admin-edit-access').hidden && tabBody.querySelector('#admin-edit-api').hidden, 'Access anchor switches back into the shared settings form');
     check(getComputedStyle(savebar).display !== 'none', 'Access shows the shared settings save bar');
@@ -832,6 +890,11 @@ try {
     check(!rerenderedBody.querySelector('#admin-edit-api').hidden && rerenderedBody.querySelector('#admin-edit-identity').hidden, 'Re-rendered production-shaped anchor tabs remain interactive');
     rerenderedBody.querySelector('[data-admin-copy-button]').click(); await wait();
     check(clipboardValue === 'https://fixture.invalid/upload/2' && location.href === originalUrl && !panel().hidden, 'Re-rendered copy control keeps working in place');
+    rerenderedBody.querySelector('[data-simbrief-dispatch-open]').click();
+    const replacedReview = panel().querySelector('dialog[data-simbrief-dispatch-dialog]');
+    check(replacedReview?.open, 'Re-rendered OFP control opens a new native review');
+    await trustedReviewClick(replacedReview.querySelector('[data-simbrief-dispatch-cancel]'));
+    await checkReviewDismissed(replacedReview, 'Cancel after editor replacement');
     close(); await wait(310);
     check(location.href === originalUrl && document === originalDocument, 'All mutations and guards preserve URL and document');
     check(localStorage.length === 1 && localStorage.getItem('php-gallery.admin-image-names.default.v1') === 'hidden'

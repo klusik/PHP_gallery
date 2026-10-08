@@ -1,6 +1,6 @@
 {
     "version": "0.124",
-    "generated_at": "2026-10-08T06:43:22+00:00",
+    "generated_at": "2026-10-08T07:09:31+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -813,8 +813,8 @@
         "reset.php": "sha256:27202e2849b07721750fcc4cf9c836a26384dc17f86c5a03d104a24e099e190b",
         "scripts/.htaccess": "sha256:b741d7040da86fbe953ec19a9ab69eefbd548fbcf42dc6d01c16cf6ee6441997",
         "scripts/application_update.php": "sha256:6be614b384dc650c2280a114bc67f6b9b5a97ba0f5ac4a0deac3677c02a2a012",
-        "scripts/audit.php": "sha256:19a02bd7bd3473fb6fb27d87fe635e7d7db0ce258c8b8bb60f4cb223ec9bea07",
-        "scripts/audit_lib.php": "sha256:728fed55991492337b34bccce84315af715e899a8a9a18dbc5225ba27ac94ee0",
+        "scripts/audit.php": "sha256:86ec51d7cb5f0a67db2838fd829718dc35930c17f82684ecc9c8d20d3cc8358b",
+        "scripts/audit_lib.php": "sha256:008ad976833732e31842701dc0a640819ff8f0d63f977ecd0a35ad10ca684dab",
         "scripts/audit_performance.php": "sha256:32b68d8206f3ffa9a9917886141b2c72368a71c0fb5ae6e7b03578be72a212ea",
         "scripts/audit_performance_registry.php": "sha256:0ad9b8d81e74d85acbfb4b4b480cf14f2fbdb8d709e712bb0b47fd8a9c058f47",
         "scripts/audit_php_registry.php": "sha256:50b21d2e6f2621140564b9ced5f82be2a61e2e3b5f46746454b16784beb8a97a",

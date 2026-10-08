@@ -2448,6 +2448,8 @@ The~workflow launchers' \codeword{--quick} flag delegates directly to~the~quick
 profile without provisioning a~database or~daemon. See \filepath{TESTING.md}
 for~limits and~\filepath{docs/GALLERY_WORKFLOWS.md} for~isolated qualification.
 
+Browser failures show the~fixture name and~specific assertion or~runtime error directly in~the~audit console and~report, with at~most five problems per~suite. Full output remains in~\codeword{browser-map.log} in~the~\codeword{required-chromium} Actions artifact for~seven days. The~printed report path belongs to~the~runner; download the~artifact from~the~run's Artifacts section. The~shared Admin browser harness records bounded browser stderr and~page exceptions on~failure, and~last assertion progress on~timeout. Asynchronous UI tests await observable completion within fixed deadlines instead of~assuming a~short delay is~sufficient. The~SimBrief review contract awaits native close-event cleanup for~up to~two seconds and~checks dialog closure, drawer visibility, unchanged URL, focus, and~background isolation separately. Repeated native Cancel clicks cover 320/390/1280px and~a~replaced editor; cancellation must~not~submit. Failed tests are~not~automatically retried into success.
+
 Automated regression and~operational acceptance answer different questions.
 The~central audit checks code, contracts, syntax, available browser fixtures,
 and~release consistency. The~isolated workflow fixture adds real database,
