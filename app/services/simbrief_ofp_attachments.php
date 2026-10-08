@@ -203,6 +203,15 @@ function simbrief_ofp_dispatch_value(string $field, string $value): string
         return '';
     }
     if ($field === 'date') {
+        // Imported SimBrief snapshots may use the documented DDMMMYY form.
+        // Interpret only the unambiguous 2000-2099 range also supported by the
+        // client redirect encoder; never guess a 1900s century for a gallery.
+        if (preg_match('/^(\\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\\d{2})$/D', $value, $matched)) {
+            $months = ['JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4, 'MAY' => 5, 'JUN' => 6,
+                'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12];
+            $value = sprintf('%04d-%02d-%02d', 2000 + (int) $matched[3],
+                $months[$matched[2]], (int) $matched[1]);
+        }
         $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
         return $date instanceof \DateTimeImmutable && $date->format('Y-m-d') === $value ? $value : '';
     }
