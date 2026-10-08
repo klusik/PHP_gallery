@@ -37,6 +37,10 @@ For this user-owned repository the Copilot CLI authenticates with the repository
 
 After validated release notes exist, the workflow builds all four PDFs on GitHub, refreshes integrity data, runs `check_release.php`, commits the tracked release artifacts, and qualifies that exact prepared SHA. If the Copilot secret is unavailable, the AI request fails, or model output does not satisfy the validator, qualification is blocked rather than accepting partial notes. The maintainer can still complete the section manually and push it; the next run detects completed notes and does not call Copilot. A workflow-created commit uses the repository `GITHUB_TOKEN`; GitHub intentionally does not start another push workflow for that commit, so qualification continues inside the same run against the emitted prepared SHA.
 
+Generation and validation share the required main headings: `### Highlights`, `### Technical Details`, and `### User Impact`. All three are mandatory even for releases limited to tests, documentation, or tooling; only irrelevant `####` subsections may be omitted. The impact section must describe evidenced maintainer/administrator/visitor consequences or explicitly state that public or administrator behavior did not change. It must not invent a product improvement to fill the template. Validation requires real third-level heading lines; an inline mention, a renamed heading or a fourth-level heading does not satisfy the contract.
+
+If AI generation or final validation fails, the workflow retains the available raw `release-notes-response.md` in the `release-notes-rejected-response` Actions artifact for seven days. The artifact contains only model prose, not evidence prompts, Copilot authentication diagnostics or tokens. Review it together with the exact validation error in the failed step. Invalid output still blocks preparation and is never applied to `PATCH_NOTES.md`; completed maintainer-authored notes continue to bypass AI generation.
+
 ### Toolchain and fail-fast ordering
 
 Before deterministic preparation, Copilot or TeX, GitHub invokes

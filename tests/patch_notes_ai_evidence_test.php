@@ -25,6 +25,22 @@ $check = static function (bool $condition, string $message): void {
         throw new RuntimeException($message);
     }
 };
+
+$validNotes = "## Version 0.124.1\n\nTest tooling release.\n\n### Highlights\n\n- Hardened test completion.\n\n### Technical Details\n\n- Added lifecycle checks.\n\n### User Impact\n\n- Maintainers received clearer diagnostics; public behavior did not change.\n";
+$check(patch_notes_ai_validate_response('0.124.1', str_replace("\n", "\r\n", $validNotes)) === $validNotes,
+    'A tooling-only release must retain all three sections and truthfully describe maintainer impact.');
+foreach (patch_notes_ai_required_sections() as $heading) {
+    foreach (['', 'Inline mention of ' . $heading, '#' . $heading, $heading . ' renamed'] as $replacement) {
+        try {
+            patch_notes_ai_validate_response('0.124.1', str_replace($heading, $replacement, $validNotes));
+        } catch (RuntimeException $exception) {
+            $check($exception->getMessage() === 'Generated release notes are missing required section: ' . $heading,
+                'A malformed required heading must report its exact missing section.');
+            continue;
+        }
+        throw new RuntimeException('Missing, inline, wrong-level or renamed main headings must never pass validation.');
+    }
+}
 $refused = static function (array $command, int $limit, string $message, int $deadline = 30) use ($check): void {
     try {
         patch_notes_ai_git($command, $limit, $deadline);
@@ -112,6 +128,14 @@ try {
         'The actual prompt CLI must complete a multi-megabyte Git diff: ' . $result['stderr']);
     $prompt = file_get_contents($promptPath);
     $check(is_string($prompt), 'The prompt CLI must write its complete evidence.');
+    $contract = substr($prompt, 0, strpos($prompt, 'SECURITY / EVIDENCE RULE:'));
+    foreach (patch_notes_ai_required_sections() as $heading) {
+        $check(str_contains($contract, '"' . $heading . '"'), 'Prompt and validator must share every required heading.');
+    }
+    $check(str_contains($contract, 'Main sections are mandatory even for test-only, documentation-only or tooling-only releases')
+        && str_contains($contract, 'omit only its optional #### subsection')
+        && str_contains($contract, 'state that explicitly; do not invent a product improvement'),
+        'The output contract must distinguish required sections from optional subsections without fabricating user impact.');
     $check(str_contains($prompt, 'Refs #123') && str_contains($prompt, 'zz-later-feature.txt')
         && str_contains($prompt, '+Later feature supported by commit metadata.'),
         'The complete diff must include later file content as well as full commit metadata and changed paths.');
