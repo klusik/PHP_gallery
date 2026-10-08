@@ -361,3 +361,119 @@ function custom_css_save_selection(string $preset, ?array $file = null): bool
     }
     return $preset !== '' && custom_css_apply_preset($preset);
 }
+
+/** A stale override writer that must reload the saved revision before retrying. */
+class CustomCssOverrideConflictException extends \RuntimeException
+{
+}
+
+/**
+ * Bound manually edited CSS before reading, staging or retaining a failed draft.
+ * Type: int. Units: UTF-8 bytes. Scope: one installation-owned override stylesheet.
+ * Consumers: override validation and bounded editor reads.
+ * Rationale: 256 KiB accommodates a substantial stylesheet while bounding session and request memory.
+ */
+const CUSTOM_CSS_OVERRIDE_MAX_BYTES = 262144;
+
+/**
+ * Resolve the independent installation-owned manual override asset.
+ * @return string Fixed absolute path beside the installed preset/upload asset.
+ */
+function custom_css_overrides_path(): string
+{
+    return dirname(__DIR__, 2) . '/public/assets/custom-overrides.css';
+}
+
+/**
+ * Reject malformed transport data while allowing ordinary CSS and browser-recoverable syntax errors.
+ * @param string $text Complete administrator-submitted UTF-8 stylesheet.
+ * @return void Refuses excessive bytes, invalid UTF-8 and binary control characters before filesystem writes.
+ */
+function custom_css_overrides_validate(string $text): void
+{
+    if (strlen($text) > CUSTOM_CSS_OVERRIDE_MAX_BYTES || preg_match('//u', $text) !== 1
+        || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $text) === 1) {
+        throw new \InvalidArgumentException('Enter valid UTF-8 CSS within the editor size limit.');
+    }
+}
+
+/**
+ * Read one complete override snapshot for the protected editor or public stylesheet URL.
+ * @return array{text:string,revision:string,url:string} Text and SHA-256 precondition; empty text has no public stylesheet URL.
+ */
+function custom_css_overrides_state(): array
+{
+    $path = custom_css_overrides_path();
+    clearstatcache(true, $path);
+    $text = '';
+    if (is_link($path) || (file_exists($path) && !is_file($path))) {
+        throw new \RuntimeException('The override asset is not a regular file.');
+    }
+    if (is_file($path)) {
+        $text = @file_get_contents($path, false, null, 0, CUSTOM_CSS_OVERRIDE_MAX_BYTES + 1);
+        if (!is_string($text)) {
+            throw new \RuntimeException('The override asset could not be read.');
+        }
+        custom_css_overrides_validate($text);
+    }
+    $revision = hash('sha256', $text);
+    return ['text' => $text, 'revision' => $revision, 'url' => $text === '' ? '' : asset_url('assets/custom-overrides.css') . '?v=' . $revision];
+}
+
+/**
+ * Atomically replace manual overrides under a serialized optimistic-concurrency precondition.
+ * @param string $text Explicit validated editor submission; empty means a dedicated clear or explicit empty save.
+ * @param string $expectedRevision SHA-256 snapshot the administrator actually edited.
+ * @return array{text:string,revision:string,url:string} Installed snapshot; validation, conflict or write errors leave the previous file intact.
+ */
+function custom_css_overrides_save(string $text, string $expectedRevision): array
+{
+    custom_css_overrides_validate($text);
+    if (preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1) {
+        throw new \InvalidArgumentException('Reload the saved override revision before saving.');
+    }
+    $revision = hash('sha256', $text);
+    $nextState = ['text' => $text, 'revision' => $revision, 'url' => $text === '' ? '' : asset_url('assets/custom-overrides.css') . '?v=' . $revision];
+    $target = custom_css_overrides_path();
+    $directory = dirname($target);
+    $lockPath = $directory . '/.custom-overrides.lock';
+    clearstatcache();
+    if (!is_dir($directory) || !is_writable($directory) || is_link($lockPath)) {
+        throw new \RuntimeException('The override asset directory is unavailable or unwritable.');
+    }
+    $lock = @fopen($lockPath, 'c');
+    if ($lock === false) {
+        throw new \RuntimeException('The override writer lock could not be opened.');
+    }
+    $staged = '';
+    try {
+        if (!flock($lock, LOCK_EX | LOCK_NB)) {
+            throw new \RuntimeException('The override writer lock could not be acquired.');
+        }
+        $current = custom_css_overrides_state();
+        if (!hash_equals($current['revision'], $expectedRevision)) {
+            throw new CustomCssOverrideConflictException('The saved overrides changed in another editor.');
+        }
+        if ($current['text'] === $text) {
+            return $current;
+        }
+        $staged = custom_css_temporary_path();
+        if (@file_put_contents($staged, $text) !== strlen($text)
+            || @hash_file('sha256', $staged) !== hash('sha256', $text)
+            || !@chmod($staged, 0644)) {
+            throw new \RuntimeException('The override asset could not be staged and verified.');
+        }
+        // Activation is the final fallible operation: no DB marker or post-replacement write can require rollback.
+        if (!@rename($staged, $target)) {
+            throw new \RuntimeException('The override asset could not be replaced.');
+        }
+        return $nextState;
+    } finally {
+        if ($staged !== '' && is_file($staged)) {
+            @unlink($staged);
+        }
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        clearstatcache(true, $target);
+    }
+}

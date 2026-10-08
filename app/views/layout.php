@@ -253,13 +253,13 @@ function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $an
 }
 
 /**
- * Handle view render header.
+ * Render the prepared public/Admin document head, branding and navigation shell.
  *
- * Used by server-rendered view helpers.
- *
- * @param string $title Title value.
- * @param ?array $currentGallery Current gallery value.
- * @param bool $publicOnly Public only value.
+ * @param string $title Page title before site branding is appended.
+ * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context, assets and navigation; defaults support legacy empty callers.
+ * @param string $requestUri Current request URI used for navigation state.
+ * @param string $page Normalized route identifier, defaulting to the public home page.
+ * @return void Emits the head, header and opening main element with manual overrides limited to public pages.
  */
 function view_render_header(
     string $title,
@@ -311,6 +311,9 @@ function view_render_header(
         echo '<link rel="canonical" href="' . e($canonicalUrl) . '">' . "\n";
     }
     echo (string) ($model['head_extras'] ?? '');
+    if ($bodyClass === 'public-page' && !empty($model['custom_css_overrides_url'])) {
+        echo '<link rel="stylesheet" href="' . e((string) $model['custom_css_overrides_url']) . '">';
+    }
     echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . (!empty($model['dev_mode_active']) ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
         echo '<div class="theme-background-shell" aria-hidden="true">';

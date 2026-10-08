@@ -1198,3 +1198,42 @@
         justify-content: flex-start;
     }
 }
+
+/* Keep advanced controls compact while retaining a full numeric alternative and per-control reset. */
+.theme-advanced-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5rem auto;
+    align-items: center;
+    gap: .45rem;
+    min-width: 0;
+    margin-bottom: .8rem;
+}
+.theme-advanced-control > label { grid-column: 1 / -1; }
+.theme-advanced-control input[type="range"],
+.theme-advanced-control input[type="number"] { min-width: 0; width: 100%; }
+.theme-advanced-control output { white-space: nowrap; font-size: .85rem; }
+.theme-advanced-control > button { grid-column: 3; }
+.theme-advanced-control > select { grid-column: 1 / 3; min-width: 0; }
+.theme-advanced-control input[type="checkbox"] { justify-self: start; }
+
+/* Mirror advanced settings only inside the existing miniature public preview. */
+.theme-appearance-preview .theme-preview-grid { gap: var(--preview-advanced-gap, .65rem); }
+.theme-appearance-preview .theme-preview-gallery-card > .theme-preview-card-copy { padding: var(--preview-advanced-padding, .55rem); }
+.theme-appearance-preview .theme-preview-card h3 { font-size: calc(.75rem * var(--preview-public-type-scale, 1)); }
+.theme-appearance-preview .theme-preview-card p { font-size: calc(.68rem * var(--preview-public-type-scale, 1)); }
+.theme-appearance-preview .theme-preview-hero h2 { font-size: calc(1.25rem * var(--preview-public-type-scale, 1)); }
+.theme-preview-page[data-header-transparent="1"] .theme-preview-header {
+    background: transparent;
+    background-image: none;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+.theme-preview-page[data-header-transparent="1"] .theme-preview-header::before,
+.theme-preview-page[data-header-transparent="1"] .theme-preview-header::after { content: none; }
+@media (max-width: 480px) {
+    .theme-advanced-control { grid-template-columns: minmax(0, 1fr) 4.5rem; }
+    .theme-advanced-control > button { grid-column: 2; }
+    .theme-advanced-control > select { grid-column: 1 / -1; }
+}

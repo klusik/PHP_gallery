@@ -621,6 +621,13 @@ not a source parser or a commitment to remove anything on a calendar date.
   replacement remains safe. Do not remove the server fallback because cache
   generation is optional or unhealthy.
 
+## Installed CSS and separate public manual overrides
+
+- **Owner and reason:** Theme/Custom CSS preserves the existing `public/assets/custom.css` preset/upload contract while a separate editor owns `public/assets/custom-overrides.css`. Ordinary Theme saves, skin replacement and unrelated resets must not erase manual edits.
+- **Protected behavior:** Existing installations retain their appearance when advanced controls are unset or invalid. Manual CSS is an optional final public layer; an absent, invalid-transport or unreadable override file is omitted without blocking public rendering, and the protected editor exposes a bounded error. CSS syntax recovery remains the browser's responsibility. Native editor POST/redirect remains supported with its own CSRF and explicit clear checkbox.
+- **Evidence:** `theme_advanced_appearance_test.php`, `custom_css_preservation_test.php`, `theme_custom_css_rendering_test.php`, and the existing Appearance/Custom CSS Chromium fixtures cover defaults, independent assets/resets, failed writes, stale editors, escaping, isolation and header restoration. Installed usage is **unknown**.
+- **Retirement:** Permanent support for installed preset/upload assets and direct/no-JavaScript editor forms. Removing either requires an explicitly approved migration of saved CSS, supported administrator clients and acceptance evidence; no age-based expiry.
+
 ## Retiring a record
 
 Do not delete a compatibility path because its record is old or its branch is

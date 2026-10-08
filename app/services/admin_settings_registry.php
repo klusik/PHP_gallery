@@ -236,7 +236,7 @@ function admin_settings_specialized_catalog(): array
         ['theme_language_editor', 'advanced', 'Language string editor', 'Search and edit individual translation strings in an installed language pack.', 'admin_theme', [], 'admin-theme-tab-language'],
         ['theme_language_import', 'advanced', 'Import language pack', 'Import a translated JSON language catalog.', 'admin_theme', [], 'admin-theme-tab-language'],
         ['theme_language_export', 'advanced', 'Export language pack', 'Download an installed language catalog for editing or backup.', 'admin_theme', [], 'admin-theme-tab-language'],
-        ['theme_custom_css_editor', 'advanced', 'Custom CSS editor', 'Edit raw custom public stylesheet rules.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
+        ['theme_custom_css_editor', 'advanced', 'Custom CSS editor', 'Edit raw custom public stylesheet rules.', 'admin_theme', ['css_editor' => 1], 'admin-theme-tab-custom-css'],
         ['theme_custom_css_preset', 'advanced', 'Custom CSS preset', 'Select and apply a built-in custom CSS starting point.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
         ['theme_custom_css_import', 'advanced', 'Import custom CSS', 'Upload a custom stylesheet into the Theme editor.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
 

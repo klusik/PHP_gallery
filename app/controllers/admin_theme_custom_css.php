@@ -284,10 +284,22 @@ function render_admin_theme_custom_css_tab(): void
     }
     $errors = (array) ($_SESSION['cms_custom_css_errors'] ?? []);
     unset($_SESSION['cms_custom_css_errors']);
+    $overrideState = ['text' => '', 'revision' => '', 'url' => ''];
+    $overrideReady = true;
+    try {
+        $overrideState = \Gallery\Services\custom_css_overrides_state();
+    } catch (\RuntimeException | \InvalidArgumentException) {
+        $overrideReady = false;
+        $errors[] = t('admin.theme.overrides.failed', 'Overrides could not be read or saved. The previous stylesheet was kept. Check asset permissions and retry.');
+    }
+    $overrideDraft = $_SESSION['cms_css_override_draft'] ?? null;
+    $overrideNotice = $_SESSION['cms_css_override_notice'] ?? null;
+    unset($_SESSION['cms_css_override_draft'], $_SESSION['cms_css_override_notice']);
 
     view_render_admin_theme_custom_css_tab([
         'presets' => $presetOptions,
         'errors' => $errors,
+        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor'])],
         'current_css' => [
             'active' => $state['active'],
             'status_label' => $state['active']

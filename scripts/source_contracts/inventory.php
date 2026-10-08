@@ -42,7 +42,7 @@ function source_provenance_exclusions(): array
  * Discover source, retaining exclusion and format accounting without following links.
  * Excluded trees are pruned before recursion. Other formats are counted by path only.
  * @param string $root Repository or disposable fixture root.
- * @return array{files:array<string,string>,other_formats:array<string,int>,excluded:array<string,string>,provenance:array<string,array{origin:string,license:string}>}
+ * @return array{files:array<string,string>,other_formats:array<string,int>,excluded:array<string,string>,provenance:array<string,array{origin:string,license:string}>} Source paths mapped to contents, other-format extension counts, excluded paths with reasons and preserved third-party attribution.
  */
 function inventory(string $root): array
 {
@@ -67,7 +67,7 @@ function inventory(string $root): array
             $excluded[$relative . '/'] = 'private, generated, third-party, or agent-owned tree; pruned';
             return false;
         }
-        if ($relative === 'config.php' || $relative === 'public/assets/custom.css' || str_starts_with($item->getFilename(), '.env')) {
+        if ($relative === 'config.php' || in_array($relative, ['public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true) || str_starts_with($item->getFilename(), '.env')) {
             $excluded[$relative] = 'installation-owned configuration; never opened';
             return false;
         }

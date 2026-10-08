@@ -51,6 +51,7 @@ use function Gallery\Services\cms_github_project_url;
 use function Gallery\Services\current_viewer;
 use function Gallery\Services\custom_css_path;
 use function Gallery\Services\custom_css_url;
+use function Gallery\Services\custom_css_overrides_state;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\favicon_asset_url;
 use function Gallery\Services\feature_capability_effective_enabled;
@@ -178,14 +179,14 @@ function shared_layout_admin_chrome_model(): array
 /**
  * Prepare the complete shared header model.
  *
- * @param ?array $currentGallery Current gallery row or null.
+ * @param array<string,scalar|null>|null $currentGallery Current database gallery row, including id/title/visibility and optional branding paths, or null.
  * @param bool $publicOnly Whether public-only gallery visibility rules apply.
- * @param array<string, mixed> $requestQuery Current query parameters.
+ * @param array<string,scalar|array<array-key,scalar|null>|null> $requestQuery Transport query values forwarded to canonical-URL normalization.
  * @param string $requestUri Current request URI.
  * @param string $scriptName Current front-controller script name.
  * @param string $page Current route/page identifier.
  * @param string $headExtras Already-buffered trusted head extras.
- * @return array<string, mixed>
+ * @return array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} Prepared header assets and policy; unreadable optional overrides have an empty public URL.
  */
 function shared_layout_header_model(
     ?array $currentGallery,
@@ -209,6 +210,15 @@ function shared_layout_header_model(
         && in_array($page, ['gallery', 'smart_gallery'], true);
     $updatePending = $user && !$anonymousPreview && $bodyClass === 'public-page' ? application_update_pending() : false;
     $customCssUrl = custom_css_url();
+    $overrideCssUrl = '';
+    if ($bodyClass === 'public-page') {
+        try {
+            $overrideCssUrl = custom_css_overrides_state()['url'];
+        } catch (\RuntimeException | \InvalidArgumentException) {
+            // An unreadable optional asset cannot prevent the visitor or administrator from opening the site.
+            $overrideCssUrl = '';
+        }
+    }
     $customCssVersion = 0;
     if ($customCssUrl) {
         $customCssPath = custom_css_path();
@@ -227,6 +237,7 @@ function shared_layout_header_model(
         'favicon_version' => (string) app_setting('favicon_version', '1'),
         'custom_css_url' => (string) ($customCssUrl ?: ''),
         'custom_css_version' => $customCssVersion,
+        'custom_css_overrides_url' => $overrideCssUrl,
         'head_extras' => $headExtras,
         'canonical_url' => $bodyClass === 'public-page'
             && stripos($headExtras, 'rel="canonical"') === false

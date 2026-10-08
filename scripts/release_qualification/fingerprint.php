@@ -39,10 +39,14 @@ function encode(array $value): string
     return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
 }
 
-/** Exclude installation-specific state and compiler outputs, never release source. */
+/**
+ * Exclude installation-specific state and compiler outputs from the frozen release fingerprint.
+ * @param string $path Project-relative file path using forward slashes.
+ * @return bool True for local configuration, custom CSS, runtime state or compiler/agent outputs; release source remains included.
+ */
 function excluded_path(string $path): bool
 {
-    if (in_array($path, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css'], true)) {
+    if (in_array($path, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true)) {
         return true;
     }
     return preg_match('~^(?:cache|data|galleries|logs)/|^winapp/http_monitor_logs/~', $path) === 1

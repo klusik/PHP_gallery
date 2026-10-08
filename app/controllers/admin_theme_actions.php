@@ -298,11 +298,33 @@ function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecov
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
- * @return void Sends the existing redirect after applying the authenticated form; domain refusals propagate to the request boundary.
+ * @return void Sends a Theme redirect or the dedicated editor JSON response; ordinary form domain refusals propagate to the request boundary.
  */
 function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
 {
     verify_csrf();
+    // The dedicated editor submission never processes or clears another Theme form value.
+    if (array_key_exists('css_override_action', $_POST)) {
+        admin_theme_process_css_overrides();
+        return;
+    }
+    if (isset($_POST['reset_theme_advanced']) && is_string($_POST['reset_theme_advanced'])) {
+        \Gallery\Services\theme_advanced_appearance_reset($_POST['reset_theme_advanced']);
+        redirect_to(url_for('admin_theme', ['saved' => 1, 'appearance_subtab' => 'admin-theme-appearance-subtab-advanced']) . '#admin-theme-tab-appearance');
+        return;
+    }
+    $advancedValues = [];
+    if (!empty($_POST['theme_advanced_present'])) {
+        foreach (\Gallery\Services\theme_advanced_appearance_definitions() as $key => $definition) {
+            $value = $_POST['theme_' . $key] ?? ($key === 'header_transparent' ? '0' : null);
+            if ($value !== null && !is_string($value)) {
+                throw new \InvalidArgumentException('Invalid appearance transport value.');
+            }
+            if ($value !== null) {
+                $advancedValues[$key] = \Gallery\Services\theme_advanced_appearance_value($key, $value);
+            }
+        }
+    }
     if (!empty($_POST['public_language_selector_settings_present'])) {
         $viewerSelectorEnabled = !empty($_POST['public_language_selector_enabled']);
         $viewerSelectorLanguages = translation_public_language_selector_normalize_languages($_POST['public_language_selector_languages'] ?? []);
@@ -424,6 +446,7 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
         }
         // Variable $siteName stores this steps working value.
+        \Gallery\Services\theme_advanced_appearance_save($advancedValues);
         $siteName = trim((string) ($_POST['site_name'] ?? ''));
         set_site_name($siteName);
         // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
@@ -583,10 +606,72 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         'admin-theme-appearance-subtab-width-map',
         'admin-theme-appearance-subtab-gallery-tags',
         'admin-theme-appearance-subtab-animations',
+        'admin-theme-appearance-subtab-advanced',
     ];
     if ($activeThemeTab === 'admin-theme-tab-appearance' && in_array($activeAppearanceSubtab, $allowedAppearanceSubtabs, true)) {
         $themeRedirectParams['appearance_subtab'] = $activeAppearanceSubtab;
     }
     redirect_to(url_for('admin_theme', $themeRedirectParams) . '#' . $activeThemeTab);
 
+}
+
+/**
+ * Handle an explicit protected CSS editor save, clear or reload after the shared CSRF boundary.
+ * @return void Sends bounded JSON for the browser editor or preserves a native form draft and redirects.
+ */
+function admin_theme_process_css_overrides(): void
+{
+    $state = null;
+    $ok = false;
+    $status = 200;
+    $draft = $_POST['css_override_text'] ?? null;
+    $revision = $_POST['css_override_revision'] ?? null;
+    $action = $_POST['css_override_action'];
+    try {
+        if (!is_string($action) || !in_array($action, ['save', 'clear', 'reload'], true)) {
+            throw new \InvalidArgumentException('Invalid editor action.');
+        }
+        if ($action === 'reload') {
+            $state = \Gallery\Services\custom_css_overrides_state();
+        } else {
+            if (!is_string($draft) || !is_string($revision)) {
+                throw new \InvalidArgumentException('Missing explicit editor text or revision.');
+            }
+            if ($action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1') {
+                throw new \InvalidArgumentException('Confirm the dedicated override clear action.');
+            }
+            $state = \Gallery\Services\custom_css_overrides_save($action === 'clear' ? '' : $draft, $revision);
+        }
+        $ok = true;
+        $message = t('admin.theme.overrides.saved', 'Saved overrides loaded.');
+    } catch (\Gallery\Services\CustomCssOverrideConflictException) {
+        $status = 409;
+        $message = t('admin.theme.overrides.conflict', 'Another editor changed the saved CSS. Copy your draft, then reload before saving again.');
+    } catch (\InvalidArgumentException) {
+        $status = 422;
+        $message = $action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1'
+            ? t('admin.theme.overrides.clear_required', 'Confirm clearing the manual overrides before submitting this action.')
+            : t('admin.theme.overrides.invalid', 'Enter valid UTF-8 CSS up to 256 KiB and reload if the saved revision is missing.');
+    } catch (RuntimeException) {
+        $status = 503;
+        $message = t('admin.theme.overrides.failed', 'Overrides could not be read or saved. The previous stylesheet was kept. Check asset permissions and retry.');
+    }
+    if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: private, no-store');
+        echo json_encode(['ok' => $ok, 'message' => $message, 'state' => $state], JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        return;
+    }
+    unset($_SESSION['cms_css_override_draft']);
+    if (!$ok && is_string($draft) && is_string($revision)) {
+        try {
+            \Gallery\Services\custom_css_overrides_validate($draft);
+            $_SESSION['cms_css_override_draft'] = ['text' => $draft, 'revision' => preg_match('/^[a-f0-9]{64}$/D', $revision) === 1 ? $revision : ''];
+        } catch (\InvalidArgumentException) {
+            // Invalid transport bytes are never copied into the session or HTML editor.
+        }
+    }
+    $_SESSION['cms_css_override_notice'] = ['ok' => $ok, 'message' => $message];
+    redirect_to(url_for('admin_theme', ['css_editor' => 1]) . '#admin-theme-tab-custom-css');
 }

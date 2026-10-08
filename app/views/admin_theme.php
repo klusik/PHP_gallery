@@ -47,7 +47,7 @@ use function Gallery\Services\t;
 /**
  * Render the Theme administration body around controller-prepared tab fragments.
  *
- * @param array<string, mixed> $viewModel Controller-prepared labels, URLs, CSRF field, and trusted tab fragments.
+ * @param array{grid_reset_notice?:string|null,tabs?:list<array{id:string,label:string}>,tab_fragments?:array<string,string>,settings_url?:string,csrf_html?:string,override_csrf_html?:string,labels?:array<string,string>} $viewModel Prepared labels, URLs, independent CSRF fields and trusted tab fragments.
  * @return void Emits the shared Theme form with one floating save action.
  */
 function view_render_admin_theme_page(array $viewModel): void
@@ -80,6 +80,8 @@ function view_render_admin_theme_page(array $viewModel): void
 
     // One viewport-anchored action remains available while editing any Theme tab.
     echo '<div class="panel admin-theme-save-panel"><span class="admin-theme-save-hint" title="' . e((string) ($labels['save_panel_hint'] ?? '')) . '">' . e((string) ($labels['save_panel_title'] ?? 'Save changes')) . '</span><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate title="' . e((string) ($labels['reset_to_css'] ?? 'Reset to CSS')) . '">' . e((string) ($labels['reset_to_css'] ?? 'Reset to CSS')) . '</button><button type="submit" title="' . e((string) ($labels['save_panel_hint'] ?? '')) . '">' . e((string) ($labels['save_theme'] ?? 'Save theme')) . '</button></div></form>';
+    // Explicit form ownership keeps editor text out of every ordinary Theme submission.
+    echo '<form id="admin-theme-css-overrides-form" method="post" data-css-override-form>' . (string) ($viewModel['override_csrf_html'] ?? $viewModel['csrf_html'] ?? '') . '</form>';
 }
 
 /**
@@ -143,7 +145,7 @@ function view_render_admin_theme_live_preview(array $preview): void
 /**
  * Render the Theme Custom CSS tab from controller-prepared presentation data.
  *
- * @param array<string, mixed> $viewModel Controller-prepared labels, preset options, and safe active stylesheet metadata.
+ * @param array{labels?:array<string,string>,presets?:list<array{filename:string,label:string,selected?:bool}>,current_css?:array{active?:bool,status_label?:string,preset_label?:string,size_label?:string,modified_label?:string,public_url?:string},errors?:list<string>,overrides?:array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool}} $viewModel Prepared labels, installed stylesheet metadata and independent manual editor state.
  * @return void Emits explicit stylesheet replacement controls and independently scoped reset actions.
  */
 function view_render_admin_theme_custom_css_tab(array $viewModel): void
@@ -152,13 +154,16 @@ function view_render_admin_theme_custom_css_tab(array $viewModel): void
     $presets = (array) ($viewModel['presets'] ?? []);
     $currentCss = (array) ($viewModel['current_css'] ?? []);
     $errors = (array) ($viewModel['errors'] ?? []);
+    $overrides = (array) ($viewModel['overrides'] ?? []);
+    $editorActive = !empty($overrides['active']);
 
     ob_start();
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope theme-custom-css-workspace" data-admin-subtab-scope><header class="theme-custom-css-heading"><h2>' . e((string) ($labels['kicker'] ?? 'Custom CSS')) . '</h2><p>' . e(t('admin.theme.custom_css.compact_hint', 'Keep your current stylesheet, or explicitly replace it with a preset or file.')) . '</p></header>';
     render_admin_subtabs([
         ['id' => 'admin-theme-css-subtab-source', 'label' => (string) ($labels['subtab_source'] ?? 'CSS source')],
+        ['id' => 'admin-theme-css-subtab-editor', 'label' => t('admin.theme.overrides.editor', 'CSS overrides / Editor')],
         ['id' => 'admin-theme-css-subtab-reset', 'label' => (string) ($labels['subtab_reset'] ?? 'Reset actions')],
-    ], 'admin-theme-css-subtab-source', (string) ($labels['subtabs_label'] ?? 'Custom CSS subsections'));
+    ], $editorActive ? 'admin-theme-css-subtab-editor' : 'admin-theme-css-subtab-source', (string) ($labels['subtabs_label'] ?? 'Custom CSS subsections'));
 
     ob_start();
     foreach ($errors as $error) {
@@ -195,9 +200,14 @@ function view_render_admin_theme_custom_css_tab(array $viewModel): void
     echo '</select><p class="theme-custom-css-hint">' . e(t('admin.theme.custom_css.preset_action_hint', 'Choose a preset only when you want to replace the current stylesheet.')) . '</p></fieldset>';
     echo '<fieldset class="theme-custom-css-card"><legend>' . e((string) ($labels['file_label'] ?? 'Custom CSS file')) . '</legend><label class="admin-visually-hidden" for="theme-custom-css-file">' . e((string) ($labels['file_label'] ?? 'Custom CSS file')) . '</label><input id="theme-custom-css-file" type="file" name="custom_css" accept=".css,text/css"><p class="theme-custom-css-hint">' . e(t('admin.theme.custom_css.upload_action_hint', 'A CSS upload replaces the current stylesheet when you save Theme.')) . '</p></fieldset></div>';
     echo '<p class="theme-custom-css-hint theme-custom-css-priority">' . e(t('admin.theme.custom_css.upload_priority_hint', 'If you upload a file and select a preset, the uploaded file takes priority.')) . '</p>';
-    echo '<details class="theme-custom-css-details"><summary>' . e(t('admin.theme.custom_css.load_order_title', 'How styles are applied')) . '</summary><p>' . e(t('admin.theme.custom_css.load_order_hint', 'Built-in styles load first, then custom CSS, then saved Theme overrides. Applies to public pages and administration wherever selectors match.')) . '</p></details>';
+    echo '<details class="theme-custom-css-details"><summary>' . e(t('admin.theme.custom_css.load_order_title', 'How styles are applied')) . '</summary><p>' . e(t('admin.theme.overrides.precedence', 'Built-in styles, installed preset/upload CSS, Theme settings, then manual overrides. Overrides apply only to public pages. CSS specificity and !important still apply.')) . '</p></details>';
     $customCssSourceHtml = (string) ob_get_clean();
-    render_admin_subtab_panel('admin-theme-css-subtab-source', $customCssSourceHtml, true);
+    render_admin_subtab_panel('admin-theme-css-subtab-source', $customCssSourceHtml, !$editorActive);
+
+    ob_start();
+    view_render_admin_theme_css_editor($overrides, $errors);
+    $editorHtml = (string) ob_get_clean();
+    render_admin_subtab_panel('admin-theme-css-subtab-editor', $editorHtml, $editorActive);
 
     ob_start();
     echo '<div class="theme-custom-css-resets"><section class="theme-custom-css-reset-row"><div><h3>' . e(t('admin.theme.custom_css.reset_appearance_title', 'Clear saved appearance overrides')) . '</h3><p class="theme-custom-css-hint">' . e(t('admin.theme.custom_css.reset_appearance_hint', 'Clears saved color, font, radius, background and map-pin overrides. Keeps the stylesheet and page width.')) . '</p></div><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e((string) ($labels['reset_to_css'] ?? 'Reset to CSS')) . '</button></section>';
@@ -208,6 +218,79 @@ function view_render_admin_theme_custom_css_tab(array $viewModel): void
     echo '</div>';
     $customCssHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-custom-css', $customCssHtml, false);
+}
+
+/**
+ * Render escaped manual CSS text with independent form ownership and explicit editor actions.
+ * @param array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool} $model Prepared saved snapshot, optional refused draft, notice and readiness flags.
+ * @param list<string> $errors Translated bounded failures to display beside the editor.
+ * @return void Emits an accessible editor and isolated optional draft preview without interpreting administrator CSS as HTML.
+ */
+function view_render_admin_theme_css_editor(array $model, array $errors): void
+{
+    $state = (array) ($model['state'] ?? ['text' => '', 'revision' => '', 'url' => '']);
+    $draft = is_array($model['draft'] ?? null) ? $model['draft'] : $state;
+    $dirty = (string) ($draft['text'] ?? '') !== (string) ($state['text'] ?? '')
+        || (string) ($draft['revision'] ?? '') !== (string) ($state['revision'] ?? '');
+    $notice = (array) ($model['notice'] ?? []);
+    foreach ($errors as $error) {
+        echo '<p class="notice error" role="alert">' . e($error) . '</p>';
+    }
+    echo '<section class="theme-css-editor" data-css-override-editor data-clear-message="' . e(t('admin.theme.overrides.clear_confirm', 'Clear the saved manual overrides? Installed preset/upload CSS and Theme settings will be kept.')) . '" data-discard-message="' . e(t('admin.theme.overrides.discard_confirm', 'Discard unsaved CSS and reload the saved overrides?')) . '" data-unsaved-message="' . e(t('admin.theme.overrides.leave_confirm', 'There are unsaved CSS edits. Leave this editor without saving them?')) . '" data-saved-label="' . e(t('admin.theme.overrides.saved_state', 'Saved')) . '" data-unsaved-label="' . e(t('admin.theme.overrides.unsaved_state', 'Unsaved changes')) . '" data-failed-label="' . e(t('admin.theme.overrides.failed', 'Overrides could not be read or saved. The previous stylesheet was kept. Check asset permissions and retry.')) . '">';
+    echo '<h3>' . e(t('admin.theme.overrides.editor', 'CSS overrides / Editor')) . '</h3><p class="theme-custom-css-hint">' . e(t('admin.theme.overrides.hint', 'Edit the final public CSS layer (UTF-8, up to 256 KiB). Save explicitly; ordinary Theme saves, presets and uploads keep these overrides. Saved CSS is publicly served.')) . '</p>';
+    echo '<label for="theme-css-override-text">' . e(t('admin.theme.overrides.code', 'Manual CSS')) . '</label><textarea id="theme-css-override-text" name="css_override_text" form="admin-theme-css-overrides-form" rows="20" maxlength="262144" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" data-css-override-text data-initial-dirty="' . ($dirty ? '1' : '0') . '">' . e((string) ($draft['text'] ?? '')) . '</textarea>';
+    echo '<input type="hidden" name="css_override_revision" form="admin-theme-css-overrides-form" value="' . e((string) ($draft['revision'] ?? '')) . '" data-css-override-revision>';
+    echo '<label class="checkbox-label" data-css-override-clear-confirm><input type="checkbox" name="css_override_clear_confirm" value="1" form="admin-theme-css-overrides-form"> ' . e(t('admin.theme.overrides.clear_check', 'I confirm clearing the manual overrides')) . '</label>';
+    echo '<div class="theme-css-editor-actions">';
+    foreach (['save' => ['save', 'Save overrides'], 'reload' => ['reload', 'Discard / reload'], 'clear' => ['clear', 'Clear overrides']] as $action => $label) {
+        echo '<button type="submit" name="css_override_action" value="' . e($action) . '" form="admin-theme-css-overrides-form" formnovalidate' . ($action !== 'reload' && empty($model['ready']) ? ' disabled' : '') . ($action === 'save' ? '' : ' class="secondary"') . ($action === 'clear' ? ' onclick="if(!this.form.dataset.cssOverrideReady){return confirm(this.closest(\'[data-css-override-editor]\').dataset.clearMessage);}"' : '') . '>' . e(t('admin.theme.overrides.' . $label[0], $label[1])) . '</button>';
+    }
+    echo '<button type="button" class="secondary" data-css-override-preview hidden>' . e(t('admin.theme.overrides.preview', 'Preview draft')) . '</button></div>';
+    echo '<p role="status" aria-live="polite" data-css-override-status>' . e($dirty ? t('admin.theme.overrides.unsaved_state', 'Unsaved changes') : t('admin.theme.overrides.saved_state', 'Saved')) . '</p>';
+    echo '<p role="alert" data-css-override-message>' . e((string) ($notice['message'] ?? '')) . '</p>';
+    echo '<p class="theme-custom-css-hint">' . e(t('admin.theme.overrides.precedence', 'Built-in styles, installed preset/upload CSS, Theme settings, then manual overrides. Overrides apply only to public pages. CSS specificity and !important still apply.')) . '</p><details class="theme-custom-css-details"><summary>' . e(t('admin.theme.overrides.example', 'Illustrative example (selector may not exist)')) . '</summary><pre><code>' . e(".my-gallery-selector {\n    border-radius: 0 !important;\n}") . '</code></pre></details>';
+    echo '<iframe class="theme-css-draft-preview" title="' . e(t('admin.theme.overrides.preview_title', 'Isolated public Theme draft preview')) . '" sandbox="" referrerpolicy="no-referrer" data-css-override-frame hidden></iframe><p class="theme-custom-css-hint">' . e(t('admin.theme.overrides.preview_hint', 'Draft preview is isolated and never saves CSS. Browser CSS syntax recovery applies; reopen this editor to correct mistakes.')) . '</p></section>';
+}
+
+/**
+ * Present canonical advanced Theme definitions as bounded controls with independent resets.
+ * @param array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>} $model Controller-prepared control limits and normalized saved values.
+ * @return void Emits public-only spacing, elevation, typography and header controls for the shared Theme form.
+ */
+function view_render_admin_theme_advanced_appearance(array $model): void
+{
+    $definitions = $model['definitions'] ?? [];
+    $values = $model['values'] ?? [];
+    echo '<fieldset class="theme-appearance-group theme-advanced-appearance"><legend>' . e(t('admin.theme.advanced.title', 'Advanced appearance')) . '</legend><input type="hidden" name="theme_advanced_present" value="1">';
+    echo '<p class="theme-appearance-group-hint">' . e(t('admin.theme.advanced.hint', 'Public gallery presentation only. Defaults retain the installed appearance; each reset restores one control. Save Theme to apply preview changes.')) . '</p>';
+    $labels = [
+        'gallery_grid_gap' => t('admin.theme.advanced.gallery_grid_gap', 'Gallery grid gap'),
+        'gallery_card_padding' => t('admin.theme.advanced.gallery_card_padding', 'Gallery card internal padding'),
+        'card_shadow' => t('admin.theme.advanced.card_shadow', 'Card elevation'),
+        'public_type_scale' => t('admin.theme.advanced.public_type_scale', 'Public content typography scale'),
+        'header_transparent' => t('admin.theme.advanced.header_transparent', 'Transparent site header'),
+    ];
+    foreach ($definitions as $key => $definition) {
+        $id = 'theme-advanced-' . $key;
+        $value = $values[$key] ?? $definition['default'];
+        $label = $labels[$key] ?? $key;
+        echo '<div class="theme-advanced-control" data-theme-advanced-control data-theme-advanced-key="' . e($key) . '" data-theme-advanced-default="' . e($definition['default']) . '"><label for="' . e($id) . '">' . e($label) . '</label>';
+        if ($key === 'card_shadow') {
+            echo '<select id="' . e($id) . '" name="theme_card_shadow" data-theme-advanced-value>';
+            foreach (['default' => t('admin.theme.advanced.shadow_default', 'Current appearance'), 'none' => t('admin.theme.advanced.shadow_none', 'None'), 'soft' => t('admin.theme.advanced.shadow_soft', 'Soft'), 'raised' => t('admin.theme.advanced.shadow_raised', 'Raised')] as $preset => $presetLabel) {
+                echo '<option value="' . e($preset) . '"' . ($value === $preset ? ' selected' : '') . '>' . e($presetLabel) . '</option>';
+            }
+            echo '</select>';
+        } elseif ($key === 'header_transparent') {
+            echo '<input id="' . e($id) . '" type="checkbox" name="theme_header_transparent" value="1" data-theme-advanced-value' . ($value === '1' ? ' checked' : '') . '>';
+            echo view_admin_theme_appearance_help($label, t('admin.theme.advanced.header_hint', 'Removes only the public navigation header backdrop. Logo, links, language picker and buttons remain; hero and Admin are unchanged. Tune Header text color for your background.'));
+        } else {
+            echo '<input type="range" min="' . $definition['min'] . '" max="' . $definition['max'] . '" step="1" value="' . e($value) . '" data-theme-advanced-slider aria-label="' . e($label) . '">';
+            echo '<input id="' . e($id) . '" type="number" name="theme_' . e($key) . '" min="' . $definition['min'] . '" max="' . $definition['max'] . '" step="1" value="' . e($value) . '" data-theme-advanced-value><output for="' . e($id) . '" data-theme-advanced-output data-unit="' . e($definition['unit']) . '">' . e($value . $definition['unit']) . '</output>';
+        }
+        echo '<button type="submit" name="reset_theme_advanced" value="' . e($key) . '" class="secondary" formnovalidate data-theme-advanced-reset aria-label="' . e(t('admin.theme.advanced.reset_label', 'Reset {label}', ['label' => $label])) . '">' . e(t('admin.theme.advanced.reset', 'Reset')) . '</button></div>';
+    }
+    echo '</fieldset>';
 }
 /**
  * Render the Theme Layout tab from controller-prepared presentation data.
@@ -500,10 +583,10 @@ function view_render_admin_theme_appearance_card_layout_row(string $name, string
 }
 
 /**
- * Render the compact three-section Appearance editor with one shared live preview.
+ * Render the public Appearance controls and animation settings with one shared live preview.
  *
- * @param array<string, mixed> $viewModel Controller-prepared appearance state.
- * @return void
+ * @param array{theme?:array<string,string|int|bool>,advanced?:array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>},theme_background_url?:string,gps_maps_feature_enabled?:bool,gps_pin_enabled?:bool,gps_pin_background_enabled?:bool,gps_pin_size?:int,gps_pin_background_size?:int,page_width_mode?:string,custom_page_width?:int,tag_page_grid_settings?:array{columns:int,rows:int,items_per_page:int},tag_page_description_layout?:string,theme_gallery_description_layout?:string,description_layouts?:list<array{value:string,label:string}>,hero_tag_visible_limit?:int,hero_tag_display_all?:bool,hero_tag_scrollbar_enabled?:bool,hero_tag_scrollbar_rows?:int,hero_tag_sort_mode?:string,gallery_info_motion_ms?:int,admin_side_panel_motion_ms?:int,site_name?:string,preview?:array<string,string|int|bool>,admin_tags_url?:string,active_subtab?:string,max_columns?:int,max_rows?:int} $viewModel Controller-prepared appearance state, canonical bounds and preview values.
+ * @return void Emits the Appearance subsection panels, bounded controls and shared preview.
  */
 function view_render_admin_theme_appearance_tab(array $viewModel): void
 {
@@ -544,6 +627,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
         ['id' => 'admin-theme-appearance-subtab-width-map', 'label' => t('admin.theme.subtab_width_map', 'Width & map pin')],
         ['id' => 'admin-theme-appearance-subtab-gallery-tags', 'label' => t('admin.theme.subtab_cards_tags', 'Cards & tags')],
         ['id' => 'admin-theme-appearance-subtab-animations', 'label' => t('admin.theme.subtab_animations', 'Animations')],
+        ['id' => 'admin-theme-appearance-subtab-advanced', 'label' => t('admin.theme.advanced.title', 'Advanced appearance')],
     ], $appearanceSubtab, t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
     ob_start();
     echo '<fieldset class="theme-appearance-group theme-appearance-identity"><legend>' . e(t('admin.theme.appearance.identity_legend', 'Site identity')) . '</legend>';
@@ -638,6 +722,10 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     echo '<div class="theme-motion-control"><div class="theme-motion-control-description"><label for="theme-admin-side-panel-motion-slider">' . e(t('admin.theme.appearance.admin_panel_motion_duration', 'Admin side panel')) . '</label><p class="theme-appearance-group-hint">' . e(t('admin.theme.appearance.admin_panel_motion_hint', 'Opening and closing speed for the Edit gallery and Add gallery side panel.')) . '</p></div><input id="theme-admin-side-panel-motion-slider" type="range" min="0" max="800" step="10" value="' . $adminSidePanelMotionMs . '" data-theme-override-control data-theme-admin-side-panel-motion-slider><div class="theme-motion-control-value"><input type="number" name="theme_admin_side_panel_motion_ms" min="0" max="800" step="10" value="' . $adminSidePanelMotionMs . '" inputmode="numeric" aria-label="' . e(t('admin.theme.appearance.admin_panel_motion_duration', 'Admin side panel')) . '" data-theme-override-control data-theme-admin-side-panel-motion-number><span class="theme-motion-control-unit">ms</span><button type="button" class="button secondary small" data-theme-admin-side-panel-motion-reset data-theme-motion-default="260">' . e(t('admin.theme.appearance.motion_reset_default', 'Default (260 ms)', ['duration' => 260])) . '</button></div></div></fieldset>';
     $appearanceAnimationsHtml = (string) ob_get_clean();
     render_admin_subtab_panel('admin-theme-appearance-subtab-animations', $appearanceAnimationsHtml, $appearanceSubtab === 'admin-theme-appearance-subtab-animations');
+    ob_start();
+    view_render_admin_theme_advanced_appearance((array) ($viewModel['advanced'] ?? []));
+    $advancedHtml = (string) ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-advanced', $advancedHtml, $appearanceSubtab === 'admin-theme-appearance-subtab-advanced');
     // The keyboard-accessible separator is enabled only after its resize behavior is attached.
     echo '</div><div class="theme-appearance-resizer" data-theme-appearance-resizer hidden role="separator" aria-orientation="vertical" tabindex="0" aria-controls="admin-theme-appearance-settings admin-theme-appearance-subtab-preview" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" aria-label="' . e(t('admin.theme.appearance.resize_label', 'Resize settings and preview')) . '" title="' . e(t('admin.theme.appearance.resize_hint', 'Drag to resize. Use arrow keys, or double-click to reset.')) . '" data-theme-resize-value="' . e(t('admin.theme.appearance.resize_value', '{settings}% settings / {preview}% preview', ['settings' => '{settings}', 'preview' => '{preview}'])) . '"></div>';
     $previewGlobalDescriptionLayout = $globalDescriptionLayout;

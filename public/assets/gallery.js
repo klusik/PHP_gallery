@@ -52,7 +52,7 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
-import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261003-theme-motion-v2';
+import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261008-theme-customization-v1';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';

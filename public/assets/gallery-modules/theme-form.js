@@ -32,6 +32,7 @@
 
 import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
 import { setupAdminGalleryGridControls } from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
+import { setupThemeAdvancedAppearance, setupThemeCssOverrideEditor } from './theme-customization.js?v=20261008-theme-customization-v1';
 
 /**
  * Theme and pagination form helpers
@@ -1048,6 +1049,8 @@ export function setupThemeOverrideForm() {
     setupThemeFavoriteGalleryTargets(form);
     setupThemeHomeGridCapacity(form);
     setupThemeLivePreview(form);
+    setupThemeAdvancedAppearance(form);
+    setupThemeCssOverrideEditor();
     setupThemeAppearanceResize(form);
     setupThemeColorHexControls(form);
     setupThemeTagGridControls(form);

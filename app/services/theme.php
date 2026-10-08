@@ -57,7 +57,7 @@ function theme_settings(): array
 {
     // $defaults stores an intermediate value used by the surrounding gallery workflow.
     $defaults = theme_css_defaults();
-    return [
+    return array_merge([
         'accent' => app_setting('theme_accent', $defaults['accent']),
         'accent_dark' => app_setting('theme_accent_dark', $defaults['accent_dark']),
         'paper' => app_setting('theme_paper', $defaults['paper']),
@@ -86,7 +86,135 @@ function theme_settings(): array
         'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
         'gallery_info_motion_ms' => (string) theme_gallery_info_motion_ms(),
         'admin_side_panel_motion_ms' => (string) theme_admin_side_panel_motion_ms(),
+    ], theme_advanced_appearance_settings());
+}
+
+/**
+ * Describe the bounded public appearance controls owned by Theme.
+ * @return array<string,array{default:string,min:int,max:int,unit:string}> Stable keys and their persisted defaults and numeric limits; selectors use zero numeric bounds.
+ */
+function theme_advanced_appearance_definitions(): array
+{
+    // Keep the original 1rem gap/padding, existing elevation, 100% type and existing header backdrop by default.
+    // Type: array<string,array{default:string,min:int,max:int,unit:string}>.
+    // Units: CSS pixels for spacing, percent for type, named presets and boolean digits for selectors.
+    // Scope: public Theme appearance only. Consumers: normalization and the Appearance editor.
+    // Rationale: 0-64px gaps, 0-48px padding and 80-140% type allow useful adjustments without unbounded layouts.
+    return [
+        'gallery_grid_gap' => ['default' => '16', 'min' => 0, 'max' => 64, 'unit' => 'px'],
+        'gallery_card_padding' => ['default' => '16', 'min' => 0, 'max' => 48, 'unit' => 'px'],
+        'card_shadow' => ['default' => 'default', 'min' => 0, 'max' => 0, 'unit' => ''],
+        'public_type_scale' => ['default' => '100', 'min' => 80, 'max' => 140, 'unit' => '%'],
+        'header_transparent' => ['default' => '0', 'min' => 0, 'max' => 1, 'unit' => ''],
     ];
+}
+
+/**
+ * Normalize one advanced public appearance value with a safe default for corrupt storage.
+ * @param string $key Canonical short Theme key from the advanced registry.
+ * @param string|null $value Stored or controller-validated scalar submission; null means unset.
+ * @return string Canonical bounded integer, shadow preset or boolean digit; throws for an unknown key.
+ */
+function theme_advanced_appearance_value(string $key, ?string $value): string
+{
+    $definition = theme_advanced_appearance_definitions()[$key] ?? null;
+    if ($definition === null) {
+        throw new InvalidArgumentException('Unknown advanced appearance setting.');
+    }
+    $value = trim($value ?? '');
+    if ($key === 'card_shadow') {
+        return in_array($value, ['default', 'none', 'soft', 'raised'], true) ? $value : $definition['default'];
+    }
+    if ($key === 'header_transparent') {
+        return $value === '1' ? '1' : '0';
+    }
+    if (filter_var($value, FILTER_VALIDATE_INT) === false) {
+        return $definition['default'];
+    }
+    return (string) max($definition['min'], min($definition['max'], (int) $value));
+}
+
+/**
+ * Resolve normalized advanced appearance state without changing existing preferences.
+ * @return array<string,string> Canonical short keys mapped to safe persisted/default values.
+ */
+function theme_advanced_appearance_settings(): array
+{
+    $settings = [];
+    foreach (theme_advanced_appearance_definitions() as $key => $definition) {
+        $settings[$key] = theme_advanced_appearance_value($key, app_setting('theme_' . $key));
+    }
+    return $settings;
+}
+
+/**
+ * Save only explicitly supplied advanced settings through the existing settings owner.
+ * @param array<string,string> $values Controller-validated scalar values keyed by canonical short name.
+ * @return void Persists normalized values independently of installed CSS and manual overrides.
+ */
+function theme_advanced_appearance_save(array $values): void
+{
+    $normalized = [];
+    foreach ($values as $key => $value) {
+        $normalized[$key] = theme_advanced_appearance_value($key, $value);
+    }
+    foreach ($normalized as $key => $value) {
+        set_app_setting('theme_' . $key, $value);
+    }
+}
+
+/**
+ * Restore one advanced control without clearing any other appearance or stylesheet state.
+ * @param string $key Canonical advanced key selected by the controller.
+ * @return void Deletes only that persisted preference; unknown keys are refused.
+ */
+function theme_advanced_appearance_reset(string $key): void
+{
+    theme_advanced_appearance_value($key, null);
+    delete_app_settings(['theme_' . $key]);
+}
+
+/**
+ * Generate scoped public rules only for advanced values that differ from the historic appearance.
+ * @param array<string,string|int|bool> $settings Normalized Theme state containing the advanced short keys.
+ * @return string Ordinary cascade rules leaving Admin, hero backdrops and special viewers untouched.
+ */
+function theme_advanced_appearance_css(array $settings): string
+{
+    $css = '';
+    foreach (['gallery_grid_gap', 'gallery_card_padding'] as $key) {
+        $value = theme_advanced_appearance_value($key, isset($settings[$key]) ? (string) $settings[$key] : null);
+        if ($value !== '16') {
+            $variable = $key === 'gallery_grid_gap' ? '--public-gallery-grid-gap' : '--public-gallery-card-padding';
+            $css .= '.public-page{' . $variable . ':' . $value . 'px;}';
+            $css .= $key === 'gallery_grid_gap'
+                ? '.public-page .site-main .grid{gap:var(--public-gallery-grid-gap);}'
+                : '.public-page .site-main .gallery-card .gallery-card-body{padding:var(--public-gallery-card-padding);}';
+        }
+    }
+    $shadow = theme_advanced_appearance_value('card_shadow', isset($settings['card_shadow']) ? (string) $settings['card_shadow'] : null);
+    $shadows = ['none' => 'none', 'soft' => '0 4px 12px rgba(54,38,20,.08)', 'raised' => '0 18px 42px rgba(54,38,20,.18)'];
+    if (isset($shadows[$shadow])) {
+        $css .= '.public-page{--public-card-shadow:' . $shadows[$shadow] . ';}';
+        $css .= '.public-page .gallery-card,.public-page .image-card,.public-page .gallery-card:hover,.public-page .gallery-card:focus-within{box-shadow:var(--public-card-shadow);}';
+    }
+    $scale = theme_advanced_appearance_value('public_type_scale', isset($settings['public_type_scale']) ? (string) $settings['public_type_scale'] : null);
+    if ($scale !== '100') {
+        $factor = number_format((int) $scale / 100, 2, '.', '');
+        $css .= '.public-page .site-main{--public-type-scale:' . $factor . ';font-size:calc(var(--type-body-size,1rem) * var(--public-type-scale));}';
+        $css .= '.public-page .hero h1{font-size:calc(clamp(2.05rem,3.6vw,3.2rem) * var(--public-type-scale,1));}';
+        $css .= '.public-page .hero p{font-size:calc(.95rem * var(--public-type-scale,1));}';
+        // Match the existing orientation rules so scaling preserves their distinct title/copy hierarchy.
+        $css .= '.public-page .site-main .gallery-card.is-gallery-description-horizontal .gallery-card-body h2{font-size:calc(clamp(1.15rem,1.6vw,1.45rem) * var(--public-type-scale,1));}';
+        $css .= '.public-page .site-main .gallery-card.is-gallery-description-horizontal .gallery-card-description{font-size:calc(.95rem * var(--public-type-scale,1));}';
+        $css .= '@media(max-width:760px){.public-page .hero h1{font-size:calc(clamp(1.8rem,9vw,2.5rem) * var(--public-type-scale,1));}}';
+    }
+    if (($settings['header_transparent'] ?? '0') === '1') {
+        $css .= '.public-page .site-header{background:transparent;background-image:none;backdrop-filter:none;-webkit-backdrop-filter:none;border-color:transparent;box-shadow:none;}';
+        $css .= '.public-page .site-header::before,.public-page .site-header::after{content:none;background:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;}';
+        $css .= '.public-page .site-header .brand{text-shadow:0 0 3px var(--paper),0 1px 2px var(--paper);}';
+    }
+    return $css;
 }
 
 /**

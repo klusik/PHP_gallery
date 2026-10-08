@@ -22,7 +22,7 @@ function check(condition,message) { if(!condition) throw new Error(message); ass
 function find(selector) { const node=document.querySelector(selector); if(!node) throw new Error('Missing '+selector); return node; }
 /** Wait for native handlers and layout. @return {Promise<void>} Resolves after browser work. */
 function settle() { return new Promise(/** Resume after events. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,35)); }
-/** Edit a native control without committing settings. @param {HTMLInputElement|HTMLSelectElement} control Production input. @param {string} value Proposed draft value. @return {void} Emits normal delegated input events. */
+/** Edit a native control without committing settings. @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} control Production input. @param {string} value Proposed draft value. @return {void} Emits normal delegated input events. */
 function edit(control,value) { control.value=value; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); }
 /** Activate a retained Custom CSS subsection. @param {string} name Retained subsection suffix. @return {void} Uses production native tab behavior. */
 function tab(name) { find(`[data-admin-subtab-target="admin-theme-css-subtab-${name}"]`).click(); }
@@ -52,10 +52,47 @@ try {
     for(const name of ['csrf_token','theme_accent','theme_page_width_custom','theme_gallery_description_layout','tag_page_gallery_description_layout','theme_branding_separator_width','favicon_cropped_png','pagination_columns','theme_favorite_gallery_types[]','theme_favorite_gallery_ids[]','cms_language','public_language','public_language_selector_settings_present','language_pack_json']) check(data.has(name),'complete multipart Save preserves hidden neighbor '+name);
     check(data.get('csrf_token')==='theme-fixture','shared native CSRF authority retained');
     const sourceTab=find('[data-admin-subtab-target="admin-theme-css-subtab-source"]'); sourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+    check(!find('#admin-theme-css-subtab-editor').hidden,'keyboard navigation reaches the new editor');
+    find('[data-admin-subtab-target="admin-theme-css-subtab-editor"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
     check(!find('#admin-theme-css-subtab-reset').hidden && document.activeElement===find('[data-admin-subtab-target="admin-theme-css-subtab-reset"]'),'keyboard subsection navigation preserves reset focus and selection');
+    tab('editor');
+    const editor=find('[data-css-override-text]'), editorForm=find('[data-css-override-form]'), savedCss=editor.value;
+    check(editor.form===editorForm && !new FormData(form).has('css_override_text'),'ordinary Theme transport excludes editor text');
+    let confirmResult=false, confirmations=0, requests=[], nextResult=null;
+    const nativeFetch=window.fetch;
+    window.confirm=()=>{confirmations++;return confirmResult;};
+    window.fetch=async (url,options)=>{
+        if(!options?.body?.get('css_override_action')) return nativeFetch(url,options);
+        requests.push(options.body);
+        return {ok:nextResult.ok,json:async()=>nextResult};
+    };
+    edit(editor,'.gallery-card { border-radius: 0 !important; }');
+    check(find('[data-css-override-status]').textContent==='Unsaved changes','input marks the editor dirty');
+    tab('source');
+    check(!find('#admin-theme-css-subtab-editor').hidden && confirmations===1,'cancelled navigation keeps unsaved editor open');
+    nextResult={ok:true,message:'Saved',state:{text:editor.value,revision:'b'.repeat(64)}};
+    find('[name="css_override_action"][value="save"]').click(); await settle();
+    check(requests.length===1 && requests[0].get('css_override_revision').length===64 && !requests[0].has('theme_accent') && requests[0].get('csrf_token')==='theme-fixture','explicit save sends only editor text, revision, action and CSRF');
+    check(editor.value!==savedCss && find('[data-css-override-status]').textContent==='Saved' && find('[data-css-override-revision]').value==='b'.repeat(64),'successful save updates the optimistic revision and clean state');
+    edit(editor,'</textarea><style>body{display:none}</style>');
+    find('[data-css-override-preview]').click(); await settle();
+    check(find('[data-css-override-frame]').getAttribute('sandbox')==='' && !find('[data-css-override-frame]').srcdoc.includes(editor.value) && getComputedStyle(document.body).display!=='none','draft CSS is linked in a sandbox without entering Admin HTML or styling');
+    nextResult={ok:false,message:'Conflict',state:null};
+    find('[name="css_override_action"][value="save"]').click(); await settle();
+    check(editor.value.includes('</textarea>') && find('[data-css-override-status]').textContent==='Unsaved changes' && find('[data-css-override-message]').textContent==='Conflict','stale save retains draft and shows failure');
+    const beforeClear=requests.length;
+    find('[name="css_override_action"][value="clear"]').click(); await settle();
+    check(requests.length===beforeClear,'clear cancellation makes no request');
+    confirmResult=true; nextResult={ok:true,message:'Reloaded',state:{text:savedCss,revision:'c'.repeat(64)}};
+    find('[name="css_override_action"][value="reload"]').click(); await settle();
+    check(editor.value===savedCss && find('[data-css-override-status]').textContent==='Saved','explicit discard restores saved text');
+    nextResult={ok:true,message:'Cleared',state:{text:'',revision:'d'.repeat(64)}};
+    find('[name="css_override_action"][value="clear"]').click(); await settle();
+    check(editor.value==='' && requests.at(-1).get('css_override_action')==='clear' && preset.value==='paper.css','confirmed clear affects only overrides');
+    window.fetch=nativeFetch;
     for(const width of [1280,390]) {
         await fetch('/__viewport?width='+width); await settle();
-        for(const name of ['source','reset']) {
+        for(const name of ['source','editor','reset']) {
             tab(name); for(const details of find('.theme-custom-css-workspace').querySelectorAll('details')) details.open=true; await settle();
             const workspace=find('.theme-custom-css-workspace'), bounds=workspace.getBoundingClientRect();
             check(workspace.scrollWidth<=workspace.clientWidth+1 && bounds.right<=innerWidth+1,width+' '+name+' compact Custom CSS including disclosures has no overflow');

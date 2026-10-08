@@ -211,3 +211,22 @@
         flex-direction: column;
     }
 }
+
+/* Keep raw CSS readable and confined to the editor at desktop and mobile widths. */
+.theme-css-editor { min-width: 0; }
+.theme-css-editor textarea {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 20rem;
+    max-height: 65vh;
+    resize: vertical;
+    overflow: auto;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: .9rem;
+    line-height: 1.5;
+    tab-size: 4;
+}
+.theme-css-editor-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
+.theme-css-editor pre { max-width: 100%; overflow: auto; }
+.theme-css-draft-preview { width: 100%; min-height: 24rem; border: 1px solid var(--line); background: #fff; }

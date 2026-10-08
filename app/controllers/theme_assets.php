@@ -353,4 +353,5 @@ function cms_theme_css(): void
     echo 'table{border-color:var(--line);border-radius:var(--radius);}';
     echo 'th{background:var(--field);color:var(--ink);}';
     echo $updatePendingCss;
+    echo \Gallery\Services\theme_advanced_appearance_css($theme);
 }

@@ -194,7 +194,53 @@ namespace {
             'PowerShell deployment bypassed the canonical inventory list or staged-tree verifier');
         css_preserve_require(str_contains($shell,'release_files.php" list') && str_contains($shell,'release_files.php" verify'),
             'Shell deployment bypassed the canonical inventory list or staged-tree verifier');
-        echo "PASS Custom CSS preservation\n";
+        // Exercise the independent editor against only the copied service and disposable assets.
+        css_preserve_baseline();
+        $initial = \Gallery\Services\custom_css_overrides_state();
+        css_preserve_require($initial['text'] === '' && $initial['url'] === '' && $initial['revision'] === hash('sha256', ''), 'missing override has a deterministic empty revision');
+        $installed = file_get_contents(\Gallery\Services\custom_css_path());
+        $settingsBefore = $GLOBALS['css_settings'];
+        $css = "/* Žluťoučký </textarea><script> */\n.gallery-card { border-radius: 3px !important; }\n@media (max-width:700px) { :root { --custom: 2px; } }";
+        $saved = \Gallery\Services\custom_css_overrides_save($css, $initial['revision']);
+        css_preserve_require($saved['text'] === $css && \Gallery\Services\custom_css_overrides_state() === $saved && str_ends_with($saved['url'], $saved['revision']), 'CSS, UTF-8, selectors, media queries and HTML-looking strings survive a reload with digest versioning');
+        css_preserve_require(file_get_contents(\Gallery\Services\custom_css_path()) === $installed && $GLOBALS['css_settings'] === $settingsBefore, 'editor save touched installed CSS or Theme settings');
+        $conflict = false;
+        try { \Gallery\Services\custom_css_overrides_save('.stale { color:red; }', $initial['revision']); } catch (\Gallery\Services\CustomCssOverrideConflictException) { $conflict = true; }
+        css_preserve_require($conflict && \Gallery\Services\custom_css_overrides_state() === $saved, 'stale editor overwrote the newer snapshot');
+        foreach ([str_repeat('x', \Gallery\Services\CUSTOM_CSS_OVERRIDE_MAX_BYTES + 1), "\xFF", "a\0b"] as $invalid) {
+            $refused = false;
+            try { \Gallery\Services\custom_css_overrides_save($invalid, $saved['revision']); } catch (InvalidArgumentException) { $refused = true; }
+            css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'invalid transport changed installed overrides');
+        }
+        foreach (['allocate', 'hash_failure', 'chmod_first', 'rename_once'] as $failure) {
+            $GLOBALS['css_failure'] = $failure; $GLOBALS['css_modes'] = [];
+            $refused = false;
+            try { \Gallery\Services\custom_css_overrides_save('.changed { padding:2px; }', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+            $GLOBALS['css_failure'] = '';
+            css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'override ' . $failure . ' failed to preserve the previous file');
+        }
+        $lock = fopen($root . '/public/assets/.custom-overrides.lock', 'c'); flock($lock, LOCK_EX);
+        $refused = false;
+        try { \Gallery\Services\custom_css_overrides_save('.busy{}', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+        flock($lock, LOCK_UN); fclose($lock);
+        css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'parallel writer was not refused without changing saved bytes');
+        \rename($root . '/public/assets', $root . '/public/held-assets');
+        $refused = false;
+        try { \Gallery\Services\custom_css_overrides_save('.missing{}', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+        \rename($root . '/public/held-assets', $root . '/public/assets');
+        css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'missing asset directory changed the previous file');
+        \Gallery\Services\custom_css_apply_preset('new.css');
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'preset replacement erased overrides');
+        \Gallery\Services\custom_css_save_selection('', ['name'=>'valid.css','tmp_name'=>$GLOBALS['css_upload'],'error'=>UPLOAD_ERR_OK]);
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'upload replacement erased overrides');
+        \Gallery\Services\custom_css_reset();
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'installed stylesheet reset erased overrides');
+        foreach (['public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'] as $owned) {
+            css_preserve_require(\Gallery\Core\release_file_policy_is_protected_path($owned) && !\Gallery\Core\release_file_policy_is_updater_path($owned) && !\Gallery\Core\release_file_policy_is_integrity_path($owned) && !\Gallery\Core\release_file_policy_is_production_path($owned), 'installation-owned override was claimed by release/update policy: ' . $owned);
+        }
+        $cleared = \Gallery\Services\custom_css_overrides_save('', $saved['revision']);
+        css_preserve_require($cleared === $initial && $GLOBALS['css_settings']['theme_accent'] === '#123456', 'explicit clear did not restore only the empty override layer');
+        echo "PASS Custom CSS preservation and independent overrides\n";
     } finally {
         foreach(['/public/assets','/custom_css','/app/services',''] as $directory) foreach(glob($root.$directory.'/*') ?: [] as $path) if(is_file($path)) unlink($path);
         foreach(new DirectoryIterator($root.'/public/assets') as $entry) if($entry->isFile()) unlink($entry->getPathname());

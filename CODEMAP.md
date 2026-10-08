@@ -342,6 +342,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Gallery hero tag Theme controls | `app/controllers/admin_theme.php`, `app/services/theme.php`, `public/assets/gallery-modules/theme-form.js`, `public/assets/styles/admin-theme-editor.css` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
+| Public appearance controls and CSS override editor | `app/services/theme.php`, `app/services/custom_css.php`, `app/controllers/admin_theme_actions.php`, `app/views/admin_theme.php`, `public/assets/gallery-modules/theme-customization.js`; installation-owned `public/assets/custom-overrides.css` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
 | Gallery branding | `app/services/gallery_branding.php`, `app/controllers/public_gallery.php`, `app/controllers/public_media.php` |
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |

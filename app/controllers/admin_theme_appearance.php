@@ -258,7 +258,7 @@ use function Gallery\Views\view_render_admin_theme_appearance_tab;
 /**
  * Render the Theme appearance tab.
  *
- * @param array<string,mixed> $theme Current normalized theme preferences.
+ * @param array<string,string|int|bool> $theme Current normalized scalar Theme preferences.
  * @param string $themeBackgroundUrl Current theme background URL.
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param array{columns:int,rows:int,items_per_page:int} $tagPageGridSettings Prepared tag-page dimensions and capacity.
@@ -274,6 +274,7 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         'admin-theme-appearance-subtab-width-map',
         'admin-theme-appearance-subtab-gallery-tags',
         'admin-theme-appearance-subtab-animations',
+        'admin-theme-appearance-subtab-advanced',
     ];
     if (!in_array($appearanceSubtab, $appearanceSubtabOptions, true)) {
         $appearanceSubtab = 'admin-theme-appearance-subtab-colors';
@@ -312,6 +313,7 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
     ]);
     view_render_admin_theme_appearance_tab([
         'theme' => $theme,
+        'advanced' => ['definitions' => \Gallery\Services\theme_advanced_appearance_definitions(), 'values' => \Gallery\Services\theme_advanced_appearance_settings()],
         'theme_background_url' => $themeBackgroundUrl,
         'gps_maps_feature_enabled' => $gpsMapsFeatureEnabled,
         'gps_pin_enabled' => $gpsPinEnabled,

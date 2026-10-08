@@ -199,13 +199,13 @@ behavior remains unchanged.
 Deployment-tunable download limits are centralized in `app/configuration_defaults.php` and may be selectively overridden through `runtime_limits` in local `config.php`. Stage 7 manifest-cache defaults are 24 hours for physical galleries, 15 minutes for Smart Galleries, 16 MiB maximum metadata-entry size, and 10,000 entries per bounded maintenance scan. Existing installations require no configuration edit after update.
 
 ### Theming & Customization
-- **Theme editor** - Customize colors, fonts, spacing and default lightbox browsing mode from the admin interface
+- **Theme editor** - Customize colors, fonts, gallery gaps/padding, elevation, public typography, transparent public header and default lightbox browsing mode, with live preview and independent resets
 - **Lightbox browsing modes** - Use the classic single image viewer, a picture strip, or a focused 3D carousel as a Theme default with per-gallery overrides
 - **Dark mode** - Switch between light and dark themes
 - **Language support** - English, Czech, German, and Swedish; English fallback retained
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
-- **Custom CSS** - Direct CSS editing for advanced customization
+- **Custom CSS** - Keep preset/upload CSS and edit a separate final public override layer in the browser, with protected saves, stale-tab detection and isolated draft preview
 - **Layout control** - Choose gallery card layout (vertical/horizontal) and favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance

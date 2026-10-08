@@ -8,6 +8,8 @@ config.php.lock
 /galleries/
 /data/gallery-trash/
 /public/assets/custom.css
+/public/assets/custom-overrides.css
+/public/assets/.custom-overrides.lock
 .env
 *.log
 *.tmp
