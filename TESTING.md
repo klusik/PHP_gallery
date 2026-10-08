@@ -2137,6 +2137,10 @@ Record the actual HTTP status, content type, request path and cookie context if 
 `PDF not found`. A synthetic fixture PASS is evidence of the repository logic, not proof that a particular
 shared-host configuration serves the route correctly.
 
+The registered legacy-dispatch model test verifies that a reviewed cruise level of `350` becomes the documented `fl=FL350`, including leading-zero normalization, the FL600 bound and omission when blank. The drawer lifecycle fixture waits up to two seconds for the current metadata-organizer completion and actual form replacement instead of assuming completion after 150 ms; its result-row, ownership, open-panel and unchanged-URL assertions remain mandatory.
+
+For external historical-date acceptance, open the reviewed SimBrief redirect in an authenticated provider session and inspect the departure date before generating. An unsigned browser check on 2026-10-08 reached the login gate with `date=03JUN26`; it did not establish whether the provider accepts or normalizes that date. Record the actual date displayed after sign-in, without rewriting the gallery date or describing a regenerated OFP as an original archive.
+
 ### OFP UI and real-device gesture acceptance
 
 The description displays a compact View/Download row followed, for authorized administrators only, by a separate

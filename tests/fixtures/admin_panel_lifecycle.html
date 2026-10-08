@@ -106,6 +106,19 @@ function check(condition, message) {
  */
 function wait(milliseconds = settleMs) { return new Promise(/** Yield until the requested fixture delay has elapsed. @param {function(): void} resolve Resume queued assertions. @return {number} Browser timer handle ignored by the executor. */ resolve => setTimeout(resolve, milliseconds)); }
 /**
+ * Await an observable completion within a bounded fixture deadline.
+ * @param {function(): boolean} condition Postcondition read without modifying production state.
+ * @param {string} message Diagnostic assertion to report if completion never arrives.
+ * @return {Promise<void>} Resolves on completion or rejects after two seconds.
+ */
+async function waitUntil(condition, message) {
+    const deadline = performance.now() + 2000;
+    while (!condition()) {
+        if (performance.now() >= deadline) throw new Error(message);
+        await wait(20);
+    }
+}
+/**
  * Produce ordinary server-shaped editor HTML with identity, revision and secret exclusions.
  * @param {string} id Synthetic gallery identity.
  * @return {string} Disposable fragment.
@@ -641,7 +654,11 @@ try {
     release('organizer', '2'); await wait(100); holdOrganizer = false;
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === false, 'Organizer completion retains the owner captured before its batch loop');
     check(field('form') === organizerReplacement && field('[data-admin-side-panel-status]').textContent === organizerStatus, 'Late organizer completion cannot redraw the replacement editor');
-    submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(150);
+    lastOrganizerDetail = null;
+    submitTool('[data-admin-metadata-organizer-apply-form]');
+    await waitUntil(() => lastOrganizerDetail?.panelOwner?.isCurrent() === true
+        && field('form') !== organizerReplacement,
+        'Current organizer completion did not reach the canonical panel refresh within two seconds');
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === true && field('form') !== organizerReplacement, 'Current organizer completion reaches the canonical panel refresh');
     check(organizerResultTableAtCompletion && location.href === originalUrl && !panel().hidden && panel().classList.contains('is-open'), 'Organizer apply renders result rows in the scroll wrapper before refresh while keeping the panel open and URL unchanged');
 
