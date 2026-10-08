@@ -191,14 +191,24 @@ function admin_edit_gallery_handle_ofp_upload(array $gallery): void
             'gallery_id' => $galleryId,
             'reason' => $error->getMessage(),
         ]);
+        $localizedErrors = [
+            'An OFP PDF is already attached. Use the separate confirmed replacement action.' => t('admin.legacy_ofp.duplicate_pdf', 'An OFP PDF is already attached. Use the separate replacement action.'),
+            'No PDF exists to replace. Reload the gallery editor.' => t('admin.legacy_ofp.missing_replace', 'No PDF exists to replace. Reload the gallery editor.'),
+            'The file is not a valid PDF document.' => t('admin.legacy_ofp.invalid_pdf', 'The uploaded file is not a valid PDF.'),
+            'The PDF must be between 16 bytes and 25 MiB.' => t('admin.legacy_ofp.size_limit', 'The PDF must be at most 25 MiB.'),
+            'Choose a valid OFP document origin.' => t('admin.legacy_ofp.invalid_provenance', 'Choose a valid OFP origin.'),
+            'The existing OFP manifest is invalid and was preserved.' => t('admin.legacy_ofp.manifest_invalid', 'The existing OFP manifest is invalid. Repair it before replacing the attachment.'),
+        ];
+        $publicError = $localizedErrors[$error->getMessage()]
+            ?? t('admin.legacy_ofp.upload_failed', 'The PDF could not be attached. Check the file and gallery storage.');
         if ($ajax) {
             http_response_code(422);
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: private, no-store');
-            echo json_encode(['ok' => false, 'error' => $error->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo json_encode(['ok' => false, 'error' => $publicError], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
-        flash_message('admin_notice', $error->getMessage());
+        flash_message('admin_notice', $publicError);
     }
     redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-api'));
 }
