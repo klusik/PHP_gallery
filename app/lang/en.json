@@ -6793,5 +6793,6 @@
     "admin.legacy_ofp.invalid_pdf": "The uploaded file is not a valid PDF.",
     "admin.legacy_ofp.size_limit": "The PDF must be at most 25 MiB.",
     "admin.legacy_ofp.invalid_provenance": "Choose a valid OFP origin.",
-    "admin.legacy_ofp.manifest_invalid": "The existing OFP manifest is invalid. Repair it before replacing the attachment."
+    "admin.legacy_ofp.manifest_invalid": "The existing OFP manifest is invalid. Repair it before replacing the attachment.",
+    "admin.legacy_ofp.gallery_mismatch": "The selected gallery changed. Reload this editor before uploading an OFP."
 }
