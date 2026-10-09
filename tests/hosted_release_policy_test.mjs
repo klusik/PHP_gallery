@@ -182,6 +182,29 @@ assert.match(contract,/CI-first/);
 assert.match(contract,/NEVER directly mutate `develop` or `main`/);
 assert.match(contract,/Do not run local audits/);
 assert.doesNotMatch(contract,/Before handing off.*run.*--profile=full/);
+
+// Retain optional focused diagnostics while rejecting active instructions that
+// would make local full audits a prerequisite for ordinary source handoff.
+const auditHeader = read('scripts/audit.php').split('declare(strict_types=1);')[0];
+assert.match(auditHeader,/CI-first.*hosted GitHub Actions/i);
+assert.doesNotMatch(auditHeader,/normal agent verification entrypoint/i);
+const testing = read('TESTING.md');
+assert.match(testing,/### Hosted coverage ownership/);
+assert.match(testing,/explicitly requested local recovery/i);
+for (const drift of [
+    /Use `php scripts\/audit\.php --profile=full` for an ordinary source handoff/i,
+    /In a source checkout[^\n]*run `php scripts\/audit\.php --profile=full`/i,
+    /Re-run[^\n]*the (?:complete|full) `php scripts\/audit\.php --profile=full` suite/i,
+    /Then run `php scripts\/audit\.php --profile=full`/i,
+    /and `php scripts\/audit\.php --profile=full` after changing/i,
+    /Run `php -l` on every changed PHP file and `node --check`/i,
+]) {
+    assert.doesNotMatch(testing,drift,'Active TESTING.md instructions must use hosted qualification');
+}
+assert.doesNotMatch(read('docs/TITLE_COMPLETION.md'),/`--profile=quick` during implementation and `--profile=full` before code handoff/i);
+assert.doesNotMatch(read('docs/IMAGE_DECODE_POLICY.md'),/Use `php scripts\/audit\.php --profile=full` for the integrated handoff/i);
+assert.match(read('README.md'),/GitHub Actions through candidate preparation and the required hosted matrix/);
+assert.match(read('AGENTS.md'),/local audit invocations are reserved for explicit diagnosis\/recovery/);
 for (const document of ['TESTING.md','CONTRIBUTING.md','docs/AGENT_AUTHORING.md']) {
     assert.match(read(document),/CI-first/);
     assert.match(read(document),/BLOCKED/);
@@ -213,5 +236,6 @@ for (const suffix of ['','_CZ','_DE','_SV']) {
     const manual = read(`docs/PHP_Gallery_Manual${suffix}.tex`);
     assert.match(manual,/CI-first/);
     assert.match(manual,/release-promotion/);
+    assert.doesNotMatch(manual,/Use \\codeword\{--profile=full\} for~complete|Pro úplné ověření před předáním použijte|Verwenden Sie \\codeword\{--profile=full\} für die vollständige Übergabeprüfung|Använd \\codeword\{--profile=full\} för fullständig överlämningskontroll/);
 }
 process.stdout.write('PASS hosted release identity, red evidence, CI-first and branch safety contracts\n');

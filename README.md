@@ -983,7 +983,7 @@ The codebase is organized for easy extension:
 
 ### Testing
 
-Run the complete standalone regression suite:
+The normal agent handoff runs the complete centrally registered regression suite in GitHub Actions through candidate preparation and the required hosted matrix. For explicitly requested local recovery or targeted diagnosis, the runner remains available:
 
 ```bash
 php scripts/audit.php --profile=full
@@ -995,7 +995,7 @@ The tracked `tests/` tree is the authoritative framework-free suite, and `php sc
 
 Recovery and qualification have separate evidence requirements. The [recovery CLI](docs/RECOVERY_ASSURANCE.md) validates isolated recovery files; the [off-host runbook](docs/RECOVERY_OFF_HOST.md) explains the real restore exercise it cannot replace. [Disposable workflow testing](docs/GALLERY_WORKFLOWS.md) exercises generated data without using the live installation. The [qualification ledger](docs/RELEASE_QUALIFICATION.md) binds audit reports and explicit manual reviews to exact source/PDF bytes; automated PASS alone is not publication approval.
 
-`RELEASE.md` is the authoritative release playbook. Start by comparing the worktree with the exact previous release tag, then run `php scripts/prepare_release.php <version>` to update only registered mechanical version markers and create a patch-note scaffold when needed. Complete release notes/documentation, rebuild and inspect the manual, then generate the manifest. Before the long audit, run the cheap gate: `php scripts/check_release.php <version>`, `php scripts/generate_manifest.php --check`, and Git whitespace checks for both working-tree and staged changes; review the diff and clean package source. Fix missing metadata or other deterministic failures here, initialize the qualification fingerprint, freeze the inputs, and run exactly one release audit path. Release profiles are not a quick/full/release staircase. The release audit includes release consistency, manifest freshness, browser integration when available, and Git whitespace validation. Inspect skipped/blocked coverage and the final package before publication. Release tooling never creates commits, tags, pushes, or hosted releases unless those actions are explicitly requested.
+`RELEASE.md` is the authoritative release playbook. A trusted maintainer prepares a `release/v_*` branch, and GitHub-hosted release qualification performs the source preflight, release metadata and patch-note preparation, one final batch build of all four manual PDFs, generated-state/manifest preparation, and the authoritative `release` audit for the exact prepared candidate SHA. Protected promotion, tagging and publication are separate maintainer-controlled steps with an explicit evidence gate. The local preparation and audit commands in `RELEASE.md` are exceptional recovery or diagnosis paths, not routine agent steps; neither a quick PASS nor an earlier or different-SHA full run establishes release readiness. Preserve human/manual acceptance and report every required SKIP, BLOCKED or failed job.
 
 The runner discovers every tracked `tests/*_test.php` script deterministically. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 

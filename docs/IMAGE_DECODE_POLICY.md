@@ -234,6 +234,7 @@ retained shared-decoder scope as recorded above. Integrated central/browser
 qualification remains with the parent; these focused results do not claim all
 acceptance criteria for every upload mode or library configuration.
 
-Use `php scripts/audit.php --profile=full` for the integrated handoff. Focused test
-commands are for developing these new fixtures or diagnosing an audit failure;
-parallel agents must leave central audit orchestration to their parent.
+Integrated handoff requires the hosted `full` matrix for the exact prepared
+candidate SHA. Existing focused test commands remain available only for explicit
+reproduction or diagnosis; they do not replace the parent workflow's centrally
+orchestrated GitHub CI or justify a parallel test runner.

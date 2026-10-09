@@ -44,6 +44,8 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
 
+These commands describe the available runner interfaces. Agent handoff is CI-first through hosted candidate preparation; local audit invocations are reserved for explicit diagnosis/recovery, not the normal edit-to-handoff sequence.
+
 ## Coding Style & Naming Conventions
 Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space indentation style. Keep functions small and explicit. New or materially refactored features should follow the project MVC boundary: models own SQL/data access, services own reusable domain orchestration and policy, controllers own HTTP/request-response flow, and views own HTML presentation. Do not move SQL into controllers/views merely for convenience, and do not let model modules read request globals or render output. Name controller files by feature area, for example `admin_galleries_edit.php` or `public_media.php`.
 
@@ -389,7 +391,7 @@ authentication storage. Preserve these policies in future edits:
 `admin_security_schema_health_statuses()` is the shared Admin registration for
 converted security/authentication capabilities. Runtime Diagnostics and dashboard
 System Health must consume the same bounded models. Add focused available/missing/
-unknown tests for any policy change and keep `php scripts/audit.php --profile=full` green.
+unknown tests for any policy change and require a green hosted `full` audit for the exact prepared candidate.
 
 Phase 10 converts destructive and ingestion workflows through
 `app/services/mutation_schema_policy.php`. Preserve these mutation rules:

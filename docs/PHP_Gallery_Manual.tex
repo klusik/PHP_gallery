@@ -2276,7 +2276,9 @@ The~canonical \filepath{AGENTS.md} requires each named declaration and~its~compl
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
-Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources, prepare generated artifacts after the~final edit and~run the~full audit once for~the~exact candidate. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
+Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+
+Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources and~push the~authorized working branch. Hosted Candidate preparation regenerates artifacts after the~final edit and~runs the~mandatory full CI matrix for~the~exact prepared SHA. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
 
 \subsection{Adding a~feature}
 
@@ -2495,9 +2497,7 @@ The~central entry point \filepath{scripts/audit.php} provides three qualificatio
 \codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
 contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax
 checks. It~omits the~complete PHP suite, whole-tree inventory/category budgets, WinApp tests,
-slow Node fixtures, and~Chromium. Use \codeword{--profile=full} for~complete
-handoff verification and~\codeword{--profile=release} for~release preparation;
-a~quick PASS does~not~replace either.
+slow Node fixtures, and~Chromium. Hosted candidate qualification runs \codeword{--profile=full} for~the~exact prepared SHA; hosted release qualification runs \codeword{--profile=release}. An~optional local or~quick PASS replaces neither required hosted gate.
 
 PHP suites run with four workers by~default. Set
 \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} to~an~integer from~1 through~8;
@@ -2532,12 +2532,7 @@ the~installation's database or~media. Follow
 \filepath{docs/GALLERY_WORKFLOWS.md} for~prerequisites; a~missing environment
 is~a~coverage gap, not~proof of~a~working feature.
 
-For~release preparation, follow \filepath{RELEASE.md}: finish source
-and~documentation, rebuild all~four manual PDFs and~check compiler diagnostics, generate the~manifest,
-and~initialize the~qualification record. Run one central release audit,
-not~a~quick/full/release sequence. With the~isolated prerequisites configured,
-\filepath{scripts/gallery_workflow_mysql.php} accepts \codeword{--release}
-to~provision its fixture around that same release audit.
+For~release preparation, follow \filepath{RELEASE.md}: finish all~source and~manual content, then let~GitHub Actions build all~four PDFs together, inspect compiler diagnostics, regenerate the~manifest and~qualify the~exact prepared SHA with one central release audit. The~isolated \filepath{scripts/gallery_workflow_mysql.php} \codeword{--release} command remains available only for~explicit local recovery and~diagnosis.
 
 The~qualification tool \filepath{scripts/release_qualification.php} records
 the~exact source and~PDF fingerprint. Its \codeword{render} command produces

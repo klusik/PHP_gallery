@@ -29,7 +29,7 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - The source test tree is intentionally absent from normal production deployment packages.
- *   - Run `php scripts/audit.php --profile=full` as the normal agent verification entrypoint.
+ *   - CI-first agents qualify the prepared SHA through hosted GitHub Actions; local profiles are exceptional diagnostics.
  *
  * Last Updated:
  *   2026-09-05
