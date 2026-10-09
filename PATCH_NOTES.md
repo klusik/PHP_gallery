@@ -1,5 +1,54 @@
 # Patch notes
 
+## Version 0.126
+
+Version 0.126 established an immutable, owner-reviewed release lifecycle with exact-SHA hosted qualification, guarded promotion, and optional post-publication reconciliation and branch retirement. It also added release initialization and expanded documentation and regression coverage; these changes did not themselves establish that a release was approved or published.
+
+### Highlights
+
+#### Guarded release lifecycle [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+- Bound releases to checked-in immutable origins and verified predecessor provenance, including the preserved `v_0.126` origin and an explicitly unqualified legacy record for `v_0.125`.
+- Required exact-candidate hosted qualification and owner review before promotion; blocked automatic merging and red-check overrides.
+- Added separate, owner-controlled workflows for release initialization, post-publication reconciliation, and optional release-branch retirement.
+
+#### Hosted release qualification [#101](https://github.com/klusik/PHP_gallery/issues/101)
+- Added pre-generation source and MVC/mutation-contract checks, then retained exact prepared-candidate qualification through the hosted release matrix.
+- Bound initial release metadata to the source commit timestamp and preserved validated existing timestamps for deterministic preparation.
+
+### Technical Details
+
+#### Backend
+- Added release-origin validation, owner-authorization, reconciliation, retirement, and new-release initialization logic under `.github/scripts/`.
+- Updated promotion to verify origin and predecessor evidence, candidate and CI identities, owner approval, current `main` state, and expected merge parents and tree before publication.
+- Added guarded reconciliation for a verified fast-forward or reviewed single-parent equivalent; the workflow prepared evidence but did not update protected refs.
+- Kept release ruleset examples as documentation; they did not activate GitHub protections or change server settings.
+
+#### Frontend
+- Updated hosted workflows for staged release qualification, guarded promotion, reconciliation, retirement, and new-release initialization.
+- Added SHA-bound aggregate required-CI check runs and configured isolated gallery workflow CI to run on `develop`.
+
+#### Database
+- Added no database migration.
+
+#### Tests
+- Added regression fixtures for immutable origins and predecessor identity, release graph and reconciliation, promotion safeguards, initialization races, timestamp determinism, and leased branch retirement.
+- Extended hosted-policy and audit-runner coverage; fixtures modeled GitHub and Git behavior and did not establish live release approval or qualification.
+
+#### Documentation
+- Added `docs/RELEASE_LIFECYCLE.md` and updated release, qualification, testing, contributor, architecture, and agent guidance.
+- Synchronized the lifecycle and hosted-verification guidance across all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior and visitor-facing features did not change.
+
+#### For administrators
+- Administrator-facing gallery behavior did not change.
+
+#### For maintainers
+- Maintainers gained documented, guarded workflows for qualifying and promoting releases, reconciling published changes, initializing future releases, and optionally retiring release branches. Actual approval, publication, and live GitHub policy acceptance remained separate steps.
+
 ## Version 0.125
 
 Version 0.125 added advanced public appearance controls, a protected visual CSS editing workflow, and a local upload-preview queue in Admin. It also strengthened hosted candidate qualification and guarded release promotion, with updated documentation and regression coverage.
