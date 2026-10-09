@@ -40,6 +40,7 @@ require_once dirname(__DIR__) . '/scripts/release_lib.php';
 use function PhpGallery\Release\collect_consistency_checks;
 use function PhpGallery\Release\ensure_patch_notes_scaffold;
 use function PhpGallery\Release\prepare_version_markers;
+use function PhpGallery\Release\resolve_release_moment;
 use function PhpGallery\Release\upsert_release_metadata;
 use function PhpGallery\Release\valid_version;
 
@@ -71,6 +72,39 @@ release_test_assert(valid_version('0.96.2'), 'Patch release versions must be acc
 release_test_assert(valid_version('10.500'), 'Two-component versions must remain supported.');
 release_test_assert(!valid_version('0.096.2'), 'Leading zeroes must remain rejected.');
 release_test_assert(!valid_version('v_0.96.2'), 'Tag prefixes are not release-version input.');
+
+// A new release is anchored to immutable source history, not the current runner clock.
+$prague = new DateTimeZone('Europe/Prague');
+$initial = resolve_release_moment(null, '0.96.2', '1780000000', $prague);
+release_test_assert($initial->getTimestamp() === 1780000000, 'First preparation must use the source-commit epoch.');
+release_test_assert(resolve_release_moment(null, '0.96.2', '1780000000', $prague) == $initial,
+    'Repeated initial preparation from the same source must be deterministic.');
+$existingTimestamp = [
+    'tag' => 'v_0.96.2', 'released_at' => '2026-09-06 09:15:00',
+    'released_label' => '6 September 2026, 09:15',
+];
+release_test_assert(resolve_release_moment($existingTimestamp, '0.96.2', '1780000001', $prague)
+    ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
+    'Existing reviewed release metadata must override any later event commit timestamp.');
+$legacyLabel = $existingTimestamp;
+$legacyLabel['released_label'] = '6. September 2026, 09:15';
+release_test_assert(resolve_release_moment($legacyLabel, '0.96.2', null, $prague)
+    ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
+    'Previously reviewed dotted-day labels must remain valid without source-epoch input.');
+foreach ([
+    [null, null], [null, '0'], [null, 'n/a'], [null, '999999999999999999999'],
+    [['tag' => 'v_0.96.3'] + $existingTimestamp, '1780000000'],
+    [['released_at' => '2026-02-30 09:15:00'] + $existingTimestamp, '1780000000'],
+    [['released_label' => 'arbitrary'] + $existingTimestamp, '1780000000'],
+] as [$stored, $epoch]) {
+    $accepted = true;
+    try {
+        resolve_release_moment($stored, '0.96.2', $epoch, $prague);
+    } catch (RuntimeException) {
+        $accepted = false;
+    }
+    release_test_assert(!$accepted, 'Invalid or contradictory first-release metadata must fail closed.');
+}
 
 $fixture = sys_get_temp_dir() . '/php-gallery-release-tooling-' . getmypid() . '-' . bin2hex(random_bytes(4));
 mkdir($fixture, 0777, true);

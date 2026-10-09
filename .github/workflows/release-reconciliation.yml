@@ -1,0 +1,95 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/release-reconciliation.yml
+# Module Type: Protected Release Reconciliation Workflow
+# Purpose: Inspect published release ancestry and request owner-reviewed synchronization into develop.
+# Responsibilities:
+#   - Keep read-only release inspection separate from protected branch-write credentials
+#   - Propose a reviewable main-to-develop pull request without merging or pushing protected refs
+#   - Verify immutable published evidence and qualified exact-SHA reconciliation
+# Author: Rudolf Klusal
+name: Reviewed release reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: Original release/v_X.Y[.Z] branch identity, even if already retired.
+        required: true
+        type: string
+      mode:
+        description: Read-only plan/verify or owner-approved bot PR proposal.
+        required: true
+        type: choice
+        default: plan
+        options: [plan, propose, verify]
+      manual_review:
+        description: Owner acceptance reference required for proposal.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: reviewed-release-reconciliation-${{ inputs.release_branch }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_BRANCH: ${{ inputs.release_branch }}
+  SYNC_MODE: ${{ inputs.mode }}
+  MANUAL_REVIEW: ${{ inputs.manual_review }}
+
+jobs:
+  inspect:
+    if: ${{ inputs.mode != 'propose' }}
+    name: Inspect published release and develop ancestry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require read-only dispatch from main
+        shell: bash
+        run: |
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Inspect exact published and reconciliation evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-reconciliation.mjs
+
+  propose:
+    if: ${{ inputs.mode == 'propose' }}
+    name: Owner-approved reconciliation PR proposal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release-reconciliation
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Require authorized main dispatch
+        shell: bash
+        run: |
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Revalidate published evidence and propose reviewed develop PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-reconciliation.mjs

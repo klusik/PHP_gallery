@@ -5,7 +5,7 @@
 # Purpose: Inspect an exact qualification, promote through a PR and publish verified assets.
 # Responsibilities:
 #   - Keep reader/build jobs isolated from protected publication credentials
-#   - Require an independently reviewed environment for every release write
+#   - Require manual single-owner environment approval for every release write
 #   - Retain original failed evidence for explicit maintainer exceptions
 # Author: Rudolf Klusal
 name: Protected release promotion
@@ -26,7 +26,7 @@ on:
         required: true
         type: string
       mode:
-        description: Plan is read-only; promote enables protected PR merge; publish follows merge.
+        description: Plan is read-only; promote opens a bot PR for manual owner review and merge; publish is separate.
         required: true
         type: choice
         default: plan
@@ -36,7 +36,7 @@ on:
         required: false
         type: string
       override_ack:
-        description: Explicitly accept the named red checks, preserving their failures.
+        description: Read-only plan diagnostics only; red-check override cannot publish.
         type: boolean
         default: false
       override_reason:
@@ -103,7 +103,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MODE: plan
+          RELEASE_INSPECTION_TARGET: ${{ inputs.mode }}
         run: node .github/scripts/release-promotion.mjs
+      - name: Retain bounded stale-main recovery evidence
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-main-recovery-inspect
+          path: ${{ runner.temp }}/release-recovery.json
+          if-no-files-found: ignore
+          retention-days: 90
       - id: scope
         name: Determine required installer build from complete Git history
         env:
@@ -191,7 +200,7 @@ jobs:
           retention-days: 30
 
   apply:
-    name: Independently approved release action
+    name: Owner-approved release PR or publication
     needs: [inspect, package, installer]
     if: ${{ always() && inputs.mode != 'plan' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
     runs-on: ubuntu-24.04
@@ -225,7 +234,15 @@ jobs:
           path: release-assets
       - name: Revalidate protected controls, exact SHA and original CI before writes
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_ASSETS: ${{ github.workspace }}/release-assets
         run: node .github/scripts/release-promotion.mjs
+      - name: Retain approved-action stale-main recovery decision
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-main-recovery-approved
+          path: ${{ runner.temp }}/release-recovery.json
+          if-no-files-found: ignore
+          retention-days: 90

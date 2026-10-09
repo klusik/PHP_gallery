@@ -22,6 +22,7 @@ declare(strict_types=1);
 use function PhpGallery\Release\detect_cms_version;
 use function PhpGallery\Release\ensure_patch_notes_scaffold;
 use function PhpGallery\Release\prepare_version_markers;
+use function PhpGallery\Release\resolve_release_moment;
 use function PhpGallery\Release\upsert_release_metadata;
 use function PhpGallery\Release\valid_version;
 
@@ -48,13 +49,8 @@ if (!is_array($metadata)) {
 }
 
 $existing = isset($metadata[$version]) && is_array($metadata[$version]) ? $metadata[$version] : null;
-$existingReleasedAt = trim((string) ($existing['released_at'] ?? ''));
-$existingTag = trim((string) ($existing['tag'] ?? ''));
-$releaseMoment = null;
-if ($existingReleasedAt !== '' && $existingTag === 'v_' . $version) {
-    $releaseMoment = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $existingReleasedAt, $timezone) ?: null;
-}
-$releaseMoment ??= new DateTimeImmutable('now', $timezone);
+$initialEpoch = getenv('RELEASE_INITIAL_EPOCH');
+$releaseMoment = resolve_release_moment($existing, $version, $initialEpoch === false ? null : $initialEpoch, $timezone);
 
 $changed = prepare_version_markers($root, $version, $releaseMoment->format('j F Y'));
 if (upsert_release_metadata($root, $version, $existing === null ? $releaseMoment : null)) {

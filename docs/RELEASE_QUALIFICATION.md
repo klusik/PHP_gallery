@@ -248,3 +248,24 @@ fingerprints, exact-byte invalidation, retained history, CLI exit codes, audit
 report imports, nested skips, phase separation and renderer failure reporting.
 Its synthetic reviewer results are confined to a temporary test directory and
 do not qualify any actual release.
+
+
+## Hosted immutable-origin and post-publication lifecycle evidence (#101)
+
+The GitHub-hosted release qualification records the exact operator-selected
+`develop` origin SHA, initialization commit, initial main SHA and previous
+stable tag SHA from the immutable, reviewed release-origin marker. The marker
+must have been introduced in a commit whose single parent was that selected
+`develop` SHA. The hosted validator checks Git/GitHub ancestry and unchanged
+marker bytes before preparing any expensive release artifacts. Those fields are
+bound into the exact prepared-candidate workflow record and checked again by
+the sole promotion implementation. Missing, altered or contradictory provenance
+is a hard failure, never reconstructed from today's moving `develop`.
+
+After publication, follow the separate reviewed synchronization workflow and
+verify its evidence; do not translate a published tag into a completed release
+lifecycle status. Only an independently approved two-parent `main -> develop`
+merge with full exact-SHA hosted CI may be marked `RECONCILED`. Details, failure
+states, server-control prerequisites and optional branch retirement are in
+[RELEASE_LIFECYCLE.md](RELEASE_LIFECYCLE.md). Synthetic regression results do not
+imply operational server approval.

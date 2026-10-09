@@ -15,12 +15,16 @@ import {readFileSync,writeFileSync,mkdtempSync,rmSync,readdirSync} from 'node:fs
 import {tmpdir} from 'node:os';
 import {join,basename} from 'node:path';
 import {createHash} from 'node:crypto';
-import {validateRequest,verifyQualification,verifyFinalContent,promote,publish} from '../.github/scripts/release-promotion.mjs';
+import {validateRequest,verifyQualification,verifyFinalContent,requireCurrentMainBase,promote,publish,inspectMergedPromotion} from '../.github/scripts/release-promotion.mjs';
+import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview} from '../.github/scripts/release-owner-authorization.mjs';
 
 const candidate = 'a'.repeat(40);
 const request = {runId:'123',candidate,branch:'release/v_1.2.3',mode:'plan',override:false,reason:'',acceptedFailures:[],manualReview:''};
 const run = {path:'.github/workflows/release-qualification.yml',event:'push',head_branch:request.branch,status:'completed',conclusion:'success',run_attempt:1};
-const record = {repository:'owner/gallery',branch:request.branch,candidate_sha:candidate,source_base:'b'.repeat(40),version:'1.2.3',run_id:'123',run_attempt:'1',ready:true};
+const record = {repository:'owner/gallery',branch:request.branch,candidate_sha:candidate,
+    source_base:'b'.repeat(40),version:'1.2.3',run_id:'123',run_attempt:'1',ready:true,
+    origin_commit_sha:'e'.repeat(40),selected_develop_sha:'f'.repeat(40),
+    initial_main_sha:'b'.repeat(40),previous_stable_tag:'v_1.2.2',previous_stable_sha:'b'.repeat(40)};
 const owners = ['Prepare release candidate','Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)','Positive production package (macos-latest)',
     'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
@@ -45,6 +49,10 @@ for (const patch of [{candidate_sha:'c'.repeat(40)},{ready:false},{ready:'false'
     assert.throws(() => verifyQualification(request,run,jobs,{...record,...patch},record.repository,candidate),/BLOCKED/);
 }
 assert.throws(() => verifyQualification(request,run,jobs,record,record.repository,'d'.repeat(40)),/stale/);
+for (const patch of [{origin_commit_sha:'bad'}, {selected_develop_sha:'develop'},
+    {previous_stable_tag:'v_1.2.3;bad'}, {previous_stable_sha:'c'.repeat(40)}]) {
+    assert.throws(() => verifyQualification(request,run,jobs,{...record,...patch},record.repository,candidate),/provenance/);
+}
 assert.throws(() => verifyQualification(request,run,jobs.slice(1),record,record.repository,candidate),/missing/);
 assert.throws(() => verifyQualification(request,run,[...jobs,jobs[0]],record,record.repository,candidate),/ambiguous/);
 for (const conclusion of ['failure','skipped','cancelled',null]) {
@@ -65,27 +73,34 @@ const previousAssets = process.env.RELEASE_ASSETS;
 const previousActor = process.env.GITHUB_ACTOR;
 const previousSummary = process.env.GITHUB_STEP_SUMMARY;
 const previousOutput = process.env.GITHUB_OUTPUT;
+const previousRunnerTemp = process.env.RUNNER_TEMP;
 // Inert publication must never append simulated evidence to a real Actions step.
 delete process.env.GITHUB_STEP_SUMMARY;
 delete process.env.GITHUB_OUTPUT;
 process.env.RELEASE_ASSETS = directory;
+process.env.RUNNER_TEMP = directory;
 process.env.GITHUB_ACTOR = 'fixture-maintainer';
 let tagSha = null;
 let releaseState = null;
 let interruptUpload = true;
 let unexpectedMain = false;
+let mainAdvanced = false;
 let changedWinapp = false;
 const writes = [];
 const mergeSha = 'c'.repeat(40);
 const tree = 'd'.repeat(40);
 const releasePr = {number:7,node_id:'fixture-pr',state:'closed',merged_at:'2026-10-08T00:00:00Z',
+    created_at:'2026-10-07T15:00:00Z',user:{login:'github-actions[bot]'},
     merge_commit_sha:mergeSha,head:{sha:candidate,repo:{full_name:record.repository}},base:{ref:'main'},html_url:'https://github.com/owner/gallery/pull/7'};
 const fakeApi = (path,method = 'GET',payload = null) => {
     if (method !== 'GET') writes.push({path,method,payload});
     if (path.includes('/pulls?')) return [structuredClone(releasePr)];
+    if (path.endsWith('/pulls/7/reviews?per_page=100')) return [
+        {id:72,user:{login:'owner'},state:'APPROVED',commit_id:candidate,
+            submitted_at:'2026-10-07T18:00:00Z',html_url:'https://github.com/owner/gallery/pull/7#pullrequestreview-72'}];
     if (path.endsWith('/commits/main')) return {sha:mergeSha,commit:{tree:{sha:unexpectedMain ? 'e'.repeat(40) : tree}}};
     if (path.endsWith('/commits/' + candidate)) return {sha:candidate,commit:{tree:{sha:tree}}};
-    if (path.includes('/compare/')) return {behind_by:0,total_commits:1,files:changedWinapp ? [{filename:'winapp/gallery_uploader/self_update.py'}] : []};
+    if (path.includes('/compare/')) return {behind_by:mainAdvanced && path.endsWith('/compare/main...' + candidate) ? 1 : 0,total_commits:1,files:changedWinapp ? [{filename:'winapp/gallery_uploader/self_update.py'}] : []};
     if (path.includes('/git/matching-refs/')) return tagSha ? [{ref:'refs/tags/v_1.2.3',object:{type:'commit',sha:tagSha}}] : [];
     if (path.endsWith('/git/refs') && method === 'POST') { tagSha = payload.sha; return {}; }
     if (path.endsWith('/git/ref/heads/main')) return {object:{sha:mergeSha}};
@@ -115,9 +130,30 @@ const fakeCommand = (executable,args) => {
 const adapters = {api:fakeApi,command:fakeCommand};
 const publishRequest = {...request,mode:'publish',manualReview:'Independent browser acceptance fixture'};
 try {
+    assert.equal(requireCurrentMainBase(request,record.repository,adapters),mergeSha);
+    mainAdvanced=true;
+    assert.throws(() => requireCurrentMainBase(request,record.repository,adapters),/BLOCKED_MAIN_ADVANCED/);
+    await assert.rejects(promote({...publishRequest,mode:'promote'},record.repository,[],adapters),/BLOCKED_MAIN_ADVANCED/);
+    assert.equal(writes.length,0,'Moved main cannot create or merge a release PR.');
+    mainAdvanced=false;
+    const recovery = JSON.parse(readFileSync(join(directory,'release-recovery.json'),'utf8'));
+    assert.equal(recovery.state,'BLOCKED_MAIN_ADVANCED');
+    assert.equal(recovery.next_required_state,'NEW_CANDIDATE_REQUIRED');
+    assert.equal(recovery.supersession,'PENDING_MAINTAINER_REVIEW');
+    assert.equal(recovery.original_qualification_run_id,request.runId);
+    assert.equal(recovery.original_qualified_candidate_sha,candidate);
+    assert.equal(recovery.observed_main_sha,mergeSha);
+    assert.equal(recovery.observed_main_tree,tree);
+    rmSync(join(directory,'release-recovery.json'));
     for (const name of ['production.zip','core-manifest.json','production-files.json','release-metadata.json','release-notes.md','SHA256SUMS','qualification-evidence.zip']) writeFileSync(join(directory,name),'fixture public data ' + name);
     const hashes = Object.fromEntries(readdirSync(directory).map(name => [name,createHash('sha256').update(readFileSync(join(directory,name))).digest('hex')]));
     writeFileSync(join(directory,'final-integrity.json'),JSON.stringify({candidate_sha:candidate,source_base:record.source_base,result:'PASS',hashes}));
+    const merged=inspectMergedPromotion(publishRequest,record.repository,adapters);
+    assert.equal(merged.ownerReview.id,72);
+    assert.equal(merged.main.sha,mergeSha);
+    assert.throws(()=>requireCurrentMainBase(request,record.repository,
+        {api:(path)=>path.includes('/compare/') ? {behind_by:1} : fakeApi(path)}),
+        /BLOCKED_MAIN_ADVANCED/,'A post-merge plan must not re-use the pre-merge ancestry gate.');
     unexpectedMain = true;
     await assert.rejects(publish(publishRequest,record.repository,record,[],adapters),/tree differs/);
     assert.equal(writes.length,0);
@@ -143,6 +179,9 @@ try {
     assert.equal(permanent.final_main_sha,mergeSha);
     assert.equal(permanent.candidate_sha,candidate);
     assert.equal(permanent.manual_review,publishRequest.manualReview);
+    assert.equal(permanent.promotion_pr.author,'github-actions[bot]');
+    assert.equal(permanent.promotion_pr.approval.reviewer,'owner');
+    assert.equal(permanent.promotion_pr.approval.commit_sha,candidate);
     const mutationCount = writes.length;
     await publish(publishRequest,record.repository,record,[],adapters);
     assert.equal(writes.length,mutationCount,'Identical retry must not modify published refs or release.');
@@ -158,18 +197,25 @@ try {
     assert.equal(writes.length,mutationCount);
     releasePr.state = 'open';
     releasePr.merged_at = null;
+    const beforePropose = writes.length;
     await promote({...publishRequest,mode:'promote'},record.repository,[],adapters);
-    assert.ok(writes.at(-1).graphql);
-    await promote({...exception,mode:'promote',manualReview:'Independent override acceptance'},record.repository,failedJobs.filter(job => job.conclusion === 'failure'),adapters);
-    const merge = writes.at(-1);
-    assert.equal(merge.payload.sha,candidate);
-    assert.match(merge.payload.commit_message,/Original red checks remain red/);
+    assert.equal(writes.length,beforePropose,
+        'Existing exact bot PR must wait for explicit human PR review and merge.');
+    await assert.rejects(promote({...exception,mode:'promote',manualReview:'Owner red-check exception'},
+        record.repository,failedJobs.filter(job => job.conclusion === 'failure'),adapters),/cannot bypass/);
+    assert.equal(writes.length,beforePropose,'Red CI may never create a protected merge.');
+    releasePr.user.login='owner';
+    await assert.rejects(promote({...publishRequest,mode:'promote'},record.repository,[],adapters),
+        /github-actions\[bot\]/);
+    releasePr.user.login='github-actions[bot]';
     assert.ok(!writes.some(write => write.path?.includes('/git/refs/heads/main')));
+    assert.ok(!writes.some(write => write.graphql),'Single-owner mode cannot enable PR auto-merge.');
 } finally {
     if (previousAssets === undefined) delete process.env.RELEASE_ASSETS; else process.env.RELEASE_ASSETS = previousAssets;
     if (previousActor === undefined) delete process.env.GITHUB_ACTOR; else process.env.GITHUB_ACTOR = previousActor;
     if (previousSummary === undefined) delete process.env.GITHUB_STEP_SUMMARY; else process.env.GITHUB_STEP_SUMMARY = previousSummary;
     if (previousOutput === undefined) delete process.env.GITHUB_OUTPUT; else process.env.GITHUB_OUTPUT = previousOutput;
+    if (previousRunnerTemp === undefined) delete process.env.RUNNER_TEMP; else process.env.RUNNER_TEMP = previousRunnerTemp;
     // This unique test-owned directory was created above; never remove another path.
     rmSync(directory,{recursive:true,force:true});
 }
@@ -219,6 +265,16 @@ assert.match(preparation,/name:'Candidate qualification'/);
 const release = read('.github/workflows/release-qualification.yml');
 assert.match(release,/name:'Release qualification'/);
 assert.match(release,/release-qualification-record/);
+const stageA = release.indexOf('name: Cheap release source preflight');
+const stageB = release.indexOf('name: Medium-cost release source preflight');
+const generation = release.indexOf('name: Apply deterministic release preparation');
+assert.ok(stageA !== -1 && stageA < stageB && stageB < generation,
+    'Both release preflight tiers must finish before generation or expensive dependencies.');
+assert.match(release,/--profile=release-stage-b/);
+assert.match(release,/name: release-source-preflight/);
+assert.match(release,/RELEASE_INITIAL_EPOCH="\$\(git show -s --format=%ct/);
+assert.match(read('.github/scripts/prepare_release_candidate.php'),/resolve_release_moment\(/);
+assert.doesNotMatch(read('.github/scripts/prepare_release_candidate.php'),/new DateTimeImmutable\('now'/);
 const promotion = read('.github/workflows/release-promotion.yml');
 assert.match(promotion,/environment: release-promotion/);
 assert.match(promotion,/persist-credentials: false/);
@@ -228,8 +284,12 @@ assert.match(promotion,/cancel-in-progress: false/);
 assert.doesNotMatch(promotion,/pull_request_target|secrets: inherit|git push/);
 const helper = read('.github/scripts/release-promotion.mjs');
 assert.match(helper,/verifyFinalContent\(main.sha,pr.merge_commit_sha,main.commit.tree.sha,candidate.commit.tree.sha\)/);
-assert.match(helper,/prevent_self_review/);
-assert.match(helper,/can_admins_bypass !== false/);
+const ownerGate=read('.github/scripts/release-owner-authorization.mjs');
+assert.match(helper,/requireOwnerEnvironment/);
+assert.match(ownerGate,/prevent_self_review !== false/);
+assert.match(ownerGate,/can_admins_bypass !== false/);
+assert.match(helper,/effectiveOwnerReview/);
+assert.doesNotMatch(helper,/enablePullRequestAutoMerge|merge_method:'merge'/);
 assert.match(helper,/immutable tag collision/);
 assert.doesNotMatch(helper,/--clobber|force:true|conclusion:'success'.*override/);
 for (const suffix of ['','_CZ','_DE','_SV']) {
@@ -238,4 +298,83 @@ for (const suffix of ['','_CZ','_DE','_SV']) {
     assert.match(manual,/release-promotion/);
     assert.doesNotMatch(manual,/Use \\codeword\{--profile=full\} for~complete|Pro úplné ověření před předáním použijte|Verwenden Sie \\codeword\{--profile=full\} für die vollständige Übergabeprüfung|Använd \\codeword\{--profile=full\} för fullständig överlämningskontroll/);
 }
-process.stdout.write('PASS hosted release identity, red evidence, CI-first and branch safety contracts\n');
+
+// Owner-only authorization: real REST shapes, no network and no GitHub writes.
+const ownerRepo='owner/gallery';
+const ownerRule=Object.assign(JSON.parse(read('.github/release-ruleset.example.json')),
+    {id:24808772,source:ownerRepo,current_user_can_bypass:'never'});
+const ownerEnv={protection_rules:[{type:'required_reviewers',prevent_self_review:false,
+    reviewers:[{type:'User',reviewer:{login:'owner'}}]}],can_admins_bypass:false,
+    deployment_branch_policy:{custom_branch_policies:true,protected_branches:false}};
+const ownerPolicies={total_count:1,branch_policies:[{id:98,name:'main'}]};
+const server={ruleset:structuredClone(ownerRule),environment:structuredClone(ownerEnv),
+    policies:structuredClone(ownerPolicies),permission:'admin'};
+const ownerCall=path=>{
+    if (path.endsWith('/collaborators/owner/permission')) return {permission:server.permission};
+    if (path.endsWith('/environments/release-promotion')) return server.environment;
+    if (path.endsWith('/environments/release-promotion/deployment-branch-policies?per_page=100'))
+        return server.policies;
+    if (path.endsWith('/rulesets')) return [{id:24808772,name:server.ruleset.name,
+        enforcement:server.ruleset.enforcement}];
+    if (path.endsWith('/rulesets/24808772')) return server.ruleset;
+    if (path.endsWith('/rules/branches/main')) return server.ruleset.rules;
+    assert.fail('Unexpected owner-only fixture GET '+path);
+};
+const ownerContext={GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',GITHUB_ACTOR:'owner'};
+assert.equal(requireOwnerDispatch(ownerRepo,ownerCall,ownerContext),'owner');
+requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion');
+requireOwnerRuleset(ownerCall,ownerRepo,'main',ownerRule.name,'Release qualification');
+assert.throws(()=>requireOwnerDispatch(ownerRepo,ownerCall,{...ownerContext,GITHUB_ACTOR:'intruder'}),/BLOCKED/);
+assert.throws(()=>requireOwnerDispatch(ownerRepo,ownerCall,{...ownerContext,GITHUB_REF:'refs/heads/develop'}),/BLOCKED/);
+server.permission='read';
+assert.throws(()=>requireOwnerDispatch(ownerRepo,ownerCall,ownerContext),/BLOCKED/);
+server.permission='admin';
+server.environment.can_admins_bypass=true;
+assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion'),/BLOCKED/);
+server.environment.can_admins_bypass=false;
+server.environment.protection_rules[0].prevent_self_review=true;
+assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion'),/BLOCKED/);
+server.environment.protection_rules[0].prevent_self_review=false;
+server.environment.protection_rules[0].reviewers[0].reviewer.login='other';
+assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion'),/BLOCKED/);
+server.environment=structuredClone(ownerEnv);
+server.policies.branch_policies[0].name='develop';
+assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion'),/BLOCKED/);
+server.policies=structuredClone(ownerPolicies);
+server.policies.branch_policies[0].type='tag';
+assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion'),/BLOCKED/);
+server.policies=structuredClone(ownerPolicies);
+for (const mutate of [
+    state=>{state.enforcement='disabled';},
+    state=>{state.bypass_actors=[{actor_id:1,actor_type:'RepositoryRole',bypass_mode:'always'}];},
+    state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.require_last_push_approval=true;},
+    state=>{state.rules.find(rule=>rule.type==='required_status_checks').parameters.required_status_checks=[];},
+    state=>{state.conditions.ref_name.include=['refs/heads/main','refs/heads/develop'];},
+]) {
+    server.ruleset=structuredClone(ownerRule);
+    mutate(server.ruleset);
+    assert.throws(()=>requireOwnerRuleset(ownerCall,ownerRepo,'main',ownerRule.name,'Release qualification'),
+        /BLOCKED/);
+}
+server.ruleset=structuredClone(ownerRule);
+delete server.ruleset.bypass_actors;
+assert.throws(()=>requireOwnerRuleset(ownerCall,ownerRepo,'main',ownerRule.name,'Release qualification'),
+    /BLOCKED/,'GitHub REST bypass-actor redaction must fail closed.');
+server.ruleset=structuredClone(ownerRule);
+const botPr={number:7,user:{login:'github-actions[bot]'},head:{sha:candidate,
+    repo:{full_name:ownerRepo}},base:{ref:'main'},created_at:'2026-10-07T15:00:00Z',
+merged_at:'2026-10-08T00:00:00Z'};
+requireBotPullRequest(botPr,ownerRepo,candidate,'main');
+assert.throws(()=>requireBotPullRequest({...botPr,user:{login:'owner'}},ownerRepo,candidate,'main'),/BLOCKED/);
+assert.throws(()=>requireBotPullRequest(botPr,ownerRepo,'c'.repeat(40),'main'),/BLOCKED/);
+const ownerReview={id:17,user:{login:'owner'},state:'APPROVED',commit_id:candidate,
+    submitted_at:'2026-10-07T18:00:00Z'};
+assert.equal(effectiveOwnerReview([ownerReview],botPr,'owner',candidate)?.id,17);
+assert.equal(effectiveOwnerReview([{...ownerReview,commit_id:'b'.repeat(40)}],botPr,'owner',candidate),null);
+assert.equal(effectiveOwnerReview([ownerReview,{...ownerReview,id:18,state:'DISMISSED',
+    submitted_at:'2026-10-07T19:00:00Z'}],botPr,'owner',candidate),null);
+assert.equal(effectiveOwnerReview([{...ownerReview,user:{login:'github-actions[bot]'}}],botPr,'owner',candidate),null);
+assert.equal(effectiveOwnerReview([ownerReview],{...botPr,user:{login:'owner'}},'owner',candidate),null);
+assert.equal(effectiveOwnerReview([ownerReview],{...botPr,merged_at:null},'owner',candidate),null);
+
+process.stdout.write('PASS hosted release identity, owner approval, red evidence, CI-first and branch safety contracts\n');

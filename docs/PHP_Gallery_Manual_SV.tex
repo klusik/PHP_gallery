@@ -2477,7 +2477,58 @@ Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera
 
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
 
-Underhållaren startar \filepath{.github/workflows/release-promotion.yml} från \codeword{main} med avslutad kvalificeringskörning, exakt SHA och utgåvegren. Plan läser bara bevis. Promote kräver oberoende godkännande i miljön \codeword{release-promotion}, aktiva PR/statusregler och aktiverar skyddad sammanslagning av utgåvens PR. Publish verifierar identiska kandidat/main-träd efter sammanslagningen, skapar en oföränderlig tagg och publicerar verifierade paket med permanenta bevis. Override kräver skäl och exakta namn på alla röda/överhoppade jobb; ursprungliga fel förblir röda. Mänsklig acceptans och produktionsvärdens smoke-test förblir separata. Saknade serverskydd blockerar skrivning; agenter pushar aldrig direkt till develop/main.
+En ny utgåva utgår från en uttryckligen vald, oföränderlig commit i~grenen
+\codeword{develop}. Utgåvegrenens första commit lägger till~en~granskad
+ursprungspost under~\filepath{.github/release-origins/} med~vald develop-SHA,
+föregående stabil tagg och~ursprunglig \codeword{main}-SHA.
+GitHub-arbetsflödet kontrollerar detta ursprung före Stage~A
+(\codeword{release-preflight}) och~kör sedan centralt registrerade källkontroller
+i~Stage~B (\codeword{release-stage-b}) innan Copilot, TinyTeX eller~PDF-generering.
+Metadata som saknas första gången får en~reproducerbar tid från~källcommiten;
+befintliga giltiga tidsuppgifter behålls vid~omkörning.
+
+Publicering avslutar inte utgåvans livscykel. När ägaren
+manuellt har godkänt och~sammanfogat utgåvans bot-skapade PR
+till~\codeword{main} och~separat godkänt publiceringen använder
+underhållaren \filepath{.github/workflows/release-reconciliation.yml}
+för~att föreslå en~ny bot-skapad PR till~\codeword{develop}.
+Synkroniseringen är slutförd först när ägaren manuellt har
+godkänt den, en~riktig merge med~två föräldrar har bevarat
+historiken och~alla obligatoriska GitHub CI-tester har lyckats
+för~exakt den resulterande develop-SHA:n. Valfri borttagning
+av~utgåvegrenen kräver ytterligare godkännande och~en~exakt
+lease för fjärrreferensen.
+
+Den~enda mänskliga ägaren \codeword{klusik} godkänner varje
+skyddad körning i~\codeword{release-promotion},
+\codeword{release-reconciliation} och~\codeword{release-retirement}.
+Varje miljö tillåter endast \codeword{main}, tillåter ägarens
+egen körningsgranskning och~förbjuder administratörsförbigång.
+Botten \codeword{github-actions[bot]} skapar PR; ägaren granskar
+och~sammanfogar dem själv. GitHub kan kräva
+\ui{Approve workflows to run} innan PR-tester körs.
+Detta är kontroll av~en~person, inte oberoende tvåpersonersgranskning.
+
+De~två förberedda GitHub-regeluppsättningarna för
+\codeword{main} och~\codeword{develop} förblir INAKTIVA
+tills ägaren godkänner aktiveringen separat. Kravet på
+godkännande av~den~senaste pushen måste först stängas av
+för~den ensamma ägaren. Ett PR-godkännande, återkallelse
+av~inaktuella granskningar, strikta obligatoriska CI-kontroller
+och~inga undantagsaktörer måste bevaras. Utan aktivt skydd
+blockeras skrivåtgärder. Se~\filepath{docs/RELEASE_LIFECYCLE.md}.
+
+Underhållaren startar \filepath{.github/workflows/release-promotion.yml}
+från~\codeword{main} med~kvalificerad körning, exakt SHA och
+utgåvegren. \codeword{plan} läser endast bevis.
+\codeword{promote} skapar efter miljögodkännande en~bot-PR
+utan automatisk sammanfogning. Ägaren godkänner vid behov
+PR-testerna, kontrollerar CI, lämnar en~PR-granskning och
+sammanfogar manuellt. Separat godkänd \codeword{publish}
+verifierar ägarens granskning av~exakt SHA, identiska
+Git-träd, oföränderlig tagg, paket och~beständiga SHA-256-bevis.
+Undantag för~misslyckad CI är förbjudna. Saknat skydd ger
+BLOCKED; agenter skriver aldrig direkt till~develop/main.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 

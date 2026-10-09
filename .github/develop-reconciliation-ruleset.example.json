@@ -1,12 +1,12 @@
 {
-  "name": "Reviewed release promotion to main",
+  "name": "Reviewed main-to-develop release reconciliation",
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
       "include": [
-        "refs/heads/main"
+        "refs/heads/develop"
       ],
       "exclude": []
     }
@@ -38,7 +38,7 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Release qualification"
+            "context": "Complete required CI matrix"
           }
         ]
       }

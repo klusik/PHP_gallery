@@ -2551,7 +2551,52 @@ the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record command
 
 \subsection{GitHub-hosted release preparation and~qualification}
 
-The~maintainer dispatches \filepath{.github/workflows/release-promotion.yml} from~\codeword{main} with the~completed qualification run, exact candidate SHA and~release branch. Plan mode reads evidence only. Promote uses an~independently approved \codeword{release-promotion} environment, verifies active PR/status rules and~enables a~release PR's protected merge. Publish runs after merge, checks identical candidate/main trees, creates an~immutable tag and~publishes verified packages with permanent evidence. An~override requires a~reason and~every exact red/skipped job name; original failures stay red. Human acceptance and~production-host smoke remain separately recorded. Missing server controls block writes; agents never directly push to~develop/main.
+A~new release starts from~an~explicit, immutable \codeword{develop} commit.
+The~release branch's first commit adds a~reviewed record under~\filepath{.github/release-origins/},
+binding the~selected develop SHA, previous stable tag, and~initial \codeword{main} SHA.
+The~hosted workflow verifies this provenance before Stage~A (\codeword{release-preflight}),
+then runs centrally registered source-only Stage~B (\codeword{release-stage-b})
+before Copilot, TinyTeX or~PDF generation. A~stable source-commit timestamp initializes
+previously absent release metadata, while completed valid metadata stays unchanged.
+
+Publication does~not end the~release lifecycle. After the~owner
+has manually reviewed and merged the bot-authored release PR into
+\codeword{main} and separately approved publication, the~maintainer
+uses \filepath{.github/workflows/release-reconciliation.yml} to~propose
+a~bot-authored PR into \codeword{develop}. Only a~manual owner PR approval,
+a~true merge retaining both parent histories and~successful complete
+hosted CI on~the~exact resulting develop SHA establish reconciliation.
+Optional retirement requires another owner approval and~an~exact remote
+ref lease; neither workflow directly overwrites protected branches.
+
+The~sole human owner \codeword{klusik} approves each protected deployment
+in~\codeword{release-promotion}, \codeword{release-reconciliation} and
+\codeword{release-retirement}. Each environment is main-only, allows
+self-review of~the~workflow dispatch and~forbids administrator bypass.
+The~bot \codeword{github-actions[bot]} creates PRs; the~owner personally
+reviews and merges them. GitHub may require the~owner to~choose
+\ui{Approve workflows to run} before PR checks start. This is~one-human
+control, not independent two-person review.
+
+The~two prepared GitHub rulesets for \codeword{main} and~\codeword{develop}
+remain DISABLED until the~owner separately authorizes activation.
+Before activation the~most-recent-push approval requirement must be OFF
+for~the~single-owner setup, while one PR approval, stale-review dismissal,
+strict required status checks and~zero bypass actors remain mandatory.
+The~write steps fail closed while effective rules are absent.
+See~\filepath{docs/RELEASE_LIFECYCLE.md} for~the~activation gates.
+
+The~maintainer starts \filepath{.github/workflows/release-promotion.yml}
+from~\codeword{main} with the~qualified run, exact candidate SHA and
+release branch. \codeword{plan} reads evidence only. After the~owner
+approves the~deployment, \codeword{promote} opens a~bot-authored PR but
+never auto-merges it. The~owner approves PR workflows if requested,
+checks CI, submits the~PR approval and~merges manually. A~new,
+separately approved \codeword{publish} verifies the~exact SHA-bound
+owner review, identical candidate/main trees, immutable tag, release
+packages and~permanent SHA-256 evidence before publication. Red-check
+overrides cannot publish in~this model. Missing protections or~checks
+are BLOCKED; agents never push directly to~develop/main.
 
 The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
 

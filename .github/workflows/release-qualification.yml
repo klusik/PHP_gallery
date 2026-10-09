@@ -43,6 +43,11 @@ jobs:
       candidate_sha: ${{ steps.final.outputs.candidate_sha }}
       source_base: ${{ steps.release.outputs.source_base }}
       base_tag: ${{ steps.release.outputs.base_tag }}
+      origin_commit_sha: ${{ steps.origin.outputs.origin_commit_sha }}
+      selected_develop_sha: ${{ steps.origin.outputs.selected_develop_sha }}
+      initial_main_sha: ${{ steps.origin.outputs.initial_main_sha }}
+      previous_stable_tag: ${{ steps.origin.outputs.previous_stable_tag }}
+      previous_stable_sha: ${{ steps.origin.outputs.previous_stable_sha }}
       ready: ${{ steps.final.outputs.ready }}
       preparation_changed: ${{ steps.commit.outputs.changed }}
     steps:
@@ -89,18 +94,69 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "base_tag=${base_tag}" >> "${GITHUB_OUTPUT}"
           echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: origin
+        name: Verify immutable release develop origin and prior main tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-origin.mjs
       - name: Cheap release source preflight
         shell: bash
         env:
           PHP_GALLERY_SOURCE_BASE: ${{ steps.release.outputs.source_base }}
           PHP_GALLERY_BROWSER: disabled
         run: php scripts/audit.php --profile=release-preflight
+      - name: Medium-cost release source preflight
+        timeout-minutes: 6
+        shell: bash
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ steps.release.outputs.source_base }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --profile=release-stage-b
+      - name: Show actionable source-stage failures
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cache/test-audit/latest.md ]]; then
+            sed -n '1,160p' cache/test-audit/latest.md
+          fi
+      - name: Retain bounded source-stage failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-source-preflight
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/*/report.json
+            cache/test-audit/*/report.md
+            cache/test-audit/*/source-failures.md
+            cache/test-audit/*/source-documentation-changed.json
+            cache/test-audit/*/source-policy-changed.json
+            cache/test-audit/*/source-debt-ratchet.json
+            cache/test-audit/*/mvc-architecture.json
+            cache/test-audit/*/source-documentation-changed.log
+            cache/test-audit/*/source-policy-changed.log
+            cache/test-audit/*/source-contract-inventory.log
+            cache/test-audit/*/php-lint.log
+            cache/test-audit/*/js-lint.log
+            cache/test-audit/*/ci-workflow-contract.log
+            cache/test-audit/*/mvc-boundaries.log
+            cache/test-audit/*/mutation-contracts.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Apply deterministic release preparation
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
+          # New releases bind to the immutable event commit; completed metadata
+          # retains its original date on retries, including the bot-prepared head.
+          export RELEASE_INITIAL_EPOCH="$(git show -s --format=%ct "${GITHUB_SHA}")"
           php .github/scripts/prepare_release_candidate.php "${RELEASE_VERSION}"
           # Share one release timestamp between manifest generation and PDF compilation.
           export SOURCE_DATE_EPOCH="$(php -r '
@@ -503,6 +559,11 @@ jobs:
           SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           BASE_TAG: ${{ needs.prepare.outputs.base_tag }}
+          ORIGIN_COMMIT_SHA: ${{ needs.prepare.outputs.origin_commit_sha }}
+          SELECTED_DEVELOP_SHA: ${{ needs.prepare.outputs.selected_develop_sha }}
+          INITIAL_MAIN_SHA: ${{ needs.prepare.outputs.initial_main_sha }}
+          PREVIOUS_STABLE_TAG: ${{ needs.prepare.outputs.previous_stable_tag }}
+          PREVIOUS_STABLE_SHA: ${{ needs.prepare.outputs.previous_stable_sha }}
           READY: ${{ needs.prepare.outputs.ready }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
         run: |
@@ -512,7 +573,9 @@ jobs:
           const e = process.env;
           const record = {repository:e.GITHUB_REPOSITORY, branch:e.GITHUB_REF_NAME,
             candidate_sha:e.CANDIDATE_SHA, source_base:e.SOURCE_BASE, version:e.RELEASE_VERSION,
-            previous_stable_tag:e.BASE_TAG, run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
+            origin_commit_sha:e.ORIGIN_COMMIT_SHA,selected_develop_sha:e.SELECTED_DEVELOP_SHA,
+            initial_main_sha:e.INITIAL_MAIN_SHA,previous_stable_tag:e.PREVIOUS_STABLE_TAG,
+            previous_stable_sha:e.PREVIOUS_STABLE_SHA,run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
             ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
             manual_review:'PENDING', promotion:'NOT_REQUESTED', override:false};
           writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');

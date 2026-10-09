@@ -2194,6 +2194,23 @@ Detailed behavior is documented in `docs/SMART_GALLERIES.md`.
 
 ## Release Documentation
 
+The guarded release architecture is in [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
+`.github/scripts/release-origin.mjs` binds each release to a human-selected
+immutable develop commit, original published main tag and unchanged origin
+record. Release Stage A/B runs centrally before generated assets, while
+`.github/scripts/release-promotion.mjs` remains the sole protected publisher.
+An advanced main returns a bounded fail-closed decision with current main
+SHA/tree, previous qualification and a separately reviewed new-candidate path.
+Publication is not equivalent to lifecycle completion.
+
+`.github/scripts/release-reconciliation.mjs` requires an independently approved
+two-parent merge retaining both develop/main ancestries, unchanged historical
+release notes/metadata and mandatory direct develop hosted CI for the merged SHA.
+`.github/scripts/release-retirement.mjs` checks publication, merged CI evidence,
+dependent PRs/workflows and an expected-SHA remote deletion lease. These are
+hosted-maintainer tools rather than shipped application modules. Checked-in
+example GitHub rulesets and tests do not activate effective server protections.
+
 `RELEASE.md` is the authoritative release lifecycle contract. `scripts/prepare_release.php` applies only registered mechanical current-version markers and delegates reusable operations to `scripts/release_lib.php`; it deliberately leaves editorial release notes, behavior-sensitive documentation, manual compilation, manifest generation, Git history, and publication explicit. `scripts/check_release.php` is read-only and validates runtime/document/manual/metadata/patch-note/manifest version consistency plus manual-PDF freshness. The central `release` audit profile registers that checker as `release-consistency`, so maintainers and agents do not need to run a second consistency pass immediately before release qualification. Audit profiles are alternatives rather than cumulative steps: release work finishes with one `--profile=release` run, not quick then full then release.
 
 Patch note formatting remains standardized in `PATCH_NOTES_TEMPLATE.md`. AI coding agents and maintainers should use it when replacing the preparation scaffold in `PATCH_NOTES.md` so releases keep consistent structure, technical references, filename citation style, and user impact descriptions.

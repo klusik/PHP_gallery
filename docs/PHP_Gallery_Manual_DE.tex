@@ -2483,7 +2483,61 @@ Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose ein
 
 \subsection{GitHub-gehostete Release-Vorbereitung und~Qualifikation}
 
-Der Maintainer startet \filepath{.github/workflows/release-promotion.yml} von \codeword{main} mit abgeschlossenem Qualifikationslauf, genauem SHA und Release-Zweig. Plan liest nur Nachweise. Promote benötigt die unabhängig genehmigte Umgebung \codeword{release-promotion}, aktive PR/Statusregeln und aktiviert geschütztes Zusammenführen des Release-PR. Publish prüft nach dem Merge identische Kandidat/main-Bäume, erstellt einen unveränderlichen Tag und veröffentlicht geprüfte Pakete samt dauerhaften Nachweisen. Override benötigt Begründung und genaue Namen aller roten/übersprungenen Jobs; ursprüngliche Fehler bleiben rot. Menschliche Abnahme und Produktionshost-Smoke bleiben getrennt. Fehlende Serverregeln blockieren Schreibaktionen; Agenten pushen nie direkt nach develop/main.
+Eine neue Veröffentlichung beginnt bei einem ausdrücklich ausgewählten,
+unveränderlichen Commit des~Zweigs \codeword{develop}. Der~erste Commit des~
+Release-Zweigs ergänzt einen geprüften Herkunftsdatensatz in~
+\filepath{.github/release-origins/}, der~die ausgewählte develop-SHA,
+den vorherigen stabilen Tag und~die anfängliche \codeword{main}-SHA bindet.
+Der~GitHub-Workflow prüft diese Herkunft vor Stage~A
+(\codeword{release-preflight}) und~führt danach die zentral registrierten
+Quellprüfungen der Stage~B (\codeword{release-stage-b}) aus, noch bevor
+Copilot, TinyTeX oder~die PDF-Erzeugung beginnen. Neue Versionsmetadaten
+übernehmen einen reproduzierbaren Zeitpunkt aus~dem Quellcommit;
+vorhandene gültige Zeitangaben bleiben bei Wiederholungen erhalten.
+
+Die Veröffentlichung beendet den Release-Lebenszyklus nicht. Nach
+der~manuellen Genehmigung und~Zusammenführung des~vom Bot erstellten
+Release-PR nach \codeword{main} sowie der~gesondert genehmigten
+Veröffentlichung schlägt
+\filepath{.github/workflows/release-reconciliation.yml}
+einen Bot-PR nach~\codeword{develop} vor. Erst die~manuelle
+Genehmigung durch den~Eigentümer, ein~echter Merge mit~zwei
+Elterncommits und~vollständig erfolgreiche gehostete CI auf~der
+genauen resultierenden develop-SHA bestätigen die Synchronisierung.
+Das optionale Löschen benötigt eine weitere Genehmigung und~eine
+exakte Remote-Ref-Lease.
+
+Der~einzige menschliche Maintainer \codeword{klusik} genehmigt
+jedes geschützte Deployment in~\codeword{release-promotion},
+\codeword{release-reconciliation} und~\codeword{release-retirement}.
+Jede Umgebung erlaubt nur \codeword{main}, lässt die~eigene
+Deployment-Genehmigung zu und~verhindert Administrator-Bypass.
+Der~Bot \codeword{github-actions[bot]} erstellt PRs; der~Eigentümer
+prüft und~merged diese selbst. GitHub kann vor den~PR-CI-Läufen
+\ui{Approve workflows to run} verlangen. Dies ist eine
+Ein-Personen-Kontrolle, keine unabhängige zweite Prüfung.
+
+Die~beiden vorbereiteten GitHub-Rulesets für \codeword{main}
+und~\codeword{develop} bleiben DEAKTIVIERT, bis der~Eigentümer
+ihre Aktivierung gesondert autorisiert. Zuvor muss die~Genehmigung
+des~letzten Pushers ausgeschaltet werden. Eine PR-Genehmigung,
+Verwerfung veralteter Reviews, strenge Pflichtchecks und~keine
+Bypass-Akteure bleiben erforderlich. Ohne aktive Schutzregeln
+blockieren alle Schreibaktionen. Einzelheiten stehen in
+\filepath{docs/RELEASE_LIFECYCLE.md}.
+
+Der~Maintainer startet \filepath{.github/workflows/release-promotion.yml}
+von~\codeword{main} mit~dem qualifizierten Lauf, der~exakten SHA
+und~dem Release-Zweig. \codeword{plan} liest nur Nachweise.
+\codeword{promote} erstellt nach der~Deployment-Genehmigung einen
+Bot-PR, aber aktiviert keinen automatischen Merge. Der~Eigentümer
+autorisiert gegebenenfalls die~CI-Läufe, überprüft die~Checks,
+genehmigt den~PR und~merged manuell. Das gesondert genehmigte
+\codeword{publish} prüft den~exakten Review-SHA, identische
+Kandidaten-/main-Git-Bäume, den~unveränderlichen Tag, alle Pakete
+und~dauerhafte SHA-256-Belege. Ausnahmen für~rote CI-Checks sind
+unzulässig; fehlender Schutz ergibt BLOCKED. Agenten schreiben
+niemals direkt nach~develop/main.
 
 Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Seine Schritte folgen diesem Vertrag:
 

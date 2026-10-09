@@ -49,6 +49,12 @@ $registry = [
             'python-import-policy',
             'ci-workflow-contract',
         ],
+        // Medium-cost source-only contracts; no generated release artifact prerequisite.
+        // Stage D retains the full exact-candidate suite after release preparation.
+        'release-stage-b' => [
+            'mvc-boundaries',
+            'mutation-contracts',
+        ],
         // Deterministic source/plan gate before any browser, database, or OS matrix.
         // It qualifies the checked-out candidate and never repairs artifacts.
         'candidate-preflight' => [
@@ -208,6 +214,9 @@ $registry = [
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
         'hosted_release_policy_test.mjs' => [],
+        'release_reconciliation_test.mjs' => [],
+        'release_origin_test.mjs' => [],
+        'release_retirement_test.mjs' => [],
         'admin_upload_clipboard_test.mjs' => [],
         'admin_upload_queue_test.mjs' => [],
         'admin_upload_thumbnail_test.mjs' => [],

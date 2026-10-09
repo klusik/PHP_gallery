@@ -39,6 +39,7 @@ declare(strict_types=1);
 namespace PhpGallery\Release;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use RuntimeException;
 
 /**
@@ -55,6 +56,45 @@ function project_root(): string
 function valid_version(string $version): bool
 {
     return preg_match('/^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/', $version) === 1;
+}
+
+/**
+ * Resolve a reproducible release date without trusting the runner wall clock.
+ *
+ * @param array<string,mixed>|null $existing Existing metadata for this exact version, or null before first preparation.
+ * @param string $version Canonical X.Y[.Z] release version.
+ * @param ?string $initialEpoch Immutable source-commit epoch in Unix seconds, required only for new metadata.
+ * @param DateTimeZone $timezone Display timezone shared by metadata and all four manuals.
+ * @return DateTimeImmutable Existing valid release moment or deterministic initial commit moment.
+ */
+function resolve_release_moment(?array $existing, string $version, ?string $initialEpoch, DateTimeZone $timezone): DateTimeImmutable
+{
+    if (!valid_version($version)) {
+        throw new RuntimeException('Invalid release version for timestamp binding.');
+    }
+    if ($existing !== null) {
+        $timestamp = $existing['released_at'] ?? null;
+        if (($existing['tag'] ?? null) !== 'v_' . $version || !is_string($timestamp)
+            || preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/D', $timestamp) !== 1) {
+            throw new RuntimeException('Existing release metadata has a missing or mismatched tag/timestamp.');
+        }
+        $moment = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $timestamp, $timezone);
+        if (!$moment || $moment->format('Y-m-d H:i:s') !== $timestamp) {
+            throw new RuntimeException('Existing release metadata has an invalid or inconsistent timestamp.');
+        }
+        // Early release records use a dotted day, e.g. "3. September 2026".
+        // Preserve validated reviewed bytes without admitting arbitrary labels.
+        if (!in_array($existing['released_label'] ?? null,
+            [$moment->format('j F Y, H:i'), $moment->format('j. F Y, H:i')], true)) {
+            throw new RuntimeException('Existing release metadata has an inconsistent edition label.');
+        }
+        return $moment;
+    }
+    if ($initialEpoch === null || preg_match('/^[1-9]\\d{0,10}$/D', $initialEpoch) !== 1
+        || filter_var($initialEpoch, FILTER_VALIDATE_INT, ['options' => ['min_range' => 946684800]]) === false) {
+        throw new RuntimeException('RELEASE_INITIAL_EPOCH must be a valid immutable source-commit timestamp.');
+    }
+    return (new DateTimeImmutable('@' . $initialEpoch))->setTimezone($timezone);
 }
 
 /**

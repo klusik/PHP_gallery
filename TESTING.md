@@ -2550,3 +2550,35 @@ The DEV-dashboard browser fixture counts initiated media requests at its owned l
 The gallery-description layout compatibility fixture injects a first rename refusal deterministically. It checks bounded Windows recovery, unchanged non-Windows single-attempt refusal, refusal to overwrite an intervening edit, read-only document preservation and owned staging cleanup, alongside its existing replay and database rollback checks.
 
 The gallery-tag fixture observes Escape dismissal during the trusted key event itself, after the production handler. This checks immediate closing state, collapsed ARIA state and summary focus without depending on a protocol response arriving before the animation finishes; final close and geometry assertions remain separate.
+
+
+### Hosted release pre-generation tiers (#101, #139, #140)
+
+`Release qualification` runs Stage A (`release-preflight`, source/syntax/policy/debt
+contracts) and Stage B (`release-stage-b`, centrally owned MVC and mutation
+contracts) before the Copilot, TinyTeX and PDF steps. Both stages must pass.
+On Stage A/B failure, the workflow stores the `release-source-preflight` artifact
+with source SHA/comparison base, bounded structured reports, and relevant failing
+suite diagnostics. These checks do **not** supersede the mandatory full release
+matrix against the exact generated candidate SHA. No additional agent-local full
+audit is required by this tiering.
+
+The first preparation for an absent target-version metadata entry uses an
+immutable commit epoch (`RELEASE_INITIAL_EPOCH`) instead of the runner clock.
+Repeated preparation preserves the existing validated `released_at`,
+`released_label` and tag; invalid or missing new-release provenance fails.
+
+
+### Guarded lifecycle and post-publication qualification (#101)
+
+See [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md) for the required
+operator path and exact live GitHub protections. Tests
+`tests/hosted_release_policy_test.mjs`, `tests/release_origin_test.mjs`,
+`tests/release_reconciliation_test.mjs` and
+`tests/release_retirement_test.mjs` are registered with the central audit.
+They use inert server/Git fixtures to reject changed origin bytes, stale main,
+missing independent review, incorrect dual-parent merge ancestry, red hosted
+checks, active operations and moved cleanup refs. They do not certify that any
+GitHub environment or ruleset is installed, that a human approved an actual
+PR, or that a real release was published/reconciled. CI-first hosted qualification
+and exact source SHA remain authoritative; no new local handoff gate is implied.

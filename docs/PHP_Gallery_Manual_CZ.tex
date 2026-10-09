@@ -2477,7 +2477,53 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 
 \subsection{Příprava a~kvalifikace vydání na GitHubu}
 
-Správce spouští \filepath{.github/workflows/release-promotion.yml} z~\codeword{main} s~dokončeným během kvalifikace, přesným SHA a~větví vydání. Režim plan pouze čte důkazy. Promote vyžaduje nezávisle schválené prostředí \codeword{release-promotion}, ověří aktivní pravidla PR a~stavových kontrol a~povolí chráněné sloučení release PR. Publish po sloučení ověří shodný obsah kandidáta/main, vytvoří neměnný tag a~zveřejní ověřené balíčky s~trvalými důkazy. Override vyžaduje důvod a~přesné názvy všech červených/přeskočených jobů; původní selhání zůstanou červená. Ruční přijetí a~kontrola produkčního hostingu zůstávají zvlášť. Bez serverových ochran jsou zápisy blokovány; agenti přímo do develop/main nepushují.
+Nové vydání vychází z~výslovně vybraného neměnného commitu větve \codeword{develop}.
+První commit release větve přidává zkontrolovaný záznam do~\filepath{.github/release-origins/},
+který váže vybrané SHA větve develop, předchozí stabilní tag a~počáteční SHA větve \codeword{main}.
+Hostovaný postup tento původ ověřuje před levnou kontrolou Stage~A
+(\codeword{release-preflight}) a~následně spustí centrální zdrojové kontroly Stage~B
+(\codeword{release-stage-b}) ještě před Copilotem, TinyTeX nebo~generováním PDF.
+Chybějící počáteční metadata získají reprodukovatelný čas z~commitu zdrojů;
+existující platný datum vydání se při opakování nemění.
+
+Zveřejněním vydání jeho životní cyklus nekončí. Po~ručním
+schválení a~sloučení release PR vytvořeného botem do~\codeword{main}
+a~samostatně schválené publikaci správce použije
+\filepath{.github/workflows/release-reconciliation.yml} k~vytvoření
+dalšího PR do~\codeword{develop}. Synchronizace je~dokončena až~po
+ručním schválení vlastníkem, skutečném sloučení se~dvěma rodiči
+a~úspěšném úplném GitHub CI nad přesným výsledným SHA větve develop.
+Volitelné odstranění release větve vyžaduje další souhlas vlastníka
+a~kontrolu přesného SHA vzdálené reference.
+
+Jediný lidský správce \codeword{klusik} schvaluje každé chráněné
+nasazení v~prostředích \codeword{release-promotion},
+\codeword{release-reconciliation} a~\codeword{release-retirement}.
+Každé prostředí povoluje pouze větev \codeword{main}, neblokuje
+schválení vlastního spuštění a~zakazuje administrátorské obejití.
+Bot \codeword{github-actions[bot]} zakládá PR, vlastník je~osobně
+kontroluje a~slučuje. GitHub může před spuštěním CI vyžadovat
+\ui{Approve workflows to run}. Nejde o~nezávislé schválení druhým
+člověkem, ale o~vědomou kontrolu jediným správcem.
+
+Dva připravené GitHub rulesety pro \codeword{main} a~\codeword{develop}
+zůstávají VYPNUTÉ do~samostatného rozhodnutí vlastníka. Před aktivací
+je~nutné vypnout požadavek na~schválení posledního pushujícího, avšak
+zachovat jedno schválení PR, zneplatnění zastaralých schválení,
+povinné přísné kontroly CI a~nulové výjimky z~ochrany. Bez aktivních
+ochran zápisové operace bezpečně selžou. Další podmínky stanoví
+\filepath{docs/RELEASE_LIFECYCLE.md}.
+
+Správce spouští \filepath{.github/workflows/release-promotion.yml}
+z~\codeword{main} s~úspěšnou kvalifikací, přesným SHA a~větví vydání.
+\codeword{plan} pouze čte důkazy. \codeword{promote} po~schválení
+prostředí vytvoří PR pod~botem, nikdy ho~automaticky nesloučí.
+Vlastník případně povolí spuštění CI, ověří všechny kontroly,
+schválí PR a~ručně ho~sloučí. Samostatně schválený \codeword{publish}
+ověří schválení vlastníka vázané na~přesné SHA, shodný Git strom,
+neměnný tag, balíčky a~trvalé SHA-256 důkazy. Výjimka pro~neúspěšné
+testy je~zakázána. Chybějící ochrany znamenají BLOCKED; agenti
+nikdy přímo nezapisují do~develop/main.
 
 Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
 

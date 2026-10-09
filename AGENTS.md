@@ -39,7 +39,8 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
-- `php scripts/audit.php --profile=release-preflight` - source-only feedback for ordinary authoring and release preparation; checks syntax, documentation, policy, and debt budgets without running regression matrices or preparing a release.
+- `php scripts/audit.php --profile=release-preflight` - cheap source-only feedback before release preparation; checks syntax, documentation, policy, and debt budgets without preparing a release.
+- `php scripts/audit.php --profile=release-stage-b` - hosted release-only medium-cost MVC and Admin mutation contracts before generation; the final matrix still qualifies the prepared SHA.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
@@ -124,6 +125,16 @@ non-forced writes. A later fix repeats hosted preparation and qualification.
 Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
 explicitly requested or hosted preparation is unavailable; agents do not routinely
 duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
+
+### Reviewed release lifecycle (#101)
+
+In addition to the mandatory hosted CI-first contract, release-only operations
+must follow `docs/RELEASE_LIFECYCLE.md`: record an exact selected `develop`
+origin, reject main ancestry drift, and treat publication as `SYNC_PENDING`
+until a separate independently reviewed main-to-develop PR is merged and every
+exact merged-SHA required hosted CI job is green. Never modify protected refs
+without the separately authorized GitHub workflow and server enforcement.
+Cleanup is an optional separately approved Git ref lease, never routine pruning.
 
 ### Mandatory Agent Verification Contract
 
