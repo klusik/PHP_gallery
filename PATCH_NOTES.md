@@ -1,5 +1,62 @@
 # Patch notes
 
+## Version 0.125
+
+Version 0.125 added advanced public appearance controls, a protected visual CSS editing workflow, and a local upload-preview queue in Admin. It also strengthened hosted candidate qualification and guarded release promotion, with updated documentation and regression coverage.
+
+### Highlights
+
+#### Theme appearance and visual CSS editing [#125](https://github.com/klusik/PHP_gallery/issues/125)
+- Added controls for public gallery spacing, card padding and shadows, typography scale, transparent headers, and individual resets.
+- Added a visual CSS workspace with responsive public-page previews, element selection and styling, resizing, and undo/redo. Visual edits remained drafts until explicitly saved.
+- Added a separate manual CSS override layer and revision-checked, atomic save workflows for CSS and supported global background changes.
+
+#### Admin upload previews [#118](https://github.com/klusik/PHP_gallery/issues/118)
+- Added an ordered, browser-local upload queue to the Admin upload drawer for selected, pasted, and dropped files, with preview, reordering, removal, and duplicate-name warnings.
+- Kept uploaded originals unchanged and preserved unresolved selections for retry; preview decoding used bounded resources and did not replace server-side validation.
+
+#### Hosted qualification and release promotion [#100](https://github.com/klusik/PHP_gallery/issues/100) [#124](https://github.com/klusik/PHP_gallery/issues/124)
+- Strengthened candidate qualification and added protected, maintainer-reviewed release promotion and publication workflows.
+
+#### OFP viewer navigation [#119](https://github.com/klusik/PHP_gallery/issues/119)
+- Added paced held-arrow-key PDF paging and stopped repeat navigation when viewer focus or lifecycle state changed.
+
+### Technical Details
+
+#### Backend
+- Added protected visual-preview policy and rendering support in `app/services/public_visual_preview.php`; preview requests were restricted to approved read-only routes and used private, no-store responses.
+- Added revision-checked Custom CSS and background-save workflows, with locking and atomic activation. Installation-specific override and lock files were excluded from updater and release ownership.
+- Updated Theme controllers and services to support advanced appearance settings, preview handling, and separate CSS submissions.
+
+#### Frontend
+- Added the visual editor and its draft, import, resize, and customization modules, plus Admin editor styling and localized interface text in English, Czech, German, and Swedish.
+- Updated the Admin upload drawer with local preview and ordered-queue modules while retaining the existing upload pipeline.
+- Loaded manual CSS overrides after public styles and omitted them from Admin pages.
+
+#### Database
+- Added no database migration; the CSS override and visual editing workflows used the existing settings and filesystem mechanisms.
+
+#### Tests
+- Added regression coverage for visual-preview policy and HTTP workflows, CSS/background save and recovery, advanced appearance rendering, visual-editor draft and resize models, and browser interactions.
+- Added upload queue and thumbnail-preview tests, and expanded OFP viewer keyboard-navigation coverage.
+- Added hosted release-policy tests for qualification and publication safeguards.
+
+#### Documentation
+- Updated maintainer, testing, release, and architecture documentation, added `docs/LIVE_VISUAL_CSS_EDITOR.md` and `docs/UPLOAD_SELECTION.md`, and synchronized all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+- Visitors saw public appearance settings and saved CSS/background changes selected by administrators; the visual editing workspace itself remained protected.
+- Public visitor access behavior did not change as a result of the visual preview workflow.
+
+#### For administrators
+- Administrators gained additional public appearance controls, a draft-based visual CSS editor, and a separate manual CSS override layer that ordinary Theme changes preserved.
+- Admin upload drawers provided local previews and queue management, while retaining selected originals for upload and retry.
+
+#### For maintainers
+- Maintainers gained stricter hosted candidate qualification and guarded release-promotion tooling, plus updated workflow documentation and regression coverage.
+
 ## Version 0.124.4
 
 Version 0.124.4 hardened first-install migration behavior and tightened repository authoring and audit evidence. It resolved installer lock handling before `config.php` exists and expanded the checked authoring guidance, audit reporting, and regression coverage for config-free installation and source diagnostics.
