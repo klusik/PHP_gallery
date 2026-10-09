@@ -67,7 +67,7 @@ export function linearFixture() {
                 result+'...'+state.developSha,published+'...'+state.mainSha];
             return {behind_by:state.lostHistory ? 1 : known.includes(pair)?0:1};
         }
-        if (path.endsWith('/rulesets')) return [{id:24808873,name:ruleset.name,enforcement:state.protected?'active':'disabled'}];
+        if (path.endsWith('/rulesets?per_page=100')) return [{id:24808873,name:ruleset.name,enforcement:state.protected?'active':'disabled'}];
         if (path.endsWith('/rulesets/24808873')) return {...ruleset,enforcement:state.protected?'active':'disabled'};
         if (path.endsWith('/rules/branches/develop')) return ruleset.rules;
         if (path.includes('/check-runs?')) return {total_count:2,check_runs:['Candidate qualification','Complete required CI matrix'].map(name=>({

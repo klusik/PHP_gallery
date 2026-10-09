@@ -109,6 +109,11 @@ A successful GitHub gate is automated qualification evidence only. Required huma
 
 ## Protected promotion and publication
 
+For the already merged v_0.126 only, follow the separately owner-approved
+[publication recovery runbook](docs/RELEASE_PUBLICATION_RECOVERY_v_0.126.md).
+Its pinned recovery ref uses this existing workflow and publisher; no additional
+main commit, release PR, tag replacement or ruleset change is authorized.
+
 The single-owner normal lifecycle is:
 
 1. Initialize `release/v_X.Y[.Z]` from an immutable selected `develop`

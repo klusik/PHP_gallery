@@ -94,6 +94,9 @@ This check is derived from the complete actual matrix; it is never a red overrid
 ## Promotion and separate publication
 
 Normal `plan`, `promote` and `publish` dispatch from reviewed `main` tooling.
+The sole off-main publication exception is the owner-approved, immutable
+[v_0.126 recovery runbook](RELEASE_PUBLICATION_RECOVERY_v_0.126.md); it reuses
+the publisher without changing the already merged main commit or qualified Q.
 `promote` requires owner deployment approval and effective main protections, then
 opens/reuses a `github-actions[bot]` PR at exact `Q`. It never approves or merges.
 Require current main to remain exactly `P`, the previous tag object/commit/tree
@@ -117,12 +120,19 @@ not an immutable run binding. Candidate checks use the corresponding `candidate`
 binding. Reconciliation decodes that identity and rechecks actual server-owned
 run/attempt and every central matrix job, then records the canonical Actions URL.
 Missing, foreign or stale external identities fail closed.
+Same-name independent PR checks do not invalidate an exact release binding.
+Duplicate checks with that same required release identity are rejected, including
+duplicates from a foreign App; exactly one successful Actions check on Q is required.
 The hosted gate exposes the unprefixed matrix context after the central aggregate
 passes, even when preparation leaves SHA unchanged; reusable job names may carry
 caller prefixes. This derives from the central registry and does not replace any
 matrix job. The publication PR must have no auto-merge configuration and its
 server-recorded merger must be the human owner. Unknown or overlapping effective
 branch rules fail closed pending a live compatibility review.
+The filtered PR listing is discovery only: fetch the single PR's complete REST
+detail, bind its identity and merge fields to the listing, and use its
+`merged_by` and timestamps for merger/review validation. Missing or conflicting
+identities and API failures block publication; list endpoints omit `merged_by`.
 
 Existing tags never move. Interrupted drafts reuse only identical assets, sizes
 and SHA-256 digests. Conflicting existing bytes block rather than clobber. Release

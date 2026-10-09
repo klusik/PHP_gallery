@@ -96,16 +96,23 @@ const writes = [];
 const mergeSha = 'c'.repeat(40);
 const tree = 'd'.repeat(40);
 const releasePr = {number:7,node_id:'fixture-pr',state:'closed',merged_at:'2026-10-08T00:00:00Z',
-    merged_by:{login:'owner'},auto_merge:null,
+    merged:true,merged_by:{login:'owner'},auto_merge:null,
     created_at:'2026-10-07T15:00:00Z',user:{login:'github-actions[bot]'},
-    merge_commit_sha:mergeSha,head:{sha:candidate,repo:{full_name:record.repository}},base:{ref:'main',sha:record.initial_main_sha},html_url:'https://github.com/owner/gallery/pull/7'};
+    merge_commit_sha:mergeSha,head:{ref:request.branch,sha:candidate,repo:{full_name:record.repository}},
+    base:{ref:'main',sha:record.initial_main_sha,repo:{full_name:record.repository}},html_url:'https://github.com/owner/gallery/pull/7'};
 const fakeApi = (path,method = 'GET',payload = null) => {
     if (method !== 'GET') writes.push({path,method,payload});
     if (path.includes('/check-runs?')) return {total_count:2,check_runs:['Release qualification','Complete required CI matrix'].map(name=>({
         name,head_sha:candidate,app:{id:15368},status:'completed',conclusion:'success',
         external_id:'release:'+request.runId+':'+record.run_attempt+':'+candidate,
         details_url:'https://github.com/'+record.repository+'/runs/114046888632'}))};
-    if (path.includes('/pulls?')) return [structuredClone(releasePr)];
+    if (path.includes('/pulls?')) {
+        const listed=structuredClone(releasePr);
+        delete listed.merged_by;
+        delete listed.merged;
+        return [listed];
+    }
+    if (path.endsWith('/pulls/7') && method==='GET') return structuredClone(releasePr);
     if (path.endsWith('/pulls/7/reviews?per_page=100')) return [
         {id:72,user:{login:'owner'},state:'APPROVED',commit_id:candidate,
             submitted_at:'2026-10-07T18:00:00Z',html_url:'https://github.com/owner/gallery/pull/7#pullrequestreview-72'}];
@@ -144,7 +151,7 @@ const fakeCommand = (executable,args) => {
     } else assert.fail('Unexpected release command.');
     return '';
 };
-const adapters = {api:fakeApi,command:fakeCommand,record,evidence:{repository:record.repository,version:'1.2.2',
+const adapters = {api:fakeApi,command:fakeCommand,record,context:{GITHUB_REF:'refs/heads/main',GITHUB_ACTOR:'fixture-maintainer'},evidence:{repository:record.repository,version:'1.2.2',
     final_main_sha:record.previous_stable_sha,final_tree:record.previous_tree_sha,candidate_sha:record.previous_release_candidate_sha,
     ready:true,automated_result:'success',override:false,run_id:'122'}};
 const publishRequest = {...request,mode:'publish',manualReview:'Independent browser acceptance fixture'};
@@ -177,9 +184,67 @@ try {
     releasePr.auto_merge={enabled_by:{login:'owner'}};
     assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,adapters),/github-actions\[bot\]/);
     releasePr.auto_merge=null;
-    const merged=inspectMergedPromotion(publishRequest,record.repository,adapters);
+    const inspectionReads=[];
+    const inspectionApi=(path,...args)=>{inspectionReads.push(path);return fakeApi(path,...args);};
+    const listPath='repos/'+record.repository+'/pulls?state=closed&base=main&head='
+        +encodeURIComponent('owner:'+request.branch)+'&per_page=100';
+    const detailPath='repos/'+record.repository+'/pulls/7';
+    assert.equal(Object.hasOwn(fakeApi(listPath)[0],'merged_by'),false,'GitHub PR listings omit the merger.');
+    const merged=inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:inspectionApi});
+    assert.deepEqual(inspectionReads.slice(0,3),[listPath,detailPath,detailPath+'/reviews?per_page=100']);
+    assert.equal(merged.pr.merged_by.login,'owner','Only the complete, identity-bound PR detail proves the human merger.');
     assert.equal(merged.ownerReview.id,72);
     assert.equal(merged.main.sha,mergeSha);
+    const completeListingApi=(path,...args)=>path===listPath ? [structuredClone(releasePr)] : fakeApi(path,...args);
+    assert.equal(inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:completeListingApi}).pr.number,7);
+    for (const response of [null,{},[],[null],[{merged_at:null}],[releasePr,releasePr]]) {
+        const invalidListingApi=(path,...args)=>path===listPath ? response : fakeApi(path,...args);
+        assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:invalidListingApi}),/BLOCKED/);
+    }
+    for (const mutate of [
+        pr=>{delete pr.number;},pr=>{delete pr.node_id;},pr=>{delete pr.head;},
+        pr=>{delete pr.head.ref;},pr=>{delete pr.base.sha;},pr=>{delete pr.base.repo;},
+        pr=>{delete pr.merge_commit_sha;},pr=>{delete pr.merged_at;},pr=>{delete pr.created_at;},
+        pr=>{pr.number=8;},pr=>{pr.node_id='another-pr';},pr=>{pr.head.ref='release/v_1.2.4';},
+        pr=>{pr.head.sha='e'.repeat(40);},pr=>{pr.head.repo.full_name='foreign/gallery';},
+        pr=>{pr.base.ref='develop';},pr=>{pr.base.sha='e'.repeat(40);},
+        pr=>{pr.base.repo.full_name='foreign/gallery';},pr=>{pr.state='open';},pr=>{pr.merged=false;},
+        pr=>{pr.merge_commit_sha='e'.repeat(40);},pr=>{pr.merged_at='2026-10-08T01:00:00Z';},
+        pr=>{pr.created_at='2026-10-07T16:00:00Z';},pr=>{pr.html_url+='0';},
+        pr=>{pr.user.login='owner';},pr=>{pr.auto_merge={enabled_by:{login:'owner'}};},
+        pr=>{delete pr.merged_by;},pr=>{pr.merged_by={login:'another-human'};},
+    ]) {
+        const inconsistentApi=(path,...args)=>{
+            const response=fakeApi(path,...args);
+            if (path===detailPath) mutate(response);
+            return response;
+        };
+        assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:inconsistentApi}),/BLOCKED/);
+    }
+    for (const mutate of [
+        pr=>{delete pr.number;},pr=>{delete pr.node_id;},pr=>{delete pr.head.ref;},
+        pr=>{delete pr.base.repo;},pr=>{pr.number=Number.MAX_SAFE_INTEGER+1;},
+        pr=>{pr.merged_by={login:'another-human'};},
+    ]) {
+        const incompleteListingApi=(path,...args)=>{
+            const response=fakeApi(path,...args);
+            if (path===listPath) mutate(response[0]);
+            return response;
+        };
+        assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:incompleteListingApi}),/BLOCKED/);
+    }
+    for (const response of [null,{},[]]) {
+        const missingDetailApi=(path,...args)=>path===detailPath ? response : fakeApi(path,...args);
+        assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:missingDetailApi}),/BLOCKED/);
+    }
+    for (const failedPath of [listPath,detailPath]) {
+        const unavailableApi=(path,...args)=>{
+            if (path===failedPath) throw new Error('simulated GitHub API failure');
+            return fakeApi(path,...args);
+        };
+        assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,{...adapters,api:unavailableApi}),/BLOCKED release promotion PR API unavailable/);
+    }
+    assert.equal(writes.length,0,'Missing, conflicting or unavailable PR detail cannot mutate the server.');
     assert.throws(()=>requireCurrentMainBase(request,record.repository,adapters),/BLOCKED_MAIN_ADVANCED/);
     unexpectedMain = true;
     await assert.rejects(publish(publishRequest,record.repository,record,[],adapters),/tree differs/);
@@ -342,7 +407,7 @@ const ownerCall=path=>{
     if (path.endsWith('/environments/release-promotion')) return server.environment;
     if (path.endsWith('/environments/release-promotion/deployment-branch-policies?per_page=100'))
         return server.policies;
-    if (path.endsWith('/rulesets')) return [{id:24808772,name:server.ruleset.name,
+    if (path.endsWith('/rulesets?per_page=100')) return [{id:24808772,name:server.ruleset.name,
         enforcement:server.ruleset.enforcement}];
     if (path.endsWith('/rulesets/24808772')) return server.ruleset;
     if (path.endsWith('/rules/branches/main')) return server.ruleset.rules;
@@ -409,9 +474,10 @@ assert.equal(effectiveOwnerReview([ownerReview],{...botPr,merged_at:null},'owner
 
 process.stdout.write('PASS hosted release identity, owner approval, red evidence, CI-first and branch safety contracts\n');
 
-const checkInventory=fakeApi('repos/'+record.repository+'/commits/'+candidate+'/check-runs?per_page=100');
+const checkInventory=fakeApi('repos/'+record.repository+'/commits/'+candidate+'/check-runs?per_page=100&filter=all');
 requireQualificationChecks(()=>checkInventory,record.repository,request,record.run_attempt);
-for (const patch of [{conclusion:'failure'},{status:'in_progress'},{head_sha:'0'.repeat(40)},
+for (const patch of [{conclusion:'failure'},{conclusion:'skipped'},{conclusion:'cancelled'},{conclusion:null},
+    {status:'in_progress'},{head_sha:'0'.repeat(40)},
     {app:{id:1}},{external_id:''},{external_id:'release:124:1:'+candidate},
     {external_id:'release:123:2:'+candidate},{external_id:'candidate:123:1:'+candidate},
     {external_id:'release:123:9007199254740992:'+candidate}]) {
@@ -419,4 +485,21 @@ for (const patch of [{conclusion:'failure'},{status:'in_progress'},{head_sha:'0'
     assert.throws(()=>requireQualificationChecks(()=>listing,record.repository,request,record.run_attempt),/qualification check/);
 }
 assert.throws(()=>requireQualificationChecks(()=>({total_count:100,check_runs:[]}),record.repository,request,record.run_attempt),/incomplete/);
+assert.throws(()=>requireQualificationChecks(()=>({...checkInventory,total_count:3}),record.repository,request,record.run_attempt),/incomplete/);
+for (const original of checkInventory.check_runs) {
+    const independent={...original,external_id:'unrelated-pr-workflow',conclusion:'failure'};
+    const listing={total_count:3,check_runs:[independent,...checkInventory.check_runs]};
+    requireQualificationChecks(path=>{
+        assert.ok(path.endsWith('&filter=all'),'All check attempts must remain visible for duplicate detection.');
+        return listing;
+    },record.repository,request,record.run_attempt);
+    listing.check_runs=listing.check_runs.filter(check=>check!==original);
+    listing.total_count=2;
+    assert.throws(()=>requireQualificationChecks(()=>listing,record.repository,request,record.run_attempt),/qualification check/,
+        'An independent green or red PR check cannot replace the required release identity.');
+    for (const duplicate of [original,{...original,conclusion:'failure'},{...original,app:{id:1}}]) {
+        assert.throws(()=>requireQualificationChecks(()=>({total_count:3,check_runs:[...checkInventory.check_runs,duplicate]}),
+            record.repository,request,record.run_attempt),/qualification check/,'Duplicate exact release identities fail closed.');
+    }
+}
 assert.throws(()=>requireQualificationChecks(()=>{throw new Error('CI unavailable');},record.repository,request,record.run_attempt),/CI unavailable/);

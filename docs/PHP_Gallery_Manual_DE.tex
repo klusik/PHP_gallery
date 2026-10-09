@@ -2518,11 +2518,28 @@ pushes develop. Completion is~\codeword{RECONCILED\_FF} or
 or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
 Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
 
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
+Main verlangt vom Eigentümer genehmigte Merge-PRs und~Release qualification
+ohne strenge Aktualitätsanforderung; develop verlangt lineare Historie ohne
+erzwungene Änderungen und~Complete required CI matrix ohne verpflichtende PRs.
+Serveraktivierung und~Live-Prüfung von~Checks, Merge und~FF benötigen getrennte
+Entscheidungen des~Eigentümers. Die~drei dauerhaften Release-Umgebungen bleiben
+eigentümergeprüft und~auf~main beschränkt. Rote Checks dürfen nicht übergangen werden.
+
+Die~einmalige Wiederherstellung der~Publikation von~\codeword{v\_0.126} verwendet
+den~exakt autorisierten Hotfix-Ref und~eine getrennte eigentümergeprüfte Umgebung;
+main, develop und~der~qualifizierte Release-Branch bleiben unverändert.
+Eine gehostete, ausschließlich lesende Readiness-Prüfung kontrolliert Live-Regeln,
+ursprüngliche Qualifikation, Eigentümerfreigabe des~PR, Reihenfolge der~Merge-Eltern
+und~Baum, tatsächliche Pakete mit~SHA-256 sowie das~vollständige paginierte
+Release-/Draft-Inventar vor~der~Anforderung einer Environment-Freigabe.
+Der~Publisher wiederholt die~Prüfungen vor~jedem Schreiben. Ein~fehlendes
+Bypass-Akteur-Feld bedeutet niemals eine leere Liste. Eine vollständige
+Ruleset-Attestierung des~Eigentümers, gebunden an~Serveridentität/Änderungszeit,
+Q/M und~die~exakte Tooling-SHA, benötigt eine getrennte ausdrückliche Freigabe
+des~Sicherheitsvertrags; die~Metadatenannahmen muss der~Eigentümer bewerten.
+Fehlende Nachweise halten die~Publikation BLOCKED. PAT, privilegierte
+Automatisierungszugänge und~Bypässe sind keine genehmigte Lösung.
+Siehe \filepath{docs/RELEASE_PUBLICATION_RECOVERY_v_0.126.md}.
 
 For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
 filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated

@@ -8,6 +8,41 @@ existing product metric actually observes adoption.
 
 ## Policy
 
+### RELEASE-RECOVERY-126 — Pinned off-main publication of the merged release
+
+- **Reason / protected behavior:** v_0.126 is qualified and merged, but its main
+  publisher rejects an independent PR check with the same name. Publish the
+  original Q at existing M without adding a main commit or rewriting a release.
+- **Owner:** Existing release promotion and owner authorization modules; the
+  exact operational contract is [the recovery runbook](RELEASE_PUBLICATION_RECOVERY_v_0.126.md).
+- **Scope / retirement:** Only User klusik, the exact recovery ref, v_0.126,
+  run 38000825301 attempt 1, Q, M and develop are admitted. Retire the exception
+  after verified publication, durable evidence retention and separately approved
+  exact-ref cleanup; preserve the general exact-check-identity fix for future releases.
+- **Regression evidence:** Central hosted Node fixtures cover independent checks,
+  duplicates, foreign identities, owner/server policy and branch/tree/review drift,
+  per-write checks, interrupted drafts and identical retries.
+- **Usage / introduction:** Authored on 2026-10-10 for this recovery. Live
+  publication usage is unknown and requires separate owner dispatch and approval.
+
+### RELEASE-RULESET-ATTESTATION-126 — Restricted token evidence proposal
+
+- **Reason / protected environment:** GitHub redacts Ruleset bypass actors from
+  the recovery job token despite Contents write. Missing never means empty.
+- **Owner / scope:** Hosted release authorization, sole owner klusik, Ruleset
+  24808772, original v_0.126 Q/M and exact recovery tooling SHA. An explicit
+  server-owned security-contract approval on #133 is required; none is supplied.
+- **Protected behavior:** Zero bypass actors remain mandatory. Full owner policy
+  digest, unchanged live identity/updated_at/all visible fields, effective rules
+  and every original release authorization are checked before each write.
+- **Retirement:** Confine attestation to this recovery; retire with the recovery
+  exception after verified publication and separately approved cleanup. Direct
+  complete live validation stays supported. Do not generalize to develop.
+- **Evidence / usage:** Central recovery fixtures model redaction and policy
+  drift. Live attestation usage is unknown; timestamp mutation guarantees and
+  publication acceptance are unverified. See the
+  [security decision](RELEASE_PUBLICATION_RECOVERY_v_0.126.md#proposed-owner-ruleset-attestation-separate-security-contract-approval).
+
 ### CI-1 — Local maintainer recovery after CI-first migration
 
 - **Reason / protected environment:** Maintainers may need existing local

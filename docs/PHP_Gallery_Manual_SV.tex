@@ -2512,11 +2512,26 @@ pushes develop. Completion is~\codeword{RECONCILED\_FF} or
 or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
 Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
 
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
+Main kräver ägargodkända merge-PR och~Release qualification utan strikt krav
+på~aktualitet; develop kräver linjär historik utan tvingade ändringar och~Complete
+required CI matrix utan obligatoriska PR. Serveraktivering och~verklig kontroll
+av~checks, merge och~FF kräver separata ägarbeslut. De~tre permanenta
+release-miljöerna förblir ägargodkända och~begränsade till main.
+Röda kontroller får inte kringgås.
+
+Den~enda återställningen av~publiceringen för~\codeword{v\_0.126} använder exakt
+auktoriserad hotfix-ref och~en~separat ägargodkänd miljö; main, develop och~den
+kvalificerade release-grenen förblir oförändrade. En~värdbaserad readiness-kontroll
+som endast läser verifierar aktuella regler, ursprunglig kvalificering, ägarens
+PR-godkännande, ordning på~merge-föräldrar och~träd, faktiska paket med~SHA-256
+samt fullständigt sidindelat release-/draft-inventarium innan Environment-godkännande
+begärs. Publiceraren upprepar kontrollerna före varje skrivning. Ett~saknat fält
+för~bypass-aktörer betyder aldrig en~tom lista. Fullständig Ruleset-attestering
+från ägaren, bunden till serveridentitet/ändringstid, Q/M och~exakt tooling-SHA,
+kräver separat uttryckligt godkännande av~säkerhetskontraktet; ägaren måste bedöma
+antagandena om~metadata. Saknade bevis håller publiceringen BLOCKED.
+PAT, privilegierade automationsuppgifter eller bypass är~ingen godkänd lösning.
+Se~\filepath{docs/RELEASE_PUBLICATION_RECOVERY_v_0.126.md}.
 
 For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
 filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated

@@ -214,6 +214,7 @@ $registry = [
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
         'hosted_release_policy_test.mjs' => [],
+        'release_publication_recovery_test.mjs' => [],
         'release_reconciliation_test.mjs' => [],
         'release_origin_test.mjs' => [],
         'linear_release_graph_test.mjs' => [],

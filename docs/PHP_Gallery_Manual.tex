@@ -2588,9 +2588,22 @@ Optional release-branch retirement requires a~separate owner approval and~exact-
 
 Main protection requires owner-reviewed merge PRs and~loose Release qualification;
 develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
+mandatory PRs. Server activation and~live check/merge/FF acceptance require separate
+owner decisions. The~three permanent release environments remain owner-reviewed
 and~main-only. No~red-check override is~permitted.
+
+The~single \codeword{v\_0.126} publication recovery uses its~exact authorized hotfix
+ref~and~a~separate owner-reviewed environment while main, develop and~the~qualified
+release branch remain unchanged. A~read-only hosted readiness gate checks live
+policy, original qualification, owner PR approval, ordered merge parents/tree,
+actual prepared assets with~SHA-256 and~complete paginated release/draft inventory
+before requesting Environment approval. The~writer repeats these checks before
+every write. A~missing bypass-actor field is~never an~empty list. A~complete owner
+Ruleset attestation bound to~server identity/update time, Q/M and~the~exact tooling
+SHA requires separate explicit security-contract approval; its~metadata assumptions
+remain subject to~owner assessment. Missing evidence keeps publication BLOCKED.
+No~PAT, privileged automation credential or~bypass is~an~approved workaround.
+See \filepath{docs/RELEASE_PUBLICATION_RECOVERY_v_0.126.md}.
 
 For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
 filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated

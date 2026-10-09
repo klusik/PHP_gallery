@@ -35,6 +35,10 @@ on:
         description: Human acceptance evidence/reference (required for writes).
         required: false
         type: string
+      ruleset_attestation_comment:
+        description: Unedited owner JSON approval on issue 133 for this exact tooling SHA; empty never attests hidden bypass actors.
+        required: false
+        type: string
       override_ack:
         description: Read-only plan diagnostics only; red-check override cannot publish.
         type: boolean
@@ -65,6 +69,7 @@ env:
   OVERRIDE_REASON: ${{ inputs.override_reason }}
   ACCEPTED_FAILURES: ${{ inputs.accepted_failures }}
   MANUAL_REVIEW: ${{ inputs.manual_review }}
+  RULESET_ATTESTATION_COMMENT: ${{ inputs.ruleset_attestation_comment }}
 
 jobs:
   inspect:
@@ -77,18 +82,31 @@ jobs:
       source_base: ${{ steps.inspect.outputs.source_base }}
       winapp_changed: ${{ steps.scope.outputs.winapp_changed }}
     steps:
-      - name: Require trusted main dispatch
-        run: |
-          test "${GITHUB_REF}" = refs/heads/main
-          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+      - name: Require trusted main or exact owner recovery dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {readRequest,validateRequest,api} from './.github/scripts/release-promotion.mjs';
+          import {requireOwnerDispatch,requirePublicationRecoveryDispatch} from './.github/scripts/release-owner-authorization.mjs';
+          const request=readRequest();
+          validateRequest(request);
+          if (process.env.GITHUB_EVENT_NAME!=='workflow_dispatch') throw new Error('BLOCKED manual dispatch required.');
+          if (process.env.GITHUB_REF!=='refs/heads/main') {
+            if (!requirePublicationRecoveryDispatch(process.env.GITHUB_REPOSITORY,process.env,request)) throw new Error('BLOCKED untrusted dispatch ref.');
+            requireOwnerDispatch(process.env.GITHUB_REPOSITORY,api,process.env,request);
+          }
+          NODE
       - name: Download candidate identity from the requested run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -132,6 +150,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.sha }}
           path: tooling
           persist-credentials: false
       - uses: actions/checkout@v7.0.1
@@ -200,10 +219,57 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  publication-readiness:
+    name: Read-only production publication readiness before owner approval
+    needs: [inspect, package, installer]
+    if: ${{ always() && github.ref == 'refs/heads/hotfix/v_0.126-publication-recovery' && inputs.mode == 'publish' && needs.inspect.result == 'success' && needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Download original qualification identity
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: verified-publication-assets
+          path: release-assets
+      - uses: actions/download-artifact@v8.0.1
+        if: ${{ needs.inspect.outputs.winapp_changed == 'true' }}
+        with:
+          name: release-winapp-installer
+          path: release-assets
+      - name: Run the production validators through GET-only adapters
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: publish
+          RELEASE_ASSETS: ${{ github.workspace }}/release-assets
+        run: node .github/scripts/release-publication-readiness.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: publication-readiness
+          path: ${{ runner.temp }}/publication-readiness.json
+          if-no-files-found: error
+          retention-days: 90
+
   apply:
     name: Owner-approved release PR or publication
     needs: [inspect, package, installer]
-    if: ${{ always() && inputs.mode != 'plan' && inputs.mode != 'bootstrap' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
+    if: ${{ always() && github.ref == 'refs/heads/main' && inputs.mode != 'plan' && inputs.mode != 'bootstrap' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release-promotion
@@ -214,6 +280,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-node@v7.0.0
@@ -248,6 +315,47 @@ jobs:
           path: ${{ runner.temp }}/release-recovery.json
           if-no-files-found: ignore
           retention-days: 90
+
+  recover-publication:
+    name: Owner-approved publication recovery for v_0.126 only
+    needs: [inspect, package, installer, publication-readiness]
+    if: ${{ always() && github.repository == 'klusik/PHP_gallery' && github.ref == 'refs/heads/hotfix/v_0.126-publication-recovery' && github.actor == 'klusik' && github.triggering_actor == 'klusik' && inputs.mode == 'publish' && inputs.release_branch == 'release/v_0.126' && inputs.candidate_sha == 'aef94a6688c7a437abfed3cc4bc2c29a283421bf' && inputs.qualification_run == '38000825301' && !inputs.override_ack && needs.publication-readiness.result == 'success' && needs.inspect.result == 'success' && needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release-publication-recovery-v_0.126
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Download original qualification after owner environment approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: verified-publication-assets
+          path: release-assets
+      - uses: actions/download-artifact@v8.0.1
+        if: ${{ needs.inspect.outputs.winapp_changed == 'true' }}
+        with:
+          name: release-winapp-installer
+          path: release-assets
+      - name: Reuse canonical publisher with pinned recovery guards before every write
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: publish
+          RELEASE_ASSETS: ${{ github.workspace }}/release-assets
+        run: node .github/scripts/release-promotion.mjs
 
   bootstrap:
     name: Owner-dispatched first-release PR proposal only

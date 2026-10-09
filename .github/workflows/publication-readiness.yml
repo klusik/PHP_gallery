@@ -1,0 +1,70 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/publication-readiness.yml
+# Module Type: Read-only Publication Diagnostic Workflow
+# Purpose: Inspect real recovery-token policy and retained prepared assets without publication.
+# Responsibilities:
+#   - Use the writer's declared GITHUB_TOKEN permissions with exclusively read-only transports
+#   - Retain complete diagnostic evidence without an Environment or server mutation
+# Author: Rudolf Klusal
+name: Read-only publication readiness
+
+on:
+  push:
+    branches: [hotfix/v_0.126-publication-recovery]
+  workflow_dispatch:
+    inputs:
+      ruleset_attestation_comment:
+        description: Optional exact owner security-contract approval comment on issue 133.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: Diagnose restricted writer token without deployment
+    if: ${{ github.repository == 'klusik/PHP_gallery' && github.ref == 'refs/heads/hotfix/v_0.126-publication-recovery' && github.actor == 'klusik' && github.triggering_actor == 'klusik' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      QUALIFICATION_RUN: '38000825301'
+      CANDIDATE_SHA: aef94a6688c7a437abfed3cc4bc2c29a283421bf
+      RELEASE_BRANCH: release/v_0.126
+      RELEASE_MODE: publish
+      OVERRIDE_ACK: 'false'
+      OVERRIDE_REASON: ''
+      ACCEPTED_FAILURES: ''
+      MANUAL_REVIEW: Read-only readiness evidence; no publication or deployment authorization
+      RULESET_ATTESTATION_COMMENT: ${{ inputs.ruleset_attestation_comment }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Download the complete original qualification identity
+        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
+      - name: Download actual verified assets retained by failed publication 38010463884
+        run: gh run download 38010463884 --repo "${GITHUB_REPOSITORY}" --name verified-publication-assets --dir release-assets
+      - name: Reuse production validators without any server write
+        env:
+          RELEASE_ASSETS: ${{ github.workspace }}/release-assets
+        run: node .github/scripts/release-publication-readiness.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: live-publication-readiness
+          path: ${{ runner.temp }}/publication-readiness.json
+          if-no-files-found: error
+          retention-days: 90
