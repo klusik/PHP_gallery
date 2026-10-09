@@ -39,10 +39,13 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
-- `php scripts/audit.php --profile=release-preflight` - source-only feedback for ordinary authoring and release preparation; checks syntax, documentation, policy, and debt budgets without running regression matrices or preparing a release.
+- `php scripts/audit.php --profile=release-preflight` - cheap source-only feedback before release preparation; checks syntax, documentation, policy, and debt budgets without preparing a release.
+- `php scripts/audit.php --profile=release-stage-b` - hosted release-only medium-cost MVC and Admin mutation contracts before generation; the final matrix still qualifies the prepared SHA.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
+
+These commands describe the available runner interfaces. Agent handoff is CI-first through hosted candidate preparation; local audit invocations are reserved for explicit diagnosis/recovery, not the normal edit-to-handoff sequence.
 
 ## Coding Style & Naming Conventions
 Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space indentation style. Keep functions small and explicit. New or materially refactored features should follow the project MVC boundary: models own SQL/data access, services own reusable domain orchestration and policy, controllers own HTTP/request-response flow, and views own HTML presentation. Do not move SQL into controllers/views merely for convenience, and do not let model modules read request globals or render output. Name controller files by feature area, for example `admin_galleries_edit.php` or `public_media.php`.
@@ -122,6 +125,17 @@ non-forced writes. A later fix repeats hosted preparation and qualification.
 Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
 explicitly requested or hosted preparation is unavailable; agents do not routinely
 duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
+
+### Reviewed release lifecycle (#101)
+
+In addition to the mandatory hosted CI-first contract, release-only operations
+must follow `docs/RELEASE_LIFECYCLE.md`: record an exact selected `develop`
+origin, reject exact published-main/tag drift, and treat publication as `SYNC_PENDING`
+until an owner-approved true FF to Q or single-parent equivalent L is retained
+with full tree/patch evidence and exact-SHA hosted CI. Never require the tagged
+main merge to be a develop ancestor or introduce new develop merge commits. Never modify protected refs
+without the separately authorized GitHub workflow and server enforcement.
+Cleanup is an optional separately approved Git ref lease, never routine pruning.
 
 ### Mandatory Agent Verification Contract
 
@@ -389,7 +403,7 @@ authentication storage. Preserve these policies in future edits:
 `admin_security_schema_health_statuses()` is the shared Admin registration for
 converted security/authentication capabilities. Runtime Diagnostics and dashboard
 System Health must consume the same bounded models. Add focused available/missing/
-unknown tests for any policy change and keep `php scripts/audit.php --profile=full` green.
+unknown tests for any policy change and require a green hosted `full` audit for the exact prepared candidate.
 
 Phase 10 converts destructive and ingestion workflows through
 `app/services/mutation_schema_policy.php`. Preserve these mutation rules:

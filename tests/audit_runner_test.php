@@ -82,6 +82,11 @@ audit_test_assert(($profiles['release-preflight'] ?? []) === [
     'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
     'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
 ], 'Release preflight must own the complete cheap static gate centrally, without expensive artifact-dependent suites.');
+audit_test_assert(($profiles['release-stage-b'] ?? null) === ['mvc-boundaries', 'mutation-contracts'],
+    'Release Stage B must select only pre-generation-safe medium-cost suites from the central registry.');
+audit_test_assert(count(array_intersect($profiles['release-stage-b'], [
+    'manifest', 'release-consistency', 'version-audit', 'php-regression', 'node-full', 'browser-map',
+])) === 0, 'Stage B must not depend on generated release artifacts or replace final qualification.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
 audit_test_assert(($profiles['candidate-preflight'] ?? []) === [
     'php-lint', 'js-lint', 'source-documentation-changed',

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.125}
-\newcommand{\manualdate}{9.~října~2026}
+\newcommand{\version}{0.126}
+\newcommand{\manualdate}{10.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2254,7 +2254,9 @@ Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou
 
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 
-Report uvádí HEAD, vyřešené SHA základu a~stav pracovní kopie. Změněný checkout poskytuje zpětnou vazbu, ne~kvalifikaci čistého commitu. Odkazovaný \filepath{source-failures.md} obsahuje všechna zjištění selhaných kontrol změn, blokátory a~zjištění nadlimitních kategorií; úplné JSON reporty bez hodnot zachovávají důkazy a~odlišují historický dluh. Workflow kandidáta je nahrávají společně. Opravte celou dávku před opakováním; nezměněný vstup není oprava. Dokončete všechny čtyři zdroje příručky, po~poslední úpravě připravte generované artefakty a~jednou spusťte úplný audit přesného kandidáta. Uveďte SHA, základ, profil/výsledek a~významné mezery pokrytí. Úspěch prvního pokusu a~opravné cykly měřte ze~skutečných reportů; očekávané úspory zůstávají neznámé, dokud nejsou pozorovány.
+Povinná hostovaná kvalifikace zahrnuje PHP/Node/WinApp testy, zdrojové kontrakty, Chromium, skutečné MySQL/MariaDB scénáře, kompatibilitu PHP a~balení na~Linuxu, Windows i~macOS. Všechny povinné joby a~kontrola přesného SHA musejí uspět. Release workflow sestaví všechny čtyři PDF příručky jednou po~posledních úpravách zdrojů, nikoli při běžném vývoji.
+
+Report uvádí HEAD, vyřešené SHA základu a~stav pracovní kopie. Změněný checkout poskytuje zpětnou vazbu, ne~kvalifikaci čistého commitu. Odkazovaný \filepath{source-failures.md} obsahuje všechna zjištění selhaných kontrol změn, blokátory a~zjištění nadlimitních kategorií; úplné JSON reporty bez hodnot zachovávají důkazy a~odlišují historický dluh. Workflow kandidáta je nahrávají společně. Opravte celou dávku před opakováním; nezměněný vstup není oprava. Dokončete všechny čtyři zdroje příručky a~pushněte pouze povolenou pracovní větev. Hostovaná příprava kandidáta po~poslední úpravě obnoví generované artefakty a~spustí povinnou plnou matici CI přesného připraveného SHA. Uveďte SHA, základ, profil/výsledek a~významné mezery pokrytí. Úspěch prvního pokusu a~opravné cykly měřte ze~skutečných reportů; očekávané úspory zůstávají neznámé, dokud nejsou pozorovány.
 
 \subsection{Přidání funkce}
 
@@ -2453,7 +2455,7 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 \index{k00072@kvalifikace vydání}
 \index{t00234@testování!d00031@dočasné postupy}
 
-Centrální vstup \filepath{scripts/audit.php} nabízí tři regresní a~kvalifikační profily a~zdrojové předběžné kontroly. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, celkový inventář a~rozpočty kategorií, testy WinApp, pomalé testy Node a~Chromium. Pro úplné ověření před předáním použijte \codeword{--profile=full}, pro přípravu vydání \codeword{--profile=release}; rychlý PASS tyto profily nenahrazuje.
+Centrální vstup \filepath{scripts/audit.php} nabízí tři regresní a~kvalifikační profily a~zdrojové předběžné kontroly. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, celkový inventář a~rozpočty kategorií, testy WinApp, pomalé testy Node a~Chromium. Povinná hostovaná kvalifikace spouští \codeword{--profile=full} pro přesné připravené SHA a~vydání hostovaně používá \codeword{--profile=release}; rychlý ani~lokální PASS povinné joby nenahrazuje.
 
 Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 40 souborů a~16~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
 
@@ -2467,7 +2469,7 @@ Při selhání prohlížeče konzole i~zpráva auditu přímo zobrazí název te
 
 Automatická regrese a~provozní přejímka odpovídají na odlišné otázky. Centrální audit kontroluje kód, kontrakty, syntaxi, dostupné testovací podklady prohlížeče a~konzistenci vydání. Izolované testovací prostředí přidává skutečné průchody databází, HTTP a~Chromium s~generovanými fotografiemi a~účty. Vyžaduje výslovnou konfiguraci určenou pouze pro dočasné testování a~nikdy nesmí používat databázi ani média instalace. Předpoklady najdete v~\filepath{docs/GALLERY_WORKFLOWS.md}; chybějící prostředí je mezerou pokrytí, nikoli důkazem fungující funkce.
 
-Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~dokumentaci, znovu sestavte všechny čtyři příručky PDF a~zkontrolujte diagnostiku překladače, vygenerujte manifest a~inicializujte kvalifikační záznam. Spusťte jeden centrální audit vydání, nikoli posloupnost quick/full/release. S~nastavenými izolovanými předpoklady přijímá \filepath{scripts/gallery_workflow_mysql.php} volbu \codeword{--release} pro vytvoření testovacího prostředí kolem stejného auditu vydání.
+Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~všechny čtyři texty příručky. GitHub Actions sestaví čtyři PDF najednou, zkontroluje diagnostiku překladače, obnoví manifest a~provede jeden centrální audit vydání přesného připraveného SHA. Příkaz \filepath{scripts/gallery_workflow_mysql.php} s~volbou \codeword{--release} zůstává pouze pro výslovně vyžádanou lokální obnovu či diagnostiku.
 
 Kvalifikační nástroj \filepath{scripts/release_qualification.php} zaznamenává přesný otisk zdroje a~PDF. Jeho příkaz \codeword{render} vytváří omezené náhledy stránek; samotné vykreslení neschvaluje jejich vzhled. Příkaz \codeword{record-audit} přijímá pouze odpovídající centrální zprávu vydání, nikoli starší úplný audit. Změněný zdrojový soubor nebo znovu sestavené PDF vybírají nové čekající podklady místo tichého opětovného použití dřívějšího souhlasu.
 
@@ -2475,7 +2477,72 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 
 \subsection{Příprava a~kvalifikace vydání na GitHubu}
 
-Správce spouští \filepath{.github/workflows/release-promotion.yml} z~\codeword{main} s~dokončeným během kvalifikace, přesným SHA a~větví vydání. Režim plan pouze čte důkazy. Promote vyžaduje nezávisle schválené prostředí \codeword{release-promotion}, ověří aktivní pravidla PR a~stavových kontrol a~povolí chráněné sloučení release PR. Publish po sloučení ověří shodný obsah kandidáta/main, vytvoří neměnný tag a~zveřejní ověřené balíčky s~trvalými důkazy. Override vyžaduje důvod a~přesné názvy všech červených/přeskočených jobů; původní selhání zůstanou červená. Ruční přijetí a~kontrola produkčního hostingu zůstávají zvlášť. Bez serverových ochran jsou zápisy blokovány; agenti přímo do develop/main nepushují.
+
+% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
+\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+
+Completed feature work is~squashed into one logical commit and~qualified again
+at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
+non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
+provide this guarantee. Existing history stays intact and~new develop commits
+remain linear. Agents never update develop or~main directly.
+
+The~release origin's only parent is~the~explicit selected develop commit D0.
+Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
+is~never rewritten. Tag object SHA, peeled published-main commit P, previous
+release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
+\codeword{v\_0.125} legacy pin records unknown historical qualification;
+it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
+scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
+locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+
+The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
+qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
+PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
+wrong parents/tree, stale review or~missing/red CI stops publication.
+
+After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
+without a~new commit. The~FF verifier independently rejects new merge commits.
+Parallel develop work requires a~single-parent L over its~observed head,
+complete three-way content proof, retained feature history,
+explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
+prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
+pushes develop. Completion is~\codeword{RECONCILED\_FF} or
+\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
+or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
+Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
+
+Main protection requires owner-reviewed merge PRs and~loose Release qualification;
+develop requires linear, non-force history and~Complete required CI matrix without
+mandatory PRs. The~existing rulesets stay disabled until separately approved live
+check/merge/FF acceptance. All three release environments remain owner-reviewed
+and~main-only. No~red-check override is~permitted.
+
+For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
+filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
+read-only contents permission permits only a~bot PR proposal. The~owner verifies
+workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
+publisher then exists on~main before a~separate publish approval. Never execute
+the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
+Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
+
+Future releases use \ui{Start New Release}: owner-approved version/optional develop
+SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
+to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
+GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
+block concurrent tag/source changes; an~origin created before a~detected race stays
+immutable for~explicit owner recovery.
+
+GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
+fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
+pushes a~reviewed finalization commit and~fresh full push qualification verifies
+its~exact SHA. Required-check app binding and~actual bot PR eligibility need
+live acceptance; an~external App/event bridge is~a~separate owner decision.
+Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
+GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
+matrix rather than~inferring qualification from~a~navigation URL.
+The~full operator contract and~remaining live tests are~in
+\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
 
 Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
 

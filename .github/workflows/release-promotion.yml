@@ -5,7 +5,7 @@
 # Purpose: Inspect an exact qualification, promote through a PR and publish verified assets.
 # Responsibilities:
 #   - Keep reader/build jobs isolated from protected publication credentials
-#   - Require an independently reviewed environment for every release write
+#   - Require manual single-owner environment approval for every release write
 #   - Retain original failed evidence for explicit maintainer exceptions
 # Author: Rudolf Klusal
 name: Protected release promotion
@@ -26,17 +26,17 @@ on:
         required: true
         type: string
       mode:
-        description: Plan is read-only; promote enables protected PR merge; publish follows merge.
+        description: Plan is read-only; promote opens a bot PR for manual owner review and merge; publish is separate; bootstrap only proposes the first release PR.
         required: true
         type: choice
         default: plan
-        options: [plan, promote, publish]
+        options: [plan, promote, publish, bootstrap]
       manual_review:
         description: Human acceptance evidence/reference (required for writes).
         required: false
         type: string
       override_ack:
-        description: Explicitly accept the named red checks, preserving their failures.
+        description: Read-only plan diagnostics only; red-check override cannot publish.
         type: boolean
         default: false
       override_reason:
@@ -68,6 +68,7 @@ env:
 
 jobs:
   inspect:
+    if: ${{ inputs.mode != 'bootstrap' }}
     name: Inspect immutable qualification and scope
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -103,7 +104,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MODE: plan
+          RELEASE_INSPECTION_TARGET: ${{ inputs.mode }}
         run: node .github/scripts/release-promotion.mjs
+      - name: Retain bounded stale-main recovery evidence
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-main-recovery-inspect
+          path: ${{ runner.temp }}/release-recovery.json
+          if-no-files-found: ignore
+          retention-days: 90
       - id: scope
         name: Determine required installer build from complete Git history
         env:
@@ -191,9 +201,9 @@ jobs:
           retention-days: 30
 
   apply:
-    name: Independently approved release action
+    name: Owner-approved release PR or publication
     needs: [inspect, package, installer]
-    if: ${{ always() && inputs.mode != 'plan' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
+    if: ${{ always() && inputs.mode != 'plan' && inputs.mode != 'bootstrap' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release-promotion
@@ -205,6 +215,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
@@ -225,7 +236,47 @@ jobs:
           path: release-assets
       - name: Revalidate protected controls, exact SHA and original CI before writes
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_ASSETS: ${{ github.workspace }}/release-assets
+        run: node .github/scripts/release-promotion.mjs
+      - name: Retain approved-action stale-main recovery decision
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-main-recovery-approved
+          path: ${{ runner.temp }}/release-recovery.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  bootstrap:
+    name: Owner-dispatched first-release PR proposal only
+    if: ${{ inputs.mode == 'bootstrap' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # This existing workflow filename is dispatchable at the reviewed release ref.
+    # Main-only deployment environments cannot authorize a release-ref deployment.
+    # No contents write permission means no main update, tag or publication authority.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Read completed exact candidate qualification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
+      - name: Verify owner and legacy predecessor and propose the bot PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: bootstrap
         run: node .github/scripts/release-promotion.mjs

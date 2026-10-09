@@ -29,7 +29,7 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - The source test tree is intentionally absent from normal production deployment packages.
- *   - Run `php scripts/audit.php --profile=full` as the normal agent verification entrypoint.
+ *   - CI-first agents qualify the prepared SHA through hosted GitHub Actions; local profiles are exceptional diagnostics.
  *
  * Last Updated:
  *   2026-09-05
@@ -93,7 +93,7 @@ if ($options['help']) {
 PHP Gallery central audit
 
 Usage:
-  php scripts/audit.php [--profile quick|full|release|release-preflight|candidate-preflight]
+  php scripts/audit.php [--profile quick|full|release|release-preflight|release-stage-b|candidate-preflight]
   php scripts/audit.php --suite <suite-id>
   php scripts/audit.php --profile full --changed
 
@@ -115,7 +115,8 @@ Profiles:
   quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
-  release-preflight  Source-only authoring/preparation feedback, including debt budgets; no release actions.
+  release-preflight  Cheap source-only authoring feedback, including debt budgets; no release actions.
+  release-stage-b    Medium-cost source-only MVC and mutation contracts before release generation.
   candidate-preflight  Read-only source, runtime plan, inventory and manifest gate before heavy CI.
 TEXT
     );

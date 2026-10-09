@@ -1,0 +1,63 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/start-new-release.yml
+# Module Type: Hosted Release Initialization Workflow
+# Purpose: Create the next immutable release origin from an owner-selected develop commit.
+# Responsibilities:
+#   - Require explicit owner dispatch and main-only manual approval
+#   - Create one atomic origin commit/ref and reuse exact identities on retries
+#   - Dispatch the existing release qualification without publishing or updating protected refs
+# Author: Rudolf Klusal
+name: Start New Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: New canonical X.Y or X.Y.Z version; v_0.126 is already initialized locally.
+        required: true
+        type: string
+      develop_sha:
+        description: Optional exact selected develop SHA; empty selects the observed develop HEAD.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: start-new-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  initialize:
+    name: Owner-approved atomic origin and qualification handoff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release-promotion
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Create or verify immutable release initialization
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          SELECTED_DEVELOP_SHA: ${{ inputs.develop_sha }}
+        run: node .github/scripts/start-new-release.mjs
+      - name: Retain exact initialization audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-initialization
+          path: ${{ runner.temp }}/release-initialization.json
+          if-no-files-found: ignore
+          retention-days: 90

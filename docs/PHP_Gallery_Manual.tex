@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.125}
-\newcommand{\manualdate}{9 October 2026}
+\newcommand{\version}{0.126}
+\newcommand{\manualdate}{10 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2276,7 +2276,9 @@ The~canonical \filepath{AGENTS.md} requires each named declaration and~its~compl
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
-Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources, prepare generated artifacts after the~final edit and~run the~full audit once for~the~exact candidate. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
+Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+
+Reports record source HEAD, resolved comparison SHA and~dirty state. A~modified checkout is~feedback, not~clean-commit qualification. The~linked \filepath{source-failures.md} lists all~failed changed-source findings, blockers and~findings in~over-budget categories; complete value-free JSON retains the~evidence and~historical debt stays identified. Candidate workflows upload these together. Repair the~whole batch before rerunning; unchanged input is~not~a~repair. Finish all~four manual sources and~push the~authorized working branch. Hosted Candidate preparation regenerates artifacts after the~final edit and~runs the~mandatory full CI matrix for~the~exact prepared SHA. Record SHA, base, profile/result and~material incomplete coverage. Measure first-attempt results and~repair cycles from actual reports; expected savings remain unknown until observed.
 
 \subsection{Adding a~feature}
 
@@ -2495,9 +2497,7 @@ The~central entry point \filepath{scripts/audit.php} provides three qualificatio
 \codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
 contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax
 checks. It~omits the~complete PHP suite, whole-tree inventory/category budgets, WinApp tests,
-slow Node fixtures, and~Chromium. Use \codeword{--profile=full} for~complete
-handoff verification and~\codeword{--profile=release} for~release preparation;
-a~quick PASS does~not~replace either.
+slow Node fixtures, and~Chromium. Hosted candidate qualification runs \codeword{--profile=full} for~the~exact prepared SHA; hosted release qualification runs \codeword{--profile=release}. An~optional local or~quick PASS replaces neither required hosted gate.
 
 PHP suites run with four workers by~default. Set
 \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} to~an~integer from~1 through~8;
@@ -2532,12 +2532,7 @@ the~installation's database or~media. Follow
 \filepath{docs/GALLERY_WORKFLOWS.md} for~prerequisites; a~missing environment
 is~a~coverage gap, not~proof of~a~working feature.
 
-For~release preparation, follow \filepath{RELEASE.md}: finish source
-and~documentation, rebuild all~four manual PDFs and~check compiler diagnostics, generate the~manifest,
-and~initialize the~qualification record. Run one central release audit,
-not~a~quick/full/release sequence. With the~isolated prerequisites configured,
-\filepath{scripts/gallery_workflow_mysql.php} accepts \codeword{--release}
-to~provision its fixture around that same release audit.
+For~release preparation, follow \filepath{RELEASE.md}: finish all~source and~manual content, then let~GitHub Actions build all~four PDFs together, inspect compiler diagnostics, regenerate the~manifest and~qualify the~exact prepared SHA with one central release audit. The~isolated \filepath{scripts/gallery_workflow_mysql.php} \codeword{--release} command remains available only for~explicit local recovery and~diagnosis.
 
 The~qualification tool \filepath{scripts/release_qualification.php} records
 the~exact source and~PDF fingerprint. Its \codeword{render} command produces
@@ -2556,7 +2551,72 @@ the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record command
 
 \subsection{GitHub-hosted release preparation and~qualification}
 
-The~maintainer dispatches \filepath{.github/workflows/release-promotion.yml} from~\codeword{main} with the~completed qualification run, exact candidate SHA and~release branch. Plan mode reads evidence only. Promote uses an~independently approved \codeword{release-promotion} environment, verifies active PR/status rules and~enables a~release PR's protected merge. Publish runs after merge, checks identical candidate/main trees, creates an~immutable tag and~publishes verified packages with permanent evidence. An~override requires a~reason and~every exact red/skipped job name; original failures stay red. Human acceptance and~production-host smoke remain separately recorded. Missing server controls block writes; agents never directly push to~develop/main.
+
+% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
+\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+
+Completed feature work is~squashed into one logical commit and~qualified again
+at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
+non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
+provide this guarantee. Existing history stays intact and~new develop commits
+remain linear. Agents never update develop or~main directly.
+
+The~release origin's only parent is~the~explicit selected develop commit D0.
+Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
+is~never rewritten. Tag object SHA, peeled published-main commit P, previous
+release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
+\codeword{v\_0.125} legacy pin records unknown historical qualification;
+it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
+scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
+locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+
+The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
+qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
+PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
+wrong parents/tree, stale review or~missing/red CI stops publication.
+
+After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
+without a~new commit. The~FF verifier independently rejects new merge commits.
+Parallel develop work requires a~single-parent L over its~observed head,
+complete three-way content proof, retained feature history,
+explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
+prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
+pushes develop. Completion is~\codeword{RECONCILED\_FF} or
+\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
+or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
+Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
+
+Main protection requires owner-reviewed merge PRs and~loose Release qualification;
+develop requires linear, non-force history and~Complete required CI matrix without
+mandatory PRs. The~existing rulesets stay disabled until separately approved live
+check/merge/FF acceptance. All three release environments remain owner-reviewed
+and~main-only. No~red-check override is~permitted.
+
+For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
+filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
+read-only contents permission permits only a~bot PR proposal. The~owner verifies
+workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
+publisher then exists on~main before a~separate publish approval. Never execute
+the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
+Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
+
+Future releases use \ui{Start New Release}: owner-approved version/optional develop
+SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
+to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
+GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
+block concurrent tag/source changes; an~origin created before a~detected race stays
+immutable for~explicit owner recovery.
+
+GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
+fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
+pushes a~reviewed finalization commit and~fresh full push qualification verifies
+its~exact SHA. Required-check app binding and~actual bot PR eligibility need
+live acceptance; an~external App/event bridge is~a~separate owner decision.
+Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
+GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
+matrix rather than~inferring qualification from~a~navigation URL.
+The~full operator contract and~remaining live tests are~in
+\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
 
 The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
 

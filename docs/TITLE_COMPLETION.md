@@ -221,9 +221,11 @@ old-match omission, suppressed fallback after sibling truncation, anonymous and
 viewer refusal, GET-only routing, cache headers, and safe failure after partial
 results. It has a generous five-second fixture guard, not a production SLA.
 
-`php scripts/audit.php` is the authoritative verification entrypoint. Use
-`--profile=quick` during implementation and `--profile=full` before code handoff;
-release preparation uses `--profile=release` instead of stacking profiles. The
-central audit covers the PHP regression, browser-module contracts, syntax, and
-MVC boundaries. Follow `AGENTS.md` for manifest regeneration and release checks
-when updater-managed application files change.
+The central `scripts/audit.php` orchestrates mandatory GitHub CI qualification.
+Coding agents commit and push the authorized working branch; hosted candidate
+preparation and its `full` matrix qualify the exact prepared SHA. `quick` and
+focused local invocations are optional for explicit diagnosis or CI-unavailable
+recovery and cannot qualify handoff. Hosted release preparation uses `release`
+without stacking audit profiles. The registered coverage includes PHP regression,
+browser-module contracts, syntax and MVC boundaries. Follow `AGENTS.md` for
+generated-artifact ownership when updater-managed files change.

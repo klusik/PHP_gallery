@@ -1,0 +1,96 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/release-retirement.yml
+# Module Type: Reviewed Release Branch Retirement
+# Purpose: Inspect cleanup eligibility and require manual owner approval before deleting one leased release branch.
+# Responsibilities:
+#   - Keep normal cleanup plans entirely read-only
+#   - Require complete tag/publication/sync/CI evidence and an exact remote branch lease
+#   - Never modify main/develop, release tags or published assets
+# Author: Rudolf Klusal
+name: Reviewed release branch retirement
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: The exact canonical release/v_X.Y[.Z] ref.
+        required: true
+        type: string
+      mode:
+        description: Read-only eligibility plan or owner-approved cleanup.
+        required: true
+        type: choice
+        default: plan
+        options: [plan, retire]
+      manual_review:
+        description: Owner acceptance reference, mandatory for retire.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: release-retirement-${{ inputs.release_branch }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_BRANCH: ${{ inputs.release_branch }}
+  RETIRE_MODE: ${{ inputs.mode }}
+  MANUAL_REVIEW: ${{ inputs.manual_review }}
+
+jobs:
+  plan:
+    if: ${{ inputs.mode == 'plan' }}
+    name: Read-only release branch retirement eligibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require maintainer dispatch from main
+        shell: bash
+        run: |
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Inspect immutable release, reconciliation and active branch leases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-retirement.mjs
+
+  retire:
+    if: ${{ inputs.mode == 'retire' }}
+    name: Owner-approved leased release ref deletion
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release-retirement
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Require approved main dispatch
+        shell: bash
+        run: |
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Revalidate exact ref lease and retire only the named completed release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-retirement.mjs

@@ -88,6 +88,26 @@ Local generator/audit commands documented elsewhere are recovery/diagnostic tool
 not mandatory agent steps. Source debt budgets remain decrease-only; never add
 baselines or weaken assertions to obtain green CI.
 
+## Guarded release contribution policy
+
+The authoritative contract is [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
+A release begins from an explicitly selected immutable `develop` SHA and a
+reviewed previous stable `main` tag. Hosted source-only Stage A and Stage B
+precede Copilot/TeX, and the exact prepared candidate is qualified through the
+full CI matrix. Existing protected promotion tooling owns the `release -> main`
+PR and publication; feature agents never push to `develop` or `main`.
+
+A published tag remains pending until the owner performs a genuine FF to exact Q
+or an exact-qualified single-parent equivalent L over parallel develop work.
+Require full three-way tree/patch evidence and preserved development history;
+matching version metadata/notes alone is insufficient. New develop merge commits
+and mandatory develop PRs are incompatible with this model.
+Cleanup uses a separately approved exact-ref lease, not routine branch pruning.
+If `main` advanced, retain the bounded `release-main-recovery` artifact and
+qualify a new reviewed candidate. Missing server-side protections remain
+**BLOCKED**, regardless of fixture test results. Ordinary development never
+rebuilds tracked manual PDFs.
+
 ## Pull requests
 
 1. Start from the repository's current default branch and keep the change

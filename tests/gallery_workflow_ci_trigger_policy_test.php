@@ -322,7 +322,9 @@ namespace {
     $buildPosition = strpos($releaseWorkflow, 'name: Build all maintained manuals');
     $savePosition = strpos($releaseWorkflow, 'name: Save TinyTeX cache');
     check($preflightPosition !== false && $preparationPosition !== false && $preflightPosition < $preparationPosition
-        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ steps.release.outputs.source_base }}'),
+        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}')
+        && str_contains($releaseWorkflow, 'name: Verify immutable release develop origin and prior main tag')
+        && !str_contains($releaseWorkflow, 'git describe --tags'),
         'Cheap blocking source checks must run through the central audit before preparation, AI and TeX.');
     check($buildPosition !== false && $savePosition !== false && $buildPosition < $savePosition
         && str_contains($releaseWorkflow, "steps.manuals.outcome == 'success'")
