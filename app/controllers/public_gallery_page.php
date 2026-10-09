@@ -53,6 +53,7 @@ use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
+use function Gallery\Core\public_visual_preview_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -106,6 +107,7 @@ use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
 use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\gallery_lightbox_total_count;
+use function Gallery\Services\gallery_anonymous_preview_access_resolution;
 use function Gallery\Services\gallery_nsfw_requirement;
 use function Gallery\Services\gallery_voting_allowed;
 use function Gallery\Services\grant_gallery_public_access;
@@ -163,7 +165,9 @@ use function Gallery\Services\thumbnail_bundle_url;
 use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\thumbnail_picture_html;
 use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\visitor_can_access_gallery_without_admin_bypass;
 use function Gallery\Services\visitor_can_access_nsfw_content;
+use function Gallery\Services\visitor_can_access_nsfw_content_without_admin_bypass;
 use function Gallery\Services\viewer_favourites_for_image_ids;
 use function Gallery\Services\viewer_favourites_storage_available;
 use function Gallery\Services\viewer_collections_for_owner;
@@ -197,8 +201,8 @@ function render_public_smart_gallery_attachment_group(array $smartGalleries, str
 }
 
 /**
- * Prepare an authorized gallery page, its cards, navigation and optional cooperation links.
- * @return void Render the selected gallery through its prepared view model.
+ * Prepare an authorized gallery page, applying anonymous-preview grants and suppressing preview side effects.
+ * @return void Render the selected gallery, redirect an inaccessible visual-preview audience to an allowed ancestor or Home, or render the ordinary denial.
  */
 function cms_gallery(): void
 {
@@ -241,15 +245,41 @@ function cms_gallery(): void
         // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
-    if (!$gallery || (!$viewer && !gallery_allows_direct_public_request($gallery) && !visitor_can_access_gallery($gallery))) {
+    $anonymousVisualPreviewGallery = $anonymousPreview
+        && (string) ($_GET['preview'] ?? '') === 'visual'
+        && (string) ($_GET['view_as'] ?? '') === 'anonymous'
+        && $gallery !== null;
+    $previewAncestorResolution = null;
+    if ($anonymousVisualPreviewGallery) {
+        // Validate the complete parent chain before canonical inherited-access walkers inspect it.
+        $previewAncestorResolution = gallery_anonymous_preview_access_resolution($gallery);
+    }
+    $visitorMayAccessGallery = $gallery !== null && ($anonymousPreview
+        ? ($previewAncestorResolution !== null
+            ? $previewAncestorResolution['selected_accessible']
+            : visitor_can_access_gallery_without_admin_bypass($gallery))
+        : visitor_can_access_gallery($gallery));
+    if ($anonymousVisualPreviewGallery && !$visitorMayAccessGallery) {
+        $accessiblePreviewAncestor = $previewAncestorResolution['ancestor'];
+        $destination = $previewAncestorResolution['valid_chain'] && $accessiblePreviewAncestor !== null
+            ? gallery_public_url($accessiblePreviewAncestor)
+            : url_for('home');
+        $destination = public_visual_preview_url($destination, true);
+        $destination .= (str_contains($destination, '?') ? '&' : '?') . 'visual_notice=anonymous_fallback';
+        redirect_to($destination);
+    }
+    if (!$gallery || (!$viewer && !gallery_allows_direct_public_request($gallery) && !$visitorMayAccessGallery)) {
         cms_not_found();
         return;
     }
-    if (!$viewer && !visitor_can_access_gallery($gallery)) {
+    if (!$viewer && !$visitorMayAccessGallery) {
         render_gallery_access_gate($gallery);
         return;
     }
-    if (!$viewer && $requestedImage && image_nsfw_restricted($requestedImage, $gallery) && !visitor_can_access_nsfw_content()) {
+    $visitorMayAccessNsfw = $anonymousPreview
+        ? visitor_can_access_nsfw_content_without_admin_bypass()
+        : visitor_can_access_nsfw_content();
+    if (!$viewer && $requestedImage && image_nsfw_restricted($requestedImage, $gallery) && !$visitorMayAccessNsfw) {
         render_gallery_access_gate($gallery, '', $requestedImage);
         return;
     }
@@ -568,7 +598,7 @@ function cms_gallery(): void
 
     public_render_profile_count('rendered_images', count($images));
     // Viewer favourites are personalized only for an authenticated viewer and never participate in gallery authorization.
-    $viewerPrincipal = current_viewer();
+    $viewerPrincipal = $anonymousPreview ? null : current_viewer();
     $viewerFavouriteControlsEnabled = $viewerPrincipal !== null && viewer_favourites_storage_available();
     // An Admin principal can expose non-public rows on this page. In the rare dual-principal case,
     // independently re-check the viewer source contract before rendering a favourite control.
@@ -587,7 +617,7 @@ function cms_gallery(): void
         ob_start();
         foreach ($images as $index => $image) {
             // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
-            $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
+            $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !$visitorMayAccessNsfw;
             if ($imageNeedsNsfwGate) {
                 ob_start();
                 render_public_image_admin_edit_link($image);
@@ -729,15 +759,21 @@ function cms_gallery(): void
     if ($requestedImage && $lightboxFeatureEnabled) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\\"' . (int) $requestedImage['id'] . '\\"], [data-lightbox-source][data-image-id=\\"' . (int) $requestedImage['id'] . '\\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
-    ob_start();
-    view_render_public_render_profile_panel(public_render_profile_panel_model());
-    $renderProfileHtml = (string) ob_get_clean();
-    telemetry_append_public_script([
-        'route_name' => 'gallery',
-        'page_kind' => 'gallery',
-        'gallery_id' => (int) $gallery['id'],
-        'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
-    ]);
+    // Visual preview requests skip the diagnostic panel because an active Admin test run can persist its render snapshot.
+    $renderProfileHtml = '';
+    if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
+        ob_start();
+        view_render_public_render_profile_panel(public_render_profile_panel_model());
+        $renderProfileHtml = (string) ob_get_clean();
+    }
+    if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
+        telemetry_append_public_script([
+            'route_name' => 'gallery',
+            'page_kind' => 'gallery',
+            'gallery_id' => (int) $gallery['id'],
+            'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
+        ]);
+    }
 
     $cooperativeLinks = [];
     foreach (\Gallery\Services\cooperative_content_gallery_groups((int) $gallery['id']) as $cooperativeId) {
@@ -764,7 +800,9 @@ function cms_gallery(): void
         'lightbox_html' => $lightboxHtml,
         'render_profile_html' => $renderProfileHtml,
     ]);
-    gallery_benchmark_record_public_render($gallery, public_render_profile_snapshot());
+    if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
+        gallery_benchmark_record_public_render($gallery, public_render_profile_snapshot());
+    }
 }
 
 

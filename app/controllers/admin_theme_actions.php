@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-10-03
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -279,17 +279,23 @@ function admin_theme_download_language_pack(): void
 }
 
 /**
- * Return a safe Custom CSS error to its owning tab while preserving installed styles.
- * @param \Gallery\Services\CustomCssRecoveryException|null $recovery Exceptional rollback outcome, when files require attention.
+ * Return a safe Custom CSS error to its owning tab while describing required file or background-settings recovery.
+ * @param \Gallery\Services\CustomCssRecoveryException|null $recovery Exceptional rollback outcome, when files or settings require attention.
  * @return void Stores only a translated message and redirects to the existing Theme page.
  */
 function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecoveryException $recovery = null): void
 {
-    $_SESSION['cms_custom_css_errors'] = [$recovery === null
-        ? t('admin.theme.custom_css.save_failed', 'The custom stylesheet could not be changed. The previous stylesheet was kept; check the selected file and try again.')
-        : ($recovery->hasRecoveryCopy
-        ? t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.')
-        : t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.'))];
+    $message = t('admin.theme.custom_css.save_failed', 'The custom stylesheet could not be changed. The previous stylesheet was kept; check the selected file and try again.');
+    if ($recovery !== null) {
+        if ($recovery->backgroundStateUncertain) {
+            $message = t('admin.theme.custom_css.rollback_uncertain', 'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.');
+        } elseif ($recovery->hasRecoveryCopy) {
+            $message = t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.');
+        } else {
+            $message = t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.');
+        }
+    }
+    $_SESSION['cms_custom_css_errors'] = [$message];
     redirect_to(url_for('admin_theme', ['css_error' => 1]) . '#admin-theme-tab-custom-css');
 }
 
@@ -298,11 +304,33 @@ function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecov
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
- * @return void Sends the existing redirect after applying the authenticated form; domain refusals propagate to the request boundary.
+ * @return void Sends a Theme redirect or the dedicated editor JSON response; ordinary form domain refusals propagate to the request boundary.
  */
 function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
 {
     verify_csrf();
+    // The dedicated editor submission never processes or clears another Theme form value.
+    if (array_key_exists('css_override_action', $_POST)) {
+        admin_theme_process_css_overrides();
+        return;
+    }
+    if (isset($_POST['reset_theme_advanced']) && is_string($_POST['reset_theme_advanced'])) {
+        \Gallery\Services\theme_advanced_appearance_reset($_POST['reset_theme_advanced']);
+        redirect_to(url_for('admin_theme', ['saved' => 1, 'appearance_subtab' => 'admin-theme-appearance-subtab-advanced']) . '#admin-theme-tab-appearance');
+        return;
+    }
+    $advancedValues = [];
+    if (!empty($_POST['theme_advanced_present'])) {
+        foreach (\Gallery\Services\theme_advanced_appearance_definitions() as $key => $definition) {
+            $value = $_POST['theme_' . $key] ?? ($key === 'header_transparent' ? '0' : null);
+            if ($value !== null && !is_string($value)) {
+                throw new \InvalidArgumentException('Invalid appearance transport value.');
+            }
+            if ($value !== null) {
+                $advancedValues[$key] = \Gallery\Services\theme_advanced_appearance_value($key, $value);
+            }
+        }
+    }
     if (!empty($_POST['public_language_selector_settings_present'])) {
         $viewerSelectorEnabled = !empty($_POST['public_language_selector_enabled']);
         $viewerSelectorLanguages = translation_public_language_selector_normalize_languages($_POST['public_language_selector_languages'] ?? []);
@@ -378,18 +406,22 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
     } elseif (!empty($_POST['reset_favicon'])) {
         remove_stored_favicon();
     } elseif (!empty($_POST['reset_theme_background'])) {
-        // $path stores an intermediate value used by the surrounding gallery workflow.
-        theme_background_clear_stored_files();
-        set_app_setting('theme_background_path', '');
-        set_app_setting('theme_background_original_path', '');
-        set_app_setting('theme_background_optimized_path', '');
+        \Gallery\Services\theme_background_with_writer_lock(static function (): void {
+            theme_background_clear_stored_files();
+            set_app_setting('theme_background_path', '');
+            set_app_setting('theme_background_original_path', '');
+            set_app_setting('theme_background_optimized_path', '');
+        });
     } elseif (!empty($_POST['generate_theme_background_optimized'])) {
-        // $backgroundMaxSide stores the requested optimized background longest side.
-        $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
-        set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
-        theme_background_regenerate_optimized($backgroundMaxSide);
+        \Gallery\Services\theme_background_with_writer_lock(static function (): void {
+            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
+            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
+            theme_background_regenerate_optimized($backgroundMaxSide);
+        });
     } elseif (!empty($_POST['delete_theme_background_optimized'])) {
-        \Gallery\Services\theme_background_delete_optimized();
+        \Gallery\Services\theme_background_with_writer_lock(static function (): void {
+            \Gallery\Services\theme_background_delete_optimized();
+        });
     } elseif (!empty($_POST['reset_theme_branding_banner'])) {
         delete_theme_branding_asset('banner');
     } elseif (!empty($_POST['reset_theme_branding_separator'])) {
@@ -424,6 +456,7 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
         }
         // Variable $siteName stores this steps working value.
+        \Gallery\Services\theme_advanced_appearance_save($advancedValues);
         $siteName = trim((string) ($_POST['site_name'] ?? ''));
         set_site_name($siteName);
         // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
@@ -440,18 +473,27 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
                 store_uploaded_favicon($_FILES['favicon_source'], (string) ($_POST['favicon_cropped_png'] ?? '') ?: null);
             }
         }
-        if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
-            // Variable $name stores this steps working value.
-            $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
-            if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
-                // $info stores an intermediate value used by the surrounding gallery workflow.
-                $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
-                if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                    throw new RuntimeException('The uploaded theme background is not a valid image.');
+        \Gallery\Services\theme_background_with_writer_lock(static function (): void {
+            if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
+                $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
+                if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
+                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                        throw new RuntimeException('The uploaded theme background is not a valid image.');
+                    }
+                    store_uploaded_theme_background($_FILES['theme_background'], theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null));
                 }
-                store_uploaded_theme_background($_FILES['theme_background'], theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null));
             }
-        }
+            set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
+            $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting('theme_background_optimized_max_side', '1920'));
+            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
+            if ($backgroundMaxSide !== $previousBackgroundMaxSide && empty($_FILES['theme_background']['tmp_name'])) {
+                theme_background_regenerate_optimized($backgroundMaxSide);
+            }
+            $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
+            set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+        });
         foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
             // $uploadField stores the file input name for one global Theme fallback branding asset.
             $uploadField = 'theme_branding_' . $themeBrandingKind;
@@ -459,18 +501,6 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
                 store_uploaded_theme_branding_asset((string) $themeBrandingKind, $_FILES[$uploadField]);
             }
         }
-        set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
-        // $backgroundMaxSide stores the requested optimized background longest side.
-        $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
-        // $previousBackgroundMaxSide stores the saved value so resize-only changes can rebuild the derivative.
-        $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting('theme_background_optimized_max_side', '1920'));
-        set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
-        if ($backgroundMaxSide !== $previousBackgroundMaxSide && empty($_FILES['theme_background']['tmp_name'])) {
-            theme_background_regenerate_optimized($backgroundMaxSide);
-        }
-        // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
-        $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
-        set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
         if ($gpsMapsFeatureEnabled) {
             theme_layout_safe_save('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
             theme_layout_safe_save('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
@@ -583,10 +613,157 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         'admin-theme-appearance-subtab-width-map',
         'admin-theme-appearance-subtab-gallery-tags',
         'admin-theme-appearance-subtab-animations',
+        'admin-theme-appearance-subtab-advanced',
     ];
     if ($activeThemeTab === 'admin-theme-tab-appearance' && in_array($activeAppearanceSubtab, $allowedAppearanceSubtabs, true)) {
         $themeRedirectParams['appearance_subtab'] = $activeAppearanceSubtab;
     }
     redirect_to(url_for('admin_theme', $themeRedirectParams) . '#' . $activeThemeTab);
 
+}
+
+/**
+ * Handle an explicit protected CSS editor save, clear or reload after the shared CSRF boundary.
+ * @return void Sends bounded CSS/background snapshot JSON for the browser editor or preserves a native CSS draft and redirects.
+ */
+function admin_theme_process_css_overrides(): void
+{
+    $state = null;
+    $background = null;
+    $ok = false;
+    $status = 200;
+    $draft = $_POST['css_override_text'] ?? null;
+    $revision = $_POST['css_override_revision'] ?? null;
+    $action = $_POST['css_override_action'];
+    $backgroundFile = $_FILES['theme_background_file'] ?? null;
+    $backgroundFieldPresent = array_key_exists('theme_background_file', $_FILES);
+    $backgroundOperationPresent = array_key_exists('theme_background_operation', $_POST);
+    $backgroundTargetPresent = array_key_exists('theme_background_target', $_POST);
+    $backgroundOperation = $backgroundOperationPresent ? $_POST['theme_background_operation'] : null;
+    $backgroundTarget = $backgroundTargetPresent ? $_POST['theme_background_target'] : null;
+    $malformedBackgroundTransport = $backgroundFieldPresent && !is_array($backgroundFile);
+    $hasBackgroundUpload = is_array($backgroundFile) && (
+        ($backgroundFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
+        || trim((string) ($backgroundFile['name'] ?? '')) !== ''
+        || trim((string) ($backgroundFile['tmp_name'] ?? '')) !== ''
+    );
+    try {
+        if ($malformedBackgroundTransport) {
+            throw new \InvalidArgumentException('Invalid Theme background upload descriptor.');
+        }
+        if (!is_string($action) || !in_array($action, ['save', 'clear', 'reload'], true)) {
+            throw new \InvalidArgumentException('Invalid editor action.');
+        }
+        if ($hasBackgroundUpload && $action !== 'save') {
+            throw new \InvalidArgumentException('Theme background images can only be saved with CSS.');
+        }
+        if ($backgroundOperationPresent || $backgroundTargetPresent) {
+            if ($action !== 'save' || !is_string($backgroundOperation) || $backgroundTarget !== 'theme') {
+                throw new \InvalidArgumentException('Choose a supported global Theme background action during explicit Save.');
+            }
+            if (!in_array($backgroundOperation, ['keep', 'replace', 'remove'], true)) {
+                throw new \InvalidArgumentException('Unknown global Theme background action.');
+            }
+            if (($backgroundOperation === 'keep' && $hasBackgroundUpload)
+                || ($backgroundOperation === 'replace' && !$hasBackgroundUpload)
+                || ($backgroundOperation === 'remove' && $hasBackgroundUpload)) {
+                throw new \InvalidArgumentException('The global Theme background action conflicts with its uploaded file.');
+            }
+        }
+        if ($action === 'reload') {
+            $state = \Gallery\Services\custom_css_overrides_state();
+        } else {
+            if (!is_string($draft) || !is_string($revision)) {
+                throw new \InvalidArgumentException('Missing explicit editor text or revision.');
+            }
+            if ($action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1') {
+                throw new \InvalidArgumentException('Confirm the dedicated override clear action.');
+            }
+            $backgroundChange = null;
+            if ($backgroundOperationPresent) {
+                $backgroundRevision = $_POST['theme_background_revision'] ?? null;
+                if (in_array($backgroundOperation, ['replace', 'remove'], true) && !is_string($backgroundRevision)) {
+                    throw new \InvalidArgumentException('Reload the Theme background before saving this change.');
+                }
+                $backgroundChange = ['operation' => $backgroundOperation, 'target' => 'theme'];
+                if (in_array($backgroundOperation, ['replace', 'remove'], true)) {
+                    $backgroundChange['expected_revision'] = $backgroundRevision;
+                }
+                if ($backgroundOperation === 'replace' && is_array($backgroundFile)) {
+                    $backgroundChange['file'] = [
+                        'name' => is_string($backgroundFile['name'] ?? null) ? $backgroundFile['name'] : '',
+                        'tmp_name' => is_string($backgroundFile['tmp_name'] ?? null) ? $backgroundFile['tmp_name'] : '',
+                        'error' => is_int($backgroundFile['error'] ?? null) ? $backgroundFile['error'] : UPLOAD_ERR_NO_FILE,
+                        'size' => is_int($backgroundFile['size'] ?? null) ? $backgroundFile['size'] : 0,
+                    ];
+                }
+            } elseif ($hasBackgroundUpload) {
+                // Existing native CSS-editor form posts use these two fields without operation metadata.
+                $backgroundRevision = $_POST['theme_background_revision'] ?? null;
+                if (!is_string($backgroundRevision) || !is_array($backgroundFile)) {
+                    throw new \InvalidArgumentException('Reload the Theme background before saving this image.');
+                }
+                $backgroundChange = [
+                    'file' => [
+                        'name' => is_string($backgroundFile['name'] ?? null) ? $backgroundFile['name'] : '',
+                        'tmp_name' => is_string($backgroundFile['tmp_name'] ?? null) ? $backgroundFile['tmp_name'] : '',
+                        'error' => is_int($backgroundFile['error'] ?? null) ? $backgroundFile['error'] : UPLOAD_ERR_NO_FILE,
+                        'size' => is_int($backgroundFile['size'] ?? null) ? $backgroundFile['size'] : 0,
+                    ],
+                    'expected_revision' => $backgroundRevision,
+                ];
+            }
+            $state = \Gallery\Services\custom_css_overrides_save($action === 'clear' ? '' : $draft, $revision, $backgroundChange);
+        }
+        $ok = true;
+        $message = t('admin.theme.overrides.saved', 'Saved overrides loaded.');
+        try {
+            $background = \Gallery\Services\theme_background_editor_state();
+            $background['operation'] = is_string($backgroundOperation) ? $backgroundOperation : ($hasBackgroundUpload ? 'replace' : 'keep');
+            $background['target'] = 'theme';
+        } catch (RuntimeException) {
+            // The completed save remains successful even if a follow-up display snapshot is temporarily unavailable.
+            $background = null;
+        }
+    } catch (\Gallery\Services\CustomCssOverrideConflictException) {
+        $status = 409;
+        $message = t('admin.theme.overrides.conflict', 'Another editor changed the saved CSS or Theme background. Keep your draft, then reload before saving again.');
+    } catch (\InvalidArgumentException) {
+        $status = 422;
+        $message = $hasBackgroundUpload || $malformedBackgroundTransport || $backgroundOperationPresent || $backgroundTargetPresent
+            ? t('admin.theme.overrides.background_invalid', 'Choose a valid JPEG, PNG, GIF, or WebP image and reload the background if another editor changed it.')
+            : ($action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1'
+            ? t('admin.theme.overrides.clear_required', 'Confirm clearing the manual overrides before submitting this action.')
+            : t('admin.theme.overrides.invalid', 'Enter valid UTF-8 CSS up to 256 KiB and reload if the saved revision is missing.'));
+    } catch (\Gallery\Services\CustomCssRecoveryException $exception) {
+        $status = 503;
+        if ($exception->backgroundStateUncertain) {
+            $message = t('admin.theme.custom_css.rollback_uncertain', 'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.');
+        } elseif ($exception->hasRecoveryCopy) {
+            $message = t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.');
+        } else {
+            $message = t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.');
+        }
+    } catch (RuntimeException) {
+        $status = 503;
+        $message = t('admin.theme.overrides.failed', 'CSS and Theme background could not be saved. The previous assets were kept. Check asset permissions and retry.');
+    }
+    if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: private, no-store');
+        echo json_encode(['ok' => $ok, 'message' => $message, 'state' => $state, 'background' => $background], JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        return;
+    }
+    unset($_SESSION['cms_css_override_draft']);
+    if (!$ok && is_string($draft) && is_string($revision)) {
+        try {
+            \Gallery\Services\custom_css_overrides_validate($draft);
+            $_SESSION['cms_css_override_draft'] = ['text' => $draft, 'revision' => preg_match('/^[a-f0-9]{64}$/D', $revision) === 1 ? $revision : ''];
+        } catch (\InvalidArgumentException) {
+            // Invalid transport bytes are never copied into the session or HTML editor.
+        }
+    }
+    $_SESSION['cms_css_override_notice'] = ['ok' => $ok, 'message' => $message];
+    redirect_to(url_for('admin_theme', ['css_editor' => 1]) . '#admin-theme-tab-custom-css');
 }

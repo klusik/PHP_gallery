@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.124.4';
+const CMS_VERSION = '0.125';
 ```
 
 Update-related code uses:
@@ -579,6 +579,8 @@ contract and load order are preserved.
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
+| `app/services/custom_css.php` | `app/services/custom_css/` | `visual_background_save.php` (reviewed background attachment staged and committed through the existing CSS Save owner) |
+| `app/services/gallery_backgrounds.php` | `app/services/gallery_backgrounds/` | `visual_css_save.php` (opaque background revision, shared writer lock and private upload staging for the existing CSS Save owner) |
 | `app/controllers/admin_galleries_edit_page.php` | `app/controllers/admin_galleries_edit_page/` | `capabilities.php`, `post_actions.php`, `overview.php`, `tab_identity.php`, `tab_access.php`, `tab_display.php`, `tab_media.php`, `tab_images.php`, `tab_tools.php`, `controller.php` |
 
 The gallery edit page was one 984-line function rather than many functions, so
@@ -1243,6 +1245,16 @@ When adding a setting:
 
 The upload page and dynamically mounted side-panel forms share clipboard selection in `public/assets/gallery-modules/admin-upload-selection.js`. A document-delegated `paste` handler appends supported image `DataTransfer` items to the ordinary `images[]` FileList, then emits native input/change events. Both classic multipart and browser-prepared uploads read that same queue; clipboard paste does not persist or submit anything. The open panel owns target selection; otherwise the focused/recent visible upload form is used, defaulting to the first visible form. Text editors, hidden/disabled inputs, in-flight uploads, and unsupported clipboard content are left alone. JPEG/PNG/GIF/WebP are accepted within the picker policy; HEIC/HEIF/DNG additionally need its explicit server-capability extension hint. Browser filenames are preserved, while unnamed/blob images receive a timestamp/sequence filename with a MIME-matched extension. Browsers without clipboard image exposure or writable FileList support retain the chooser/drop path. Existing authentication, CSRF, target ownership, file validation, limits, metadata/previews, progress and canonical mutation completion remain with their current owners.
 
+For the right-hand Admin upload drawer, `admin-upload-preview.js` composes the existing delegated clipboard owner with the small per-form selection model in `admin-upload-queue.js`. Existing-gallery and create-gallery drawer forms emit localized `data-gallery-upload-preview` markup; standalone upload pages deliberately do not. Repeated paste, a new native picker choice, and drop append into the same browser-local `FileList`. Per-occurrence client IDs preserve preview identity and deliberate duplicate selections. Remove, clear and accessible move actions synchronize the actual file input before normal upload, with visible count, byte size and advisory format/size feedback. The browser-assisted ZIP path honors explicit drawer order while standalone/folder uploads retain natural filename ordering. The selected original `File` always remains the transport source; local previews do not replace it.
+
+`admin-upload-thumbnail.js` owns the local preview decoder. Before calling `createImageBitmap`, it reads at most 256 KiB of raster headers and admits only bounded static PNG/JPEG/WebP geometry: encoded source at most 24 MiB, either dimension at most 8192 pixels, and at most 16 * 1024 * 1024 source pixels. Animated, unknown, malformed, metadata-heavy and unsupported sources retain a format tile and their original upload eligibility. One document-wide decoder remains occupied until a cancelled native decode actually returns; waiting work is abortable. Each successful preview is a new PNG with its longest edge at most 256 pixels. The original bitmap is closed and its temporary canvas zeroed. The renderer retains at most 12 miniature URLs or pending requests, not twelve decoded original photographs. This bounds miniature RGBA surfaces to 3 MiB and one admitted source surface to 64 MiB, excluding browser codec overhead and the original selected File storage. These are allocation budgets, not a claimed whole-process RSS ceiling.
+
+URL revocation covers removal, clear, viewport eviction, acknowledged submission, native form reset, page hide and detached drawer fragments. A persisted page-show rebuilds only the miniatures from the retained bfcache FileList; no promise is made that unsent files survive an ordinary reload. Generation checks and AbortControllers prevent obsolete render callbacks from reviving removed previews. File assignment failure retains the browser-native chooser path. Empty, unsupported, oversized and unreadable candidates receive advisory per-item feedback, with server MIME/size validation authoritative.
+
+Exact repeated filenames receive per-occurrence warnings without deduplicating selected Files or treating names as upload identities. Warnings are recomputed after removal. A directly disabled input or disabled parent fieldset blocks drop as well as clipboard additions. Selection totals remain local metrics: classic AJAX sends one image per request and browser preparation retains its existing batch/item limits. The confined operation-key fixture verifies an explicitly reordered drawer queue across a lost second classic acknowledgment, locked/reset-protected originals, exact replay and canonical clear.
+
+Unsent local selections are guarded before drawer close or gallery switch. The canonical `admin-operation-keys.js` owner takes precedence over a local discard prompt: active or retained retry inputs cannot be removed, reset, replaced by paste/picker/drop, or discarded while their result is unresolved. All consumers import the same cache revision so there is only one operation-intent WeakMap. `data-upload-selection-locked` is only a UI projection of that owner, not independent retry authority. Partial classic/prepared failure keeps the original File sequence and existing operation/session keys; canonical success releases it and delegates no-reload refresh to the existing completion coordinator. This presentation enhancement adds no durable draft batch, endpoint, visibility change or in-gallery paste routing. See [upload selection safety](docs/UPLOAD_SELECTION.md) for the capability and privacy review.
+
 The default upload form uses browser-side preparation when the browser pipeline is enabled and selected for the request. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives using the admin ZIP size as a soft packing target and the admin maximum-images-per-batch cap. If one atomic image package (original plus its prepared thumbnails) is larger than the normal ZIP target, it is emitted as a singleton batch; the detected PHP upload limit remains the hard ceiling. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. Unchecking it before submission explicitly selects the normal server-side `admin_upload` path. When browser preparation remains selected and files are present, a browser capability or preparation failure stops before persistence instead of silently changing the selected execution path. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
 
 The browser implementation lives in `public/assets/gallery-modules/admin-browser-upload.js` and `public/assets/gallery-modules/browser-image-worker.js`. The server orchestration and guard logic live in `app/services/browser_uploads.php`; the dedicated settings view lives in `app/views/admin_upload_settings.php`. Controllers only handle HTTP validation, persistence orchestration, and response formatting.
@@ -1452,6 +1464,92 @@ Supported branding concepts include:
 10. Thumbnail size bounds.
 11. Gallery hero tag disclosure, ordering and row-based scrolling.
 12. Custom CSS presets.
+
+Issue #127's Live Visual CSS Editor is a draft workspace over the existing
+manual CSS override editor. The editor continues to own the only CSS textarea,
+revision, validation and explicit save path; its deterministic visual-edit block
+is merged into that textarea and is never written during preview. The public
+page is rendered by the real public routes in a protected, script-disabled
+same-origin frame, while the HUD remains in the parent Admin document. Preview
+routes use `preview=visual` and the established `view_as=anonymous` policy, with
+route-level GET/HEAD authorization, same-origin destination validation and
+private no-store response handling. Denied preview markers resolve through the
+ordinary public not-found controller after its module is loaded, so an
+unauthorized request cannot expose the preview page or its editor metadata.
+Serving public pages and media has existing
+telemetry and derived-thumbnail behavior, so preview implementations must
+explicitly suppress visitor/benchmark reporting and persistent repair writes
+while preserving per-request gallery/media visibility checks. Width edits use
+the existing Theme normalizers but stay in CSS draft state; the HUD synchronizes
+its custom-width slider and numeric pixel field and reports the actual rendered
+`.site-main` width from the iframe. Background assets remain pending until the
+existing explicit publication boundary can safely
+stage and roll back them. The stage gates, exact controllers/services, test
+contracts, and manual browser matrix are maintained in
+[`docs/LIVE_VISUAL_CSS_EDITOR.md`](docs/LIVE_VISUAL_CSS_EDITOR.md).
+
+For preview renders, `app/controllers/shared_layout.php` prepares the ordered
+stylesheet URLs, including the visual marker and anonymous audience where
+needed; `app/views/layout.php` renders those prepared values. Bootstrap may
+inherit preview context for an otherwise unmarked dependent asset request only
+from an exact-origin, in-mount referrer on GET/HEAD. Cross-origin requests do
+not receive that referrer. `app/services/custom_css.php` owns stylesheet
+inspection, including the fail-closed `@import` refusal and the preview-only
+8 MiB installed-CSS bound; `app/bootstrap/dispatch.php` runs that inspection
+after preview authorization and before rendering. The parent editor maps the
+typed refusal marker to localized guidance without receiving paths or file
+system errors. Restoring saved CSS uses the last confirmed saved text and
+revision snapshot already present in the page or returned by the last
+successful save; it performs no fetch, save, or reconciliation with external
+changes and clears the pending background File.
+
+Preview stylesheet paths reuse `Gallery\Core\asset_url()` before adding the
+cache query and preview/audience markers. That canonical helper accounts for
+both the script URL and physical front-controller path, so deployments served
+from either the repository root or `public/` use the same asset pathname in the
+preview and ordinary public document.
+
+The same shared-layout controller prepares the background layer context from
+the actual public resolver and emits only typed owner/mode/target data for the
+scriptless preview to inspect; the layout view renders those values without
+resolving gallery state. The context distinguishes the global Theme image, a
+Theme gallery fallback, a gallery-specific source, and no image. A gallery cover
+fallback or explicit gallery source makes the visual editor's Theme image target
+unavailable on that route, so its controls explain that Home is needed instead
+of pretending a global change alters the independent image. Global Theme image
+Keep/Replace/Remove remains a draft until the existing explicit CSS Save. Remove
+clears only the global Theme image paths and owned files; it preserves the Theme
+gallery fallback mode and every gallery source/cover. The fallback value named
+`theme_background_source` describes the gallery-cover mode, not the global
+uploaded Theme image.
+
+The Admin Custom CSS controller treats background readiness separately from CSS
+readiness. If the background storage lock or a configured global image cannot
+be inspected for its revision, it supplies an unavailable background snapshot;
+the editor disables only image Replace/Remove controls and shows the localized
+background-unavailable message. Manual CSS and the existing CSS-only Keep Save
+remain usable. An empty but readable background state is different: it is ready
+for the first image upload. If a safe preview URL cannot be prepared, the visual
+launch stays hidden; the CSS editor and background draft controls still
+initialize, but the UI does not claim that an actual preview is available.
+
+Theme background fit and position use managed CSS on the permanent
+`body.public-page .theme-background-image` layer. The closed fit values are
+`cover` and `contain`; position uses two integer percentage axes from 0 to 100.
+The editor initializes from the actual computed layer values and reports values
+outside this grammar instead of silently coercing them. Position has
+synchronized integer sliders and numeric inputs whose effective values include
+percent units. The editor compares computed output against requested and managed
+values and surfaces a conflict when stronger hand-authored CSS prevents an
+override from taking effect. Reset removes only its corresponding managed
+declaration and reveals the Theme baseline. These properties are draft CSS
+saved through the existing explicit override action, not persisted Theme settings.
+If computed position cannot be represented safely, the editor leaves it intact
+until both axes are explicitly supplied.
+Gallery-specific backgrounds are rendered separately on the gallery hero and
+remain outside these controls. An empty but ready Theme image state still
+permits fit/position drafts for a pending image without implying that an image
+is currently visible.
 
 ## Lightbox Browsing Mode Model
 
@@ -1687,7 +1785,7 @@ Aviation-related gallery features are intentionally modular.
 
 SimBrief drafts can be generated during gallery creation or from an existing gallery editor. The editable Markdown description uses the selected source language; when gallery translation storage is ready, maintained-language description fields are filled as well. Draft references remain private and session/admin-bound. Saving the gallery attaches the OFP and available route coordinates afterward, so an optional flight-data failure does not undo the gallery save. The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
 
-The public saved SimBrief OFP PDF viewer is owned by `public/assets/gallery-modules/simbrief-ofp-viewer.js` with its layout in `public/assets/styles/lightbox.css`. It is an independent PDF.js document sequence with gallery-authorized links, bounded high-DPI canvas rendering, generation-based stale render cancellation, stage-scoped zoom/pan, and no interaction with the photo-lightbox page sequence. Its modal dialog contains one fullscreenable non-dialog `.simbrief-ofp-root` holding both the PDF stage and its controls, because HTML `<dialog>` cannot be the Fullscreen API target. The document viewer manages `F` and `Escape`, native fullscreen transitions and a CSS fallback, an overlay HUD with idle timeout and focus/hover safeguards, and a single shared scale/fit model for fit width/page/actual size, buttons, Ctrl+wheel or trackpad pinch zoom, and touchscreen pinch. Unmodified physical mouse-wheel and two-finger trackpad input scroll the PDF in either axis through its native stage scrollbar. Safari's stage-scoped GestureEvents provide a trackpad pinch fallback; touch input stays within the PDF stage, with one-finger pan and pinch-to-pan handoff. PDF-relative pointer anchors preserve viewport focus during zoom; the header and toolbar retain a fixed high-contrast palette and UI scale above the scrollable stage even in fullscreen. The view/download actions are compact and separate from the administrator's CSRF-protected conversion form, whose localized help is revealed by hover, focus or tap. The lifecycle aborts document-only listeners and timers when closed. The original locally saved PDF is streamed by `cms_gallery_ofp_pdf()` in `app/controllers/public_media.php` through the distinct `gallery_ofp_pdf` public route; the old overloaded `media&ofp=1` form remains supported. `public_gallery_ofp_document_url()` generates a root-relative same-origin `index.php` link using the actual script mount path rather than configured host or the legacy image-ID route. The service `simbrief_ofp_visitor_access_allowed()` permits clean-cookie anonymous reads of direct-link-accessible public and unpublished source galleries, applies inherited password/share/NSFW authorization, denies private galleries without a normal visitor grant and private generated page children, and limits administrator-only bypass to verified administrators outside anonymous preview. The controller authorizes before resolving the symlink-safe local manifest and PDF; both forbidden and true-missing cases return an identical no-store, binary-safe text 404 with no filesystem disclosure. The explicit route, public-policy loader and URL generation are covered by a real isolated HTTP fixture for root and subdirectory installations. Before an automatic fit is measured, the shared page renderer updates the pan layout to remove manual viewport-sized gutters. Reset, fit-width and fit-page therefore use current automatic padding rather than stale zoom margins, including after stage resizing; the same generation guard and bitmap swap remain authoritative.
+The public saved SimBrief OFP PDF viewer is owned by `public/assets/gallery-modules/simbrief-ofp-viewer.js` with its layout in `public/assets/styles/lightbox.css`. It is an independent PDF.js document sequence with gallery-authorized links, bounded high-DPI canvas rendering, generation-based stale render cancellation, stage-scoped zoom/pan, and no interaction with the photo-lightbox page sequence. Native Left/Right auto-repeat has a 150 ms minimum interval and admits the next held-key page only after the preceding keyboard render completes; discrete presses retain one-page semantics and the existing generation guard. There is no internal key-repeat timer or pending repeat queue. Keyup, blur, document hiding, fullscreen transitions, close and focus moving into an editable control or another dialog retire the held-key context. Document acquisition failures expose the protected PDF fallback without leaving a rejected keyboard task. First/last page actions are no-ops. The stage remains focusable for document shortcuts and native scrolling, with its browser outline removed only on the OFP stage; real controls retain visible keyboard focus and native tab traversal. Its modal dialog contains one fullscreenable non-dialog `.simbrief-ofp-root` holding both the PDF stage and its controls, because HTML `<dialog>` cannot be the Fullscreen API target. The document viewer manages `F` and `Escape`, native fullscreen transitions and a CSS fallback, an overlay HUD with idle timeout and focus/hover safeguards, and a single shared scale/fit model for fit width/page/actual size, buttons, Ctrl+wheel or trackpad pinch zoom, and touchscreen pinch. Unmodified physical mouse-wheel and two-finger trackpad input scroll the PDF in either axis through its native stage scrollbar. Safari's stage-scoped GestureEvents provide a trackpad pinch fallback; touch input stays within the PDF stage, with one-finger pan and pinch-to-pan handoff. PDF-relative pointer anchors preserve viewport focus during zoom; the header and toolbar retain a fixed high-contrast palette and UI scale above the scrollable stage even in fullscreen. The view/download actions are compact and separate from the administrator's CSRF-protected conversion form, whose localized help is revealed by hover, focus or tap. The lifecycle aborts document-only listeners and timers when closed. The original locally saved PDF is streamed by `cms_gallery_ofp_pdf()` in `app/controllers/public_media.php` through the distinct `gallery_ofp_pdf` public route; the old overloaded `media&ofp=1` form remains supported. `public_gallery_ofp_document_url()` generates a root-relative same-origin `index.php` link using the actual script mount path rather than configured host or the legacy image-ID route. The service `simbrief_ofp_visitor_access_allowed()` permits clean-cookie anonymous reads of direct-link-accessible public and unpublished source galleries, applies inherited password/share/NSFW authorization, denies private galleries without a normal visitor grant and private generated page children, and limits administrator-only bypass to verified administrators outside anonymous preview. The controller authorizes before resolving the symlink-safe local manifest and PDF; both forbidden and true-missing cases return an identical no-store, binary-safe text 404 with no filesystem disclosure. The explicit route, public-policy loader and URL generation are covered by a real isolated HTTP fixture for root and subdirectory installations. Before an automatic fit is measured, the shared page renderer updates the pan layout to remove manual viewport-sized gutters. Reset, fit-width and fit-page therefore use current automatic padding rather than stale zoom margins, including after stage resizing; the same generation guard and bitmap swap remain authoritative.
 
 
 ## Admin Gallery Discovery
@@ -2378,6 +2476,18 @@ Settings Uploads edits format/rename, worker/batch limits and thumbnail chunks t
 Theme consumes prepared Appearance/Media/Layout/Language/Custom CSS models. Appearance pane resizing is local and bounded. Language Settings/Design/Editor/Diagnostics retain separate language scopes and form-local preview ownership. Vertical cards place media above text; horizontal cards beside it. The replay-safe compatibility migration preserves explicit/inherited data and legacy imports/Trash. All tags remain in server markup and use shared browser disclosure. Search defaults on without rewriting saved preferences.
 
 Custom CSS verifies settings storage before file mutation, stages beside the target, verifies copies, preserves permissions and retains prior bytes until marker persistence succeeds. Failed persistence restores prior CSS; failed rollback retains recovery evidence and bounded guidance. Deployment excludes the installation-owned active file.
+
+Theme owns the stable `theme_gallery_grid_gap` (0–64 px), `theme_gallery_card_padding` (0–48 px), `theme_card_shadow` (`default`, `none`, `soft`, `raised`), `theme_public_type_scale` (80–140%) and `theme_header_transparent` (`0`/`1`) keys. Unset/invalid values retain historic appearance; default gap/padding, shadow and scale emit no component override. Advanced settings apply scoped public rules and variables. Transparent header rules remove only its container backdrop and pseudo-elements, retaining geometry and navigation; hero, Admin and special viewers are unaffected. Independent reset deletes exactly one preference. The current miniature Theme preview mirrors staged values.
+
+The protected Custom CSS editor owns an independent form and `public/assets/custom-overrides.css`, loaded after all ordinary public styles, including generated Theme and mobile CSS. Installed preset/upload CSS keeps its existing earlier position. Manual CSS never loads on Admin pages; standard specificity/importance still apply. Reads/saves/clear/reload pass Admin and CSRF boundaries. UTF-8 transport is bounded to 256 KiB with binary controls rejected; CSS grammar is deliberately browser-owned, so syntax mistakes remain editable. Same-directory staging verifies complete bytes and permissions, then activates by atomic rename as the final fallible filesystem operation. A fixed nonblocking writer lock and SHA-256 precondition prevent lost updates; errors keep prior bytes and drafts. Public URLs use the content digest, and empty overrides omit the link. Dedicated clear confirmation affects only overrides. The draft preview links Blob CSS into a sandbox with scripts, external resources, forms and parent access denied. The override asset and writer lock are excluded from Git, packages, updater replacement/rollback, integrity and source/fingerprint inventories. No schema migration is required.
+
+For an authorized visual-preview home/gallery request, `app/bootstrap/dispatch.php` loads the single `visual-preview-document` module, which contains the CSS inspector and background-context declarations. Dispatch inspects the installed CSS and saved override first; a refusal returns before shared layout calls the background-context resolver. On success, the route prepares its shared header and resolves the rendered background context. The deferred edge in `scripts/runtime_module_roots.php` keeps the gallery-background resolver closure out of ordinary routes that reuse `shared_layout.php`, including media, thumbnails, and Admin telemetry.
+
+Clean-rewrite image detail, original-media, and thumbnail URLs are composed from the undecorated mounted route path: append `/media` or `/thumb-N.ext` first, then add visual-preview and audience query markers, and finally add the image cache-version query value. The manifest and both responsive/progressive thumbnail renderers use the same ordering. Query-string installations continue to use their dedicated public media/thumbnail routes. The preview-marker decorator preserves an input URL's existing query values and fragment. Application-generated asset routes are fragment-free, and their cache-version value is appended as a query parameter; this contract does not extend to arbitrary fragment-bearing input passed to the generic version helper.
+
+Invalid or refused preview markers still use the standard shared-layout 404. An authenticated visual-preview request for a gallery that the Anonymous audience cannot access is handled by the gallery controller: it resolves the complete parent chain first, fails closed to Home for missing/cyclic ancestry, and otherwise redirects to the nearest ancestor allowed by ordinary visitor policy or Home. The redirect retains `preview=visual` and `view_as=anonymous`, carries only the fixed `visual_notice=anonymous_fallback` token, and never renders or names the denied gallery. This behavior is limited to the marked visual-preview request; ordinary visitor gates remain unchanged. The shared-layout controller reuses dispatch's canonical decision and prepares background editor metadata only for active, allowed Home/Gallery documents, preventing denied asset error pages from invoking the deferred resolver or exposing editor attributes.
+
+The visual CSS editor uses closed, context-specific profiles: links and buttons expose only their supported color/alpha, typography, border, radius, padding and shadow properties; heading and paragraph profiles add text decoration; Header and Hero expose separately managed standard and WebKit backdrop filters. The global Theme image layer alone receives managed `background-size` (`cover` or `contain`) and two integer `background-position` percentages from 0 to 100, and only when that image is the server-authorized visible target. Gallery-specific and Theme-fallback hero backgrounds remain separate. An unsaved managed page-width draft takes precedence over saved Theme Appearance width in the preview; explicitly saving the CSS publishes that rule on public pages as well, without changing the stored Theme setting. Reset removes only the managed declaration and reveals the underlying Theme or manual CSS draft value.
 
 ## Bounded updater metadata and navigation imports
 

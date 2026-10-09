@@ -41,6 +41,18 @@ function admission_retry_ready(string $id): void
     S\cooperative_proposal_exchange_save($stored, $group);
 }
 
+/** Keep the fixture's catalog cooldown active during an immediate contention read.
+ * @param string $id Isolated active group whose admission gate is under test.
+ * @return void Store a finite future cooldown without changing the security lease or operation owner.
+ */
+function admission_retry_blocked(string $id): void
+{
+    $stored = S\cooperative_proposal_exchange_load($id);
+    $group = $stored['group'];
+    $group['exchange']['content_retry_at'] = time() + S\COOPERATIVE_CONSENT_RETRY_DELAY;
+    S\cooperative_proposal_exchange_save($stored, $group);
+}
+
 $id = admission_active_fixture();
 $b = $GLOBALS['exchange_nodes']['b']['id'];
 $c = $GLOBALS['exchange_nodes']['c']['id'];
@@ -75,20 +87,34 @@ $hook = /** A second source still shares this group's single network admission.
         && S\cooperative_proposal_exchange_load($id)['storage_revision'] === $stored['storage_revision'],
         'Concurrent anonymous reader launched or superseded catalog work.');
 };
+$firstReadStartedAt = time();
 $result = S\cooperative_content_read($id, $b);
-exchange_check(!$result['pending'] && $calls === 1, 'First owned catalog did not complete.');
+$firstReadCompletedAt = time();
+$firstSuccessRetryAt = S\cooperative_proposal_exchange_load($id)['group']['exchange']['content_retry_at'] ?? null;
+exchange_check(!$result['pending'] && $calls === 1 && is_int($firstSuccessRetryAt)
+    && $firstSuccessRetryAt >= $firstReadStartedAt + S\COOPERATIVE_CONTENT_SUCCESS_RETRY_DELAY
+    && $firstSuccessRetryAt <= $firstReadCompletedAt + S\COOPERATIVE_CONTENT_SUCCESS_RETRY_DELAY,
+    'First owned catalog did not complete with its bounded successful-admission cooldown.');
 $stored = S\cooperative_proposal_exchange_load($id);
 exchange_check(!isset($stored['group']['exchange']['content_operation'])
     && $stored['group']['exchange']['lease'] === $lease, 'Successful content changed the security lease.');
+admission_retry_blocked($id);
 exchange_check(S\cooperative_content_read($id, $c) === ['pending' => true] && $calls === 1,
-    'Successful admission spacing allowed another immediate source request.');
+    'Successful admission spacing allowed another source request before the saved cooldown expired.');
 
 admission_retry_ready($id);
 $pending = true;
+$pendingReadStartedAt = time();
+$pendingResult = S\cooperative_content_read($id, $b);
+$pendingReadCompletedAt = time();
+$pendingSuccessRetryAt = S\cooperative_proposal_exchange_load($id)['group']['exchange']['content_retry_at'] ?? null;
+exchange_check($pendingResult === ['pending' => true] && $calls === 2 && is_int($pendingSuccessRetryAt)
+    && $pendingSuccessRetryAt >= $pendingReadStartedAt + S\COOPERATIVE_CONTENT_SUCCESS_RETRY_DELAY
+    && $pendingSuccessRetryAt <= $pendingReadCompletedAt + S\COOPERATIVE_CONTENT_SUCCESS_RETRY_DELAY,
+    'Validated remote pending status was not preserved with its successful-admission cooldown.');
+admission_retry_blocked($id);
 exchange_check(S\cooperative_content_read($id, $b) === ['pending' => true] && $calls === 2,
-    'Validated remote pending status was not preserved.');
-exchange_check(S\cooperative_content_read($id, $b) === ['pending' => true] && $calls === 2,
-    'Remote pending status bypassed successful admission spacing.');
+    'Remote pending status bypassed successful admission spacing before the saved cooldown expired.');
 $pending = false;
 admission_retry_ready($id);
 $fail = true;

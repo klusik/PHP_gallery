@@ -8,6 +8,24 @@ existing product metric actually observes adoption.
 
 ## Policy
 
+### CI-1 — Local maintainer recovery after CI-first migration
+
+- **Reason / protected environment:** Maintainers may need existing local
+  generators/audits when GitHub is genuinely inaccessible or for explicitly
+  requested environment-specific diagnosis. Red or slow CI is not inaccessible CI.
+- **Owner:** AGENTS.md owns agent execution; RELEASE.md and the existing canonical
+  generator/audit scripts own recovery. No parallel runner or test registry exists.
+- **Permanent support rationale:** Keep local development and emergency recovery
+  possible without treating local PASS as hosted qualification. Ordinary agents
+  commit/push only an explicitly authorized working branch; protected release
+  workflows own approved promotion/publication. Production-host smoke stays manual.
+- **Regression evidence:** `tests/hosted_release_policy_test.mjs` exercises missing,
+  stale and red evidence refusal, exact overrides and CI-first/branch contracts
+  through the central hosted Node registry. Actual hosted write-mode acceptance
+  requires configured server protections and independent environment approval.
+- **Usage / introduction:** Local recovery usage is unknown; this policy transition
+  was authored for #100/#124 on 2026-10-08, without inferring older adoption.
+
 Compatibility is a supported behavior when users, installed data, older
 clients, host configurations, or documented no-JavaScript flows rely on it.
 Keep such behavior until its owner demonstrates the retirement condition below.
@@ -27,10 +45,18 @@ not a source parser or a commitment to remove anything on a calendar date.
 ### UI-3 — Clipboard exposure and writable FileList availability
 
 - **Reason / protected environment:** Desktop browsers or clipboard sources may expose no image files, and older/restricted browsers may not construct a DataTransfer or assign an input FileList. Their established chooser/drop and ordinary no-JavaScript POST uploads remain usable.
-- **Owner:** `admin-upload-selection.js` owns selection only; existing upload controllers/services and the side-panel completion owner retain persistence and security.
+- **Owner:** `admin-upload-selection.js` owns clipboard extraction; `admin-upload-queue.js` and `admin-upload-preview.js` own the right-drawer local selection, previews and disposal. Existing upload controllers/services and the side-panel completion owner retain persistence, progress and security.
 - **Evidence:** `admin_upload_clipboard_test.mjs` and the registered `admin_upload_clipboard_browser_test.mjs` cover file-only exposure, selection preservation on assignment failure, ordinary multipart submission and dynamic panel controls. The OS/browser matrix in `TESTING.md` remains manual evidence.
 - **Usage:** Clipboard API availability and fallback frequency are `unknown`; no new telemetry is collected.
 - **Support rationale:** Chooser/drop and no-JavaScript POST remain permanently supported input methods. Clipboard input is additive and may never require permission polling or a second upload endpoint.
+
+### UI-4: Bounded local miniature fallback
+
+- **Reason / protected environment:** A browser may lack `createImageBitmap` or canvas encoding, reject a codec, or receive animated, oversized, unknown or metadata-heavy image data. Preview admission must not narrow the existing server upload formats or replace the original with a thumbnail.
+- **Owner:** `admin-upload-thumbnail.js` owns bounded raster admission and serialized decoding; `admin-upload-preview.js` owns format fallback and URL/callback disposal. Upload processing, metadata and authorization remain with the existing transport/service owners.
+- **Evidence:** Registered `admin_upload_thumbnail_test.mjs`, the expanded clipboard Chromium fixture, and the real Worker/ZIP operation-key fixture cover fallback, original preservation, resource bounds, reset and uncertain acknowledgment. Actual OS clipboard/browser results remain in the `TESTING.md` manual matrix.
+- **Usage:** Decoder support, oversized-image frequency, fallback usage and real browser-process memory are `unknown`; no telemetry is added.
+- **Support rationale:** A missing local miniature is permanently allowed for an otherwise uploadable original. Retirement would require a separate accepted browser/format support-policy change, not merely a passing Chromium test.
 
 ## Database and migrations
 
@@ -594,6 +620,59 @@ not a source parser or a commitment to remove anything on a calendar date.
   explicitly ended, usage is measured and acceptably low, and an authorized
   replacement remains safe. Do not remove the server fallback because cache
   generation is optional or unhealthy.
+
+## Visual CSS resize across a scriptless preview frame
+
+- **Reason / protected environment:** During a native drag over the scriptless preview iframe, hosted Chromium delivered a trusted held pointer move to the parent overlay after handle capture was lost. The active gesture must continue only through the existing pointerId-guarded transaction while the parent overlay shields hit testing; the implementation does not assume a specific browser cause for capture loss.
+- **Owner:** `public/assets/gallery-modules/theme-visual-css-resize.js` owns the existing resize transaction, temporary overlay shield, one overlay move/up/cancel listener set, capture attempt, cancellation and restoration. It does not add a second pointer pipeline or alter public-page interaction outside an active drag.
+- **Evidence:** `tests/theme_visual_css_resize_model_test.mjs` covers the bounded transaction model; `tests/theme_visual_editor_browser_test.mjs` exercises native pointer movement, transient preview, commit and Escape restoration. The [W3C Pointer Events capture algorithm](https://www.w3.org/TR/pointerevents3/#setting-pointer-capture) keeps capture pending until subsequent event processing and requires the capture element to be in the pointer's active document. The [W3C cross-iframe capture issue](https://github.com/w3c/pointerevents/issues/493) documents unresolved boundary behavior; the `TESTING.md` browser matrix is the manual evidence owner.
+- **Usage:** Unknown; no gesture or browser telemetry is collected.
+- **Lifecycle:** Permanent while resize handles are parent-owned and the public preview remains in an iframe. The shield must be enabled only for an active transaction and restored on every commit, cancel, capture failure, frame teardown and workspace cleanup path.
+
+## Visual-preview audience fallback for inaccessible galleries
+
+- **Reason / protected scenario:** An administrator may switch the visual
+  workspace to Anonymous while its current gallery requires a password, is
+  private, or otherwise fails the ordinary visitor grant. Redirecting only the
+  authenticated visual preview to the nearest accessible ancestor or Home keeps
+  the workspace useful without rendering the denied gallery document or
+  changing normal visitor access behavior. A listed password-gated child may
+  remain as a normal locked, no-cover card under the existing public-listing
+  policy; private children stay omitted.
+- **Owner:** `app/controllers/public_gallery_page.php` selects the destination;
+  `app/services/gallery_access.php` walks ancestors and applies the canonical
+  no-administrator-bypass visitor policy; the visual editor HUD displays the
+  fixed `visual_notice=anonymous_fallback` token as generic localized copy;
+  `app/services/seo_request_guard.php` retains it through Home canonicalization
+  only alongside the exact visual-preview and anonymous-audience markers.
+- **Evidence / tests:** `tests/public_visual_preview_workflow_test.php` covers
+  the real HTTP redirect for password-gated and private galleries,
+  nearest-ancestor and Home fallback, cyclic ancestry, preserved
+  preview/audience/notice markers across canonicalization, no-store behavior,
+  locked listed-child rendering, private-child omission, and the unchanged
+  ordinary-visitor password gate. `tests/gallery_workflow_browser_test.php`
+  exercises the actual authenticated Admin browser flow from the protected
+  signed-in gallery to Anonymous, checking the ancestor URL, preview/audience
+  markers, generic notice, unchanged CSS draft and Admin URL, zero mutation
+  requests, and Back restoration of the signed-in gallery. Separately,
+  `tests/theme_visual_editor_browser_test.mjs` uses a controlled synthetic
+  iframe redirect to verify draft/history retention, notice display, and token
+  removal from later navigation.
+- **Usage:** Unknown; the product has no counter for audience-toggle
+  fallbacks.
+- **Lifecycle:** Permanent while the visual editor offers an Anonymous
+  audience toggle and gallery navigation. Retirement requires an explicit
+  replacement UX that preserves access enforcement, draft state, and a clear
+  explanation when the selected gallery is unavailable.
+
+## Installed CSS and separate public manual overrides
+
+- **Owner and reason:** Theme/Custom CSS preserves the existing `public/assets/custom.css` preset/upload contract while a separate editor owns `public/assets/custom-overrides.css`. Ordinary Theme saves, skin replacement and unrelated resets must not erase manual edits.
+- **Protected behavior:** Existing installations retain their appearance when advanced controls are unset or invalid. Manual CSS is an optional final public layer; an absent, invalid-transport or unreadable override file is omitted without blocking public rendering, and the protected editor exposes a bounded error. CSS syntax recovery remains the browser's responsibility. Native editor POST/redirect remains supported with its own CSRF and explicit clear checkbox.
+- **Composite background-save compatibility:** The existing `custom_css_overrides_save($text, $revision)` call and `css_override_action=save` route remain CSS-only when no background operation is requested. The visual editor's explicit global Theme target carries `keep`, `replace`, or `remove` plus the opaque background revision; replacement attaches the reviewed File and remove stages only deletion of the global Theme image. The operation preserves `theme_background_source` (the gallery fallback mode), per-gallery `background_source` values and gallery cover assets. Its controller-prepared public context distinguishes the global Theme image, Theme gallery fallback, explicit gallery source, and no image; when an independent gallery-derived layer is active, the visual editor disables the Theme image target on that route and directs the administrator to Home. If background revision inspection is unavailable, only image operations are disabled and the existing CSS-only editor/save path remains usable; a ready empty image state still permits first upload. An unavailable preview URL hides the visual launch without claiming that a preview exists, while the editor controls remain initialized. Owner: `app/services/custom_css.php`, `app/services/custom_css/visual_background_save.php`, `app/services/gallery_backgrounds.php`, and the application-settings model transaction. CSS lock precedes the shared Theme background writer lock. Legacy direct POST/redirect remains supported.
+- **Visual-preview stylesheet compatibility:** `app/controllers/shared_layout.php` prepares the marked stylesheet URLs by starting with `Gallery\Core\asset_url()` and then adding the cache revision and visual-preview/audience query context; `app/views/layout.php` only emits that controller model. The canonical helper examines both `SCRIPT_NAME` and `SCRIPT_FILENAME`, preserving the same public asset path for repository-root, `public/` document-root, and subdirectory-mounted deployments. `app/bootstrap/request.php` carries the marker to otherwise unmarked dependent resources only for same-origin, in-mount GET/HEAD requests whose referrer has the exact request origin; ordinary public stylesheet URLs and non-preview requests retain their existing form. `app/services/custom_css.php` owns the fail-closed `@import` and stylesheet-inspection decisions, while dispatch enforces them after preview authorization and before rendering. Keep this request-context bridge limited to those resources and methods; it is not a general route authorization or cross-origin referrer fallback.
+- **Evidence:** `tests/custom_css_visual_preview_inspection_test.php`, `tests/public_visual_preview_policy_test.php`, `tests/public_visual_preview_workflow_test.php`, and `tests/public_visual_preview_asset_url_test.php` cover stylesheet inspection, route/resource boundaries, and canonical asset URL composition. The real-route `tests/support/gallery_workflow_browser.js` asserts preview/public `base.css` path and marker behavior, loaded body reset, and strict saved-width parity. Existing `theme_advanced_appearance_test.php`, `custom_css_preservation_test.php`, `app_settings_atomic_activation_model_test.php`, `theme_custom_css_rendering_test.php`, and Appearance/Custom CSS Chromium fixtures cover defaults, independent assets/resets, transaction rollback, failed writes, stale editors, escaping, isolation and header restoration. Installed usage and document-root distribution are **unknown**.
+- **Retirement:** Permanent support for installed preset/upload assets, CSS-only callers, direct/no-JavaScript editor forms, and repository-root, `public/` document-root, and subdirectory-mounted installations. Removing any contract requires an explicitly approved migration of saved CSS, supported administrator clients and deployment configurations, plus acceptance evidence; no age-based expiry.
 
 ## Retiring a record
 

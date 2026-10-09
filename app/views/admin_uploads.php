@@ -38,12 +38,43 @@ use function Gallery\Services\t;
 
 /**
  * Render clipboard instructions and a localized live status for an upload selection.
+ * @param bool $panelMode True only for the enhanced right-hand upload drawer.
  * @return void Emit presentation metadata consumed by the clipboard selection module.
  */
-function view_render_admin_upload_clipboard_hint(): void
+function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
 {
     echo '<p class="muted">' . e(t('admin.upload.clipboard_hint', 'Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.')) . '</p>';
     echo '<p class="muted" role="status" data-gallery-upload-selection-status data-added="' . e(t('admin.upload.clipboard_added', 'Added {count} clipboard image(s). Submit the form to upload.')) . '" data-unavailable="' . e(t('admin.upload.clipboard_unavailable', 'This browser could not add clipboard images. Choose or drop files instead.')) . '"></p>';
+    // Only enhanced right-side drawer forms get a local thumbnail queue.
+    // Full-page forms preserve their native selection and progressive fallback.
+    if ($panelMode) {
+        $labels = [
+            'summary' => t('admin.upload.queue_summary', '{count} selected · {size}'),
+            'clear' => t('admin.upload.queue_clear', 'Clear selection'),
+            'remove' => t('admin.upload.queue_remove', 'Remove {name}'),
+            'earlier' => t('admin.upload.queue_earlier', 'Move {name} earlier'),
+            'later' => t('admin.upload.queue_later', 'Move {name} later'),
+            'empty-file' => t('admin.upload.queue_empty_file', 'Empty file, upload may fail'),
+            'repeated-name' => t('admin.upload.queue_repeated_name', 'Repeated filename; these are separate selected files'),
+            'large-preview' => t('admin.upload.queue_large_preview', 'Preview skipped for large source'),
+            'preview-unavailable' => t('admin.upload.queue_preview_unavailable', 'Preview unavailable; the original remains selected for upload'),
+            'unnamed' => t('admin.upload.queue_unnamed', 'Unnamed image'),
+            'unsupported-format' => t('admin.upload.queue_unsupported_format', 'This format may not be supported for upload'),
+            'zip-requires-browser' => t('admin.upload.queue_zip_requires_browser', 'ZIP requires browser-assisted upload'),
+            'browser-format' => t('admin.upload.queue_browser_format', 'Use classic upload for this format'),
+            'large-upload' => t('admin.upload.queue_large_upload', 'Exceeds the reported per-file server limit ({size})'),
+            'assignment-unavailable' => t('admin.upload.clipboard_unavailable', 'This browser could not add clipboard images. Choose or drop files instead.'),
+            'unsent-title' => t('admin.upload.queue_unsent_title', 'Unsent images'),
+            'unsent-warning' => t('admin.upload.queue_unsent_warning', 'Selected images exist only in this browser. Discard them before leaving this upload panel?'),
+            'keep-editing' => t('admin.upload.queue_keep_editing', 'Continue adding images'),
+            'discard' => t('admin.upload.queue_discard', 'Discard selection and leave'),
+        ];
+        echo '<div class="gallery-upload-queue" data-gallery-upload-preview hidden';
+        foreach ($labels as $key => $translation) {
+            echo ' data-' . $key . '="' . e((string) $translation) . '"';
+        }
+        echo '></div>';
+    }
 }
 
 /** @param array<string,mixed> $viewModel Controller-prepared full upload page. */
@@ -114,7 +145,7 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
         echo '<label' . ($panelMode ? ' class="admin-side-panel-field admin-side-panel-field-wide"' : '') . '><span>' . e(t('admin.upload.gallery', 'Gallery')) . '</span><select name="gallery_id" required>' . (string) ($viewModel['gallery_options_html'] ?? '') . '</select></label>';
     }
     echo '<label tabindex="0" data-gallery-upload-drop-zone' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
-    view_render_admin_upload_clipboard_hint();
+    view_render_admin_upload_clipboard_hint($panelMode);
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     if ($panelMode) {
@@ -154,7 +185,7 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
     echo '<div class="admin-side-panel-card admin-side-panel-upload-card">';
     echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';
     echo '<label tabindex="0" data-gallery-upload-drop-zone class="admin-side-panel-file-drop"><span class="admin-side-panel-file-title">' . e(t('admin.upload.choose_images', 'Choose images')) . '</span><input name="images[]" type="file" accept="' . e((string) ($viewModel['accept_value'] ?? '')) . '" multiple><span class="muted">' . e(t('admin.upload.multiple_files_help', 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.')) . '</span></label>';
-    view_render_admin_upload_clipboard_hint();
+    view_render_admin_upload_clipboard_hint($panelMode);
     echo '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     echo '</div>';

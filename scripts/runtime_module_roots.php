@@ -24,6 +24,14 @@ return [
             'Gallery\\Services\\schema_inspection_prime_table_snapshots',
             'Gallery\\Services\\feature_flag_route_enabled',
             'Gallery\\Services\\seo_request_guard_route_robots_header_value',
+            'Gallery\\Services\\public_visual_preview_is_active',
+            'Gallery\\Services\\public_visual_preview_request_decision',
+            'Gallery\\Services\\public_visual_preview_inherit_referrer_context',
+        ],
+        // One preview-only document root; dispatch inspects CSS before the renderer calls the background-context function.
+        'visual-preview-document' => [
+            'Gallery\\Services\\custom_css_visual_preview_inspection_decision',
+            'Gallery\\Services\\theme_background_visual_editor_context',
         ],
         'routing-paths' => [
             'Gallery\\Services\\find_gallery_by_public_path',
@@ -126,6 +134,10 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Dispatch loads the preview-document module before inspection; shared layout invokes the context function only after inspection passes.
+        'Gallery\\Controllers\\shared_layout_header_model' => [
+            'Gallery\\Services\\theme_background_visual_editor_context',
+        ],
         // The database boundary always reports central telemetry. Admin test-run
         // instrumentation is optional and is loaded only when the opted-in
         // request-diagnostics lifecycle module is selected before the first query.

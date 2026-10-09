@@ -243,6 +243,17 @@ namespace {
             'Database/runtime jobs must explicitly disable redundant Chromium: ' . $jobName);
         check(!str_contains($job, '--suite=browser-map'), 'Browser fixtures must not repeat across a runtime matrix.');
     }
+    $realDatabaseJob = $jobBlocks['real-database-browser'] ?? '';
+    check(substr_count($realDatabaseJob, 'real_browser: true') === 1
+        && substr_count($realDatabaseJob, 'real_browser: false') === 2
+        && str_contains($realDatabaseJob, "database: 'mysql:8.4'\n            real_browser: true"),
+        'Exactly one stable MySQL matrix entry must own the real-app Chromium workflow journey.');
+    check(str_contains($realDatabaseJob, 'if: matrix.real_browser')
+        && str_contains($realDatabaseJob, 'Discover Chromium for the real application workflow')
+        && str_contains($realDatabaseJob, 'browser_path=%s')
+        && str_contains($realDatabaseJob, 'GALLERY_WORKFLOW_BROWSER: ${{ steps.workflow-browser.outputs.browser_path || \'disabled\' }}')
+        && str_contains($realDatabaseJob, 'GALLERY_WORKFLOW_BROWSER_REQUIRED: ${{ matrix.real_browser && \'1\' || \'0\' }}'),
+        'The single real-app journey must receive a verified Chromium path and the other matrix entries must remain explicitly disabled.');
     $browserJob = $jobBlocks['browser-tests'] ?? '';
     check(str_contains($browserJob, "PHP_GALLERY_BROWSER_REQUIRED: '1'")
         && !str_contains($browserJob, 'PHP_GALLERY_BROWSER: disabled')
@@ -383,6 +394,11 @@ namespace {
         'AI patch-note boundary must provide bounded evidence, reject unsafe output and remain independent of authentication secrets.');
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
+    $workflowBrowserTest = (string) file_get_contents(dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php');
+    check(str_contains($runner, 'GALLERY_WORKFLOW_BROWSER_REQUIRED')
+        && str_contains($runner, 'required real-app Chromium workflow has no verified browser executable')
+        && str_contains($workflowBrowserTest, "getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') !== '1'"),
+        'A required real-app browser journey must fail closed when its verified executable or fixture is missing.');
     foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
         $launcher = (string) file_get_contents(dirname(__DIR__) . '/scripts/' . $launcherName);
         $quickBranch = strpos($launcher, "if ((\$argv[1] ?? '') === '--quick')");
@@ -399,7 +415,9 @@ namespace {
     $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (string $profile): array {' . $selectionBody . 'return $requiredTests;};');
     check($selection instanceof Closure, 'Actual central evidence selector did not compile.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = 'disabled';
-    $requiredDatabaseTests = ['installer_first_install_test.php', 'gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
+    $requiredDatabaseTests = ['installer_first_install_test.php', 'gallery_workflow_integration_test.php',
+        'public_visual_preview_workflow_test.php', 'theme_visual_background_workflow_test.php',
+        'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
     check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests],
         'Explicit browser disablement changed database/HTTP or race PASS requirements.');
     check($selection('quick') === ['database_engine_contract_test.php'],

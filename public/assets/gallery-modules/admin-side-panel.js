@@ -42,15 +42,16 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026100
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260920-operation-keys-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261008-issue118-v3';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
-import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261003-scoped-i18n-v1';
-import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
+import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261008-issue118-v3';
+import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning, adminOperationOwnsInput} from './admin-operation-keys.js?v=20261008-issue118-v3';
 import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
-import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261008-clipboard-v1';
+import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261008-issue118-v3';
+import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261008-issue118-v5';
 
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.
@@ -196,6 +197,7 @@ import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=2026100
  */
 export function setupGalleryUploadProgress() {
     setupGalleryUploadClipboard();
+    setupGalleryUploadPreviews();
     document.querySelectorAll('[data-gallery-upload-form]').forEach(/** Bind each mounted upload form at most once. @param {Element} form Candidate upload form. @return {void} Marks valid forms bound before installing submission handling. */ (form) => {
         if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;
@@ -228,7 +230,10 @@ async function runGalleryUpload(form) {
     revealPanelUploadProgress(form, progress);
     form.classList.add('is-uploading');
     // buttons stores state or configuration for the gallery front-end flow.
-    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    // Disable queue actions during transport without rewriting their short labels.
+    const queueButtons = Array.from(form.querySelectorAll('[data-upload-queue-action]')).map(button => ({button, disabled: button.disabled}));
+    queueButtons.forEach(({button}) => { button.disabled = true; });
+    const buttons = Array.from(form.querySelectorAll('button:not([data-upload-queue-action]), input[type="submit"]'));
     buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
         if (button instanceof HTMLButtonElement) {
@@ -258,6 +263,8 @@ async function runGalleryUpload(form) {
         }
         requireCanonicalUploadMutationResult(result);
         finishAdminOperation(operation, true);
+        // Only a canonical acknowledged upload may retire in-memory source files.
+        clearGalleryUploadQueue(form);
         if (createThumbnails) {
             const failed = Number(result.thumbnail_failed || 0);
             const message = failed > 0 ? i18n('admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.', {count: failed}) : i18n('admin.operations.upload_complete', 'Upload and thumbnail job complete.');
@@ -281,6 +288,10 @@ async function runGalleryUpload(form) {
     } finally {
         finishAdminOperation(operation);
         form.classList.remove('is-uploading');
+        const selectionLocked = adminOperationOwnsInput(form);
+        if (selectionLocked && form.querySelector('[data-gallery-upload-preview]')) form.dataset.uploadSelectionLocked = '1';
+        else delete form.dataset.uploadSelectionLocked;
+        queueButtons.forEach(({button, disabled}) => { button.disabled = disabled || selectionLocked; });
         const panel = form.closest('[data-admin-side-panel]');
         if (panel instanceof HTMLElement) {
             panel.classList.remove('is-uploading');
@@ -786,6 +797,7 @@ async function openAdminGallerySidePanel(link) {
         window.location.href = link.href;
         return;
     }
+    if (!allowGalleryUploadQueueTransition(panel, /** Resume opening after explicit discard of unsent local files. @return {Promise<void>} Opens the requested workflow. */ () => openAdminGallerySidePanel(link))) return;
     if (!allowAdminPanelTransition(panel, /** Resume this explicit open only after the draft/context guard permits it. @return {Promise<void>} Loads the requested workflow without submitting the old form. */ () => openAdminGallerySidePanel(link))) return;
     const owner = beginAdminPanelOpen(panel, link);
     const workflow = sidePanelWorkflowFromLink(link);
@@ -1338,6 +1350,7 @@ function openAdminGallerySidePanelShell(panel) {
  * @return {void} Requests inline draft protection, then restores focus and schedules guarded exit hiding.
  */
 function closeAdminGallerySidePanel(panel) {
+    if (!allowGalleryUploadQueueTransition(panel, /** Resume closing after explicit local file discard. @return {void} Closes the owned panel. */ () => closeAdminGallerySidePanel(panel))) return;
     if (!allowAdminPanelTransition(panel, /** Resume the requested close after an explicit safe draft choice. @return {void} Does not submit or silently discard unresolved operation state. */ () => closeAdminGallerySidePanel(panel))) return;
     const stillClosing = deactivateAdminPanel(panel);
     panel.classList.remove('is-open');
@@ -2611,7 +2624,7 @@ async function switchAdminSidePanelToGalleryEditor(result, completionGuard = nul
     if (!(panel instanceof HTMLElement) || editUrl === '') {
         return false;
     }
-    if (adminPanelHasUnsavedText(panel)) return true;
+    if (adminPanelHasUnsavedText(panel) || hasPendingGalleryUploadQueue(panel)) return true;
     if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
         return true;
     }
@@ -2827,12 +2840,13 @@ function appendServerUploadEvents(progress, events) {
 }
 
 /**
- * Snapshot selected File references in deterministic folder/name order.
+ * Snapshot source File references for classic chunking and operation replay.
  *
- * The original browser File objects are retained, not copied into text drafts or
- * persisted in browser storage. Missing/empty file controls yield an empty array.
+ * The explicit right-drawer preview queue determines its submitted FileList order.
+ * Standalone forms retain the established natural filename/folder ordering.
+ * Neither path copies source bytes or persists them in browser storage.
  * @param {HTMLFormElement} form Original upload form containing images[].
- * @return {File[]} Sorted source references used by classic chunk indices and intent comparison.
+ * @return {File[]} Source references in drawer order, or default folder/name order on standalone forms.
  */
 function selectedGalleryUploadFiles(form) {
     // fileInput stores state or configuration for the gallery front-end flow.
@@ -2840,9 +2854,9 @@ function selectedGalleryUploadFiles(form) {
     if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
         return [];
     }
-    return Array.from(fileInput.files)
-        .filter(/** Retain only actual browser File references for upload ordering. @param {File} file FileList entry. @return {boolean} Whether the source has the required File identity. */ (file) => file instanceof File)
-        .sort(compareGalleryUploadFilesByDefaultFolderOrder);
+    const files = Array.from(fileInput.files)
+        .filter(/** Retain only actual browser File references for upload ordering. @param {File} file FileList entry. @return {boolean} Whether the source has the required File identity. */ (file) => file instanceof File);
+    return form.querySelector('[data-gallery-upload-preview]') ? files : files.sort(compareGalleryUploadFilesByDefaultFolderOrder);
 }
 
 /**

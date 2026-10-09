@@ -58,6 +58,16 @@ export function adminOperationIsRunning(form) {
 }
 
 /**
+ * Report exclusive ownership of inputs needed by an active or retained exact retry.
+ * Completed and safely abandoned pre-request intents are removed by finishAdminOperation.
+ * @param {HTMLFormElement} form Original upload/create form.
+ * @return {boolean} Whether selection/reset controls must preserve this intent's original inputs.
+ */
+export function adminOperationOwnsInput(form) {
+    return intents.has(form);
+}
+
+/**
  * Begin or explicitly retry the same form intent; never rotate on failure or changed input.
  * File identity is conservative: keep the original selection for an exact retry.
  * @param {HTMLFormElement} form Original server-rendered form.
@@ -145,7 +155,7 @@ export function finishAdminOperation(intent, completed = false) {
 export function allowAdminOperationTransition(panel) {
     for (const form of panel.querySelectorAll('form')) {
         const intent = intents.get(form);
-        if (!intent || (!intent.running && !intent.unresolved)) continue;
+        if (!intent) continue;
         let notice = form.querySelector('[data-admin-operation-unresolved]');
         if (!notice) {
             notice = document.createElement('p');

@@ -13,7 +13,7 @@
  * serialize forms, credentials, file inputs, access settings or browser storage.
  */
 import {i18nForElement} from './admin-core.js?v=20261003-scoped-i18n-v1';
-import {allowAdminOperationTransition} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
+import {allowAdminOperationTransition} from './admin-operation-keys.js?v=20261008-issue118-v3';
 import {ADMIN_PANEL_DRAFT_FIELDS, ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT, ADMIN_PANEL_REVISION_LENGTH_LIMIT, ADMIN_PANEL_SAVED_REVISION_PATTERN} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
 /**

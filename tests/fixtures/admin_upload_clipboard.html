@@ -10,13 +10,15 @@ Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><title>Disposable clipboard upload fixture</title>
-<style>[hidden] { display: none !important; } label { display: block; padding: 8px; }</style>
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<style>.admin-side-panel-dialog { width: 320px; max-width: 100%; } [hidden] { display: none !important; } label { display: block; padding: 8px; }</style>
 <main id="page" tabindex="0"></main>
 <div data-admin-side-panel hidden><div class="admin-side-panel-dialog" data-admin-side-panel-body></div></div>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupGalleryUploadProgress} from '/public/assets/gallery-modules/admin-side-panel.js';
-import {clipboardUploadFiles} from '/public/assets/gallery-modules/admin-upload-selection.js?v=20261008-clipboard-v1';
+import {clipboardUploadFiles} from '/public/assets/gallery-modules/admin-upload-selection.js?v=20261008-issue118-v3';
+import {allowGalleryUploadQueueTransition} from '/public/assets/gallery-modules/admin-upload-preview.js?v=20261008-issue118-v5';
 import {browserUploadZipSelected} from '/public/assets/gallery-modules/admin-browser-upload.js';
 let assertions = 0;
 const posts = [], completions = [];
@@ -25,7 +27,27 @@ const originalUrl = location.href;
 const page = document.querySelector('#page');
 const panel = document.querySelector('[data-admin-side-panel]');
 const panelBody = panel.querySelector('[data-admin-side-panel-body]');
-const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='), char => char.charCodeAt(0));
+const canvas = document.createElement('canvas');
+canvas.width = 64; canvas.height = 32;
+canvas.getContext('2d').fillRect(0, 0, 64, 32);
+const sourceBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+const bytes = new Uint8Array(await sourceBlob.arrayBuffer());
+canvas.width = 0; canvas.height = 0;
+const nativeCreateURL = URL.createObjectURL.bind(URL), nativeRevokeURL = URL.revokeObjectURL.bind(URL);
+const liveURLs = new Set();
+let maximumURLs = 0, decodes = 0, maximumDecodes = 0;
+URL.createObjectURL = blob => {
+    check(!(blob instanceof File), 'Preview URL never retains an original File');
+    const url = nativeCreateURL(blob);
+    liveURLs.add(url); maximumURLs = Math.max(maximumURLs, liveURLs.size);
+    return url;
+};
+URL.revokeObjectURL = url => { liveURLs.delete(url); nativeRevokeURL(url); };
+const nativeBitmap = window.createImageBitmap.bind(window);
+window.createImageBitmap = async (...args) => {
+    decodes++; maximumDecodes = Math.max(maximumDecodes, decodes);
+    try { return await nativeBitmap(...args); } finally { decodes--; }
+};
 /** Assert a browser postcondition.
  * @param {boolean} condition Expected state.
  * @param {string} message Failure description.
@@ -49,6 +71,29 @@ function mount(root, id) {
         <label tabindex="0" data-gallery-upload-drop-zone>Images<input type="file" name="images[]" accept=".jpg,.png,.webp,.gif,image/*" multiple required></label>
         <p role="status" data-gallery-upload-selection-status data-added="Added {count}" data-unavailable="Choose files instead"></p>
         <input type="checkbox" name="create_thumbnails"><input type="checkbox" data-browser-upload-toggle><button>Upload</button>`;
+    if (root === panelBody) {
+        const view = document.createElement('div');
+        view.dataset.galleryUploadPreview = '';
+        view.dataset.summary = '{count} selected · {size}';
+        view.dataset.clear = 'Clear selection';
+        view.dataset.remove = 'Remove {name}';
+        view.dataset.earlier = 'Move {name} earlier';
+        view.dataset.later = 'Move {name} later';
+        view.dataset.emptyFile = 'Empty file';
+        view.dataset.repeatedName = 'Repeated filename; separate selected files';
+        view.dataset.largePreview = 'Large file';
+        view.dataset.previewUnavailable = 'Preview unavailable; original kept';
+        view.dataset.unsupportedFormat = 'Unsupported format';
+        view.dataset.zipRequiresBrowser = 'Enable prepared upload for ZIP';
+        view.dataset.browserFormat = 'Use classic upload for this format';
+        view.dataset.largeUpload = 'Exceeds {size}';
+        view.dataset.assignmentUnavailable = 'Choose files instead';
+        view.dataset.unsentTitle = 'Unsent images';
+        view.dataset.unsentWarning = 'Discard unsent images?';
+        view.dataset.keepEditing = 'Continue selecting';
+        view.dataset.discard = 'Discard selection';
+        form.querySelector('[data-gallery-upload-selection-status]').after(view);
+    }
     root.append(form); return form;
 }
 /** Dispatch a paste exposing only synthetic clipboard data.
@@ -68,6 +113,18 @@ function paste(target, files, text = false) {
  * @return {Promise<void>} Resolves after an event-loop cycle.
  */
 async function settle() { await new Promise(resolve => setTimeout(resolve, 30)); }
+/** Await one deterministic lifecycle postcondition with a fixture-only deadline.
+ * @param {function(): boolean} predicate Expected browser state.
+ * @param {string} description Failure context.
+ * @return {Promise<void>} Resolves when the state is visible or throws on timeout.
+ */
+async function until(predicate, description) {
+    const deadline = performance.now() + 5000;
+    while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(description);
+        await settle();
+    }
+}
 /** Capture production multipart requests without network persistence. */
 class FixtureXHR extends EventTarget {
     /** Initialize request-local progress events. @return {FixtureXHR} Synthetic transport. */
@@ -136,9 +193,61 @@ try {
     check(!paste(page, [named]).defaultPrevented, 'Unrelated panel blocks background uploads');
     const dynamic = mount(panelBody, 99), dynamicInput = dynamic.querySelector('[type="file"]');
     check(paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'New panel is handled without rebinding');
+    const previews = dynamic.querySelector('[data-gallery-upload-preview]');
+    check(previews && !previews.hidden && previews.querySelectorAll('[data-upload-queue-id]').length === 1, 'One immediate panel thumbnail tile');
+    await until(() => previews.querySelector('img:not([hidden])') !== null, 'Real miniature decoding');
+    check(liveURLs.size === 1, 'One visible miniature owns one small URL');
+    check(paste(panelBody, [unnamed]).defaultPrevented && dynamicInput.files.length === 2, 'Second paste appends without losing first');
+    check(previews.querySelectorAll('[data-upload-queue-id]').length === 2, 'Repeated paste yields two live previews');
+    const picker = new DataTransfer();
+    picker.items.add(new File([bytes], 'picker-added.png', {type: 'image/png'}));
+    dynamicInput.files = picker.files;
+    dynamicInput.dispatchEvent(new Event('change', {bubbles: true}));
+    check(dynamicInput.files.length === 3 && dynamicInput.files[0].name === 'screenshot.png' && dynamicInput.files[2].name === 'picker-added.png', 'Picker change is additive to earlier pastes');
+    const dropped = new DataTransfer();
+    dropped.items.add(new File([bytes], 'dropped.png', {type: 'image/png'}));
+    const dropEvent = new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dropped});
+    dynamic.querySelector('[data-gallery-upload-drop-zone]').dispatchEvent(dropEvent);
+    check(dropEvent.defaultPrevented && dynamicInput.files.length === 4, 'Drop appends to pasted and picked images via canonical FileList');
+    check(previews.querySelectorAll('[data-upload-queue-id]').length === 4, 'Four mixed-source preview tiles');
+    previews.querySelectorAll('[data-upload-queue-action="earlier"]')[3].click();
+    check(dynamicInput.files[2].name === 'dropped.png', 'Move earlier changes native submit order');
+    const removePrevious = previews.querySelectorAll('[data-upload-queue-action="remove"]')[1];
+    removePrevious.click();
+    check(dynamicInput.files.length === 3 && dynamicInput.files[1].name === 'dropped.png', 'Removing one preview removes only its File');
+    check(document.activeElement?.dataset?.uploadQueueAction === 'remove', 'Focus stays inside queue after removing a tile');
+    check(new FormData(dynamic).getAll('images[]').length === 3, 'Classic FormData matches local preview count');
+    const invalid = new DataTransfer();
+    invalid.items.add(new File(['svg'], 'unsafe.svg', {type: 'image/svg+xml'}));
+    dynamicInput.files = invalid.files;
+    dynamicInput.dispatchEvent(new Event('change', {bubbles: true}));
+    check(previews.textContent.includes('Unsupported format') && dynamicInput.files.length === 4, 'Unsupported selection stays visible with advisory warning');
+    previews.querySelector('[data-upload-queue-action="clear"]').click();
+    check(dynamicInput.files.length === 0 && previews.hidden, 'Clear selection releases only current local files');
+    check(paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'Pasting after clear starts a fresh queue');
+    let guardedTransition = false;
+    check(!allowGalleryUploadQueueTransition(panel, () => { guardedTransition = true; }), 'Leaving with unsent screenshots requires a choice');
+    check(panel.querySelector('[data-gallery-upload-queue-discard-prompt]'), 'Drawer shows explicit unsent-selection warning');
+    panel.querySelector('[data-gallery-upload-queue-discard-prompt] button').click();
+    check(!guardedTransition && dynamicInput.files.length === 1, 'Keep editing retains the current FileList');
+    dynamicInput.focus();
+    check(!allowGalleryUploadQueueTransition(panel, () => { guardedTransition = true; }), 'Reopening discard is guarded');
+    panel.querySelector('[data-gallery-upload-queue-discard-prompt] button').dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+    check(!panel.querySelector('[data-gallery-upload-queue-discard-prompt]') && dynamicInput.files.length === 1
+        && document.activeElement === dynamicInput, 'Escape cancels discard and restores original focus');
     dynamicInput.disabled = true;
     check(!paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'Disabled selection preserved');
+    dynamic.querySelector('[data-gallery-upload-drop-zone]').dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dropped}));
+    check(dynamicInput.files.length === 1, 'Disabled input rejects dropped files as well as pasted files');
     dynamicInput.disabled = false;
+    const disabledFields = document.createElement('fieldset');
+    disabledFields.disabled = true;
+    dynamicInput.parentElement.before(disabledFields);
+    disabledFields.append(dynamicInput.parentElement);
+    dynamic.querySelector('[data-gallery-upload-drop-zone]').dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dropped}));
+    check(dynamicInput.files.length === 1, 'Inherited fieldset disability also preserves the exact selected FileList');
+    disabledFields.before(dynamicInput.parentElement);
+    disabledFields.remove();
     const NativeTransfer = window.DataTransfer;
     window.DataTransfer = () => { throw new Error('Unavailable FileList'); };
     panelBody.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: selected}));
@@ -150,13 +259,118 @@ try {
     check(!paste(panelBody, [named]).defaultPrevented && dynamicInput.files.length === 1, 'Busy upload selection preserved');
     finishRequest(); await settle();
     check(completions.length === 1 && completions[0].mutation.entity_ids.length === 1 && typeof completions[0].fallback === 'object', 'Canonical completion preserved');
+    check(dynamicInput.files.length === 0 && previews.hidden, 'Acknowledged upload clears local queue and preview DOM');
     check(!panel.hidden && location.href === originalUrl, 'Panel stays open and URL unchanged');
     panelBody.replaceChildren(); const replacement = mount(panelBody, 100);
     check(paste(panelBody, [unnamed]).defaultPrevented && replacement.querySelector('[type="file"]').files.length === 1, 'Re-rendered control remains intercepted');
     setupGalleryUploadProgress(); responseStatus = 413; replacement.requestSubmit(); finishRequest(); await settle();
     check(completions.length === 1 && replacement.textContent.includes('Fixture upload size limit'), 'Existing size-limit/error pipeline reused');
+    check(replacement.querySelector('[type="file"]').files.length === 1 && !replacement.querySelector('[data-gallery-upload-preview]').hidden, 'Failed upload retains queue for retry');
     check(location.href === originalUrl && !panel.hidden, 'Error also preserves panel and URL');
+    const retainedInput = replacement.querySelector('[type="file"]');
+    const retainedFile = retainedInput.files[0], retainedKey = replacement.elements.operation_key.value;
+    check(!allowGalleryUploadQueueTransition(panel, () => { throw new Error('Uncertain result discarded'); })
+        && !panel.querySelector('[data-gallery-upload-queue-discard-prompt]'), 'Unknown acknowledgment uses operation guard before local discard');
+    check(replacement.querySelector('[data-upload-queue-action="clear"]').disabled, 'Unresolved retry disables queue mutation');
+    check(!paste(panelBody, [named]).defaultPrevented && retainedInput.files[0] === retainedFile, 'Unresolved retry rejects new paste without replacing originals');
+    retainedInput.files = picker.files;
+    retainedInput.dispatchEvent(new Event('change', {bubbles: true}));
+    replacement.reset();
+    check(retainedInput.files.length === 1 && retainedInput.files[0] === retainedFile
+        && replacement.elements.operation_key.value === retainedKey, 'Picker changes and reset cannot destroy exact retry input');
+    responseStatus = 200;
+    replacement.requestSubmit(); finishRequest(); await settle();
+    check(posts.at(-1).get('operation_key') === retainedKey && retainedInput.files.length === 0,
+        'Explicit retry uses the same key and clears only after canonical acknowledgment');
     check(clipboardUploadFiles({files: [named]}, dynamicInput).length === 1, 'File-only clipboard exposure');
-    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+    panelBody.replaceChildren();
+    const ordered = mount(panelBody, 99);
+    setupGalleryUploadProgress();
+    const alpha = new File([bytes], 'alpha.png', {type: 'image/png'});
+    const omega = new File([bytes], 'omega.png', {type: 'image/png'});
+    check(paste(panelBody, [alpha, omega]).defaultPrevented, 'Multi-image paste for classic ordering');
+    ordered.querySelectorAll('[data-upload-queue-action="earlier"]')[1].click();
+    check(ordered.querySelector('[type="file"]').files[0].name === 'omega.png', 'Custom queue order differs from natural filename order');
+    responseStatus = 200;
+    const orderedStart = posts.length;
+    ordered.requestSubmit();
+    check(posts.length === orderedStart + 1 && posts[orderedStart].get('images[]')?.name === 'omega.png', 'First classic chunk honors explicit queue order');
+    finishRequest();
+    await settle();
+    check(posts.length === orderedStart + 2 && posts[orderedStart + 1].get('images[]')?.name === 'alpha.png', 'Second classic chunk preserves reordered input');
+    finishRequest();
+    await settle();
+    check(completions.length === 3 && ordered.querySelector('[type="file"]').files.length === 0, 'Multi-file acknowledgement clears canonical queue');
+    panelBody.replaceChildren();
+    const validation = mount(panelBody, 103), validationInput = validation.querySelector('[type="file"]');
+    validationInput.accept += ',.heic,.dng,.zip';
+    validation.querySelector('[data-browser-upload-toggle]').dataset.browserUploadConfig = JSON.stringify({upload_limit_bytes: 1024});
+    setupGalleryUploadProgress();
+    const wideBytes = bytes.slice();
+    new DataView(wideBytes.buffer).setUint32(16, 9000);
+    const selection = new DataTransfer();
+    for (const file of [named, named, new File([], 'empty.png', {type: 'image/png'}),
+        new File([wideBytes], 'wide.png', {type: 'image/png'}),
+        new File([new Uint8Array(2048)], 'unreadable.png', {type: 'image/png'}),
+        new File(['codec'], 'photo.heic', {type: 'image/heic'}),
+        new File(['archive'], 'photos.zip', {type: 'application/zip'}),
+        new File(['svg'], '<b>unsafe.svg</b>', {type: 'image/svg+xml'})]) selection.items.add(file);
+    validationInput.files = selection.files;
+    validationInput.dispatchEvent(new Event('change', {bubbles: true}));
+    const validationView = validation.querySelector('[data-gallery-upload-preview]');
+    const tiles = Array.from(validationView.querySelectorAll('[data-upload-queue-id]'));
+    check(tiles.length === 8 && new FormData(validation).getAll('images[]').length === 8, 'Warnings retain every original occurrence in the native upload selection');
+    check(tiles[0].textContent.includes('Repeated filename') && tiles[1].textContent.includes('Repeated filename'), 'Repeated filenames are visible without deduplicating deliberate selections');
+    check(tiles[2].textContent.includes('Empty file') && tiles[4].textContent.includes('Exceeds 1.0 KiB'), 'Zero-byte and effective server-size warnings are per item');
+    check(tiles[6].textContent.includes('Enable prepared upload for ZIP'), 'ZIP warning reflects the current submit path');
+    check(tiles[7].textContent.includes('<b>unsafe.svg</b>') && !tiles[7].querySelector('b'), 'Untrusted filenames remain text rather than markup');
+    await until(() => tiles[0].querySelector('img:not([hidden])'), 'Healthy file still receives a preview beside invalid selections');
+    for (const index of [3, 4, 5]) {
+        tiles[index].scrollIntoView({block: 'nearest'});
+        await until(() => tiles[index].querySelector('[data-upload-preview-note]')?.textContent.includes('Preview unavailable'),
+            'Visible oversized, unreadable or unsupported-codec source receives advisory feedback');
+    }
+    const preparedToggle = validation.querySelector('[data-browser-upload-toggle]');
+    preparedToggle.checked = true;
+    preparedToggle.dispatchEvent(new Event('change', {bubbles: true}));
+    check(!validationView.textContent.includes('Enable prepared upload for ZIP') && validationView.textContent.includes('Use classic upload for this format'), 'Switching preparation updates format warnings without dropping Files');
+    validationView.querySelector('[data-upload-queue-action="remove"]').click();
+    check(validationInput.files.length === 7 && !validationView.textContent.includes('Repeated filename'), 'Removing one occurrence clears stale collision warnings for the remaining file');
+    validation.reset(); await settle();
+    panelBody.replaceChildren();
+    const large = mount(panelBody, 101), largeInput = large.querySelector('[type="file"]');
+    setupGalleryUploadProgress();
+    const many = Array.from({length: 100}, (_, index) => new File([bytes], `shot-${index}.png`, {type: 'image/png'}));
+    const started = performance.now();
+    paste(panelBody, many);
+    const appendMilliseconds = Math.round(performance.now() - started);
+    check(largeInput.files.length === 100 && large.querySelectorAll('[data-upload-queue-id]').length === 100, 'Large selection has FileList/DOM parity');
+    await until(() => liveURLs.size > 0, 'Large queue starts bounded previews');
+    check(maximumURLs <= 12 && maximumDecodes === 1, 'Measured resources stay within 12 miniature URLs and one decoder');
+    const grid = large.querySelector('.gallery-upload-queue-grid');
+    check(grid.scrollWidth <= grid.clientWidth + 1 && panelBody.scrollWidth <= panelBody.clientWidth + 1,
+        'Production preview CSS has no horizontal overflow at 320 pixels');
+    window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true}));
+    await settle();
+    check(liveURLs.size === 0 && largeInput.files.length === 100, 'Page hide releases previews but retains bfcache selection');
+    window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}));
+    await until(() => liveURLs.size > 0, 'bfcache restoration rebuilds previews');
+    grid.scrollTop = grid.scrollHeight;
+    await settle();
+    check(liveURLs.size <= 12, 'Scrolling retains bounded resources');
+    large.reset(); await settle();
+    check(largeInput.files.length === 0 && large.querySelector('[data-gallery-upload-preview]').hidden && liveURLs.size === 0, 'Native reset clears files, DOM and URLs');
+    paste(panelBody, many);
+    panelBody.replaceChildren(); await settle();
+    check(liveURLs.size === 0 && largeInput.files.length === 0, 'Detached drawer releases selection and ignores pending miniature completion');
+    const finalForm = mount(panelBody, 102);
+    setupGalleryUploadProgress(); paste(panelBody, [named]);
+    let discarded = false;
+    check(!allowGalleryUploadQueueTransition(panel, () => { discarded = true; }), 'Fresh local queue still permits explicit discard');
+    panel.querySelectorAll('[data-gallery-upload-queue-discard-prompt] button')[1].click();
+    await settle();
+    check(discarded && finalForm.querySelector('[type="file"]').files.length === 0 && liveURLs.size === 0, 'Confirmed local discard releases resources without touching existing photos');
+    check(location.href === originalUrl && !panel.hidden, 'All queue actions preserve the panel and URL');
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions; 100-item append ${appendMilliseconds}ms; peak miniature URLs ${maximumURLs}; peak decoders ${maximumDecodes}`;
 } catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
 </script>

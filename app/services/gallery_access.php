@@ -512,6 +512,23 @@ function public_image_visible_to_current_visitor(array $image, array $gallery): 
 }
 
 /**
+ * Return true when an image is visible to a visitor without administrator bypass.
+ * @param array{visibility?:string|null,nsfw_enabled?:int|string|null} $image Public visibility and optional image NSFW fields.
+ * @param array{id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited visibility, access and NSFW policy fields.
+ * @return bool True when image visibility, gallery grants, and NSFW rules all permit access.
+ */
+function public_image_visible_to_current_visitor_without_admin_bypass(array $image, array $gallery): bool
+{
+    if ((string) ($image['visibility'] ?? '') !== 'public') {
+        return false;
+    }
+    if (!visitor_can_access_gallery_without_admin_bypass($gallery)) {
+        return false;
+    }
+    return !image_nsfw_restricted($image, $gallery) || visitor_can_access_nsfw_content_without_admin_bypass();
+}
+
+/**
  * Return true when public media for one gallery needs private cache semantics.
  *
  * @param array $gallery Gallery row or gallery data.
@@ -817,6 +834,46 @@ function visitor_can_access_gallery_without_admin_bypass(array $gallery): bool
         return true;
     }
     return request_share_token_allows_gallery($gallery);
+}
+
+/**
+ * Resolve one gallery's anonymous-preview access and nearest visitor-accessible ancestor.
+ * @param array{id:int|string,parent_id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,access_password_hash?:string|null,access_token_hash?:string|null,access_token_expires_at?:string|null,nsfw_enabled?:int|string|null,url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Resolved gallery row and policy/route fields used to validate and evaluate its structural ancestors.
+ * @return array{valid_chain:bool,selected_accessible:bool,ancestor:array{id:int|string,parent_id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,access_password_hash?:string|null,access_token_hash?:string|null,access_token_expires_at?:string|null,nsfw_enabled?:int|string|null,url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null}|null} Chain validity, ordinary visitor access to the selected gallery, and its nearest ordinarily accessible ancestor when the selected gallery is denied.
+ */
+function gallery_anonymous_preview_access_resolution(array $gallery): array
+{
+    $visitedIds = [];
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    if ($galleryId > 0) {
+        $visitedIds[$galleryId] = true;
+    }
+    $ancestors = [];
+    $current = $gallery;
+    while ($current !== null) {
+        $parentId = (int) ($current['parent_id'] ?? 0);
+        if ($parentId < 1) {
+            break;
+        }
+        if (isset($visitedIds[$parentId])) {
+            return ['valid_chain' => false, 'selected_accessible' => false, 'ancestor' => null];
+        }
+        $visitedIds[$parentId] = true;
+        $current = find_gallery($parentId);
+        if ($current === null) {
+            return ['valid_chain' => false, 'selected_accessible' => false, 'ancestor' => null];
+        }
+        $ancestors[] = $current;
+    }
+    if (visitor_can_access_gallery_without_admin_bypass($gallery)) {
+        return ['valid_chain' => true, 'selected_accessible' => true, 'ancestor' => null];
+    }
+    foreach ($ancestors as $ancestor) {
+        if (visitor_can_access_gallery_without_admin_bypass($ancestor)) {
+            return ['valid_chain' => true, 'selected_accessible' => false, 'ancestor' => $ancestor];
+        }
+    }
+    return ['valid_chain' => true, 'selected_accessible' => false, 'ancestor' => null];
 }
 
 /**

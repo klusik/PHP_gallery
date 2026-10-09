@@ -88,7 +88,7 @@ namespace {
         return (string) ob_get_clean();
     }
     if(realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? ''))===__FILE__) {
-        foreach(\Gallery\Views\view_admin_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
+        foreach(\Gallery\Controllers\shared_layout_admin_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
         echo '<div id="full-create">'.creation_fixture_page().'</div><template id="production-create-panel">'.creation_fixture_panel().'</template><template id="production-create-root-panel">'.creation_fixture_panel(0).'</template><template id="production-create-retry">'.creation_fixture_page(creation_fixture_retry(),'Validation <safe> failed').'</template>';
         echo '<template id="production-simbrief-editor">'.creation_fixture_simbrief_editor().'</template>';
     }

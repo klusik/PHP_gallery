@@ -36,9 +36,11 @@
 
 declare(strict_types=1);
 
-use function Gallery\Views\view_admin_stylesheet_files;
+use function Gallery\Controllers\shared_layout_admin_stylesheet_files;
+use function Gallery\Controllers\shared_layout_stylesheet_files_for_context;
 use function Gallery\Views\view_script_asset_for_context;
-use function Gallery\Views\view_stylesheet_files_for_context;
+
+require_once __DIR__ . '/../app/controllers/shared_layout.php';
 
 if (!function_exists('e')) {
         /**
@@ -97,13 +99,13 @@ function assert_public_asset_not_contains(string $needle, array $haystack, strin
     }
 }
 
-$anonymousPublicStyles = view_stylesheet_files_for_context('public-page', null, false);
+$anonymousPublicStyles = shared_layout_stylesheet_files_for_context('public-page', null, false);
 assert_public_asset_contains('assets/styles/public-shared.css', $anonymousPublicStyles, 'anonymous public styles include extracted shared public CSS');
 assert_public_asset_contains('assets/styles/public.css', $anonymousPublicStyles, 'anonymous public styles include public CSS');
 assert_public_asset_contains('assets/styles/lightbox.css', $anonymousPublicStyles, 'anonymous public styles include lightbox CSS');
 assert_public_asset_contains('assets/styles/breadcrumbs.css', $anonymousPublicStyles, 'anonymous public styles include shared breadcrumb presentation');
 
-foreach (view_admin_stylesheet_files() as $styleFile) {
+foreach (shared_layout_admin_stylesheet_files() as $styleFile) {
     if (in_array($styleFile, ['assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css'], true)) {
         continue;
     }
@@ -111,16 +113,16 @@ foreach (view_admin_stylesheet_files() as $styleFile) {
 }
 
 $loggedInUser = ['id' => 1, 'username' => 'admin'];
-$loggedInPublicStyles = view_stylesheet_files_for_context('public-page', $loggedInUser, false);
+$loggedInPublicStyles = shared_layout_stylesheet_files_for_context('public-page', $loggedInUser, false);
 assert_public_asset_contains('assets/styles/public-shared.css', $loggedInPublicStyles, 'logged-in public styles keep shared visitor presentation CSS');
 assert_public_asset_contains('assets/styles/admin.css', $loggedInPublicStyles, 'logged-in public styles keep admin CSS');
 assert_public_asset_contains('assets/styles/side-panel.css', $loggedInPublicStyles, 'logged-in public styles keep side panel CSS');
 assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $loggedInPublicStyles, 'logged-in public styles include duplicate detector CSS');
 
-$anonymousPreviewStyles = view_stylesheet_files_for_context('public-page', $loggedInUser, true);
+$anonymousPreviewStyles = shared_layout_stylesheet_files_for_context('public-page', $loggedInUser, true);
 assert_public_asset_same($anonymousPublicStyles, $anonymousPreviewStyles, 'anonymous preview uses the anonymous public CSS set');
 
-$adminStyles = view_stylesheet_files_for_context('admin-page', $loggedInUser, false);
+$adminStyles = shared_layout_stylesheet_files_for_context('admin-page', $loggedInUser, false);
 assert_public_asset_contains('assets/styles/admin.css', $adminStyles, 'admin pages include admin CSS');
 assert_public_asset_contains('assets/styles/admin-layout.css', $adminStyles, 'admin pages include admin layout CSS');
 assert_public_asset_contains('assets/styles/side-panel.css', $adminStyles, 'admin pages include side panel CSS');

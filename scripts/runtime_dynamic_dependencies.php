@@ -100,6 +100,7 @@ Gallery\Models\admin_gallery_report_model_image_rows_after_id|variable_callable|
 Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$compensate()
 Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
 Gallery\Models\gallery_feature_plan_model_transaction|variable_callable|$operation()
+Gallery\Models\app_settings_model_set_many_with_activation|variable_callable|$activate()
 Gallery\Models\viewer_account_model_transaction|variable_callable|$operation()
 Gallery\Models\viewer_collection_model_transaction|variable_callable|$operation()
 Gallery\Models\viewer_favourite_model_set|variable_callable|$lockedAccountAllowed()
@@ -130,6 +131,7 @@ Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$
 Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$writeEntry()
 Gallery\Services\content_translation_rows|dynamic_callback_argument|is_callable($contentLocalizationLoaderForTests)
 Gallery\Services\content_translation_rows|variable_callable|$contentLocalizationLoaderForTests()
+Gallery\Services\custom_css_visual_preview_css_has_imports|variable_callable|$decodeIdentifier()
 Gallery\Services\database_maintenance_cleanup_rules|variable_callable|$addOrphan()
 Gallery\Services\database_maintenance_migration_audit|variable_callable|$appendObject()
 Gallery\Services\database_maintenance_migration_audit|variable_callable|$touchTable()
@@ -160,6 +162,7 @@ Gallery\Services\pagination_page_url|variable_callable|$urlBuilder()
 Gallery\Services\public_render_profile_db|variable_callable|$callback()
 Gallery\Services\public_render_profile_span|variable_callable|$callback()
 Gallery\Services\public_render_profile_with_thumbnail_purpose|variable_callable|$callback()
+Gallery\Services\public_visual_preview_inherit_referrer_context|variable_callable|$normalizeOrigin()
 Gallery\Services\schema_inspection_column_definition_contains|dynamic_callback_argument|is_callable($override)
 Gallery\Services\schema_inspection_column_definition_contains|variable_callable|$override()
 Gallery\Services\schema_inspection_column_nullable|dynamic_callback_argument|is_callable($override)
@@ -172,6 +175,7 @@ Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
 Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()
 Gallery\Services\site_maintenance_run_cleanup_operation|variable_callable|$callback()
 Gallery\Services\site_maintenance_with_lock|variable_callable|$callback()
+Gallery\Services\theme_background_with_writer_lock|variable_callable|$operation()
 Gallery\Services\site_url_mutate_config_source|variable_callable|$mutator()
 Gallery\Services\smart_gallery_map_query_context|variable_callable|$lookup()
 Gallery\Services\smart_gallery_presentation_master_status|variable_callable|$capabilityEnabled()
@@ -204,6 +208,10 @@ SITES;
             str_contains($signature, 'maintenance_center_load_task_dependencies|') => 'injected-module-loader:maintenance-center-task-worker',
             str_contains($signature, 'application_update_job_finalize|') => 'string-callbacks:required-updater-cache-roots',
             str_contains($signature, 'admin_test_run_clear_safe_caches|') => 'string-callbacks:required-diagnostic-cache-roots',
+            str_contains($signature, 'app_settings_model_set_many_with_activation|') => 'settings-model:transaction-activation-callback',
+            str_contains($signature, 'theme_background_with_writer_lock|') => 'theme-background-service:exclusive-writer-lock-operation',
+            str_contains($signature, 'custom_css_visual_preview_css_has_imports|') => 'custom-css-preview:local-escape-decoder-no-module-edge',
+            str_contains($signature, 'public_visual_preview_inherit_referrer_context|') => 'visual-preview-referrer:local-origin-normalizer-no-module-edge',
             str_contains($signature, 'image_decode_gd_path_result|') => 'runtime-function:optional-gd-decoder',
             str_contains($signature, 'navigation_data_navigraph_exchange_code|') => 'injected-oauth-transport:default-http-post-remains-static',
             default => 'caller-owned-or-local-callback:no-module-edge',

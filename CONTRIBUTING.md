@@ -48,81 +48,45 @@ architecture documentation before changing code. In particular:
   Mark unmeasured usage and uncertain dates as unknown; removal needs evidence
   that the recorded condition is met.
 
-## Preparing an ordinary source candidate
+## Preparing and verifying an ordinary source candidate
 
-Complete the permanent documentation impact review, including all four TeX
-manual sources when affected, before the final preparation run. If no TeX
-content applies, document the reason in the handoff. Leave PDFs, manual
-version/date metadata and `PATCH_NOTES.md` to release preparation.
+Read the top-priority [CI-first contract](AGENTS.md#mandatory-agent-verification-contract).
+Before writing, verify the current working branch/HEAD, remote head and explicit
+branch-scoped user authorization plus usable write permission. Agents must never
+directly mutate `develop` or `main`, even through APIs or broad credentials.
+Missing authorization or access is BLOCKED before writes.
 
-Do not publish an intermediate source commit with stale generated state.
-After final source or documentation edits, stage any newly created/deleted
-production files and run:
+Finish source, tests, relevant permanent Markdown and all four maintained TeX
+manual sources. Leave PDFs, manual version/date metadata and patch notes to
+release preparation. Make atomic source commits and push only the exact authorized
+`feature/*`, `fix/*`, `bugfix/*`, `hotfix/*` or `codex/*` ref with a normal push.
+Check for concurrent writers and incorporate bot commits before subsequent fixes.
 
-```sh
-git add <new-or-removed-production-files>
-php scripts/prepare_candidate.php
-git diff -- app/runtime/modules.php app/production-files.json app/core-manifest.json
-git add app/runtime/modules.php app/production-files.json app/core-manifest.json
-git commit -m "chore(candidate): refresh generated artifacts" # only if changed
-php scripts/prepare_candidate.php --check
-```
+[Candidate preparation](.github/workflows/candidate-preparation.yml) generates
+runtime plans, indexed production inventory and complete-file integrity hashes,
+commits only changed artifacts, then calls full central CI for its exact prepared
+SHA. Its lease and final gate refuse stale branches. Read-only candidate preflight
+blocks expensive jobs for stale artifacts or source violations. Bot commits do
+not trigger recursion: the caller owns the reusable qualification.
 
-This uses the canonical generators in dependency order: runtime plan, Git-index
-production inventory, then core-manifest hashes from complete checkout bytes.
-Repeat it after any later source/test fix. Repeating without changes creates
-no diff or timestamp-only manifest update. The `--check` command is read-only.
+Inspect hosted summaries, required jobs and `source-failures.md`/linked JSON or
+failure logs. Repair the complete batch, commit and push the same branch until
+fresh required CI is green. Do not routinely prepare generated artifacts, execute
+audits, run test loops or duplicate lint locally. Focused local reproduction is
+exceptional for an observed environment-specific CI failure, genuinely inaccessible
+CI or explicit user request. Red or slow CI is not unavailable CI; local evidence
+never replaces hosted qualification.
 
-For a feature/fix branch, the stable hosted
-[Candidate preparation](.github/workflows/candidate-preparation.yml)
-automation can perform the generated-artifact commit for the exact pushed SHA
-and pass that prepared candidate to the reusable full CI workflow. It checks
-the remote branch head before a non-forced write and refuses superseded work.
-The ordinary CI preflight is read-only and blocks expensive jobs when the
-published candidate remains stale. GitHub Actions bot commits do not themselves
-trigger recursive workflow runs. Do not add PR-specific codegen workflows.
+The central audit remains the only test orchestrator in GitHub Actions. Ordinary
+handoffs need full hosted coverage; release qualification uses the release profile
+and matrix in `RELEASE.md`. Required FAIL/BLOCKED/SKIP/missing/cancelled/stale jobs
+prevent a green handoff. Report workflow URL, branch, prepared SHA, immutable
+comparison base, required job results and material/manual gaps. Preserve all
+PHP, Node, Python, browser, database, WinApp, runtime and source-policy coverage.
 
-Once prepared, run `php scripts/audit.php --profile=full` (only once at final
-handoff, rather than redundant direct test-tree walks) and record its result
-against the exact commit. For release preparation use `RELEASE.md` and the
-release audit instead. Nothing in candidate preparation merges, squashes,
-tags, or publishes an artifact.
-
-## Verification
-
-The central audit is the project's authoritative automated verification
-interface:
-
-```text
-php scripts/audit.php --profile=release-preflight
-php scripts/audit.php --profile=quick
-php scripts/audit.php --profile=full
-```
-
-Choose `release-preflight` for source-only authoring feedback or `quick` for
-behavior/regression feedback during implementation; do not run both mechanically.
-The historical preflight name does not imply release actions. It includes the
-whole-tree category budgets that quick omits. Freeze `PHP_GALLERY_SOURCE_BASE`
-to the branch merge-base with `origin/main`, as shown in
-[the authoring reference](docs/AGENT_AUTHORING.md#source-feedback-and-comparison-base),
-so already committed omissions remain visible. Missing history is BLOCKED.
-On source failure inspect the linked `source-failures.md`, repair all applicable
-findings in the batch, then rerun after the fixes. Reports identify source HEAD,
-comparison SHA and dirty state; checkout feedback is not clean-commit qualification.
-
-Use `full` for a final deterministic check
-when the required runtimes are available. The `release` profile is reserved for
-maintainer release preparation. Read [TESTING.md](TESTING.md) for audit scope,
-environment requirements, and manual acceptance boundaries. If a required
-runtime or optional integration is unavailable, say so and include the audit's
-reported status; do not describe skipped coverage as passed.
-
-Full/release audits enforce historical source debt by stable categories through
-the existing inventory. Reliable counts may decrease; they must not exceed their
-reviewed caps. New categories start with zero allowance. Only the three documented
-noisy policy heuristics remain advisory. See [source debt maintenance](TESTING.md#source-debt-category-budgets)
-for the explicit decrease-only refresh workflow. Do not reset or inflate budgets
-to pass an audit; preserve meaningful existing documentation when moving code.
+Local generator/audit commands documented elsewhere are recovery/diagnostic tools,
+not mandatory agent steps. Source debt budgets remain decrease-only; never add
+baselines or weaken assertions to obtain green CI.
 
 ## Pull requests
 

@@ -14,6 +14,7 @@
  *   - Keep domain logic reusable outside controllers
  *   - Protect existing behavior with small focused functions
  *   - Return predictable values for callers
+ *   - Stage and revision-check pending Theme background replacements without publishing them early
  *
  * Author:
  *   Rudolf Klusal
@@ -29,14 +30,13 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-10-09
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use GdImage;
 use RuntimeException;
 use function Gallery\Core\url_for;
 use function Gallery\Models\gallery_model_background_source_column_exists;
@@ -53,6 +53,8 @@ use function Gallery\Models\gallery_model_background_source_column_exists;
  * so stored values such as cache/theme-background/background.jpg still resolve
  * to the existing root cache folder.
  */
+
+require_once __DIR__ . '/gallery_backgrounds/visual_css_save.php';
 
 /**
  * Return true when the gallery background source column is available.
@@ -245,10 +247,10 @@ function theme_background_asset_url(): string
 }
 
 /**
- * Return a stable asset revision for the currently served theme background.
+ * Return an opaque cache key that distinguishes immutable background filenames.
  *
  * @param string $relativePath Relative path filesystem path.
- * @return string Text result for the caller.
+ * @return string File timestamp plus a short digest of its basename, or an empty string when absent.
  */
 function theme_background_served_version(string $relativePath): string
 {
@@ -257,7 +259,8 @@ function theme_background_served_version(string $relativePath): string
     if (!is_file($absolute)) {
         return '';
     }
-    return (string) filemtime($absolute);
+    // Unique staged filenames must produce distinct immutable URLs even when two uploads share one-second filemtime resolution.
+    return (string) filemtime($absolute) . '-' . substr(hash('sha256', basename($relativePath)), 0, 12);
 }
 
 /**
@@ -383,8 +386,8 @@ function theme_background_regenerate_optimized(?int $maxSide = null): bool
  * Generate a resized WebP derivative for the global theme background.
  *
  * @param string $sourcePath Source filesystem path.
- * @param int $maxSide Max side value.
- * @return bool True when the condition matches.
+ * @param int $maxSide Maximum output side length in pixels.
+ * @return bool True when the derivative was installed and its setting updated; false when optimization is unavailable.
  */
 function theme_background_generate_optimized(string $sourcePath, int $maxSide): bool
 {
@@ -392,45 +395,8 @@ function theme_background_generate_optimized(string $sourcePath, int $maxSide): 
         set_app_setting('theme_background_optimized_path', '');
         return false;
     }
-    // $raw stores the uploaded image bytes so GD can decode the supported source type.
-    $raw = @file_get_contents($sourcePath);
-    if ($raw === false || $raw === '') {
-        set_app_setting('theme_background_optimized_path', '');
-        return false;
-    }
-    // $source stores the decoded image resource used for resizing.
-    $source = @imagecreatefromstring($raw);
-    if (!$source instanceof GdImage) {
-        set_app_setting('theme_background_optimized_path', '');
-        return false;
-    }
-    // $width stores the decoded source width.
-    $width = imagesx($source);
-    // $height stores the decoded source height.
-    $height = imagesy($source);
-    // $scale stores the resize factor. Upscaling is intentionally disabled.
-    $scale = min(1.0, $maxSide / max(1, max($width, $height)));
-    // $targetWidth stores the optimized derivative width.
-    $targetWidth = max(1, (int) round($width * $scale));
-    // $targetHeight stores the optimized derivative height.
-    $targetHeight = max(1, (int) round($height * $scale));
-    // $target stores the final transparent-safe image canvas.
-    $target = imagecreatetruecolor($targetWidth, $targetHeight);
-    imagealphablending($target, false);
-    imagesavealpha($target, true);
-    // $transparent stores the transparent fill used before resampling.
-    $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
-    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $transparent);
-    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
-    imageinterlace($target, true);
-    // $targetPath stores the optimized derivative filesystem path.
     $targetPath = theme_background_storage_dir() . DIRECTORY_SEPARATOR . 'background-optimized.webp';
-    // $written stores whether the optimized derivative was created successfully.
-    $written = imagewebp($target, $targetPath, 82);
-    imagedestroy($target);
-    imagedestroy($source);
-    if (!$written || !is_file($targetPath)) {
-        @unlink($targetPath);
+    if (!theme_background_write_optimized_derivative($sourcePath, $maxSide, $targetPath)) {
         set_app_setting('theme_background_optimized_path', '');
         return false;
     }

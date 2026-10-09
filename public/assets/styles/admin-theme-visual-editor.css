@@ -1,0 +1,474 @@
+/*
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-theme-visual-editor.css
+ * Module Type: Admin Theme Stylesheet
+ * Purpose: Present the Live Visual CSS Editor workspace and its parent-owned HUD.
+ * Responsibilities: Keep the HUD legible and responsive while leaving the public iframe visually unchanged.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.theme-visual-editor-workspace {
+    position: fixed;
+    inset: 0;
+    box-sizing: border-box;
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: #17202a;
+    background: #e7e9ed;
+    border: 0;
+}
+
+.theme-visual-editor-workspace::backdrop {
+    background: transparent;
+}
+
+.theme-visual-editor-preview-shell {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.theme-visual-editor-frame {
+    display: block;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    min-height: 100%;
+    border: 0;
+    background: #fff;
+}
+
+.theme-visual-editor-hud {
+    position: fixed;
+    z-index: 2;
+    top: max(.5rem, env(safe-area-inset-top));
+    left: 50%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    width: max-content;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: .45rem;
+    overflow: auto;
+    color: #17202a;
+    background: #fff;
+    border: 1px solid rgb(15 23 42 / 18%);
+    border-radius: .7rem;
+    box-shadow: 0 3px 16px rgb(15 23 42 / 18%);
+    transform: translateX(-50%);
+    overscroll-behavior: contain;
+}
+
+.theme-visual-editor-hud[data-collapsed="1"] > :not([data-visual-editor-collapse-controls]):not([data-visual-editor-exit-prompt]) {
+    display: none;
+}
+
+.theme-visual-editor-exit-prompt {
+    display: flex;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .35rem;
+    border-top: 1px solid rgb(15 23 42 / 18%);
+}
+
+.theme-visual-editor-exit-prompt[hidden] {
+    display: none;
+}
+
+.theme-visual-editor-title {
+    padding: .3rem .45rem;
+    font-size: .85rem;
+    white-space: nowrap;
+}
+
+.theme-visual-editor-page-title,
+.theme-visual-editor-draft-status {
+    max-width: min(24rem, 70vw);
+    padding: .25rem .4rem;
+    overflow: hidden;
+    font-size: .75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.theme-visual-editor-draft-status {
+    color: #475569;
+}
+
+.theme-visual-editor-button {
+    min-height: 2.15rem;
+    padding: .35rem .6rem;
+    color: #17202a;
+    font: inherit;
+    font-size: .8rem;
+    line-height: 1.2;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: .45rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.theme-visual-editor-button:hover:not(:disabled) {
+    background: #eef2f7;
+}
+
+.theme-visual-editor-button[aria-pressed="true"] {
+    color: #fff;
+    background: #334155;
+    border-color: #334155;
+}
+
+.theme-visual-editor-button:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
+.theme-visual-editor-button:disabled {
+    color: #64748b;
+    cursor: default;
+    opacity: .65;
+}
+
+.theme-visual-editor-theme-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    margin: 0;
+    padding: .15rem .3rem;
+    color: #334155;
+    font-size: .72rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .4rem;
+}
+
+.theme-visual-editor-theme-controls[hidden] {
+    display: none;
+}
+
+.theme-visual-editor-background-position-controls {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 2rem);
+}
+
+.theme-visual-editor-page-width-controls {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 2rem);
+}
+
+.theme-visual-editor-page-width-hint {
+    flex-basis: 100%;
+    max-width: 34rem;
+    text-align: center;
+}
+
+.theme-visual-editor-page-width-effective {
+    flex-basis: 100%;
+    text-align: center !important;
+    white-space: normal;
+}
+
+.theme-visual-editor-theme-controls select {
+    max-width: 8rem;
+    min-height: 1.9rem;
+}
+
+.theme-visual-editor-theme-controls input[type="range"] {
+    width: 5.5rem;
+    min-height: 1.9rem;
+}
+
+.theme-visual-editor-theme-controls input[type="number"] {
+    width: 4rem;
+    min-height: 1.9rem;
+}
+
+.theme-visual-editor-theme-controls output {
+    min-width: 2.4rem;
+    text-align: end;
+}
+
+.theme-visual-editor-background-value-warning {
+    flex-basis: 100%;
+    max-width: min(34rem, 88vw);
+    color: #92400e;
+    font-size: .75rem;
+    text-align: center;
+}
+
+.theme-visual-editor-file-input {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+.theme-visual-editor-background-review {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: .25rem .65rem;
+    margin-block: .65rem;
+    padding: .65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .5rem;
+    background: #f8fafc;
+}
+
+.theme-visual-editor-background-review > p {
+    margin: 0;
+    font-size: .8rem;
+}
+
+.theme-visual-editor-background-review > p[data-visual-editor-background-target-review],
+.theme-visual-editor-background-review > p[data-visual-editor-background-source-review],
+.theme-visual-editor-background-review > p[data-visual-editor-background-operation-review],
+.theme-visual-editor-background-review > p.theme-custom-css-hint {
+    grid-column: 1 / -1;
+}
+
+.theme-visual-editor-background-review img {
+    display: block;
+    grid-column: 1 / -1;
+    width: min(100%, 22rem);
+    max-height: 9rem;
+    object-fit: contain;
+    object-position: left center;
+    background: #e2e8f0;
+    border-radius: .35rem;
+}
+
+.theme-visual-editor-background-review img[hidden] {
+    display: none;
+}
+
+.theme-visual-editor-background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+@media (max-width: 38rem) {
+    .theme-visual-editor-background-review {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-visual-editor-background-actions > button {
+        flex: 1 1 9rem;
+    }
+}
+
+.theme-visual-editor-inspector {
+    position: fixed;
+    z-index: 5;
+    box-sizing: border-box;
+    width: min(22rem, calc(100vw - 1rem));
+    max-height: min(50vh, 30rem);
+    padding: .7rem;
+    overflow: auto;
+    color: #17202a;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: .6rem;
+    box-shadow: 0 4px 18px rgb(15 23 42 / 20%);
+    overscroll-behavior: contain;
+}
+
+.theme-visual-editor-inspector[hidden] {
+    display: none;
+}
+
+.theme-visual-editor-inspector code {
+    display: block;
+    margin-block: .4rem;
+    overflow-wrap: anywhere;
+}
+
+.theme-visual-editor-ancestors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    margin-block: .5rem;
+}
+
+.theme-visual-editor-inspector dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .2rem .5rem;
+}
+
+.theme-visual-editor-properties {
+    display: grid;
+    gap: .55rem;
+    margin-block: .6rem;
+}
+
+.theme-visual-editor-properties[hidden] {
+    display: none;
+}
+
+.theme-visual-editor-properties > label {
+    display: grid;
+    gap: .2rem;
+    font-size: .75rem;
+    font-weight: 650;
+}
+
+.theme-visual-editor-properties select,
+.theme-visual-editor-property input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2rem;
+    padding: .35rem;
+    color: #17202a;
+    background: #fff;
+    border: 1px solid #94a3b8;
+    border-radius: .35rem;
+    font: inherit;
+    font-size: .8rem;
+}
+
+.theme-visual-editor-property-controls {
+    display: grid;
+    gap: .45rem;
+}
+
+.theme-visual-editor-property {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .35rem;
+    min-width: 0;
+    margin: 0;
+    padding: .45rem;
+    border: 1px solid #dbe2ea;
+    border-radius: .4rem;
+}
+
+.theme-visual-editor-property legend {
+    padding-inline: .2rem;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.theme-visual-editor-property > span {
+    grid-column: 1 / -1;
+    min-width: 0;
+    font-size: .7rem;
+    overflow-wrap: anywhere;
+}
+
+.theme-visual-editor-property > input[type="color"] {
+    width: 2.35rem;
+    height: 2rem;
+    padding: .1rem;
+    background: #fff;
+    border: 1px solid #94a3b8;
+    border-radius: .35rem;
+}
+
+.theme-visual-editor-opacity {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(4rem, 1fr);
+    align-items: center;
+    gap: .4rem;
+    font-size: .7rem;
+}
+
+.theme-visual-editor-opacity input[type="range"] {
+    width: 100%;
+    min-width: 0;
+}
+
+.theme-visual-editor-property > input[type="text"] {
+    grid-column: 1 / -1;
+}
+
+.theme-visual-editor-property > button {
+    grid-column: 1 / -1;
+}
+
+.theme-visual-editor-warning {
+    margin: .35rem 0;
+    color: #9a3412;
+    font-size: .75rem;
+}
+
+.theme-visual-editor-warning:empty {
+    display: none;
+}
+
+.theme-visual-editor-inspector dt,
+.theme-visual-editor-inspector dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.theme-visual-editor-follow-message {
+    display: block;
+    margin-block: .35rem;
+    color: #9a3412;
+    font-size: .8rem;
+}
+
+.theme-visual-editor-hover-tip {
+    position: fixed;
+    z-index: 6;
+    box-sizing: border-box;
+    max-width: min(22rem, calc(100vw - 1rem));
+    padding: .3rem .5rem;
+    overflow-wrap: anywhere;
+    color: #fff;
+    font: 12px sans-serif;
+    background: #17202a;
+    border-radius: .35rem;
+    pointer-events: none;
+}
+
+.theme-visual-editor-hover-tip[hidden] {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .theme-visual-editor-hud {
+        justify-content: flex-start;
+        max-width: calc(100vw - 1rem);
+    }
+
+    .theme-visual-editor-title {
+        display: none;
+    }
+
+    .theme-visual-editor-draft-status {
+        flex-basis: 100%;
+        order: 1;
+    }
+}

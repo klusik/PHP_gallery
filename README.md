@@ -1,12 +1,19 @@
 # PHP Gallery CMS
 
+Coding agents use [CI-first, working-branch-only verification](AGENTS.md#mandatory-agent-verification-contract):
+commit and push the explicitly authorized feature/fix/codex branch, then inspect
+hosted candidate preparation and full qualification for the exact prepared SHA.
+Agents never directly mutate develop/main. Normal releases use GitHub-hosted
+preparation and [protected promotion/publication](RELEASE.md#protected-promotion-and-publication);
+local audits remain exceptional diagnostics or maintainer recovery.
+
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
 PHP 8.1 is the compatibility minimum. For deployment, use the latest patch release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.124.4
+**Current Version:** 0.125
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -25,6 +32,8 @@ Gallery headers and cards share an animated tag panel. The server renders the sa
 Breadcrumb navigation offers nine styles through one accessible component: Minimal, Chevron, Pills, Surface, Ribbon (arrow segments), Nodes (connected dots), Tabs, Tiles (raised cards), and Gradient (theme-colored surface and accent stripe). In **Theme > Layout > Cards & badges**, gallery **Display > Advanced**, and Smart Gallery presentation controls, each native radio-card option shows a real breadcrumb example so administrators can choose by appearance. The inherit card previews the effective Theme style; the controls support keyboard selection and work without JavaScript. **Default / inherit** resolves to the Theme choice and then built-in Chevron. Invalid values safely fall back, and wrapping keeps ancestor links reachable without JavaScript. See the [breadcrumb component contract](docs/BREADCRUMBS.md).
 
 Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
+
+Theme > Custom CSS includes a Live Visual CSS Editor for previewing the real public home or gallery page, inspecting stable selectors, and composing a bounded CSS draft. Its preview is authenticated and read-only, while anonymous simulation still applies public visibility and media authorization. Page-width and style edits stay in the CSS draft; a selected background image remains browser-only until the existing explicit CSS Save submits both revisions together. See the [editor contract and coverage](docs/LIVE_VISUAL_CSS_EDITOR.md).
 
 ## Product manuals
 
@@ -59,7 +68,7 @@ WinApp **0.3.2** loads Windows updater APIs explicitly from System32, retains co
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
 
 ### Image Management
-- **Upload interface** - Upload multiple images to a gallery via browser
+- **Upload interface** - Add multiple images to a gallery via browser; the right-hand Admin upload panel collects repeated pasted screenshots, picked files and dropped images into a removable, reorderable local preview queue before a single ordinary upload
 - **Automatic scanning** - Detect newly added files on the filesystem
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
@@ -192,13 +201,13 @@ behavior remains unchanged.
 Deployment-tunable download limits are centralized in `app/configuration_defaults.php` and may be selectively overridden through `runtime_limits` in local `config.php`. Stage 7 manifest-cache defaults are 24 hours for physical galleries, 15 minutes for Smart Galleries, 16 MiB maximum metadata-entry size, and 10,000 entries per bounded maintenance scan. Existing installations require no configuration edit after update.
 
 ### Theming & Customization
-- **Theme editor** - Customize colors, fonts, spacing and default lightbox browsing mode from the admin interface
+- **Theme editor** - Customize colors, fonts, gallery gaps/padding, elevation, public typography, transparent public header and default lightbox browsing mode, with live preview and independent resets
 - **Lightbox browsing modes** - Use the classic single image viewer, a picture strip, or a focused 3D carousel as a Theme default with per-gallery overrides
 - **Dark mode** - Switch between light and dark themes
 - **Language support** - English, Czech, German, and Swedish; English fallback retained
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
-- **Custom CSS** - Direct CSS editing for advanced customization
+- **Custom CSS** - Keep preset/upload CSS and edit a separate final public override layer in the browser, with protected saves, stale-tab detection and isolated draft preview
 - **Layout control** - Choose gallery card layout (vertical/horizontal) and favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
@@ -231,6 +240,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 #### Upload Interface
 - Multi-file upload to existing or new gallery
 - Paste clipboard images/screenshots with Ctrl+V (Windows/Linux) or Cmd+V (macOS) into the focused upload area; images join the same file selection and upload workflow
+- In the right-hand upload drawer, repeated paste/picker/drop choices accumulate in one removable, reorderable preview queue. Submit once using the ordinary upload button. Unsupported or oversized previews keep the original file; an unresolved upload preserves its exact retry selection. The queue is local to the open page, not a persisted draft or a Commit/Reset publishing workflow. See [selection safety and limits](docs/UPLOAD_SELECTION.md).
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes

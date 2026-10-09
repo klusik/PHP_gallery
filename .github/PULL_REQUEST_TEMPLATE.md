@@ -20,8 +20,8 @@ Compatibility changes (write `none` when not applicable):
 
 - Applicable authoring contracts reviewed (declarations/types/shapes/policy, MVC and documentation as relevant):
 - Final candidate SHA and immutable source comparison base:
-- Audit profile and result:
-- Relevant skips or unavailable prerequisites:
+- Hosted workflow URL, checked working branch, required jobs and result:
+- Material missing/skipped/blocked or stale CI coverage (local evidence is exceptional):
 - Manual checks performed or still needed:
 
 ## Review notes

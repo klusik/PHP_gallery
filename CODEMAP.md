@@ -1,5 +1,22 @@
 # PHP Gallery Code Map
 
+Hosted source/release lifecycle ownership:
+
+- `.github/workflows/candidate-preparation.yml`: source-only preflight, canonical
+  generated-state commit on authorized feature/fix/codex branches, exact-SHA full
+  matrix and stale-head gate; agents follow the CI-first contract in AGENTS.md.
+- `.github/workflows/release-qualification.yml`: release preparation/manual batch,
+  authoritative release matrix, candidate-bound check and qualification record.
+- `.github/workflows/release-promotion.yml`: read-only evidence inspection/builds
+  followed by separately approved maintainer promotion/publication from main.
+- `.github/scripts/release-promotion.mjs`: immutable run/attempt/branch validation,
+  server protection checks, SHA-bound PR promotion, identical-main-tree check,
+  immutable tags and durable evidence publication. No ordinary agent bypass.
+- `.github/scripts/release-assets.mjs`: canonical integrity/package checks and
+  public report archive/hash preparation without publication credentials.
+- `tests/hosted_release_policy_test.mjs`: central Node regression for stale/red/
+  missing evidence, exact overrides, CI-first instructions and branch safety.
+
 This file maps features to source files. It is optimized for fast maintenance and AI-assisted code changes.
 
 ## How to Use This Map
@@ -80,6 +97,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Migration data repairs | `app/migration_repairs.php` |
 | Security/session/CSRF helpers | `app/security.php` |
 | General helpers | `app/helpers.php` |
+| Live Visual CSS Editor (issue #127) | `app/views/admin_theme.php`, `app/controllers/admin_theme_custom_css.php`, `app/controllers/admin_theme_actions.php`, `app/services/custom_css.php`, `app/services/gallery_backgrounds.php`, `theme-visual-editor.js`, `theme-visual-css-draft.js`, `theme-visual-css-resize.js`, and `app/bootstrap/dispatch.php`; permanent route, editing, persistence and coverage contract is in `docs/LIVE_VISUAL_CSS_EDITOR.md`. |
 | Integrity manifest logic | `app/integrity.php`, `app/core-manifest.json`, `scripts/generate_manifest.php` |
 
 ## Public Gallery Pages
@@ -288,7 +306,7 @@ Disabling Trash affects future deletes only; existing trash entries remain visib
 
 | Task | Files |
 | --- | --- |
-| Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/browser_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-browser-upload.js`, `public/assets/gallery-modules/admin-upload-selection.js` (delegated clipboard-to-FileList selection), `public/assets/gallery-modules/browser-image-worker.js` |
+| Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/browser_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-browser-upload.js`, `public/assets/gallery-modules/admin-upload-selection.js` (delegated clipboard-to-FileList selection), `public/assets/gallery-modules/admin-upload-queue.js` (per-form ordered File identities), `public/assets/gallery-modules/admin-upload-preview.js` (drawer previews, validation hints and lifecycle), `public/assets/gallery-modules/admin-upload-thumbnail.js` (bounded header admission and serialized miniature decoding), `public/assets/gallery-modules/browser-image-worker.js` |
 | Thumbnail maintenance and browser rebuild | `app/controllers/admin_thumbnails.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_sources.php`, `app/services/browser_thumbnail_rebuild.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/browser-image-worker.js` |
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
@@ -325,6 +343,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Gallery hero tag Theme controls | `app/controllers/admin_theme.php`, `app/services/theme.php`, `public/assets/gallery-modules/theme-form.js`, `public/assets/styles/admin-theme-editor.css` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
+| Public appearance controls and CSS override editor | `app/services/theme.php`, `app/services/custom_css.php` (saved CSS and preview stylesheet inspection), `app/services/gallery_backgrounds.php` (Theme/gallery source and fallback resolution), `app/controllers/admin_theme_actions.php`, `app/controllers/shared_layout.php` (controller-prepared stylesheet URLs and typed public background context), `app/views/admin_theme.php`, `app/views/layout.php` (renders prepared URLs/context), `app/bootstrap/request.php` (exact-origin referrer context for same-origin GET/HEAD dependencies), `public/assets/gallery-modules/theme-customization.js`, `theme-visual-editor.js`, `theme-visual-css-draft.js`, `theme-visual-css-resize.js`; installation-owned `public/assets/custom-overrides.css`; visual editor policy and tests in `docs/LIVE_VISUAL_CSS_EDITOR.md` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
 | Gallery branding | `app/services/gallery_branding.php`, `app/controllers/public_gallery.php`, `app/controllers/public_media.php` |
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |

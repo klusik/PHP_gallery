@@ -59,19 +59,20 @@ namespace {
         throw new \RuntimeException($label . ': unsafe image path was allowed.');
     }
 
-    $root = sys_get_temp_dir() . '/gallery-image-path-' . bin2hex(random_bytes(8));
-    $galleryStorage = $root . '/galleries';
-    $galleryDir = $galleryStorage . '/album';
-    $outsideDir = $root . '/outside';
+    // Compare native physical paths exactly while keeping relative-path/traversal cases unchanged.
+    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gallery-image-path-' . bin2hex(random_bytes(8));
+    $galleryStorage = $root . DIRECTORY_SEPARATOR . 'galleries';
+    $galleryDir = $galleryStorage . DIRECTORY_SEPARATOR . 'album';
+    $outsideDir = $root . DIRECTORY_SEPARATOR . 'outside';
     if (!mkdir($galleryDir, 0700, true) || !mkdir($outsideDir, 0700, true)) {
         throw new \RuntimeException('Could not prepare isolated image storage.');
     }
     $GLOBALS['image_path_containment_root'] = $galleryStorage;
     $gallery = ['folder_path' => 'album'];
-    $valid = $galleryDir . '/photo.jpg';
-    $outside = $outsideDir . '/other.jpg';
-    $fileLink = $galleryDir . '/escape.jpg';
-    $directoryLink = $galleryDir . '/redirected';
+    $valid = $galleryDir . DIRECTORY_SEPARATOR . 'photo.jpg';
+    $outside = $outsideDir . DIRECTORY_SEPARATOR . 'other.jpg';
+    $fileLink = $galleryDir . DIRECTORY_SEPARATOR . 'escape.jpg';
+    $directoryLink = $galleryDir . DIRECTORY_SEPARATOR . 'redirected';
     try {
         file_put_contents($valid, 'ordinary gallery image');
         file_put_contents($outside, 'outside gallery fixture');
@@ -80,7 +81,7 @@ namespace {
             'Existing ordinary image must resolve.'
         );
         image_path_containment_assert(
-            \Gallery\Services\image_abs_path(['relative_path' => 'future.jpg'], $gallery) === $galleryDir . '/future.jpg',
+            \Gallery\Services\image_abs_path(['relative_path' => 'future.jpg'], $gallery) === $galleryDir . DIRECTORY_SEPARATOR . 'future.jpg',
             'Missing target for a safe upload must still resolve.'
         );
         image_path_containment_refused(['relative_path' => '../outside/other.jpg'], $gallery, 'Dot-dot traversal');

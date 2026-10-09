@@ -255,15 +255,20 @@ function cms_home(): void
         $backToTopHtml = (string) ob_get_clean();
     }
 
-    // $renderProfileHtml captures the optional profiler panel before the page view emits final markup.
-    ob_start();
-    view_render_public_render_profile_panel(public_render_profile_panel_model());
-    $renderProfileHtml = (string) ob_get_clean();
+    // Visual preview requests skip the diagnostic panel because an active Admin test run can persist its render snapshot.
+    $renderProfileHtml = '';
+    if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
+        ob_start();
+        view_render_public_render_profile_panel(public_render_profile_panel_model());
+        $renderProfileHtml = (string) ob_get_clean();
+    }
 
-    telemetry_append_public_script([
-        'route_name' => 'home',
-        'page_kind' => 'home',
-    ]);
+    if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
+        telemetry_append_public_script([
+            'route_name' => 'home',
+            'page_kind' => 'home',
+        ]);
+    }
 
     $homeCreation = public_home_admin_creation_view_model($homeGalleryCount);
     \Gallery\Views\view_render_public_gallery_home([

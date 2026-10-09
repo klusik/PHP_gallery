@@ -18,12 +18,12 @@ use function GalleryWorkflow\fixtureDatabase;
 use function GalleryWorkflow\validateFixture;
 
 $browser = (string) getenv('GALLERY_WORKFLOW_BROWSER');
-if ($browser === 'disabled') {
+if ($browser === 'disabled' && getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') !== '1') {
     echo "SKIP gallery workflow Chromium explicitly disabled by GALLERY_WORKFLOW_BROWSER\n";
     exit(0);
 }
-if (!getenv('GALLERY_WORKFLOW_FIXTURE') || $browser === '') {
-    $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1';
+if (!getenv('GALLERY_WORKFLOW_FIXTURE') || $browser === '' || $browser === 'disabled') {
+    $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1' || getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') === '1';
     echo ($required ? 'BLOCKED' : 'SKIP') . " gallery workflow full stack browser requires isolated fixture and Chromium\n";
     exit($required ? 1 : 0);
 }

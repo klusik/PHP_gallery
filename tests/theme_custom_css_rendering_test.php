@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/theme_custom_css_rendering_test.php
  * Module Type: Regression Test
- * Purpose: Preserve explicit Custom CSS replacement and reset form contracts.
+ * Purpose: Preserve explicit Custom CSS controls and independently fail-closed Theme image readiness.
  * Responsibilities: Exercise actual prepared rendering without reading or writing user stylesheets.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -35,9 +35,24 @@ custom_css_require(custom_css_count($xpath,$scope.'//select[@name="custom_css_pr
 custom_css_require(custom_css_count($xpath,$scope.'//input[@type="file" and @name="custom_css" and @accept=".css,text/css"]')===1,'stylesheet upload retains its native canonical name and accept filter');
 foreach(['reset_theme_overrides','reset_custom_css'] as $action) custom_css_require(custom_css_count($xpath,$scope.'//button[@name="'.$action.'" and @value="1" and @formnovalidate]')===1,'existing independent reset '.$action);
 custom_css_require(custom_css_count($xpath,$scope.'//*[@id="admin-custom-css"]')===1 && custom_css_count($xpath,$scope.'//*[contains(text(),"Uploaded <safe> stylesheet")]')>0,'current stylesheet metadata stays escaped and discoverable');
-custom_css_require(custom_css_count($xpath,'//form[@data-theme-form and @method="post" and @enctype="multipart/form-data"]')===1 && custom_css_count($xpath,'//input[@name="csrf_token" and @value="theme-fixture"]')===1,'Custom CSS stays inside complete shared form authority');
+custom_css_require(custom_css_count($xpath,'//form[@data-theme-form and @method="post" and @enctype="multipart/form-data"]')===1 && custom_css_count($xpath,'//form[@data-theme-form]//input[@name="csrf_token" and @value="theme-fixture"]')===1,'installed CSS stays inside complete shared form authority');
+custom_css_require(custom_css_count($xpath,'//form[@data-css-override-form]//input[@name="csrf_token" and @value="theme-fixture"]')===1 && custom_css_count($xpath,'//textarea[@name="css_override_text" and @form="admin-theme-css-overrides-form"]')===1,'manual editor has independent form ownership and CSRF');
+ob_start(); \Gallery\Views\view_render_admin_theme_css_editor(['state'=>['text'=>'/* </textarea><script>alert(1)</script> */','revision'=>str_repeat('a',64),'url'=>''],'ready'=>true],[]); $escaped=custom_css_xpath((string)ob_get_clean());
+custom_css_require(custom_css_count($escaped,'//script')===0 && str_contains($escaped->query('//textarea')->item(0)->textContent,'</textarea><script>'),'HTML-looking CSS remains escaped textarea data');
 foreach ([['active'=>false,'status_label'=>'No custom stylesheet'],['active'=>false,'status_label'=>'Missing selected preset','preset_label'=>'Missing <safe>'],['active'=>true,'status_label'=>'Preset active','preset_label'=>'Night']] as $state) {
     ob_start(); \Gallery\Views\view_render_admin_theme_custom_css_tab(theme_fixture_custom_css_model(['current_css'=>$state])); $variant=custom_css_xpath((string)ob_get_clean());
     custom_css_require(custom_css_count($variant,'//*[contains(text(),"'.$state['status_label'].'")]')>0 && custom_css_count($variant,'//select[@name="custom_css_preset"]/option[@selected and @value=""]')===1,'current state never auto-applies a replacement '.$state['status_label']);
 }
+$unavailableModel=theme_fixture_custom_css_model();
+$unavailableModel['overrides']['background']=['available'=>false,'revision'=>'','source'=>'','url'=>'','ready'=>false];
+ob_start(); \Gallery\Views\view_render_admin_theme_custom_css_tab($unavailableModel); $unavailable=custom_css_xpath((string)ob_get_clean());
+$unavailableRoot=$unavailable->query('//*[@data-css-override-editor and @data-visual-editor-background-ready="0"]')->item(0);
+custom_css_require($unavailableRoot instanceof DOMElement,'unreadable Theme image readiness is exposed to the visual editor');
+custom_css_require(custom_css_count($unavailable,'//*[@data-visual-editor-background-file and @disabled]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-remove and @disabled]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-keep and not(@disabled)]')===1,
+    'unreadable Theme image disables image mutation controls while preserving Keep for pending-draft cancellation');
+custom_css_require(custom_css_count($unavailable,'//button[@name="css_override_action" and @value="save" and not(@disabled)]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-status and contains(text(),"Background image editing is unavailable.")]')===1,
+    'unreadable Theme image presents the localized unavailable state without blocking CSS-only Save');
 echo "PASS Theme Custom CSS rendering\n";

@@ -172,6 +172,48 @@ try {
     const publicReady=new Promise(/** Await only the confined actual public fixture document. @param {function():void} resolve Completion callback. @return {void} Installs a one-shot frame load handler. */ resolve=>publicFrame.addEventListener('load',resolve,{once:true}));
     publicFrame.src='/__public_cards'; document.body.append(publicFrame); await publicReady; await settle(); await publicLayouts(publicFrame,false);
     await fetch('/__viewport?width=390'); await settle(); await publicLayouts(publicFrame,true);
+    // Rebind the new controls after the existing fixture replaces the workspace.
+    const {setupThemeAdvancedAppearance}=await import('/public/assets/gallery-modules/theme-customization.js');
+    setupAdminNestedTabs(form);
+    setupThemeAdvancedAppearance(form);
+    find('[data-admin-subtab-target="admin-theme-appearance-subtab-advanced"]').click();
+    const gap=find('[name="theme_gallery_grid_gap"]'), padding=find('[name="theme_gallery_card_padding"]'), type=find('[name="theme_public_type_scale"]'), transparent=find('[name="theme_header_transparent"]');
+    edit('[name="theme_gallery_grid_gap"]','30'); edit('[name="theme_gallery_card_padding"]','8'); edit('[name="theme_public_type_scale"]','120'); transparent.checked=true; transparent.dispatchEvent(new Event('change',{bubbles:true}));
+    const advancedPreview=find('[data-theme-preview-page]'), previewHeader=advancedPreview.querySelector('.theme-preview-header'), previewHero=advancedPreview.querySelector('.theme-preview-hero');
+    check(gap.closest('[data-theme-advanced-control]').querySelector('output').textContent==='30px' && advancedPreview.style.getPropertyValue('--preview-advanced-gap')==='15px','advanced number and effective unit update the shared preview');
+    check(getComputedStyle(previewHeader).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(previewHeader).backdropFilter==='none' && getComputedStyle(previewHero).backgroundColor!=='rgba(0, 0, 0, 0)','transparent preview removes header backdrop while preserving hero');
+    find('[data-theme-advanced-reset][value="header_transparent"]').click();
+    check(!transparent.checked && gap.value==='30' && padding.value==='8' && type.value==='120','header reset leaves all other staged settings intact');
+    find('[data-theme-advanced-reset][value="gallery_grid_gap"]').click();
+    check(gap.value==='16' && padding.value==='8' && type.value==='120','spacing reset is independent');
+    for(const width of [1280,390]) {
+        await fetch('/__viewport?width='+width); await settle();
+        const advanced=find('.theme-advanced-appearance');
+        check(advanced.scrollWidth<=advanced.clientWidth+1 && advanced.getBoundingClientRect().right<=innerWidth+1,width+' advanced controls have no horizontal overflow');
+        for(const control of advanced.querySelectorAll('input[type="number"],select,button')) check(control.getBoundingClientRect().width>0 && control.getBoundingClientRect().right<=innerWidth+1,width+' numeric alternatives and resets remain usable');
+        const doc=publicFrame.contentDocument, css=doc.querySelector('#fixture-theme-css'), header=doc.querySelector('.site-header'), hero=doc.querySelector('.hero');
+        const originalCss=css.textContent, opaqueHeader=getComputedStyle(header).backgroundColor, heroBackdrop=getComputedStyle(hero).backgroundColor, headerHeight=header.getBoundingClientRect().height;
+        const typeTargets=[doc.querySelector('.site-main'),hero.querySelector('h1'),hero.querySelector('p'),doc.querySelector('.gallery-card-body h2'),doc.querySelector('.gallery-card.is-gallery-description-horizontal .gallery-card-body h2'),doc.querySelector('.gallery-card.is-gallery-description-horizontal .gallery-card-description')];
+        const defaultTypeSizes=typeTargets.map(element=>parseFloat(getComputedStyle(element).fontSize));
+        css.textContent=doc.querySelector('#fixture-transparent-css').content.textContent; await settle();
+        const headerStyle=getComputedStyle(header);
+        check(headerStyle.backgroundColor==='rgba(0, 0, 0, 0)' && headerStyle.backgroundImage==='none' && headerStyle.boxShadow==='none' && headerStyle.backdropFilter==='none' && headerStyle.borderColor==='rgba(0, 0, 0, 0)',width+' actual generated header has no backdrop, image, shadow, blur or border');
+        check(getComputedStyle(header,'::before').content==='none' && getComputedStyle(header,'::after').content==='none',width+' actual header has no pseudo-element mask');
+        check(header.getBoundingClientRect().height===headerHeight && getComputedStyle(hero).backgroundColor===heroBackdrop && [...header.querySelectorAll('a')].every(a=>a.getBoundingClientRect().width>0),width+' actual header preserves spacing, navigation, Admin actions and hero');
+        publicFrame.contentWindow.scrollTo(0,700); await settle();
+        check(getComputedStyle(header).backgroundColor==='rgba(0, 0, 0, 0)',width+' scrolling retains transparent header');
+        css.textContent=doc.querySelector('#fixture-advanced-css').content.textContent; await settle();
+        // Measure the settled preset after the existing card elevation transitions finish.
+        await Promise.all([...doc.querySelectorAll('.gallery-card')].flatMap(card=>card.getAnimations().map(animation=>animation.finished.catch(()=>{}))));
+        const actualGap=getComputedStyle(doc.querySelector('.grid')).gap;
+        const actualCards=[...doc.querySelectorAll('.gallery-card')].map(card=>({title:card.querySelector('h2').textContent,padding:getComputedStyle(card.querySelector('.gallery-card-body')).paddingTop,shadow:getComputedStyle(card).boxShadow}));
+        check(actualGap==='28px' && actualCards.every(card=>card.padding==='9px' && card.shadow==='none'),width+' actual generated advanced rules affect both physical/Smart card orientations and renderers; gap='+actualGap+' cards='+JSON.stringify(actualCards));
+        check(typeTargets.every((element,index)=>Math.abs(parseFloat(getComputedStyle(element).fontSize)-defaultTypeSizes[index]*1.2)<0.1),width+' public type scale preserves the existing body, hero and card heading/copy hierarchy');
+        const override=doc.createElement('style'); override.textContent='.public-page .site-main .gallery-card .gallery-card-body{padding:3px}'; doc.head.append(override); await settle();
+        check(getComputedStyle(doc.querySelector('.gallery-card-body')).paddingTop==='3px',width+' final ordinary override wins against normal Theme rule'); override.remove();
+        css.textContent=originalCss; await settle();
+        check(getComputedStyle(header).backgroundColor===opaqueHeader && getComputedStyle(hero).backgroundColor===heroBackdrop,width+' resetting generated switch restores the previous header and hero');
+    }
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Appearance assertions';
 } catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
 </script></body></html>

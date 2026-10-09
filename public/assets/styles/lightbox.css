@@ -1624,6 +1624,12 @@ dialog.lightbox.simbrief-ofp-dialog::backdrop { background: rgba(0, 0, 0, 0.84);
     scrollbar-gutter: stable;
     z-index: 0;
 }
+/* The focusable PDF scroll stage receives initial document focus, but is not
+   a toolbar control. Suppress its browser frame only; controls keep their
+   dedicated :focus-visible indicators in normal and fullscreen views. */
+dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-stage:focus {
+    outline: none;
+}
 .simbrief-ofp-canvas-wrap {
     display: flex;
     box-sizing: border-box;

@@ -260,6 +260,7 @@ use function Gallery\Views\view_render_admin_theme_page;
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
+ * @return void Emits prepared Theme tabs and their independent settings/editor form authorities.
  */
 function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
 {
@@ -309,6 +310,7 @@ function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxMode
         'grid_reset_notice' => $gridResetNotice,
         'settings_url' => admin_settings_url('appearance'),
         'csrf_html' => csrf_field(),
+        'override_csrf_html' => csrf_field(),
         'tabs' => [
             ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
             ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],

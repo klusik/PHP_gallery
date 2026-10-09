@@ -34,24 +34,95 @@ final class Http
     /**
      * Send one real application request, preserving cookies, status, headers and body.
      *
-     * @param string $route Loopback front-controller route.
-     * @param ?array<string,mixed> $fields Form fields, null for read-only methods.
+     * @param string $route Root-relative front-controller route, supported clean public gallery asset route, or clean Home/Gallery document route; an absolute URL is accepted only for a same-origin loopback redirect to one of those routes.
+     * @param ?array<string,string|int|float|bool|null|\CURLFile|list<string|int|float|bool|null>> $fields Form fields keyed by input name; values are scalar values, top-level upload handles, or one-dimensional repeated scalar values.
      * @param bool $json Whether to request the JSON transport envelope.
      * @param string $method GET or HEAD; form submissions always use POST.
-     * @return array{status:int,body:string,headers:array<string,string>,json:mixed} Real HTTP result.
+     * @param ?string $referer Optional absolute HTTP(S) referrer used by request-context integration tests.
+     * @return array{status:int,body:string,headers:array<string,string>,json:scalar|array<array-key,mixed>|null} Real HTTP result; json is the associative decoded JSON tree with nested arrays recursively containing JSON scalars, arrays or null; null represents valid JSON null or failed/non-JSON decoding.
      */
-    public function request(string $route, ?array $fields = null, bool $json = false, string $method = 'GET'): array
+    public function request(string $route, ?array $fields = null, bool $json = false, string $method = 'GET', ?string $referer = null): array
     {
-        check(str_starts_with($route, '/index.php?'), 'Workflow HTTP calls must target the local application router.');
+        $routeParts = parse_url($route);
+        $originParts = parse_url($this->origin);
+        $absoluteRoute = is_array($routeParts) && isset($routeParts['scheme'], $routeParts['host']);
+        $path = is_array($routeParts) ? ($routeParts['path'] ?? null) : null;
+        $query = is_array($routeParts) ? ($routeParts['query'] ?? null) : null;
+        $sameOriginAbsolute = $absoluteRoute && is_array($originParts)
+            && strtolower((string) $routeParts['scheme']) === strtolower((string) $originParts['scheme'])
+            && strtolower((string) $routeParts['host']) === strtolower((string) $originParts['host'])
+            && (int) ($routeParts['port'] ?? 80) === (int) ($originParts['port'] ?? 80)
+            && !isset($routeParts['user']) && !isset($routeParts['pass']);
+        $relativeRoute = !$absoluteRoute && str_starts_with($route, '/') && !str_starts_with($route, '//');
+        $safeSegmentPattern = '(?:[A-Za-z0-9._\~-]|%[A-Fa-f0-9]{2})+';
+        $pathSegmentsSafe = is_string($path);
+        if ($pathSegmentsSafe) {
+            foreach (explode('/', trim($path, '/')) as $segment) {
+                if ($segment === '') {
+                    continue;
+                }
+                $decodedSegment = rawurldecode($segment);
+                if (preg_match('~^' . $safeSegmentPattern . '$~D', $segment) !== 1
+                    || in_array($decodedSegment, ['.', '..'], true)
+                    || str_contains($decodedSegment, '/') || str_contains($decodedSegment, '\\')
+                    || preg_match('/[\x00-\x1F\x7F]/', $decodedSegment) === 1) {
+                    $pathSegmentsSafe = false;
+                    break;
+                }
+            }
+        }
+        $frontControllerRoute = is_string($path) && $path === '/index.php'
+            && is_string($query) && $query !== '';
+        $cleanGalleryAssetRoute = is_string($path)
+            && preg_match('~^/(?:(?:[A-Za-z0-9._\~-]|%[A-Fa-f0-9]{2})+/)*gallery/(?:(?:[A-Za-z0-9._\~-]|%[A-Fa-f0-9]{2})+/)*(?:media|thumb-[1-9][0-9]*\.(?:jpg|webp))$~iD', $path) === 1;
+        $cleanHomeDocumentRoute = $path === '/';
+        $cleanGalleryDocumentRoute = is_string($path)
+            && preg_match('~^/gallery/(?:' . $safeSegmentPattern . '/)+$~D', $path) === 1;
+        $cleanDocumentRoute = $cleanHomeDocumentRoute || $cleanGalleryDocumentRoute;
+        $cleanDocumentQueryAllowed = true;
+        if ($cleanDocumentRoute && is_string($query) && $query !== '') {
+            $documentQuery = [];
+            parse_str($query, $documentQuery);
+            $allowedDocumentQuery = ['preview' => 'visual', 'view_as' => 'anonymous', 'visual_notice' => 'anonymous_fallback'];
+            $cleanDocumentQueryAllowed = $documentQuery !== []
+                && count($documentQuery) === count(explode('&', $query));
+            foreach ($documentQuery as $key => $value) {
+                if (!is_string($key) || !isset($allowedDocumentQuery[$key])
+                    || $value !== $allowedDocumentQuery[$key]) {
+                    $cleanDocumentQueryAllowed = false;
+                    break;
+                }
+            }
+        }
+        $routePathAllowed = $frontControllerRoute || $cleanGalleryAssetRoute
+            || ($cleanDocumentRoute && $cleanDocumentQueryAllowed);
+        check(($relativeRoute || $sameOriginAbsolute) && $routePathAllowed && $pathSegmentsSafe
+            && !str_contains($route, '#') && preg_match('/[\r\n\x00]/', $route) !== 1,
+            'Workflow HTTP calls must target a supported same-origin application route.');
+        if ($referer !== null) {
+            $refererParts = parse_url($referer);
+            check(preg_match('/[\r\n\x00]/', $referer) !== 1 && is_array($refererParts)
+                && in_array(strtolower((string) ($refererParts['scheme'] ?? '')), ['http', 'https'], true)
+                && (string) ($refererParts['host'] ?? '') !== ''
+                && !array_key_exists('user', $refererParts) && !array_key_exists('pass', $refererParts)
+                && !array_key_exists('fragment', $refererParts),
+                'Workflow HTTP Referer must be an absolute HTTP(S) URI without credentials or fragments.');
+        }
         check(in_array($method, ['GET', 'HEAD'], true) && ($method !== 'HEAD' || $fields === null),
             'Workflow HTTP method must be GET or HEAD without HEAD form fields.');
-        $headers = [];
-        curl_setopt_array($this->handle, [CURLOPT_URL => $this->origin . $route,
-            CURLOPT_HTTPHEADER => $json ? ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'] : [],
-            CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$headers): int {
+        $requestHeaders = [];
+        $responseHeaders = [];
+        if ($referer !== null) {
+            $requestHeaders[] = 'Referer: ' . $referer;
+        }
+        $requestHeaders = array_merge($requestHeaders, $json ? ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'] : []);
+        $requestUrl = $absoluteRoute ? $route : $this->origin . $route;
+        curl_setopt_array($this->handle, [CURLOPT_URL => $requestUrl,
+            CURLOPT_HTTPHEADER => $requestHeaders,
+            CURLOPT_HEADERFUNCTION => static function (\CurlHandle $handle, string $line) use (&$responseHeaders): int {
                 if (str_contains($line, ':')) {
                     [$key, $value] = explode(':', $line, 2);
-                    $headers[strtolower(trim($key))] = trim($value);
+                    $responseHeaders[strtolower(trim($key))] = trim($value);
                 }
                 return strlen($line);
             }]);
@@ -68,7 +139,7 @@ final class Http
             $body = curl_exec($this->handle);
             check(is_string($body), 'Isolated HTTP transport failed.');
             return ['status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE), 'body' => $body,
-                'headers' => $headers, 'json' => json_decode($body, true)];
+                'headers' => $responseHeaders, 'json' => json_decode($body, true)];
         } finally {
             if ($method === 'HEAD') {
                 // Restore reusable handle semantics for the next request.

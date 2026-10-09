@@ -5,6 +5,35 @@ routes in a temporary application copy. It never loads the checkout's config.php
 copies its gallery/data/cache directories, or connects to its configured database.
 All sample photographs and credentials are generated for the run.
 
+The issue #127 visual-preview workflow keeps the public document and asset
+boundaries distinct. The real HTTP fixture verifies that a valid but inaccessible
+gallery in the authenticated Anonymous visual preview redirects to the nearest
+visitor-accessible ancestor or Home with the preview/audience markers and one
+fixed generic notice token, then follows that same-origin canonical destination
+and confirms the accessible public document renders with private no-store headers.
+Home SEO canonicalization preserves that exact notice only with the matching
+preview and anonymous-audience markers. The denied gallery document itself is
+never rendered. An otherwise listed,
+password-gated child may still appear in its accessible parent’s ordinary public
+listing as a locked card without cover imagery; a private child is omitted by the
+existing public-listing policy. Gallery destinations are matched against the
+stored canonical `url_path`, not inferred from the gallery’s filesystem folder
+name. The fixture accepts the supported
+front-controller and clean Home/Gallery route forms while rejecting unrelated
+paths, query keys, and cross-origin redirects. Ordinary visitors retain the existing
+password gate. Protected original-media and thumbnail requests remain denied,
+while public assets inherit preview context only under the same-origin,
+in-mount request policy. The workflow also verifies installed and saved
+stylesheet `@import` refusal, including the HEAD response, and checks that the
+preview performs no persistent writes. The live Admin browser fixture switches
+the protected signed-in gallery to Anonymous and verifies the accessible
+ancestor URL, preview/audience markers, generic notice, unchanged CSS draft and
+Admin URL, zero mutation requests, and Back restoration. A separate visual
+editor browser fixture uses a controlled synthetic redirect for pending-file,
+history, and notice-token lifecycle checks. Browser contracts also cover the
+semantic profile/property controls; none of these assertions claim manual
+device testing.
+
 ## Entry points
 
 The central audit remains the test orchestrator. The full and release profiles,
@@ -23,6 +52,11 @@ does not claim full HTTP/concurrency/browser workflow qualification.
 The browser PHP entry point launches tests/gallery_workflow_browser.mjs using the
 same standalone headless Chromium approach as the existing map fixture. It needs
 no browser tool runtime, npm install, Playwright, Selenium, or Composer dependency.
+The disposable PHP router forwards application requests to the copied
+`public/index.php` and normalizes `SCRIPT_NAME` to that front controller while
+preserving `REQUEST_URI`. This keeps the app's mount-path derivation based on the
+front-controller script, as it is for a rewritten Apache request, rather than on
+the clean asset URL that selected the fixture router.
 
 Ordinary audits without a disposable fixture run the safety test and explicitly
 SKIP the HTTP and browser integration tests. A skip is not full-stack evidence.

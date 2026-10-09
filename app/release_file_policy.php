@@ -126,7 +126,7 @@ function release_file_policy_is_production_path(string $relativePath): bool
     ], true)) {
         return true;
     }
-    if (in_array($relativePath, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css'], true)
+    if (in_array($relativePath, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true)
         || str_starts_with($relativePath, 'app/_for_codex/')) {
         return false;
     }
@@ -329,7 +329,7 @@ function release_file_policy_server_paths(): array
  */
 function release_file_policy_is_updater_path(string $relativePath): bool
 {
-    if (in_array($relativePath, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css'], true)
+    if (in_array($relativePath, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true)
         || str_starts_with($relativePath, 'app/_for_codex/')) {
         return false;
     }
@@ -364,7 +364,7 @@ function release_file_policy_is_protected_path(string $relativePath): bool
     }
     $portablePath = strtolower($relativePath);
     if (in_array($portablePath, [
-        'config.php', 'app/bootstrap/config.php', 'public/assets/custom.css',
+        'config.php', 'app/bootstrap/config.php', 'public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock',
         '.user.ini', 'php.ini', 'robots.txt',
     ], true)) {
         return true;
@@ -398,6 +398,8 @@ function release_file_policy_is_integrity_path(string $relativePath): bool
         || $relativePath === 'config.php'
         || $relativePath === 'app/bootstrap/config.php'
         || $relativePath === 'public/assets/custom.css'
+        || $relativePath === 'public/assets/custom-overrides.css'
+        || $relativePath === 'public/assets/.custom-overrides.lock'
         || str_starts_with($relativePath, 'app/_for_codex/')
         || preg_match('#^(cache|data|galleries|custom_css|\.git|\.idea|\.vscode)/#', $relativePath) === 1
         || preg_match('#(^|/)(\.DS_Store|Thumbs\.db|error_log)$#', $relativePath) === 1) {
@@ -609,7 +611,7 @@ function release_file_policy_archive_owned_candidates(string $root): array
             throw new RuntimeException('Update archive contains an unsafe updater root.');
         }
         foreach (release_file_policy_enumerate_files($root, $directory) as $path) {
-            if ($path === 'public/assets/custom.css'
+            if (in_array($path, ['public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true)
                 || str_starts_with($path, 'app/_for_codex/')
                 || in_array(basename($path), ['.DS_Store', 'Thumbs.db'], true)) {
                 continue;

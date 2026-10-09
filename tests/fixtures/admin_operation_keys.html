@@ -18,8 +18,8 @@ License: MIT
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupGalleryUploadProgress, setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
-import {allowAdminOperationTransition, adminOperationIsRunning} from '/public/assets/gallery-modules/admin-operation-keys.js?v=20260920-operation-keys-v1';
-import {adminPanelHasUnsavedText} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20260920-operation-keys-v1';
+import {allowAdminOperationTransition, adminOperationIsRunning} from '/public/assets/gallery-modules/admin-operation-keys.js?v=20261008-issue118-v3';
+import {adminPanelHasUnsavedText} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261008-issue118-v3';
 
 /** Original native fetch is used only for confined fixture/module assets. */
 const nativeFetch = window.fetch.bind(window);
@@ -156,9 +156,10 @@ setupAdminGallerySidePanel();
  * @param {string} mode Create, new classic or existing classic workflow.
  * @param {File[]} files Disposable selected images.
  * @param {boolean} prepared Whether to run the real worker/ZIP pipeline.
+ * @param {boolean} preview Whether to mount the local drawer queue; defaults to prepared forms.
  * @return {HTMLFormElement} Connected form with its normal production handler.
  */
-function mount(mode, files = [], prepared = false) {
+function mount(mode, files = [], prepared = false, preview = prepared) {
     const form = document.createElement('form');
     const create = mode === 'create';
     form.action = create ? '/fixture-create' : '/fixture-upload';
@@ -172,6 +173,17 @@ function mount(mode, files = [], prepared = false) {
         <input name="title" value="Fixture title"><textarea name="description">Fixture description</textarea>
         <input type="checkbox" name="create_thumbnails" value="1"><input type="file" name="images[]" multiple>
         <input type="checkbox" data-browser-upload-toggle><button>Submit fixture intent</button>`;
+    if (preview) {
+        const view = document.createElement('div');
+        view.dataset.galleryUploadPreview = '';
+        view.dataset.summary = '{count} files';
+        view.dataset.clear = 'Clear';
+        view.dataset.previewUnavailable = 'No preview';
+        view.dataset.remove = 'Remove {name}';
+        view.dataset.earlier = 'Move earlier';
+        view.dataset.later = 'Move later';
+        form.append(view);
+    }
     const selected = new DataTransfer();
     files.forEach(/** Populate the actual browser file selection with disposable originals. @param {File} file Fixture-generated image. @return {DataTransferItem|null} Browser item added to the selection. */ file => selected.items.add(file));
     form.querySelector('[type="file"]').files = selected.files;
@@ -225,20 +237,35 @@ try {
     await submit(form);
     check(nextGallery === galleryBefore + 2, 'Fresh deliberate create permits a duplicate title');
 
-    form = mount('existing', files);
+    form = mount('existing', [], false, true);
+    for (const file of files) {
+        const clipboard = new DataTransfer(); clipboard.items.add(file);
+        form.querySelector('[type="file"]').dispatchEvent(new ClipboardEvent('paste', {clipboardData: clipboard, bubbles: true, cancelable: true}));
+    }
+    form.querySelectorAll('[data-upload-queue-action="earlier"]')[1].click();
     key = form.elements.operation_key.value;
     const imageBefore = nextImage;
     const classicStart = records.length;
-    fault = {endpoint: '/fixture-upload', file: 'photo-2.png', remaining: 1};
+    fault = {endpoint: '/fixture-upload', file: 'photo-1.png', remaining: 1};
     await submit(form);
     const firstPass = records.slice(classicStart);
     check(firstPass.length === 2 && firstPass[0].key === key && firstPass[1].key !== key, 'Classic multipart chunks have distinct stable keys starting with original form key');
     check(nextImage === imageBefore + 2 && form.elements.operation_key.value === key, 'Lost second chunk acknowledgment does not rotate or duplicate');
+    check(firstPass[0].files[0] === 'photo-2.png' && firstPass[1].files[0] === 'photo-1.png', 'Classic lost-response scenario preserves the explicit drawer order');
+    check(form.querySelectorAll('[data-upload-queue-id]').length === 2 && form.querySelector('[data-upload-queue-action="clear"]').disabled,
+        'Partial classic acknowledgment retains both original occurrences and locks the drawer queue');
+    form.reset();
+    check(form.querySelector('[type="file"]').files[0] === files[1], 'Reset cannot erase or reorder a partially acknowledged classic upload');
     await submit(form);
     const retried = records.slice(classicStart + 2);
     check(retried.length === 2 && retried.every(/** Compare each replay against its corresponding original classic request. @param {{key: string, fingerprint: string}} record Retried fixture request. @param {number} index Zero-based chunk index. @return {boolean} Whether identity and exact payload agree. */ (record, index) => record.key === firstPass[index].key && record.fingerprint === firstPass[index].fingerprint), 'Whole classic retry reuses the exact key and payload of every chunk');
     check(nextImage === imageBefore + 2 && form.fixtureResult.image_ids.length === 2, 'Classic replay preserves unique image IDs through canonical aggregation');
     check(form.elements.operation_key.value !== key, 'Only confirmed complete multi-chunk intent rotates root key');
+    check(form.querySelector('[type="file"]').files.length === 0 && form.querySelector('[data-gallery-upload-preview]').hidden,
+        'Full canonical classic replay clears the local selection exactly once');
+    const freshSelection = new DataTransfer();
+    files.forEach(file => freshSelection.items.add(file));
+    form.querySelector('[type="file"]').dispatchEvent(new ClipboardEvent('paste', {clipboardData: freshSelection, bubbles: true, cancelable: true}));
     await submit(form);
     check(nextImage === imageBefore + 4, 'Fresh deliberate upload of same files is not filename deduplication');
 
@@ -265,18 +292,31 @@ try {
     check(preparedBatches.length === 2 && preparedBatches.every(/** Verify prepared identity is not replaced by the classic ledger key. @param {{operationKey: string|null}} record Captured operation-key field. @return {boolean} Whether that field is absent. */ record => record.operationKey === null) && preparedBatches[0].key !== preparedBatches[1].key, 'Actual worker ZIP batches retain independent session/batch keys, not ledger operation keys');
     check(form.elements.operation_key.value !== key && form.fixtureResult.image_ids.length === 2, 'Prepared full completion rotates only after all batches succeed');
 
-    form = mount('existing', files, true);
+    form = mount('existing', [], true);
+    for (const file of files) {
+        const clipboard = new DataTransfer(); clipboard.items.add(file);
+        form.querySelector('[type="file"]').dispatchEvent(new ClipboardEvent('paste', {clipboardData: clipboard, bubbles: true, cancelable: true}));
+    }
+    check(form.querySelectorAll('[data-upload-queue-id]').length === 2, 'Prepared upload starts from two repeated clipboard pastes');
+    form.querySelectorAll('[data-upload-queue-action="earlier"]')[1].click();
+    check(form.querySelector('[type="file"]').files[0] === files[1], 'Prepared input preserves explicit queue order');
     key = form.elements.operation_key.value;
     const preparedRetryStart = records.length;
     const preparedImageBefore = nextImage;
     fault = {endpoint: '/fixture-prepared', remaining: 3};
     await submit(form);
     check(form.elements.operation_key.value === key && records.length === preparedRetryStart + 3, 'Exhausted prepared retries preserve root key and bounded existing retry count');
+    check(form.querySelector('[type="file"]').files.length === 2 && form.querySelector('[data-upload-queue-action="clear"]').disabled,
+        'Failed prepared batch keeps both originals and locks destructive queue actions');
+    form.reset();
+    check(form.querySelector('[type="file"]').files[0] === files[1], 'Prepared retry cannot be reset into different input');
     await submit(form);
     const preparedRetry = records.slice(preparedRetryStart);
     check(preparedRetry.every(/** Confirm each prepared retry retains the enabled hidden target. @param {{gallery: string}} record Captured target projection. @return {boolean} Whether it is the selected fixture gallery. */ record => record.gallery === '10'), 'Prepared existing target uses enabled hidden gallery ID, not disabled legacy select');
     check(preparedRetry.slice(0, 4).every(/** Compare bounded and explicit retries with the original prepared batch bytes. @param {{key: string, fingerprint: string}} record Captured batch identity. @return {boolean} Whether session/index and multipart fingerprint are unchanged. */ record => record.key === preparedRetry[0].key && record.fingerprint === preparedRetry[0].fingerprint), 'Explicit prepared retry retains original session, batch index and exact ZIP bytes');
     check(nextImage === preparedImageBefore + 2 && form.fixtureResult.image_ids.length === 2, 'Prepared explicit retry does not duplicate a committed batch');
+    check(form.querySelector('[type="file"]').files.length === 0 && form.querySelector('[data-gallery-upload-preview]').hidden,
+        'Canonical prepared completion clears the same local queue');
     check(location.href === originalUrl && completions === 7, 'Actual client actions remain in place with one success event per completed intent');
 
     form = mount('new');

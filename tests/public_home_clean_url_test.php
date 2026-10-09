@@ -43,6 +43,7 @@ function assert_public_home_clean_url(bool $condition, string $label): void
 $source = (string) file_get_contents(__DIR__ . '/../app/helpers_request.php');
 $seoSource = (string) file_get_contents(__DIR__ . '/../app/services/seo_request_guard.php');
 $requestBootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap/request.php');
+require_once __DIR__ . '/../app/services/seo_request_guard.php';
 
 assert_public_home_clean_url(
     str_contains($source, "if (\$page === 'home' && \$params === [] && url_rewrite_should_emit_clean_urls())")
@@ -53,10 +54,23 @@ assert_public_home_clean_url(
 assert_public_home_clean_url(
     str_contains($seoSource, "if (\$page === 'home' && \$unexpected !== [])")
         && str_contains($seoSource, "'action' => 'redirect'")
-        && str_contains($seoSource, "['gallery_page', 'view_as', 'lang']")
+        && str_contains($seoSource, "['gallery_page', 'view_as', 'lang', 'preview']")
         && str_contains($requestBootstrapSource, "header('Location: ' . \$location, true, \$status);"),
     'Unexpected homepage query parameters must permanently redirect while retaining only supported homepage parameters.'
 );
+
+$ordinaryUnexpected = \Gallery\Services\seo_request_guard_unexpected_query_parameters('home', [
+    'gallery_page' => '2', 'view_as' => 'anonymous', 'lang' => 'cs',
+]);
+assert_public_home_clean_url($ordinaryUnexpected === [], 'Ordinary supported homepage query parameters must remain accepted.');
+$unknownOrdinaryParameters = \Gallery\Services\seo_request_guard_unexpected_query_parameters('home', [
+    'gallery_page' => '2', 'unexpected' => 'value',
+]);
+assert_public_home_clean_url($unknownOrdinaryParameters === ['unexpected'], 'Ordinary unknown homepage parameters must remain subject to canonical cleanup.');
+$previewUnexpected = \Gallery\Services\seo_request_guard_unexpected_query_parameters('home', [
+    'gallery_page' => '2', 'view_as' => 'anonymous', 'lang' => 'cs', 'preview' => 'visual', 'unexpected' => 'value',
+]);
+assert_public_home_clean_url($previewUnexpected === ['unexpected'], 'Preview context may be retained without making other homepage query keys valid.');
 
 assert_public_home_clean_url(
     str_contains($seoSource, "\$location = rtrim(public_base_url(), '/') . '/';")

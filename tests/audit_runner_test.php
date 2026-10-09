@@ -188,9 +188,12 @@ try {
 
 $previousWorkflowBrowser = getenv('GALLERY_WORKFLOW_BROWSER');
 $previousWorkflowRequired = getenv('GALLERY_WORKFLOW_REQUIRED');
+$previousWorkflowBrowserRequired = getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED');
 try {
     putenv('GALLERY_WORKFLOW_BROWSER=disabled');
     putenv('GALLERY_WORKFLOW_REQUIRED=1');
+    // The optional browser-only probe must override the required-browser job environment in its child.
+    putenv('GALLERY_WORKFLOW_BROWSER_REQUIRED=0');
     $disabledWorkflow = \PhpGallery\Audit\run_process(
         [PHP_BINARY, __DIR__ . '/gallery_workflow_browser_test.php'], dirname(__DIR__), 5
     );
@@ -198,9 +201,17 @@ try {
         && output_is_skip($disabledWorkflow['stdout'])
         && str_contains($disabledWorkflow['stdout'], 'explicitly disabled'),
         'Explicit browser-only opt-out must SKIP even when database/HTTP workflows remain required.');
+    putenv('GALLERY_WORKFLOW_BROWSER_REQUIRED=1');
+    $requiredDisabledWorkflow = \PhpGallery\Audit\run_process(
+        [PHP_BINARY, __DIR__ . '/gallery_workflow_browser_test.php'], dirname(__DIR__), 5
+    );
+    audit_test_assert($requiredDisabledWorkflow['exit_code'] !== 0
+        && str_contains($requiredDisabledWorkflow['stdout'], 'BLOCKED'),
+        'A job that requires Chromium must block when its browser is explicitly disabled.');
 } finally {
     putenv($previousWorkflowBrowser === false ? 'GALLERY_WORKFLOW_BROWSER' : 'GALLERY_WORKFLOW_BROWSER=' . $previousWorkflowBrowser);
     putenv($previousWorkflowRequired === false ? 'GALLERY_WORKFLOW_REQUIRED' : 'GALLERY_WORKFLOW_REQUIRED=' . $previousWorkflowRequired);
+    putenv($previousWorkflowBrowserRequired === false ? 'GALLERY_WORKFLOW_BROWSER_REQUIRED' : 'GALLERY_WORKFLOW_BROWSER_REQUIRED=' . $previousWorkflowBrowserRequired);
 }
 
 $unittestFailure = parse_python_unittest_summary("Ran 36 tests in 0.320s\n\nFAILED (failures=1, errors=2, skipped=3)\n");

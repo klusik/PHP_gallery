@@ -4,8 +4,8 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/custom_css_preservation_test.php
  * Module Type: Regression Test
- * Purpose: Preserve installed Custom CSS and settings through no-op and failed replacements.
- * Responsibilities: Inject filesystem failures into the actual service within an owned temporary root.
+ * Purpose: Preserve installed Custom CSS and global Theme image state through editor replacement, removal and failed transactions.
+ * Responsibilities: Inject filesystem and settings-commit failures into actual services within an owned temporary root.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -16,6 +16,12 @@ namespace Gallery\Core {
      * @return string Fixture asset URL.
      */
     function asset_url(string $path): string { return '/fixture/'.$path; }
+    /** Prepare a route URL used by the real Theme background service.
+     * @param string $route Canonical fixture route name.
+     * @param array<string,string> $params Route parameters.
+     * @return string Disposable same-origin route URL.
+     */
+    function url_for(string $route, array $params = []): string { return '/fixture/index.php?page='.$route.($params === [] ? '' : '&'.http_build_query($params)); }
 }
 namespace Gallery\Services {
     /** Read only the fixture's in-memory setting map.
@@ -24,6 +30,27 @@ namespace Gallery\Services {
      * @return string Disposable stored value.
      */
     function app_setting(string $key,string $default=''): string { return $GLOBALS['css_settings'][$key] ?? $default; }
+    /** Apply semantic settings and a reversible asset callback as one disposable transaction.
+     * @param array<string,string> $settings Related settings proposed by the service.
+     * @param callable():void $activate File activation executed before commit.
+     * @return void Restores settings after ordinary failure but retains injected uncertain-commit values to model an unconfirmed rollback.
+     */
+    function set_app_settings_atomically(array $settings, callable $activate): void {
+        $before=$GLOBALS['css_settings'];
+        foreach($settings as $key=>$value) $GLOBALS['css_settings'][$key]=$value;
+        try {
+            $activate();
+            if($GLOBALS['css_failure']==='atomic_commit') throw new \RuntimeException('Injected settings commit failure.');
+            if(in_array($GLOBALS['css_failure'], ['atomic_rollback_uncertain', 'atomic_rollback_uncertain_css_restore'], true)) throw new \Gallery\Models\AppSettingsRollbackException('Injected unconfirmed settings rollback.');
+        } catch(\Throwable $exception) {
+            if(!str_starts_with($GLOBALS['css_failure'], 'atomic_rollback_uncertain')) $GLOBALS['css_settings']=$before;
+            throw $exception;
+        }
+    }
+    /** Keep the disposable request cache empty after a simulated successful transaction.
+     * @return void Does not access application state.
+     */
+    function app_settings_reset_request_cache(): void {}
     /** Inject a failed marker write before changing the fixture setting map.
      * @param string $key Setting identifier.
      * @param string $value Proposed stored value.
@@ -60,7 +87,27 @@ namespace Gallery\Services {
      * @param string $target Owned active path.
      * @return bool Whether the fixture rename succeeded.
      */
-    function rename(string $source,string $target): bool { $GLOBALS['css_events'][]='rename'; if($GLOBALS['css_failure']==='rename_once') { $GLOBALS['css_failure']=''; return false; } if($GLOBALS['css_failure']==='restore_only' && count(array_filter($GLOBALS['css_events'],/** Count recorded fixture renames. @param string $event Recorded operation. @return bool Whether the operation is a rename. */ fn(string $event): bool=>$event==='rename'))>1) return false; return \rename($source,$target); }
+    function rename(string $source,string $target): bool
+    {
+        $GLOBALS['css_events'][] = 'rename';
+        if ($GLOBALS['css_failure'] === 'rename_once') {
+            $GLOBALS['css_failure'] = '';
+            return false;
+        }
+        if ($GLOBALS['css_failure'] === 'background_activate' && str_contains($target, 'background-original-')) return false;
+        if ($GLOBALS['css_failure'] === 'css_activate' && str_ends_with($target, 'custom-overrides.css')) return false;
+        if ($GLOBALS['css_failure'] === 'atomic_rollback_uncertain_css_restore' && str_ends_with($target, 'custom-overrides.css')) {
+            $GLOBALS['css_restore_target_renames'] = ($GLOBALS['css_restore_target_renames'] ?? 0) + 1;
+            if ($GLOBALS['css_restore_target_renames'] > 1) return false;
+        }
+        if ($GLOBALS['css_failure'] === 'restore_only' && count(array_filter($GLOBALS['css_events'],
+            /** Count recorded fixture renames.
+             * @param string $event Recorded operation.
+             * @return bool Whether the operation is a rename.
+             */
+            static fn (string $event): bool => $event === 'rename')) > 1) return false;
+        return \rename($source, $target);
+    }
     /** Inject failed digest observation without fabricating an apparently verified copy.
      * @param string $algorithm Requested hash algorithm.
      * @param string $filename Owned fixture path.
@@ -88,13 +135,28 @@ namespace Gallery\Services {
      * @param string $path Proposed uploaded path.
      * @return bool Whether the test owns this simulated upload.
      */
-    function is_uploaded_file(string $path): bool { return $path===$GLOBALS['css_upload']; }
+    function is_uploaded_file(string $path): bool { return $path===$GLOBALS['css_upload'] || $path===($GLOBALS['css_background_upload']??''); }
     /** Move a disposable upload or inject its transport failure.
      * @param string $source Owned simulated upload.
      * @param string $target Owned staging path.
      * @return bool Whether the fixture move succeeded.
      */
     function move_uploaded_file(string $source,string $target): bool { $GLOBALS['css_events'][]='upload'; return $GLOBALS['css_failure']==='upload_move' ? false : \rename($source,$target); }
+    /** Match only raster MIME values admitted by the actual Theme upload policy.
+     * @param string $mime Content-derived raster MIME value.
+     * @return string|null Normalized extension or null for unsupported content.
+     */
+    function gallery_branding_mime_extension(string $mime): ?string { return ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'][$mime]??null; }
+}
+namespace Gallery\Models {
+    /** Identify the fixture's unconfirmed settings transaction outcome. */
+    final class AppSettingsRollbackException extends \RuntimeException {}
+
+    /** Return one value from the disposable raw settings snapshot.
+     * @param string $key Requested application setting.
+     * @return string|false Stored fixture string or false when absent.
+     */
+    function app_settings_model_get(string $key): string|false { return array_key_exists($key,$GLOBALS['css_settings']) ? (string)$GLOBALS['css_settings'][$key] : false; }
 }
 namespace {
     /** Require an observable preservation invariant.
@@ -107,7 +169,7 @@ namespace {
      * @return void Initializes only disposable files and in-memory settings.
      */
     function css_preserve_baseline(): void {
-        $GLOBALS['css_settings']=['custom_css_preset'=>'old.css','theme_accent'=>'#123456','theme_page_width'=>'1440'];
+        $GLOBALS['css_settings']=['custom_css_preset'=>'old.css','theme_accent'=>'#123456','theme_page_width'=>'1440','theme_background_path'=>'','theme_background_original_path'=>'','theme_background_optimized_path'=>'','theme_background_source'=>'existing','theme_background_optimized_max_side'=>'1920'];
         $GLOBALS['css_fail_setting']=false; $GLOBALS['css_schema']='available'; $GLOBALS['css_failure']=''; $GLOBALS['css_events']=[]; $GLOBALS['css_modes']=[];
         file_put_contents(\Gallery\Services\custom_css_path(),'/* retained local edits */ .owned{color:#123456}');
         \chmod(\Gallery\Services\custom_css_path(),0640); clearstatcache(true,\Gallery\Services\custom_css_path());
@@ -120,6 +182,17 @@ namespace {
         $paths=[]; $directory=dirname(\Gallery\Services\custom_css_path());
         foreach(new DirectoryIterator($directory) as $entry) if($entry->isFile() && $entry->getFilename()!=='custom.css') $paths[]=$entry->getPathname();
         return $paths;
+    }
+    /** Hash all installed Theme image assets owned by the disposable service fixture.
+     * @return array<string,string> Filename-to-SHA-256 map, excluding the shared writer lock.
+     */
+    function css_preserve_background_hashes(): array {
+        $paths=[]; $directory=$GLOBALS['css_root'].'/cache/theme-background';
+        foreach(new DirectoryIterator($directory) as $entry) if(!$entry->isDot() && $entry->getFilename()!=='.theme-background.lock') {
+            if(!$entry->isFile() || $entry->isLink()) throw new RuntimeException('Unexpected fixture background storage entry.');
+            $paths[$entry->getFilename()]=hash_file('sha256',$entry->getPathname());
+        }
+        ksort($paths,SORT_STRING); return $paths;
     }
     /** Confirm a failed action leaves the old bytes, marker and unrelated preferences intact.
      * @param callable():mixed $action Actual service invocation with a configured failure.
@@ -134,11 +207,15 @@ namespace {
         css_preserve_require((fileperms(\Gallery\Services\custom_css_path()) & 0777)===$mode,$label.' changed installed stylesheet permissions');
         css_preserve_require(css_preserve_staged_paths()===[],$label.' leaked a disposable staging file');
     }
-    $root=sys_get_temp_dir().'/gallery-custom-css-'.bin2hex(random_bytes(10));
-    $directories=['','/app','/app/services','/public','/public/assets','/custom_css'];
+    $root=sys_get_temp_dir().'/gallery-custom-css-'.bin2hex(random_bytes(10)); $GLOBALS['css_root']=$root;
+    $directories=['','/app','/app/services','/app/services/custom_css','/app/services/gallery_backgrounds','/public','/public/assets','/custom_css','/cache'];
     foreach($directories as $directory) mkdir($root.$directory);
     \copy(dirname(__DIR__).'/app/services/custom_css.php',$root.'/app/services/custom_css.php');
+    \copy(dirname(__DIR__).'/app/services/custom_css/visual_background_save.php',$root.'/app/services/custom_css/visual_background_save.php');
+    \copy(dirname(__DIR__).'/app/services/gallery_backgrounds.php',$root.'/app/services/gallery_backgrounds.php');
+    \copy(dirname(__DIR__).'/app/services/gallery_backgrounds/visual_css_save.php',$root.'/app/services/gallery_backgrounds/visual_css_save.php');
     require $root.'/app/services/custom_css.php';
+    require $root.'/app/services/gallery_backgrounds.php';
     require dirname(__DIR__).'/app/services/updates.php';
     require_once dirname(__DIR__).'/app/release_file_policy.php';
     $GLOBALS['css_upload']=$root.'/upload.css';
@@ -174,7 +251,7 @@ namespace {
         clearstatcache(true,\Gallery\Services\custom_css_path()); css_preserve_require(count($GLOBALS['css_modes'])===1 && $GLOBALS['css_modes'][0]['mode']===0644,'first installation did not explicitly request publicly readable permissions');
         if(PHP_OS_FAMILY!=='Windows') css_preserve_require((fileperms(\Gallery\Services\custom_css_path()) & 0777)===0644,'first installation did not retain native POSIX permissions');
         css_preserve_baseline(); css_preserve_require(\Gallery\Services\custom_css_save_selection('new.css',['name'=>'','tmp_name'=>'','error'=>UPLOAD_ERR_NO_FILE]) && str_contains(file_get_contents(\Gallery\Services\custom_css_path()),'preset CSS'),'native empty upload failed to fall back to explicit preset selection');
-        css_preserve_baseline(); \Gallery\Services\custom_css_reset(); css_preserve_require(!is_file(\Gallery\Services\custom_css_path()) && $GLOBALS['css_settings']===['custom_css_preset'=>'','theme_accent'=>'#123456','theme_page_width'=>'1440'],'successful reset changed another owner');
+        css_preserve_baseline(); $resetExpectedSettings=$GLOBALS['css_settings']; \Gallery\Services\custom_css_reset(); $resetExpectedSettings['custom_css_preset']=''; css_preserve_require(!is_file(\Gallery\Services\custom_css_path()) && $GLOBALS['css_settings']===$resetExpectedSettings,'successful reset changed another owner');
         $state=\Gallery\Services\custom_css_state(); css_preserve_require(!$state['active'] && $state['bytes']===0 && $state['modified']===0 && $state['url']==='','absent CSS state advertises an asset');
         foreach(['public/assets/custom.css','custom_css/new.css','custom_css/nested/local.css'] as $path) css_preserve_require(\Gallery\Services\application_update_path_is_protected($path),'updater admits local CSS '.$path);
         $manifest=json_decode(file_get_contents(dirname(__DIR__).'/app/core-manifest.json'),true,512,JSON_THROW_ON_ERROR);
@@ -194,10 +271,200 @@ namespace {
             'PowerShell deployment bypassed the canonical inventory list or staged-tree verifier');
         css_preserve_require(str_contains($shell,'release_files.php" list') && str_contains($shell,'release_files.php" verify'),
             'Shell deployment bypassed the canonical inventory list or staged-tree verifier');
-        echo "PASS Custom CSS preservation\n";
+        // Exercise the independent editor against only the copied service and disposable assets.
+        css_preserve_baseline();
+        $initial = \Gallery\Services\custom_css_overrides_state();
+        css_preserve_require($initial['text'] === '' && $initial['url'] === '' && $initial['revision'] === hash('sha256', ''), 'missing override has a deterministic empty revision');
+        $installed = file_get_contents(\Gallery\Services\custom_css_path());
+        $settingsBefore = $GLOBALS['css_settings'];
+        $css = "/* Žluťoučký </textarea><script> */\n.gallery-card { border-radius: 3px !important; }\n@media (max-width:700px) { :root { --custom: 2px; } }";
+        $saved = \Gallery\Services\custom_css_overrides_save($css, $initial['revision']);
+        css_preserve_require($saved['text'] === $css && \Gallery\Services\custom_css_overrides_state() === $saved && str_ends_with($saved['url'], $saved['revision']), 'CSS, UTF-8, selectors, media queries and HTML-looking strings survive a reload with digest versioning');
+        css_preserve_require(file_get_contents(\Gallery\Services\custom_css_path()) === $installed && $GLOBALS['css_settings'] === $settingsBefore, 'editor save touched installed CSS or Theme settings');
+        $conflict = false;
+        try { \Gallery\Services\custom_css_overrides_save('.stale { color:red; }', $initial['revision']); } catch (\Gallery\Services\CustomCssOverrideConflictException) { $conflict = true; }
+        css_preserve_require($conflict && \Gallery\Services\custom_css_overrides_state() === $saved, 'stale editor overwrote the newer snapshot');
+        foreach ([str_repeat('x', \Gallery\Services\CUSTOM_CSS_OVERRIDE_MAX_BYTES + 1), "\xFF", "a\0b"] as $invalid) {
+            $refused = false;
+            try { \Gallery\Services\custom_css_overrides_save($invalid, $saved['revision']); } catch (InvalidArgumentException) { $refused = true; }
+            css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'invalid transport changed installed overrides');
+        }
+        foreach (['allocate', 'hash_failure', 'chmod_first', 'rename_once'] as $failure) {
+            $GLOBALS['css_failure'] = $failure; $GLOBALS['css_modes'] = [];
+            $refused = false;
+            try { \Gallery\Services\custom_css_overrides_save('.changed { padding:2px; }', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+            $GLOBALS['css_failure'] = '';
+            css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'override ' . $failure . ' failed to preserve the previous file');
+        }
+        $lock = fopen($root . '/public/assets/.custom-overrides.lock', 'c'); flock($lock, LOCK_EX);
+        $refused = false;
+        try { \Gallery\Services\custom_css_overrides_save('.busy{}', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+        flock($lock, LOCK_UN); fclose($lock);
+        css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'parallel writer was not refused without changing saved bytes');
+        \rename($root . '/public/assets', $root . '/public/held-assets');
+        $refused = false;
+        try { \Gallery\Services\custom_css_overrides_save('.missing{}', $saved['revision']); } catch (RuntimeException) { $refused = true; }
+        \rename($root . '/public/held-assets', $root . '/public/assets');
+        css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $saved, 'missing asset directory changed the previous file');
+        \Gallery\Services\custom_css_apply_preset('new.css');
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'preset replacement erased overrides');
+        \Gallery\Services\custom_css_save_selection('', ['name'=>'valid.css','tmp_name'=>$GLOBALS['css_upload'],'error'=>UPLOAD_ERR_OK]);
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'upload replacement erased overrides');
+        \Gallery\Services\custom_css_reset();
+        css_preserve_require(\Gallery\Services\custom_css_overrides_state() === $saved, 'installed stylesheet reset erased overrides');
+        css_preserve_baseline();
+        $beforeComposite = \Gallery\Services\custom_css_overrides_state();
+        $GLOBALS['css_background_upload'] = $root . '/background-first.gif';
+        file_put_contents($GLOBALS['css_background_upload'], base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', true));
+        $firstComposite = \Gallery\Services\custom_css_overrides_save(
+            '.visual { color: #123456; }',
+            $beforeComposite['revision'],
+            ['file'=>['name'=>'background.gif','tmp_name'=>$GLOBALS['css_background_upload'],'error'=>UPLOAD_ERR_OK,'size'=>filesize($GLOBALS['css_background_upload'])],'expected_revision'=>\Gallery\Services\theme_background_revision()]
+        );
+        $installedBackgroundSettings = $GLOBALS['css_settings'];
+        $installedBackgroundPath = $root . '/' . $installedBackgroundSettings['theme_background_original_path'];
+        css_preserve_require($firstComposite['text'] === '.visual { color: #123456; }' && is_file($installedBackgroundPath), 'explicit composite save did not activate its CSS and owned background');
+        $currentBackgroundRevision = \Gallery\Services\theme_background_revision();
+        $GLOBALS['css_settings']['theme_background_opacity'] = '48';
+        $opacityChangedRevision = \Gallery\Services\theme_background_revision();
+        unset($GLOBALS['css_settings']['theme_background_opacity']);
+        css_preserve_require($opacityChangedRevision !== $currentBackgroundRevision, 'background revision did not protect the opacity setting that affects the reviewed result');
+        $priorCompositeCssMode = fileperms(\Gallery\Services\custom_css_overrides_path()) & 0777;
+        $staleBackgroundRefused = false;
+        $GLOBALS['css_background_upload'] = $root . '/background-stale.gif';
+        file_put_contents($GLOBALS['css_background_upload'], base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', true));
+        try {
+            \Gallery\Services\custom_css_overrides_save('.stale { color: red; }', $firstComposite['revision'], ['file'=>['name'=>'background.gif','tmp_name'=>$GLOBALS['css_background_upload'],'error'=>UPLOAD_ERR_OK,'size'=>filesize($GLOBALS['css_background_upload'])],'expected_revision'=>str_repeat('0',64)]);
+        } catch (\Gallery\Services\CustomCssOverrideConflictException) { $staleBackgroundRefused = true; }
+        css_preserve_require($staleBackgroundRefused && \Gallery\Services\custom_css_overrides_state() === $firstComposite && $GLOBALS['css_settings'] === $installedBackgroundSettings && is_file($GLOBALS['css_background_upload']), 'stale background revision changed saved CSS or settings before consuming the pending upload');
+        foreach (['background_activate','css_activate','atomic_commit'] as $failure) {
+            $previousFiles = [];
+            foreach (glob($root . '/cache/theme-background/background*.*') ?: [] as $path) if (is_file($path)) $previousFiles[basename($path)] = hash_file('sha256', $path);
+            $GLOBALS['css_background_upload'] = $root . '/background-' . $failure . '.gif';
+            file_put_contents($GLOBALS['css_background_upload'], base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', true));
+            $GLOBALS['css_failure'] = $failure;
+            $refused = false;
+            try {
+                \Gallery\Services\custom_css_overrides_save('.failed { color: red; }', $firstComposite['revision'], ['file'=>['name'=>'background.gif','tmp_name'=>$GLOBALS['css_background_upload'],'error'=>UPLOAD_ERR_OK,'size'=>filesize($GLOBALS['css_background_upload'])],'expected_revision'=>$currentBackgroundRevision]);
+            } catch (RuntimeException) { $refused = true; }
+            $GLOBALS['css_failure'] = '';
+            $currentFiles = [];
+            foreach (glob($root . '/cache/theme-background/background*.*') ?: [] as $path) if (is_file($path)) $currentFiles[basename($path)] = hash_file('sha256', $path);
+            $stagingFiles = array_merge(glob($root . '/cache/theme-background/.pending-*') ?: [], glob($root . '/public/assets/.custom-css-*') ?: []);
+            css_preserve_require($refused && \Gallery\Services\custom_css_overrides_state() === $firstComposite && (fileperms(\Gallery\Services\custom_css_overrides_path()) & 0777) === $priorCompositeCssMode && $GLOBALS['css_settings'] === $installedBackgroundSettings && $currentFiles === $previousFiles && $stagingFiles === [], $failure . ' failure did not restore prior CSS bytes/mode, Theme settings/assets or remove staging files');
+        }
+        $previousFiles = [];
+        foreach (glob($root . '/cache/theme-background/background*.*') ?: [] as $path) if (is_file($path)) $previousFiles[basename($path)] = hash_file('sha256', $path);
+        $GLOBALS['css_background_upload'] = $root . '/background-rollback-uncertain.gif';
+        file_put_contents($GLOBALS['css_background_upload'], base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', true));
+        $GLOBALS['css_failure'] = 'atomic_rollback_uncertain';
+        $uncertainFailure = false;
+        try {
+            \Gallery\Services\custom_css_overrides_save('.uncertain { color: red; }', $firstComposite['revision'], ['file'=>['name'=>'background.gif','tmp_name'=>$GLOBALS['css_background_upload'],'error'=>UPLOAD_ERR_OK,'size'=>filesize($GLOBALS['css_background_upload'])],'expected_revision'=>$currentBackgroundRevision]);
+        } catch (\Gallery\Services\CustomCssRecoveryException $exception) {
+            $uncertainFailure = $exception->backgroundStateUncertain;
+        }
+        $GLOBALS['css_failure'] = '';
+        $uncertainFiles = [];
+        foreach (glob($root . '/cache/theme-background/background*.*') ?: [] as $path) if (is_file($path)) $uncertainFiles[basename($path)] = hash_file('sha256', $path);
+        $uncertainBackgroundPath = $root . '/' . $GLOBALS['css_settings']['theme_background_original_path'];
+        $stagingFiles = array_merge(glob($root . '/cache/theme-background/.pending-*') ?: [], glob($root . '/public/assets/.custom-css-*') ?: []);
+        css_preserve_require($uncertainFailure && \Gallery\Services\custom_css_overrides_state() === $firstComposite
+            && $GLOBALS['css_settings'] !== $installedBackgroundSettings && is_file($uncertainBackgroundPath)
+            && array_diff_key($previousFiles, $uncertainFiles) === [] && count($uncertainFiles) > count($previousFiles)
+            && $stagingFiles === [], 'unconfirmed database rollback removed a possibly referenced immutable background or changed saved CSS');
+        $previousFiles = $uncertainFiles;
+        $GLOBALS['css_background_upload'] = $root . '/background-double-failure.gif';
+        file_put_contents($GLOBALS['css_background_upload'], base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', true));
+        $GLOBALS['css_failure'] = 'atomic_rollback_uncertain_css_restore';
+        $GLOBALS['css_restore_target_renames'] = 0;
+        $doubleFailure = false;
+        try {
+            \Gallery\Services\custom_css_overrides_save('.double-failure { color: red; }', \Gallery\Services\custom_css_overrides_state()['revision'], ['file'=>['name'=>'background.gif','tmp_name'=>$GLOBALS['css_background_upload'],'error'=>UPLOAD_ERR_OK,'size'=>filesize($GLOBALS['css_background_upload'])],'expected_revision'=>\Gallery\Services\theme_background_revision()]);
+        } catch (\Gallery\Services\CustomCssRecoveryException $exception) {
+            $doubleFailure = $exception->backgroundStateUncertain && $exception->hasRecoveryCopy;
+        }
+        $GLOBALS['css_failure'] = '';
+        $doubleFailureFiles = [];
+        foreach (glob($root . '/cache/theme-background/background*.*') ?: [] as $path) if (is_file($path)) $doubleFailureFiles[basename($path)] = hash_file('sha256', $path);
+        $recoveryCopies = glob($root . '/public/assets/.custom-css-*') ?: [];
+        css_preserve_require($doubleFailure && array_diff_key($previousFiles, $doubleFailureFiles) === []
+            && count($doubleFailureFiles) > count($previousFiles) && count($recoveryCopies) === 1
+            && file_get_contents($recoveryCopies[0]) === $firstComposite['text'],
+            'combined CSS restore and settings rollback failure did not retain both background candidates and the prior CSS recovery copy');
+        if (!\rename($recoveryCopies[0], \Gallery\Services\custom_css_overrides_path())) {
+            throw new RuntimeException('The disposable prior CSS recovery copy could not be restored for fixture cleanup.');
+        }
+        $GLOBALS['css_settings'] = $installedBackgroundSettings;
+        $saved = $firstComposite;
+        $beforeRemoveCss = \Gallery\Services\custom_css_overrides_state();
+        $beforeRemoveSettings = $GLOBALS['css_settings'];
+        $beforeRemoveBackgrounds = css_preserve_background_hashes();
+        $beforeRemovePublicAssets = css_preserve_staged_paths();
+        $beforeRemoveMode = fileperms(\Gallery\Services\custom_css_overrides_path()) & 0777;
+        $removeRevision = \Gallery\Services\theme_background_revision();
+        $GLOBALS['css_failure'] = 'atomic_commit';
+        $removeCommitFailure = false;
+        try {
+            \Gallery\Services\custom_css_overrides_save(
+                '.remove-failure { color: red; }',
+                $beforeRemoveCss['revision'],
+                ['operation'=>'remove','target'=>'theme','expected_revision'=>$removeRevision]
+            );
+        } catch (RuntimeException) { $removeCommitFailure = true; }
+        $GLOBALS['css_failure'] = '';
+        clearstatcache(true, \Gallery\Services\custom_css_overrides_path());
+        css_preserve_require($removeCommitFailure
+            && \Gallery\Services\custom_css_overrides_state() === $beforeRemoveCss
+            && $GLOBALS['css_settings'] === $beforeRemoveSettings
+            && css_preserve_background_hashes() === $beforeRemoveBackgrounds
+            && (fileperms(\Gallery\Services\custom_css_overrides_path()) & 0777) === $beforeRemoveMode
+            && css_preserve_staged_paths() === $beforeRemovePublicAssets,
+            'settings commit failure after staged CSS activation did not restore exact CSS, Theme settings and background assets');
+        $removed = \Gallery\Services\custom_css_overrides_save(
+            '.theme-image-removed { color: #123456; }',
+            $beforeRemoveCss['revision'],
+            ['operation'=>'remove','target'=>'theme','expected_revision'=>$removeRevision]
+        );
+        css_preserve_require($removed['text'] === '.theme-image-removed { color: #123456; }'
+            && \Gallery\Services\custom_css_overrides_state() === $removed
+            && $GLOBALS['css_settings']['theme_background_path'] === ''
+            && $GLOBALS['css_settings']['theme_background_original_path'] === ''
+            && $GLOBALS['css_settings']['theme_background_optimized_path'] === ''
+            && $GLOBALS['css_settings']['theme_background_source'] === 'existing'
+            && $GLOBALS['css_settings']['theme_accent'] === '#123456'
+            && css_preserve_background_hashes() === [],
+            'global Theme image removal did not clear only owned image settings/assets while preserving fallback and unrelated appearance');
+        $removedSettings = $GLOBALS['css_settings'];
+        $removedRevision = \Gallery\Services\theme_background_revision();
+        $idempotentRemove = \Gallery\Services\custom_css_overrides_save(
+            $removed['text'],
+            $removed['revision'],
+            ['operation'=>'remove','target'=>'theme','expected_revision'=>$removedRevision]
+        );
+        css_preserve_require($idempotentRemove === $removed && $GLOBALS['css_settings'] === $removedSettings
+            && css_preserve_background_hashes() === [],
+            'repeating removal with current revisions was not idempotent');
+        $unknownOperationRefused = false;
+        try {
+            \Gallery\Services\custom_css_overrides_save($removed['text'], $removed['revision'], [
+                'operation'=>'remove','target'=>'gallery','expected_revision'=>$removedRevision,
+            ]);
+        } catch (InvalidArgumentException) { $unknownOperationRefused = true; }
+        css_preserve_require($unknownOperationRefused && $GLOBALS['css_settings'] === $removedSettings,
+            'a non-Theme removal target was accepted or changed settings');
+        $saved = $removed;
+        foreach (['public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'] as $owned) {
+            css_preserve_require(\Gallery\Core\release_file_policy_is_protected_path($owned) && !\Gallery\Core\release_file_policy_is_updater_path($owned) && !\Gallery\Core\release_file_policy_is_integrity_path($owned) && !\Gallery\Core\release_file_policy_is_production_path($owned), 'installation-owned override was claimed by release/update policy: ' . $owned);
+        }
+        $cleared = \Gallery\Services\custom_css_overrides_save('', $saved['revision']);
+        css_preserve_require($cleared === $initial && $GLOBALS['css_settings']['theme_accent'] === '#123456', 'explicit clear did not restore only the empty override layer');
+        echo "PASS Custom CSS preservation and independent overrides\n";
     } finally {
-        foreach(['/public/assets','/custom_css','/app/services',''] as $directory) foreach(glob($root.$directory.'/*') ?: [] as $path) if(is_file($path)) unlink($path);
+        foreach(['/public/assets','/custom_css','/app/services/custom_css','/app/services/gallery_backgrounds','/app/services','/cache/theme-background','/cache',''] as $directory) foreach(glob($root.$directory.'/*') ?: [] as $path) if(is_file($path)) unlink($path);
+        if (is_file($root . '/cache/theme-background/.theme-background.lock')) unlink($root . '/cache/theme-background/.theme-background.lock');
         foreach(new DirectoryIterator($root.'/public/assets') as $entry) if($entry->isFile()) unlink($entry->getPathname());
+        if(is_dir($root.'/cache/theme-background')) rmdir($root.'/cache/theme-background');
         foreach(array_reverse($directories) as $directory) rmdir($root.$directory);
     }
 }

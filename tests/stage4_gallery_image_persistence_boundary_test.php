@@ -31,6 +31,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
+require_once __DIR__ . '/support/module_source.php';
 $serviceFiles = [
     'app/services/gallery_mutations.php',
     'app/services/gallery_lookup.php',
@@ -114,9 +115,9 @@ foreach ($serviceFiles as $relativePath) {
         throw new RuntimeException('Stage 4 service is unavailable: ' . $relativePath);
     }
 
-    $source = file_get_contents($path);
-    if ($source === false) {
-        throw new RuntimeException('Unable to read Stage 4 service: ' . $relativePath);
+    $source = module_source($path);
+    if ($source === '') {
+        throw new RuntimeException('Unable to read Stage 4 service module: ' . $relativePath);
     }
 
     $tokens = token_get_all($source);

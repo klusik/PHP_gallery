@@ -91,6 +91,8 @@ return [
         'gallery_image_move_crash_test.php' => 'Kills its own mutation workers and repairs shared disposable database and gallery state.',
         'gallery_workflow_browser_test.php' => 'Browser journeys mutate the externally supplied shared disposable HTTP/database fixture.',
         'gallery_workflow_integration_test.php' => 'Authenticated workflows mutate the externally supplied shared disposable HTTP/database fixture.',
+        'public_visual_preview_workflow_test.php' => 'Preview requests and temporary visibility states use the externally supplied disposable HTTP/database fixture.',
+        'theme_visual_background_workflow_test.php' => 'Composite CSS and Theme background HTTP saves mutate the externally supplied disposable HTTP/database and filesystem fixture.',
         'breadcrumb_workflow_integration_test.php' => 'Breadcrumb Theme/gallery saves and Trash restore mutate the shared disposable HTTP/database fixture.',
         'content_language_workflow_integration_test.php' => 'Language, translation, and favorite-navigation assertions temporarily mutate the shared disposable HTTP/database fixture.',
         'viewer_phase07_mysql_concurrency_test.php' => 'Runs nested writers against the common explicitly supplied MySQL test database.',

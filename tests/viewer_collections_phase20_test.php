@@ -15,14 +15,14 @@
  *   - Verify collection items are canonical image references and never stored authorization grants
  *   - Verify every collection read applies current no-admin-bypass source authorization
  *   - Verify reorder validation is bounded, owner-safe, duplicate-safe, and transactional
- *   - Verify private collection UI stays out of anonymous HTML and Phase 2 ownership logic remains separate from later sharing/public-profile surfaces
+ *   - Verify private collection UI stays out of anonymous and anonymous-preview HTML and Phase 2 ownership logic remains separate from later sharing/public-profile surfaces
  *   - Verify new PHP imports resolve to real symbols so lint-only namespace failures are caught
  *
  * Author:
  *   Rudolf Klusal
  *
  * Last Updated:
- *   2026-08-18
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -206,7 +206,7 @@ viewer_phase20_assert(str_contains($remove, 'viewer_collection_model_item_delete
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($service, 'viewer_collections_storage_available'), 'viewer_accounts_enabled()'), 'Collection storage must respect the existing viewer account feature switch.');
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($controller, 'viewer_collection_require_viewer'), 'viewer_http_auth_available()') && str_contains(viewer_phase20_function_source($controller, 'viewer_collection_require_viewer'), 'viewer_collections_storage_available()'), 'Private collection routes must fail closed on viewer/schema unavailability.');
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($accountsController, 'viewer_http_no_store'), "header('Cache-Control: private, no-store, max-age=0')"), 'Private collection pages must inherit the exact viewer private/no-store cache boundary.');
-viewer_phase20_assert(str_contains($publicGallery, '$viewerPrincipal = current_viewer();') && str_contains($publicGallery, '$viewerCollectionControlsEnabled = $viewerPrincipal !== null'), 'Public gallery collection UI must be viewer-only.');
+viewer_phase20_assert(str_contains($publicGallery, '$viewerPrincipal = $anonymousPreview ? null : current_viewer();') && str_contains($publicGallery, '$viewerCollectionControlsEnabled = $viewerPrincipal !== null'), 'Public gallery collections must stay viewer-only and suppress the Admin viewer during anonymous preview.');
 viewer_phase20_assert(str_contains($publicGallery, '$viewerCollections = $viewerCollectionControlsEnabled') && str_contains($publicGallery, ': [];'), 'Anonymous public gallery HTML must not query/render private collection metadata.');
 viewer_phase20_assert(str_contains($smartGalleries, '$viewerCollectionRequiresSourceRecheck') && str_contains($smartGalleries, 'viewer_source_image_can_reference'), 'Dual Admin+viewer Smart Gallery controls must recheck source access without Admin authority.');
 viewer_phase20_assert(str_contains($favouritesController, 'render_viewer_collection_add_control_html'), 'Favourites page should reuse the same collection-add control.');

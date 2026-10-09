@@ -33,7 +33,7 @@
  */
 
 import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
-import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
+import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261008-issue118-v3';
 
 /**
  * Prepared uploader's existing session retained only for the current document's explicit retries.
@@ -94,7 +94,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
     };
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress);
+    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
     const files = expanded.files;
     if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
     const progressState = operation.prepared ? {...operation.prepared.progressState} : createBrowserProgressState(files);
@@ -423,9 +423,11 @@ function selectedBrowserUploadFiles(form) {
     if (!(input instanceof HTMLInputElement) || !input.files) {
         return [];
     }
-    return Array.from(input.files)
-        .filter((file) => file instanceof File)
-        .sort(compareUploadFilesByDefaultFolderOrder);
+    const files = Array.from(input.files).filter((file) => file instanceof File);
+    // Only the #118 drawer exposes explicit move controls. Honour their native
+    // FileList order without changing the historical folder-order upload pages.
+    return form.querySelector('[data-gallery-upload-preview]')
+        ? files : files.sort(compareUploadFilesByDefaultFolderOrder);
 }
 
 /** Return whether the current selection contains a user ZIP archive. */
@@ -445,9 +447,10 @@ function isBrowserUploadZipFile(file) {
  * @param {File[]} selectedFiles Original browser selection.
  * @param {Record<string, *>} config Browser upload configuration.
  * @param {HTMLElement} progress Progress container.
+ * @param {boolean} preserveOrder Honour explicit drawer order, including ZIP positions.
  * @return {Promise<{files: File[], skipped: number}>} Expanded upload selection.
  */
-async function expandBrowserUploadArchives(selectedFiles, config, progress) {
+async function expandBrowserUploadArchives(selectedFiles, config, progress, preserveOrder = false) {
     const files = [];
     let skipped = 0;
     for (const selectedFile of selectedFiles) {
@@ -465,7 +468,7 @@ async function expandBrowserUploadArchives(selectedFiles, config, progress) {
         files.push(...archiveFiles);
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracted_zip', 'ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.', {name: selectedFile.name, added: archiveFiles.length, skipped: Number(result.skipped || 0)}));
     }
-    return {files: files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
+    return {files: preserveOrder ? files : files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
 }
 
 /** Ask a short-lived worker to safely extract one selected user ZIP. */

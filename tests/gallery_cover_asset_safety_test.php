@@ -45,18 +45,19 @@ namespace {
         }
     }
 
-    $fixtureRoot = sys_get_temp_dir() . '/php-gallery-cover-' . bin2hex(random_bytes(8));
-    $galleryRoot = $fixtureRoot . '/album';
-    $nestedRoot = $galleryRoot . '/nested';
+    // Expected physical paths use native separators; persisted relative paths below remain portable inputs.
+    $fixtureRoot = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-cover-' . bin2hex(random_bytes(8));
+    $galleryRoot = $fixtureRoot . DIRECTORY_SEPARATOR . 'album';
+    $nestedRoot = $galleryRoot . DIRECTORY_SEPARATOR . 'nested';
     if (!mkdir($nestedRoot, 0700, true) && !is_dir($nestedRoot)) {
         throw new RuntimeException('Unable to create disposable cover fixture.');
     }
     $GLOBALS['gallery_cover_fixture_root'] = $fixtureRoot;
 
-    $validFile = $nestedRoot . '/cover.png';
-    $outsideFile = $fixtureRoot . '/outside.png';
-    $linkedFile = $galleryRoot . '/linked.png';
-    $linkedDirectory = $galleryRoot . '/escape';
+    $validFile = $nestedRoot . DIRECTORY_SEPARATOR . 'cover.png';
+    $outsideFile = $fixtureRoot . DIRECTORY_SEPARATOR . 'outside.png';
+    $linkedFile = $galleryRoot . DIRECTORY_SEPARATOR . 'linked.png';
+    $linkedDirectory = $galleryRoot . DIRECTORY_SEPARATOR . 'escape';
     try {
         file_put_contents($validFile, 'fixture cover');
         file_put_contents($outsideFile, 'outside fixture image');

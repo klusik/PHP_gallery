@@ -586,6 +586,59 @@ function thumbnail_response_file_geometry_status(array $image, array $gallery, i
 }
 
 /**
+ * Resolve an already-existing valid thumbnail without generating, repairing, or recording a derivative.
+ * @param array<string,mixed> $image Persisted source row whose derivative may be displayed.
+ * @param array<string,mixed> $gallery Owning gallery used to constrain the thumbnail path.
+ * @param int $size Requested supported derivative maximum side in pixels.
+ * @param string $format Requested supported image format.
+ * @return array{path:string,geometry_status:array<string,mixed>}|null Existing valid derivative response, or null when no safe derivative is available.
+ */
+function thumbnail_readonly_existing_response_file(array $image, array $gallery, int $size, string $format): ?array
+{
+    if (!thumbnail_legacy_identity_owned($image)) {
+        return null;
+    }
+
+    $sizes = thumbnail_sizes();
+    usort($sizes, static fn (int $left, int $right): int => abs($left - $size) <=> abs($right - $size));
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats')
+        ? thumbnail_policy_requested_formats()
+        : ['jpg', 'webp'];
+    $formats = array_values(array_unique(array_merge([$format], $formats)));
+    $candidates = [['size' => $size, 'format' => $format]];
+    foreach ($sizes as $candidateSize) {
+        foreach ($formats as $candidateFormat) {
+            if (in_array($candidateFormat, ['jpg', 'webp'], true)) {
+                $candidates[] = ['size' => (int) $candidateSize, 'format' => $candidateFormat];
+            }
+        }
+    }
+    $seen = [];
+
+    foreach ($candidates as $candidate) {
+        $candidateKey = (int) $candidate['size'] . ':' . (string) $candidate['format'];
+        if (isset($seen[$candidateKey])) {
+            continue;
+        }
+        $seen[$candidateKey] = true;
+        try {
+            $path = thumbnail_abs_path($image, $gallery, (int) $candidate['size'], (string) $candidate['format']);
+        } catch (RuntimeException) {
+            continue;
+        }
+        if (!is_file($path)) {
+            continue;
+        }
+        $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, (int) $candidate['size'], $path);
+        if (empty($geometryStatus['valid'])) {
+            continue;
+        }
+        return ['path' => $path, 'geometry_status' => $geometryStatus];
+    }
+    return null;
+}
+
+/**
  * Return true when a generated thumbnail file has valid geometry.
  *
  * @param array $image Image row or image data.

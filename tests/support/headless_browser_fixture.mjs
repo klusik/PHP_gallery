@@ -16,13 +16,24 @@ import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const startupTimeoutMs = 15000;
 const fixtureTimeoutMs = 30000;
+// Type: number.
+// Units: UTF-16 code units of one source expression.
+// Scope: error context for an expired DevTools command in the owned fixture.
+// Consumers: the bounded protocol-timeout message, never the evaluated page result.
+// Rationale: identify which evaluation stalled without copying an entire fixture expression into logs.
+const protocolFailureContextLength = 120;
+
+/**
+ * A JSON-compatible value returned by a DevTools expression serialized by value.
+ * @typedef {null|boolean|number|string|Array<BrowserJsonValue>|Record<string,BrowserJsonValue>} BrowserJsonValue
+ */
 
 /**
  * Navigate one fresh owned tab to its loopback fixture and return the result marker.
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
- * @param {{readResult?:function():Promise<string>,timeoutMs?:number}} options Optional owned result-file reader and bounded workflow deadline.
+ * @param {{readResult?:function():Promise<string>,timeoutMs?:number,interact?:function({evaluate:function(string):Promise<BrowserJsonValue|undefined>,mouse:function('mouseMoved'|'mousePressed'|'mouseReleased',number,number,number):Promise<void>,key:function('keyDown'|'keyUp',string):Promise<void>}):Promise<void>}} options Optional owned result reader, workflow deadline, and native input interaction. The evaluator returns a JSON-compatible protocol value or undefined when DevTools omits one.
  * @return {Promise<{result:string, exitCode:number|null}>} Fixture marker and owned process exit code.
  */
 export async function runHeadlessBrowserFixture(executable, url, profilePrefix, options = {}) {
@@ -86,7 +97,15 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
             return new Promise((resolve, reject) => {
                 const timer = setTimeout(() => {
                     requests.delete(id);
-                    reject(new Error('Owned Chromium protocol timeout'));
+                    const expression = typeof params.expression === 'string'
+                        ? params.expression.replace(/\s+/g, ' ').slice(0, protocolFailureContextLength)
+                        : '';
+                    const context = method === 'Runtime.evaluate'
+                        ? 'page evaluation ' + (expression ? '`' + expression + '`' : '')
+                        : method === 'Input.dispatchMouseEvent' || method === 'Input.dispatchKeyEvent'
+                            ? 'native ' + String(params.type || 'input') + ' input'
+                            : 'browser command';
+                    reject(new Error('Owned Chromium protocol timeout during ' + context + ' (' + method + ')'));
                 }, 5000);
                 requests.set(id, {resolve, reject, timer});
                 debuggingSocket.send(JSON.stringify({id, method, params, sessionId}));
@@ -104,6 +123,53 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         // reloads an already-running authenticated workflow.
         const navigation = await command('Page.navigate', {url}, sessionId);
         if (navigation.errorText) throw new Error('Owned fixture navigation failed');
+        if (options.interact) {
+            /**
+             * Evaluate a page expression and return its structured by-value result.
+             * @param {string} expression Expression evaluated in the owned fixture page.
+             * @returns {Promise<BrowserJsonValue|undefined>} JSON-compatible result value, or undefined when DevTools omits the value.
+             */
+            function evaluate(expression) {
+                return command('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}, sessionId)
+                    .then(response => response.result?.value);
+            }
+
+            /**
+             * Dispatch one native mouse input event in viewport CSS pixels.
+             * @param {'mouseMoved'|'mousePressed'|'mouseReleased'} type DevTools mouse event phase.
+             * @param {number} x Horizontal viewport coordinate in CSS pixels.
+             * @param {number} y Vertical viewport coordinate in CSS pixels.
+             * @param {number} buttons Active mouse-button bit mask after this event.
+             * @returns {Promise<void>} Resolves after Chromium accepts the input event.
+             */
+            function mouse(type, x, y, buttons) {
+                const params = {type, x, y, buttons};
+                if (type === 'mousePressed' || type === 'mouseReleased') params.button = 'left';
+                return command('Input.dispatchMouseEvent', params, sessionId).then(() => {});
+            }
+
+            /**
+             * Dispatch one native keyboard phase to the owned page with DOM identity and Windows virtual-key metadata.
+             * @param {'keyDown'|'keyUp'} type DevTools keyboard event phase used for both halves of activation.
+             * @param {string} key Fixture key token; Space maps to DOM key ' ' and code 'Space', Enter/Space/Escape map to virtual-key codes 13/32/27, and keyDown sends text for Enter/Space.
+             * @returns {Promise<void>} Resolves after Chromium accepts the key event.
+             */
+            function key(type, key) {
+                const params = {
+                    type,
+                    key: key === 'Space' ? ' ' : key,
+                    code: key === 'Space' ? 'Space' : key,
+                    windowsVirtualKeyCode: key === 'Enter' ? 13 : key === 'Space' ? 32 : key === 'Escape' ? 27 : 0,
+                };
+                if (type === 'keyDown' && (key === 'Enter' || key === 'Space')) {
+                    params.text = key === 'Enter' ? '\r' : ' ';
+                    params.unmodifiedText = params.text;
+                }
+                return command('Input.dispatchKeyEvent', params, sessionId).then(() => {});
+            }
+
+            await options.interact({evaluate, mouse, key});
+        }
         // Bound fixture completion independently from browser startup and protocol request deadlines.
         const deadline = Date.now() + Math.max(1000, Math.min(145000, options.timeoutMs ?? fixtureTimeoutMs));
         let result = '';

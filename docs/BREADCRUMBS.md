@@ -37,6 +37,11 @@ The style registry's labels use the translation keys
 `breadcrumbs.style.<style-id>`. Persisted IDs and CSS modifier classes are machine
 contracts; translated labels are presentation only.
 
+The Theme enum and physical-gallery values in `ADMIN_SETTINGS_INVENTORY.md`
+must stay aligned with `breadcrumb_style_registry()`. The registered
+`breadcrumb_theme_settings_test.php` compares those documented lists with the
+real registry and checks the `chevron` fallback and gallery-only `inherit` value.
+
 ## Admin visual selection
 
 Theme, physical-gallery, and Smart Gallery breadcrumb selectors present the

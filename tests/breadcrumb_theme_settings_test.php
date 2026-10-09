@@ -14,6 +14,7 @@
  *   - Check the stable public style IDs and invalid-value normalization
  *   - Verify Theme saves and public-content revision behavior
  *   - Protect omitted-field compatibility in the Theme POST handler
+ *   - Keep the settings inventory's Theme and gallery style lists aligned with the registry
  *
  * Author:
  *   Rudolf Klusal
@@ -295,6 +296,32 @@ namespace Gallery\Tests\BreadcrumbThemeSettings {
         assert_true(breadcrumb_style_normalize($styleId) === $styleId, 'A registered style ID did not normalize to itself.');
         assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', $styleId) === $styleId, 'A registered Theme style was rejected.');
     }
+
+    // Compare the documented accepted values with the real registry, not a second fixture list.
+    $settingsInventory = file_get_contents(__DIR__ . '/../docs/ADMIN_SETTINGS_INVENTORY.md');
+    assert_true(is_string($settingsInventory), 'Could not read the Admin settings inventory.');
+    assert_true(preg_match('/^\| `theme_breadcrumb_style` \|[^\r\n]+/m', $settingsInventory, $themeInventoryMatch) === 1,
+        'The inventory must contain the Theme breadcrumb setting row.');
+    $themeInventoryColumns = array_map('trim', explode('|', trim($themeInventoryMatch[0], "| \t\r\n")));
+    preg_match_all('/`([^`]+)`/', $themeInventoryColumns[2], $documentedThemeStyles);
+    assert_true($documentedThemeStyles[1] === array_keys($registry),
+        'The inventory Theme enum must list every registered visual style exactly once, without inherit.');
+    preg_match_all('/`([^`]+)`/', $themeInventoryColumns[3], $documentedThemeFallbacks);
+    assert_true(array_values(array_unique($documentedThemeFallbacks[1])) === [\Gallery\Services\BREADCRUMB_STYLE_DEFAULT],
+        'The inventory Theme fallback must match the shared breadcrumb default.');
+
+    assert_true(preg_match('/^\d+\. `gallery_breadcrumb_style\.<gallery-id>` accepts ([^.]+)\.([^\r\n]+)/m',
+        $settingsInventory, $galleryInventoryMatch) === 1,
+        'The inventory must document the physical-gallery breadcrumb override.');
+    preg_match_all('/`([^`]+)`/', $galleryInventoryMatch[1], $documentedGalleryStyles);
+    assert_true($documentedGalleryStyles[1] === [...array_keys($registry), \Gallery\Services\BREADCRUMB_STYLE_INHERIT],
+        'The inventory gallery values must list every registered style and the gallery-only inherit sentinel.');
+    assert_true(preg_match('/Missing or invalid gallery values inherit `([^`]+)`; missing or invalid Theme values fall back to `([^`]+)`/',
+        $galleryInventoryMatch[2], $documentedGalleryFallbacks) === 1,
+        'The inventory must document the gallery-to-Theme fallback order.');
+    assert_true($documentedGalleryFallbacks[1] === 'theme_breadcrumb_style'
+        && $documentedGalleryFallbacks[2] === \Gallery\Services\BREADCRUMB_STYLE_DEFAULT,
+        'The inventory gallery fallback must inherit Theme before using the shared default.');
 
     assert_true(breadcrumb_style_normalize('invalid') === 'chevron', 'Invalid global breadcrumb styles must fall back to chevron.');
     assert_true(theme_breadcrumb_style() === 'chevron', 'Theme getter did not normalize an invalid saved style.');
