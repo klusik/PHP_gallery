@@ -182,7 +182,19 @@ function patch_notes_ai_build_prompt(string $version, string $baseTag, string $r
         throw new RuntimeException('Patch-note template exceeds the configured AI context bound.');
     }
 
-    $baseCommit = trim(patch_notes_ai_git(['git', 'rev-parse', $baseTag . '^{commit}'], 256));
+    // Hosted preparation supplies the verified release-side predecessor, which may not contain main.
+    $explicitBase = getenv('PHP_GALLERY_RELEASE_BASE');
+    if ($explicitBase !== false && preg_match('/^[a-f0-9]{40}$/D', $explicitBase) !== 1) {
+        throw new RuntimeException('Invalid explicit release-side comparison SHA.');
+    }
+    $baseCommit = trim(patch_notes_ai_git(['git', 'rev-parse', ($explicitBase ?: $baseTag) . '^{commit}'], 256));
+    if ($explicitBase !== false) {
+        $publishedTree = trim(patch_notes_ai_git(['git', 'rev-parse', $baseTag . '^{tree}'], 256));
+        $candidateTree = trim(patch_notes_ai_git(['git', 'rev-parse', $baseCommit . '^{tree}'], 256));
+        if ($publishedTree !== $candidateTree) {
+            throw new RuntimeException('Explicit release-side predecessor differs from the published tag tree.');
+        }
+    }
     $headCommit = trim(patch_notes_ai_git(['git', 'rev-parse', 'HEAD^{commit}'], 256));
     if (preg_match('/^[0-9a-f]{40}$/D', $baseCommit) !== 1 || preg_match('/^[0-9a-f]{40}$/D', $headCommit) !== 1) {
         throw new RuntimeException('Unable to resolve immutable release comparison commits.');

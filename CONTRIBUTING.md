@@ -97,9 +97,11 @@ precede Copilot/TeX, and the exact prepared candidate is qualified through the
 full CI matrix. Existing protected promotion tooling owns the `release -> main`
 PR and publication; feature agents never push to `develop` or `main`.
 
-A published tag is not fully reconciled until a separate independently reviewed
-two-parent `main -> develop` PR preserves original development history, the
-published release metadata/notes and the exact merged-SHA hosted CI result.
+A published tag remains pending until the owner performs a genuine FF to exact Q
+or an exact-qualified single-parent equivalent L over parallel develop work.
+Require full three-way tree/patch evidence and preserved development history;
+matching version metadata/notes alone is insufficient. New develop merge commits
+and mandatory develop PRs are incompatible with this model.
 Cleanup uses a separately approved exact-ref lease, not routine branch pruning.
 If `main` advanced, retain the bounded `release-main-recovery` artifact and
 qualify a new reviewed candidate. Missing server-side protections remain

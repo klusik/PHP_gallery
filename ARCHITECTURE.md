@@ -2197,19 +2197,41 @@ Detailed behavior is documented in `docs/SMART_GALLERIES.md`.
 The guarded release architecture is in [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
 `.github/scripts/release-origin.mjs` binds each release to a human-selected
 immutable develop commit, original published main tag and unchanged origin
-record. Release Stage A/B runs centrally before generated assets, while
+record. Tag object, peeled published commit, previous release-side commit and
+tree are separate; schema v1 stays immutable and v_0.125 uses explicit
+UNKNOWN_LEGACY evidence. Release Stage A/B runs centrally before generated assets, while
 `.github/scripts/release-promotion.mjs` remains the sole protected publisher.
 An advanced main returns a bounded fail-closed decision with current main
 SHA/tree, previous qualification and a separately reviewed new-candidate path.
 Publication is not equivalent to lifecycle completion.
 
-`.github/scripts/release-reconciliation.mjs` requires an independently approved
-two-parent merge retaining both develop/main ancestries, unchanged historical
-release notes/metadata and mandatory direct develop hosted CI for the merged SHA.
-`.github/scripts/release-retirement.mjs` checks publication, merged CI evidence,
+`.github/scripts/release-reconciliation.mjs` verifies an owner-performed true FF
+to release-side Q or a single-parent L over parallel develop. It recomputes the
+complete D0/D/Q tree, verifies retained history, explicit conflict decisions and
+binary/full-index patch digests, and binds exact CI/owner acceptance to immutable
+release evidence. No tagged-main ancestry or develop merge is required.
+The unchanged-develop FF verifier independently checks retained selected ancestry
+and rejects any merge commit in the new develop range.
+`.github/scripts/start-new-release.mjs` atomically creates future immutable origins
+and predecessor pins and hands off to existing qualification. The first v_0.126
+uses a qualified release-ref PR-only bootstrap before the new main publisher.
+The create-only ref operation cannot lease several refs at once; fresh checks
+before creation and handoff reject tag/source races and retain any created origin
+unchanged for explicit owner recovery.
+`.github/scripts/release-retirement.mjs` checks publication, linear CI evidence,
 dependent PRs/workflows and an expected-SHA remote deletion lease. These are
 hosted-maintainer tools rather than shipped application modules. Checked-in
 example GitHub rulesets and tests do not activate effective server protections.
+
+Qualification can prepare by dispatch, but promotion requires a completed normal
+push-triggered qualification because GitHub excludes dispatch job checks from PR
+requirements. Exact custom checks and complete central matrix evidence are still
+required. Unknown check eligibility or app binding remains fail-closed; a future
+event/App bridge needs separate live acceptance rather than a token fallback.
+SHA-bound checks carry explicit kind/run/attempt/SHA `external_id` evidence;
+GitHub Actions rewrites `details_url`, so release verifiers never infer the run
+identity from that navigation URL. Actual run metadata and central jobs remain
+independent mandatory server evidence.
 
 `RELEASE.md` is the authoritative release lifecycle contract. `scripts/prepare_release.php` applies only registered mechanical current-version markers and delegates reusable operations to `scripts/release_lib.php`; it deliberately leaves editorial release notes, behavior-sensitive documentation, manual compilation, manifest generation, Git history, and publication explicit. `scripts/check_release.php` is read-only and validates runtime/document/manual/metadata/patch-note/manifest version consistency plus manual-PDF freshness. The central `release` audit profile registers that checker as `release-consistency`, so maintainers and agents do not need to run a second consistency pass immediately before release qualification. Audit profiles are alternatives rather than cumulative steps: release work finishes with one `--profile=release` run, not quick then full then release.
 

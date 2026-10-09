@@ -17,7 +17,8 @@ import {readFileSync, writeFileSync, appendFileSync, readdirSync} from 'node:fs'
 import {resolve, basename} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview} from './release-owner-authorization.mjs';
+import {verifyPredecessor,verifyReleaseOrigin,originPath} from './release-origin.mjs';
+import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive JSON transport values; domain validators narrow the fields they consume.
  * @typedef {null|boolean|number|string|JsonValue[]|{[key: string]: JsonValue}} JsonValue
@@ -29,21 +30,22 @@ import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,require
  * @typedef {{name:string,status:string,conclusion:string|null,html_url:string}} ReleaseJob
  */
 /** Qualification record produced by the aggregate release gate.
- * @typedef {{repository:string,branch:string,candidate_sha:string,source_base:string,version:string,run_id:string,run_attempt:string,ready:boolean,origin_commit_sha:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string}} ReleaseRecord
+ * @typedef {{repository:string,branch:string,candidate_sha:string,source_base:string,version:string,run_id:string,run_attempt:string,ready:boolean,origin_commit_sha:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string,origin_blob_sha:string,previous_tag_object_sha:string,
+ * previous_tag_object_type:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string}} ReleaseRecord
  */
 
 /** Execute bounded tooling without a shell or inherited input stream.
  * @param {string} executable Installed command to execute.
  * @param {string[]} args Literal command arguments.
  * @param {string|null} input Optional UTF-8 standard input.
- * @returns {string} Complete stdout; throws on timeout, failure or overflow.
+ * @returns {string} Complete Git diff/NUL-delimited bytes as UTF-8, otherwise trimmed stdout; throws on timeout, failure or overflow.
  */
 export function command(executable, args, input = null) {
     const result = spawnSync(executable, args, {encoding:'utf8', input, timeout:60000, maxBuffer:16 * 1024 * 1024});
     if (result.error || result.status !== 0) {
         throw new Error(`BLOCKED ${executable} command failed (${result.status ?? 'unavailable'}).`);
     }
-    return result.stdout.trim();
+    return executable==='git' && (args.includes('-z') || args[0]==='diff') ? result.stdout : result.stdout.trim();
 }
 
 /** Call the repository API with literal paths and JSON request bodies.
@@ -67,7 +69,7 @@ export function validateRequest(request) {
     if (!match || !/^[a-f0-9]{40}$/.test(request.candidate) || !/^[1-9]\d*$/.test(request.runId)) {
         throw new Error('BLOCKED invalid release branch, exact SHA or qualification run.');
     }
-    if (!['plan','promote','publish'].includes(request.mode)) throw new Error('BLOCKED unknown release action.');
+    if (!['plan','promote','publish','bootstrap'].includes(request.mode)) throw new Error('BLOCKED unknown release action.');
     if (request.mode !== 'plan' && !request.manualReview.trim()) throw new Error('BLOCKED human acceptance evidence is required.');
     if (request.override && (!request.reason.trim() || request.acceptedFailures.length === 0)) {
         throw new Error('BLOCKED override requires a reason and exact failed job names.');
@@ -88,6 +90,44 @@ export function validateRequest(request) {
 export function verifyFinalContent(mainSha, mergeSha, mainTree, candidateTree) {
     if (mainSha !== mergeSha || mainTree !== candidateTree) {
         throw new Error('BLOCKED final main tree differs or main advanced after promotion.');
+    }
+}
+
+/** Require current GitHub Actions checks bound to the exact SHA, requested run and attempt.
+ * @param {function(string):JsonValue} call Read-only server API.
+ * @param {string} repository Exact owner/repository.
+ * @param {ReleaseRequest} request Exact qualification identity.
+ * @param {string} runAttempt Exact server-validated qualification attempt from the retained record.
+ * @returns {void} Throws for unavailable, foreign, stale, pending or red status checks.
+ */
+export function requireQualificationChecks(call,repository,request,runAttempt) {
+    const checks=call('repos/'+repository+'/commits/'+request.candidate+'/check-runs?per_page=100');
+    if (!Array.isArray(checks?.check_runs) || !Number.isInteger(checks.total_count) || checks.total_count>=100) {
+        throw new Error('BLOCKED exact qualification check inventory unavailable or incomplete.');
+    }
+    for (const name of ['Release qualification','Complete required CI matrix']) {
+        const matches=checks.check_runs.filter(check=>check.name===name && check.app?.id===15368);
+        const binding=qualificationCheckBinding(matches[0]?.external_id);
+        if (matches.length!==1 || matches[0].head_sha!==request.candidate
+            || matches[0].status!=='completed' || matches[0].conclusion!=='success'
+            || binding?.kind!=='release' || binding.runId!==request.runId || binding.sha!==request.candidate
+            || String(binding.attempt)!==runAttempt) {
+            throw new Error('BLOCKED missing, stale or red exact qualification check: '+name);
+        }
+    }
+}
+
+/** Refuse promotion from a dispatch-only qualification with unproven PR check eligibility.
+ * GitHub excludes workflow-dispatch job checks from required PR checks. This owner
+ * must publish a reviewed finalization commit normally and obtain fresh push CI;
+ * an external App bridge would require separate live acceptance and authorization.
+ * @param {{event:string}} run Server-reported qualification trigger.
+ * @returns {void} Throws unless the exact qualification was triggered by a normal push.
+ */
+export function requireEligibleQualificationEvent(run) {
+    if (run.event!=='push') {
+        throw new Error('BLOCKED_PR_CHECK_ELIGIBILITY: dispatch-only qualification cannot authorize promotion; '
+            +'owner must push a reviewed finalization commit and qualify its new exact SHA through the push event.');
     }
 }
 
@@ -115,7 +155,9 @@ export function verifyQualification(request, run, jobs, record, repository, curr
     }
     if (![record.origin_commit_sha,record.selected_develop_sha,record.initial_main_sha,
         record.previous_stable_sha].every(value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value))
-        || record.source_base !== record.previous_stable_sha
+        || record.source_base !== record.previous_release_candidate_sha
+        || record.previous_stable_sha !== record.initial_main_sha
+        || ![record.previous_tag_object_sha,record.previous_tree_sha,record.previous_release_candidate_sha,record.origin_blob_sha].every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))
         || typeof record.previous_stable_tag !== 'string'
         || !/^v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(record.previous_stable_tag)) {
         throw new Error('BLOCKED qualification lacks immutable selected-develop and prior-main provenance.');
@@ -224,16 +266,20 @@ export function refuseAdvancedMain(request,repository,mainSha,reason,call=api) {
 /** Inspect main lineage before claiming a qualified candidate can still be promoted.
  * @param {ReleaseRequest} request Explicit qualified candidate.
  * @param {string} repository Owner/repository.
- * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue}|null} adapters Inert test server adapter when supplied.
- * @returns {string} Exact main SHA observed together with positive branch ancestry.
+ * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,record?:ReleaseRecord,evidence?:Record<string,unknown>}|null} adapters Inert test server adapter when supplied.
+ * @returns {string} Exact selected predecessor main SHA; candidate ancestry is independent.
  */
 export function requireCurrentMainBase(request, repository, adapters = null) {
     const call = adapters?.api ?? api;
     const sha = call(`repos/${repository}/git/ref/heads/main`).object?.sha;
     if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('BLOCKED_MAIN_ADVANCED: current main SHA is unavailable.');
-    const comparison = call(`repos/${repository}/compare/main...${request.candidate}`);
-    if (!Number.isInteger(comparison.behind_by) || comparison.behind_by !== 0) {
-        refuseAdvancedMain(request,repository,sha,'main is no longer an ancestor of the exact qualified candidate',call);
+    const record = adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
+    if (sha !== record.initial_main_sha || record.previous_stable_sha !== sha) {
+        refuseAdvancedMain(request,repository,sha,'current main differs from the exact selected published predecessor',call);
+    }
+    const predecessor = verifyPredecessor(call,repository,record.previous_stable_tag,adapters ?? {});
+    for (const [key,value] of Object.entries(predecessor)) {
+        if (record[key] !== value) throw new Error('BLOCKED qualification predecessor evidence differs: '+key);
     }
     if (call(`repos/${repository}/git/ref/heads/main`).object?.sha !== sha) {
         refuseAdvancedMain(request,repository,sha,'main changed during promotion lineage inspection',call);
@@ -241,18 +287,20 @@ export function requireCurrentMainBase(request, repository, adapters = null) {
     return sha;
 }
 
-/** Create/reuse the release PR and request protected SHA-bound promotion.
+/** Create/reuse the bot PR for separately performed owner review and manual merge.
  * @param {ReleaseRequest} request Checked maintainer request.
  * @param {string} repository Owner/repository identity.
  * @param {ReleaseJob[]} failures Original accepted red evidence.
  * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,command:function(string,string[],(string|null)=):string}|null} adapters Optional inert API/command adapters for hosted regression tests; API method defaults to GET and command input defaults to null.
- * @returns {Promise<void>} Completes PR/auto-merge setup or the explicit override merge.
+ * @returns {Promise<void>} Reports the exact bot PR requiring manual owner approval and merge.
  */
 export async function promote(request, repository, failures, adapters = null) {
     if (request.override || failures.length) {
         throw new Error('BLOCKED owner-only promotion cannot bypass any required red or skipped CI job.');
     }
     const call = adapters?.api ?? api;
+    const record=adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
+    requireQualificationChecks(call,repository,request,record.run_attempt);
     const owner = repository.split('/')[0];
     const observedMainSha = requireCurrentMainBase(request,repository,adapters);
     const pulls = call('repos/' + repository + '/pulls?state=all&base=main&head='
@@ -277,6 +325,7 @@ export async function promote(request, repository, failures, adapters = null) {
     }
     requireBotPullRequest(pr,repository,request.candidate,'main');
     if (pr.merged_at) return;
+    if (pr.base?.sha !== observedMainSha) throw new Error('BLOCKED PR base changed before owner review.');
     if (call('repos/' + repository + '/git/ref/heads/' + request.branch).object?.sha !== request.candidate) {
         throw new Error('BLOCKED stale release candidate after PR creation.');
     }
@@ -307,11 +356,23 @@ export function inspectMergedPromotion(request,repository,adapters=null) {
     const pr=pulls.find(item=>item.merged_at);
     if (!pr) throw new Error('BLOCKED exact release candidate has not been promoted through a PR.');
     requireBotPullRequest(pr,repository,request.candidate,'main');
+    if (pr.merged_by?.login?.toLowerCase()!==owner.toLowerCase()) {
+        throw new Error('BLOCKED release PR must be manually merged by the human owner.');
+    }
     const reviews=call('repos/'+repository+'/pulls/'+pr.number+'/reviews?per_page=100');
     const ownerReview=effectiveOwnerReview(reviews,pr,owner,request.candidate);
     if (!ownerReview) throw new Error('BLOCKED no effective owner PR approval for the exact qualified candidate.');
     const main=call('repos/'+repository+'/commits/main');
     const candidate=call('repos/'+repository+'/commits/'+request.candidate);
+    const record = adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
+    if (main.parents?.length !== 2 || main.parents[0]?.sha !== record.initial_main_sha
+        || main.parents[1]?.sha !== request.candidate) {
+        throw new Error('BLOCKED final release merge parents or reviewed PR base differ.');
+    }
+    const predecessor = verifyPredecessor(call,repository,record.previous_stable_tag,adapters ?? {});
+    for (const [key,value] of Object.entries(predecessor)) {
+        if (record[key] !== value) throw new Error('BLOCKED published predecessor changed after qualification.');
+    }
     verifyFinalContent(main.sha,pr.merge_commit_sha,main.commit.tree.sha,candidate.commit.tree.sha);
     return {pr,ownerReview,main,candidate};
 }
@@ -329,6 +390,7 @@ export async function publish(request, repository, record, failures, adapters = 
         throw new Error('BLOCKED owner-only publication cannot bypass a failed mandatory qualification.');
     }
     const call = adapters?.api ?? api;
+    requireQualificationChecks(call,repository,request,record.run_attempt);
     const execute = adapters?.command ?? command;
     const {pr,ownerReview,main}=inspectMergedPromotion(request,repository,adapters);
     const directory = resolve(process.env.RELEASE_ASSETS ?? 'release-assets');
@@ -341,9 +403,10 @@ export async function publish(request, repository, record, failures, adapters = 
     for (const [name, expected] of Object.entries(integrity.hashes)) {
         if (basename(name) !== name || createHash('sha256').update(readFileSync(resolve(directory,name))).digest('hex') !== expected) throw new Error('BLOCKED publication asset bytes changed.');
     }
-    const changed = call(`repos/${repository}/compare/${record.source_base}...${request.candidate}`);
-    if (changed.total_commits > 250 || !Array.isArray(changed.files) || changed.files.length >= 300) throw new Error('BLOCKED truncated WinApp scope comparison.');
-    if (changed.files.some(file => /^winapp\/(?!tests\/|README\.md$)/.test(file.filename)) && !files.some(name => name.endsWith('.exe'))) {
+    // Endpoint tree comparison is required; GitHub compare files describe a merge-base diff.
+    const changed = execute('git',['diff','--name-only','--no-renames',record.source_base,request.candidate,
+        '--','winapp',':!winapp/tests',':!winapp/README.md']);
+    if (changed.trim() && !files.some(name => name.endsWith('.exe'))) {
         throw new Error('BLOCKED changed WinApp requires its hosted installer asset.');
     }
     const installers = files.filter(name => name.endsWith('.exe'));
@@ -418,6 +481,17 @@ export async function main() {
     const record = JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
     const current = api(`repos/${repository}/git/ref/heads/${request.branch}`).object.sha;
     const failures = verifyQualification(request,run,jobs,record,repository,current);
+    if (request.mode!=='plan' || ['promote','publish'].includes(process.env.RELEASE_INSPECTION_TARGET)) {
+        requireEligibleQualificationEvent(run);
+    }
+    if (!request.override) requireQualificationChecks(api,repository,request,record.run_attempt);
+    const origin = JSON.parse(command('git',['show',request.candidate+':'+originPath(record.version)]));
+    const checked = verifyReleaseOrigin(origin,record.version,request.candidate,repository,
+        request.mode === 'publish' || process.env.RELEASE_INSPECTION_TARGET === 'publish'
+            ? {publishedMainSha:inspectMergedPromotion(request,repository).main.sha} : {});
+    for (const [key,value] of Object.entries(checked)) {
+        if (record[key] !== value) throw new Error('BLOCKED current provenance differs from qualified record: '+key);
+    }
     output('GITHUB_OUTPUT', `version=${record.version}\nsource_base=${record.source_base}\nrun_attempt=${record.run_attempt}`);
     output('GITHUB_STEP_SUMMARY', `Qualification: https://github.com/${repository}/actions/runs/${request.runId}\nBranch: ${request.branch}\nCandidate: ${request.candidate}\nComparison: ${record.source_base}\nRequired jobs: ${jobs.length}\nOverride: ${request.override}\nHuman acceptance: ${request.manualReview || 'pending'}`);
     if (request.mode === 'plan') {
@@ -432,6 +506,17 @@ export async function main() {
         return;
     }
     if (request.mode !== 'publish') requireCurrentMainBase(request,repository);
+    if (request.mode === 'bootstrap') {
+        const owner = repository.split('/')[0];
+        if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || process.env.GITHUB_ACTOR !== owner
+            || process.env.GITHUB_REF !== 'refs/heads/'+request.branch || process.env.GITHUB_SHA !== request.candidate
+            || record.predecessor_kind !== 'legacy-v_0.125' || record.version !== '0.126'
+            || !['admin','maintain'].includes(api('repos/'+repository+'/collaborators/'+owner+'/permission').permission)) {
+            throw new Error('BLOCKED bootstrap is limited to an owner-dispatched exact first qualified release.');
+        }
+        await promote(request,repository,failures);
+        return;
+    }
     if (request.override) throw new Error('BLOCKED red-check override is unavailable for a single-owner release.');
     verifyWriteControls(repository);
     if (request.mode === 'promote') await promote(request,repository,failures);

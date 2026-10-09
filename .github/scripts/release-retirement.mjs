@@ -70,7 +70,7 @@ export function planRetirement(request, repository, adapters = {}) {
     validateRetirementRequest(request);
     const call = adapters.api ?? api;
     const snapshot = inspectSync({branch:request.branch,mode:'plan',manualReview:''},repository,adapters);
-    if (snapshot.state !== 'RECONCILED') {
+    if (!['RECONCILED_FF','RECONCILED_EQUIVALENT'].includes(snapshot.state)) {
         return {state:'BLOCKED',branch:request.branch,expected_sha:null,
             detail:'Post-publication develop reconciliation is not fully verified: ' + snapshot.state + '. ' + snapshot.detail};
     }
@@ -96,7 +96,7 @@ export function planRetirement(request, repository, adapters = {}) {
             detail:'An open source PR or an unfinished release workflow still depends on the branch.'};
     }
     return {state:'ELIGIBLE',branch:request.branch,expected_sha:sha,
-        detail:'Published immutable release and fully qualified owner-reviewed main-to-develop merge verified; no active dependent workflows.'};
+        detail:'Published immutable release and fully qualified owner-approved linear reconciliation verified; no active dependent workflows.'};
 }
 
 /** Require the sole owner's separately approved main-only retirement environment.

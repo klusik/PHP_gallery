@@ -15,7 +15,7 @@ import {readFileSync,writeFileSync,mkdtempSync,rmSync,readdirSync} from 'node:fs
 import {tmpdir} from 'node:os';
 import {join,basename} from 'node:path';
 import {createHash} from 'node:crypto';
-import {validateRequest,verifyQualification,verifyFinalContent,requireCurrentMainBase,promote,publish,inspectMergedPromotion} from '../.github/scripts/release-promotion.mjs';
+import {validateRequest,verifyQualification,verifyFinalContent,requireQualificationChecks,requireEligibleQualificationEvent,requireCurrentMainBase,promote,publish,inspectMergedPromotion} from '../.github/scripts/release-promotion.mjs';
 import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview} from '../.github/scripts/release-owner-authorization.mjs';
 
 const candidate = 'a'.repeat(40);
@@ -24,13 +24,17 @@ const run = {path:'.github/workflows/release-qualification.yml',event:'push',hea
 const record = {repository:'owner/gallery',branch:request.branch,candidate_sha:candidate,
     source_base:'b'.repeat(40),version:'1.2.3',run_id:'123',run_attempt:'1',ready:true,
     origin_commit_sha:'e'.repeat(40),selected_develop_sha:'f'.repeat(40),
-    initial_main_sha:'b'.repeat(40),previous_stable_tag:'v_1.2.2',previous_stable_sha:'b'.repeat(40)};
+    initial_main_sha:'9'.repeat(40),previous_stable_tag:'v_1.2.2',previous_stable_sha:'9'.repeat(40),
+    previous_release_candidate_sha:'b'.repeat(40),previous_tag_object_sha:'9'.repeat(40),
+    previous_tag_object_type:'commit',previous_tree_sha:'8'.repeat(40),predecessor_kind:'qualified',origin_blob_sha:'7'.repeat(40)};
 const owners = ['Prepare release candidate','Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)','Positive production package (macos-latest)',
     'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
     'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Authoritative release audit','Complete required CI matrix','Release qualification gate'];
 const jobs = owners.map(name => ({name,status:'completed',conclusion:'success',html_url:'https://github.com/owner/gallery/actions/runs/123'}));
 assert.equal(validateRequest(request),'1.2.3');
+requireEligibleQualificationEvent(run);
+assert.throws(()=>requireEligibleQualificationEvent({...run,event:'workflow_dispatch'}),/BLOCKED_PR_CHECK_ELIGIBILITY/);
 verifyFinalContent(candidate,candidate,'b'.repeat(40),'b'.repeat(40));
 assert.throws(() => verifyFinalContent('c'.repeat(40),candidate,'b'.repeat(40),'b'.repeat(40)),/main advanced/);
 assert.throws(() => verifyFinalContent(candidate,candidate,'c'.repeat(40),'b'.repeat(40)),/tree differs/);
@@ -85,25 +89,37 @@ let releaseState = null;
 let interruptUpload = true;
 let unexpectedMain = false;
 let mainAdvanced = false;
+let promoted = false;
+let wrongParents = false;
 let changedWinapp = false;
 const writes = [];
 const mergeSha = 'c'.repeat(40);
 const tree = 'd'.repeat(40);
 const releasePr = {number:7,node_id:'fixture-pr',state:'closed',merged_at:'2026-10-08T00:00:00Z',
+    merged_by:{login:'owner'},auto_merge:null,
     created_at:'2026-10-07T15:00:00Z',user:{login:'github-actions[bot]'},
-    merge_commit_sha:mergeSha,head:{sha:candidate,repo:{full_name:record.repository}},base:{ref:'main'},html_url:'https://github.com/owner/gallery/pull/7'};
+    merge_commit_sha:mergeSha,head:{sha:candidate,repo:{full_name:record.repository}},base:{ref:'main',sha:record.initial_main_sha},html_url:'https://github.com/owner/gallery/pull/7'};
 const fakeApi = (path,method = 'GET',payload = null) => {
     if (method !== 'GET') writes.push({path,method,payload});
+    if (path.includes('/check-runs?')) return {total_count:2,check_runs:['Release qualification','Complete required CI matrix'].map(name=>({
+        name,head_sha:candidate,app:{id:15368},status:'completed',conclusion:'success',
+        external_id:'release:'+request.runId+':'+record.run_attempt+':'+candidate,
+        details_url:'https://github.com/'+record.repository+'/runs/114046888632'}))};
     if (path.includes('/pulls?')) return [structuredClone(releasePr)];
     if (path.endsWith('/pulls/7/reviews?per_page=100')) return [
         {id:72,user:{login:'owner'},state:'APPROVED',commit_id:candidate,
             submitted_at:'2026-10-07T18:00:00Z',html_url:'https://github.com/owner/gallery/pull/7#pullrequestreview-72'}];
-    if (path.endsWith('/commits/main')) return {sha:mergeSha,commit:{tree:{sha:unexpectedMain ? 'e'.repeat(40) : tree}}};
+    if (path.endsWith('/commits/main')) return {sha:mergeSha,commit:{tree:{sha:unexpectedMain ? 'e'.repeat(40) : tree}},
+        parents:wrongParents ? [{sha:record.initial_main_sha}] : [{sha:record.initial_main_sha},{sha:candidate}]};
+    if (path.endsWith('/git/ref/tags/v_1.2.2')) return {object:{type:'commit',sha:record.previous_stable_sha}};
+    if (path.endsWith('/commits/'+record.previous_stable_sha)) return {sha:record.previous_stable_sha,commit:{tree:{sha:record.previous_tree_sha}},parents:[{sha:'0'.repeat(40)},{sha:record.previous_release_candidate_sha}]};
+    if (path.endsWith('/commits/'+record.previous_release_candidate_sha)) return {sha:record.previous_release_candidate_sha,commit:{tree:{sha:record.previous_tree_sha}}};
+    if (path.endsWith('/releases/tags/v_1.2.2')) return {tag_name:'v_1.2.2',draft:false,prerelease:false,assets:[{name:'release-evidence.json'}]};
     if (path.endsWith('/commits/' + candidate)) return {sha:candidate,commit:{tree:{sha:tree}}};
     if (path.includes('/compare/')) return {behind_by:mainAdvanced && path.endsWith('/compare/main...' + candidate) ? 1 : 0,total_commits:1,files:changedWinapp ? [{filename:'winapp/gallery_uploader/self_update.py'}] : []};
     if (path.includes('/git/matching-refs/')) return tagSha ? [{ref:'refs/tags/v_1.2.3',object:{type:'commit',sha:tagSha}}] : [];
     if (path.endsWith('/git/refs') && method === 'POST') { tagSha = payload.sha; return {}; }
-    if (path.endsWith('/git/ref/heads/main')) return {object:{sha:mergeSha}};
+    if (path.endsWith('/git/ref/heads/main')) return {object:{sha:mainAdvanced ? '0'.repeat(40) : promoted ? mergeSha : record.initial_main_sha}};
     if (path.endsWith('/git/ref/heads/' + request.branch)) return {object:{sha:candidate}};
     if (path.endsWith('/git/ref/tags/v_1.2.3')) return {object:{sha:tagSha}};
     if (path.endsWith('/releases?per_page=100')) return releaseState ? [structuredClone(releaseState)] : [];
@@ -114,6 +130,7 @@ const fakeApi = (path,method = 'GET',payload = null) => {
     assert.fail('Unexpected API path: ' + path);
 };
 const fakeCommand = (executable,args) => {
+    if (executable==='git') return changedWinapp ? 'winapp/gallery_uploader/self_update.py' : '';
     assert.equal(executable,'gh');
     if (args[0] === 'api') { writes.push({graphql:args}); return '{}'; }
     assert.equal(args[0],'release');
@@ -127,10 +144,12 @@ const fakeCommand = (executable,args) => {
     } else assert.fail('Unexpected release command.');
     return '';
 };
-const adapters = {api:fakeApi,command:fakeCommand};
+const adapters = {api:fakeApi,command:fakeCommand,record,evidence:{repository:record.repository,version:'1.2.2',
+    final_main_sha:record.previous_stable_sha,final_tree:record.previous_tree_sha,candidate_sha:record.previous_release_candidate_sha,
+    ready:true,automated_result:'success',override:false,run_id:'122'}};
 const publishRequest = {...request,mode:'publish',manualReview:'Independent browser acceptance fixture'};
 try {
-    assert.equal(requireCurrentMainBase(request,record.repository,adapters),mergeSha);
+    assert.equal(requireCurrentMainBase(request,record.repository,adapters),record.initial_main_sha);
     mainAdvanced=true;
     assert.throws(() => requireCurrentMainBase(request,record.repository,adapters),/BLOCKED_MAIN_ADVANCED/);
     await assert.rejects(promote({...publishRequest,mode:'promote'},record.repository,[],adapters),/BLOCKED_MAIN_ADVANCED/);
@@ -148,12 +167,20 @@ try {
     for (const name of ['production.zip','core-manifest.json','production-files.json','release-metadata.json','release-notes.md','SHA256SUMS','qualification-evidence.zip']) writeFileSync(join(directory,name),'fixture public data ' + name);
     const hashes = Object.fromEntries(readdirSync(directory).map(name => [name,createHash('sha256').update(readFileSync(join(directory,name))).digest('hex')]));
     writeFileSync(join(directory,'final-integrity.json'),JSON.stringify({candidate_sha:candidate,source_base:record.source_base,result:'PASS',hashes}));
+    promoted=true;
+    wrongParents=true;
+    assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,adapters),/merge parents/);
+    wrongParents=false;
+    releasePr.merged_by.login='github-actions[bot]';
+    assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,adapters),/manually merged/);
+    releasePr.merged_by.login='owner';
+    releasePr.auto_merge={enabled_by:{login:'owner'}};
+    assert.throws(()=>inspectMergedPromotion(publishRequest,record.repository,adapters),/github-actions\[bot\]/);
+    releasePr.auto_merge=null;
     const merged=inspectMergedPromotion(publishRequest,record.repository,adapters);
     assert.equal(merged.ownerReview.id,72);
     assert.equal(merged.main.sha,mergeSha);
-    assert.throws(()=>requireCurrentMainBase(request,record.repository,
-        {api:(path)=>path.includes('/compare/') ? {behind_by:1} : fakeApi(path)}),
-        /BLOCKED_MAIN_ADVANCED/,'A post-merge plan must not re-use the pre-merge ancestry gate.');
+    assert.throws(()=>requireCurrentMainBase(request,record.repository,adapters),/BLOCKED_MAIN_ADVANCED/);
     unexpectedMain = true;
     await assert.rejects(publish(publishRequest,record.repository,record,[],adapters),/tree differs/);
     assert.equal(writes.length,0);
@@ -195,6 +222,7 @@ try {
     writeFileSync(join(directory,'fixture-installer.exe'),'altered installer bytes');
     await assert.rejects(publish(publishRequest,record.repository,record,[],adapters),/installer metadata/);
     assert.equal(writes.length,mutationCount);
+    promoted=false;
     releasePr.state = 'open';
     releasePr.merged_at = null;
     const beforePropose = writes.length;
@@ -349,6 +377,8 @@ for (const mutate of [
     state=>{state.bypass_actors=[{actor_id:1,actor_type:'RepositoryRole',bypass_mode:'always'}];},
     state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.require_last_push_approval=true;},
     state=>{state.rules.find(rule=>rule.type==='required_status_checks').parameters.required_status_checks=[];},
+    state=>{state.rules.push({type:'required_linear_history'});},
+    state=>{state.rules.push(structuredClone(state.rules.find(rule=>rule.type==='required_status_checks')));},
     state=>{state.conditions.ref_name.include=['refs/heads/main','refs/heads/develop'];},
 ]) {
     server.ruleset=structuredClone(ownerRule);
@@ -378,3 +408,15 @@ assert.equal(effectiveOwnerReview([ownerReview],{...botPr,user:{login:'owner'}},
 assert.equal(effectiveOwnerReview([ownerReview],{...botPr,merged_at:null},'owner',candidate),null);
 
 process.stdout.write('PASS hosted release identity, owner approval, red evidence, CI-first and branch safety contracts\n');
+
+const checkInventory=fakeApi('repos/'+record.repository+'/commits/'+candidate+'/check-runs?per_page=100');
+requireQualificationChecks(()=>checkInventory,record.repository,request,record.run_attempt);
+for (const patch of [{conclusion:'failure'},{status:'in_progress'},{head_sha:'0'.repeat(40)},
+    {app:{id:1}},{external_id:''},{external_id:'release:124:1:'+candidate},
+    {external_id:'release:123:2:'+candidate},{external_id:'candidate:123:1:'+candidate},
+    {external_id:'release:123:9007199254740992:'+candidate}]) {
+    const listing=structuredClone(checkInventory);Object.assign(listing.check_runs[0],patch);
+    assert.throws(()=>requireQualificationChecks(()=>listing,record.repository,request,record.run_attempt),/qualification check/);
+}
+assert.throws(()=>requireQualificationChecks(()=>({total_count:100,check_runs:[]}),record.repository,request,record.run_attempt),/incomplete/);
+assert.throws(()=>requireQualificationChecks(()=>{throw new Error('CI unavailable');},record.repository,request,record.run_attempt),/CI unavailable/);

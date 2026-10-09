@@ -3,23 +3,25 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: .github/scripts/release-reconciliation.mjs
  * Module Type: Protected Release Reconciliation
- * Purpose: Reconcile a published main release into develop only through reviewed, qualified GitHub PRs.
+ * Purpose: Prepare and verify owner-approved linear release reconciliation without updating develop.
  * Responsibilities:
  *   - Verify immutable published tag, evidence, ancestry and source identity
- *   - Propose a dedicated exact-tag sync branch without modifying protected refs
- *   - Report reconciliation only after a reviewed PR and exact-merge-sha hosted CI
+ *   - Propose a single-parent working branch without modifying protected refs
+ *   - Report reconciliation only after owner acceptance, complete content proof and exact-SHA CI
  *   - Keep inspection read-only and refuse missing server controls
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {peelReleaseTag} from './release-origin.mjs';
 import {api,command,output} from './release-promotion.mjs';
-import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview} from './release-owner-authorization.mjs';
+import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive GitHub JSON transport value consumed by read-only reconciliation validators.
  * @typedef {null|boolean|number|string|JsonValue[]|{[key:string]:JsonValue}} JsonValue
@@ -28,7 +30,9 @@ import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,require
  * @typedef {function(string,string=,(JsonValue|null)=):JsonValue} GithubReader
  */
 /** @typedef {{branch:string,mode:string,manualReview:string}} SyncRequest */
-/** @typedef {{tagSha:string,candidateSha:string,branch:string,state:string,detail:string,developSha:string,mainSha:string,syncBranch:string,pr:number|null,qualificationRun:string|null}} SyncPlan */
+/** @typedef {function(string,string[]):string} GitReader */
+/** @typedef {{path:string,base:string,develop:string,release:string,result:string,decision:string,review:string}} Resolution */
+/** @typedef {{tagSha:string,candidateSha:string,branch:string,state:string,detail:string,developSha:string,mainSha:string,syncBranch:string,pr:number|null,qualificationRun:string|null,selectedDevelopSha:string,expectedTree?:string,conflicts?:string[],resultSha?:string}} SyncPlan */
 
 /** Validate the requested release identity and requested level of authority.
  * @param {SyncRequest} request Explicit workflow dispatch fields.
@@ -45,14 +49,14 @@ export function validateSyncRequest(request) {
     return match[1];
 }
 
-/** Derive a branch name that is unique per published tag and immutable commit.
+/** Derive a working branch name bound to the release version and observed develop base.
  * @param {string} version Canonical version without tag prefix.
- * @param {string} tagSha Published immutable main SHA.
+ * @param {string} developSha Exact observed develop SHA on which replay will be prepared.
  * @returns {string} Reconciliation branch name.
  */
-export function syncBranchName(version, tagSha) {
-    if (!/^[a-f0-9]{40}$/.test(tagSha)) throw new Error('BLOCKED invalid published main SHA.');
-    return 'sync/release/v_' + version + '-' + tagSha.slice(0,12);
+export function syncBranchName(version, developSha) {
+    if (!/^[a-f0-9]{40}$/.test(developSha)) throw new Error('BLOCKED invalid observed develop SHA.');
+    return 'feature/reconcile-v_' + version + '-' + developSha.slice(0,12);
 }
 
 /** Fetch one immutable release-evidence asset and check GitHub's stored digest.
@@ -62,13 +66,13 @@ export function syncBranchName(version, tagSha) {
  * @returns {Record<string,unknown>} Parsed permanent release evidence.
  */
 export function downloadReleaseEvidence(repository, tag, asset) {
-    if (asset.name !== 'release-evidence.json' || !/^sha256:[a-f0-9]{64}$/.test(asset.digest)) {
+    if (!asset || !['release-evidence.json','release-reconciliation.json'].includes(asset.name) || !/^sha256:[a-f0-9]{64}$/.test(asset.digest)) {
         throw new Error('BLOCKED immutable release-evidence asset digest is unavailable.');
     }
     const directory = mkdtempSync(join(tmpdir(),'gallery-release-sync-'));
     try {
-        command('gh',['release','download',tag,'--repo',repository,'--pattern','release-evidence.json','--dir',directory]);
-        const bytes = readFileSync(join(directory,'release-evidence.json'));
+        command('gh',['release','download',tag,'--repo',repository,'--pattern',asset.name,'--dir',directory]);
+        const bytes = readFileSync(join(directory,asset.name));
         if (bytes.length !== asset.size || 'sha256:' + createHash('sha256').update(bytes).digest('hex') !== asset.digest) {
             throw new Error('BLOCKED downloaded release evidence differs from the published asset.');
         }
@@ -240,110 +244,230 @@ export function hasEffectiveSyncApproval(reviews,pr,owner,sha) {
     return effectiveOwnerReview(reviews,pr,owner,sha);
 }
 
+/** Compute a complete three-way tree; conflicting paths require explicit owner decisions.
+ * @param {string} selected Original selected develop SHA used as merge base.
+ * @param {string} develop Exact parallel develop head.
+ * @param {string} candidate Qualified release-side SHA.
+ * @param {GitReader|undefined} git Optional inert Git reader.
+ * @returns {{tree:string,conflicts:string[]}} Entire expected tree and every conflicted path.
+ */
+export function linearMergeTree(selected,develop,candidate,git) {
+    if (![selected,develop,candidate].every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))) {
+        throw new Error('BLOCKED immutable three-way SHA inputs missing.');
+    }
+    const args = ['merge-tree','--write-tree','--merge-base='+selected,'--name-only','-z',develop,candidate];
+    let stdout;
+    if (git) stdout = git('git',args);
+    else {
+        const result = spawnSync('git',args,{encoding:'utf8',timeout:60000,maxBuffer:16*1024*1024});
+        if (result.error || ![0,1].includes(result.status)) throw new Error('BLOCKED three-way Git comparison unavailable.');
+        stdout = result.stdout;
+    }
+    const fields = stdout.split('\0');
+    const tree = fields.shift().trim();
+    if (!/^[a-f0-9]{40}$/.test(tree)) throw new Error('BLOCKED incomplete three-way tree.');
+    const boundary = fields.indexOf('');
+    if (boundary < 0) throw new Error('BLOCKED incomplete conflict path inventory.');
+    return {tree,conflicts:fields.slice(0,boundary)};
+}
+
+/** Verify an SHA-preserving FF retains selected history and introduces no develop merge commits.
+ * @param {string} selected Original release-selected develop SHA.
+ * @param {string} develop Exact pre-FF develop SHA.
+ * @param {string} candidate Qualified release-side Q used as the FF destination.
+ * @param {GitReader|undefined} git Optional isolated Git reader.
+ * @returns {void} Throws when ancestry is missing or the new develop range contains a merge commit.
+ */
+export function verifyFastForwardHistory(selected,develop,candidate,git=undefined) {
+    if (![selected,develop,candidate].every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))) {
+        throw new Error('BLOCKED exact fast-forward history identities missing.');
+    }
+    const execute = git ?? command;
+    if (execute('git',['merge-base',selected,develop])!==selected
+        || execute('git',['merge-base',develop,candidate])!==develop
+        || execute('git',['rev-list','--merges',develop+'..'+candidate]).trim()) {
+        throw new Error('BLOCKED fast-forward must preserve develop history without new merge commits.');
+    }
+}
+
+/** Verify a single-parent replay preserves the full merge result and all parallel history.
+ * Regenerated runtime modules/inventory/manifest are independently freshness-checked by mandatory CI.
+ * @param {string} selected Original release-selected develop SHA.
+ * @param {string} develop Exact pre-FF develop SHA.
+ * @param {string} candidate Exact released Q.
+ * @param {string} result Exact proposed single-parent L.
+ * @param {GitReader|undefined} git Optional isolated Git reader.
+ * @param {Resolution[]} resolutions Explicit owner-reviewed decisions for every conflict.
+ * @returns {{expected_tree:string,result_tree:string,release_patch_sha256:string,reconciliation_patch_sha256:string,resolutions:Resolution[],regenerated_paths:string[]}} Complete tree and byte-level patch evidence; throws for lost changes or unreviewed conflict.
+ */
+export function verifyLinearContent(selected,develop,candidate,result,git=undefined,resolutions=[]) {
+    const execute = git ?? command;
+    if (!/^[a-f0-9]{40}$/.test(result ?? '')) throw new Error('BLOCKED exact linear result SHA missing.');
+    const parents = execute('git',['rev-list','--parents','-n','1',result]).split(/\s+/);
+    if (parents.length !== 2 || parents[0] !== result || parents[1] !== develop) {
+        throw new Error('BLOCKED equivalent reconciliation must have exactly the observed develop parent.');
+    }
+    if (execute('git',['rev-list','--merges',selected+'..'+develop]).trim()
+        || execute('git',['merge-base',selected,candidate]) !== selected
+        || execute('git',['merge-base',selected,develop]) !== selected) {
+        throw new Error('BLOCKED parallel develop lost original selected history.');
+    }
+    const merge = linearMergeTree(selected,develop,candidate,git);
+    const tree = execute('git',['rev-parse',result+'^{tree}']);
+    const changed = execute('git',['diff','--name-only','--no-renames','-z',merge.tree,tree]).split('\0').filter(Boolean);
+    const regenerated = ['app/runtime/modules.php','app/production-files.json','app/core-manifest.json'];
+    if (!Array.isArray(resolutions) || new Set(resolutions.map(item=>item.path)).size !== resolutions.length
+        || resolutions.length !== merge.conflicts.length
+        || merge.conflicts.some(path=>!resolutions.some(item=>item.path===path))) {
+        throw new Error('BLOCKED conflicts require explicit decisions for every affected path.');
+    }
+    for (const decision of resolutions) {
+        if (!decision.decision?.trim() || !decision.review?.trim()) throw new Error('BLOCKED conflict decision/review missing.');
+        for (const [field,sha] of [['base',selected],['develop',develop],['release',candidate],['result',result]]) {
+            const entry = execute('git',['ls-tree','-z',sha,'--',decision.path]);
+            if (decision[field] !== entry) throw new Error('BLOCKED conflict decision does not bind exact blob/mode/path.');
+        }
+    }
+    if (changed.some(path=>!regenerated.includes(path) && !merge.conflicts.includes(path))) {
+        throw new Error('BLOCKED full reconciled tree lost released or parallel changes.');
+    }
+    const digest = (base,head)=>{
+        const args = ['diff','--binary','--full-index','--no-ext-diff','--no-renames',base,head];
+        let bytes;
+        if (git) bytes = git('git',args);
+        else {
+            const process = spawnSync('git',args,{timeout:60000,maxBuffer:16*1024*1024});
+            if (process.error || process.status!==0) throw new Error('BLOCKED complete patch evidence unavailable.');
+            bytes = process.stdout;
+        }
+        return createHash('sha256').update(bytes).digest('hex');
+    };
+    return {expected_tree:merge.tree,result_tree:tree,release_patch_sha256:digest(selected,candidate),
+        reconciliation_patch_sha256:digest(develop,result),resolutions,
+        regenerated_paths:changed.filter(path=>regenerated.includes(path))};
+}
+
+/** Find a genuine SHA-bound successful central candidate/release check and complete matrix.
+ * @param {GithubReader} call GitHub read-only API.
+ * @param {string} repository Exact repository.
+ * @param {string} sha Result SHA that must be green before a protected FF.
+ * @returns {string|null} Exact completed run URL, or null for unavailable/red/incomplete CI.
+ */
+export function qualifiedLinearCandidate(call,repository,sha) {
+    const checks = call('repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100');
+    if (!Array.isArray(checks?.check_runs) || checks.total_count >= 100) throw new Error('BLOCKED exact check inventory incomplete.');
+    const required = checks.check_runs.filter(check=>check.name==='Complete required CI matrix'
+        && check.head_sha===sha && check.app?.id===15368);
+    if (!required.length || required.some(check=>check.status!=='completed' || check.conclusion!=='success')) return null;
+    const candidates = checks.check_runs.filter(check=>['Candidate qualification','Release qualification'].includes(check.name)
+        && check.head_sha===sha && check.app?.id===15368);
+    if (!candidates.length || candidates.some(check=>check.status!=='completed' || check.conclusion!=='success')) return null;
+    for (const check of candidates) {
+        const binding=qualificationCheckBinding(check.external_id);
+        if (!binding || binding.sha!==sha || (binding.kind==='release')!==(check.name==='Release qualification')) continue;
+        const run = call('repos/'+repository+'/actions/runs/'+binding.runId);
+        if (!['.github/workflows/candidate-preparation.yml','.github/workflows/release-qualification.yml',
+            '.github/workflows/gallery-workflows.yml'].includes(run.path)
+            || !['push','workflow_dispatch'].includes(run.event) || run.status !== 'completed'
+            || run.conclusion !== 'success' || run.run_attempt!==binding.attempt
+            || String(run.id)!==binding.runId
+            || run.path!==(binding.kind==='release' ? '.github/workflows/release-qualification.yml' : '.github/workflows/candidate-preparation.yml')) continue;
+        const listing = call('repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100');
+        const requiredNames = ['Read-only generated-state and source preflight',
+            'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
+            'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
+            'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+            'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+        if (Array.isArray(listing.jobs) && listing.total_count < 100
+            && requiredNames.every(name=>listing.jobs.filter(job=>(job.name===name || job.name.endsWith(' / '+name))
+                && job.status==='completed' && job.conclusion==='success').length===1)) return 'https://github.com/'+repository+'/actions/runs/'+binding.runId;
+    }
+    return null;
+}
+
 /** Obtain a read-only, fail-closed reconciliation snapshot.
  * @param {SyncRequest} request Validated workflow request.
  * @param {string} repository Owner/repository.
- * @param {{api?:GithubReader,evidence?:Record<string,unknown>}} adapters Optional hermetic fixture readers.
- * @returns {SyncPlan} Release state and its most relevant evidence.
+ * @param {{api?:GithubReader,evidence?:Record<string,unknown>,reconciliation?:Record<string,unknown>,git?:GitReader}} adapters Optional hermetic fixture readers.
+ * @returns {SyncPlan} Release state, SHA/tree identity and content/CI evidence.
  */
 export function inspectSync(request, repository, adapters = {}) {
     const version = validateSyncRequest(request);
     const call = adapters.api ?? api;
-    const tag = 'v_' + version;
-    const tagRef = call('repos/' + repository + '/git/ref/tags/' + tag);
-    if (tagRef.object?.type !== 'commit' || !/^[a-f0-9]{40}$/.test(tagRef.object.sha)) {
-        throw new Error('BLOCKED expected immutable release commit tag is missing.');
-    }
-    const tagSha = tagRef.object.sha;
-    const published = call('repos/' + repository + '/releases/tags/' + tag);
-    if (published.tag_name !== tag || published.draft !== false || published.prerelease === true) {
+    const identity = peelReleaseTag(call,repository,'v_'+version);
+    const published = call('repos/'+repository+'/releases/tags/v_'+version);
+    if (published.draft !== false || published.prerelease !== false || published.tag_name !== 'v_'+version) {
         throw new Error('BLOCKED release is not published at the exact immutable tag.');
     }
-    const evidenceAsset = published.assets?.find(asset => asset.name === 'release-evidence.json');
-    if (!evidenceAsset) throw new Error('BLOCKED permanent release evidence asset missing.');
-    const evidence = adapters.evidence ?? downloadReleaseEvidence(repository,tag,evidenceAsset);
-    const commit = call('repos/' + repository + '/commits/' + tagSha);
-    if (evidence.final_main_sha !== tagSha || evidence.final_tree !== commit.commit?.tree?.sha
+    const asset = published.assets?.find(item=>item.name==='release-evidence.json');
+    if (!asset) throw new Error('BLOCKED permanent release evidence missing.');
+    const evidence = adapters.evidence ?? downloadReleaseEvidence(repository,'v_'+version,asset);
+    const commit = call('repos/'+repository+'/commits/'+identity.commit_sha);
+    const candidate = call('repos/'+repository+'/commits/'+evidence.candidate_sha);
+    if (evidence.repository !== repository || evidence.final_main_sha !== identity.commit_sha
+        || evidence.final_tree !== identity.tree_sha || candidate.commit?.tree?.sha !== identity.tree_sha
         || evidence.version !== version || evidence.branch !== request.branch
-        || !/^[a-f0-9]{40}$/.test(evidence.candidate_sha ?? '')
-        || !/^[1-9]\d*$/.test(evidence.run_id ?? '')) {
-        throw new Error('BLOCKED released commit and durable qualification evidence disagree.');
+        || commit.parents?.length !== 2 || commit.parents[0]?.sha !== evidence.initial_main_sha
+        || commit.parents[1]?.sha !== evidence.candidate_sha || evidence.override !== false
+        || evidence.ready !== true || evidence.automated_result !== 'success') {
+        throw new Error('BLOCKED released parents/tree and durable qualification evidence disagree.');
     }
-    const mainSha = call('repos/' + repository + '/git/ref/heads/main').object?.sha;
-    const developSha = call('repos/' + repository + '/git/ref/heads/develop').object?.sha;
-    if (!isAncestor(call,repository,tagSha,mainSha)) {
-        throw new Error('BLOCKED published main ancestry was rewritten or missing.');
+    const developSha = call('repos/'+repository+'/git/ref/heads/develop').object?.sha;
+    const mainSha = call('repos/'+repository+'/git/ref/heads/main').object?.sha;
+    if (!isAncestor(call,repository,identity.commit_sha,mainSha)) throw new Error('BLOCKED published main history lost.');
+    const plan = {tagSha:identity.commit_sha,candidateSha:evidence.candidate_sha,branch:request.branch,
+        developSha,mainSha,syncBranch:syncBranchName(version,developSha),pr:null,qualificationRun:null,
+        selectedDevelopSha:evidence.selected_develop_sha,state:'SYNC_PENDING',detail:'Owner-approved SHA-preserving FF remains pending.'};
+    if (!developProtected(call,repository)) return {...plan,state:'SYNC_BLOCKED',detail:'Develop requires active linear non-force full-CI protection without mandatory PR.'};
+    const auditAsset = published.assets.find(item=>item.name==='release-reconciliation.json');
+    const proof = adapters.reconciliation ?? (auditAsset ? downloadReleaseEvidence(repository,'v_'+version,auditAsset) : null);
+    if (!proof) {
+        if (isAncestor(call,repository,developSha,evidence.candidate_sha)) {
+            verifyFastForwardHistory(evidence.selected_develop_sha,developSha,evidence.candidate_sha,adapters.git);
+            return {...plan,detail:'Develop can fast-forward to exact qualified Q; no merge commit or main ancestry is needed.'};
+        }
+        const merge = linearMergeTree(evidence.selected_develop_sha,developSha,evidence.candidate_sha,adapters.git);
+        return {...plan,state:merge.conflicts.length ? 'SYNC_BLOCKED':'SYNC_PENDING',expectedTree:merge.tree,
+            conflicts:merge.conflicts,detail:merge.conflicts.length ? 'Explicit owner conflict decisions required.'
+                : 'Prepare one single-parent replay on current develop, qualify it, then request owner FF.'};
     }
-    const branch = syncBranchName(version,tagSha);
-    const branchSha = matchingBranchSha(call,repository,branch);
-    if (branchSha && !isAncestor(call,repository,tagSha,branchSha)) {
-        throw new Error('BLOCKED synchronization branch lost immutable main ancestry.');
+    if (proof.repository !== repository || proof.candidate_sha !== evidence.candidate_sha
+        || proof.published_main_sha !== identity.commit_sha || proof.selected_develop_sha !== evidence.selected_develop_sha
+        || !['RECONCILED_FF','RECONCILED_EQUIVALENT'].includes(proof.state)) {
+        return {...plan,state:'SYNC_BLOCKED',detail:'Immutable reconciliation proof identities differ.'};
     }
-    const owner = repository.split('/')[0];
-    const pulls = call('repos/' + repository + '/pulls?state=all&base=develop&head='
-        + encodeURIComponent(owner + ':' + branch) + '&per_page=100');
-    if (!Array.isArray(pulls) || pulls.length >= 100) {
-        throw new Error('BLOCKED ambiguous or truncated reconciliation PR listing.');
+    const ownerRun = call('repos/'+repository+'/actions/runs/'+proof.owner_run_id+'/attempts/'+proof.owner_run_attempt);
+    if (ownerRun.path !== '.github/workflows/release-reconciliation.yml' || ownerRun.event !== 'workflow_dispatch'
+        || ownerRun.head_branch !== 'main' || ownerRun.actor?.login !== repository.split('/')[0]
+        || ownerRun.run_attempt !== Number(proof.owner_run_attempt) || ownerRun.status !== 'completed' || ownerRun.conclusion !== 'success') {
+        return {...plan,state:'SYNC_PENDING',detail:'Owner reconciliation run is not completed successfully.'};
     }
-    const matching = pulls.filter(pr => pr.head?.ref === branch && pr.head?.repo?.full_name === repository
-        && pr.base?.ref === 'develop');
-    if (matching.length > 1) throw new Error('BLOCKED multiple reconciliation PRs for one immutable release.');
-    const pr = matching[0] ?? null;
-    const protectedBranch = developProtected(call,repository);
-    const baseline = {tagSha,candidateSha:evidence.candidate_sha,branch:request.branch,developSha,mainSha,syncBranch:branch,pr:pr?.number ?? null,
-        qualificationRun:null,state:'SYNC_PENDING',detail:'Published release has no completed reviewed reconciliation.'};
-    if (!protectedBranch) {
-        return {...baseline,state:'SYNC_BLOCKED',detail:'Develop is missing active owner-review ruleset or effective strict full-CI protection.'};
+    if (!isAncestor(call,repository,proof.develop_base_sha,proof.result_sha)
+        || !isAncestor(call,repository,proof.result_sha,developSha)) {
+        return {...plan,state:'SYNC_BLOCKED',detail:'Result or previous develop history is absent from current develop.'};
     }
-    if (pr) {
-        try {
-            requireBotPullRequest(pr,repository,tagSha,'develop');
-        } catch (error) {
-            return {...baseline,state:'SYNC_BLOCKED',detail:error.message};
+    if (proof.state==='RECONCILED_FF') {
+        if (proof.result_sha!==evidence.candidate_sha || proof.result_tree!==identity.tree_sha) {
+            return {...plan,state:'SYNC_BLOCKED',detail:'FF proof did not preserve exact release Q/tree.'};
+        }
+        verifyFastForwardHistory(proof.selected_develop_sha,proof.develop_base_sha,proof.result_sha,adapters.git);
+    } else {
+        const content = verifyLinearContent(proof.selected_develop_sha,proof.develop_base_sha,
+            proof.candidate_sha,proof.result_sha,adapters.git,proof.resolutions ?? []);
+        for (const [key,value] of Object.entries(content)) {
+            if (JSON.stringify(proof[key])!==JSON.stringify(value)) return {...plan,state:'SYNC_BLOCKED',detail:'Reconciliation full-tree/patch evidence differs.'};
         }
     }
-    if (pr && branchSha && pr.head.sha !== branchSha && !pr.merged_at) {
-        return {...baseline,state:'SYNC_BLOCKED',detail:'Open reconciliation PR head no longer matches the dedicated branch.'};
+    const ci = qualifiedLinearCandidate(call,repository,proof.result_sha);
+    if (!ci || ci!==proof.qualification_url) return {...plan,state:'SYNC_PENDING',detail:'Exact result GitHub CI is missing, red or stale.'};
+    if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==developSha) {
+        return {...plan,state:'SYNC_BLOCKED',detail:'Develop raced during verification; re-plan.'};
     }
-    if (pr?.merged_at) {
-        if (!/^[a-f0-9]{40}$/.test(pr.merge_commit_sha ?? '')
-            || !isAncestor(call,repository,tagSha,developSha)
-            || !isAncestor(call,repository,pr.merge_commit_sha,developSha)) {
-            return {...baseline,state:'SYNC_BLOCKED',detail:'Merged reconciliation PR is not included in current develop ancestry.'};
-        }
-        const merge = call('repos/' + repository + '/commits/' + pr.merge_commit_sha);
-        if (merge.parents?.length !== 2 || merge.parents[1]?.sha !== tagSha
-            || !/^[a-f0-9]{40}$/.test(merge.parents[0]?.sha ?? '')
-            || !isAncestor(call,repository,merge.parents[0].sha,developSha)) {
-            return {...baseline,state:'SYNC_BLOCKED',detail:'Reconciliation was not a full merge retaining both develop and published main parents.'};
-        }
-        const reviews = call('repos/' + repository + '/pulls/' + pr.number + '/reviews?per_page=100');
-        const approval=hasEffectiveSyncApproval(reviews,pr,owner,tagSha);
-        if (!approval) {
-            return {...baseline,state:'SYNC_BLOCKED',detail:'No current owner SHA-bound PR approval exists for the exact published merge parent.'};
-        }
-        try {
-            if (!publishedContentSurvived(call,repository,version,tagSha,pr.merge_commit_sha)) {
-                return {...baseline,state:'SYNC_BLOCKED',detail:'Published release notes or version metadata were lost or rewritten by reconciliation.'};
-            }
-        } catch (error) {
-            return {...baseline,state:'SYNC_BLOCKED',detail:'Published release content could not be verified: '+error.message};
-        }
-        const success = qualifiedDevelopMerge(call,repository,pr.merge_commit_sha);
-        return {...baseline,state:success ? 'RECONCILED' : 'SYNC_PENDING',
-            detail:success ? 'Published main ancestry and exact merged develop SHA passed hosted CI.' : 'Merged PR awaits exact-SHA hosted develop push qualification.',
-            qualificationRun:success,ownerApproval:approval};
-    }
-    if (isAncestor(call,repository,tagSha,developSha)) {
-        return {...baseline,state:'SYNC_BLOCKED',detail:'Published ancestry is present without an auditable merged reconciliation PR.'};
-    }
-    if (pr && pr.state !== 'open') {
-        return {...baseline,state:'SYNC_BLOCKED',detail:'Reconciliation PR was closed without a merge.'};
-    }
-    return {...baseline,detail:pr ? 'Reviewed reconciliation PR is open; merge and CI remain pending.' : 'A reconciliation PR has not yet been proposed.'};
+    return {...plan,state:proof.state,resultSha:proof.result_sha,qualificationRun:ci,
+        detail:'Owner-approved linear reconciliation, full content proof and exact hosted CI verified.'};
 }
 
-/** Require the owner-approved GitHub Environment and active develop PR/CI rules.
+/** Require the owner-approved environment and active develop linear/CI rules.
  * @param {string} repository Expected owner/name.
  * @param {GithubReader} call GitHub API reader.
  * @param {Record<string,string|undefined>} context Trusted workflow context.
@@ -356,49 +480,89 @@ export function verifySyncWriteControls(repository, call, context = process.env)
         'Reviewed main-to-develop release reconciliation','Complete required CI matrix');
 }
 
-/** Propose one immutable-tag synchronization branch and reviewed PR, without merging.
+/** Prepare a linear working branch and request central qualification, without updating develop.
  * @param {SyncRequest} request Reviewed propose-mode dispatch.
  * @param {string} repository Owner/repository.
  * @param {{api?:GithubReader,evidence?:Record<string,unknown>,context?:Record<string,string|undefined>}} adapters Optional isolated fixtures.
- * @returns {SyncPlan} Pending synchronization state, never an invented completed result.
+ * @returns {SyncPlan} Verified pending or completed linear synchronization state.
  */
 export function proposeSync(request, repository, adapters = {}) {
-    if (request.mode !== 'propose') throw new Error('BLOCKED proposeSync requires propose mode.');
+    if (request.mode!=='propose') throw new Error('BLOCKED proposal requires explicit propose mode.');
     const call = adapters.api ?? api;
-    const snapshot = inspectSync(request,repository,adapters);
-    if (snapshot.state === 'RECONCILED') return snapshot;
-    if (snapshot.state === 'SYNC_BLOCKED') throw new Error('BLOCKED ' + snapshot.detail);
+    const execute = adapters.git ?? command;
     verifySyncWriteControls(repository,call,adapters.context ?? process.env);
-    const current = matchingBranchSha(call,repository,snapshot.syncBranch);
-    if (current && current !== snapshot.tagSha) {
-        throw new Error('BLOCKED existing synchronization branch has different content; maintainer review required.');
+    const snapshot = inspectSync(request,repository,adapters);
+    if (snapshot.state==='SYNC_BLOCKED') throw new Error('BLOCKED '+snapshot.detail);
+    if (snapshot.state.startsWith('RECONCILED_')) return snapshot;
+    if (isAncestor(call,repository,snapshot.developSha,snapshot.candidateSha)) return snapshot;
+    const merge = linearMergeTree(snapshot.selectedDevelopSha,snapshot.developSha,snapshot.candidateSha,adapters.git);
+    if (merge.conflicts.length) throw new Error('BLOCKED explicit owner conflict decisions required.');
+    const existing = matchingBranchSha(call,repository,snapshot.syncBranch);
+    if (!existing) {
+        execute('git',['config','user.name','github-actions[bot]']);
+        execute('git',['config','user.email','41898282+github-actions[bot]@users.noreply.github.com']);
+        const result = execute('git',['commit-tree',merge.tree,'-p',snapshot.developSha,'-m',
+            'Reconcile released v_'+validateSyncRequest(request)+' on parallel develop (refs #101)']);
+        if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==snapshot.developSha
+            || matchingBranchSha(call,repository,snapshot.syncBranch)) throw new Error('BLOCKED raced reconciliation refs.');
+        execute('gh',['auth','setup-git']);
+        // The zero-ref lease permits creation only; it never overwrites an existing branch.
+        execute('git',['push','--force-with-lease=refs/heads/'+snapshot.syncBranch+':',
+            'origin',result+':refs/heads/'+snapshot.syncBranch]);
+    } else {
+        if (!isAncestor(call,repository,snapshot.developSha,existing)) throw new Error('BLOCKED existing proposal lost observed develop ancestry.');
     }
-    if (!current) {
-        call('repos/' + repository + '/git/refs','POST',{ref:'refs/heads/' + snapshot.syncBranch,sha:snapshot.tagSha});
+    call('repos/'+repository+'/actions/workflows/candidate-preparation.yml/dispatches','POST',{ref:snapshot.syncBranch});
+    return {...snapshot,detail:'Working proposal prepared; qualify final single-parent SHA after any generated-artifact squash. Owner alone performs develop FF.'};
+}
+
+/** Record owner acceptance only after the actual FF and exact full CI, without updating develop.
+ * @param {SyncRequest} request Owner verify-mode dispatch.
+ * @param {string} repository Exact repository.
+ * @returns {void} Creates immutable reconciliation evidence; conflicting retries are refused.
+ */
+export function recordReconciliation(request,repository) {
+    verifySyncWriteControls(repository,api,process.env);
+    const version = validateSyncRequest(request);
+    const snapshot = inspectSync(request,repository);
+    if (snapshot.state==='SYNC_BLOCKED' && snapshot.detail!=='Explicit owner conflict decisions required.') throw new Error('BLOCKED '+snapshot.detail);
+    const tag = 'v_'+version;
+    const published = api('repos/'+repository+'/releases/tags/'+tag);
+    const existing = published.assets?.find(item=>item.name==='release-reconciliation.json');
+    if (existing) {
+        const snapshot = inspectSync(request,repository);
+        if (!snapshot.state.startsWith('RECONCILED_')) throw new Error('BLOCKED existing immutable proof is not valid.');
+        output('GITHUB_STEP_SUMMARY',JSON.stringify(snapshot,null,2));
+        return;
     }
-    if (snapshot.pr === null) {
-        const body = 'Post-publication reconciliation for ' + request.branch + '\n'
-            + 'Immutable published main SHA: ' + snapshot.tagSha + '\n'
-            + 'Develop starting SHA: ' + snapshot.developSha + '\n'
-            + 'Owner dispatch acceptance: ' + request.manualReview + '\n'
-            + 'Required: owner PR approval, manual merge, and full hosted develop CI.\n'
-            + 'PR CI may require Approve workflows to run by the repository owner.\n'
-            + 'No direct develop update, merge automation or bypass.\n'
-            + 'Refs #101 #136 #137';
-        const pr = call('repos/' + repository + '/pulls','POST',{
-            title:'Sync published release v_' + validateSyncRequest(request) + ' into develop',
-            head:snapshot.syncBranch,base:'develop',body,
-            maintainer_can_modify:false});
-        requireBotPullRequest(pr,repository,snapshot.tagSha,'develop');
-    }
-    if (call('repos/' + repository + '/git/ref/heads/develop').object?.sha !== snapshot.developSha) {
-        throw new Error('BLOCKED develop advanced during sync proposal; re-plan before approval.');
-    }
-    return {...snapshot,state:'SYNC_PENDING',detail:'Dedicated sync PR awaits independent review, full CI and merge.'};
+    const evidence = downloadReleaseEvidence(repository,tag,published.assets.find(item=>item.name==='release-evidence.json'));
+    const identity = peelReleaseTag(api,repository,tag);
+    const result = process.env.SYNC_RESULT_SHA ?? '';
+    const base = process.env.SYNC_BASE_SHA ?? '';
+    const current = api('repos/'+repository+'/git/ref/heads/develop').object?.sha;
+    if (!request.manualReview.trim() || !isAncestor(api,repository,base,result)
+        || !isAncestor(api,repository,result,current)) throw new Error('BLOCKED approved FF has not preserved exact develop/result history.');
+    const resolutions = JSON.parse(process.env.SYNC_RESOLUTIONS ?? '[]');
+    if (result===evidence.candidate_sha) verifyFastForwardHistory(evidence.selected_develop_sha,base,result);
+    const content = result===evidence.candidate_sha ? {expected_tree:identity.tree_sha,result_tree:identity.tree_sha,
+        resolutions:[]} : verifyLinearContent(evidence.selected_develop_sha,base,evidence.candidate_sha,result,undefined,resolutions);
+    const ci = qualifiedLinearCandidate(api,repository,result);
+    if (!ci) throw new Error('BLOCKED exact reconciliation result lacks full hosted CI.');
+    const proof = {schema_version:1,repository,state:result===evidence.candidate_sha ? 'RECONCILED_FF':'RECONCILED_EQUIVALENT',
+        candidate_sha:evidence.candidate_sha,published_main_sha:identity.commit_sha,
+        selected_develop_sha:evidence.selected_develop_sha,develop_base_sha:base,result_sha:result,...content,
+        qualification_url:ci,owner:process.env.GITHUB_ACTOR,owner_run_id:process.env.GITHUB_RUN_ID,
+        owner_run_attempt:process.env.GITHUB_RUN_ATTEMPT,manual_review:request.manualReview};
+    const file = resolve(process.env.RUNNER_TEMP,'release-reconciliation.json');
+    writeFileSync(file,JSON.stringify(proof,null,2)+'\n');
+    if (api('repos/'+repository+'/git/ref/heads/develop').object?.sha!==current
+        || peelReleaseTag(api,repository,tag).tag_object_sha!==identity.tag_object_sha) throw new Error('BLOCKED refs raced during owner acceptance.');
+    command('gh',['release','upload',tag,file,'--repo',repository]);
+    output('GITHUB_STEP_SUMMARY',JSON.stringify(proof,null,2));
 }
 
 /** Run read-only status inspection or the separately reviewed proposal.
- * @returns {Promise<void>} Writes only GitHub step summaries, or an approved sync PR.
+ * @returns {Promise<void>} Reports status, prepares a working ref or records owner acceptance without updating develop.
  */
 export async function main() {
     const request = {branch:process.env.RELEASE_BRANCH ?? '', mode:process.env.SYNC_MODE ?? 'plan',
@@ -409,10 +573,11 @@ export async function main() {
         || process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || process.env.GITHUB_REF !== 'refs/heads/main') {
         throw new Error('BLOCKED reconciliation inspection requires trusted main workflow dispatch.');
     }
+    if (request.mode==='verify') { recordReconciliation(request,repository); return; }
     const plan = request.mode === 'propose' ? proposeSync(request,repository) : inspectSync(request,repository);
     output('GITHUB_STEP_SUMMARY','Release reconciliation: ' + plan.state + '\n'
         + 'Published main: ' + plan.tagSha + '\nDevelop: ' + plan.developSha + '\n'
-        + 'Sync PR: ' + (plan.pr ?? 'none') + '\n' + plan.detail + '\n'
+        + 'Working proposal: ' + plan.syncBranch + '\n' + plan.detail + '\n'
         + 'Exact CI: ' + (plan.qualificationRun ?? 'PENDING'));
     process.stdout.write(JSON.stringify(plan,null,2) + '\n');
 }

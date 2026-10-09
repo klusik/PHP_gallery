@@ -1,269 +1,303 @@
-# Reviewed hosted release lifecycle (issue #101)
+# Linear hosted release lifecycle (issue #101)
 
-This is the canonical operational runbook for a GitHub-hosted release. The existing
-single publish implementation is `.github/scripts/release-promotion.mjs` (#100).
-Preparation, post-publication reconciliation and retirement are separate state
-transitions, not alternative ways to publish.
+This is the canonical operational runbook. Preparation, promotion, publication,
+linear reconciliation and optional retirement have separate authorization gates.
+The publisher remains `.github/scripts/release-promotion.mjs`; every audit uses
+`scripts/audit.php`. No agent writes `main` or `develop`.
 
-## Invariants
+## History and immutable identities
 
-- Never write to `main` or `develop` directly. They must move only through a
-  reviewed PR and server-enforced mandatory hosted CI.
-- A release is selected from an **explicit immutable develop commit**, not
-  inferred from today's moving `develop`. A newer develop HEAD is not a reason
-  to rebase an already qualified candidate.
-- A qualified source SHA, its generated artifact tree, previous stable tag,
-  selected develop SHA and qualification workflow run/attempt must agree.
-- Approval to **prepare**, **promote**, **publish**, **reconcile** and **retire**
-  is separate. An agent authorization to modify a feature branch never grants
-  permission to mutate protected branches or release tags.
-- Exact GitHub branch/environment controls must be independently verified
-  on the live repository. Example JSON or passing fixture tests do not prove
-  server-side configuration.
-- All historic tags/releases/qualification evidence are immutable. A new
-  stabilization attempt means a new candidate and new exact-SHA qualification.
+A completed feature/fix is squashed into one logical commit on an unqualified
+working branch and qualified again at the resulting SHA. The owner integrates it
+into `develop` with a real non-forced fast-forward. GitHub **Rebase and merge**
+may rewrite SHAs and is not this operation. Existing historical merges are retained;
+new development commits must be linear. Concurrent feature commits must survive.
 
-## 1. Initialize an immutable release origin (#134)
+For each release, distinguish:
 
-Create `release/v_X.Y[.Z]` at the **reviewed selected develop commit**. As the
-very first commit on that release branch, add
-`.github/release-origins/v_X.Y[.Z].json`, with these exact fields:
+- `D0`: explicitly selected develop commit; the immutable origin's sole parent.
+- `Q`: exact prepared, fully qualified release-side candidate.
+- `P`: previous published main merge commit, obtained by peeling its stable tag.
+- `Qprev`: previous release-side candidate, the second parent of `P`.
+- `M`: new published main commit, with exactly ordered parents `[P,Q]`.
 
-```json
-{
-  "schema_version": 1,
-  "version": "0.126",
-  "release_branch": "release/v_0.126",
-  "selected_develop_sha": "REPLACE_WITH_EXACT_40_HEX_DEVELOP_SHA",
-  "initial_main_sha": "REPLACE_WITH_EXACT_40_HEX_MAIN_SHA",
-  "previous_stable_tag": "v_0.125",
-  "previous_stable_sha": "REPLACE_WITH_EXACT_40_HEX_TAG_COMMIT_SHA"
-}
-```
+Require `tree(P)=tree(Qprev)` and `tree(M)=tree(Q)`. Tags point to published main
+commits; `git log --first-parent main` is the publication history. A previous
+published main merge does **not** need to be an ancestor of `D0` or `Q`.
+Annotated tag object SHA, peeled commit SHA and tree SHA are independent identities.
+No workflow rebases qualified candidates, rewrites tags or updates protected refs.
 
-The example placeholders must be replaced. Require the current `main` commit
-to equal the previous stable tag commit at initialization; require that
-`main` commit to be an ancestor of the selected `develop` SHA. Select a
-numeric next version greater than the previous stable version. Review the
-record and push this branch creation commit. The initialization commit must
-have the selected develop commit as its **only parent**. A pre-existing branch
-that already has stabilization commits cannot be retrospectively declared
-provenanced: create a new reviewed candidate, preserving the old attempt's
-evidence rather than force-rewriting it.
+## Immutable origin and the v_0.125 predecessor bootstrap
 
-`.github/scripts/release-origin.mjs` verifies the exact blob is unchanged
-since the initialization commit, the commit's parent equals the selected
-develop SHA, previous tag has not moved, `main` still descends from the
-initial published main, `develop` still contains the selected commit and
-the prepared candidate descends from the initialization commit. A missing,
-invalid or edited origin fails closed **before** any Copilot/TeX generation.
-The qualification artifact records the source, initial main, previous tag
-and origin commit and the publisher rejects missing/contradictory evidence.
+Schema version 1 remains supported, unchanged. The first release commit introduces
+`.github/release-origins/v_X.Y[.Z].json`, and its only parent must be the exact
+`selected_develop_sha`. Its fields remain `schema_version`, `version`,
+`release_branch`, `selected_develop_sha`, `initial_main_sha`, `previous_stable_tag`
+and `previous_stable_sha` (the peeled published commit). The blob cannot change,
+be deleted/reintroduced or be retrospectively attributed to another source.
 
-## 2. Source and exact candidate qualification (#139, #140)
+New initializations introduce `.github/release-predecessors/v_X.Y[.Z].json` in the
+same origin commit. This immutable supplemental record pins the predecessor tag
+object/type, peeled main commit, release-side candidate, tree and evidence kind.
+Qualification regenerates **evidence**, not origin files, and checks every identity
+against the server. The source comparison base is `Qprev`; comparing its tree to
+`P` proves the same published baseline without incorrectly imposing ancestry.
 
-The release-qualification workflow runs on `release/v_*` and consists of:
+The locally initialized `v_0.126` origin commit
+`af3b8bfb03d5ddf5eea5bd5c8d4a237df0893460`, directly above
+`44ba56cca2f110a2aa2527da337014750aebc6a3`, remains unchanged. Its schema v1
+exception uses the separately reviewed `.github/release-legacy/v_0.125.json`:
 
-1. Release branch and immutable origin validation.
-2. **Stage A**, central `release-preflight`: syntax, documentation, source
-   contract inventory, policy and CI workflow contracts.
-3. **Stage B**, central `release-stage-b`: MVC boundaries and admin mutation
-   contracts, both safe before release-generated artifacts.
-4. Deterministic release preparation (patch notes, TinyTeX, manual PDFs,
-   version metadata, manifests), then checkout/commit the prepared SHA with
-   a non-force branch update and stale-ref rejection.
-5. **Stage D**, the mandatory full hosted GitHub CI matrix and release audit
-   against the **exact prepared SHA**. Required jobs cannot be replaced with
-   prior quick/source preflight evidence.
+| Identity | Exact SHA |
+| --- | --- |
+| Annotated tag object | `e84b66ac93fb6bbf61fd0a599e0c34cb43484d48` |
+| Published main `P` | `9ef4fbe54ecb4f2eaeba7d6595cabda016b50fc3` |
+| First parent | `d92c464ad8292c8a6070f14dffaefe63b9c25051` |
+| Release-side `Qprev` | `a9f08375881bae68b99aa048e3d44e428551d31b` |
+| Identical published/candidate tree | `52a9d282b400f31b947967975206a216086064d7` |
 
-First-ever target version metadata takes the immutable triggering source
-commit epoch from `RELEASE_INITIAL_EPOCH`; an existing valid date is retained
-without regeneration. The four manuals, metadata and `SOURCE_DATE_EPOCH`
-must remain consistent. This is a *source date*, not the eventual public
-release publication timestamp.
+This is the explicit `UNKNOWN_LEGACY` historical qualification exception, owned
+by `klusik`, confined to this repository and predecessor. The historical Release
+has no new publisher evidence asset. No historical approval, CI qualification or
+usage measurement is invented. Future predecessors require permanent qualified
+release evidence and retained release-side ancestry or verified equivalent
+reconciliation. See [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+[#133](https://github.com/klusik/PHP_gallery/issues/133).
 
-Previously reviewed release metadata may use the exact historical dotted-day
-`released_label` format (for example, `3. September 2026, 13:08`).
-The current undotted form and this legacy form are both accepted without
-rewriting any reviewed entry; inconsistent labels remain blocked.
+## Hosted preparation and exact qualification
 
-Stage A/B diagnostic artifacts are named `release-source-preflight` when
-generation is blocked. Review their JSON/Markdown and failing suite logs.
-Never fabricate a passing job, weaken debt baselines or infer that a successful
-Stage A/B is a qualified release.
+The existing release workflow verifies branch, selected develop, unchanged origin,
+current main predecessor, published stable tag and release-side/tree identities
+before Stage A (`release-preflight`) and Stage B (`release-stage-b`). Both central
+source stages precede Copilot, TinyTeX and generated artifacts. Stage D retains the
+complete PHP/Node/WinApp, Chromium, database, runtime, packaging and release audit.
 
-## 3. Guarded main promotion and publication (#133, #135, #100)
+There is no implicit `git describe` selection. Audits and commit-note ranges use
+verified `Qprev`; file differences, release-note text and WinApp scope use direct
+endpoint tree comparisons. GitHub compare ancestry and merge-base file lists
+cannot substitute for a complete endpoint diff. The release-note helper receives
+`PHP_GALLERY_RELEASE_BASE` and verifies its tree equals the explicit previous tag.
+Its direct CLI tag-based default remains supported for historical maintainer use.
 
-`.github/workflows/release-promotion.yml` in read-only `plan` mode verifies
-an exact successful run and candidate identity. Check `main` ancestry **again**
-before proposing/approving a PR. A `BLOCKED_MAIN_ADVANCED` means the current
-main is no longer an ancestor of the selected qualified candidate, or changed
-during inspection. Stop. Record original run, SHA, competing current main SHA
-and tag, and have a maintainer decide on a **new** reviewed release candidate
-with a fresh origin and all generated artifacts/CI. Do not auto-rebase,
-force-move the old branch, bypass approvals, reuse a green run or rewrite a tag.
+The locked TinyTeX toolchain, EN/CS/DE/SV PDF builds and final SHA-256 integrity
+remain unchanged. Missing first-trigger metadata uses the immutable source epoch;
+valid existing metadata is retained. Identical preparation may reuse its exact
+existing tree/SHA; any differing remote-head race blocks a normal write-back.
 
-A stale-main failure retains the `release-main-recovery-inspect`
-(or `release-main-recovery-approved`) artifact recording the original run,
-candidate, competing main SHA/tree and required `NEW_CANDIDATE_REQUIRED`.
-The original candidate becomes `SUPERSEDED` only after an explicit human
-review/record of its replacement; no workflow silently declares or publishes it.
+Qualification binds the exact emitted prepared SHA, comparison base, origin commit
+and blob, predecessor identities, run/attempt, all required jobs and source record.
+A later edit or squash requires new qualification. The aggregate result also binds
+`Complete required CI matrix` to every exact prepared SHA, including bot-generated
+commits, so a protected owner FF has the required context on its destination.
+This check is derived from the complete actual matrix; it is never a red override.
 
-The single-owner `promote` step requires the owner's manual deployment
-approval in `release-promotion`, effective protected `main` rules and
-an exact, green qualification. It opens or reuses a PR authored by
-`github-actions[bot]`, with head equal to the qualified release SHA. It
-**does not approve or merge that PR**, enable auto-merge, bypass failed
-checks or write directly to `main`. The owner `klusik` must separately
-review and approve the PR and choose **Create a merge commit** manually.
+## Promotion and separate publication
 
-GitHub may put `GITHUB_TOKEN`-created PR workflows in an
-**approval-required** state. The owner first uses **Approve workflows to
-run** on the PR, then verifies successful required GitHub CI and submits
-a distinct PR **Approve** review. Deployment approval, workflow-run
-approval and PR approval are three different decisions. The PR author
-and reviewer must be different accounts; owner-authored PRs are rejected
-rather than attempting self-approval.
+Normal `plan`, `promote` and `publish` dispatch from reviewed `main` tooling.
+`promote` requires owner deployment approval and effective main protections, then
+opens/reuses a `github-actions[bot]` PR at exact `Q`. It never approves or merges.
+Require current main to remain exactly `P`, the previous tag object/commit/tree
+and `Qprev` to remain pinned, and every exact qualification job to be green.
 
-The separately owner-approved `publish` step checks the bot PR author,
-the latest valid `klusik` review **for the exact release head SHA**, the
-actual merged PR commit, current `main`, identical candidate/main Git
-trees and successful complete mandatory CI. Only then may it create an
-immutable tag and verified draft release, upload checked SHA-256 assets,
-record PR/reviewer identities in `release-evidence.json` and make the
-release public. Interrupted drafts remain recoverable without duplicate
-publication. The public release does not imply reconciliation completion.
+The owner authorizes PR workflow runs if GitHub requests **Approve workflows to
+run**, submits an actual SHA-bound PR **Approve**, and chooses **Create a merge
+commit**. Missing, dismissed, stale or wrong-identity reviews are rejected.
+Publication is a new owner-approved dispatch. It verifies the actual merge's ordered
+parents `[P,Q]`, current main `M`, identical full tree, unchanged origins/predecessor,
+qualification, assets and final refs before tagging and draft-to-public publication.
+A main advance is `BLOCKED_MAIN_ADVANCED`; retain recovery evidence and obtain an
+explicit new-candidate decision. Do not automatically rebase, update or publish.
+No write mode accepts red/skipped/cancelled/missing CI or an override.
 
-**Red-check override is disabled in this owner-only implementation.**
-An `override_ack` write dispatch is rejected. Failed, skipped, missing
-or stale mandatory evidence must be repaired, not reclassified as green.
-The read-only `plan` retains diagnostics without any merge authority.
+Promotion rechecks the current GitHub Actions `Release qualification` and
+`Complete required CI matrix` contexts on Q, including their explicit
+`external_id` binding (`release:<run>:<attempt>:<SHA>`). GitHub Actions normalizes
+the check's `details_url` to its own `/runs/<check>` URL; it is a navigation field,
+not an immutable run binding. Candidate checks use the corresponding `candidate`
+binding. Reconciliation decodes that identity and rechecks actual server-owned
+run/attempt and every central matrix job, then records the canonical Actions URL.
+Missing, foreign or stale external identities fail closed.
+The hosted gate exposes the unprefixed matrix context after the central aggregate
+passes, even when preparation leaves SHA unchanged; reusable job names may carry
+caller prefixes. This derives from the central registry and does not replace any
+matrix job. The publication PR must have no auto-merge configuration and its
+server-recorded merger must be the human owner. Unknown or overlapping effective
+branch rules fail closed pending a live compatibility review.
 
-## 4. Main-to-develop reconciliation (#136, #137)
+Existing tags never move. Interrupted drafts reuse only identical assets, sizes
+and SHA-256 digests. Conflicting existing bytes block rather than clobber. Release
+evidence retains candidate/main/tree, origin and predecessor, review ID/SHA/time,
+run/attempt, comparison base and actual outcomes. Hosting/updater smoke acceptance
+remains separate.
 
-From trusted `main`, dispatch `Reviewed release reconciliation` with
-the original release branch identity. `plan` or `verify` is read-only.
-The `propose` mode requires separate owner deployment approval via
-`release-reconciliation` and active, strict `develop` PR/CI rules.
-The bot creates `sync/release/v_X.Y[.Z]-<published SHA prefix>` from the
-immutable published main tag and opens a bot-authored PR **to develop**.
-It cannot merge that PR or write directly to `develop`.
+## First-release PR-only bootstrap
 
-After required PR workflows run (approve them manually if requested),
-`klusik` submits an actual PR **Approve** review and manually chooses
-a **merge commit**, retaining the previous develop history as first
-parent and the exact published main SHA as second parent. The verifier
-rejects owner-authored PRs, missing/dismissed/stale owner approval,
-wrong source SHA, history loss, changed published notes or metadata, and
-red mandatory CI. Even after GitHub merges the PR, status becomes
-`RECONCILED` **only** when the published tag and merge SHA are ancestors
-of current develop, the merge retains both parents and every mandatory
-hosted PHP, Node, Chromium, database and packaging job passes on the
-**exact resulting develop merge SHA**. Otherwise it remains
-`SYNC_PENDING` or `SYNC_BLOCKED`. Do not use a reset, force push,
-squash or autogenerated conflict bypass.
+The older publisher is currently on `main`, while the corrected publisher arrives
+with `v_0.126`. Never dispatch the old promote/override path or add an intermediate
+untagged feature commit to main. The already-present workflow filename
+`release-promotion.yml` supplies the new `bootstrap` mode **at the exact qualified
+release ref**. It is limited to an owner dispatch for `v_0.126` with the pinned
+legacy predecessor, fully green qualification and explicit review reference.
 
-## 5. Optional release branch retirement (#138)
+Its job has `contents: read`, `actions: read`, `pull-requests: write`; it can only
+propose the bot-authored PR. It has no protected-ref/tag/publication write authority.
+Main-only deployment environments cannot approve a release-ref job, so this
+proposal uses explicit owner dispatch; it cannot authorize the later merge or
+publication. The owner reviews the exact candidate workflow before dispatching.
 
-Dispatch `Reviewed release branch retirement` from `main`. Read-only
-`plan` returns `ELIGIBLE`, `BLOCKED` or `ALREADY_DELETED`. Optional
-`retire` requires a **separate** owner deployment approval in
-`release-retirement` and a second eligibility inspection. It verifies
-publication, owner-reviewed reconciliation, exact develop CI, no open
-source/target PR and no active related workflows, then deletes only the
-specified release ref using `--force-with-lease` against its exact SHA.
-Neither tags nor permanent evidence are touched; `RETAIN` is valid.
+GitHub requires the dispatched workflow filename on the default branch; it already
+exists here. Ref-specific bootstrap routing, bot PR creation, manual workflow
+approval and required-check eligibility still need the separately authorized live
+acceptance in #133. If GitHub rejects this routing or review policy, stop at
+`BLOCKED` and record the actual server limitation. Do not substitute the old
+publisher, an unrestricted credential or automatic merge. After the owner manually
+merges `[P,Q]`, the corrected publisher is on main and a separate protected
+`publish` dispatch may proceed. No publication occurs during proposal.
 
-## Required live GitHub settings: the sole human owner
+## Linear reconciliation
 
-The owner configured the following on **2026-10-09**, as recorded in
-[#101's configuration checkpoint](https://github.com/klusik/PHP_gallery/issues/101#issuecomment-6087514464).
-Both rulesets **remain DISABLED** and must not be activated by an agent:
+Publication is `SYNC_PENDING`. From main, owner-approved `propose` can prepare only
+a `feature/reconcile-v_X.Y-<develop prefix>` working branch and dispatch existing
+candidate preparation. It never pushes develop or creates a mandatory develop PR.
 
-- `Reviewed release promotion to main`, ID `24808772`, target `main`;
-  required context `Release qualification`.
-- `Reviewed main-to-develop release reconciliation`, ID `24808873`,
-  target `develop`; required context `Complete required CI matrix`.
+When develop has not advanced, the owner proposes the genuine non-force FF
+`D0 -> Q`, retaining Q SHA and tree. No additional commit is needed. Exact release
+qualification and the real required matrix check must already exist on Q.
+The verifier checks the exact pre-FF develop-to-Q range for merge commits and
+retained selected history; active server rules alone are not content/history proof.
 
-**Before any separately authorized activation**, the owner must turn
-**Require approval of the most recent reviewable push OFF** in both
-rulesets. The last pusher may be the same single human owner. Retain
-one approval, **dismiss stale approvals on push**, require resolved
-review conversations, allow only merge commits, strict current-base CI,
-no force pushes, no deletion, and **zero bypass actors**. Check exact
-required status names and the effective installed rule parameters,
-not only source-controlled templates.
+When develop advanced to `D`, compute the entire three-way merge with **explicit
+base D0**, parallel develop `D`, and released `Q`. Prepare a single-parent `L` whose
+only parent is `D`. This retains all parallel feature history and release changes,
+including deletions, mode changes and binary files. Compare the complete actual L
+tree against the expected tree, and retain SHA-256 of the full binary/full-index
+`D0 -> Q` and `D -> L` patches. Only runtime modules, production inventory and core
+manifest may differ as centrally verified regenerated artifacts; those paths are
+explicitly recorded in the proof. Same version, notes or metadata alone prove
+nothing. New develop merges, lost ancestry and other tree differences block.
 
-All three environments `release-promotion`, `release-reconciliation`,
-and `release-retirement` must have exactly one required reviewer,
-GitHub User `klusik`; **Prevent self-review OFF**, **administrator
-bypass OFF**, wait timer OFF; and a single custom deployment branch,
-`main`. They use no additional release-token secrets. The default
-Actions permission remains read-only; approved writer jobs request
-only specific `GITHUB_TOKEN` write scopes and reader/builder jobs get
-no release write credential. Actions PR creation is enabled. Nothing
-automatically approves a human PR or deployment.
+Conflicts are never resolved automatically with `ours`. The owner must explicitly
+review **every** conflicted path, recording base/develop/release/result `ls-tree -z`
+entries (mode/blob/path or empty for deletion), a concrete decision and review
+reference in `resolutions_json`. The verifier recomputes the full merge and rejects
+missing, extra, mismatched or unbound decisions. A decision accepting a semantic
+change is human acceptance, not proof of text-equivalence. The exact resolved L
+still requires full hosted CI. Complex directory/rename conflicts may require a
+new reviewed source arrangement; unsupported proof remains blocked.
 
-This is conscious **single-owner control**, not two-human review.
-The bot author and owner PR reviewer are distinct identities, but the
-owner remains the only human authorization authority.
+If candidate preparation adds generated commits, the owner squashes only this
+unqualified reconciliation working branch into a single-parent L over D, then
+runs hosted preparation/CI again on **that exact L**. Do not squash/rewrite release
+origin history or reuse a pre-squash run. Before the owner FF, inspect fresh develop
+D and result L; a concurrent develop advance requires a new plan and new CI.
 
-### Safe activation gate and blocked operational checks
+After the separately authorized owner FF, `verify` requires deployment approval,
+exact `result_sha`, prior `develop_base_sha`, current retained history, successful
+SHA-bound central CI and full content evidence. It uploads immutable
+`release-reconciliation.json` to the published release, without modifying develop.
+The owner run must finish successfully before any later inspection accepts it.
+Repeat verification reuses valid identical evidence; it cannot replace an existing
+proof. The state is:
 
-1. Hosted feature-branch CI must pass on the exact implemented SHA.
-   Keep live rulesets DISABLED during implementation.
-2. The owner must separately review and integrate the updated workflows
-   into default `main` and applicable `develop` history. Only then can
-   dispatch from `main` execute the new code. This integration is not
-   authorized to the feature-branch agent.
-3. Verify actual effective environments and corrected rulesets, branch
-   status contexts, approval permissions, bot identities and merge method.
-4. With separate authorization, demonstrate a real controlled bot-authored
-   PR, manual workflow-run authorization where required, an owner review
-   and server refusal of an unreviewed/red PR. If meaningful tests require
-   limited temporary protection activation, obtain explicit approval and
-   document rollback. A passing fixture does **not** prove this.
-5. After verifying real compatibility, request explicit owner approval
-   **before activating** rulesets. Read back both effective rulesets
-   immediately afterward, then use a separately authorized qualified
-   release for the live end-to-end proof required by #133.
+| State | Meaning |
+| --- | --- |
+| `SYNC_PENDING` | Owner FF, accepted evidence or exact completed CI is incomplete |
+| `SYNC_BLOCKED` | Conflict, lost content/history, invalid SHA/tree/owner or server policy |
+| `RECONCILED_FF` | Exact Q retained after the owner FF, with complete CI and owner audit |
+| `RECONCILED_EQUIVALENT` | Single-parent L retained, complete three-way/patch proof and exact CI |
 
-If any required REST permission, environment readback, review identity,
-eligible PR check, hosted CI or qualified candidate is missing, report
-**BLOCKED** with concrete evidence. Do not invent passes, bypass
-protections or enable rulesets automatically.
+The tagged main merge does not need to be an ancestor of develop. A later release
+accepts Q lineage or recomputes the durable equivalent reconciliation proof and
+checks its successful owner workflow. Preserve immutable evidence on interruption;
+an asset uploaded by a subsequently failed owner run is blocked and requires an
+explicit recovery decision, never silent replacement.
 
-**API visibility limitation:** The GitHub REST deployment-branch policy
-listing may report only the policy ID and `name`, not its branch/tag
-`type`. The runtime verifies exactly one literal `main` policy and
-trusted `refs/heads/main` dispatch, rejects an explicitly reported
-tag policy and requires the owner to confirm the actual branch-only
-setting in GitHub Settings. The GitHub REST ruleset detail can redact
-`bypass_actors` from tokens without ruleset-write permission.
-The authorization check intentionally **fails closed** if it cannot
-inspect the bypass inventory. If the approved job's narrow
-`GITHUB_TOKEN` receives a redacted response, publication remains
-BLOCKED. The owner must explicitly decide a least-privilege,
-separately approved and auditable way to obtain trustworthy policy
-evidence; do not automatically add an administration token or
-weaken ruleset checks. Record this as an operational blocker until
-tested against the real environment. GitHub documentation:
-https://docs.github.com/en/rest/repos/rules and
-https://docs.github.com/en/rest/deployments/branch-policies .
+## Server controls and live acceptance
 
-## Lifecycle states and recovery
+Rulesets `24808772` (main) and `24808873` (develop) stay **DISABLED** during
+implementation. Source templates do not activate them or prove server enforcement.
+The compatible policies are separate:
 
-| State | Meaning | Operator action |
-| --- | --- | --- |
-| `BLOCKED_MAIN_ADVANCED` | Main diverged during stabilization or promotion | Preserve attempt; review a new qualified candidate |
-| `PUBLISHED` | Immutable public GitHub Release and assets verified | Schedule reviewed sync, not a completion claim |
-| `SYNC_PENDING` | Sync PR, merged SHA or exact hosted CI is incomplete | Review/fix/qualify without force-updating develop |
-| `SYNC_BLOCKED` | Missing approval, incorrect ancestry, red CI, conflict or rules drift | Stop, retain evidence, resolve explicitly |
-| `RECONCILED` | Published main ancestor, owner-reviewed bot PR merge and exact full CI confirmed | Release lifecycle complete; cleanup optional |
-| `ELIGIBLE` | Exact retained release branch can be retired with a lease | Request separate cleanup approval |
-| `ALREADY_DELETED` | Source release ref absent, immutable publication still intact | Nothing to delete |
+- Main: owner-reviewed PR, one approval, dismiss stale approvals, resolved review
+  threads, merge commits only, no force/deletion/bypass; **loose** required
+  `Release qualification` from GitHub Actions (`integration_id=15368`). Strict
+  up-to-date would incorrectly require previous M ancestry in Q.
+- Develop: linear history, non-force/non-deletion, **no required PR**, strict
+  `Complete required CI matrix` from GitHub Actions. The owner alone performs
+  actual FF; a PR rebase merge is not an SHA-preserving integration method.
 
-Log every gate in #101 with exact release branch, SHA/tree, workflow run/attempt,
-CI run links, human reviewer and PR, tags/assets and remaining BLOCKED items.
-Hermetic tests prove only code behavior and cannot substitute for live server
-protection evidence.
+All three existing environments require sole User `klusik`, Prevent self-review
+OFF, admin bypass OFF, exactly one branch-only `main` deployment policy. Missing
+bypass inventory, incomplete effective rules or unknown policy remains fail-closed.
+No implementation step changes GitHub settings or broadens credentials.
+
+GitHub's [required-check documentation](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)
+excludes checks created by workflow jobs triggered only by `workflow_dispatch`
+from required PR checks; the external GitHub App exception is not evidence that
+an Actions-token-created check is eligible. Promotion therefore returns
+`BLOCKED_PR_CHECK_ELIGIBILITY` for a dispatch-only qualification. After automatic
+initialization/preparation, the owner must review a finalization commit (an explicit
+empty acceptance commit is possible), push it normally to the release branch and
+obtain fresh full qualification on its exact SHA from the **push** event. No
+qualified candidate is rebased or silently rewritten. A future eligible-event/App
+bridge requires a separate architecture decision and live acceptance; there is
+no automatic credential fallback. The current v_0.126 qualification should start
+with the separately approved owner push of its existing release branch.
+
+We statically verify exact context names,
+GitHub Actions provenance and emitted candidate SHA. Live bot PR check eligibility,
+non-ancestral Q, loose main policy, actual merge parents/tree and protected owner FF
+must be tested before activation/publication. No synthetic fixture establishes
+that compatibility. See [workflow triggering](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
+for ref dispatch and bot PR workflow approval.
+
+The read-only server inventory on 2026-10-09 confirms Actions PR creation/review
+permission is enabled. Both disabled ruleset REST responses currently omit
+`integration_id` for required checks. Protected write guards require the explicit
+GitHub Actions binding (`15368`) and fail closed if that provenance is absent.
+Only the owner may later decide and authorize compatible activation/binding and
+the live PR test; this implementation changes neither setting.
+
+## Start New Release and optional retirement
+
+After the corrected workflows reach main through the first release merge,
+**Start New Release** accepts version and optional exact develop SHA. It requires
+owner dispatch and separate main-only deployment approval, checks the current
+published main and immutable predecessor, selected develop lineage, target absence
+and fresh ref leases, then creates one origin commit containing both records and
+atomically creates its release ref. It explicitly dispatches existing release
+qualification because token-created pushes do not recursively start Actions.
+
+Initialization refuses a selected develop tree already containing that version's
+origin/predecessor paths or missing the qualification handoff contract. No existing
+initialization bytes can be overwritten through atomic tree creation.
+
+An interrupted run may leave unattached Git objects; it cannot publish a partial
+origin branch. A retry reuses only an unchanged verified origin and source. A
+conflicting branch/tag/source or a raced main/develop/tag blocks. There is no PATCH
+ref, force update, protected write, tag or publication operation. `v_0.126` is
+explicitly excluded because its existing local origin must be transferred unchanged.
+
+GitHub's ref-creation API cannot atomically lease other branch/tag refs. Initialization
+therefore rechecks the target tag and selected context immediately before creation
+and again before qualification handoff. A detected race after creation fails the run
+and retains the exact origin branch for explicit owner recovery; it never moves or
+deletes that origin. Qualification independently rechecks the immutable context.
+
+Retirement accepts only `RECONCILED_FF` or `RECONCILED_EQUIVALENT`. It separately
+requires owner approval, exact candidate lease, no active source/target PR or
+related workflow, and fresh eligibility. The retained release branch is optional;
+keeping it is valid. Deletion targets only that one leased release ref. Historic
+tags, releases and proof files remain immutable.
+
+## Current v_0.126 implementation boundary
+
+Implementation is authorized only on `feature/linear-release-lifecycle-101`,
+starting at the existing local release HEAD. The origin commit stays outside the
+squashable implementation range. After review, the owner may separately authorize
+fast-forwarding local release to the exact hosted-qualified feature candidate;
+no release integration, release-branch push, tag, ruleset activation or publication
+is part of this implementation task. P0 source correctness is demonstrated by the
+central hosted matrix; #133 live server and publication acceptance stays blocked
+until separately authorized. Stage A/B failure timings, cold/warm PDF cost and
+live first-trigger idempotence remain operational measurement gaps (#139/#140).

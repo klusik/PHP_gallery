@@ -2551,52 +2551,72 @@ the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record command
 
 \subsection{GitHub-hosted release preparation and~qualification}
 
-A~new release starts from~an~explicit, immutable \codeword{develop} commit.
-The~release branch's first commit adds a~reviewed record under~\filepath{.github/release-origins/},
-binding the~selected develop SHA, previous stable tag, and~initial \codeword{main} SHA.
-The~hosted workflow verifies this provenance before Stage~A (\codeword{release-preflight}),
-then runs centrally registered source-only Stage~B (\codeword{release-stage-b})
-before Copilot, TinyTeX or~PDF generation. A~stable source-commit timestamp initializes
-previously absent release metadata, while completed valid metadata stays unchanged.
 
-Publication does~not end the~release lifecycle. After the~owner
-has manually reviewed and merged the bot-authored release PR into
-\codeword{main} and separately approved publication, the~maintainer
-uses \filepath{.github/workflows/release-reconciliation.yml} to~propose
-a~bot-authored PR into \codeword{develop}. Only a~manual owner PR approval,
-a~true merge retaining both parent histories and~successful complete
-hosted CI on~the~exact resulting develop SHA establish reconciliation.
-Optional retirement requires another owner approval and~an~exact remote
-ref lease; neither workflow directly overwrites protected branches.
+% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
+\subsubsection{Linear Git release lifecycle and first-release bootstrap}
 
-The~sole human owner \codeword{klusik} approves each protected deployment
-in~\codeword{release-promotion}, \codeword{release-reconciliation} and
-\codeword{release-retirement}. Each environment is main-only, allows
-self-review of~the~workflow dispatch and~forbids administrator bypass.
-The~bot \codeword{github-actions[bot]} creates PRs; the~owner personally
-reviews and merges them. GitHub may require the~owner to~choose
-\ui{Approve workflows to run} before PR checks start. This is~one-human
-control, not independent two-person review.
+Completed feature work is~squashed into one logical commit and~qualified again
+at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
+non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
+provide this guarantee. Existing history stays intact and~new develop commits
+remain linear. Agents never update develop or~main directly.
 
-The~two prepared GitHub rulesets for \codeword{main} and~\codeword{develop}
-remain DISABLED until the~owner separately authorizes activation.
-Before activation the~most-recent-push approval requirement must be OFF
-for~the~single-owner setup, while one PR approval, stale-review dismissal,
-strict required status checks and~zero bypass actors remain mandatory.
-The~write steps fail closed while effective rules are absent.
-See~\filepath{docs/RELEASE_LIFECYCLE.md} for~the~activation gates.
+The~release origin's only parent is~the~explicit selected develop commit D0.
+Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
+is~never rewritten. Tag object SHA, peeled published-main commit P, previous
+release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
+\codeword{v\_0.125} legacy pin records unknown historical qualification;
+it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
+scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
+locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
 
-The~maintainer starts \filepath{.github/workflows/release-promotion.yml}
-from~\codeword{main} with the~qualified run, exact candidate SHA and
-release branch. \codeword{plan} reads evidence only. After the~owner
-approves the~deployment, \codeword{promote} opens a~bot-authored PR but
-never auto-merges it. The~owner approves PR workflows if requested,
-checks CI, submits the~PR approval and~merges manually. A~new,
-separately approved \codeword{publish} verifies the~exact SHA-bound
-owner review, identical candidate/main trees, immutable tag, release
-packages and~permanent SHA-256 evidence before publication. Red-check
-overrides cannot publish in~this model. Missing protections or~checks
-are BLOCKED; agents never push directly to~develop/main.
+The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
+qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
+PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
+wrong parents/tree, stale review or~missing/red CI stops publication.
+
+After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
+without a~new commit. The~FF verifier independently rejects new merge commits.
+Parallel develop work requires a~single-parent L over its~observed head,
+complete three-way content proof, retained feature history,
+explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
+prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
+pushes develop. Completion is~\codeword{RECONCILED\_FF} or
+\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
+or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
+Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
+
+Main protection requires owner-reviewed merge PRs and~loose Release qualification;
+develop requires linear, non-force history and~Complete required CI matrix without
+mandatory PRs. The~existing rulesets stay disabled until separately approved live
+check/merge/FF acceptance. All three release environments remain owner-reviewed
+and~main-only. No~red-check override is~permitted.
+
+For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
+filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
+read-only contents permission permits only a~bot PR proposal. The~owner verifies
+workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
+publisher then exists on~main before a~separate publish approval. Never execute
+the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
+Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
+
+Future releases use \ui{Start New Release}: owner-approved version/optional develop
+SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
+to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
+GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
+block concurrent tag/source changes; an~origin created before a~detected race stays
+immutable for~explicit owner recovery.
+
+GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
+fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
+pushes a~reviewed finalization commit and~fresh full push qualification verifies
+its~exact SHA. Required-check app binding and~actual bot PR eligibility need
+live acceptance; an~external App/event bridge is~a~separate owner decision.
+Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
+GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
+matrix rather than~inferring qualification from~a~navigation URL.
+The~full operator contract and~remaining live tests are~in
+\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
 
 The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
 

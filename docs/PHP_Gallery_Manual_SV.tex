@@ -2477,58 +2477,72 @@ Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera
 
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
 
-En ny utgåva utgår från en uttryckligen vald, oföränderlig commit i~grenen
-\codeword{develop}. Utgåvegrenens första commit lägger till~en~granskad
-ursprungspost under~\filepath{.github/release-origins/} med~vald develop-SHA,
-föregående stabil tagg och~ursprunglig \codeword{main}-SHA.
-GitHub-arbetsflödet kontrollerar detta ursprung före Stage~A
-(\codeword{release-preflight}) och~kör sedan centralt registrerade källkontroller
-i~Stage~B (\codeword{release-stage-b}) innan Copilot, TinyTeX eller~PDF-generering.
-Metadata som saknas första gången får en~reproducerbar tid från~källcommiten;
-befintliga giltiga tidsuppgifter behålls vid~omkörning.
 
-Publicering avslutar inte utgåvans livscykel. När ägaren
-manuellt har godkänt och~sammanfogat utgåvans bot-skapade PR
-till~\codeword{main} och~separat godkänt publiceringen använder
-underhållaren \filepath{.github/workflows/release-reconciliation.yml}
-för~att föreslå en~ny bot-skapad PR till~\codeword{develop}.
-Synkroniseringen är slutförd först när ägaren manuellt har
-godkänt den, en~riktig merge med~två föräldrar har bevarat
-historiken och~alla obligatoriska GitHub CI-tester har lyckats
-för~exakt den resulterande develop-SHA:n. Valfri borttagning
-av~utgåvegrenen kräver ytterligare godkännande och~en~exakt
-lease för fjärrreferensen.
+% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
+\subsubsection{Linear Git release lifecycle and first-release bootstrap}
 
-Den~enda mänskliga ägaren \codeword{klusik} godkänner varje
-skyddad körning i~\codeword{release-promotion},
-\codeword{release-reconciliation} och~\codeword{release-retirement}.
-Varje miljö tillåter endast \codeword{main}, tillåter ägarens
-egen körningsgranskning och~förbjuder administratörsförbigång.
-Botten \codeword{github-actions[bot]} skapar PR; ägaren granskar
-och~sammanfogar dem själv. GitHub kan kräva
-\ui{Approve workflows to run} innan PR-tester körs.
-Detta är kontroll av~en~person, inte oberoende tvåpersonersgranskning.
+Completed feature work is~squashed into one logical commit and~qualified again
+at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
+non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
+provide this guarantee. Existing history stays intact and~new develop commits
+remain linear. Agents never update develop or~main directly.
 
-De~två förberedda GitHub-regeluppsättningarna för
-\codeword{main} och~\codeword{develop} förblir INAKTIVA
-tills ägaren godkänner aktiveringen separat. Kravet på
-godkännande av~den~senaste pushen måste först stängas av
-för~den ensamma ägaren. Ett PR-godkännande, återkallelse
-av~inaktuella granskningar, strikta obligatoriska CI-kontroller
-och~inga undantagsaktörer måste bevaras. Utan aktivt skydd
-blockeras skrivåtgärder. Se~\filepath{docs/RELEASE_LIFECYCLE.md}.
+The~release origin's only parent is~the~explicit selected develop commit D0.
+Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
+is~never rewritten. Tag object SHA, peeled published-main commit P, previous
+release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
+\codeword{v\_0.125} legacy pin records unknown historical qualification;
+it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
+scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
+locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
 
-Underhållaren startar \filepath{.github/workflows/release-promotion.yml}
-från~\codeword{main} med~kvalificerad körning, exakt SHA och
-utgåvegren. \codeword{plan} läser endast bevis.
-\codeword{promote} skapar efter miljögodkännande en~bot-PR
-utan automatisk sammanfogning. Ägaren godkänner vid behov
-PR-testerna, kontrollerar CI, lämnar en~PR-granskning och
-sammanfogar manuellt. Separat godkänd \codeword{publish}
-verifierar ägarens granskning av~exakt SHA, identiska
-Git-träd, oföränderlig tagg, paket och~beständiga SHA-256-bevis.
-Undantag för~misslyckad CI är förbjudna. Saknat skydd ger
-BLOCKED; agenter skriver aldrig direkt till~develop/main.
+The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
+qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
+PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
+wrong parents/tree, stale review or~missing/red CI stops publication.
+
+After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
+without a~new commit. The~FF verifier independently rejects new merge commits.
+Parallel develop work requires a~single-parent L over its~observed head,
+complete three-way content proof, retained feature history,
+explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
+prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
+pushes develop. Completion is~\codeword{RECONCILED\_FF} or
+\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
+or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
+Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
+
+Main protection requires owner-reviewed merge PRs and~loose Release qualification;
+develop requires linear, non-force history and~Complete required CI matrix without
+mandatory PRs. The~existing rulesets stay disabled until separately approved live
+check/merge/FF acceptance. All three release environments remain owner-reviewed
+and~main-only. No~red-check override is~permitted.
+
+For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
+filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
+read-only contents permission permits only a~bot PR proposal. The~owner verifies
+workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
+publisher then exists on~main before a~separate publish approval. Never execute
+the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
+Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
+
+Future releases use \ui{Start New Release}: owner-approved version/optional develop
+SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
+to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
+GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
+block concurrent tag/source changes; an~origin created before a~detected race stays
+immutable for~explicit owner recovery.
+
+GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
+fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
+pushes a~reviewed finalization commit and~fresh full push qualification verifies
+its~exact SHA. Required-check app binding and~actual bot PR eligibility need
+live acceptance; an~external App/event bridge is~a~separate owner decision.
+Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
+GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
+matrix rather than~inferring qualification from~a~navigation URL.
+The~full operator contract and~remaining live tests are~in
+\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 

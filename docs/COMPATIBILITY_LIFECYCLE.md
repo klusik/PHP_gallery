@@ -682,3 +682,20 @@ proof that meets its retirement condition, identify migration and release-note
 effects, add or adjust the regression/acceptance evidence, and link the change
 that removes the behavior. Permanent records may remain as architectural
 contracts rather than accumulating expiry dates.
+
+## Release provenance schema v1 and v_0.125 legacy predecessor
+
+Owner: hosted release-origin/promotion tooling. Schema v1 is permanently supported
+for immutable origins, including the already initialized v_0.126. Extended tag,
+release-side and tree identities live in separate evidence and future immutable
+predecessor records. Never rewrite the existing origin to migrate its schema.
+Usage: one confirmed v_0.126 initialization; other usage unknown.
+
+The repository-specific v_0.125 legacy pin protects the actual annotated historical
+tag and identical published/release-side tree. Historical qualification is
+UNKNOWN_LEGACY. It grants no write/publication authority and cannot qualify any
+other predecessor. Retain this historical proof permanently; future initializations
+use normal durable qualification evidence. Regression: release_origin_test.mjs and
+linear_release_graph_test.mjs, registered in the central audit. Direct CLI release
+notes retain their explicit tag-based default; hosted preparation supplies verified
+release-side SHA and checks tree equality. Direct CLI usage is unknown.

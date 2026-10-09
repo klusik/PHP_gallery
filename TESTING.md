@@ -1244,6 +1244,14 @@ Only for an explicitly requested offline/recovery procedure may the maintainer u
 the local commands documented in `RELEASE.md`; the resulting local evidence is
 not a substitute for GitHub-hosted candidate qualification.
 
+Release promotion fixtures also reject dispatch-only PR qualification eligibility,
+foreign/red/unavailable exact checks, auto-merge and a non-owner merger. GitHub's
+live PR evaluation remains separate: require push-triggered release qualification,
+the exact Actions integration binding, an owner-approved bot PR and its actual
+merge parents/tree. A manual-dispatch green run alone cannot prove merge eligibility.
+Fixtures also model GitHub's normalized check URL and require exact external
+kind/run/attempt/SHA identity; missing or substituted bindings are rejected.
+
 ### Version 0.94.2 thumbnail-policy regression
 
 The hosted full regression covers `php tests/thumbnail_format_metadata_consistency_test.php`, `php tests/thumbnail_compatibility_model_test.php`, `php tests/public_thumbnail_markup_test.php`, `php tests/public_thumbnail_rendering_model_test.php`, `php tests/thumbnail_warmup_model_test.php` when changing thumbnail compatibility, metadata, manifest, bundle, generation, maintenance, or public rendering code. Verify that the default and explicit `modern` mode advertise only WebP derivatives, including progressive and responsive candidates, even with historical valid JPEG metadata or files present. Verify that explicit `legacy` mode continues to advertise valid JPEG and WebP derivatives, and that cleanup removes stale JPEG metadata whether or not the generated file exists. Confirm old `.jpg` requests in modern mode do not generate files or mutate settings.
@@ -2577,8 +2585,25 @@ operator path and exact live GitHub protections. Tests
 `tests/release_reconciliation_test.mjs` and
 `tests/release_retirement_test.mjs` are registered with the central audit.
 They use inert server/Git fixtures to reject changed origin bytes, stale main,
-missing independent review, incorrect dual-parent merge ancestry, red hosted
-checks, active operations and moved cleanup refs. They do not certify that any
+missing owner review, incorrect release merge parents, non-linear reconciliation,
+wrong trees, lost released/parallel changes, red hosted checks, conflicts, active
+operations and moved cleanup refs. `tests/linear_release_graph_test.mjs` builds a
+real isolated two-release graph with annotated tags, schema v1 origins, absent
+previous-main ancestry, deletion preservation and parallel replay.
+Its FF case also rejects a release destination containing a new merge commit.
+`tests/start_new_release_test.mjs` verifies atomic origin/ref creation, duplicate
+tags, exact-source retries and raced refs through the same central registry. It
+also introduces a target tag during object creation and after ref creation,
+proving that initialization refuses creation or qualification handoff respectively
+without rewriting the origin. These tests do not certify that any
 GitHub environment or ruleset is installed, that a human approved an actual
 PR, or that a real release was published/reconciled. CI-first hosted qualification
 and exact source SHA remain authoritative; no new local handoff gate is implied.
+
+Required live acceptance remains separate: ref-dispatched first-release bot PR,
+owner workflow-run and PR approval, exact Release qualification head/test-merge
+eligibility, ordered [P,Q] main parents with tree(Q), owner-only true FF preserving
+Q or exact single-parent L, immutable acceptance assets and the next release.
+Both rulesets stay disabled until separately approved real server testing. Source
+fixtures and a green feature matrix do not establish production release approval.
+No local manual PDF build is part of feature verification.

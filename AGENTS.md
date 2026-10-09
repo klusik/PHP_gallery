@@ -130,9 +130,10 @@ duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md
 
 In addition to the mandatory hosted CI-first contract, release-only operations
 must follow `docs/RELEASE_LIFECYCLE.md`: record an exact selected `develop`
-origin, reject main ancestry drift, and treat publication as `SYNC_PENDING`
-until a separate independently reviewed main-to-develop PR is merged and every
-exact merged-SHA required hosted CI job is green. Never modify protected refs
+origin, reject exact published-main/tag drift, and treat publication as `SYNC_PENDING`
+until an owner-approved true FF to Q or single-parent equivalent L is retained
+with full tree/patch evidence and exact-SHA hosted CI. Never require the tagged
+main merge to be a develop ancestor or introduce new develop merge commits. Never modify protected refs
 without the separately authorized GitHub workflow and server enforcement.
 Cleanup is an optional separately approved Git ref lease, never routine pruning.
 

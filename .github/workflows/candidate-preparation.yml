@@ -228,8 +228,19 @@ jobs:
           const summary = `Branch: ${e.GITHUB_REF_NAME}\nCandidate: ${e.CANDIDATE_SHA}\nComparison base: ${e.SOURCE_BASE}\nResult: ${e.GATE_OUTCOME}\nWorkflow: https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`;
           appendFileSync(e.GITHUB_STEP_SUMMARY, summary + '\n');
           writeFileSync(e.RUNNER_TEMP + '/candidate-check.json', JSON.stringify({name:'Candidate qualification',
+            external_id:`candidate:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.CANDIDATE_SHA}`,
             head_sha:e.CANDIDATE_SHA, status:'completed', conclusion:e.GATE_OUTCOME === 'success' ? 'success' : 'failure',
             details_url:`https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
             output:{title:'Exact prepared source candidate',summary}}));
           NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/candidate-check.json"
+          # A reusable workflow may prefix its native job context even when SHA is unchanged.
+          # Bind the required public context to the verified aggregate for every candidate.
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          const file = process.env.RUNNER_TEMP + '/candidate-check.json';
+          const check = JSON.parse(readFileSync(file,'utf8'));
+          check.name = 'Complete required CI matrix';
+          writeFileSync(process.env.RUNNER_TEMP + '/prepared-matrix-check.json',JSON.stringify(check));
+          NODE
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/prepared-matrix-check.json"

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repository": "klusik/PHP_gallery",
+  "tag": "v_0.125",
+  "tag_object_sha": "e84b66ac93fb6bbf61fd0a599e0c34cb43484d48",
+  "published_commit_sha": "9ef4fbe54ecb4f2eaeba7d6595cabda016b50fc3",
+  "first_parent_sha": "d92c464ad8292c8a6070f14dffaefe63b9c25051",
+  "release_candidate_sha": "a9f08375881bae68b99aa048e3d44e428551d31b",
+  "tree_sha": "52a9d282b400f31b947967975206a216086064d7",
+  "qualification": "UNKNOWN_LEGACY",
+  "owner": "klusik",
+  "evidence": "https://github.com/klusik/PHP_gallery/issues/101",
+  "scope": "Read-only predecessor bootstrap; no historical release qualification or publication authority."
+}

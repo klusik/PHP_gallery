@@ -2477,53 +2477,72 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 
 \subsection{Příprava a~kvalifikace vydání na GitHubu}
 
-Nové vydání vychází z~výslovně vybraného neměnného commitu větve \codeword{develop}.
-První commit release větve přidává zkontrolovaný záznam do~\filepath{.github/release-origins/},
-který váže vybrané SHA větve develop, předchozí stabilní tag a~počáteční SHA větve \codeword{main}.
-Hostovaný postup tento původ ověřuje před levnou kontrolou Stage~A
-(\codeword{release-preflight}) a~následně spustí centrální zdrojové kontroly Stage~B
-(\codeword{release-stage-b}) ještě před Copilotem, TinyTeX nebo~generováním PDF.
-Chybějící počáteční metadata získají reprodukovatelný čas z~commitu zdrojů;
-existující platný datum vydání se při opakování nemění.
 
-Zveřejněním vydání jeho životní cyklus nekončí. Po~ručním
-schválení a~sloučení release PR vytvořeného botem do~\codeword{main}
-a~samostatně schválené publikaci správce použije
-\filepath{.github/workflows/release-reconciliation.yml} k~vytvoření
-dalšího PR do~\codeword{develop}. Synchronizace je~dokončena až~po
-ručním schválení vlastníkem, skutečném sloučení se~dvěma rodiči
-a~úspěšném úplném GitHub CI nad přesným výsledným SHA větve develop.
-Volitelné odstranění release větve vyžaduje další souhlas vlastníka
-a~kontrolu přesného SHA vzdálené reference.
+% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
+\subsubsection{Linear Git release lifecycle and first-release bootstrap}
 
-Jediný lidský správce \codeword{klusik} schvaluje každé chráněné
-nasazení v~prostředích \codeword{release-promotion},
-\codeword{release-reconciliation} a~\codeword{release-retirement}.
-Každé prostředí povoluje pouze větev \codeword{main}, neblokuje
-schválení vlastního spuštění a~zakazuje administrátorské obejití.
-Bot \codeword{github-actions[bot]} zakládá PR, vlastník je~osobně
-kontroluje a~slučuje. GitHub může před spuštěním CI vyžadovat
-\ui{Approve workflows to run}. Nejde o~nezávislé schválení druhým
-člověkem, ale o~vědomou kontrolu jediným správcem.
+Completed feature work is~squashed into one logical commit and~qualified again
+at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
+non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
+provide this guarantee. Existing history stays intact and~new develop commits
+remain linear. Agents never update develop or~main directly.
 
-Dva připravené GitHub rulesety pro \codeword{main} a~\codeword{develop}
-zůstávají VYPNUTÉ do~samostatného rozhodnutí vlastníka. Před aktivací
-je~nutné vypnout požadavek na~schválení posledního pushujícího, avšak
-zachovat jedno schválení PR, zneplatnění zastaralých schválení,
-povinné přísné kontroly CI a~nulové výjimky z~ochrany. Bez aktivních
-ochran zápisové operace bezpečně selžou. Další podmínky stanoví
-\filepath{docs/RELEASE_LIFECYCLE.md}.
+The~release origin's only parent is~the~explicit selected develop commit D0.
+Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
+is~never rewritten. Tag object SHA, peeled published-main commit P, previous
+release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
+\codeword{v\_0.125} legacy pin records unknown historical qualification;
+it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
+scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
+locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
 
-Správce spouští \filepath{.github/workflows/release-promotion.yml}
-z~\codeword{main} s~úspěšnou kvalifikací, přesným SHA a~větví vydání.
-\codeword{plan} pouze čte důkazy. \codeword{promote} po~schválení
-prostředí vytvoří PR pod~botem, nikdy ho~automaticky nesloučí.
-Vlastník případně povolí spuštění CI, ověří všechny kontroly,
-schválí PR a~ručně ho~sloučí. Samostatně schválený \codeword{publish}
-ověří schválení vlastníka vázané na~přesné SHA, shodný Git strom,
-neměnný tag, balíčky a~trvalé SHA-256 důkazy. Výjimka pro~neúspěšné
-testy je~zakázána. Chybějící ochrany znamenají BLOCKED; agenti
-nikdy přímo nezapisují do~develop/main.
+The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
+qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
+PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
+wrong parents/tree, stale review or~missing/red CI stops publication.
+
+After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
+without a~new commit. The~FF verifier independently rejects new merge commits.
+Parallel develop work requires a~single-parent L over its~observed head,
+complete three-way content proof, retained feature history,
+explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
+prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
+pushes develop. Completion is~\codeword{RECONCILED\_FF} or
+\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
+or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
+Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
+
+Main protection requires owner-reviewed merge PRs and~loose Release qualification;
+develop requires linear, non-force history and~Complete required CI matrix without
+mandatory PRs. The~existing rulesets stay disabled until separately approved live
+check/merge/FF acceptance. All three release environments remain owner-reviewed
+and~main-only. No~red-check override is~permitted.
+
+For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
+filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
+read-only contents permission permits only a~bot PR proposal. The~owner verifies
+workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
+publisher then exists on~main before a~separate publish approval. Never execute
+the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
+Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
+
+Future releases use \ui{Start New Release}: owner-approved version/optional develop
+SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
+to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
+GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
+block concurrent tag/source changes; an~origin created before a~detected race stays
+immutable for~explicit owner recovery.
+
+GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
+fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
+pushes a~reviewed finalization commit and~fresh full push qualification verifies
+its~exact SHA. Required-check app binding and~actual bot PR eligibility need
+live acceptance; an~external App/event bridge is~a~separate owner decision.
+Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
+GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
+matrix rather than~inferring qualification from~a~navigation URL.
+The~full operator contract and~remaining live tests are~in
+\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
 
 Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
 
