@@ -42,7 +42,7 @@ use Throwable;
 use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
-use function Gallery\Core\image_public_url;
+use function Gallery\Core\image_public_route_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\url_rewrite_should_emit_clean_urls;
 
@@ -170,24 +170,24 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
 }
 
 /**
- * Return the public base URL used to derive media and thumbnail URLs for one image.
+ * Return the undecorated public image route used to derive media and thumbnail URLs.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{url_slug?:string|null,filename?:string|null} $image Image identity used to build the public route.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery route fields used to build the public image route.
+ * @return string Public image route without visual-preview query markers.
  */
 function public_gallery_media_manifest_image_base_url(array $image, array $gallery): string
 {
-    return rtrim(image_public_url($image, $gallery), '/');
+    return rtrim(image_public_route_url($image, $gallery), '/');
 }
 
 /**
  * Return a public media URL without repeated generic URL resolution.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param string $imageBaseUrl Public image base URL.
- * @return string Text result for the caller.
+ * @param array{url_slug?:string|null,filename?:string|null,id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Public route identity plus source/derivative revision fields used for URL construction and cache invalidation.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery route fields for query-mode media URLs and fallback ownership.
+ * @param string $imageBaseUrl Undecorated public image route used to append the clean media suffix before preview markers.
+ * @return string Versioned public media URL with preview markers after the complete route path.
  */
 function public_gallery_media_manifest_media_url(array $image, array $gallery, string $imageBaseUrl): string
 {
@@ -205,12 +205,12 @@ function public_gallery_media_manifest_media_url(array $image, array $gallery, s
 /**
  * Return a public thumbnail URL without repeated generic URL resolution.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param string $imageBaseUrl Public image base URL.
+ * @param array{url_slug?:string|null,filename?:string|null,id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Public route identity plus source/derivative revision fields used for URL construction and cache invalidation.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery route fields for query-mode thumbnail URLs and fallback ownership.
+ * @param string $imageBaseUrl Undecorated public image route used to append the clean thumbnail suffix before preview markers.
  * @param int $size Thumbnail size.
  * @param string $format Thumbnail format.
- * @return string Text result for the caller.
+ * @return string Versioned public thumbnail URL with preview markers after the complete route path.
  */
 function public_gallery_media_manifest_variant_url(array $image, array $gallery, string $imageBaseUrl, int $size, string $format): string
 {

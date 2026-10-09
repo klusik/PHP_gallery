@@ -199,10 +199,12 @@ Maintenance run state, last-result and completion marker settings are runtime st
 | Google linked account/OAuth state | auth services; Account | user/account-specific | specialized service fallback | optional auth schema | Specialized status/link | Account | secret/identity |
 | OpenAI user settings/API key | OpenAI service; Account | user-specific model/consent/key settings | disabled/unavailable when feature/schema/key missing | optional user settings schema | Specialized status/link, no key value | Account | secret |
 | Upload API keys | upload automation services; API manager | gallery-scoped secrets | dedicated API-key lifecycle | existing upload API schema | Specialized status/link | API manager | secret |
-| `custom_css_preset` and uploaded raw CSS | `custom_css.php` / Theme | preset marker plus file-backed CSS | built-in stylesheet when no custom CSS | changes public CSS; file-backed | Specialized status/link | Theme Custom CSS | advanced |
+| `custom_css_preset` and uploaded raw CSS | `custom_css.php` / Theme | preset marker plus file-backed CSS; the Live Visual CSS Editor produces a bounded managed CSS block | built-in stylesheet when no custom CSS | changes public CSS; file-backed; visual page-width and background edits stay in the in-memory draft until the existing explicit CSS Save | Specialized status/link | Theme Custom CSS | advanced |
 | Theme branding/background files | Theme media services | uploaded image assets | built-in/no asset fallback | filesystem write/derivative generation | Specialized status/link | Theme Media | file-backed |
 | Language pack JSON editor | translations/Theme | JSON string catalog | default catalog/fallback language | filesystem write/import/export | Specialized | Theme Language | advanced |
 | Database repair, cleanup, migrations, optimize/analyze | database maintenance/migrations | explicit operation, not scalar setting | no automatic central action | potentially destructive/DDL; existing migrations | Specialized | Storage > DB maintenance | destructive |
+
+The Live Visual CSS Editor is part of Theme Custom CSS, not a new persisted setting or upload endpoint. Its page-width preview writes only the managed CSS draft and never changes `theme_page_width` or `theme_page_width_custom`; Reset reveals the width supplied by Theme Appearance. A selected background image remains in the browser until the administrator uses the existing explicit CSS Save action, which sends CSS and the reviewed image together through the Theme background owner. CSS-only saves remain supported. The browser preview and file selection do not write Theme settings or assets.
 
 ## Inheritance and override rules
 

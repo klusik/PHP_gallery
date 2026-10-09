@@ -163,6 +163,8 @@ jobs:
             cache/test-audit/**/source-policy-changed.log
             cache/test-audit/**/source-contract-inventory.log
             cache/test-audit/**/python-import-policy.log
+            cache/test-audit/**/js-lint.log
+            cache/test-audit/**/ci-workflow-contract.log
             cache/test-audit/**/source-documentation-changed.json
             cache/test-audit/**/source-policy-changed.json
             cache/test-audit/**/source-documentation.json

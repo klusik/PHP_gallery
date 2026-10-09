@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\admin_anonymous_preview_active;
+
 require_once __DIR__ . '/gallery_edit_concurrency.php';
 
 use InvalidArgumentException;
@@ -196,7 +198,7 @@ function gallery_branding_schema_ready(): bool
 /**
  * Return the stored relative path for one branding asset, if configured.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null} $gallery Configured relative paths keyed by supported branding kind.
  * @param string $kind Kind value.
  * @return ?string Text result for the caller.
  */
@@ -254,20 +256,29 @@ function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $
 }
 
 /**
- * Return the public route for one configured gallery branding asset.
+ * Return the public route for one configured gallery branding asset after audience-specific access checks.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,folder_path:string,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null,banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null} $gallery Gallery identity, path, inherited visibility/access/NSFW policy, and optional branding paths.
  * @param string $kind Kind value.
  * @param bool $publicOnly Public only value.
- * @return string Text result for the caller.
+ * @return string Authorized asset URL, or an empty string when public visitor access is unavailable.
  */
 function gallery_branding_asset_url(array $gallery, string $kind, bool $publicOnly): string
 {
-    if ($publicOnly && gallery_access_requirement($gallery) !== null && !visitor_can_access_gallery($gallery)) {
-        return '';
-    }
-    if ($publicOnly && gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
-        return '';
+    if ($publicOnly) {
+        $anonymousPreview = admin_anonymous_preview_active();
+        $galleryVisitorAllowed = $anonymousPreview
+            ? visitor_can_access_gallery_without_admin_bypass($gallery)
+            : visitor_can_access_gallery($gallery);
+        $nsfwVisitorAllowed = $anonymousPreview
+            ? visitor_can_access_nsfw_content_without_admin_bypass()
+            : visitor_can_access_nsfw_content();
+        if (gallery_access_requirement($gallery) !== null && !$galleryVisitorAllowed) {
+            return '';
+        }
+        if (gallery_nsfw_requirement($gallery) !== null && !$nsfwVisitorAllowed) {
+            return '';
+        }
     }
     if (gallery_branding_asset_abs_path($gallery, $kind) === null) {
         return '';
@@ -586,4 +597,3 @@ function delete_theme_branding_asset(string $kind): void
     }
     set_app_setting(theme_branding_asset_setting($kind), '');
 }
-

@@ -63,6 +63,7 @@ use function Gallery\Services\public_gallery_sitemap_entries;
 use function Gallery\Services\public_render_profile_count;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_sitemap_entries;
+use function Gallery\Core\public_visual_preview_url;
 use function Gallery\Services\public_sitemap_image_last_modified;
 use function Gallery\Services\public_sitemap_lastmod;
 use function Gallery\Services\site_name;
@@ -104,7 +105,7 @@ use function Gallery\Views\view_render_public_seo_tags;
  * Encode one relative gallery path for clean public URLs while preserving slashes.
  *
  * @param string $folderPath Folder path filesystem path.
- * @return string Text result for the caller.
+ * @return string Encoded public route segment with slash hierarchy preserved.
  */
 function gallery_public_path_segment(string $folderPath): string
 {
@@ -112,10 +113,10 @@ function gallery_public_path_segment(string $folderPath): string
 }
 
 /**
- * Build the preferred public URL for one gallery, using its clean public path when available.
+ * Build the preferred public URL for one gallery, using its clean public path and active preview audience state when available.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
+ * @return string Public gallery URL in the configured route mode.
  */
 function gallery_public_url(array $gallery): string
 {
@@ -133,7 +134,10 @@ function gallery_public_url(array $gallery): string
     if (!url_rewrite_should_emit_clean_urls()) {
         return url_for('gallery', ['public_path' => $urlPath]);
     }
-    return public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
+    $url = public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
+    return (string) ($_GET['preview'] ?? '') === 'visual'
+        ? public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous')
+        : $url;
 }
 
 /**
@@ -142,8 +146,8 @@ function gallery_public_url(array $gallery): string
  * The returned value is independent from URL rewrite support so callers can
  * safely choose either clean path routing or index.php query-string routing.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{url_slug?:string|null,filename?:string|null} $image Image URL slug or source filename fallback.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
  * @return string Public gallery/image path without a leading or trailing slash.
  */
 function image_public_route_path(array $image, array $gallery): string
@@ -170,20 +174,38 @@ function image_public_route_path(array $image, array $gallery): string
 }
 
 /**
- * Build the preferred public URL for one image detail page.
+ * Build the public image route without adding visual-preview query markers.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * Asset URL owners append `/media` or a thumbnail suffix to this undecorated
+ * route before adding preview context, so clean-route query strings stay after
+ * the complete path.
+ *
+ * @param array{url_slug?:string|null,filename?:string|null} $image Image URL slug or source filename fallback.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the route.
+ * @return string Public image route without visual-preview markers.
+ */
+function image_public_route_url(array $image, array $gallery): string
+{
+    $publicPath = image_public_route_path($image, $gallery);
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return base_url('index.php?' . http_build_query(['page' => 'gallery', 'public_path' => $publicPath]));
+    }
+    return public_base_url() . '/gallery/' . public_path_segment($publicPath) . '/';
+}
+
+/**
+ * Build the preferred public URL for one image detail page, retaining visual-preview navigation state.
+ *
+ * @param array{url_slug?:string|null,filename?:string|null} $image Image URL slug or source filename fallback.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
+ * @return string Public gallery/image URL in the configured route mode.
  */
 function image_public_url(array $image, array $gallery): string
 {
-    // $publicPath stores the rewrite-independent gallery/image route.
-    $publicPath = image_public_route_path($image, $gallery);
-    if (!url_rewrite_should_emit_clean_urls()) {
-        return url_for('gallery', ['public_path' => $publicPath]);
-    }
-    return public_base_url() . '/gallery/' . public_path_segment($publicPath) . '/';
+    $url = image_public_route_url($image, $gallery);
+    return (string) ($_GET['preview'] ?? '') === 'visual'
+        ? public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous')
+        : $url;
 }
 
 
@@ -193,16 +215,16 @@ function image_public_url(array $image, array $gallery): string
  * Query-string installations must use the dedicated public_media route rather
  * than appending /media after an index.php query string.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{url_slug?:string|null,filename?:string|null,id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Public route identity plus source/derivative revision fields used for URL construction and cache invalidation.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
+ * @return string Versioned original-media URL with preview markers after the complete route path.
  */
 function image_public_media_url(array $image, array $gallery): string
 {
     if (!url_rewrite_should_emit_clean_urls()) {
         return image_public_asset_url_with_version(url_for('public_media', ['public_path' => image_public_route_path($image, $gallery)]), $image);
     }
-    return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/media', $image);
+    return image_public_asset_url_with_version(rtrim(image_public_route_url($image, $gallery), '/') . '/media', $image);
 }
 
 /**
@@ -213,14 +235,18 @@ function image_public_media_url(array $image, array $gallery): string
  * thumbnail derivative generation is invalidated. Appending one ordinary query
  * parameter works in both clean-rewrite and index.php query-string routing modes
  * and prevents a newly uploaded image from inheriting browser-cached bytes from
- * an older deleted image that reused the same public slug.
+ * an older deleted image that reused the same public slug. Preview requests also
+ * retain their same-origin route and audience markers without decorating external URLs.
  *
  * @param string $url Public media or thumbnail URL.
- * @param array $image Image row or image data.
+ * @param array{id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Image identity and source/derivative revision fields used for cache invalidation.
  * @return string Versioned public URL.
  */
 function image_public_asset_url_with_version(string $url, array $image): string
 {
+    if ((string) ($_GET['preview'] ?? '') === 'visual') {
+        $url = public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous');
+    }
     // $version stores the source/derivative identity used only for browser cache invalidation.
     $version = image_public_asset_version($image);
     if ($version === '') {
@@ -241,7 +267,7 @@ function image_public_asset_url_with_version(string $url, array $image): string
  * scanner invalidation lifecycle for regenerated derivatives. The explicit
  * revision prefix invalidates URLs produced before this cache-safety fix.
  *
- * @param array $image Image row or image data.
+ * @param array{id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Image identity and source/derivative revision fields used for cache invalidation.
  * @return string Compact cache version.
  */
 function image_public_asset_version(array $image): string
@@ -266,11 +292,11 @@ function image_public_asset_version(array $image): string
  * Query-string installations must use the dedicated public_thumb route rather
  * than appending /thumb-N.ext after an index.php query string.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{url_slug?:string|null,filename?:string|null,id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Public route identity plus source/derivative revision fields used for URL construction and cache invalidation.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
  * @param int $size Size value.
  * @param string $format Format value.
- * @return string Text result for the caller.
+ * @return string Versioned thumbnail URL with preview markers after the complete route path.
  */
 function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
@@ -283,7 +309,7 @@ function image_public_thumbnail_url(array $image, array $gallery, int $size, str
             'format' => $format,
         ]), $image);
     }
-    return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format, $image);
+    return image_public_asset_url_with_version(rtrim(image_public_route_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format, $image);
 }
 
 /**

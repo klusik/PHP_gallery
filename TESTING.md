@@ -17,6 +17,31 @@ This guide applies to PHP Gallery Version 0.124.4. Release verification uses the
 Retained Version 0.107 thumbnail acceptance: open a gallery editor, run **Create all thumbnails** with and without **Include subgalleries**, and confirm only the selected branch is processed. Confirm browser generation is initially selected there and in the all-gallery Maintenance card, server generation remains selectable, progress completes in place, and every gallery-editor tab still responds after the Images tab is opened. For the Metadata Organizer, verify a successful move changes the physical file location and an induced move failure gives a safe reason while the pending journal remains available for reconciliation. The central release audit owns automated verification; these are manual browser and filesystem acceptance checks.
 This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
 
+## Issue #127 visual CSS editor contracts
+
+`tests/public_visual_preview_workflow_test.php` exercises the disposable HTTP
+boundary: same-origin marked stylesheet inheritance, invalid explicit marker
+refusal, installed and saved `@import` refusal, no-write preview snapshots,
+ordinary public-page behavior, image route privacy, and authenticated Anonymous
+preview fallback to the nearest accessible gallery or Home. Its cyclic-parent
+case uses normal access modes so structural validation must finish before
+inherited visitor-policy walks. The real Admin workflow in
+`tests/gallery_workflow_browser_test.php` switches a protected signed-in gallery
+to Anonymous and verifies the accessible ancestor, preview/audience markers,
+generic localized notice, unchanged CSS draft/Admin URL, zero mutation
+requests, and Back restoration. `tests/theme_visual_editor_browser_test.mjs`
+covers synthetic iframe lifecycle behavior, including pending-file/history
+preservation and removal of the notice token from later navigation.
+`tests/seo_request_guard_preview_test.php` verifies that only the exact
+`visual_notice=anonymous_fallback` value with both preview markers survives a
+canonical Home redirect; unknown values and mismatched markers remain subject
+to canonical cleanup. The HTTP workflow follows the resulting destination and
+checks its private no-store document response.
+`tests/theme_custom_css_rendering_test.php` covers server-rendered labels and
+readiness hooks. These source tests do not substitute for the required
+hosted candidate matrix or any separately requested manual browser
+qualification.
+
 ## Database support evidence
 
 The project-tested database/PHP representatives are MySQL 8.4/PHP 8.3,
@@ -1379,6 +1404,198 @@ Use a gallery with enough photos to create several viewport lengths. Test with b
 
 The browser/network observations above are manual verification only. The standalone PHP and Node tests do not claim coverage of real browser request scheduling or visual decode behavior.
 
+### Live Visual CSS Editor Acceptance Test
+
+Use a disposable installation with a public gallery, at least one private or
+password-gated gallery, representative photographs, and an administrator
+account. The automated coverage is split across
+`tests/public_visual_preview_policy_test.php`, the mandatory database-backed
+`tests/public_visual_preview_workflow_test.php`,
+the serial database-backed `tests/theme_visual_background_workflow_test.php`,
+`tests/theme_visual_css_draft_model_test.mjs`,
+`tests/theme_visual_css_resize_model_test.mjs`,
+`tests/theme_visual_editor_browser_test.mjs`, and the existing custom CSS
+preservation contracts, plus `tests/custom_css_visual_preview_inspection_test.php`
+for unsafe and oversized stylesheet refusal. The real HTTP workflow must execute in each required
+database job; the synthetic browser fixture supplements it and does not replace
+real server rendering or media authorization.
+
+The disposable Admin/PHP Chromium journey in
+`tests/support/gallery_workflow_browser.js` also exercises real server-rendered
+gallery-card selection and Follow, a managed color edit on an actual gallery
+heading, and Back/Home draft retention before it continues into the explicit
+background Save flow. It applies a managed width and image-opacity draft, saves
+the CSS and reviewed background through the existing form, then loads a fresh
+ordinary homepage without preview markers. At the same iframe viewport it
+compares the rendered `.site-main` width, image opacity, and manually authored
+body outline with the preview; it also requires no editor-only draft style and
+fetches the rendered Theme asset URL as nonempty image bytes. The separate
+synthetic editor fixture provides broader interaction coverage but is not
+evidence for the PHP-rendered routes.
+
+1. Open **Admin > Theme > Custom CSS > CSS overrides / Editor**. Start the Live
+   Visual CSS Editor and confirm it loads the actual public home page. Navigate
+   to a public gallery and a photo page; the Admin controls remain outside the
+   public document and the preview does not execute public scripts or submit
+   forms. Confirm `app/controllers/shared_layout.php` prepares marked stylesheet
+   URLs and `app/views/layout.php` only renders them. Bootstrap may inherit
+   preview/audience context for dependent resources only on same-origin,
+   in-mount GET/HEAD requests with an exact-origin `Referer`; cross-origin
+   resources receive no preview URL. With a saved stylesheet containing
+   `@import`, verify that launch is
+   refused while the CSS textarea remains byte-for-byte unchanged and Manual
+   CSS remains available for editing and explicit saving. Also test an installed
+   `public/assets/custom.css` larger than 8 MiB and an unreadable or linked
+   stylesheet: visual inspection must fail closed with the generic localized
+   refusal, without exposing a path or filesystem error. This bound is only for
+   preview inspection; Manual CSS remains available. After reducing an
+   oversized installed file to 8 MiB or less, visual inspection can be tried
+   again.
+2. Check the signed-in and anonymous audience modes. Anonymous simulation must
+   hide unpublished/private content under the same visitor rules as a fresh
+   visitor. A password/share/NSFW gate remains enforced, and denied routes do
+   not reveal media. Confirm public media and thumbnails load through the
+   normal authorization path.
+3. In the browser network panel, verify preview document and dependent responses
+   are private/no-store. Compare telemetry and thumbnail/derivative state before
+   and after home, gallery, thumbnail and media requests. No preview request may
+   record visitor analytics, create/repair a derivative, or update thumbnail
+   metadata. Check that an unmarked same-origin dependent resource inherits the
+   valid preview marker and anonymous audience only through its exact-origin
+   referrer; an unrelated or cross-origin referrer must not confer that context.
+   Confirm POST is refused with 405 and `Allow: GET, HEAD`; an
+   authorized HEAD has no body. Original Theme background assets and other
+   unapproved routes remain denied.
+4. Select elements with unique and repeated stable selectors. Inspect effective
+   and visual-editor-managed values without changing the draft. Try site,
+   tablet and mobile scopes; changing the viewport preset alone must not create
+   or move a media rule. Only deliberate values from the supported property and
+   value grammar enter the generated CSS. Unsupported functions/variables are
+   directed to Manual CSS rather than serialized from computed styles.
+   Check page-width modes Default, Wide, Custom and Full width across the
+   header, main area and footer. In Custom mode, edit both the 1024–2048 px
+   slider and numeric field and confirm they stay synchronized with an explicit
+   `px` unit. The separate effective-width readout must match the rendered
+   `.site-main` width in the iframe, including viewport clamping; it must not
+   merely echo the requested custom value. Reset must reveal the saved Theme
+   Appearance width without writing Theme settings. Switch from Default to
+   Custom and confirm the last custom pixel value returns; explicitly try
+   Custom at 1120 and 1440 px and keep the control enabled. Switch through a
+   preset and back to Custom, then Undo/Redo; the selected mode and custom value
+   must return together. Reset visual session must restore the exact entry CSS
+   and width controls.
+   Background opacity affects only the image layer, not page content.
+5. Verify color alpha and the hero overlay behavior. A hero color edit updates
+   the primary declaration and its owned `::before` background-image `none`
+   companion in one undo step. Reset removes only that linked companion; an
+   independent pseudo-element override and manual CSS outside the managed block
+   remain unchanged. Corrupt or duplicate managed markers and malformed
+   provenance fail closed with a repair warning.
+6. Exercise undo/redo and the visual-session lifecycle. **Reset visual session**
+   restores the exact CSS and pending File captured when the workspace opened,
+   clears visual undo/redo history and keeps the workspace, route, audience and
+   viewport open without a request. **Clear draft** empties CSS and removes the
+   pending File; **Undo clear draft** restores that one-step snapshot. **Restore
+   saved CSS** replaces textarea and CSS revision with the last confirmed saved
+   snapshot rendered on the page or returned by the last successful Save, and
+   clears the pending File; when the draft is dirty, confirm first. It makes no
+   request and does not fetch or reconcile a save made by another tab or
+   administrator after that snapshot. A later explicit Save may therefore be
+   refused as stale. Escape first closes an open
+   inspector/popover; otherwise verify the in-workspace choices Apply, Discard
+   session and Continue editing. Apply merges only the managed block into the
+   current textarea and retains a pending File, with no request. Discard
+   restores the entry CSS and File and closes the workspace, also without a
+   request. The separate confirmed **Clear overrides** form action still
+   deletes persisted CSS. Reopen the editor and verify authored rules outside
+   the managed block, including CRLF bytes, survive unchanged.
+7. Inspect the persistent background review and HUD source/mode labels. Confirm
+   that the resolver reports the actual visible global Theme image, Theme
+   gallery fallback, gallery-specific background, or no image, without
+   revealing hidden gallery sources or local paths. On a route using an
+   independent gallery asset or Theme fallback, Replace/Remove must be disabled
+   with Home guidance; Keep remains available to clear a pending global draft.
+   When background revision inspection fails because its lock or configured
+   global image is unreadable, verify the localized unavailable message,
+   disabled image operations, and continued Manual CSS/CSS-only Keep Save. A
+   ready state with no saved image must still permit the first upload. If the
+   preview URL is unavailable, the launch stays hidden; background controls may
+   initialize, but no preview frame is claimed.
+   When the preview workspace is available, choose an image and inspect its
+   in-memory preview, then explicitly choose
+   Keep, Replace, or Remove. Selection and Apply must not send a request or
+   persist the file; object URLs and local paths must never enter CSS or
+   serialized editor state. Use the existing explicit Save with target `theme`,
+   operation `keep|replace|remove`, and opaque `theme_background_revision`;
+   `theme_background_file` is sent only for Replace. CSS-only Save remains
+   compatible. Test that Remove affects only the global Theme image and
+   preserves `theme_background_source`, every gallery `background_source`, and
+   gallery cover assets. Test stale CSS/background revisions
+   (409), invalid images (422), and operational/uncertain rollback failures
+   (503); keep the local CSS and File available for review. Inject activation
+   and settings-commit failures: confirmed rollback restores prior settings,
+   CSS bytes/mode and assets and removes staging files. If rollback cannot be
+   confirmed, retain any immutable assets that may still be referenced and
+   verify the bounded warning directs the administrator to review Theme
+   settings. On Home, verify the global Theme image offers Fit (`cover` or
+   `contain`) and horizontal/vertical positions from 0% through 100%, with the
+   percent units visible and exposed to assistive technology. Change axes with
+   both sliders and numeric fields; confirm the controls stay synchronized,
+   effective-value outputs match the computed image-layer presentation, and
+   the page content and authoritative CSS textarea stay unchanged. Add a
+   temporary unsupported `background-position` such as a percentage combined
+   with a pixel offset and verify both numeric axes start blank; changing only
+   one axis must not create a draft, while a complete explicit pair does. An
+   empty numeric change must restore the effective value without an undo step.
+   For conflict handling, add a stronger `!important` rule in Manual CSS and
+   confirm the override-conflict status appears while computed output differs,
+   then clears when effective and
+   managed values match. Reset fit and position independently, then use
+   Undo/Redo to restore the grouped draft. Apply to the CSS editor, reopen the
+   workspace, and confirm the controls and computed values are reconstructed
+   from the managed CSS block; the server revisions remain unchanged until the
+   existing explicit Save. Then follow to a gallery whose visible background
+   has target `none`; confirm a previously visible global conflict and the
+   fit/position groups are actually hidden, and cannot change that independent
+   gallery background. For the public CSS round trip, Apply the reviewed width
+   and image-opacity draft, use the existing explicit Save, and reload the
+   ordinary public homepage without preview markers. At the same viewport,
+   compare the real `.site-main` width and image-layer opacity with the preview,
+   confirm the manual CSS still computes on the page, and verify no visual-editor
+   draft style is injected. Confirm both documents load `base.css` from the
+   same canonical asset path, the preview copy has only the visual marker, and
+   the body-margin reset applies in both. The Theme image URL emitted by the
+   saved page must deliver an authorized, nonempty image response.
+8. Test resizing with mouse and touch on a narrow 390 px viewport. Verify only
+   approved hero/layout vertical handles and effective card/media axes appear;
+   media keeps its aspect ratio and stays within the visible bounds. One drag
+   creates one undo entry. Escape, pointer cancellation, selection replacement,
+   iframe navigation, and workspace teardown remove transient styles/handles
+   and restore the pre-drag preview and handle positions. During a held drag,
+   verify the parent overlay temporarily shields the iframe hit-test boundary
+   for the gesture; the same overlay listener must continue the active
+   pointerId-guarded transaction when a trusted move targets the shield rather
+   than the handle. Verify the overlay returns to its original pointer-event
+   behavior after commit or cancellation. Tab through controls,
+   check visible focus and resize-handle accessible labels, and check
+   scroll/resize alignment. In the preview, focus a link or button and use Enter
+   or Space to select it without activating its ordinary page action. Use the
+   focused ancestor, Style element and conditional Follow link controls by
+   keyboard; only the explicit Follow action may navigate. External, Admin,
+   download, and new-window links remain selectable for styling but never offer
+   Follow.
+9. Repeat the essential navigation, audience, selector, apply/cancel and save
+   flows in supported Chromium, Firefox and Safari-family browsers, including
+   Edge where available. Headless Chromium does not establish Safari pointer
+   behavior, physical touch, trackpad gestures or high-DPI rendering. Keep
+   those as separate manual checks; report each actual browser/OS/device tested
+   and leave untested combinations open.
+
+The dedicated browser fixture validates UI interaction in a controlled page;
+it does not establish compatibility for every browser engine. Record real PHP
+workflow and manual browser evidence separately as described in
+`docs/LIVE_VISUAL_CSS_EDITOR.md`.
+
 ### Gallery Hero Tag Theme Smoke Test
 
 Also verify the adjacent public tag-page settings: use Configure tag display from Edit tags and confirm it opens Theme > Appearance > Gallery tags; set columns, rows, and card design; save; and verify the dedicated grid, pagination capacity, and card layout on a public tag page without changing ordinary gallery pages. Use Manage tag metadata to verify the reverse link. Run php tests/tag_page_theme_model_test.php.
@@ -2173,7 +2390,41 @@ The central audit registers `tests/admin_settings_workspace_browser_test.mjs` an
 
 The release profile registers tree/features/password/creation/public-home/upload/Trash and Theme Appearance/Custom CSS/Language/Layout/Media browser fixtures. PHP covers subtree aggregation, plan snapshots/stale refusal, own-password/token retention, confirmed-empty onboarding, coupled upload settings, mobile one-time credential retention, CSS rollback, orientation replay and update/navdata budgets.
 
-Theme advanced appearance and manual overrides use the same hosted central browser/source qualification. `theme_advanced_appearance_test.php` covers unchanged upgrade defaults, corrupt-value fallback, bounds, batch normalization, scoped header CSS and independent reset. `custom_css_preservation_test.php` exercises the actual copied service in owned temporary storage: UTF-8 round trips, empty state, digest versioning, stale saves, lock contention, invalid/oversized payloads, staging/hash/permission/rename failures, missing directories, preset/upload/reset coexistence and installation ownership. `theme_css_override_transport_test.php` invokes the actual protected route with disposable boundary adapters to prove Admin/CSRF ordering, malformed-request refusal, stale HTTP responses and explicit clear confirmation. Rendering contracts cover HTML-looking CSS escaping and independent editor form/CSRF ownership. Appearance Chromium exercises numeric controls, responsive geometry, actual generated transparent-header CSS and restore behavior, hero/navigation preservation, both public thumbnail renderers, scoped card rules and final cascade precedence. Custom CSS Chromium covers explicit editor transport, saved/unsaved feedback, cancelled navigation/clear, stale-save draft retention, reload, isolated preview and desktop/mobile overflow. Browser failures are handled through fresh candidate preparation; these fixtures do not qualify a live installation. For live manual checks, use home, gallery, tag and access-prompt pages at desktop/mobile widths, scroll the header, verify logo/language/Admin click and focus targets against the chosen background, save/reload from two tabs, and verify refreshed anonymous CSS URLs. PDFs and Patch Notes are outside this feature batch.
+Theme advanced appearance and manual overrides use the same hosted central browser/source qualification. `theme_advanced_appearance_test.php` covers unchanged upgrade defaults, corrupt-value fallback, bounds, batch normalization, scoped header CSS and independent reset. `custom_css_preservation_test.php` exercises the actual copied service in owned temporary storage: UTF-8 round trips, empty state, digest versioning, stale saves, lock contention, invalid/oversized payloads, staging/hash/permission/rename failures, missing directories, preset/upload/reset coexistence and installation ownership. `theme_css_override_transport_test.php` invokes the actual protected route with disposable boundary adapters to prove Admin/CSRF ordering, malformed-request refusal, stale HTTP responses, explicit clear confirmation, and explicit Replace refusal for PHP `UPLOAD_ERR_NO_FILE` without changing saved CSS. `theme_visual_background_workflow_test.php` submits a real multipart file through the protected Theme form, checks CSS/background/cache responses and owned persisted assets, then proves stale CSS and background revisions return 409 without changing either state; its real HTTP no-file Replace case requires an actionable error and exact preservation of CSS, Theme settings, gallery metadata and background files. Its serial barrier isolates shared Theme assets. Rendering contracts cover HTML-looking CSS escaping and independent editor form/CSRF ownership. Appearance Chromium exercises numeric controls, responsive geometry, actual generated transparent-header CSS and restore behavior, hero/navigation preservation, both public thumbnail renderers, scoped card rules and final cascade precedence. Custom CSS Chromium covers explicit editor transport, saved/unsaved feedback, cancelled navigation/clear, stale-save draft retention, reload, isolated preview and desktop/mobile overflow. Browser failures are handled through fresh candidate preparation; these fixtures do not qualify a live installation. For live manual checks, use home, gallery, tag and access-prompt pages at desktop/mobile widths, scroll the header, verify logo/language/Admin click and focus targets against the chosen background, save/reload from two tabs, and verify refreshed anonymous CSS URLs. PDFs and Patch Notes are outside this feature batch.
+
+The serial `theme_visual_background_workflow_test.php` also verifies the new
+global Theme image operation contract: Keep/Replace/Remove is submitted only
+through the existing explicit Save, and removal preserves Theme fallback mode,
+per-gallery sources, and gallery cover assets.
+
+### Live Visual CSS Editor (#127) coverage ownership
+
+The stage contract and existing production owners are listed in
+[`docs/LIVE_VISUAL_CSS_EDITOR.md`](docs/LIVE_VISUAL_CSS_EDITOR.md). Keep small
+DOM-only browser fixtures for isolated HUD mechanics, CSS block parsing and
+state transitions, but they are supplemental: final preview coverage must run
+the real PHP public homepage and gallery renderer behind the existing owned
+disposable MySQL workflow fixture. Launch through the server-prepared,
+subdirectory-safe preview URL; exercise the `preview=visual` boundary, the
+existing `view_as=anonymous` behavior, real CSS/Theme asset URLs, authorized
+thumbnail/media requests and internal gallery navigation. Verify that the
+top-level Admin URL never changes, scriptless-frame actions cannot submit or
+follow links, the Admin HUD stays outside broad user CSS, and a preview visit
+does not write Theme settings, public overrides, visitor/benchmark telemetry,
+or persistent thumbnail repairs. Access coverage must include public,
+unpublished, password/share-gated, and private galleries plus restricted media;
+anonymous output must not inherit administrator or viewer-account access.
+
+As stages add styling, resizing, width and backgrounds, extend the same real
+route/browser journey to prove computed inspection is a no-op, deliberate edits
+round-trip through one deterministic managed CSS block, bytes outside that
+block survive unchanged, Apply never saves, Cancel restores the exact entry
+draft, and only the existing explicit Save publishes. Verify allowed handle
+axes, actual header/main/footer reflow, pending image staging and rollback,
+audience/navigation history, stale revision conflicts and accessible keyboard
+focus. Chrome/Edge Chromium CI does not establish Safari trackpad or mobile
+touch coverage; report those manual runs only when observed. See
+`docs/LIVE_VISUAL_CSS_EDITOR.md` for the full stage exit gates.
 
 Live acceptance should stage nested/overlapping intentions, exercise voting/game coupling and cancel/discard, and change a gallery from another tab between review/apply. Check that rerendered controls remain intercepted and panel URL/open state remain stable. Remove an own password with token/ancestor protection and verify the retained access boundary.
 

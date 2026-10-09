@@ -71,6 +71,7 @@ namespace {
     require_once dirname(__DIR__,2).'/app/views/admin_theme.php';
     require_once dirname(__DIR__,2).'/app/views/admin_gallery_renderers.php';
     require_once dirname(__DIR__,2).'/app/views/layout.php';
+    require_once dirname(__DIR__,2).'/app/controllers/shared_layout.php';
     require_once dirname(__DIR__,2).'/app/views/admin_language_settings.php';
     require_once dirname(__DIR__,2).'/app/services/theme.php';
     require_once dirname(__DIR__,2).'/app/services/pagination.php';
@@ -157,12 +158,12 @@ namespace {
             'selector_state'=>['id_prefix'=>'admin-theme-public-language-selector','marker_name'=>'public_language_selector_settings_present','enabled'=>true,'languages'=>['en','de'],'supported_languages'=>array_keys($presentations),'presentations'=>$presentations,'design_defaults'=>$canonical['defaults'],'design'=>$canonical['defaults'],'design_bounds'=>$canonical['bounds'],'public_language'=>'de']],$overrides);
     }
     /** Prepare Custom CSS state and preset choices without reading user files.
-     * @param array{labels?:array<string,string>,presets?:list<array{filename:string,label:string,selected?:bool}>,current_css?:array{active?:bool,status_label?:string,preset_label?:string,size_label?:string,modified_label?:string,public_url?:string},errors?:list<string>,overrides?:array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool}} $overrides Scenario-specific Custom CSS presentation values.
-     * @return array{labels?:array<string,string>,presets?:list<array{filename:string,label:string,selected?:bool}>,current_css?:array{active?:bool,status_label?:string,preset_label?:string,size_label?:string,modified_label?:string,public_url?:string},errors?:list<string>,overrides?:array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool}} Complete disposable Custom CSS view model with independent editor state.
+     * @param array{labels?:array<string,string>,presets?:list<array{filename:string,label:string,selected?:bool}>,current_css?:array{active?:bool,status_label?:string,preset_label?:string,size_label?:string,modified_label?:string,public_url?:string},errors?:list<string>,overrides?:array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool,background?:array{available:bool,ready?:bool,revision:string,source:string,url:string}}} $overrides Scenario-specific Custom CSS presentation values, including a safe image readiness snapshot; preview_url stays absent so chooser behavior does not depend on preview launch.
+     * @return array{labels?:array<string,string>,presets?:list<array{filename:string,label:string,selected?:bool}>,current_css?:array{active?:bool,status_label?:string,preset_label?:string,size_label?:string,modified_label?:string,public_url?:string},errors?:list<string>,overrides?:array{state?:array{text:string,revision:string,url:string},draft?:array{text:string,revision:string}|null,notice?:array{ok:bool,message:string}|null,ready?:bool,active?:bool,background?:array{available:bool,ready?:bool,revision:string,source:string,url:string}}} Complete disposable Custom CSS view model with independent editor state and an intentionally absent visual preview URL.
      */
     function theme_fixture_custom_css_model(array $overrides = []): array {
         return array_replace(['current_css'=>['active'=>true,'status_label'=>'Custom stylesheet active','preset_label'=>'Uploaded <safe> stylesheet','size_label'=>'1.2 KB','modified_label'=>'2026-10-02 12:00','public_url'=>'/fixture-custom.css'],
-            'overrides'=>['state'=>['text'=>'/* saved */ .gallery-card { border-radius: 8px; }','revision'=>hash('sha256','/* saved */ .gallery-card { border-radius: 8px; }'),'url'=>'/fixture-overrides.css'],'ready'=>true],
+            'overrides'=>['state'=>['text'=>'/* saved */ .gallery-card { border-radius: 8px; }','revision'=>hash('sha256','/* saved */ .gallery-card { border-radius: 8px; }'),'url'=>'/fixture-overrides.css'],'ready'=>true,'background'=>['available'=>false,'ready'=>true,'revision'=>str_repeat('0',64),'source'=>'none','url'=>'']],
             'presets'=>[['filename'=>'night.css','label'=>'Night <safe>','selected'=>true],['filename'=>'paper.css','label'=>'Paper','selected'=>false]],
             'labels'=>['keep_current'=>'Keep current custom CSS','skin_hint'=>'Choose a preset only when you intend to replace the active stylesheet.','file_hint'=>'Upload CSS to replace the active stylesheet when you save.']],$overrides);
     }
@@ -185,7 +186,7 @@ namespace {
         ob_start(); \Gallery\Views\view_render_admin_theme_page(['tabs'=>$tabs,'csrf_html'=>\Gallery\Core\csrf_field(),'settings_url'=>'/fixture-settings','tab_fragments'=>$fragments]); return (string)ob_get_clean();
     }
     if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
-        foreach (\Gallery\Views\view_admin_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
+        foreach (\Gallery\Controllers\shared_layout_admin_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
         echo theme_fixture_page([], in_array('--language-editor', $argv ?? [], true) ? ['active_subtab'=>'admin-theme-language-subtab-editor'] : []);
     }
 }

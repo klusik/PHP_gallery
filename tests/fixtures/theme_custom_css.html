@@ -58,13 +58,17 @@ try {
     tab('editor');
     const editor=find('[data-css-override-text]'), editorForm=find('[data-css-override-form]'), savedCss=editor.value;
     check(editor.form===editorForm && !new FormData(form).has('css_override_text'),'ordinary Theme transport excludes editor text');
-    let confirmResult=false, confirmations=0, requests=[], nextResult=null;
+    let confirmResult=false, confirmations=0, requests=[], nextResult=null, deferNextSave=false, deferredSaveResolver=null;
     const nativeFetch=window.fetch;
     window.confirm=()=>{confirmations++;return confirmResult;};
     window.fetch=async (url,options)=>{
         if(!options?.body?.get('css_override_action')) return nativeFetch(url,options);
         requests.push(options.body);
-        return {ok:nextResult.ok,json:async()=>nextResult};
+        if(deferNextSave && options.body.get('css_override_action')==='save') {
+            deferNextSave=false;
+            return new Promise(resolve=>{deferredSaveResolver=resolve;});
+        }
+        return {ok:nextResult.ok,status:nextResult.status||200,json:async()=>nextResult};
     };
     edit(editor,'.gallery-card { border-radius: 0 !important; }');
     check(find('[data-css-override-status]').textContent==='Unsaved changes','input marks the editor dirty');
@@ -89,6 +93,66 @@ try {
     nextResult={ok:true,message:'Cleared',state:{text:'',revision:'d'.repeat(64)}};
     find('[name="css_override_action"][value="clear"]').click(); await settle();
     check(editor.value==='' && requests.at(-1).get('css_override_action')==='clear' && preset.value==='paper.css','confirmed clear affects only overrides');
+
+    const pendingBackground=find('[data-visual-editor-background-file]');
+    const backgroundRevision=find('[data-visual-editor-background-revision]');
+    const cssRevision=find('[data-css-override-revision]');
+    const editorRoot=find('[data-css-override-editor]');
+    const backgroundOperation=find('[data-visual-editor-background-operation]');
+    const keepBackground=find('[data-visual-editor-background-keep]');
+    const removeBackground=find('[data-visual-editor-background-remove]');
+    const backgroundSave=find('[name="css_override_action"][value="save"]');
+    check(editorRoot.dataset.visualEditorPreviewUrl==='' && find('[data-visual-editor-launch]').hidden,
+        'fixture without an authorized preview keeps launch hidden while initializing the separate image draft controls');
+    check(editorRoot.dataset.visualEditorBackgroundReady==='1' && !pendingBackground.disabled,
+        'an explicit ready snapshot permits choosing the first Theme image when none is saved');
+    const submittedFile=new File(['submitted image'],'submitted.png',{type:'image/png'});
+    const submittedTransfer=new DataTransfer(); submittedTransfer.items.add(submittedFile); pendingBackground.files=submittedTransfer.files;
+    pendingBackground.dispatchEvent(new Event('change',{bubbles:true}));
+    check(backgroundOperation.value==='replace' && find('[data-visual-editor-background-status]').textContent.includes('submitted.png'),
+        'a native File selection stages replace and displays its safe filename without a visual preview URL');
+    editorRoot.dataset.visualEditorBackgroundReady='0';
+    pendingBackground.dispatchEvent(new Event('change',{bubbles:true}));
+    check(pendingBackground.disabled && pendingBackground.files[0]===submittedFile && backgroundOperation.value==='replace'
+        && !keepBackground.disabled && removeBackground.disabled && !backgroundSave.disabled
+        && find('[data-visual-editor-background-status]').textContent.includes('unavailable'),
+        'an unreadable saved image preserves the pending draft, keeps CSS Save and Keep available, and blocks image mutations visibly');
+    editorRoot.dataset.visualEditorBackgroundReady='1';
+    pendingBackground.dispatchEvent(new Event('change',{bubbles:true}));
+    edit(editor,'.race { color: #123456; }');
+    const submittedText=editor.value;
+    const replacementFile=new File(['replacement image'],'replacement.png',{type:'image/png'});
+    const replacementTransfer=new DataTransfer(); replacementTransfer.items.add(replacementFile);
+    deferNextSave=true;
+    find('[name="css_override_action"][value="save"]').click(); await settle();
+    check(pendingBackground.disabled && typeof deferredSaveResolver==='function','an in-flight explicit Save disables the native pending-image chooser');
+    pendingBackground.files=replacementTransfer.files;
+    pendingBackground.dispatchEvent(new Event('change',{bubbles:true}));
+    check(requests.at(-1).get('theme_background_file')?.name==='submitted.png','the deferred request owns the exact File captured at submission');
+    const confirmedBackground={revision:'f'.repeat(64),url:'/theme-backgrounds/submitted.png',available:true,source:'theme'};
+    deferredSaveResolver({ok:true,status:200,json:async()=>({ok:true,message:'Saved submitted image',state:{text:submittedText,revision:'e'.repeat(64)},background:confirmedBackground})});
+    await settle();
+    check(!pendingBackground.disabled && pendingBackground.files[0]===replacementFile,'successful Save consumes only its submitted File and retains a newer local replacement');
+    check(editor.value===submittedText && cssRevision.value==='e'.repeat(64) && backgroundRevision.value==='f'.repeat(64)
+        && find('[data-css-override-status]').textContent==='Unsaved changes',
+        'successful upload advances confirmed revisions while keeping the newer File draft dirty');
+    const retainedReplacementText=editor.value;
+    const retainedCssRevision=cssRevision.value;
+    const retainedBackgroundRevision=backgroundRevision.value;
+    nextResult={ok:false,status:409,message:'Conflict',state:null};
+    find('[name="css_override_action"][value="save"]').click(); await settle();
+    check(pendingBackground.files[0]===replacementFile && editor.value===retainedReplacementText
+        && cssRevision.value===retainedCssRevision && backgroundRevision.value===retainedBackgroundRevision,
+        'HTTP 409 keeps the pending replacement, CSS and both revision snapshots');
+    nextResult={ok:false,status:503,message:'Unavailable',state:null};
+    find('[name="css_override_action"][value="save"]').click(); await settle();
+    check(pendingBackground.files[0]===replacementFile && editor.value===retainedReplacementText
+        && cssRevision.value===retainedCssRevision && backgroundRevision.value===retainedBackgroundRevision
+        && !pendingBackground.disabled,
+        'HTTP 503 keeps the pending replacement, CSS and revisions and restores the file control');
+    check(!pendingBackground.classList.contains('theme-visual-editor-file-input')&&pendingBackground.getClientRects().length>0
+        &&find('[data-visual-editor-background-status]').textContent.includes('replacement.png'),
+        'the asynchronous Save recovery keeps the replacement visible for final filename review');
     window.fetch=nativeFetch;
     for(const width of [1280,390]) {
         await fetch('/__viewport?width='+width); await settle();

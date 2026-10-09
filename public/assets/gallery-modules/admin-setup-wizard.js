@@ -11,7 +11,7 @@
  * Contact: https://github.com/klusik
  * License: MIT
  */
-import { setupThemeLivePreview } from './theme-form.js?v=20261003-gallery-grid-v1';
+import { setupThemeLivePreview } from './theme-form.js?v=20261009-visual-editor-overlay-routing';
 
 /** Enable or disable one field's submitted values without losing its staged browser value.
  * @param {HTMLInputElement} include Inclusion checkbox.

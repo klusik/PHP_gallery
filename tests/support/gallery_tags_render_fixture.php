@@ -79,7 +79,7 @@ function gallery_tags_fixture_card(string $case, int $visibleLimit, int $rows, b
 function gallery_tags_fixture_document(): void
 {
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery tag fixture</title>';
-    foreach (\Gallery\Views\view_public_stylesheet_files() as $stylesheet) {
+    foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) {
         echo '<link rel="stylesheet" href="/public/' . \Gallery\Core\e($stylesheet) . '">';
     }
     echo '</head><body class="public-page"><main class="gallery-grid">';

@@ -52,8 +52,8 @@ namespace {
         if (!$condition) { throw new RuntimeException($message); }
     }
     $root = sys_get_temp_dir() . '/gallery-filesystem-owner-' . bin2hex(random_bytes(12));
-    $directories = ['', '/app', '/app/services', '/public', '/public/assets', '/custom_css', '/cache', '/cache/theme-background'];
-    $files = ['/app/services/custom_css.php', '/app/services/gallery_backgrounds.php', '/public/assets/custom.css',
+    $directories = ['', '/app', '/app/services', '/app/services/custom_css', '/app/services/gallery_backgrounds', '/public', '/public/assets', '/custom_css', '/cache', '/cache/theme-background'];
+    $files = ['/app/services/custom_css.php', '/app/services/custom_css/visual_background_save.php', '/app/services/gallery_backgrounds.php', '/app/services/gallery_backgrounds/visual_css_save.php', '/public/assets/custom.css',
         '/custom_css/fixture.css', '/cache/theme-background/original.png', '/cache/theme-background/optimized.webp', '/unrelated.txt'];
     $GLOBALS['filesystem_owner_settings'] = [];
     $allocatedExport = '';
@@ -61,6 +61,7 @@ namespace {
         foreach ($directories as $directory) { mkdir($root . $directory); }
         foreach (['custom_css', 'gallery_backgrounds'] as $module) {
             copy(dirname(__DIR__) . '/app/services/' . $module . '.php', $root . '/app/services/' . $module . '.php');
+            copy(dirname(__DIR__) . '/app/services/' . $module . '/' . ($module === 'custom_css' ? 'visual_background_save.php' : 'visual_css_save.php'), $root . '/app/services/' . $module . '/' . ($module === 'custom_css' ? 'visual_background_save.php' : 'visual_css_save.php'));
             require $root . '/app/services/' . $module . '.php';
         }
         require_once dirname(__DIR__) . '/app/services/logs.php';

@@ -3,11 +3,13 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/gallery-modules/theme-customization.js
  * Module Type: Browser Module
- * Purpose: Bind advanced public appearance controls and the isolated manual CSS editor.
- * Responsibilities: Preserve independent resets, unsaved drafts, optimistic revisions and protected Admin styling.
+ * Purpose: Bind advanced Theme controls and the isolated managed-CSS editor.
+ * Responsibilities: Preserve unsaved CSS and pending background File drafts, multipart Save revisions and protected preview styling.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
+
+import { restoreVisualEditorBackgroundFile, setVisualEditorBackgroundOperation, setupThemeVisualEditor } from './theme-visual-editor.js?v=20261009-visual-editor-overlay-routing';
 
 /**
  * Synchronize service-bounded appearance inputs and their miniature public preview.
@@ -113,11 +115,22 @@ export function setupThemeCssOverrideEditor() {
     const root = document.querySelector('[data-css-override-editor]');
     const form = document.querySelector('[data-css-override-form]');
     if (!(root instanceof HTMLElement) || !(form instanceof HTMLFormElement) || form.dataset.cssOverrideReady === '1') return;
+    const visualSaveFailure = root.querySelector('[data-visual-editor-failed-label]');
+    if (visualSaveFailure instanceof HTMLElement && visualSaveFailure.dataset.visualEditorFailedLabel) {
+        root.dataset.failedLabel = visualSaveFailure.dataset.visualEditorFailedLabel;
+    }
     const text = root.querySelector('[data-css-override-text]');
     const revision = root.querySelector('[data-css-override-revision]');
+    const backgroundFile = root.querySelector('[data-visual-editor-background-file]');
+    const backgroundRevision = root.querySelector('[data-visual-editor-background-revision]');
+    const backgroundOperation = root.querySelector('[data-visual-editor-background-operation]');
+    const savedTextSnapshot = root.querySelector('[data-css-override-saved-text]');
+    const savedRevisionSnapshot = root.querySelector('[data-css-override-saved-revision]');
+    const lifecycleLabels = root.querySelector('[data-visual-editor-lifecycle-labels]');
     const status = root.querySelector('[data-css-override-status]');
     const message = root.querySelector('[data-css-override-message]');
     if (!(text instanceof HTMLTextAreaElement) || !(revision instanceof HTMLInputElement)) return;
+    setupThemeVisualEditor(root, text);
     form.dataset.cssOverrideReady = '1';
     const nativeClearConfirmation = root.querySelector('[data-css-override-clear-confirm]');
     if (nativeClearConfirmation) nativeClearConfirmation.hidden = true;
@@ -125,9 +138,88 @@ export function setupThemeCssOverrideEditor() {
     let busy = false;
     let leavingPage = false;
     let previewUrl = '';
-    const dirty = () => savedText === null || text.value !== savedText;
+    let persistedText = savedTextSnapshot instanceof HTMLTextAreaElement ? savedTextSnapshot.value : text.value;
+    let persistedRevision = savedRevisionSnapshot instanceof HTMLInputElement ? savedRevisionSnapshot.value : revision.value;
+    let clearDraftSnapshot = null;
+    let applyingDraftAction = false;
+    const restoreSavedButton = root.querySelector('[data-css-override-restore-saved]');
+    const clearDraftButton = root.querySelector('[data-css-override-clear-draft]');
+    const undoClearDraftButton = root.querySelector('[data-css-override-undo-clear-draft]');
+    const backgroundLabels = root.querySelector('[data-visual-editor-labels]');
+    const dirty = () => savedText === null || text.value !== savedText
+        || backgroundFile instanceof HTMLInputElement && backgroundFile.files.length > 0
+        || backgroundOperation instanceof HTMLInputElement && backgroundOperation.value !== 'keep';
     const syncStatus = () => { if (status) status.textContent = dirty() ? root.dataset.unsavedLabel : root.dataset.savedLabel; };
-    text.addEventListener('input', syncStatus);
+    root.addEventListener('theme-background-operation-change', () => {
+        if (!applyingDraftAction) clearDraftSnapshot = null;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = !clearDraftSnapshot;
+        syncStatus();
+    });
+    text.addEventListener('input', () => {
+        if (!applyingDraftAction) clearDraftSnapshot = null;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = !clearDraftSnapshot;
+        syncStatus();
+    });
+    backgroundFile?.addEventListener('change', () => {
+        if (!applyingDraftAction) clearDraftSnapshot = null;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = !clearDraftSnapshot;
+        syncStatus();
+    });
+    restoreSavedButton?.addEventListener('click', () => {
+        if (dirty() && !window.confirm(lifecycleLabels?.dataset.visualEditorRestoreConfirmLabel || '')) return;
+        if (backgroundFile instanceof HTMLInputElement && !restoreVisualEditorBackgroundFile(backgroundFile, null)) {
+            if (message) message.textContent = backgroundLabels?.dataset.visualEditorBackgroundUnavailableLabel || root.dataset.failedLabel;
+            return;
+        }
+        text.value = persistedText;
+        savedText = persistedText;
+        revision.value = persistedRevision;
+        if (backgroundFile instanceof HTMLInputElement) {
+            backgroundFile.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        if (backgroundOperation instanceof HTMLInputElement) setVisualEditorBackgroundOperation(root, 'keep');
+        clearDraftSnapshot = null;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = true;
+        if (message) message.textContent = '';
+        if (frame instanceof HTMLIFrameElement) frame.hidden = true;
+        text.dispatchEvent(new Event('input', {bubbles: true}));
+    });
+    clearDraftButton?.addEventListener('click', () => {
+        const file = backgroundFile instanceof HTMLInputElement ? backgroundFile.files?.[0] || null : null;
+        const operation = backgroundOperation instanceof HTMLInputElement ? backgroundOperation.value : 'keep';
+        if (text.value === '' && file === null && operation === 'keep') return;
+        if (backgroundFile instanceof HTMLInputElement && !restoreVisualEditorBackgroundFile(backgroundFile, null)) {
+            if (message) message.textContent = backgroundLabels?.dataset.visualEditorBackgroundUnavailableLabel || root.dataset.failedLabel;
+            return;
+        }
+        clearDraftSnapshot = {text: text.value, file, operation};
+        applyingDraftAction = true;
+        text.value = '';
+        text.dispatchEvent(new Event('input', {bubbles: true}));
+        if (backgroundFile instanceof HTMLInputElement) {
+            backgroundFile.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        if (backgroundOperation instanceof HTMLInputElement) setVisualEditorBackgroundOperation(root, 'keep');
+        applyingDraftAction = false;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = false;
+        if (message) message.textContent = '';
+        if (frame instanceof HTMLIFrameElement) frame.hidden = true;
+    });
+    undoClearDraftButton?.addEventListener('click', () => {
+        if (!clearDraftSnapshot) return;
+        if (backgroundFile instanceof HTMLInputElement
+            && !restoreVisualEditorBackgroundFile(backgroundFile, clearDraftSnapshot.file)) return;
+        applyingDraftAction = true;
+        text.value = clearDraftSnapshot.text;
+        if (backgroundFile instanceof HTMLInputElement) backgroundFile.dispatchEvent(new Event('change', {bubbles: true}));
+        if (backgroundOperation instanceof HTMLInputElement) {
+            setVisualEditorBackgroundOperation(root, clearDraftSnapshot.operation);
+        }
+        clearDraftSnapshot = null;
+        if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = true;
+        applyingDraftAction = false;
+        text.dispatchEvent(new Event('input', {bubbles: true}));
+    });
     // Preserve native editing shortcuts; Tab inserts spaces only inside this code field.
     text.addEventListener('keydown', event => {
         if (event.key !== 'Tab' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -177,8 +269,29 @@ export function setupThemeCssOverrideEditor() {
         const body = new FormData(form);
         body.set('css_override_action', action);
         if (action === 'clear') body.set('css_override_clear_confirm', '1');
+        const submittedBackgroundOperation = action === 'save' && backgroundOperation instanceof HTMLInputElement
+            ? backgroundOperation.value
+            : 'keep';
+        const submittedBackgroundTarget = action === 'save' ? 'theme' : '';
+        const submittedBackgroundFile = action === 'save' && submittedBackgroundOperation === 'replace'
+            && backgroundFile instanceof HTMLInputElement
+            ? backgroundFile.files?.[0] || null
+            : null;
+        if (action === 'save') {
+            body.set('theme_background_operation', submittedBackgroundOperation);
+            body.set('theme_background_target', submittedBackgroundTarget);
+            if (submittedBackgroundOperation !== 'replace') body.delete('theme_background_file');
+        }
+        if (action !== 'save') {
+            body.delete('theme_background_file');
+            body.delete('theme_background_revision');
+            body.delete('theme_background_operation');
+            body.delete('theme_background_target');
+        }
         busy = true;
         text.readOnly = true;
+        const backgroundFileWasDisabled = backgroundFile instanceof HTMLInputElement ? backgroundFile.disabled : null;
+        if (backgroundFile instanceof HTMLInputElement) backgroundFile.disabled = true;
         const buttons = [...root.querySelectorAll('button')];
         const disabled = buttons.map(button => button.disabled);
         buttons.forEach(button => { button.disabled = true; });
@@ -189,6 +302,43 @@ export function setupThemeCssOverrideEditor() {
             if (response.ok && result.ok && typeof result.state?.text === 'string' && typeof result.state?.revision === 'string') {
                 text.value = savedText = result.state.text;
                 revision.value = result.state.revision;
+                persistedText = result.state.text;
+                persistedRevision = result.state.revision;
+                if (savedTextSnapshot instanceof HTMLTextAreaElement) savedTextSnapshot.value = persistedText;
+                if (savedRevisionSnapshot instanceof HTMLInputElement) savedRevisionSnapshot.value = persistedRevision;
+                const savedBackground = result.background;
+                if (savedBackground && typeof savedBackground.revision === 'string'
+                    && typeof savedBackground.url === 'string' && typeof savedBackground.available === 'boolean'
+                    && typeof savedBackground.source === 'string') {
+                    if (backgroundRevision instanceof HTMLInputElement) backgroundRevision.value = savedBackground.revision;
+                    root.dataset.visualEditorBackgroundUrl = savedBackground.url;
+                    root.dataset.visualEditorBackgroundAvailable = savedBackground.available ? '1' : '0';
+                    const confirmedOperation = action === 'save'
+                        && savedBackground.operation === submittedBackgroundOperation
+                        && savedBackground.target === submittedBackgroundTarget;
+                    const operationStillCurrent = backgroundOperation instanceof HTMLInputElement
+                        && backgroundOperation.value === submittedBackgroundOperation
+                        && submittedBackgroundTarget === 'theme';
+                    const pendingSelectionConsumed = confirmedOperation && operationStillCurrent
+                        && submittedBackgroundOperation === 'replace'
+                        && submittedBackgroundFile !== null
+                        && backgroundFile instanceof HTMLInputElement
+                        && (backgroundFile.files?.[0] || null) === submittedBackgroundFile;
+                    const operationConsumed = confirmedOperation && operationStillCurrent
+                        && (submittedBackgroundOperation !== 'replace' || pendingSelectionConsumed);
+                    if (pendingSelectionConsumed && backgroundFile instanceof HTMLInputElement) backgroundFile.value = '';
+                    if (operationConsumed) setVisualEditorBackgroundOperation(root, 'keep');
+                    root.dispatchEvent(new CustomEvent('theme-background-saved', {
+                        detail: {
+                            background: savedBackground,
+                            uploaded: pendingSelectionConsumed,
+                            pendingSelectionConsumed,
+                            operationConsumed,
+                            operation: submittedBackgroundOperation,
+                            target: submittedBackgroundTarget,
+                        },
+                    }));
+                }
                 disabled.fill(false);
                 syncStatus();
                 // A stale draft preview must never be mistaken for the newly saved or reloaded CSS.
@@ -199,6 +349,9 @@ export function setupThemeCssOverrideEditor() {
         } finally {
             busy = false;
             text.readOnly = false;
+            if (backgroundFile instanceof HTMLInputElement && backgroundFileWasDisabled !== null) {
+                backgroundFile.disabled = backgroundFileWasDisabled;
+            }
             buttons.forEach((button, index) => { button.disabled = disabled[index]; });
         }
     });

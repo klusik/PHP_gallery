@@ -13,6 +13,7 @@
  * Responsibilities:
  *   - Cover rewrite-disabled image, media, and thumbnail fallback URLs
  *   - Cover request-local public media manifest URLs used by selected-gallery photo cards
+ *   - Keep resource suffixes before preview markers in both routing modes
  *   - Prevent path suffixes from being appended after index.php query strings
  *   - Keep clean rewritten media and thumbnail URLs unchanged
  *
@@ -137,10 +138,36 @@ require_once __DIR__ . '/../app/services/app_settings.php';
     assert_public_media_url_same($queryMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $queryBaseUrl), 'rewrite-disabled manifest media URL');
     assert_public_media_url_same($queryThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $queryBaseUrl, 300, 'webp'), 'rewrite-disabled manifest thumbnail URL');
 
+    $_SERVER['HTTP_HOST'] = 'example.test';
+    $_SERVER['HTTPS'] = 'on';
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['REQUEST_URI'] = '/index.php?page=gallery&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001';
+    $_GET = ['preview' => 'visual', 'view_as' => 'anonymous'];
+    $queryPreviewImageUrl = $queryImageUrl . '&preview=visual&view_as=anonymous';
+    $queryPreviewMediaUrl = str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryMediaUrl);
+    $queryPreviewThumbnailUrl = str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryThumbnailUrl);
+    assert_public_media_url_same($queryPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-disabled preview image URL');
+    assert_public_media_url_same($queryPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-disabled preview media URL');
+    assert_public_media_url_same($queryPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-disabled preview thumbnail URL');
+    assert_public_media_url_same($queryImageUrl, public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-disabled preview manifest base remains undecorated');
+    assert_public_media_url_same($queryPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $queryBaseUrl), 'rewrite-disabled preview manifest media URL');
+    assert_public_media_url_same($queryPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $queryBaseUrl, 300, 'webp'), 'rewrite-disabled preview manifest thumbnail URL');
+
+    $_GET = ['preview' => 'visual', 'view_as' => 'administrator'];
+    $querySignedPreviewImageUrl = $queryImageUrl . '&preview=visual';
+    $querySignedPreviewMediaUrl = str_replace('&v=', '&preview=visual&v=', $queryMediaUrl);
+    $querySignedPreviewThumbnailUrl = str_replace('&v=', '&preview=visual&v=', $queryThumbnailUrl);
+    assert_public_media_url_same($querySignedPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-disabled administrator preview image URL');
+    assert_public_media_url_same($querySignedPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-disabled administrator preview media URL');
+    assert_public_media_url_same($querySignedPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-disabled administrator preview thumbnail URL');
+    assert_public_media_url_same($querySignedPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $queryBaseUrl), 'rewrite-disabled administrator preview manifest media URL');
+    assert_public_media_url_same($querySignedPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $queryBaseUrl, 300, 'webp'), 'rewrite-disabled administrator preview manifest thumbnail URL');
+
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
     $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4';
     $_SERVER['REQUEST_URI'] = '/gallery/Test%20na%20Macu/VLC%20snapy/test-na-macu-vlc-snapy-0001/';
     $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_GET = [];
 
     $cleanImageUrl = 'https://example.test/gallery/Test%20na%20Macu/VLC%20snapy/test-na-macu-vlc-snapy-0001/';
     $cleanMediaUrl = $cleanImageUrl . 'media?v=' . $assetVersion;
@@ -154,6 +181,27 @@ require_once __DIR__ . '/../app/services/app_settings.php';
     assert_public_media_url_same(rtrim($cleanImageUrl, '/'), $cleanBaseUrl, 'rewrite-enabled manifest image base URL');
     assert_public_media_url_same($cleanMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled manifest media URL');
     assert_public_media_url_same($cleanThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled manifest thumbnail URL');
+
+    $_GET = ['preview' => 'visual', 'view_as' => 'anonymous'];
+    $cleanPreviewImageUrl = $cleanImageUrl . '?preview=visual&view_as=anonymous';
+    $cleanPreviewMediaUrl = rtrim($cleanImageUrl, '/') . '/media?preview=visual&view_as=anonymous&v=' . $assetVersion;
+    $cleanPreviewThumbnailUrl = rtrim($cleanImageUrl, '/') . '/thumb-300.webp?preview=visual&view_as=anonymous&v=' . $assetVersion;
+    assert_public_media_url_same($cleanPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-enabled preview image URL');
+    assert_public_media_url_same($cleanPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-enabled preview media URL');
+    assert_public_media_url_same($cleanPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled preview thumbnail URL');
+    assert_public_media_url_same(rtrim($cleanImageUrl, '/'), public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-enabled preview manifest base remains undecorated');
+    assert_public_media_url_same($cleanPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled preview manifest media URL');
+    assert_public_media_url_same($cleanPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled preview manifest thumbnail URL');
+
+    $_GET = ['preview' => 'visual', 'view_as' => 'administrator'];
+    $cleanSignedPreviewImageUrl = $cleanImageUrl . '?preview=visual';
+    $cleanSignedPreviewMediaUrl = rtrim($cleanImageUrl, '/') . '/media?preview=visual&v=' . $assetVersion;
+    $cleanSignedPreviewThumbnailUrl = rtrim($cleanImageUrl, '/') . '/thumb-300.webp?preview=visual&v=' . $assetVersion;
+    assert_public_media_url_same($cleanSignedPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-enabled administrator preview image URL');
+    assert_public_media_url_same($cleanSignedPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-enabled administrator preview media URL');
+    assert_public_media_url_same($cleanSignedPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled administrator preview thumbnail URL');
+    assert_public_media_url_same($cleanSignedPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled administrator preview manifest media URL');
+    assert_public_media_url_same($cleanSignedPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled administrator preview manifest thumbnail URL');
 
     $replacement = $image;
     $replacement['id'] = 43;

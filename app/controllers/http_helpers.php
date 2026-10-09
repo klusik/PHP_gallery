@@ -208,12 +208,10 @@ function cms_nsfw_guard_schema_unavailable(string $page): void
 }
 
 /**
- * HTTP controller helper model.
- *
- * This module contains small response helpers shared by public and admin controllers, such as conditional file headers and the public back-to-top control renderer.
- *
- * @param string $path Filesystem path.
- * @param string $cacheControl Cache control value.
+ * Send conditional file validators while preventing visual-preview cache reuse.
+ * @param string $path Filesystem path of the authorized response asset.
+ * @param string $cacheControl Cache policy for ordinary non-preview responses.
+ * @return void Sends validators and cache policy, or exits with HTTP 304 for a matching ordinary request.
  */
 function send_conditional_file_headers(string $path, string $cacheControl): void
 {
@@ -226,13 +224,14 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     $etag = '"' . sha1($path . '|' . $mtime . '|' . $size) . '"';
     header('ETag: ' . $etag);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
-    header('Cache-Control: ' . $cacheControl);
+    header('Cache-Control: ' . ((string) ($_GET['preview'] ?? '') === 'visual' ? 'private, no-store, max-age=0' : $cacheControl));
 
     // $clientEtag stores an intermediate value used by the surrounding gallery workflow.
     $clientEtag = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
     // $clientModifiedSince stores an intermediate value used by the surrounding gallery workflow.
     $clientModifiedSince = (string) ($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '');
-    if ($clientEtag === $etag || ($clientModifiedSince !== '' && (int) strtotime($clientModifiedSince) >= $mtime)) {
+    if ((string) ($_GET['preview'] ?? '') !== 'visual'
+        && ($clientEtag === $etag || ($clientModifiedSince !== '' && (int) strtotime($clientModifiedSince) >= $mtime))) {
         http_response_code(304);
         exit;
     }
@@ -250,14 +249,15 @@ function clear_response_cache_headers(): void
 }
 
 /**
- * Send a cache policy after removing inherited PHP/session cache headers.
+ * Send a cache policy after removing inherited PHP/session cache headers, forcing visual-preview responses private and unstoreable.
  *
- * @param string $cacheControl Cache control value.
+ * @param string $cacheControl Cache policy for ordinary non-preview responses.
+ * @return void Emits the selected Cache-Control header.
  */
 function send_asset_cache_control(string $cacheControl): void
 {
     clear_response_cache_headers();
-    header('Cache-Control: ' . $cacheControl);
+    header('Cache-Control: ' . ((string) ($_GET['preview'] ?? '') === 'visual' ? 'private, no-store, max-age=0' : $cacheControl));
 }
 
 /**
@@ -287,4 +287,3 @@ function cms_not_found(): void
     );
     render_footer();
 }
-

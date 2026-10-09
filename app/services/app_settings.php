@@ -14,6 +14,7 @@
  *   - Keep domain logic reusable outside controllers
  *   - Protect existing behavior with small focused functions
  *   - Return predictable values for callers
+ *   - Keep request-local settings reads coherent after atomic domain writes
  *
  * Author:
  *   Rudolf Klusal
@@ -29,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -39,10 +40,12 @@ namespace Gallery\Services;
 use function Gallery\Core\request_data;
 
 use PDOException;
+use Gallery\Models\AppSettingsRollbackException;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\app_settings_model_all;
 use function Gallery\Models\app_settings_model_delete;
 use function Gallery\Models\app_settings_model_get;
+use function Gallery\Models\app_settings_model_set_many_with_activation;
 use function Gallery\Models\app_settings_model_set;
 
 /**
@@ -541,6 +544,23 @@ function set_app_setting(string $key, string $value): void
         $GLOBALS['cms_app_settings_cache'] = [];
     }
     $GLOBALS['cms_app_settings_cache'][$key] = $value;
+}
+
+/**
+ * Persist related application settings around a reversible domain activation, then invalidate request-local reads.
+ *
+ * @param array<string,string> $settings Non-empty map from setting keys to values that must become visible together.
+ * @param callable():void $activate Reversible domain-owned file activation run inside the model-owned settings transaction.
+ * @return void Keeps the request cache unchanged on failure and forces subsequent reads to observe the committed rows.
+ * @throws \InvalidArgumentException When the map is empty or contains invalid keys or values.
+ * @throws PDOException When persistence fails; the model attempts to roll back setting writes and the caller must reverse file activation.
+ * @throws AppSettingsRollbackException When the database does not confirm rollback, leaving committed setting state uncertain.
+ * @throws \RuntimeException When a transaction boundary reports failure; the caller reverses file activation.
+ */
+function set_app_settings_atomically(array $settings, callable $activate): void
+{
+    app_settings_model_set_many_with_activation($settings, now_sql(), $activate);
+    app_settings_reset_request_cache();
 }
 
 /**

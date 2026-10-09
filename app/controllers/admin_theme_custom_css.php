@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -59,6 +59,7 @@ use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
+use function Gallery\Core\public_visual_preview_url;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\app_setting;
@@ -256,8 +257,8 @@ use function Gallery\Views\view_render_admin_theme_custom_css_tab;
  */
 
 /**
- * Render the Theme custom CSS tab.
- * @return void Passes actual asset status and explicit replacement choices to the view.
+ * Render the Theme custom CSS tab with a server-generated public visual-preview URL.
+ * @return void Passes CSS readiness independently from the optional Theme-image readiness, page-width baseline and preview URL to the view.
  */
 function render_admin_theme_custom_css_tab(): void
 {
@@ -295,11 +296,20 @@ function render_admin_theme_custom_css_tab(): void
     $overrideDraft = $_SESSION['cms_css_override_draft'] ?? null;
     $overrideNotice = $_SESSION['cms_css_override_notice'] ?? null;
     unset($_SESSION['cms_css_override_draft'], $_SESSION['cms_css_override_notice']);
+    $themeSettings = \Gallery\Services\theme_settings();
+    $background = ['available' => false, 'revision' => '', 'source' => '', 'url' => '', 'ready' => true];
+    try {
+        $background = \Gallery\Services\theme_background_editor_state();
+        $background['ready'] = true;
+    } catch (RuntimeException) {
+        // An unreadable configured Theme image disables only image editing; the independent CSS editor remains usable.
+        $background = ['available' => false, 'revision' => '', 'source' => '', 'url' => '', 'ready' => false];
+    }
 
     view_render_admin_theme_custom_css_tab([
         'presets' => $presetOptions,
         'errors' => $errors,
-        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor'])],
+        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor']), 'preview_url' => public_visual_preview_url(url_for('home')), 'background' => $background, 'page_width' => ['mode' => (string) ($themeSettings['page_width'] ?? 'default'), 'custom_px' => (int) ($themeSettings['page_width_custom'] ?? 1440)]],
         'current_css' => [
             'active' => $state['active'],
             'status_label' => $state['active']

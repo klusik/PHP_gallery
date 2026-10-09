@@ -157,10 +157,16 @@ namespace {
             throw new RuntimeException('Unable to create disposable Theme module fixture.');
         }
     }
+    if (!mkdir($serviceDir . '/gallery_backgrounds', 0700, true)) {
+        throw new RuntimeException('Unable to create the disposable Theme background module part directory.');
+    }
     foreach (['gallery_backgrounds.php', 'gallery_branding.php'] as $module) {
         if (!copy(dirname(__DIR__) . '/app/services/' . $module, $serviceDir . '/' . $module)) {
             throw new RuntimeException('Unable to stage isolated Theme service.');
         }
+    }
+    if (!copy(dirname(__DIR__) . '/app/services/gallery_backgrounds/visual_css_save.php', $serviceDir . '/gallery_backgrounds/visual_css_save.php')) {
+        throw new RuntimeException('Unable to stage the isolated Theme background module part.');
     }
     file_put_contents($serviceDir . '/gallery_edit_concurrency.php', "<?php\n");
     require $serviceDir . '/gallery_backgrounds.php';
@@ -261,10 +267,11 @@ namespace {
                 @unlink($path);
             }
         }
-        foreach (['gallery_backgrounds.php', 'gallery_branding.php', 'gallery_edit_concurrency.php'] as $module) {
+        foreach (['gallery_backgrounds.php', 'gallery_backgrounds/visual_css_save.php', 'gallery_branding.php', 'gallery_edit_concurrency.php'] as $module) {
             @unlink($serviceDir . '/' . $module);
         }
         @unlink($incoming);
+        @rmdir($serviceDir . '/gallery_backgrounds');
         @rmdir($serviceDir);
         @rmdir($root . '/app');
         @rmdir($backgroundDir);

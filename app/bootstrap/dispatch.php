@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 use Gallery\Services\PublicSchemaPolicyUnavailableException;
+use function Gallery\Controllers\cms_not_found;
 use function Gallery\Controllers\cms_public_schema_unavailable;
 use function Gallery\Services\feature_flag_disabled_route_decision;
 use function Gallery\Services\feature_flag_route_enabled;
@@ -45,6 +46,7 @@ use function Gallery\Services\gallery_visibility_assert_public_policy_available;
 use function Gallery\Services\nsfw_guard_assert_public_policy_available;
 use function Gallery\Services\seo_request_guard_route_robots_header_value;
 use function Gallery\Services\t;
+use function Gallery\Services\translation_active_language;
 use function Gallery\Views\view_render_feature_disabled_admin;
 use function Gallery\Views\view_render_not_found;
 
@@ -301,6 +303,66 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
     $kernel ??= cms_runtime_kernel();
     $route = $kernel->resolve(new Request($page));
     $kernel->load('request-policy');
+
+    // The preview marker converts otherwise ordinary public GET routes into an Admin-only, no-store read surface.
+    if (array_key_exists('preview', $_GET)) {
+        // `request-policy` was loaded above and owns the preview classifier, so this route needs no separate policy module.
+        $principal = current_user();
+        $previewDecision = \Gallery\Services\public_visual_preview_request_decision(
+            $page,
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')),
+            is_array($principal) && (string) ($principal['role'] ?? '') === 'admin',
+            $_GET
+        );
+        if (!empty($previewDecision['active']) && !headers_sent()) {
+            header('Cache-Control: ' . (string) $previewDecision['cache_control']);
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            header('X-Robots-Tag: noindex, nofollow, noarchive');
+        }
+        if (empty($previewDecision['allowed'])) {
+            http_response_code((int) ($previewDecision['status'] ?? 404));
+            if ((int) ($previewDecision['status'] ?? 404) === 405) {
+                if (!headers_sent()) {
+                    header('Allow: GET, HEAD');
+                    header('Content-Type: text/plain; charset=utf-8');
+                }
+                echo "Visual preview accepts only GET and HEAD requests.\n";
+                return;
+            }
+            $kernel->load('http-not-found');
+            cms_not_found();
+            return;
+        }
+        if (!empty($previewDecision['active']) && !empty($previewDecision['allowed'])
+            && in_array($page, ['home', 'gallery'], true)) {
+            // Inspect active user CSS only for an authorized preview document, outside early request policy.
+            $kernel->load('visual-preview-document');
+            $cssInspection = \Gallery\Services\custom_css_visual_preview_inspection_decision();
+            if (!empty($cssInspection['blocked'])) {
+                http_response_code(409);
+                if (!headers_sent()) {
+                    header('Content-Type: text/html; charset=utf-8');
+                    header('Cache-Control: private, no-store, max-age=0');
+                }
+                if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'HEAD') {
+                    $isImportRefusal = ($cssInspection['reason'] ?? '') === 'import_unsupported';
+                    $refusalReason = $isImportRefusal ? 'import' : 'inspection';
+                    $messageKey = $isImportRefusal
+                        ? 'admin.theme.overrides.visual_editor_import_unsupported'
+                        : 'admin.theme.overrides.visual_editor_inspection_unavailable';
+                    $messageFallback = $isImportRefusal
+                        ? 'The visual editor cannot safely preview CSS with @import. Use Manual CSS, or remove the import rules before opening this preview.'
+                        : 'The visual editor could not safely inspect a saved stylesheet. Use Manual CSS, or ensure the installed stylesheet is a readable regular file within the preview inspection limit.';
+                    $message = t($messageKey, $messageFallback);
+                    echo '<!doctype html><html lang="' . e(translation_active_language()) . '"><head><meta charset="utf-8"><title>'
+                        . e(t('admin.theme.overrides.visual_editor_title', 'Live Visual CSS Editor'))
+                        . '</title></head><body><div data-visual-preview-blocked="' . e($refusalReason) . '">' . e($message) . '</div></body></html>';
+                }
+                return;
+            }
+        }
+    }
 
     // Download endpoints are crawler-excluded independently of authorization, feature state, and response type.
     $robotsDirective = seo_request_guard_route_robots_header_value($page);

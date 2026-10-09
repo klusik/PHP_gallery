@@ -292,6 +292,12 @@ $registry = [
             'php_argument' => true,
             'timeout' => 60,
         ],
+        'theme_visual_editor_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'theme_visual_css_draft_model_test.mjs' => [],
+        'theme_visual_css_resize_model_test.mjs' => [],
         'gallery_creation_browser_test.mjs' => [
             'browser' => true,
             'php_argument' => true,

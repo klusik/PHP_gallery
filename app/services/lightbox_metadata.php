@@ -40,12 +40,13 @@ use function Gallery\Models\lightbox_metadata_model_fetch_images;
 use function Gallery\Models\lightbox_metadata_model_image_position;
 use function Gallery\Models\lightbox_metadata_model_state_summary;
 use function Gallery\Models\lightbox_metadata_model_total_count;
+use function Gallery\Core\admin_anonymous_preview_active;
 
 
 /**
- * Return true when the current public lightbox request must hide NSFW image rows.
+ * Return true when public or anonymous-preview lightbox output must hide NSFW image rows.
  *
- * @param array $gallery Gallery database row used for inherited NSFW checks.
+ * @param array{parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery ancestry and NSFW flag fields used for inherited restrictions.
  * @param bool $publicOnly True when the current request uses anonymous visitor visibility.
  * @return bool True when restricted image rows must not be exposed to the browser.
  */
@@ -54,7 +55,9 @@ function gallery_lightbox_excludes_restricted_nsfw(array $gallery, bool $publicO
     if (!$publicOnly || !nsfw_guard_schema_ready()) {
         return false;
     }
-    return !visitor_can_access_nsfw_content();
+    return admin_anonymous_preview_active()
+        ? !visitor_can_access_nsfw_content_without_admin_bypass()
+        : !visitor_can_access_nsfw_content();
 }
 
 /**

@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -199,14 +199,14 @@ function seo_request_guard_ignored_tracking_parameters(): array
 }
 
 /**
- * Return public query parameters accepted by each route.
+ * Return public query parameters accepted by each route, including the protected preview marker.
  *
  * @param string $page Public route identifier.
  * @return array<int,string> Allowed query parameter names for this route.
  */
 function seo_request_guard_allowed_parameters_for_page(string $page): array
 {
-    $global = ['page', 'lang'];
+    $global = ['page', 'lang', 'preview'];
     $map = [
         'home' => ['gallery_page', 'view_as'],
         'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust', 'benchmark_phase'],
@@ -251,10 +251,11 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
 }
 
 /**
- * Return unexpected public query keys for the current request.
+ * Return unexpected public query keys, accepting the fixed fallback notice only with its preview markers.
  *
- * @param string $page Page number or page data.
- * @return array<int string>.
+ * @param string $page Normalized public route identifier.
+ * @param array<array-key,scalar|array<array-key,mixed>|null> $query Parsed request query values; bracket-syntax arrays are not valid notice tokens.
+ * @return list<string> Unexpected parameter names, including invalid fallback-notice values.
  */
 function seo_request_guard_unexpected_query_parameters(string $page, array $query): array
 {
@@ -265,7 +266,12 @@ function seo_request_guard_unexpected_query_parameters(string $page, array $quer
     foreach (array_keys($query) as $rawName) {
         $name = (string) $rawName;
         $lowerName = strtolower($name);
-        if (isset($allowed[$name]) || isset($tracking[$lowerName])) {
+        $validAnonymousFallbackNotice = $page === 'home'
+            && $name === 'visual_notice'
+            && ($query['visual_notice'] ?? null) === 'anonymous_fallback'
+            && ($query['preview'] ?? null) === 'visual'
+            && ($query['view_as'] ?? null) === 'anonymous';
+        if (isset($allowed[$name]) || isset($tracking[$lowerName]) || $validAnonymousFallbackNotice) {
             continue;
         }
         $unexpected[] = $name;
@@ -280,7 +286,7 @@ function seo_request_guard_unexpected_query_parameters(string $page, array $quer
  *
  * @param string $page Route identifier.
  * @param string $method HTTP request method supplied by the bootstrap boundary.
- * @param array<string,mixed> $query Parsed query parameters supplied by the bootstrap boundary.
+ * @param array<array-key,scalar|array<array-key,mixed>|null> $query Parsed query values supplied by the bootstrap boundary; invalid or mismatched fallback-notice values remain unexpected.
  * @param bool $authenticated Whether an authenticated administrator is already available.
  * @param string $requestUri Raw request URI used only for redacted sampled logging.
  * @param string $remoteAddress Remote address used only for sampled security logging.
@@ -331,19 +337,24 @@ function seo_request_guard_enforcement_decision(
 }
 
 /**
- * Build the canonical homepage redirect location while retaining supported query keys only.
+ * Build the canonical homepage redirect while retaining supported parameters and an exact anonymous fallback notice.
  *
- * @param array<string,mixed> $query Parsed query parameters.
- * @return string Absolute canonical homepage URL.
+ * @param array<array-key,scalar|array<array-key,mixed>|null> $query Parsed request query values; nested values are retained only for established generic parameters.
+ * @return string Absolute canonical homepage URL with supported parameters, preview/audience markers, and the fixed notice only when all three notice conditions match.
  */
 function seo_request_guard_home_redirect_location(array $query): string
 {
-    $supported = array_fill_keys(['gallery_page', 'view_as', 'lang'], true);
+    $supported = array_fill_keys(['gallery_page', 'view_as', 'lang', 'preview'], true);
     $retained = [];
     foreach ($query as $name => $value) {
         if (isset($supported[(string) $name])) {
             $retained[(string) $name] = $value;
         }
+    }
+    if (($query['preview'] ?? null) === 'visual'
+        && ($query['view_as'] ?? null) === 'anonymous'
+        && ($query['visual_notice'] ?? null) === 'anonymous_fallback') {
+        $retained['visual_notice'] = 'anonymous_fallback';
     }
 
     $location = rtrim(public_base_url(), '/') . '/';
@@ -460,4 +471,3 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
 
     return '';
 }
-

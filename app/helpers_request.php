@@ -366,14 +366,20 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
 }
 
 /**
- * Build a query-string route URL.
+ * Build an application route URL and preserve active visual-preview audience markers.
  *
- * @param string $page Page number or page data.
- * @param array $params Params value.
- * @return string Text result for the caller.
+ * @param string $page Canonical route identifier passed to the application front controller.
+ * @param array<string,mixed> $params Query parameters to encode after the route identifier.
+ * @return string Application URL using the configured rewrite mode and any active preview markers.
  */
 function url_for(string $page, array $params = []): string
 {
+    if ((string) ($_GET['preview'] ?? '') === 'visual') {
+        $params['preview'] = 'visual';
+        if ((string) ($_GET['view_as'] ?? '') === 'anonymous') {
+            $params['view_as'] = 'anonymous';
+        }
+    }
     if ($page === 'home' && $params === [] && url_rewrite_should_emit_clean_urls()) {
         return base_url();
     }
@@ -526,6 +532,98 @@ function anonymous_preview_url(string $url, bool $enabled): string
     }
     $rebuilt .= (string) ($parts['path'] ?? '');
     if ($query) {
+        $rebuilt .= '?' . http_build_query($query);
+    }
+    if (isset($parts['fragment'])) {
+        $rebuilt .= '#' . $parts['fragment'];
+    }
+    return $rebuilt;
+}
+
+/**
+ * Add the authenticated visual-preview and audience markers to an application URL.
+ * @param string $url Same-origin application URL whose route and existing query must be preserved.
+ * @param bool $anonymous Whether the URL should render using anonymous visitor visibility rules.
+ * @return string The URL carrying the visual-preview marker and requested audience marker.
+ */
+function public_visual_preview_url(string $url, bool $anonymous = false): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return $url;
+    }
+    $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $requestScheme = request_is_https() ? 'https' : 'http';
+    $requestOrigin = $requestHost === '' ? null : parse_url($requestScheme . '://' . $requestHost);
+    if (!is_array($requestOrigin) || !isset($requestOrigin['host'])
+        || isset($requestOrigin['user']) || isset($requestOrigin['pass']) || isset($requestOrigin['path'])
+        || isset($requestOrigin['query']) || isset($requestOrigin['fragment'])) {
+        return $url;
+    }
+    if (isset($parts['host'])) {
+        $urlScheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $requestOriginScheme = strtolower((string) ($requestOrigin['scheme'] ?? ''));
+        $urlPort = (int) ($parts['port'] ?? ($urlScheme === 'https' ? 443 : 80));
+        $requestPort = (int) ($requestOrigin['port'] ?? ($requestOriginScheme === 'https' ? 443 : 80));
+        if ($urlScheme !== $requestOriginScheme
+            || strtolower((string) $parts['host']) !== strtolower((string) ($requestOrigin['host'] ?? ''))
+            || $urlPort !== $requestPort
+            || isset($parts['user']) || isset($parts['pass'])) {
+            return $url;
+        }
+    } elseif (isset($parts['scheme']) || str_starts_with($url, '//')) {
+        return $url;
+    }
+    $urlPath = (string) ($parts['path'] ?? '');
+    $mountPath = '/' . trim(request_script_base_path(), '/');
+    if ($mountPath === '/') {
+        $mountPath = '';
+    }
+    if ($urlPath === '' || $urlPath[0] !== '/' || ($mountPath !== ''
+        && $urlPath !== $mountPath && !str_starts_with($urlPath, $mountPath . '/'))) {
+        return $url;
+    }
+    $query = [];
+    $explicitPreviewValues = [];
+    foreach (explode('&', (string) ($parts['query'] ?? '')) as $pair) {
+        if ($pair === '') {
+            continue;
+        }
+        [$rawName, $rawValue] = array_pad(explode('=', $pair, 2), 2, '');
+        if (urldecode($rawName) === 'preview') {
+            $explicitPreviewValues[] = urldecode($rawValue);
+        }
+    }
+    if (count($explicitPreviewValues) > 1 || ($explicitPreviewValues !== [] && $explicitPreviewValues[0] !== 'visual')) {
+        return $url;
+    }
+    parse_str((string) ($parts['query'] ?? ''), $query);
+    $query['preview'] = 'visual';
+    if ($anonymous) {
+        $query['view_as'] = 'anonymous';
+    } else {
+        unset($query['view_as']);
+    }
+
+    $rebuilt = '';
+    if (isset($parts['scheme'])) {
+        $rebuilt .= $parts['scheme'] . '://';
+    }
+    if (isset($parts['user'])) {
+        $rebuilt .= $parts['user'];
+        if (isset($parts['pass'])) {
+            $rebuilt .= ':' . $parts['pass'];
+        }
+        $rebuilt .= '@';
+    }
+    if (isset($parts['host'])) {
+        $rebuilt .= $parts['host'];
+    }
+    if (isset($parts['port'])) {
+        $rebuilt .= ':' . $parts['port'];
+    }
+    $rebuilt .= (string) ($parts['path'] ?? '');
+    if ($query !== []) {
         $rebuilt .= '?' . http_build_query($query);
     }
     if (isset($parts['fragment'])) {

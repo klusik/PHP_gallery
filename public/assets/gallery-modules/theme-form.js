@@ -6,12 +6,12 @@
  * Module Type: Browser Module
  *
  * Purpose:
- *   Provides client-side behavior for the PHP Gallery user interface.
+ *   Bind the shared Theme appearance and custom-CSS editor modules.
  *
  * Responsibilities:
- *   - Attach behavior to existing server-rendered markup
+ *   - Attach behavior to existing server-rendered Theme controls
+ *   - Load the current revision of the Theme customization module
  *   - Keep DOM interaction predictable and readable
- *   - Avoid unnecessary layout work in performance-sensitive paths
  *
  * Author:
  *   Rudolf Klusal
@@ -27,12 +27,12 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-10-03
+ *   2026-10-09
  */
 
 import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
 import { setupAdminGalleryGridControls } from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
-import { setupThemeAdvancedAppearance, setupThemeCssOverrideEditor } from './theme-customization.js?v=20261008-theme-customization-v1';
+import { setupThemeAdvancedAppearance, setupThemeCssOverrideEditor } from './theme-customization.js?v=20261009-visual-editor-overlay-routing';
 
 /**
  * Theme and pagination form helpers

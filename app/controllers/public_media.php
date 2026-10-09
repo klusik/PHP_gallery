@@ -39,6 +39,7 @@ namespace Gallery\Controllers;
 use finfo;
 use InvalidArgumentException;
 use function Gallery\Core\current_user;
+use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\public_base_url;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\find_gallery;
@@ -58,16 +59,21 @@ use function Gallery\Services\image_create_from_path;
 use function Gallery\Services\image_nsfw_restricted;
 use function Gallery\Services\image_public_display_file;
 use function Gallery\Services\public_image_visible_to_current_visitor;
+use function Gallery\Services\public_image_visible_to_current_visitor_without_admin_bypass;
+use function Gallery\Services\public_visual_preview_is_active;
 use function Gallery\Services\public_media_needs_private_cache;
 use function Gallery\Services\public_sitemap_entries;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
+use function Gallery\Services\thumbnail_readonly_existing_response_file;
 use function Gallery\Services\thumbnail_response_file_geometry_status;
 use function Gallery\Views\view_render_sitemap_xml;
 use function Gallery\Services\thumbnail_sizes;
 use function Gallery\Services\telemetry_record_media_served_event;
 use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\visitor_can_access_gallery_without_admin_bypass;
 use function Gallery\Services\visitor_can_access_nsfw_content;
+use function Gallery\Services\visitor_can_access_nsfw_content_without_admin_bypass;
 
 /**
  * Public media controller model.
@@ -95,11 +101,11 @@ function cms_release_public_media_session_lock(): void
  *
  * Invalid geometry is handled by the response resolver before streaming.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,thumbnail_source_identity_version?:int|string|null,width?:int|string|null,height?:int|string|null} $image Persisted thumbnail source identity and optional fallback geometry.
+ * @param array{folder_path:string} $gallery Owning gallery folder used to constrain source and derivative paths.
  * @param int $size Size value.
  * @param string $path Filesystem path.
- * @return array<string mixed>.
+ * @return array{valid:bool,reason:string} Geometry decision and machine-readable reason.
  */
 function cms_thumbnail_file_geometry_status_for_response(array $image, array $gallery, int $size, string $path): array
 {
@@ -113,8 +119,8 @@ function cms_thumbnail_file_geometry_status_for_response(array $image, array $ga
 /**
  * Return true when a generated thumbnail has valid geometry.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,thumbnail_source_identity_version?:int|string|null,width?:int|string|null,height?:int|string|null} $image Persisted thumbnail source identity and optional fallback geometry.
+ * @param array{folder_path:string} $gallery Owning gallery folder used to constrain source and derivative paths.
  * @param int $size Size value.
  * @param string $path Filesystem path.
  * @return bool True when the condition matches.
@@ -128,20 +134,24 @@ function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int
 
 
 /**
- * Resolve a thumbnail response file and repair invalid geometry before streaming.
+ * Resolve a thumbnail response file, using a strictly read-only lookup for visual preview requests.
  *
  * Public thumbnail URLs may touch the filesystem because the browser is asking
  * for a specific derivative. Invalid aspect-ratio variants are deleted and are
- * never streamed back to the client.
+ * never streamed in ordinary requests; visual preview returns only an existing
+ * valid derivative and never repairs it.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,thumbnail_source_identity_version?:int|string|null,width?:int|string|null,height?:int|string|null} $image Persisted thumbnail source identity and optional fallback geometry.
+ * @param array{folder_path:string} $gallery Owning gallery folder used to constrain source and derivative paths.
  * @param int $size Size value.
  * @param string $format Format value.
- * @return array{path:string,geometry_status:array<string,mixed>}|null Structured result data for the caller.
+ * @return array{path:string,geometry_status:array{valid:bool,reason:string}}|null Existing thumbnail path and geometry decision, or null when no safe derivative is available.
  */
 function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $size, string $format): ?array
 {
+    if (public_visual_preview_is_active($_GET)) {
+        return thumbnail_readonly_existing_response_file($image, $gallery, $size, $format);
+    }
     if (function_exists('Gallery\\Services\\thumbnail_ensure_image_thumbnail_variant_file')) {
         return thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, $size, $format);
     }
@@ -150,13 +160,14 @@ function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $
 }
 
 /**
- * Handle cms thumb.
- *
- * Used by HTTP controller routing for this workflow.
+ * Stream an authorized image thumbnail, suppressing writes and admin grants in anonymous preview mode.
+ * @return void Streams an existing authorized derivative or sends an opaque not-found response.
  */
 function cms_thumb(): void
 {
-    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('thumb', [
+    $previewRequest = public_visual_preview_is_active($_GET);
+    $anonymousPreview = $previewRequest && admin_anonymous_preview_active();
+    $benchmarkMediaRequest = $previewRequest ? null : gallery_benchmark_media_request_begin('thumb', [
         'size' => (int) ($_GET['size'] ?? 0),
         'format' => substr((string) ($_GET['format'] ?? 'jpg'), 0, 12),
     ]);
@@ -172,7 +183,10 @@ function cms_thumb(): void
     }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || (!current_user() && !public_image_visible_to_current_visitor($image, $gallery)) || (current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
+    $imageVisible = $gallery !== null && ($anonymousPreview
+        ? public_image_visible_to_current_visitor_without_admin_bypass($image, $gallery)
+        : public_image_visible_to_current_visitor($image, $gallery));
+    if (!$gallery || (!$anonymousPreview && !current_user() && !$imageVisible) || ($anonymousPreview && !$imageVisible) || (!$anonymousPreview && current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
         cms_not_found();
         return;
     }
@@ -216,7 +230,7 @@ function cms_thumb(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
-    if (is_int($readBytes) && $readBytes > 0) {
+    if (!$previewRequest && is_int($readBytes) && $readBytes > 0) {
         telemetry_record_media_served_event(
             $image,
             $gallery,
@@ -242,11 +256,14 @@ function cms_thumb(): void
 }
 
 /**
- * Handles cms public thumb logic for the gallery application.
+ * Stream an authorized public-path thumbnail without preview telemetry or derivative repair.
+ * @return void Streams an existing authorized derivative or sends an opaque not-found response.
  */
 function cms_public_thumb(): void
 {
-    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('public_thumb', [
+    $previewRequest = public_visual_preview_is_active($_GET);
+    $anonymousPreview = $previewRequest && admin_anonymous_preview_active();
+    $benchmarkMediaRequest = $previewRequest ? null : gallery_benchmark_media_request_begin('public_thumb', [
         'size' => (int) ($_GET['size'] ?? 0),
         'format' => substr((string) ($_GET['format'] ?? 'jpg'), 0, 12),
     ]);
@@ -265,7 +282,10 @@ function cms_public_thumb(): void
         cms_not_found();
         return;
     }
-    if ((!current_user() && !public_image_visible_to_current_visitor($image, $gallery)) || (current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
+    $imageVisible = $anonymousPreview
+        ? public_image_visible_to_current_visitor_without_admin_bypass($image, $gallery)
+        : public_image_visible_to_current_visitor($image, $gallery);
+    if ((!$anonymousPreview && !current_user() && !$imageVisible) || ($anonymousPreview && !$imageVisible) || (!$anonymousPreview && current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
         cms_not_found();
         return;
     }
@@ -311,7 +331,7 @@ function cms_public_thumb(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
-    if (is_int($readBytes) && $readBytes > 0) {
+    if (!$previewRequest && is_int($readBytes) && $readBytes > 0) {
         telemetry_record_media_served_event(
             $image,
             $gallery,
@@ -337,11 +357,14 @@ function cms_public_thumb(): void
 }
 
 /**
- * Handles cms public media logic for the gallery application.
+ * Stream an authorized public-path original while preserving anonymous-preview gallery and NSFW grants.
+ * @return void Streams the authorized image file or sends an opaque not-found response.
  */
 function cms_public_media(): void
 {
-    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('public_media');
+    $previewRequest = public_visual_preview_is_active($_GET);
+    $anonymousPreview = $previewRequest && admin_anonymous_preview_active();
+    $benchmarkMediaRequest = $previewRequest ? null : gallery_benchmark_media_request_begin('public_media');
     // $resolved stores an intermediate value used by the surrounding gallery workflow.
     $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -353,7 +376,10 @@ function cms_public_media(): void
         cms_not_found();
         return;
     }
-    if ((!current_user() && !public_image_visible_to_current_visitor($image, $gallery)) || (current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
+    $imageVisible = $anonymousPreview
+        ? public_image_visible_to_current_visitor_without_admin_bypass($image, $gallery)
+        : public_image_visible_to_current_visitor($image, $gallery);
+    if ((!$anonymousPreview && !current_user() && !$imageVisible) || ($anonymousPreview && !$imageVisible) || (!$anonymousPreview && current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
         cms_not_found();
         return;
     }
@@ -394,7 +420,7 @@ function cms_public_media(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
-    if (is_int($readBytes) && $readBytes > 0) {
+    if (!$previewRequest && is_int($readBytes) && $readBytes > 0) {
         telemetry_record_media_served_event(
             $image,
             $gallery,
@@ -420,23 +446,30 @@ function cms_public_media(): void
 }
 
 /**
- * Stream an authorized gallery cover image from a canonical gallery-local path.
+ * Stream an authorized gallery cover image from a canonical gallery-local path, applying anonymous-preview access grants.
  *
  * @return void Sends the image or an opaque not-found response.
  */
 function cms_gallery_cover_asset(): void
 {
+    $anonymousPreview = public_visual_preview_is_active($_GET) && admin_anonymous_preview_active();
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
     if (!$gallery) {
         cms_not_found();
         return;
     }
-    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+    $galleryVisitorAllowed = $anonymousPreview
+        ? visitor_can_access_gallery_without_admin_bypass($gallery)
+        : visitor_can_access_gallery($gallery);
+    if ((!current_user() || $anonymousPreview) && !$galleryVisitorAllowed) {
         cms_not_found();
         return;
     }
-    if ((!current_user() || current_user_is_known_under_18()) && gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
+    $nsfwVisitorAllowed = $anonymousPreview
+        ? visitor_can_access_nsfw_content_without_admin_bypass()
+        : visitor_can_access_nsfw_content();
+    if (($anonymousPreview || !current_user() || current_user_is_known_under_18()) && gallery_nsfw_requirement($gallery) !== null && !$nsfwVisitorAllowed) {
         cms_not_found();
         return;
     }
@@ -496,12 +529,13 @@ function cms_gallery_cover_asset(): void
 
 
 /**
- * Stream an authorized gallery branding asset with gallery-level cache privacy.
+ * Stream an authorized gallery branding asset with gallery-level cache privacy and anonymous-preview access grants.
  *
  * @return void Sends the image or an opaque not-found response.
  */
 function cms_gallery_branding_asset(): void
 {
+    $anonymousPreview = public_visual_preview_is_active($_GET) && admin_anonymous_preview_active();
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
     if (!$gallery || !gallery_branding_schema_ready()) {
@@ -515,11 +549,17 @@ function cms_gallery_branding_asset(): void
         cms_not_found();
         return;
     }
-    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+    $galleryVisitorAllowed = $anonymousPreview
+        ? visitor_can_access_gallery_without_admin_bypass($gallery)
+        : visitor_can_access_gallery($gallery);
+    if ((!current_user() || $anonymousPreview) && !$galleryVisitorAllowed) {
         cms_not_found();
         return;
     }
-    if ((!current_user() || current_user_is_known_under_18()) && gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
+    $nsfwVisitorAllowed = $anonymousPreview
+        ? visitor_can_access_nsfw_content_without_admin_bypass()
+        : visitor_can_access_nsfw_content();
+    if (($anonymousPreview || !current_user() || current_user_is_known_under_18()) && gallery_nsfw_requirement($gallery) !== null && !$nsfwVisitorAllowed) {
         cms_not_found();
         return;
     }
@@ -624,8 +664,7 @@ function cms_gallery_ofp_pdf(): void
 }
 
 /**
- * Dispatch authorized public media, including imported OFP PDFs, through the
- * existing gallery visibility, ownership and image-access controller.
+ * Dispatch authorized public media through gallery visibility, ownership and image-access rules, including the read-only preview policy.
  *
  * @return void Streams permitted media or sends an access-controlled failure.
  */
@@ -635,7 +674,9 @@ function cms_media(): void
         cms_gallery_ofp_pdf();
         return;
     }
-    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('media');
+    $previewRequest = public_visual_preview_is_active($_GET);
+    $anonymousPreview = $previewRequest && admin_anonymous_preview_active();
+    $benchmarkMediaRequest = $previewRequest ? null : gallery_benchmark_media_request_begin('media');
     // Variable $image stores this steps working value.
     $image = find_image((int) ($_GET['id'] ?? 0));
     if (!$image) {
@@ -644,7 +685,10 @@ function cms_media(): void
     }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || (!current_user() && !public_image_visible_to_current_visitor($image, $gallery)) || (current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
+    $imageVisible = $gallery !== null && ($anonymousPreview
+        ? public_image_visible_to_current_visitor_without_admin_bypass($image, $gallery)
+        : public_image_visible_to_current_visitor($image, $gallery));
+    if (!$gallery || (!$anonymousPreview && !current_user() && !$imageVisible) || ($anonymousPreview && !$imageVisible) || (!$anonymousPreview && current_user_is_known_under_18() && image_nsfw_restricted($image, $gallery))) {
         cms_not_found();
         return;
     }
@@ -683,7 +727,7 @@ function cms_media(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
-    if (is_int($readBytes) && $readBytes > 0) {
+    if (!$previewRequest && is_int($readBytes) && $readBytes > 0) {
         telemetry_record_media_served_event(
             $image,
             $gallery,

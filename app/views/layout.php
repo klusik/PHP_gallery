@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Views;
 
-use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\asset_dependency_revision;
 use function Gallery\Core\asset_url;
 use function Gallery\Core\cms_current_version;
@@ -46,7 +45,6 @@ use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
-use function Gallery\Core\theme_cache_key;
 use function Gallery\Core\url_for;
 use function Gallery\Services\t;
 
@@ -135,111 +133,6 @@ function view_favorite_gallery_nav_html(array $items): string
 
 
 /**
- * Return the full legacy stylesheet set required by admin screens and logged-in public tools.
- *
- * @return list<string> Stylesheet paths relative to the public web root.
- */
-function view_admin_stylesheet_files(): array
-{
-    return [
-        'assets/styles/base.css',
-        'assets/styles/public.css',
-        'assets/styles/lightbox.css',
-        'assets/styles/admin.css',
-        'assets/styles/admin-layout.css',
-        'assets/styles/admin-dashboard.css',
-        'assets/styles/admin-maintenance-center.css',
-        'assets/styles/admin-telemetry.css',
-        'assets/styles/admin-logs.css',
-        'assets/styles/admin-subtabs.css',
-        'assets/styles/admin-theme-preview.css',
-        'assets/styles/admin-setup-wizard.css',
-        'assets/styles/admin-reordering.css',
-        'assets/styles/admin-media-tools.css',
-        'assets/styles/admin-theme-editor.css',
-        'assets/styles/admin-theme-media.css',
-        'assets/styles/admin-theme-layout.css',
-        'assets/styles/admin-theme-language.css',
-        'assets/styles/admin-theme-custom-css.css',
-        'assets/styles/admin-gallery-list.css',
-        'assets/styles/admin-smart-galleries.css',
-        'assets/styles/admin-gallery-title-completion.css',
-        'assets/styles/admin-patch-notes.css',
-        'assets/styles/admin-update.css',
-        'assets/styles/admin-tags.css',
-        'assets/styles/side-panel.css',
-        'assets/styles/admin-gallery-create.css',
-        'assets/styles/admin-duplicate-photo-detector.css',
-        'assets/styles/admin-cinematic.css',
-        'assets/styles/admin-settings.css',
-        'assets/styles/utilities.css',
-        'assets/styles.css',
-        'assets/styles/admin-gallery-api.css',
-        'assets/styles/admin-gallery-access.css',
-        'assets/styles/admin-gallery-display.css',
-        'assets/styles/admin-gallery-media.css',
-        'assets/styles/breadcrumbs.css',
-    ];
-}
-
-/**
- * Return the anonymous public stylesheet set.
- *
- * The shared public file contains only visitor-facing rules extracted from
- * mixed legacy admin stylesheets after visual verification.
- *
- * @return array<int string> Stylesheet paths relative to the public web root.
- */
-function view_public_stylesheet_files(): array
-{
-    return [
-        'assets/styles/base.css',
-        'assets/styles/public.css',
-        'assets/styles/lightbox.css',
-        'assets/styles/public-shared.css',
-        'assets/styles/utilities.css',
-        'assets/styles.css',
-        'assets/styles/breadcrumbs.css',
-    ];
-}
-
-/**
- * Return whether the current request needs the full admin asset set.
- *
- * @param string $bodyClass Rendered body class for the current page family.
- * @param ?array $user User value.
- * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
- * @return bool True when admin or logged-in public tooling must stay available.
- */
-function view_should_load_admin_assets(string $bodyClass, ?array $user, bool $anonymousPreview): bool
-{
-    return $bodyClass === 'admin-page' || ($user !== null && !$anonymousPreview);
-}
-
-/**
- * Return stylesheet files for the current page context.
- *
- * @param string $bodyClass Rendered body class for the current page family.
- * @param ?array $user User value.
- * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
- * @return array<int string> Stylesheet paths relative to the public web root.
- */
-function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
-{
-    if (!view_should_load_admin_assets($bodyClass, $user, $anonymousPreview)) {
-        return view_public_stylesheet_files();
-    }
-
-    $files = view_admin_stylesheet_files();
-    if ($bodyClass !== 'admin-page' && $user !== null && !$anonymousPreview && !in_array('assets/styles/public-shared.css', $files, true)) {
-        $lightboxIndex = array_search('assets/styles/lightbox.css', $files, true);
-        $insertAt = $lightboxIndex === false ? 2 : ((int) $lightboxIndex + 1);
-        array_splice($files, $insertAt, 0, ['assets/styles/public-shared.css']);
-    }
-    return $files;
-}
-
-/**
  * Return the browser entrypoint for the current page context.
  *
  * @param bool $isAdminPage Whether the current route renders an admin or setup page.
@@ -256,7 +149,7 @@ function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $an
  * Render the prepared public/Admin document head, branding and navigation shell.
  *
  * @param string $title Page title before site branding is appended.
- * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context, assets and navigation; defaults support legacy empty callers.
+ * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context and ordered stylesheet URLs; direct callers must supply stylesheet URLs because asset selection belongs to the layout controller.
  * @param string $requestUri Current request URI used for navigation state.
  * @param string $page Normalized route identifier, defaulting to the public home page.
  * @return void Emits the head, header and opening main element with manual overrides limited to public pages.
@@ -288,23 +181,8 @@ function view_render_header(
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    $styleFiles = view_stylesheet_files_for_context($bodyClass, $user, $anonymousPreview);
-    foreach ($styleFiles as $styleFile) {
-        $stylePath = dirname(__DIR__, 2) . '/public/' . $styleFile;
-        if (!is_file($stylePath)) {
-            continue;
-        }
-        echo '<link rel="stylesheet" href="' . e(asset_url($styleFile)) . '?v=' . filemtime($stylePath) . '">';
-    }
-    $customCss = trim((string) ($model['custom_css_url'] ?? ''));
-    if ($customCss !== '') {
-        echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . e((string) ($model['custom_css_version'] ?? 0)) . '">';
-    }
-    echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
-    $mobileGalleryStyle = 'assets/styles/mobile-gallery.css';
-    $mobileGalleryStylePath = dirname(__DIR__, 2) . '/public/' . $mobileGalleryStyle;
-    if (is_file($mobileGalleryStylePath)) {
-        echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
+    foreach (($model['stylesheet_urls'] ?? []) as $stylesheetUrl) {
+        echo '<link rel="stylesheet" href="' . e((string) $stylesheetUrl) . '">';
     }
     $canonicalUrl = trim((string) ($model['canonical_url'] ?? ''));
     if ($canonicalUrl !== '') {
@@ -318,7 +196,16 @@ function view_render_header(
     if ($bodyClass === 'public-page') {
         echo '<div class="theme-background-shell" aria-hidden="true">';
         echo '<div class="theme-background-base"></div>';
-        echo '<div class="theme-background-image"></div>';
+        $visualBackground = is_array($model['visual_background'] ?? null) ? $model['visual_background'] : null;
+        if ($visualBackground !== null) {
+            echo '<div class="theme-background-image"'
+                . ' data-theme-background-visual-editor-target="' . e((string) $visualBackground['target']) . '"'
+                . ' data-theme-background-visible-owner="' . e((string) $visualBackground['owner']) . '"'
+                . ' data-theme-background-visible-mode="' . e((string) $visualBackground['mode']) . '"'
+                . ' data-theme-background-visible-url="' . e((string) $visualBackground['url']) . '"></div>';
+        } else {
+            echo '<div class="theme-background-image"></div>';
+        }
         echo '</div>';
     }
     $headerBranding = view_public_header_branding_model(is_array($model['branding'] ?? null) ? $model['branding'] : []);

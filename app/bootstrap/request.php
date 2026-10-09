@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 use function Gallery\Services\seo_request_guard_enforcement_decision;
+use function Gallery\Services\public_visual_preview_inherit_referrer_context;
 use function Gallery\Services\translation_bootstrap_request;
 use const Gallery\Services\CMS_ADMIN_LANGUAGE_COOKIE;
 use const Gallery\Services\CMS_LANGUAGE_COOKIE;
@@ -44,7 +45,7 @@ use const Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE;
 use function Gallery\Core\viewer_identity_remember_restore_request;
 
 /**
- * Resolve the route and initialize request-scoped behavior in the legacy startup order.
+ * Resolve the route and initialize request-scoped behavior in the legacy startup order, marking preview responses private before SEO redirects.
  *
  * @param Request|null $request Route snapshot already normalized by the kernel, or legacy direct-call input.
  * @return string Resolved page identifier.
@@ -59,7 +60,27 @@ function cms_initialize_request(?Request $request = null): string
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    $previewReferer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+    if (array_key_exists('preview', $_GET) || str_contains($previewReferer, 'preview=visual')) {
+        $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+        $requestOrigin = $requestHost === '' ? '' : (request_is_https() ? 'https://' : 'http://') . $requestHost;
+        $previewReferrerContext = public_visual_preview_inherit_referrer_context(
+            $_GET,
+            request_method(),
+            $previewReferer,
+            $requestOrigin,
+            request_script_base_path()
+        );
+        $_GET = $previewReferrerContext['query'];
+    }
     cms_prime_gallery_schema_cache($page);
+    // Keep every marked workspace response private even if SEO canonicalization returns a redirect before dispatch.
+    if (array_key_exists('preview', $_GET) && !headers_sent()) {
+        header('Cache-Control: private, no-store, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        header('X-Robots-Tag: noindex, nofollow, noarchive');
+    }
     if (function_exists('Gallery\\Services\\seo_request_guard_enforcement_decision')) {
         $seoDecision = seo_request_guard_enforcement_decision(
             $page,

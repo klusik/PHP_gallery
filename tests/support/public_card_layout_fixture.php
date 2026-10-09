@@ -30,7 +30,7 @@ function public_layout_picture(string $renderer): string {
 function public_layout_document(): string {
     ob_start();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public card orientation fixture</title>';
-    foreach (\Gallery\Views\view_public_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
+    foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) echo '<link rel="stylesheet" href="/public/'.\Gallery\Core\e($stylesheet).'">';
     // Preserve the orientation fixture's original full-width cards using the real supported grid setting.
     echo '<style id="fixture-theme-css">' . theme_fixture_css([]) . '</style></head><body class="public-page"><header class="site-header"><a href="#home" class="brand">Fixture logo</a><nav class="nav"><a href="#gallery">Gallery</a><a href="#admin">Admin</a></nav><div class="public-language-switcher"><a href="#en">EN</a></div></header><main class="site-main"><section class="hero"><h1>Public gallery</h1><p>Hero backdrop stays present.</p></section><section class="grid pagination-grid-columns-1">';
     $id=500;

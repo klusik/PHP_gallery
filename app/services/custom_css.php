@@ -14,6 +14,7 @@
  *   - Keep domain logic reusable outside controllers
  *   - Protect existing behavior with small focused functions
  *   - Return predictable values for callers
+ *   - Commit an optional reviewed Theme background attachment with explicit manual CSS Save
  *
  * Author:
  *   Rudolf Klusal
@@ -29,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-10-09
  */
 
 declare(strict_types=1);
@@ -38,16 +39,21 @@ namespace Gallery\Services;
 
 use function Gallery\Core\asset_url;
 
-/** A refused activation whose file rollback needs administrator attention. */
+/** A refused activation whose file or settings rollback needs administrator attention. */
 class CustomCssRecoveryException extends \RuntimeException
 {
     /**
-     * Distinguish an actual previous-file recovery copy from a failed first-install cleanup.
+     * Identify preserved CSS recovery copies and uncertain background settings after a refused activation.
      * @param bool $hasRecoveryCopy Whether verified prior stylesheet bytes remain backed up.
      * @param \Throwable $previous Persistence error that caused the refused activation.
+     * @param bool $backgroundStateUncertain Whether the database did not confirm rollback of background settings.
      * @return void Initializes the bounded recovery status and original failure.
      */
-    public function __construct(public readonly bool $hasRecoveryCopy, \Throwable $previous)
+    public function __construct(
+        public readonly bool $hasRecoveryCopy,
+        \Throwable $previous,
+        public readonly bool $backgroundStateUncertain = false
+    )
     {
         parent::__construct('The custom stylesheet rollback could not be completed.', 0, $previous);
     }
@@ -421,16 +427,180 @@ function custom_css_overrides_state(): array
 }
 
 /**
- * Atomically replace manual overrides under a serialized optimistic-concurrency precondition.
+ * Classify whether effective user stylesheets can be inspected by the visual preview.
+ * @return array{blocked:bool,reason:'allowed'|'import_unsupported'|'inspection_unavailable'|'inspection_limit'} Stable refusal reason without exposing installation paths or filesystem errors.
+ */
+function custom_css_visual_preview_inspection_decision(): array
+{
+    $installedPath = custom_css_path();
+    clearstatcache(true, $installedPath);
+    if (is_link($installedPath) || (file_exists($installedPath) && !is_file($installedPath))) {
+        return ['blocked' => true, 'reason' => 'inspection_unavailable'];
+    }
+    if (is_file($installedPath)) {
+        $size = @filesize($installedPath);
+        if (!is_int($size)) {
+            return ['blocked' => true, 'reason' => 'inspection_unavailable'];
+        }
+        if ($size > CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES) {
+            return ['blocked' => true, 'reason' => 'inspection_limit'];
+        }
+        $installedText = @file_get_contents($installedPath, false, null, 0, CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES + 1);
+        if (!is_string($installedText)) {
+            return ['blocked' => true, 'reason' => 'inspection_unavailable'];
+        }
+        if (strlen($installedText) > CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES) {
+            return ['blocked' => true, 'reason' => 'inspection_limit'];
+        }
+        if (custom_css_visual_preview_css_has_imports($installedText)) {
+            return ['blocked' => true, 'reason' => 'import_unsupported'];
+        }
+    }
+
+    try {
+        if (custom_css_visual_preview_css_has_imports(custom_css_overrides_state()['text'])) {
+            return ['blocked' => true, 'reason' => 'import_unsupported'];
+        }
+    } catch (\Throwable) {
+        return ['blocked' => true, 'reason' => 'inspection_unavailable'];
+    }
+    return ['blocked' => false, 'reason' => 'allowed'];
+}
+
+/**
+ * Bound installed Custom CSS inspection to 8 MiB (8,388,608 bytes) before a visual-preview document.
+ * Type: int. Units: bytes. Scope: one installed Custom CSS file read only before a visual-preview document.
+ * Consumers: custom_css_visual_preview_inspection_decision().
+ * Rationale: Refuse files over 8 MiB or unreadable files before the preview parser allocates a second full copy; this limit affects preview only.
+ */
+const CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES = 8388608;
+
+/**
+ * Find top-level CSS import at-rules without matching text in comments, strings or values.
+ * @param string $text CSS source read from an installation-owned stylesheet or editor draft.
+ * @return bool True for a CSS-escaped or ordinary import identifier at the stylesheet top level.
+ */
+function custom_css_visual_preview_css_has_imports(string $text): bool
+{
+    $decodeIdentifier = static function (string $source, int $offset): array {
+        $value = '';
+        $index = $offset;
+        $length = strlen($source);
+        while ($index < $length) {
+            $character = $source[$index];
+            if ($character === "\\") {
+                $index++;
+                if ($index >= $length) {
+                    break;
+                }
+                if (preg_match('/[0-9a-f]/i', $source[$index]) === 1) {
+                    $escapeStart = $index;
+                    while ($index < $length && $index - $escapeStart < 6
+                        && preg_match('/[0-9a-f]/i', $source[$index]) === 1) {
+                        $index++;
+                    }
+                    $codePoint = hexdec(substr($source, $escapeStart, $index - $escapeStart));
+                    $value .= $codePoint > 0 && $codePoint < 128 ? chr($codePoint) : "\0";
+                    if ($index < $length && preg_match('/[\t\n\r\f ]/', $source[$index]) === 1) {
+                        if ($source[$index] === "\r" && ($source[$index + 1] ?? '') === "\n") {
+                            $index += 2;
+                        } else {
+                            $index++;
+                        }
+                    }
+                    continue;
+                }
+                if (str_contains("\n\r\f", $source[$index])) {
+                    return ['value' => '', 'end' => $index + 1];
+                }
+                $value .= $source[$index];
+                $index++;
+                continue;
+            }
+            if (preg_match('/[a-z0-9_-]/i', $character) !== 1 && ord($character) < 128) {
+                break;
+            }
+            $value .= $character;
+            $index++;
+        }
+        return ['value' => $value, 'end' => $index];
+    };
+
+    $length = strlen($text);
+    $index = 0;
+    $braceDepth = 0;
+    $parenthesisDepth = 0;
+    while ($index < $length) {
+        $character = $text[$index];
+        $next = $text[$index + 1] ?? '';
+        if ($character === '/' && $next === '*') {
+            $commentEnd = strpos($text, '*/', $index + 2);
+            $index = $commentEnd === false ? $length : $commentEnd + 2;
+            continue;
+        }
+        if ($character === "'" || $character === '"') {
+            $quote = $character;
+            $index++;
+            while ($index < $length) {
+                if ($text[$index] === "\\") {
+                    $index += 2;
+                    continue;
+                }
+                if ($text[$index] === $quote) {
+                    $index++;
+                    break;
+                }
+                $index++;
+            }
+            continue;
+        }
+        if ($character === "\\") {
+            $escaped = $decodeIdentifier($text, $index);
+            $index = max($index + 1, (int) $escaped['end']);
+            continue;
+        }
+        if ($character === '@' && $braceDepth === 0 && $parenthesisDepth === 0) {
+            $identifier = $decodeIdentifier($text, $index + 1);
+            if (strtolower((string) $identifier['value']) === 'import') {
+                return true;
+            }
+        }
+        if ($character === '{') {
+            $braceDepth++;
+        } elseif ($character === '}') {
+            $braceDepth = max(0, $braceDepth - 1);
+        } elseif ($character === '(') {
+            $parenthesisDepth++;
+        } elseif ($character === ')') {
+            $parenthesisDepth = max(0, $parenthesisDepth - 1);
+        }
+        $index++;
+    }
+    return false;
+}
+
+/**
+ * Atomically replace manual overrides, optionally composing a reviewed global Theme background change.
  * @param string $text Explicit validated editor submission; empty means a dedicated clear or explicit empty save.
  * @param string $expectedRevision SHA-256 snapshot the administrator actually edited.
- * @return array{text:string,revision:string,url:string} Installed snapshot; validation, conflict or write errors leave the previous file intact.
+ * @param array{operation:'keep',target:'theme'}|array{operation:'replace',target:'theme',file:array{name?:string,tmp_name?:string,error?:int,size?:int},expected_revision:string}|array{operation:'remove',target:'theme',expected_revision:string}|array{file:array{name?:string,tmp_name?:string,error?:int,size?:int},expected_revision:string}|null $backgroundAttachment Reviewed Theme-image operation; null and keep preserve the CSS-only save path, while the unmarked two-field shape remains compatible with existing upload callers.
+ * @return array{text:string,revision:string,url:string} Installed snapshot after a successful save; conflicts leave prior state intact, while recovery exceptions preserve any recovery copy needed after an uncertain failure.
+ * @throws CustomCssOverrideConflictException When the saved CSS or selected Theme background has changed since review.
+ * @throws CustomCssRecoveryException When a failed composite activation cannot restore the previous CSS bytes.
+ * @throws \InvalidArgumentException When the explicit Theme-image operation shape or target is invalid.
+ * @throws \RuntimeException When a configured Theme image cannot be verified for removal.
  */
-function custom_css_overrides_save(string $text, string $expectedRevision): array
+function custom_css_overrides_save(string $text, string $expectedRevision, ?array $backgroundAttachment = null): array
 {
     custom_css_overrides_validate($text);
     if (preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1) {
         throw new \InvalidArgumentException('Reload the saved override revision before saving.');
+    }
+    if ($backgroundAttachment !== null) {
+        $backgroundChange = custom_css_background_change_normalize($backgroundAttachment);
+        if ($backgroundChange['operation'] !== 'keep') {
+            return custom_css_overrides_save_with_background_change($text, $expectedRevision, $backgroundChange);
+        }
     }
     $revision = hash('sha256', $text);
     $nextState = ['text' => $text, 'revision' => $revision, 'url' => $text === '' ? '' : asset_url('assets/custom-overrides.css') . '?v=' . $revision];
@@ -477,3 +647,5 @@ function custom_css_overrides_save(string $text, string $expectedRevision): arra
         clearstatcache(true, $target);
     }
 }
+
+require_once __DIR__ . '/custom_css/visual_background_save.php';

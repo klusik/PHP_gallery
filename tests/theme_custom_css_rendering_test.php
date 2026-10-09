@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/theme_custom_css_rendering_test.php
  * Module Type: Regression Test
- * Purpose: Preserve explicit Custom CSS replacement and reset form contracts.
+ * Purpose: Preserve explicit Custom CSS controls and independently fail-closed Theme image readiness.
  * Responsibilities: Exercise actual prepared rendering without reading or writing user stylesheets.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -43,4 +43,16 @@ foreach ([['active'=>false,'status_label'=>'No custom stylesheet'],['active'=>fa
     ob_start(); \Gallery\Views\view_render_admin_theme_custom_css_tab(theme_fixture_custom_css_model(['current_css'=>$state])); $variant=custom_css_xpath((string)ob_get_clean());
     custom_css_require(custom_css_count($variant,'//*[contains(text(),"'.$state['status_label'].'")]')>0 && custom_css_count($variant,'//select[@name="custom_css_preset"]/option[@selected and @value=""]')===1,'current state never auto-applies a replacement '.$state['status_label']);
 }
+$unavailableModel=theme_fixture_custom_css_model();
+$unavailableModel['overrides']['background']=['available'=>false,'revision'=>'','source'=>'','url'=>'','ready'=>false];
+ob_start(); \Gallery\Views\view_render_admin_theme_custom_css_tab($unavailableModel); $unavailable=custom_css_xpath((string)ob_get_clean());
+$unavailableRoot=$unavailable->query('//*[@data-css-override-editor and @data-visual-editor-background-ready="0"]')->item(0);
+custom_css_require($unavailableRoot instanceof DOMElement,'unreadable Theme image readiness is exposed to the visual editor');
+custom_css_require(custom_css_count($unavailable,'//*[@data-visual-editor-background-file and @disabled]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-remove and @disabled]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-keep and not(@disabled)]')===1,
+    'unreadable Theme image disables image mutation controls while preserving Keep for pending-draft cancellation');
+custom_css_require(custom_css_count($unavailable,'//button[@name="css_override_action" and @value="save" and not(@disabled)]')===1
+    && custom_css_count($unavailable,'//*[@data-visual-editor-background-status and contains(text(),"Background image editing is unavailable.")]')===1,
+    'unreadable Theme image presents the localized unavailable state without blocking CSS-only Save');
 echo "PASS Theme Custom CSS rendering\n";

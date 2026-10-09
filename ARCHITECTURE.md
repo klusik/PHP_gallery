@@ -579,6 +579,8 @@ contract and load order are preserved.
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
+| `app/services/custom_css.php` | `app/services/custom_css/` | `visual_background_save.php` (reviewed background attachment staged and committed through the existing CSS Save owner) |
+| `app/services/gallery_backgrounds.php` | `app/services/gallery_backgrounds/` | `visual_css_save.php` (opaque background revision, shared writer lock and private upload staging for the existing CSS Save owner) |
 | `app/controllers/admin_galleries_edit_page.php` | `app/controllers/admin_galleries_edit_page/` | `capabilities.php`, `post_actions.php`, `overview.php`, `tab_identity.php`, `tab_access.php`, `tab_display.php`, `tab_media.php`, `tab_images.php`, `tab_tools.php`, `controller.php` |
 
 The gallery edit page was one 984-line function rather than many functions, so
@@ -1462,6 +1464,92 @@ Supported branding concepts include:
 10. Thumbnail size bounds.
 11. Gallery hero tag disclosure, ordering and row-based scrolling.
 12. Custom CSS presets.
+
+Issue #127's Live Visual CSS Editor is a draft workspace over the existing
+manual CSS override editor. The editor continues to own the only CSS textarea,
+revision, validation and explicit save path; its deterministic visual-edit block
+is merged into that textarea and is never written during preview. The public
+page is rendered by the real public routes in a protected, script-disabled
+same-origin frame, while the HUD remains in the parent Admin document. Preview
+routes use `preview=visual` and the established `view_as=anonymous` policy, with
+route-level GET/HEAD authorization, same-origin destination validation and
+private no-store response handling. Denied preview markers resolve through the
+ordinary public not-found controller after its module is loaded, so an
+unauthorized request cannot expose the preview page or its editor metadata.
+Serving public pages and media has existing
+telemetry and derived-thumbnail behavior, so preview implementations must
+explicitly suppress visitor/benchmark reporting and persistent repair writes
+while preserving per-request gallery/media visibility checks. Width edits use
+the existing Theme normalizers but stay in CSS draft state; the HUD synchronizes
+its custom-width slider and numeric pixel field and reports the actual rendered
+`.site-main` width from the iframe. Background assets remain pending until the
+existing explicit publication boundary can safely
+stage and roll back them. The stage gates, exact controllers/services, test
+contracts, and manual browser matrix are maintained in
+[`docs/LIVE_VISUAL_CSS_EDITOR.md`](docs/LIVE_VISUAL_CSS_EDITOR.md).
+
+For preview renders, `app/controllers/shared_layout.php` prepares the ordered
+stylesheet URLs, including the visual marker and anonymous audience where
+needed; `app/views/layout.php` renders those prepared values. Bootstrap may
+inherit preview context for an otherwise unmarked dependent asset request only
+from an exact-origin, in-mount referrer on GET/HEAD. Cross-origin requests do
+not receive that referrer. `app/services/custom_css.php` owns stylesheet
+inspection, including the fail-closed `@import` refusal and the preview-only
+8 MiB installed-CSS bound; `app/bootstrap/dispatch.php` runs that inspection
+after preview authorization and before rendering. The parent editor maps the
+typed refusal marker to localized guidance without receiving paths or file
+system errors. Restoring saved CSS uses the last confirmed saved text and
+revision snapshot already present in the page or returned by the last
+successful save; it performs no fetch, save, or reconciliation with external
+changes and clears the pending background File.
+
+Preview stylesheet paths reuse `Gallery\Core\asset_url()` before adding the
+cache query and preview/audience markers. That canonical helper accounts for
+both the script URL and physical front-controller path, so deployments served
+from either the repository root or `public/` use the same asset pathname in the
+preview and ordinary public document.
+
+The same shared-layout controller prepares the background layer context from
+the actual public resolver and emits only typed owner/mode/target data for the
+scriptless preview to inspect; the layout view renders those values without
+resolving gallery state. The context distinguishes the global Theme image, a
+Theme gallery fallback, a gallery-specific source, and no image. A gallery cover
+fallback or explicit gallery source makes the visual editor's Theme image target
+unavailable on that route, so its controls explain that Home is needed instead
+of pretending a global change alters the independent image. Global Theme image
+Keep/Replace/Remove remains a draft until the existing explicit CSS Save. Remove
+clears only the global Theme image paths and owned files; it preserves the Theme
+gallery fallback mode and every gallery source/cover. The fallback value named
+`theme_background_source` describes the gallery-cover mode, not the global
+uploaded Theme image.
+
+The Admin Custom CSS controller treats background readiness separately from CSS
+readiness. If the background storage lock or a configured global image cannot
+be inspected for its revision, it supplies an unavailable background snapshot;
+the editor disables only image Replace/Remove controls and shows the localized
+background-unavailable message. Manual CSS and the existing CSS-only Keep Save
+remain usable. An empty but readable background state is different: it is ready
+for the first image upload. If a safe preview URL cannot be prepared, the visual
+launch stays hidden; the CSS editor and background draft controls still
+initialize, but the UI does not claim that an actual preview is available.
+
+Theme background fit and position use managed CSS on the permanent
+`body.public-page .theme-background-image` layer. The closed fit values are
+`cover` and `contain`; position uses two integer percentage axes from 0 to 100.
+The editor initializes from the actual computed layer values and reports values
+outside this grammar instead of silently coercing them. Position has
+synchronized integer sliders and numeric inputs whose effective values include
+percent units. The editor compares computed output against requested and managed
+values and surfaces a conflict when stronger hand-authored CSS prevents an
+override from taking effect. Reset removes only its corresponding managed
+declaration and reveals the Theme baseline. These properties are draft CSS
+saved through the existing explicit override action, not persisted Theme settings.
+If computed position cannot be represented safely, the editor leaves it intact
+until both axes are explicitly supplied.
+Gallery-specific backgrounds are rendered separately on the gallery hero and
+remain outside these controls. An empty but ready Theme image state still
+permits fit/position drafts for a pending image without implying that an image
+is currently visible.
 
 ## Lightbox Browsing Mode Model
 
@@ -2392,6 +2480,14 @@ Custom CSS verifies settings storage before file mutation, stages beside the tar
 Theme owns the stable `theme_gallery_grid_gap` (0–64 px), `theme_gallery_card_padding` (0–48 px), `theme_card_shadow` (`default`, `none`, `soft`, `raised`), `theme_public_type_scale` (80–140%) and `theme_header_transparent` (`0`/`1`) keys. Unset/invalid values retain historic appearance; default gap/padding, shadow and scale emit no component override. Advanced settings apply scoped public rules and variables. Transparent header rules remove only its container backdrop and pseudo-elements, retaining geometry and navigation; hero, Admin and special viewers are unaffected. Independent reset deletes exactly one preference. The current miniature Theme preview mirrors staged values.
 
 The protected Custom CSS editor owns an independent form and `public/assets/custom-overrides.css`, loaded after all ordinary public styles, including generated Theme and mobile CSS. Installed preset/upload CSS keeps its existing earlier position. Manual CSS never loads on Admin pages; standard specificity/importance still apply. Reads/saves/clear/reload pass Admin and CSRF boundaries. UTF-8 transport is bounded to 256 KiB with binary controls rejected; CSS grammar is deliberately browser-owned, so syntax mistakes remain editable. Same-directory staging verifies complete bytes and permissions, then activates by atomic rename as the final fallible filesystem operation. A fixed nonblocking writer lock and SHA-256 precondition prevent lost updates; errors keep prior bytes and drafts. Public URLs use the content digest, and empty overrides omit the link. Dedicated clear confirmation affects only overrides. The draft preview links Blob CSS into a sandbox with scripts, external resources, forms and parent access denied. The override asset and writer lock are excluded from Git, packages, updater replacement/rollback, integrity and source/fingerprint inventories. No schema migration is required.
+
+For an authorized visual-preview home/gallery request, `app/bootstrap/dispatch.php` loads the single `visual-preview-document` module, which contains the CSS inspector and background-context declarations. Dispatch inspects the installed CSS and saved override first; a refusal returns before shared layout calls the background-context resolver. On success, the route prepares its shared header and resolves the rendered background context. The deferred edge in `scripts/runtime_module_roots.php` keeps the gallery-background resolver closure out of ordinary routes that reuse `shared_layout.php`, including media, thumbnails, and Admin telemetry.
+
+Clean-rewrite image detail, original-media, and thumbnail URLs are composed from the undecorated mounted route path: append `/media` or `/thumb-N.ext` first, then add visual-preview and audience query markers, and finally add the image cache-version query value. The manifest and both responsive/progressive thumbnail renderers use the same ordering. Query-string installations continue to use their dedicated public media/thumbnail routes. The preview-marker decorator preserves an input URL's existing query values and fragment. Application-generated asset routes are fragment-free, and their cache-version value is appended as a query parameter; this contract does not extend to arbitrary fragment-bearing input passed to the generic version helper.
+
+Invalid or refused preview markers still use the standard shared-layout 404. An authenticated visual-preview request for a gallery that the Anonymous audience cannot access is handled by the gallery controller: it resolves the complete parent chain first, fails closed to Home for missing/cyclic ancestry, and otherwise redirects to the nearest ancestor allowed by ordinary visitor policy or Home. The redirect retains `preview=visual` and `view_as=anonymous`, carries only the fixed `visual_notice=anonymous_fallback` token, and never renders or names the denied gallery. This behavior is limited to the marked visual-preview request; ordinary visitor gates remain unchanged. The shared-layout controller reuses dispatch's canonical decision and prepares background editor metadata only for active, allowed Home/Gallery documents, preventing denied asset error pages from invoking the deferred resolver or exposing editor attributes.
+
+The visual CSS editor uses closed, context-specific profiles: links and buttons expose only their supported color/alpha, typography, border, radius, padding and shadow properties; heading and paragraph profiles add text decoration; Header and Hero expose separately managed standard and WebKit backdrop filters. The global Theme image layer alone receives managed `background-size` (`cover` or `contain`) and two integer `background-position` percentages from 0 to 100, and only when that image is the server-authorized visible target. Gallery-specific and Theme-fallback hero backgrounds remain separate. An unsaved managed page-width draft takes precedence over saved Theme Appearance width in the preview; explicitly saving the CSS publishes that rule on public pages as well, without changing the stored Theme setting. Reset removes only the managed declaration and reveals the underlying Theme or manual CSS draft value.
 
 ## Bounded updater metadata and navigation imports
 

@@ -173,10 +173,13 @@ jobs:
         include:
           - php: '8.3'
             database: 'mysql:8.4'
+            real_browser: true
           - php: '8.3'
             database: 'mariadb:10.11'
+            real_browser: false
           - php: '8.5'
             database: 'mariadb:11.4'
+            real_browser: false
     services:
       database:
         image: ${{ matrix.database }}
@@ -188,7 +191,7 @@ jobs:
           - 13316:3306
         options: --hostname gallery-workflow-ci
     env:
-      # Browser coverage has one dedicated job instead of repeating across database variants.
+      # One MySQL variant adds the real-app Chromium journey; the other DB variants do not repeat it.
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
       GALLERY_WORKFLOW_ENABLE: disposable-only
@@ -216,7 +219,29 @@ jobs:
           node-version: '22'
           # This source checkout has no npm install or package-manager cache to restore.
           package-manager-cache: false
+      - name: Discover Chromium for the real application workflow
+        id: workflow-browser
+        if: matrix.real_browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser_path=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if browser_path="$(command -v "$candidate")"; then
+              break
+            fi
+          done
+          if [[ -z "$browser_path" || ! -x "$browser_path" ]]; then
+            echo 'BLOCKED required Chromium executable was not found on the runner.' >&2
+            exit 1
+          fi
+          "$browser_path" --version
+          printf 'browser_path=%s\n' "$browser_path" >> "$GITHUB_OUTPUT"
       - name: Central audit with mandatory real workflows and database races
+        env:
+          # Keep synthetic browser fixtures in their dedicated job; the disposable workflow test gets this executable directly.
+          GALLERY_WORKFLOW_BROWSER: ${{ steps.workflow-browser.outputs.browser_path || 'disabled' }}
+          GALLERY_WORKFLOW_BROWSER_REQUIRED: ${{ matrix.real_browser && '1' || '0' }}
         run: php scripts/gallery_workflow_ci.php
       - name: Upload audit reports and process diagnostics
         if: always()

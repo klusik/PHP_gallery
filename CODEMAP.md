@@ -97,6 +97,7 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Migration data repairs | `app/migration_repairs.php` |
 | Security/session/CSRF helpers | `app/security.php` |
 | General helpers | `app/helpers.php` |
+| Live Visual CSS Editor (issue #127) | `app/views/admin_theme.php`, `app/controllers/admin_theme_custom_css.php`, `app/controllers/admin_theme_actions.php`, `app/services/custom_css.php`, `app/services/gallery_backgrounds.php`, `theme-visual-editor.js`, `theme-visual-css-draft.js`, `theme-visual-css-resize.js`, and `app/bootstrap/dispatch.php`; permanent route, editing, persistence and coverage contract is in `docs/LIVE_VISUAL_CSS_EDITOR.md`. |
 | Integrity manifest logic | `app/integrity.php`, `app/core-manifest.json`, `scripts/generate_manifest.php` |
 
 ## Public Gallery Pages
@@ -342,7 +343,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Gallery hero tag Theme controls | `app/controllers/admin_theme.php`, `app/services/theme.php`, `public/assets/gallery-modules/theme-form.js`, `public/assets/styles/admin-theme-editor.css` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
-| Public appearance controls and CSS override editor | `app/services/theme.php`, `app/services/custom_css.php`, `app/controllers/admin_theme_actions.php`, `app/views/admin_theme.php`, `public/assets/gallery-modules/theme-customization.js`; installation-owned `public/assets/custom-overrides.css` |
+| Public appearance controls and CSS override editor | `app/services/theme.php`, `app/services/custom_css.php` (saved CSS and preview stylesheet inspection), `app/services/gallery_backgrounds.php` (Theme/gallery source and fallback resolution), `app/controllers/admin_theme_actions.php`, `app/controllers/shared_layout.php` (controller-prepared stylesheet URLs and typed public background context), `app/views/admin_theme.php`, `app/views/layout.php` (renders prepared URLs/context), `app/bootstrap/request.php` (exact-origin referrer context for same-origin GET/HEAD dependencies), `public/assets/gallery-modules/theme-customization.js`, `theme-visual-editor.js`, `theme-visual-css-draft.js`, `theme-visual-css-resize.js`; installation-owned `public/assets/custom-overrides.css`; visual editor policy and tests in `docs/LIVE_VISUAL_CSS_EDITOR.md` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
 | Gallery branding | `app/services/gallery_branding.php`, `app/controllers/public_gallery.php`, `app/controllers/public_media.php` |
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |

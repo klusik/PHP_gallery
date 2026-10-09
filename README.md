@@ -33,6 +33,8 @@ Breadcrumb navigation offers nine styles through one accessible component: Minim
 
 Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
 
+Theme > Custom CSS includes a Live Visual CSS Editor for previewing the real public home or gallery page, inspecting stable selectors, and composing a bounded CSS draft. Its preview is authenticated and read-only, while anonymous simulation still applies public visibility and media authorization. Page-width and style edits stay in the CSS draft; a selected background image remains browser-only until the existing explicit CSS Save submits both revisions together. See the [editor contract and coverage](docs/LIVE_VISUAL_CSS_EDITOR.md).
+
 ## Product manuals
 
 Complete product manuals are available as searchable PDFs and editable LaTeX sources:
