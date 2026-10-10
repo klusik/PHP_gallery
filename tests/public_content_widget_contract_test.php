@@ -58,7 +58,7 @@ $equal(true, public_widget_visible_on_page($published, 'gallery'), 'Gallery scop
 $equal(false, public_widget_visible_on_page($published, 'admin'), 'Admin never public');
 $equal(false, public_widget_visible_on_page($published, 'media'), 'Media never public');
 $equal(false, public_widget_visible_on_page(public_widget_normalize($base + ['status' => 'disabled']), 'home'), 'Disabled excluded');
-$equal(false, public_widget_visible_on_page(public_widget_normalize($base + ['status' => 'published', 'page_scope' => 'gallery']), 'home'), 'Gallery-only excluded from home');
+$equal(false, public_widget_visible_on_page(public_widget_normalize([...$base, 'status' => 'published', 'page_scope' => 'gallery', 'flow_slot' => 'content_top']), 'home'), 'Gallery-only excluded from home');
 $equal('https://example.org/a?q=1#part', public_widget_safe_url('https://example.org/a?q=1#part'), 'HTTPS URI');
 $equal('/index.php?page=gallery&id=12', public_widget_safe_url('/index.php?page=gallery&id=12'), 'Internal gallery path');
 $equal('index.php?page=gallery&id=12', public_widget_safe_url('index.php?page=gallery&id=12'), 'Subfolder query routing');

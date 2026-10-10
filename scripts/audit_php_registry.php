@@ -52,7 +52,6 @@ return [
         'admin_side_panel_gallery_mutation_test.php',
         'gallery_public_paths_test.php',
         'gallery_description_links_render_test.php',
-        'public_content_widget_contract_test.php',
         'upload_writer_ownership_test.php',
         'image_decode_upload_pipeline_test.php',
         'public_thumbnail_markup_test.php',

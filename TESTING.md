@@ -19,7 +19,7 @@ This project is a plain PHP gallery CMS without a formal browser automation stac
 
 ## Public content widget foundation (#126)
 
-`tests/public_content_widget_contract_test.php` is registered for quick and full/release PHP audits. Its no-database fixtures verify migration shape, empty/draft defaults, known page scopes, seven normalized flow regions, supported floating anchors and clamped input ranges, validated internal/HTTP(S) links, rejection of executable schemes and unknown modes, and early denial of non-public page types. It does **not** claim to exercise a live Admin workflow, migration replay on MariaDB, database revision races, generated markup or browser floating interactions. Those remain required before closing #126 and are tracked by #174/#175. Hosted candidate preparation and the exact-candidate full matrix remain authoritative.
+`tests/public_content_widget_contract_test.php` is discovered by the full/release PHP regression suite. The curated 48-case quick test list is intentionally unchanged. Its no-database fixtures verify migration shape, empty/draft defaults, known page scopes, seven normalized flow regions, supported floating anchors and clamped input ranges, validated internal/HTTP(S) links, rejection of executable schemes and unknown modes, and early denial of non-public page types. It does **not** claim to exercise a live Admin workflow, migration replay on MariaDB, database revision races, generated markup or browser floating interactions. Those remain required before closing #126 and are tracked by #174/#175. Hosted candidate preparation and the exact-candidate full matrix remain authoritative.
 
 ## Issue #127 visual CSS editor contracts
 
