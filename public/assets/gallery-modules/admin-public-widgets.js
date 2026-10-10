@@ -377,18 +377,6 @@ export function publicWidgetProtectedHomeUrl(value, baseHref) {
 }
 
 /**
- * Project the sanitized Admin draft onto real public Home layout slots.
- *
- * The source DOM is the existing authenticated scriptless Home renderer, so
- * page styles, grid, rails and footer use actual Theme/public CSS. This
- * modifies only the isolated iframe document, never persistence or live DOM.
- *
- * @param {Document} doc Protected public Home document.
- * @param {HTMLFormElement} form Current unsaved widget form.
- * @param {Element} preview Sanitized Markdown preview owned by the server.
- * @returns {void} Inserts exactly one draft into the selected Home slot.
- */
-/**
  * Reconcile the actual public Home CSS rail mode after a transient draft move.
  *
  * An edited published widget may have been the only article in an old rail.
@@ -414,6 +402,18 @@ function publicWidgetReconcileHomeRails(main) {
     layout.classList.add('public-widget-content-layout--' + (left && right ? 'both' : left ? 'left' : 'right'));
 }
 
+/**
+ * Project the sanitized Admin draft onto real public Home layout slots.
+ *
+ * The source DOM is the existing authenticated scriptless Home renderer, so
+ * page styles, grid, rails and footer use actual Theme/public CSS. This
+ * modifies only the isolated iframe document, never persistence or live DOM.
+ *
+ * @param {Document} doc Protected public Home document.
+ * @param {HTMLFormElement} form Current unsaved widget form.
+ * @param {Element} preview Sanitized Markdown preview owned by the server.
+ * @returns {void} Inserts exactly one draft into the selected Home slot.
+ */
 function publicWidgetRenderHomeDraft(doc, form, preview) {
     const main = doc.querySelector('main.site-main');
     const footer = doc.querySelector('.site-footer');
