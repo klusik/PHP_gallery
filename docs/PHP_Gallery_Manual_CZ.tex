@@ -778,7 +778,7 @@ Databáze uchovává názvy, popisy, data, viditelnost, hesla a~konfiguraci př�
 
 Databáze zrychluje vyhledávání a~správu. Umožňuje také přiřadit souboru přívětivý název, bohatý popis, štítky, zvolené pořadí a~pravidla přístupu bez změny původních bajtů obrázku.
 
-Volitelná tabulka \texttt{public\_content\_widgets} může ukládat koncepty veřejných obsahových widgetů, stav zveřejnění, cílové stránky, umístění v~toku stránky nebo plovoucí umístění, souřadnice v~okně prohlížeče, pořadí a~revize pro souběžné úpravy. Samotné přidání tabulky žádný widget nezobrazí. Před zveřejněním je nutné dokončit administraci a~veřejné vykreslování. Záznamy patří do běžné databázové zálohy.
+Tabulka \texttt{public\_content\_widgets} ukládá vlastní názvy, Markdown, rozsah stránek, sedm umístění v~toku stránky, kotvy a~normalizované souřadnice plovoucích panelů, stav zveřejnění, pořadí a~revize pro souběžné úpravy. Při aktualizaci vzniká prázdná tabulka; bez výslovného zveřejnění správcem se žádný widget nezobrazí. Publikované záznamy se vykreslují pouze na odpovídajících veřejných stránkách, koncepty a~vypnuté widgety nejsou ve veřejném HTML vůbec. Data widgetů zahrňte do běžné databázové zálohy.
 
 \subsection{Jak databáze pomáhá uživatelům}
 \index{d00024@databáze!p00185@přínosy}
@@ -869,6 +869,22 @@ Galerie může nejprve zobrazovat menší galerie a~poté fotografie. Napříkla
 Stránkování rozděluje dlouhou sbírku na zvládnutelné stránky. Pomáhá rychle zobrazit první stránku a~udržuje posouvání pohodlné. Malá výstava může nejlépe vypadat na jediné stránce. Svatbě s~1,500 fotografiemi obvykle prospějí stránky nebo podřízené galerie. Velký prohlížeč fotografií může pokračovat širší posloupností galerie a~podle potřeby načítat další informace.\footnote{Stránkování mění počet karet zobrazených najednou. Samotné fotografie i~jejich pořadí ponechává beze změny.}
 
 Dlouhé veřejné seznamy obsahují plovoucí ovládací prvek \ui{Nahoru}, jakmile se návštěvník posune do výpisu galerie. Používá plynulé posouvání prohlížeče, mimo aktivní výpis mizí a~při otevřeném lightboxu nebo celoobrazovkovém prohlížeči zůstává skrytý, aby nekonkuroval ovládání fotografií.
+
+\subsection{Konfigurovatelné widgety veřejného obsahu}
+\index{widgety veřejného obsahu}
+
+V~administraci otevřete \ui{Vzhled} a~\ui{Widgety}. Můžete vytvořit více nezávislých panelů, například \emph{Spřátelené galerie}, oznámení nebo~užitečné odkazy. Widget má název, text ve~formátu Markdown, stav zveřejnění, rozsah stránek, vzhled a~uloženou polohu. Připravte koncept, použijte \ui{Náhled bez uložení} a~změny potvrďte tlačítkem \ui{Uložit widget}. K~dispozici je~duplikování do~nezveřejněného konceptu, číselné pořadí, vypnutí a~odstranění s~potvrzením. Souběžná úprava z~jiného panelu administrace nesmí tiše přepsat novější revizi.
+
+Do~jednoho widgetu můžete zapsat nadpisy, odstavce, zvýraznění, seznamy a~více odkazů s~vlastními popisky. Podporovány jsou bezpečné interní cesty galerie a~externí HTTP(S) odkazy. Spustitelná schémata URL, libovolné HTML, skripty a~externí vložené aplikace jsou zakázány. Nahrávání obrázků nebo~log widgetů současný editor zatím nenabízí. Do~veřejného widgetu nevkládejte neveřejné informace.
+
+Rozsah určíte volbou \emph{Úvodní stránka}, \emph{Stránky galerií} nebo~\emph{Úvodní stránka a~galerie}. Umístění v~obsahu zahrnuje horní a~dolní část hlavního obsahu, levý a~pravý sloupec, prostor bezprostředně před a~za~mřížkou galerií na~úvodní stránce a~globální patičku. Widget určený pro~všechny stránky s~pozicí u~úvodní mřížky se~v~detailu galerie zobrazí na~konci hlavního obsahu. Postranní sloupce jsou součástí rozvržení a~na~úzkém displeji se~řadí za~hlavní obsah. Widgety se~nevkládají do~navigačního záhlaví ani~do~hero panelu.
+
+V~režimu \emph{Plovoucí} vyberte jednu z~osmi kotev okna prohlížeče nebo~vlastní souřadnice X/Y v~rozsahu 0 až~1000. Na~dostatečně velkém desktopovém okně může být widget pevně ukotvený a~zavírací. Současně se~vylepšují nejvýše dva panely; při kolizi, malém displeji, zvětšení stránky nebo~nedostatku výšky se~stejný obsah zobrazí bezpečně v~běžném toku. Návštěvnické \ui{Zavřít} skryje panel pouze při~daném zobrazení stránky a~nemění publikované nastavení. Bez~JavaScriptu zůstávají texty a~odkazy v~počátečním HTML právě jednou.
+
+V~mapě umístění administrace můžete polohu upravit přetažením myší, dotykem, perem, kliknutím nebo~šipkami. Shift se~šipkou provádí větší krok; \ui{Obnovit polohu plovoucího widgetu} nastaví bezpečnou výchozí kotvu dole vpravo. Přepínání počítač/tablet/mobil ani~náhled obsah nepublikují. Mapa umístění je~zatím orientační, nikoliv přesnou kopií veřejného layoutu s~aktuálním Theme CSS. Po~uložení ověřte vzhled přímo na~veřejné stránce.
+
+Rozhraní administrace je~přeloženo do~EN/CS/DE/SV, ale~vlastní název a~Markdown zůstávají v~zadaném zdrojovém jazyce bez~automatického překladu. Ve~vlastních stylech Theme můžete cílit na~\texttt{.public-content-widget} nebo~stálý atribut \texttt{data-public-widget-id}. Samotný editor widgetů neukládá libovolný CSS ani~JavaScript.
+
 
 \subsection{Vyhledávání, štítky a~navigace}
 \index{v00261@vyhledávání}

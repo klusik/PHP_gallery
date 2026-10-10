@@ -782,7 +782,7 @@ Die Datenbank merkt sich Titel, Beschreibungen, Datumsangaben, Sichtbarkeit, Pas
 
 Die Datenbank macht Suche und Administration schnell. Sie ermöglicht außerdem einen verständlichen Dateititel, eine ausführliche Beschreibung, Schlagwörter, eine festgelegte Reihenfolge und Zugriffsregeln, ohne die ursprünglichen Bildbytes zu verändern.
 
-Die~optionale Tabelle \texttt{public\_content\_widgets} kann Entwürfe öffentlicher Inhaltswidgets, Veröffentlichungsstatus, Seitengeltungsbereich, Positionen im~Seitenfluss oder als~schwebende Ansicht, Fensterkoordinaten, Reihenfolge und~Revisionsprüfungen speichern. Allein die~Installation dieser Tabelle blendet keine Widgets ein. Vor~einer sichtbaren Veröffentlichung müssen Administration und~öffentliche Darstellung integriert werden. Sichern Sie~diese Datensätze mit~der~restlichen Datenbank.
+Die~Tabelle \texttt{public\_content\_widgets} speichert verfasste Titel, Markdown-Inhalte, Seitengeltungsbereiche, sieben Positionen im~normalen Seitenfluss, Anker und~normierte Fensterkoordinaten für~schwebende Panels, Veröffentlichungsstatus, Reihenfolge sowie~Revisionsnummern für~gleichzeitige Bearbeitung. Ein~Upgrade legt eine~leere Tabelle an; ohne ausdrückliche Veröffentlichung erscheint kein Widget. Nur~veröffentlichte Datensätze werden auf~zulässigen öffentlichen Start- und~Galerieseiten ausgegeben; Entwürfe und~deaktivierte Einträge fehlen vollständig im~öffentlichen HTML. Nehmen Sie~die Datensätze in~die~reguläre Datenbanksicherung auf.
 
 \subsection{Wie Benutzer von der Datenbank profitieren}
 \index{d00062@Datenbank!v00267@Vorteile}
@@ -873,6 +873,22 @@ Eine Galerie kann zuerst kleinere Galerien und danach Fotos anzeigen. Beispielsw
 Die Seitennavigation teilt eine lange Sammlung in überschaubare Seiten. Dadurch erscheint die erste Seite rasch, und das Scrollen bleibt angenehm. Eine kleine Ausstellung wirkt möglicherweise auf einer Seite am besten. Eine Hochzeit mit 1.500 Fotos profitiert meist von Seiten oder Untergalerien. Der große Fotobetrachter kann die umfassendere Galerieabfolge weiter durchlaufen und zusätzliche Informationen bei Bedarf laden.\footnote{Die Seitennavigation verändert, wie viele Karten gleichzeitig erscheinen. Die zugrunde liegenden Fotos und deren Reihenfolge bleiben unverändert.}
 
 Lange öffentliche Listen enthalten eine schwebende Schaltfläche \ui{Nach oben}, sobald der Besucher in die Galerieliste gescrollt hat. Sie verwendet sanftes Browserscrolling, verschwindet außerhalb der aktiven Liste und bleibt verborgen, solange die Lightbox oder der Vollbildbetrachter geöffnet ist, damit sie nicht mit den Fotosteuerungen konkurriert.
+
+\subsection{Konfigurierbare Widgets für öffentliche Inhalte}
+\index{Widgets für öffentliche Inhalte}
+
+Öffnen Sie~im Admin-Bereich \ui{Design} und~\ui{Widgets}. Sie~können mehrere unabhängige Inhaltsbereiche anlegen, etwa \emph{Partnergalerien}, Ankündigungen oder~nützliche Links. Jedes Widget enthält einen~Titel, Markdown-Inhalt, Veröffentlichungsstatus, Seitengeltungsbereich, Darstellung und~Position. Bearbeiten Sie~zunächst den~Entwurf, prüfen Sie~\ui{Vorschau ohne Speichern} und~wählen Sie~erst danach \ui{Widget speichern}. Duplikate werden als~unveröffentlichte Entwürfe angelegt; auch~Reihenfolge, Deaktivierung und~bestätigtes Löschen sind verfügbar. Eine~parallele Bearbeitung darf keine~neuere Revision unbemerkt überschreiben.
+
+Ein~Widget kann Überschriften, Absätze, Hervorhebungen, Listen und~mehrere Links mit~selbstgewählten Beschriftungen verbinden. Zulässig sind sichere interne Galeriepfade und~externe HTTP(S)-Links. Ausführbare URL-Schemata, beliebiges HTML, Skripte und~eingebettete Fremdanwendungen sind gesperrt. Das~Hochladen von~Widgetlogos oder~Bildern wird im~aktuellen Editor noch~nicht unterstützt. Vertrauliche Informationen gehören nicht in~öffentliche Widgets.
+
+Wählen Sie~als Geltungsbereich \emph{Startseite}, \emph{Galerieseiten} oder~\emph{Startseite und~Galerien}. Die~Positionen im~Seitenfluss umfassen den~Anfang und~das~Ende des~Hauptinhalts, linke/rechte Seitenspalten, direkt vor/nach dem~Galerieraster der~Startseite und~die~globale Fußzeile. Ein~auf~allen Seiten gültiges Widget mit~einem Startseitenraster-Platz erscheint auf~Galeriedetailseiten ersatzweise am~Ende des~Hauptinhalts. Seitenspalten bleiben Bestandteil des~Layouts und~werden auf~schmalen Bildschirmen unter~dem Hauptinhalt angeordnet. Navigation und~Hero-Bereich sind keine Widget-Ziele.
+
+Im~Modus \emph{Schwebend} wählen Sie~einen von~acht Bildschirmankern oder~eigene X/Y-Koordinaten zwischen 0 und~1000. Auf~einem ausreichend großen Desktop-Bildschirm kann das~Panel fest im~Ansichtsfenster stehen und~geschlossen werden. Höchstens zwei Panels erhalten zugleich diese~Darstellung; bei~Kollisionen, kleinen Fenstern, Vergrößerung oder~Platzmangel bleibt derselbe Artikel zugänglich im~normalen Seitenfluss. \ui{Schließen} blendet das~Panel nur~für~die aktuelle Seitenansicht aus und~ändert keine~Administrator-Einstellungen. Ohne~JavaScript stehen Text und~Links genau einmal im~ursprünglichen HTML.
+
+In~der Administrationskarte passen Sie~Positionen durch Ziehen mit~Maus, Stift oder~Berührung, durch Klicken oder~mit~Pfeiltasten an. Umschalt mit~Pfeiltaste verwendet größere Schritte; \ui{Schwebende Position zurücksetzen} stellt einen~gültigen Anker unten rechts wieder her. Die~Auswahl Desktop/Tablet/Mobilgerät und~die~Vorschau veröffentlichen keine~ungespeicherten Daten. Die~Positionskarte ist derzeit illustrativ und~kein pixelgenaues Abbild des~öffentlichen Layouts mit~Theme-CSS. Kontrollieren Sie~die tatsächliche öffentliche Seite nach~dem Speichern.
+
+Die~Oberfläche ist in~EN/CS/DE/SV übersetzt; verfasster Titel und~Markdown bleiben ohne~automatische Inhaltsübersetzung in~der~gewählten Ausgangssprache. Eigenes Theme-CSS kann \texttt{.public-content-widget} oder~den stabilen Selektor \texttt{data-public-widget-id} gestalten. Im~Widget-Editor kann kein beliebiger CSS- oder~JavaScript-Code gespeichert werden.
+
 
 \subsection{Suche, Schlagwörter und Navigation}
 \index{s00237@Suche}

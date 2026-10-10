@@ -46,9 +46,15 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
 
-## Public content widgets: dormant domain foundation (#126)
+## Public content widgets: active MVC content and placement domain (#126)
 
-The dedicated `public_content_widgets` model is the sole SQL owner. Its service validates closed enums for page scopes, seven in-flow slots, floating anchor presets/custom permille coordinates, publication state and bounded Markdown/link inputs; it orchestrates revision-guarded writes and returns no rows for non-public routes. New rows default to draft and the migration seeds nothing. This foundation is intentionally not connected to public pages or Admin until the scoped controller/view/renderer and localization flows are implemented. A later public integration must resolve the gallery's existing visitor access decision *before* reading scope-filtered widget rows and must not turn an inaccessible gallery into a widget display route. The shared renderer must consume controller-prepared rows without querying storage.
+The [public content widget architecture and operating contract](docs/PUBLIC_CONTENT_WIDGETS.md) describes the currently implemented Admin lifecycle, seven public flow regions, floating enhancement, mobile/no-JavaScript fallback, security boundaries, maintenance and test ownership.
+
+The append-only widget schema is owned by `database/migrations/202610100001_public_content_widgets.php`; `app/models/public_content_widgets.php` remains the only widget SQL owner. `app/services/public_content_widgets.php` owns closed enum normalization, safe authored Markdown/URL policy, published page-scope selection and deterministic region planning. Public controllers prepare a widget region plan **after** existing gallery access decisions, and `app/views/public_content_widgets.php` is the shared escaped SSR presentation owner. No view queries persistence, and no visitor input publishes widget content.
+
+The seven in-flow zones and the bounded floating fallback share exactly one widget identity and one server-rendered HTML instance. The browser may progressively fix at most two already-published panels to suitable desktop viewports; narrow/zoomed/colliding layouts retain the normal-flow content. The Admin pointer/keyboard map edits an unsaved draft and never invokes publication until explicit authorized Save. EN/CS/DE/SV UI translations are maintained independently of the single stored authored source language.
+
+An empty upgraded installation shows no widget markup. Disabled and draft rows are filtered before HTML creation; inaccessible gallery routes continue using their existing access gate rather than becoming a widget display surface. The active implementation still requires true public Theme preview, expanded browser/accessibility and database race acceptance and final exact-head CI before the parent issue may be closed.
 
 ## Strict MVC Layer Contract
 

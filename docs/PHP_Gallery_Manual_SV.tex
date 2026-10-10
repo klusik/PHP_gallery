@@ -778,7 +778,7 @@ Databasen kommer ihåg titlar, beskrivningar, datum, synlighet, lösenord och å
 
 Databasen gör sökning och administration snabba. Den låter också en fil ha en lättbegriplig titel, utförlig beskrivning, taggar, vald ordning och åtkomstregler utan att ändra originalbildens byte.
 
-Den~valfria tabellen \texttt{public\_content\_widgets} kan lagra utkast till offentliga innehållswidgetar, publiceringsstatus, sidomfattning, placering i~sidflödet eller som~flytande panel, koordinater i~webbläsarfönstret, ordning och~revisionskontroller. Enbart tabellen visar inga nya widgetar. Administrationen och~den~offentliga renderingen måste vara anslutna innan innehåll kan visas för besökare. Ta~med posterna i~den vanliga databassäkerhetskopian.
+Tabellen \texttt{public\_content\_widgets} lagrar egna titlar, Markdown, sidomfattning, sju platser i~det normala sidflödet, ankare och~normaliserade fönsterkoordinater för~flytande paneler, publiceringsstatus, ordning och~revisioner för~samtidig redigering. En~uppgradering skapar en~tom tabell och~visar inga widgetar förrän en~administratör publicerar dem uttryckligen. Endast publicerade poster visas på~berättigade offentliga start- och~gallerisidor; utkast och~inaktiverade poster saknas helt i~offentlig HTML. Ta~med dessa poster i~den vanliga databassäkerhetskopian.
 
 \subsection{Hur användare drar nytta av databasen}
 \index{d00049@databas!f00093@fördelar}
@@ -869,6 +869,22 @@ Ett galleri kan visa mindre gallerier först och fotografier därefter. Till exe
 Paginering delar en lång samling i hanterbara sidor. Det hjälper första sidan att visas snabbt och gör rullningen bekväm. En liten utställning kan se bäst ut på en enda sida. Ett bröllop med 1~500 fotografier har vanligen nytta av flera sidor eller undergallerier. Den stora bildvisaren kan fortsätta genom galleriets större bildföljd och läsa in ytterligare information efter behov.\footnote{Paginering ändrar hur många kort som visas samtidigt. De underliggande fotografierna och deras ordning bevaras.}
 
 Långa offentliga listor visar en flytande kontroll \ui{Till toppen} efter att besökaren har rullat in i gallerilistan. Den använder webbläsarens mjuka rullning, försvinner utanför den aktiva listan och förblir dold medan ljuslådan eller helskärmsvisaren är öppen så att den inte konkurrerar med bildkontrollerna.
+
+\subsection{Anpassningsbara widgetar för offentligt innehåll}
+\index{widgetar för offentligt innehåll}
+
+Öppna \ui{Utseende} och~\ui{Widgetar} i~administrationen för~att skapa flera fristående innehållspaneler, till~exempel \emph{Partnergallerier}, meddelanden eller~användbara länkar. En~widget har en~titel, Markdown-text, publiceringsstatus, sidomfattning, utseende och~sparad position. Redigera ett~utkast, välj \ui{Förhandsvisa utan att spara} och~tryck uttryckligen \ui{Spara widget}. Det~går även att~duplicera till~ett opublicerat utkast, ändra ordning, inaktivera och~bekräfta borttagning. Samtidig redigering i~en~annan administratörsflik får inte tyst skriva över en~nyare revision.
+
+Samma widget kan innehålla rubriker, stycken, betoning, listor och~flera länkar med~valfri synlig text. Säkra interna gallerisökvägar och~externa HTTP(S)-länkar stöds. Körbara URL-scheman, godtycklig HTML, skript och~inbäddade externa appar tillåts inte. Uppladdning av~widgetlogotyper eller~bilder ingår ännu inte i~redigeraren. Lägg inte privat information i~offentliga widgetar.
+
+Välj sidomfattningen \emph{Startsida}, \emph{Gallerisidor} eller~\emph{Startsida och~gallerier}. Platser i~sidflödet omfattar toppen/botten av~huvudinnehållet, vänster/höger sidofält, direkt före/efter startsidans gallerirutnät och~den globala sidfoten. En~widget för~alla sidor med~en startsidesposition visas i~stället längst ned i~huvudinnehållet på~galleridetaljsidor. Sidofälten följer sidans normala layout och~staplas efter huvudinnehållet på~smala skärmar. Navigeringshuvudet och~hero-panelen är~inte tillåtna platser.
+
+I~läget \emph{Flytande} väljer du~ett av~åtta fönsterankare eller~egna X/Y-koordinater mellan 0 och~1000. På~en~tillräckligt stor datorskärm kan panelen vara fast förankrad i~fönstret och~stängas. Högst två paneler förstärks samtidigt; vid~kollisioner, små fönster, zoomning eller~för liten höjd visas samma artikel tillgängligt i~det vanliga sidflödet. Besökarens \ui{Stäng} döljer bara panelen under den~aktuella sidvisningen och~ändrar inte administratörens publiceringsval. Utan~JavaScript finns text och~länkar exakt en~gång i~sidans ursprungliga HTML.
+
+I~administrationens positionskarta kan du~dra med~mus, pekpenna eller~finger, klicka eller~använda piltangenter för~att ändra koordinater. Skift med~piltangent ger ett~större steg; \ui{Återställ flytande position} väljer en~giltig standardposition nere till~höger. Val av~dator/surfplatta/mobil och~förhandsvisning publicerar inga osparade ändringar. Positionskartan är~illustrativ och~visar ännu inte en~pixelidentisk kopia av~den offentliga layouten med~aktuellt Theme-CSS. Granska därför den~riktiga offentliga sidan efter att~du har sparat.
+
+Administrationsgränssnittet har översättningar i~EN/CS/DE/SV, men~egen titel och~Markdown behåller det~valda källspråket utan~automatisk innehållsöversättning. Anpassad Theme-CSS kan rikta sig mot \texttt{.public-content-widget} eller~den stabila selektorn \texttt{data-public-widget-id}. Widgetredigeraren lagrar aldrig godtycklig CSS eller~JavaScript.
+
 
 \subsection{Sökning, taggar och navigering}
 \index{s00240@sökning}
