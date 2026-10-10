@@ -106,6 +106,7 @@ function cms_admin_public_widgets(): void
     if (request_method() === 'POST') {
         verify_csrf();
         $action = is_string($_POST['widget_action'] ?? null) ? $_POST['widget_action'] : '';
+        $wantsPreviewJson = $action === 'preview' && ($_POST['widget_preview_json'] ?? null) === '1';
         $selection = $_POST['widget_id'] ?? $selection;
         if ($selection === '') {
             $selection = 'new';
@@ -164,8 +165,20 @@ function cms_admin_public_widgets(): void
                 return;
             }
             if ($action === 'preview') {
-                public_widget_normalize((array) $draft);
+                $validated = public_widget_normalize((array) $draft);
                 $notice = t('admin.widgets.preview_only', 'Preview only. No widget data was saved.');
+                if ($wantsPreviewJson) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    header('Cache-Control: no-store');
+                    echo json_encode([
+                        'ok' => true,
+                        'html' => public_widget_markdown_html((string) $validated['content_md']),
+                        'title' => (string) $validated['title'],
+                        'appearance' => (string) $validated['appearance'],
+                        'message' => $notice,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    return;
+                }
             } else {
                 throw new PublicWidgetInvalidField('widget_action', 'Choose a supported widget action.');
             }
@@ -174,6 +187,13 @@ function cms_admin_public_widgets(): void
             $error = $failure->getMessage();
         } catch (Throwable) {
             $error = t('admin.widgets.storage_error', 'Widget storage is unavailable. Check database migrations and try again.');
+        }
+        if ($wantsPreviewJson && $error !== '') {
+            http_response_code($errorField !== '' ? 422 : 503);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            echo json_encode(['ok' => false, 'message' => $error, 'field' => $errorField], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
         }
     }
     try {
