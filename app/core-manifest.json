@@ -1,6 +1,6 @@
 {
     "version": "0.126.3",
-    "generated_at": "2026-10-10T20:58:15+00:00",
+    "generated_at": "2026-10-10T21:19:03+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -432,7 +432,7 @@
         "app/services/picture_game.php": "sha256:b5014010715fa3036ab02d6f440ba3f16c57f20c84eaa9639db561b9daaf896b",
         "app/services/picture_manager.php": "sha256:1d012691424bd884c30fe0c66f95935c572706880e730fa7f25aba21f4433cdc",
         "app/services/presentation_schema_policy.php": "sha256:5210fa32804281975ebc333d743d1dfb72656c5361ac92ec9b9fb05704c07c46",
-        "app/services/public_content_widgets.php": "sha256:27498cc5fc8fd82ff9a52693164ea6fb63afc5b1e9afb6331ad130f99c29aee6",
+        "app/services/public_content_widgets.php": "sha256:3172c05ef8b652447c0bb1bff82057aa2ba91f42ac70a59c798672f2ad996ab2",
         "app/services/public_gallery_media_manifest.php": "sha256:f259447a07e468cb75099dbb94bba3a131add16e4eca3712f206518def4318c3",
         "app/services/public_paths.php": "sha256:94f9fd5e327b39ce89c03ac21e74c1d93c5b61d5a755bf6f2f952ce66e914642",
         "app/services/public_render_profiler.php": "sha256:0c19d283a8969d73359b0fd6c0a5460217d785f5c581f301e02edc728190ef43",
