@@ -125,9 +125,24 @@ function view_render_admin_public_widgets(array $model): void
         'flow_hint' => t('admin.widgets.preview_flow_hint', 'An in-page widget follows the normal layout and selected content zone.'),
         'floating_hint' => t('admin.widgets.preview_floating_hint', 'Drag, click or use arrow keys to customize the floating position.'),
         'reset_position' => t('admin.widgets.reset_position', 'Reset floating position'),
+        'preview_marker' => t('admin.widgets.preview_marker', 'Widget'),
+        'page_label' => t('admin.widgets.preview_page_label', 'Placement warning page'),
+        'page_home' => t('admin.widgets.preview_page_home', 'Homepage'),
+        'page_gallery' => t('admin.widgets.preview_page_gallery', 'Gallery page'),
+        'guide_header' => t('admin.widgets.preview_guide_header', 'Illustrative reserved header'),
+        'guide_controls' => t('admin.widgets.preview_guide_controls', 'Illustrative fixed-controls area'),
+        'peer_label' => t('admin.widgets.preview_peer_label', 'Another published widget'),
+        'warning_fallback' => t('admin.widgets.preview_warning_fallback', 'This device uses the in-page fallback, not a fixed overlay.'),
+        'warning_header' => t('admin.widgets.preview_warning_header', 'This position is near the header. The public placement solver may move the panel below navigation.'),
+        'warning_edge' => t('admin.widgets.preview_warning_edge', 'Custom coordinates are near a viewport edge. The actual panel will be clamped or left in page flow.'),
+        'warning_collision' => t('admin.widgets.preview_warning_collision', 'Another published widget uses a nearby position on this page. The public layout may move one panel or retain it in flow.'),
+        'warning_limit' => t('admin.widgets.preview_warning_limit', 'Only two published floating panels can be active per page; additional panels remain in page flow.'),
+        'warning_invalid' => t('admin.widgets.preview_warning_invalid', 'Choose numeric coordinates from 0 to 1000 before saving.'),
+        'warning_disclaimer' => t('admin.widgets.preview_warning_disclaimer', 'Illustrative safety guides only. Actual Theme geometry and widget height determine final placement.'),
     ];
     $browserLabelsJson = json_encode($browserLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-    echo '<form action="' . e($url) . '" method="post" class="public-widgets-form" data-public-widget-editor data-widget-i18n="' . e($browserLabelsJson) . '">' . $csrf;
+    $publishedPeersJson = json_encode((array) ($model['published_peers'] ?? []), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+    echo '<form action="' . e($url) . '" method="post" class="public-widgets-form" data-public-widget-editor data-widget-i18n="' . e($browserLabelsJson) . '" data-widget-published-peers="' . e($publishedPeersJson) . '">' . $csrf;
     echo '<input type="hidden" name="widget_id" value="' . e($id) . '"><input type="hidden" name="revision" value="' . $revision . '">';
     echo '<label for="public-widget-title">' . e(t('admin.widgets.field.title', 'Title (optional)')) . '<input id="public-widget-title" name="title" type="text" maxlength="180" value="' . e(view_public_widget_field($draft['title'] ?? '')) . '"></label>';
     echo '<label for="public-widget-content">' . e(t('admin.widgets.field.content_md', 'Formatted text and links')) . '</label><div class="public-widgets-toolbar" role="toolbar" aria-label="' . e(t('admin.widgets.toolbar', 'Formatting tools')) . '">';

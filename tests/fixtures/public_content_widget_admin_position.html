@@ -15,8 +15,8 @@ License: MIT License (see LICENSE file in repository)
 <link rel="stylesheet" href="/widget-admin.css">
 <body class="admin-page">
 <main>
-<form action="/" method="post" data-public-widget-editor data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","reset_position":"Reset floating position","floating_hint":"Drag widget position"}'>
-    <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option></select>
+<form action="/" method="post" data-public-widget-editor data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","reset_position":"Reset floating position","floating_hint":"Drag widget position"}' data-widget-published-peers='[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope":"home","anchor":"bottom-right","x":900,"y":900,"width":320}]'>
+    <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option><option value="all">All</option></select>
     <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select>
     <fieldset data-widget-flow-controls>
         <select name="flow_slot"><option value="content_top">Top</option><option value="home_before_grid">Before grid</option></select>
@@ -48,6 +48,12 @@ try {
     check(stage && document.querySelectorAll('.public-widgets-placement-stage').length === 1, 'Idempotent stage creation');
     check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
     check(document.querySelector('[data-widget-flow-controls]').hidden, 'Floating form hides flow controls');
+    const warnings = document.querySelector('.public-widgets-placement-warnings');
+    const pageSelect = document.querySelector('.public-widgets-page-select');
+    check(pageSelect && pageSelect.disabled && pageSelect.value === 'home', 'Scope pins the advisory page');
+    check(warnings.textContent.includes('Another published widget'), 'Competing published anchor warning is visible');
+    check(document.querySelectorAll('.public-widgets-restricted-guide:not([hidden])').length === 2, 'Protected regions shown only for desktop floating mode');
+    check(document.querySelectorAll('.public-widgets-peer-marker').length === 1, 'Published peer position shown without authored content');
     const r = stage.getBoundingClientRect();
     stage.setPointerCapture = () => {};
     stage.hasPointerCapture = () => false;
@@ -68,6 +74,18 @@ try {
     check(reset && reset.type === 'button' && !reset.hidden, 'Localized nonpublishing Reset control');
     reset.click();
     check(value('floating_anchor') === 'bottom-right' && value('x_permille') === '900' && value('y_permille') === '900', 'Reset restores a valid default');
+    form.querySelector('[name="page_scope"]').value = 'all';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(!pageSelect.disabled, 'All-pages scope enables page-specific collision inspection');
+    pageSelect.value = 'gallery';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    check(!warnings.textContent.includes('Another published widget') && !document.querySelector('.public-widgets-peer-marker'), 'Home-only peer is absent on gallery preview');
+    pageSelect.value = 'home';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    check(warnings.textContent.includes('Another published widget'), 'Home warning reappears without publication');
+    document.querySelector('.public-widgets-device-toggle button:nth-child(2)').click();
+    check(warnings.textContent.includes('in-page fallback'), 'Tablet preview exposes real public fallback policy');
+    document.querySelector('.public-widgets-device-toggle button:first-child').click();
     form.querySelector('[name="page_scope"]').value = 'gallery';
     form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
     form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
@@ -75,6 +93,7 @@ try {
     form.querySelector('[name="placement_mode"]').value = 'flow';
     form.querySelector('[name="placement_mode"]').dispatchEvent(new Event('change', {bubbles: true}));
     check(reset.hidden && stage.dataset.mode === 'flow', 'Flow mode disables floating controls');
+    check(warnings.textContent === '' && document.querySelectorAll('.public-widgets-restricted-guide:not([hidden])').length === 0, 'Flow mode removes floating warnings and guides');
     check(value('flow_slot') === 'content_top', 'Invalid active gallery flow slot is safely replaced');
     check(form.querySelector('textarea').value.includes('Initial **draft**'), 'Preview never edits authored draft');
     check(document.querySelector('[data-widget-preview-body]').textContent.includes('Published source'), 'Read-only preview preserved');

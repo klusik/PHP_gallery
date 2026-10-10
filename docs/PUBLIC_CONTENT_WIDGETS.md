@@ -26,7 +26,7 @@ Only these source content formats are rendered: escaped paragraphs and lines, he
 
 3. Choose `Homepage`, `Gallery pages` or `Homepage and galleries`. These page scopes are independent of placement.
 4. Select `In page` or `Floating`, then choose a supported region/preset, appearance and panel width.
-5. Inspect the **safe server-rendered Markdown preview** and the **illustrative** desktop/tablet/mobile placement map. The map is **not** yet a true iframe preview of the production Theme layout. Drag, click or use arrow keys to set floating custom X/Y. Shift+Arrow uses larger steps; Reset restores a valid bottom-right preset.
+5. Inspect the **safe server-rendered Markdown preview** and the **illustrative** desktop/tablet/mobile placement map. This is **not** a production Theme/page-accurate preview. Drag, click or use arrow keys to set floating custom X/Y; Shift+Arrow uses larger steps and Reset restores bottom-right. The map now marks approximate protected header/controls areas and up to five published peer positions. Home/gallery warning scope can be switched when a widget targets all pages. It advises on top-edge/clamping, likely nearby collisions, the two-panel public floating limit and the public tablet/mobile flow fallback. These indications are nonblocking and cannot guarantee exact public coordinates or widget heights.
 6. Click Save to persist. Switch publication state to Published only when content should become visible. Discard returns to the saved configuration. Duplication creates an independent **draft**, not a second automatically published overlay.
 7. Test the actual public homepage/gallery with the selected Theme and a narrow viewport before calling visual appearance accepted.
 
@@ -91,4 +91,4 @@ Run GitHub Actions candidate preparation and the full required matrix on the aut
 
 ## Known limitations and required follow-up
 
-The current Admin position map is illustrative, not a faithful visual inspector using the actual homepage/gallery CSS. Precise forbidden-area/collision guides, wider mobile/zoom/overlay accessibility tests, complete database-backed concurrency/permission workflows, additional locale-specific visual safety warnings, richer authored-content localization and optional image uploads remain incomplete. These are not grounds to hide authored content silently or to claim that the entire parent #126 is finished.
+The Admin position map provides localized **advisory** protected-zone and other-published-widget warnings, but is still illustrative: it is not a faithful page-specific inspector with actual public homepage/gallery CSS or pixel-accurate exclusion and overlap geometry. Wider mobile/zoom/overlay accessibility tests, full authenticated Admin browser/permission workflows, richer authored-content localization and optional image uploads remain incomplete. These are not grounds to hide authored content silently or to claim that the entire parent #126 is finished.

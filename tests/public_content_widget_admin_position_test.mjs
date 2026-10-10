@@ -16,7 +16,7 @@ import {readFileSync} from 'node:fs';
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/admin-public-widgets.js', import.meta.url), 'utf8');
 const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
-const {publicWidgetPointerPosition} = module;
+const {publicWidgetPointerPosition, publicWidgetPlacementWarnings} = module;
 const rect = {left: 20, top: 30, width: 200, height: 100};
 
 assert.deepEqual(publicWidgetPointerPosition(120, 80, rect), {x: 500, y: 500});
@@ -35,4 +35,19 @@ assert.ok(source.includes("event.shiftKey ? 50 : 10"), 'Keyboard fine/coarse pre
 assert.ok(source.includes("reset.type = 'button'"), 'Reset is nonpublishing');
 assert.ok(source.includes("anchor.value = 'bottom-right'"), 'Reset restores a safe supported anchor');
 assert.ok(source.includes("x.value = '900'") && source.includes("y.value = '900'"), 'Reset bounds saved coordinates');
+const draft = {mode: 'floating', anchor: 'bottom-right', x: 900, y: 900, device: 'desktop', page: 'home', widgetId: 'selected'};
+const other = {id: 'another', scope: 'home', anchor: 'bottom-right', x: 900, y: 900, width: 320};
+assert.deepEqual(publicWidgetPlacementWarnings(draft, [other]), ['collision'], 'Same-page competing anchor warns');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, page: 'gallery'}, [other]), [], 'Other gallery scopes cannot trigger collisions');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, widgetId: 'another'}, [other]), [], 'Own saved record is not a competitor');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, mode: 'flow'}, [other]), [], 'In-flow placement does not warn about floating');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, device: 'tablet'}, [other]), ['fallback'], 'Tablet uses existing below-960px fallback');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, device: 'mobile'}, [other]), ['fallback'], 'Mobile retains the initial in-flow article');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'top-left'}, []), ['header'], 'Top preset warns about protected header');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'custom', x: 10, y: 10}, []), ['header', 'edge'], 'Custom edge coordinates warn');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'custom', x: NaN}, []), ['invalid'], 'Malformed unsaved numeric field warns');
+assert.deepEqual(publicWidgetPlacementWarnings(draft, [other, {...other, id: 'second', scope: 'all', anchor: 'top-left'}]),
+    ['limit', 'collision'], 'Overlay limit and likely collision are separate risks');
+assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'custom', x: 850, y: 850}, [other]),
+    ['collision'], 'Nearby custom coordinates warn');
 console.log('public_content_widget_admin_position_test: PASS');

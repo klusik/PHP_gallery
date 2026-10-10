@@ -60,6 +60,61 @@ export function publicWidgetPointerPosition(clientX, clientY, bounds) {
 }
 
 /**
+ * Illustrative 0..1000 anchor points shared by the Admin map and risk advisor.
+ * Type: Record<string,[number,number]>. Units: normalized viewport permille.
+ * Scope: authenticated Admin only. Consumers: stage marker and warnings.
+ * Rationale: warn consistently without pretending to know public widget heights.
+ */
+const PUBLIC_WIDGET_PREVIEW_ANCHORS = Object.freeze({
+    'top-left': [90, 100], 'top-center': [500, 100], 'top-right': [910, 100],
+    'middle-left': [90, 500], 'middle-right': [910, 500],
+    'bottom-left': [90, 900], 'bottom-center': [500, 900], 'bottom-right': [910, 900],
+});
+
+/**
+ * Identify advisory Admin placement risks without predicting exact Theme geometry.
+ *
+ * The server provides metadata for published widgets only. Scope and self-ID
+ * filtering prevent unrelated pages and the saved editor record from generating
+ * false collisions. Real public placement still owns bounds and layering.
+ *
+ * @param {{mode:string,anchor:string,x:number,y:number,device:string,page:string,widgetId:string}} draft Unsaved placement and selected illustrative viewport.
+ * @param {Array<{id:string,scope:string,anchor:string,x:number,y:number,width:number}>} peers Server-validated, published floating placements.
+ * @returns {string[]} Stable translation suffixes for advisory warnings.
+ */
+export function publicWidgetPlacementWarnings(draft, peers) {
+    if (draft.mode !== 'floating') return [];
+    if (draft.device !== 'desktop') return ['fallback'];
+    const warnings = [];
+    const x = Number(draft.x);
+    const y = Number(draft.y);
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > 1000 || y < 0 || y > 1000) {
+        warnings.push('invalid');
+    }
+    if (draft.anchor.startsWith('top') || (draft.anchor === 'custom' && y < 220)) {
+        warnings.push('header');
+    }
+    if (draft.anchor === 'custom' && (x < 60 || x > 940 || y < 60 || y > 940)) {
+        warnings.push('edge');
+    }
+    const visiblePeers = Array.isArray(peers) ? peers.filter(peer =>
+        peer && peer.id !== draft.widgetId && ['home', 'gallery', 'all'].includes(peer.scope)
+        && (peer.scope === 'all' || peer.scope === draft.page)
+        && ['home', 'gallery'].includes(draft.page)) : [];
+    if (visiblePeers.length >= 2) warnings.push('limit');
+    const position = PUBLIC_WIDGET_PREVIEW_ANCHORS[draft.anchor] || [x, y];
+    const collision = visiblePeers.some(peer => {
+        const other = PUBLIC_WIDGET_PREVIEW_ANCHORS[peer.anchor] || [Number(peer.x), Number(peer.y)];
+        return other.every(Number.isFinite)
+            && position.every(Number.isFinite)
+            && Math.abs(position[0] - other[0]) < 240
+            && Math.abs(position[1] - other[1]) < 260;
+    });
+    if (collision) warnings.push('collision');
+    return warnings;
+}
+
+/**
  * Synchronize supported page zones and flow/floating settings before form submission.
  *
  * @param {HTMLFormElement} form Active widget editor.
@@ -75,6 +130,15 @@ function setupWidgetPlacement(form, labels) {
     const x = form.querySelector('[name="x_permille"]');
     const y = form.querySelector('[name="y_permille"]');
     const width = form.querySelector('[name="width_px"]');
+    const appearance = form.querySelector('[name="appearance"]');
+    const widgetId = form.querySelector('[name="widget_id"]')?.value || '';
+    let peers = [];
+    try {
+        const parsed = JSON.parse(form.dataset.widgetPublishedPeers || '[]');
+        if (Array.isArray(parsed)) peers = parsed;
+    } catch (_) {
+        peers = [];
+    }
     const flow = form.querySelector('[data-widget-flow-controls]');
     const floating = form.querySelector('[data-widget-floating-controls]');
     const preview = document.querySelector('[data-widget-preview]');
@@ -98,16 +162,39 @@ function setupWidgetPlacement(form, labels) {
         toggle.append(button);
         return button;
     });
+    const pageLabel = document.createElement('label');
+    pageLabel.className = 'public-widgets-preview-page';
+    pageLabel.textContent = translated('page_label', 'Placement warning page');
+    const pageSelect = document.createElement('select');
+    pageSelect.className = 'public-widgets-page-select';
+    for (const page of ['home', 'gallery']) {
+        const option = document.createElement('option');
+        option.value = page;
+        option.textContent = translated('page_' + page, page === 'home' ? 'Homepage' : 'Gallery page');
+        pageSelect.append(option);
+    }
+    pageLabel.append(pageSelect);
     const stage = document.createElement('div');
     stage.className = 'public-widgets-placement-stage';
     stage.dataset.device = 'desktop';
     stage.tabIndex = 0;
     stage.setAttribute('role', 'button');
     stage.setAttribute('aria-label', translated('coordinates', 'Floating widget location preview. Click or use arrow keys to select custom coordinates.'));
+    const headerGuide = document.createElement('span');
+    headerGuide.className = 'public-widgets-restricted-guide public-widgets-guide-header';
+    headerGuide.title = translated('guide_header', 'Illustrative reserved header');
+    headerGuide.setAttribute('aria-hidden', 'true');
+    const controlsGuide = document.createElement('span');
+    controlsGuide.className = 'public-widgets-restricted-guide public-widgets-guide-controls';
+    controlsGuide.title = translated('guide_controls', 'Illustrative fixed-controls area');
+    controlsGuide.setAttribute('aria-hidden', 'true');
+    const peerLayer = document.createElement('div');
+    peerLayer.className = 'public-widgets-peer-layer';
+    peerLayer.setAttribute('aria-hidden', 'true');
     const marker = document.createElement('span');
     marker.className = 'public-widgets-position-marker';
-    marker.textContent = 'Widget';
-    stage.append(marker);
+    marker.textContent = translated('preview_marker', 'Widget');
+    stage.append(headerGuide, controlsGuide, peerLayer, marker);
     const caption = document.createElement('p');
     caption.className = 'public-widgets-placement-caption';
     caption.textContent = translated('stage_hint', 'Select desktop, tablet or mobile. Click inside the dashed preview to set a custom floating location.');
@@ -115,14 +202,26 @@ function setupWidgetPlacement(form, labels) {
     reset.type = 'button';
     reset.className = 'secondary public-widgets-reset-position';
     reset.textContent = translated('reset_position', 'Reset floating position');
-    tools.append(toggle, stage, reset, caption);
+    const warnings = document.createElement('ul');
+    warnings.className = 'public-widgets-placement-warnings';
+    warnings.setAttribute('role', 'status');
+    warnings.setAttribute('aria-live', 'polite');
+    const disclaimer = document.createElement('p');
+    disclaimer.className = 'public-widgets-placement-disclaimer';
+    disclaimer.textContent = translated('warning_disclaimer', 'Illustrative safety guides only. Actual Theme geometry and widget height determine final placement.');
+    tools.append(toggle, pageLabel, stage, reset, caption, warnings, disclaimer);
     floating?.insertAdjacentElement('afterend', tools);
     const clamp = (value) => Math.min(1000, Math.max(0, Math.round(Number(value) || 0)));
-    const anchorCoords = {
-        'top-left': [90, 100], 'top-center': [500, 100], 'top-right': [910, 100],
-        'middle-left': [90, 500], 'middle-right': [910, 500],
-        'bottom-left': [90, 900], 'bottom-center': [500, 900], 'bottom-right': [910, 900],
+    const anchorCoords = PUBLIC_WIDGET_PREVIEW_ANCHORS;
+    const fallbackWarnings = {
+        fallback: 'This device uses the in-page fallback, not a fixed overlay.',
+        header: 'This position is near the header. The public placement solver may move the panel below navigation.',
+        edge: 'Custom coordinates are near a viewport edge. The actual panel will be clamped or left in page flow.',
+        collision: 'Another published widget uses a nearby position on this page. The public layout may move one panel or retain it in flow.',
+        limit: 'Only two published floating panels can be active per page; additional panels remain in page flow.',
+        invalid: 'Choose numeric coordinates from 0 to 1000 before saving.',
     };
+    let previousWarningCodes = null;
     const refresh = () => {
         const isFloating = mode?.value === 'floating';
         if (flow) flow.hidden = isFloating;
@@ -134,12 +233,52 @@ function setupWidgetPlacement(form, labels) {
         }
         stage.dataset.mode = isFloating ? 'floating' : 'flow';
         reset.hidden = !isFloating;
+        if (scope?.value === 'home' || scope?.value === 'gallery') pageSelect.value = scope.value;
+        pageSelect.disabled = scope?.value !== 'all';
         const xy = anchorCoords[anchor?.value] || [clamp(x?.value), clamp(y?.value)];
         marker.style.left = String(xy[0] / 10) + '%';
         marker.style.top = String(xy[1] / 10) + '%';
         if (card && width) card.style.maxWidth = String(Math.min(480, Math.max(180, Number(width.value) || 320))) + 'px';
-        caption.textContent = stage.dataset.device === 'mobile'
-            ? translated('mobile_hint', 'Mobile uses an accessible in-page fallback instead of a fixed overlay.')
+        if (card && appearance) {
+            card.classList.toggle('public-content-widget--minimal', appearance.value === 'minimal');
+            card.classList.toggle('public-content-widget--card', appearance.value !== 'minimal');
+        }
+        const desktopFloat = isFloating && stage.dataset.device === 'desktop';
+        headerGuide.hidden = !desktopFloat;
+        controlsGuide.hidden = !desktopFloat;
+        peerLayer.hidden = !desktopFloat;
+        peerLayer.replaceChildren();
+        if (desktopFloat) {
+            const related = peers.filter(peer => peer && peer.id !== widgetId
+                && (peer.scope === 'all' || peer.scope === pageSelect.value));
+            for (const peer of related.slice(0, 5)) {
+                const other = document.createElement('span');
+                other.className = 'public-widgets-peer-marker';
+                other.title = translated('peer_label', 'Another published widget');
+                const point = anchorCoords[peer.anchor] || [clamp(peer.x), clamp(peer.y)];
+                other.style.left = String(point[0] / 10) + '%';
+                other.style.top = String(point[1] / 10) + '%';
+                peerLayer.append(other);
+            }
+        }
+        const warningCodes = publicWidgetPlacementWarnings({
+            mode: mode?.value || 'flow', anchor: anchor?.value || 'bottom-right',
+            x: x?.value === '' ? NaN : Number(x?.value),
+            y: y?.value === '' ? NaN : Number(y?.value),
+            device: stage.dataset.device, page: pageSelect.value, widgetId,
+        }, peers);
+        const signature = warningCodes.join(',');
+        if (signature !== previousWarningCodes) {
+            previousWarningCodes = signature;
+            warnings.replaceChildren();
+            for (const code of warningCodes) {
+                const item = document.createElement('li');
+                item.textContent = translated('warning_' + code, fallbackWarnings[code]);
+                warnings.append(item);
+            }
+        }
+        caption.textContent = stage.dataset.device !== 'desktop'
+            ? translated('mobile_hint', 'This device uses an accessible in-page fallback instead of a fixed overlay.')
             : isFloating ? translated('floating_hint', 'Click or use arrow keys in the preview to customize the floating position.')
                 : translated('flow_hint', 'In-page widget follows normal page flow and the selected content zone.');
     };
@@ -197,7 +336,8 @@ function setupWidgetPlacement(form, labels) {
         anchor.value = 'custom';
         refresh();
     });
-    for (const input of [mode, scope, zone, anchor, x, y, width]) {
+    pageSelect.addEventListener('change', refresh);
+    for (const input of [mode, scope, zone, anchor, x, y, width, appearance]) {
         input?.addEventListener('input', refresh);
         input?.addEventListener('change', refresh);
     }

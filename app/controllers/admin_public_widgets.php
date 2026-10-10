@@ -87,6 +87,41 @@ function admin_public_widget_select(array $rows, mixed $requested): ?array
 }
 
 /**
+ * Prepare public-position-only metadata for authenticated Admin collision hints.
+ *
+ * Invalid, draft, disabled and ordinary in-flow records must not influence the
+ * warning preview. Never expose authored body, title or unpublished widget data.
+ *
+ * @param list<array<string,mixed>> $rows Authorized saved widget rows.
+ * @return list<array{id:string,scope:string,anchor:string,x:int,y:int,width:int}> Valid published floating placements.
+ */
+function admin_public_widget_published_peers(array $rows): array
+{
+    $peers = [];
+    foreach ($rows as $row) {
+        if (!is_array($row) || ($row['status'] ?? null) !== 'published'
+            || ($row['placement_mode'] ?? null) !== 'floating') {
+            continue;
+        }
+        try {
+            $valid = public_widget_normalize($row);
+            $id = public_widget_id($row['widget_id'] ?? null);
+        } catch (PublicWidgetInvalidField) {
+            continue;
+        }
+        $peers[] = [
+            'id' => $id,
+            'scope' => $valid['page_scope'],
+            'anchor' => $valid['floating_anchor'],
+            'x' => $valid['x_permille'],
+            'y' => $valid['y_permille'],
+            'width' => $valid['width_px'],
+        ];
+    }
+    return $peers;
+}
+
+/**
  * Translate one known widget validation failure without exposing storage exceptions.
  *
  * Domain validation remains service-owned and language-neutral. Only this Admin
@@ -267,6 +302,7 @@ function cms_admin_public_widgets(): void
     render_header(t('admin.widgets.title', 'Public content widgets'));
     view_render_admin_public_widgets([
         'rows' => $rows,
+        'published_peers' => admin_public_widget_published_peers($rows),
         'selected' => $selected,
         'draft' => $draft,
         'notice' => $notice,

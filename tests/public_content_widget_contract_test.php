@@ -14,8 +14,10 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/services/public_content_widgets.php';
+require_once dirname(__DIR__) . '/app/controllers/admin_public_widgets.php';
 
 use Gallery\Services\PublicWidgetInvalidField;
+use function Gallery\Controllers\admin_public_widget_published_peers;
 use function Gallery\Services\public_widget_id;
 use function Gallery\Services\public_widget_normalize;
 use function Gallery\Services\public_widget_revision;
@@ -84,6 +86,21 @@ $invalid(static fn (): array => public_widget_normalize([...$base, 'status' => '
 $invalid(static fn (): int => public_widget_revision('0'), 'revision');
 $invalid(static fn (): int => public_widget_revision('1e3'), 'revision');
 $invalid(static fn (): string => public_widget_id('not-a-widget'), 'widget_id');
+
+$publishedFloat = public_widget_normalize([...$base, 'status' => 'published', 'placement_mode' => 'floating', 'page_scope' => 'all']);
+$publishedFloat['widget_id'] = str_repeat('a', 32);
+$draftFloat = [...$publishedFloat, 'widget_id' => str_repeat('b', 32), 'status' => 'draft'];
+$invalidFloat = [...$publishedFloat, 'widget_id' => str_repeat('c', 32), 'x_permille' => 1200];
+$regularFlow = [...$publishedFloat, 'widget_id' => str_repeat('d', 32), 'placement_mode' => 'flow'];
+$publishedPeers = admin_public_widget_published_peers([$draftFloat, $invalidFloat, $regularFlow, $publishedFloat]);
+$equal([[
+    'id' => str_repeat('a', 32),
+    'scope' => 'all',
+    'anchor' => 'bottom-right',
+    'x' => 900,
+    'y' => 900,
+    'width' => 320,
+]], $publishedPeers, 'Only normalized published floating geometry is sent to Admin preview, without content');
 
 $allPositions = ['content_top', 'content_bottom', 'left_rail', 'right_rail', 'home_before_grid', 'home_after_grid', 'footer'];
 foreach ($allPositions as $slot) {

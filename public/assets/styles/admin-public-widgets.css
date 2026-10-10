@@ -47,3 +47,17 @@
 .admin-page .public-widgets-placement-stage[data-mode="floating"]{touch-action:none;user-select:none}
 .admin-page .public-widgets-reset-position{justify-self:start}
 .admin-page .public-widgets-reset-position[hidden]{display:none}
+
+/* Guidance uses a deliberately illustrative normalized map, not live Theme geometry. */
+.admin-page .public-widgets-preview-page{display:grid;gap:.3rem;max-width:18rem}
+.admin-page .public-widgets-placement-stage{overflow:hidden;isolation:isolate}
+.admin-page .public-widgets-restricted-guide{position:absolute;left:0;right:0;pointer-events:none;background:repeating-linear-gradient(45deg,rgba(150,61,38,.15),rgba(150,61,38,.15) 5px,rgba(150,61,38,.06) 5px,rgba(150,61,38,.06) 10px)}
+.admin-page .public-widgets-guide-header{top:0;height:18%;border-bottom:1px dashed #9d5744}
+.admin-page .public-widgets-guide-controls{bottom:0;height:13%;border-top:1px dashed #9d5744}
+.admin-page .public-widgets-peer-layer{position:absolute;inset:0;pointer-events:none}
+.admin-page .public-widgets-peer-marker{position:absolute;width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#914e32;transform:translate(-50%,-50%);box-shadow:0 0 0 1px #914e32}
+.admin-page .public-widgets-placement-warnings{margin:.1rem 0;padding:0 0 0 1.5rem;display:grid;gap:.4rem;color:var(--ink,#222)}
+.admin-page .public-widgets-placement-warnings:empty{display:none}
+.admin-page .public-widgets-placement-warnings li{overflow-wrap:anywhere}
+.admin-page .public-widgets-placement-disclaimer{font-size:.85rem;color:var(--muted,#555);margin:.1rem 0}
+.admin-page .public-widgets-placement-stage[data-device="tablet"] .public-widgets-position-marker{left:50%!important;top:85%!important}
