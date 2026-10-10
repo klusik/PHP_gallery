@@ -1,6 +1,6 @@
 {
     "version": "0.126.3",
-    "generated_at": "2026-10-10T19:46:44+00:00",
+    "generated_at": "2026-10-10T19:48:55+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -542,7 +542,7 @@
         "app/views/admin_maintenance_center.php": "sha256:4d8496be2fc91d6b849602fdcad17f5b8c2296cefed8b116e579f3348a302ea3",
         "app/views/admin_media_renamer.php": "sha256:5ca880f5943a189d803a077218155093fd09da7cb9c2ad50b9a0b7c89aaeb856",
         "app/views/admin_public_inline.php": "sha256:c79f4d9929ae0bbe5ea3e3399089f6e73278b29448951c45c2e22123eb1ca071",
-        "app/views/admin_public_widgets.php": "sha256:b684fb3cda289595d07381ee83a96c0122a099c44b570e99d641dc404e3211b4",
+        "app/views/admin_public_widgets.php": "sha256:1c6de37be692b0012e3e70b36956c95ef92f46b983d54dd6941273a9e3061ba9",
         "app/views/admin_render_profiler.php": "sha256:402b4c63f2c44c78895403a88bba40ff67486448f489d5d2b560911eb4da0331",
         "app/views/admin_search_diagnostics.php": "sha256:a3b606db8dc5eebe2a4aaa96b54e03e45a574809a71fa4d28edba17586420eb8",
         "app/views/admin_settings.php": "sha256:84db1e65b4976ed9cf1616bc963357f20db17c1aa6886f540e15cb497e7fec1b",
@@ -720,7 +720,7 @@
         "public/assets/gallery-modules/admin-panel-lifecycle.js": "sha256:4ec74b77efc777f04a7973965f209507ee025ddfcffe790ce78fb3485c5367cc",
         "public/assets/gallery-modules/admin-panel-policy.js": "sha256:9977b1a4ac5bc7121abc8d59aea6c0ea0f2f44afc961fdd207c516eff67f7ffd",
         "public/assets/gallery-modules/admin-picture-game.js": "sha256:3061ba35af241ce3392b936253c954be4ced3209b8fd9ee141d03c1d80c05450",
-        "public/assets/gallery-modules/admin-public-widgets.js": "sha256:a74a6bb99a0de20e0616b16f8b9eb09f5e846cb943759dbb19f3e02f09a7ec04",
+        "public/assets/gallery-modules/admin-public-widgets.js": "sha256:9b183c6493fd72496060da934f613c1591bd88451f294a0e90b3cd35c4e5e076",
         "public/assets/gallery-modules/admin-refresh-progress.js": "sha256:86b03f3bacb42d84c54776ad258c1372810304bb84db2e90775628bc20ff39af",
         "public/assets/gallery-modules/admin-route-navdata.js": "sha256:20534c2d793d09a44f7fd680911e74d71cbccc97a9d68a6a8e9a0ca6a0b11cc0",
         "public/assets/gallery-modules/admin-search-diagnostics.js": "sha256:5ea3b52530ccb11582a41263f4df0b7228bcfddc0a360e9aa29fd7e10f2350a1",
