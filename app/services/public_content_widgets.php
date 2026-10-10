@@ -451,6 +451,35 @@ function public_widget_inline_html(string $text): string
 }
 
 /**
+ * Flush pending Markdown paragraph and list fragments without dynamic callables.
+ *
+ * The runtime module compiler requires explicit function dependency edges,
+ * so this isolated helper is invoked directly instead of a variable closure.
+ *
+ * @param list<string> $blocks Completed HTML block fragments, mutated in place.
+ * @param list<string> $paragraph Pending escaped paragraph source lines, consumed in place.
+ * @param list<string> $listItems Pending safe HTML list items, consumed in place.
+ * @param string $listTag Current list element name, cleared after flushing.
+ * @return void Appends safe blocks to the output accumulator.
+ */
+function public_widget_flush_markdown_blocks(array &$blocks, array &$paragraph, array &$listItems, string &$listTag): void
+{
+    if ($paragraph !== []) {
+        $parts = [];
+        foreach ($paragraph as $line) {
+            $parts[] = public_widget_inline_html($line);
+        }
+        $blocks[] = '<p>' . implode('<br>', $parts) . '</p>';
+        $paragraph = [];
+    }
+    if ($listItems !== []) {
+        $blocks[] = '<' . $listTag . '>' . implode('', $listItems) . '</' . $listTag . '>';
+        $listItems = [];
+        $listTag = '';
+    }
+}
+
+/**
  * Render the bounded, intentionally small Markdown subset shared by Admin and public pages.
  *
  * Supported blocks: paragraphs, hard line breaks, level 1-3 headings, ordered and
@@ -473,39 +502,24 @@ function public_widget_markdown_html(string $markdown): string
     $paragraph = [];
     $listItems = [];
     $listTag = '';
-    $flush = static function () use (&$blocks, &$paragraph, &$listItems, &$listTag): void {
-        if ($paragraph !== []) {
-            $parts = [];
-            foreach ($paragraph as $line) {
-                $parts[] = public_widget_inline_html($line);
-            }
-            $blocks[] = '<p>' . implode('<br>', $parts) . '</p>';
-            $paragraph = [];
-        }
-        if ($listItems !== []) {
-            $blocks[] = '<' . $listTag . '>' . implode('', $listItems) . '</' . $listTag . '>';
-            $listItems = [];
-            $listTag = '';
-        }
-    };
     foreach (explode("\n", $source) as $line) {
         if (trim($line) === '') {
-            $flush();
+            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
             continue;
         }
         if (preg_match('/^\s{0,3}(#{1,3})\s+(.+)$/u', $line, $heading) === 1) {
-            $flush();
+            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
             $level = min(4, strlen($heading[1]) + 1);
             $blocks[] = '<h' . $level . '>' . public_widget_inline_html(trim($heading[2])) . '</h' . $level . '>';
             continue;
         }
         if (preg_match('/^\s{0,3}(?:[-*+]\s+([^\r\n]+)|[0-9]{1,3}[.)]\s+([^\r\n]+))$/u', $line, $item) === 1) {
             if ($paragraph !== []) {
-                $flush();
+                public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
             }
             $tag = isset($item[2]) && $item[2] !== '' ? 'ol' : 'ul';
             if ($listTag !== '' && $listTag !== $tag) {
-                $flush();
+                public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
             }
             $listTag = $tag;
             $itemText = $tag === 'ol' ? $item[2] : $item[1];
@@ -513,10 +527,10 @@ function public_widget_markdown_html(string $markdown): string
             continue;
         }
         if ($listItems !== []) {
-            $flush();
+            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
         }
         $paragraph[] = trim($line);
     }
-    $flush();
+    public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
     return implode("\n", $blocks);
 }
