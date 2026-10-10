@@ -61,3 +61,11 @@
 .admin-page .public-widgets-placement-warnings li{overflow-wrap:anywhere}
 .admin-page .public-widgets-placement-disclaimer{font-size:.85rem;color:var(--muted,#555);margin:.1rem 0}
 .admin-page .public-widgets-placement-stage[data-device="tablet"] .public-widgets-position-marker{left:50%!important;top:85%!important}
+
+/* Protected real-public-Home preview, without public scripts or editor writes. */
+.admin-page .public-widgets-theme-preview{margin-top:1.25rem;border-top:1px solid var(--line,#ddd);padding-top:1rem;min-width:0}
+.admin-page .public-widgets-theme-preview h3{margin:.2rem 0 .6rem}
+.admin-page .public-widgets-theme-preview [data-widget-theme-status]{font-size:.9rem}
+.admin-page .public-widgets-theme-frame-wrap{position:relative;overflow:hidden;margin:.5rem auto 0;border:1px solid var(--line,#ddd);border-radius:6px;max-width:100%;background:var(--paper,#fff)}
+.admin-page .public-widgets-theme-frame-wrap[hidden]{display:none}
+.admin-page .public-widgets-theme-frame{position:absolute;inset:0 auto auto 0;display:block;border:0;max-width:none;transform-origin:top left;background:#fff}

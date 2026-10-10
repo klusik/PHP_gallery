@@ -281,6 +281,7 @@ function setupWidgetPlacement(form, labels) {
             ? translated('mobile_hint', 'This device uses an accessible in-page fallback instead of a fixed overlay.')
             : isFloating ? translated('floating_hint', 'Click or use arrow keys in the preview to customize the floating position.')
                 : translated('flow_hint', 'In-page widget follows normal page flow and the selected content zone.');
+        form.dispatchEvent(new Event('public-widget-preview-change'));
     };
     const applyPointer = (event) => {
         if (mode?.value !== 'floating' || !x || !y || !anchor) return;
@@ -345,6 +346,212 @@ function setupWidgetPlacement(form, labels) {
     return refresh;
 }
 
+
+/**
+ * Validate the controller-prepared same-origin, marked public Home URL.
+ *
+ * The server enforces Admin authentication, GET-only preview routing and asset
+ * isolation. This client allowlist prevents accidental non-preview navigation.
+ *
+ * @param {string} value Server-generated Home preview URL.
+ * @param {string} baseHref URL of the authenticated Admin editor.
+ * @returns {URL|null} Allowed protected Home URL, or null.
+ */
+export function publicWidgetProtectedHomeUrl(value, baseHref) {
+    try {
+        if (typeof value !== 'string' || !value.trim()) return null;
+        const url = new URL(value, baseHref);
+        const origin = new URL(baseHref);
+        if (url.origin !== origin.origin || url.username || url.password || url.hash) return null;
+        const keys = [...url.searchParams.keys()];
+        if (keys.some(key => !['page', 'preview', 'view_as'].includes(key))
+            || keys.some(key => url.searchParams.getAll(key).length !== 1)
+            || url.searchParams.get('preview') !== 'visual'
+            || (url.searchParams.has('view_as') && url.searchParams.get('view_as') !== 'anonymous')) return null;
+        const routed = url.pathname.endsWith('/index.php') && url.searchParams.get('page') === 'home';
+        const clean = url.pathname.endsWith('/') && !url.searchParams.has('page');
+        return routed || clean ? url : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Project the sanitized Admin draft onto real public Home layout slots.
+ *
+ * The source DOM is the existing authenticated scriptless Home renderer, so
+ * page styles, grid, rails and footer use actual Theme/public CSS. This
+ * modifies only the isolated iframe document, never persistence or live DOM.
+ *
+ * @param {Document} doc Protected public Home document.
+ * @param {HTMLFormElement} form Current unsaved widget form.
+ * @param {Element} preview Sanitized Markdown preview owned by the server.
+ * @returns {void} Inserts exactly one draft into the selected Home slot.
+ */
+function publicWidgetRenderHomeDraft(doc, form, preview) {
+    const main = doc.querySelector('main.site-main');
+    const footer = doc.querySelector('.site-footer');
+    const content = preview?.querySelector('[data-widget-preview-body]');
+    if (!main || !footer || !content || form.querySelector('[name="page_scope"]')?.value === 'gallery') return;
+    const floating = form.querySelector('[name="placement_mode"]')?.value === 'floating';
+    const slot = floating ? 'floating' : form.querySelector('[name="flow_slot"]')?.value || 'content_bottom';
+    const requested = Number(form.querySelector('[name="width_px"]')?.value);
+    const width = Number.isFinite(requested) ? Math.min(480, Math.max(180, Math.round(requested))) : 320;
+    const appearance = form.querySelector('[name="appearance"]')?.value === 'minimal' ? 'minimal' : 'card';
+    const editId = form.querySelector('[name="widget_id"]')?.value || '';
+    if (/^[a-f0-9]{32}$/.test(editId)) {
+        for (const saved of doc.querySelectorAll('[data-public-widget-id="' + editId + '"]')) saved.remove();
+    }
+    const article = doc.createElement('article');
+    article.className = 'public-content-widget public-content-widget--' + appearance;
+    article.style.setProperty('--public-widget-max-width', String(width) + 'px');
+    article.dataset.widgetThemeDraft = '1';
+    const sourceTitle = preview.querySelector('.public-content-widget-title');
+    if (sourceTitle && !sourceTitle.hidden && sourceTitle.textContent) {
+        const title = doc.createElement('h2');
+        title.className = 'public-content-widget-title';
+        title.textContent = sourceTitle.textContent;
+        article.append(title);
+    }
+    const body = doc.createElement('div');
+    body.className = 'public-content-widget-body';
+    for (const child of content.childNodes) body.append(doc.importNode(child, true));
+    article.append(body);
+    const region = doc.createElement('section');
+    region.className = 'public-widget-region public-widget-region--' + slot;
+    region.dataset.widgetThemeDraftRegion = '1';
+    region.dataset.publicWidgetZone = slot;
+    region.append(article);
+    if (slot === 'content_top') {
+        main.prepend(region);
+    } else if (slot === 'content_bottom' || slot === 'floating') {
+        main.append(region);
+    } else if (slot === 'footer') {
+        footer.prepend(region);
+    } else if (slot === 'home_before_grid' || slot === 'home_after_grid') {
+        const list = main.querySelector('.gallery-list-content');
+        const grid = main.querySelector('[data-public-gallery-index-grid]');
+        if (slot === 'home_before_grid' && grid) grid.before(region);
+        else if (list) list.append(region);
+        else main.append(region);
+    } else if (slot === 'left_rail' || slot === 'right_rail') {
+        let layout = main.querySelector('.public-widget-content-layout');
+        if (!layout) {
+            layout = doc.createElement('div');
+            layout.className = 'public-widget-content-layout';
+            const primary = doc.createElement('div');
+            primary.className = 'public-widget-primary';
+            for (const node of [...main.childNodes]) {
+                if (node.nodeType === 1 && node.matches(
+                    '.public-widget-region--content_top,.public-widget-region--content_bottom,.public-widget-region--floating')) continue;
+                primary.append(node);
+            }
+            layout.append(primary);
+            const after = main.querySelector('.public-widget-region--content_bottom,.public-widget-region--floating');
+            if (after) after.before(layout);
+            else main.append(layout);
+        }
+        layout.append(region);
+        const left = Boolean(layout.querySelector('.public-widget-region--left_rail'));
+        const right = Boolean(layout.querySelector('.public-widget-region--right_rail'));
+        layout.classList.remove('public-widget-content-layout--left','public-widget-content-layout--right',
+            'public-widget-content-layout--both');
+        layout.classList.add('public-widget-content-layout--' + (left && right ? 'both' : left ? 'left' : 'right'));
+    } else {
+        main.append(region);
+    }
+}
+
+/**
+ * Render a noninteractive real-Theme Home iframe for editor-only draft inspection.
+ *
+ * The protected frame has no allow-scripts/allow-forms permissions. The
+ * controller prepares its only URL, and public scripts never run in it.
+ * Page-specific gallery and public floating geometry remain out of scope.
+ *
+ * @param {HTMLFormElement} form Active editor.
+ * @param {Record<string,string>} labels Maintained browser translations.
+ * @returns {Function} Refresh callback after preview or placement edits.
+ */
+function setupWidgetThemePreview(form, labels) {
+    const host = document.querySelector('[data-widget-theme-preview]');
+    const shell = host?.querySelector('[data-widget-theme-frame-wrap]');
+    const status = host?.querySelector('[data-widget-theme-status]');
+    const preview = document.querySelector('[data-widget-preview]');
+    if (!host || !shell || !status || !preview) return () => {};
+    const label = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
+    const url = publicWidgetProtectedHomeUrl(host.dataset.widgetPreviewUrl || '', window.location.href);
+    if (!url) {
+        status.textContent = label('theme_unavailable', 'Protected Home preview is unavailable.');
+        return () => {};
+    }
+    const frame = document.createElement('iframe');
+    frame.className = 'public-widgets-theme-frame';
+    frame.title = host.querySelector('h3')?.textContent || 'Public homepage Theme preview';
+    frame.setAttribute('sandbox', 'allow-same-origin');
+    frame.setAttribute('referrerpolicy', 'same-origin');
+    shell.append(frame);
+    let mainSnapshot = null, footerSnapshot = null, ready = false;
+    const refresh = () => {
+        const scope = form.querySelector('[name="page_scope"]')?.value;
+        const page = document.querySelector('.public-widgets-page-select')?.value || 'home';
+        if (scope === 'gallery' || page === 'gallery') {
+            shell.hidden = true;
+            status.textContent = label('theme_gallery', 'Gallery page preview is not available yet.');
+            return;
+        }
+        shell.hidden = false;
+        if (!ready) {
+            status.textContent = label('theme_loading', 'Loading public Theme preview…');
+            return;
+        }
+        const doc = frame.contentDocument;
+        const main = doc?.querySelector('main.site-main'), footer = doc?.querySelector('.site-footer');
+        if (!doc || !main || !footer || !mainSnapshot || !footerSnapshot) return;
+        const device = document.querySelector('.public-widgets-placement-stage')?.dataset.device || 'desktop';
+        const width = ({desktop:1280,tablet:768,mobile:390})[device] || 1280;
+        const scale = Math.min(1, Math.max(1, host.getBoundingClientRect().width - 20) / width);
+        frame.style.width = width + 'px';
+        frame.style.height = '760px';
+        frame.style.transform = 'scale(' + scale + ')';
+        shell.style.width = String(width * scale) + 'px';
+        shell.style.height = String(760 * scale) + 'px';
+        const sourceMain = mainSnapshot.cloneNode(true), sourceFooter = footerSnapshot.cloneNode(true);
+        main.replaceChildren(...sourceMain.childNodes);
+        footer.replaceChildren(...sourceFooter.childNodes);
+        publicWidgetRenderHomeDraft(doc, form, preview);
+        status.textContent = form.querySelector('[name="placement_mode"]')?.value === 'floating'
+            ? label('theme_floating', 'Floating widgets remain in their no-script flow position.')
+            : label('theme_ready', 'Real Home Theme and widget position shown. No data saved.');
+    };
+    frame.addEventListener('load', () => {
+        try {
+            const doc = frame.contentDocument;
+            const current = publicWidgetProtectedHomeUrl(frame.contentWindow?.location.href || '', window.location.href);
+            const main = doc?.querySelector('body.public-page main.site-main');
+            const footer = doc?.querySelector('.site-footer');
+            if (!current || current.href !== url.href || !main || !footer
+                || !main.querySelector('.gallery-list-frame') || doc.querySelector('[data-visual-preview-blocked]')) {
+                throw new Error('Protected Home did not pass verification.');
+            }
+            doc.addEventListener('click', event => event.preventDefault(), true);
+            doc.addEventListener('submit', event => event.preventDefault(), true);
+            mainSnapshot = main.cloneNode(true);
+            footerSnapshot = footer.cloneNode(true);
+            ready = true;
+            refresh();
+        } catch (_) {
+            shell.hidden = true;
+            ready = false;
+            status.textContent = label('theme_unavailable', 'Protected Home preview is unavailable.');
+        }
+    });
+    form.addEventListener('public-widget-preview-change', refresh);
+    status.textContent = label('theme_loading', 'Loading public Theme preview…');
+    frame.src = url.href;
+    return refresh;
+}
+
 /**
  * Attach the editor to its dedicated Admin DOM only, leaving all other pages inert.
  *
@@ -371,6 +578,7 @@ export function setupAdminPublicWidgets() {
     }
     const translated = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
     const refresh = setupWidgetPlacement(form, labels);
+    const refreshTheme = setupWidgetThemePreview(form, labels);
     const preview = document.querySelector('[data-widget-preview]');
     const body = preview?.querySelector('[data-widget-preview-body]');
     const title = preview?.querySelector('.public-content-widget-title');
@@ -413,6 +621,7 @@ export function setupAdminPublicWidgets() {
             card.classList.toggle('public-content-widget--minimal', result.appearance === 'minimal');
             card.classList.toggle('public-content-widget--card', result.appearance !== 'minimal');
             refresh();
+            refreshTheme();
             notice.textContent = result.message || 'Preview updated. No changes saved.';
         } catch (error) {
             notice.textContent = error instanceof Error ? error.message : translated('failure', 'Preview unavailable.');

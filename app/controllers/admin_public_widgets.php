@@ -20,6 +20,7 @@ use Gallery\Services\PublicWidgetInvalidField;
 use Throwable;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\public_visual_preview_home_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -309,6 +310,7 @@ function cms_admin_public_widgets(): void
         'error' => $error,
         'error_field' => $errorField,
         'preview_html' => public_widget_markdown_html($content),
+        'preview_home_url' => public_visual_preview_home_url(true),
         'csrf_html' => csrf_field(),
         'editor_url' => url_for('admin_theme', ['widgets' => '1']),
         'new_url' => url_for('admin_theme', ['widgets' => '1', 'id' => 'new']),
