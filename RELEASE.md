@@ -96,13 +96,17 @@ The final gate checks that the release branch still points to the qualified cand
 2. Wait for automatic preparation, all four PDFs and exact-Q full CI. Approve the
    automatically created release PR to `main` once.
 3. Automation performs the protected standard merge, immutable tag and safe
-   develop fast-forward. Create/publish the GitHub Release manually using the
-   workflow's `manual-release-assets`, completion `release-evidence.json`/SHA-256, and any
-   required `manual-winapp-installer`.
+   develop fast-forward, then creates one unpublished GitHub Release draft with
+   the exact qualified notes. Open the draft, optionally attach the workflow's
+   `manual-release-assets`, completion `release-evidence.json`/SHA-256 and any
+   required `manual-winapp-installer`, then manually click **Publish release**.
+   No assets are uploaded or published automatically.
 
 No normal step requests SHA/run IDs, a workflow dispatch or deployment approval.
 A changed head needs fresh qualification. Missing/red mandatory checks or unreadable effective
-policy are BLOCKED. Omitted bypass membership is explicitly recorded and remains
+policy are BLOCKED. Existing drafts and published releases are never modified;
+completed merge/tag stays valid if draft staging fails (TAGGED / DRAFT_PENDING).
+Omitted bypass membership is explicitly recorded and remains
 server enforced; it is never replaced with a fabricated empty list. GitHub Release publication is never automatic.
 
 The complete parent/tree, token-event, retry and synchronization contract is in

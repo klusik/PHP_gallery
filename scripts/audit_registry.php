@@ -220,6 +220,7 @@ $registry = [
         'start_new_release_test.mjs' => [],
         'release_completion_test.mjs' => [],
         'release_completion_handoff_test.mjs' => [],
+        'release_draft_test.mjs' => [],
         'release_asset_integrity_test.mjs' => [],
         'release_retirement_test.mjs' => [],
         'admin_upload_clipboard_test.mjs' => [],

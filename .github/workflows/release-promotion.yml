@@ -7,7 +7,7 @@
 #   - React to human PR review without relying on token-created merge or push events
 #   - Finish tagging in the same job and support reruns after an interrupted merge
 #   - Preserve server protections, immutable tags and linear develop history
-#   - Leave GitHub Release publication to the maintainer
+#   - Create only a draft after verified tagging; publication and uploads remain manual
 # Author: Rudolf Klusal
 name: Automatic reviewed release completion
 run-name: Release completion ${{ inputs.mode || github.event_name }} at ${{ github.ref_name }}
