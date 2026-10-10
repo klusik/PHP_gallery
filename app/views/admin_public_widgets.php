@@ -153,7 +153,8 @@ function view_render_admin_public_widgets(array $model): void
     view_public_widget_select('appearance', $draft['appearance'] ?? 'card', ['card' => 'Card', 'minimal' => 'Minimal']);
     view_public_widget_select('source_language', $draft['source_language'] ?? 'en', ['en' => 'English', 'cs' => 'Čeština', 'de' => 'Deutsch', 'sv' => 'Svenska']);
     echo '<div class="public-widgets-actions"><button type="submit" name="widget_action" value="' . ($editing ? 'save' : 'create') . '">' . e($editing ? t('admin.widgets.save', 'Save widget') : t('admin.widgets.create_action', 'Create widget')) . '</button>';
-    echo '<button type="submit" class="secondary" name="widget_action" value="preview" formnovalidate>' . e(t('admin.widgets.preview_action', 'Preview without saving')) . '</button></div>';
+    echo '<button type="submit" class="secondary" name="widget_action" value="preview" formnovalidate>' . e(t('admin.widgets.preview_action', 'Preview without saving')) . '</button>';
+    echo '<a class="button secondary" href="' . e((string) ($model['discard_url'] ?? '')) . '">' . e(t('admin.widgets.discard', 'Discard unsaved changes')) . '</a></div>';
     if ($editing) {
         echo '<div class="public-widgets-danger"><button type="submit" name="widget_action" value="duplicate" class="secondary" formnovalidate>' . e(t('admin.widgets.duplicate', 'Duplicate saved version as draft')) . '</button>';
         echo '<label><input type="checkbox" name="confirm_delete" value="1">' . e(t('admin.widgets.confirm_delete', 'Confirm permanent deletion')) . '</label>';

@@ -231,6 +231,9 @@ function cms_admin_public_widgets(): void
         'csrf_html' => csrf_field(),
         'editor_url' => url_for('admin_theme', ['widgets' => '1']),
         'new_url' => url_for('admin_theme', ['widgets' => '1', 'id' => 'new']),
+        'discard_url' => $selected === null
+            ? url_for('admin_theme', ['widgets' => '1', 'id' => 'new'])
+            : url_for('admin_theme', ['widgets' => '1', 'id' => (string) ($selected['widget_id'] ?? '')]),
         'theme_url' => url_for('admin_theme'),
         'settings_url' => admin_settings_url('appearance'),
     ]);
