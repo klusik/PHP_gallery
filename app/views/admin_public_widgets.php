@@ -98,7 +98,11 @@ function view_render_admin_public_widgets(array $model): void
             $name = trim((string) ($row['title'] ?? '')) ?: t('admin.widgets.untitled', 'Untitled widget');
             $status = (string) ($row['status'] ?? 'draft');
             echo '<li><a' . ($rowId === $id ? ' aria-current="page"' : '') . ' href="' . e((string) ($row['edit_url'] ?? '')) . '"><strong>' . e($name) . '</strong>';
-            echo '<small>' . e(t('admin.widgets.state.' . $status, ucfirst($status))) . ' · ' . e((string) ($row['page_scope'] ?? 'home')) . ' · ' . e((string) ($row['placement_mode'] ?? 'flow')) . '</small></a></li>';
+            $scope = (string) ($row['page_scope'] ?? 'home');
+            $mode = (string) ($row['placement_mode'] ?? 'flow');
+            echo '<small>' . e(t('admin.widgets.state.' . $status, ucfirst($status))) . ' · ';
+            echo e(t('admin.widgets.scope.' . $scope, ucfirst($scope))) . ' · ';
+            echo e(t('admin.widgets.mode.' . $mode, ucfirst($mode))) . '</small></a></li>';
         }
         echo '</ol>';
         if (count($rows) > 1) {
@@ -197,7 +201,12 @@ function view_render_admin_public_widgets(array $model): void
     echo '</div>';
     view_public_widget_select('mobile_fallback', $draft['mobile_fallback'] ?? 'flow', ['flow' => 'Accessible in-page fallback']);
     view_public_widget_select('appearance', $draft['appearance'] ?? 'card', ['card' => 'Card', 'minimal' => 'Minimal']);
-    view_public_widget_select('source_language', $draft['source_language'] ?? 'en', ['en' => 'English', 'cs' => 'Čeština', 'de' => 'Deutsch', 'sv' => 'Svenska']);
+    view_public_widget_select('source_language', $draft['source_language'] ?? 'en', [
+        'en' => t('admin.widgets.language.en', 'English'),
+        'cs' => t('admin.widgets.language.cs', 'Czech'),
+        'de' => t('admin.widgets.language.de', 'German'),
+        'sv' => t('admin.widgets.language.sv', 'Swedish'),
+    ]);
     echo '<div class="public-widgets-actions"><button type="submit" name="widget_action" value="' . ($editing ? 'save' : 'create') . '">' . e($editing ? t('admin.widgets.save', 'Save widget') : t('admin.widgets.create_action', 'Create widget')) . '</button>';
     echo '<button type="submit" class="secondary" name="widget_action" value="preview" formnovalidate>' . e(t('admin.widgets.preview_action', 'Preview without saving')) . '</button>';
     echo '<a class="button secondary" href="' . e((string) ($model['discard_url'] ?? '')) . '">' . e(t('admin.widgets.discard', 'Discard unsaved changes')) . '</a></div>';

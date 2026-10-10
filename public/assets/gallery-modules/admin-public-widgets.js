@@ -4,7 +4,7 @@
  * File: public/assets/gallery-modules/admin-public-widgets.js
  * Module Type: Browser Module
  * Purpose: Enhance widget Markdown authoring and viewport placement without client-side persistence.
- * Responsibilities: Keep native form actions functional without JavaScript; use safe server preview.
+ * Responsibilities: Keep native actions functional without JavaScript; refit safe public previews to Admin sizing.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -693,12 +693,36 @@ function setupWidgetThemePreview(form, labels) {
     let mainSnapshot = null;
     let footerSnapshot = null;
     let ready = false;
+    let previewViewport = null;
     const dismissedPreviewWidgets = new Set();
     const pageName = page => label('page_' + page, page === 'home' ? 'Homepage' : 'Gallery page');
     const statusUnavailable = page => status.textContent = page === 'gallery' && !galleryValue
             ? label('theme_gallery', 'Gallery Theme preview is unavailable; the editor remains usable.')
         : label('theme_unavailable', 'The protected public-page preview is unavailable; the editor remains usable.');
+    const fitFrame = () => {
+        if (!ready || shell.hidden || !previewViewport) return;
+        const width = previewViewport.width;
+        const height = previewViewport.height;
+        const availableWidth = Math.max(1, host.getBoundingClientRect().width - 20);
+        const scale = Math.min(1, availableWidth / width);
+        frame.style.width = width + 'px';
+        frame.style.height = height + 'px';
+        frame.style.transform = 'scale(' + scale + ')';
+        shell.style.width = String(width * scale) + 'px';
+        shell.style.height = String(height * scale) + 'px';
+    };
+    let hostResizeObserver = null;
+    const observeHost = () => {
+        if (hostResizeObserver && host.isConnected) hostResizeObserver.observe(host);
+    };
+    if (typeof ResizeObserver === 'function') {
+        hostResizeObserver = new ResizeObserver(fitFrame);
+        observeHost();
+    } else {
+        window.addEventListener('resize', fitFrame, {passive: true});
+    }
     const refresh = () => {
+        observeHost();
         const page = pageSelect?.value === 'gallery' ? 'gallery' : 'home';
         if (legacyHomeOnly && page === 'gallery') {
             shell.hidden = true;
@@ -738,14 +762,8 @@ function setupWidgetThemePreview(form, labels) {
             tablet: {width: 768, height: 1024},
             mobile: {width: 390, height: 740},
         }[device] || {width: 1280, height: 900};
-        const width = viewport.width;
-        const height = viewport.height;
-        const scale = Math.min(1, Math.max(1, host.getBoundingClientRect().width - 20) / width);
-        frame.style.width = width + 'px';
-        frame.style.height = height + 'px';
-        frame.style.transform = 'scale(' + scale + ')';
-        shell.style.width = String(width * scale) + 'px';
-        shell.style.height = String(height * scale) + 'px';
+        previewViewport = viewport;
+        fitFrame();
         const sourceMain = mainSnapshot.cloneNode(true);
         const sourceFooter = footerSnapshot.cloneNode(true);
         main.replaceChildren(...sourceMain.childNodes);

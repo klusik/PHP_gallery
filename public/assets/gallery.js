@@ -53,7 +53,7 @@
  */
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261010-visual-editor-draft-availability';
-import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261011-widgets-real-page-floating-preview-v1';
+import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261011-widgets-preview-host-refit-v1';
 import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261011-gallery-action-widget-exclusion-v2';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';

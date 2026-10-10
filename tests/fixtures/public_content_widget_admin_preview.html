@@ -152,11 +152,15 @@ try {
                 && Math.abs(box.height - actionBounds.height) <= 1);
             check(actionExclusion,
                 'Gallery preview geometry contains the actual rendered hero action cluster.');
+            const candidateWidth = Math.min(480, Math.floor(geometry.viewportWidth * 0.45));
             const candidate = {
-                anchor: 'top-right', x: 900, y: 100, width: Number(draft.dataset.publicWidgetWidth),
+                anchor: 'top-right', x: 900, y: 100, width: candidateWidth,
                 height: Math.ceil(geometry.viewportHeight * 0.4), viewportWidth: geometry.viewportWidth,
                 viewportHeight: geometry.viewportHeight, topInset: geometry.topInset,
             };
+            check(candidate.width >= 180 && candidate.width <= 480
+                && candidate.width <= geometry.viewportWidth * 0.45,
+            'Gallery action-collision candidate uses a supported panel width.');
             const unprotected = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions
                 .filter(box => box !== actionExclusion)});
             const protectedCandidate = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions});

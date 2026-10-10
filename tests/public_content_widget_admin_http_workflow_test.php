@@ -33,6 +33,10 @@ if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
 $stage = 'fixture validation';
 $createdIds = [];
 $failureMessage = null;
+$widgetMarker = bin2hex(random_bytes(12));
+$ownedWidgetTitle = 'Widget HTTP workflow ' . $widgetMarker;
+$draftContent = '**Widget HTTP draft** ' . $widgetMarker;
+$forbiddenLinkDraft = $draftContent . "\n[Forbidden target](javascript:alert(1))";
 try {
     $token = (string) getenv('GALLERY_WORKFLOW_TOKEN');
     $directory = validateFixture((string) getenv('GALLERY_WORKFLOW_FIXTURE'), $token);
@@ -41,10 +45,9 @@ try {
     $origin = json_decode((string) file_get_contents($directory . '/endpoint.json'), true, 512, JSON_THROW_ON_ERROR)['url'];
     $widgetRoute = '/index.php?page=admin_theme&widgets=1';
     $initialCount = countRows($pdo, 'public_content_widgets');
-    $draftContent = '**Widget HTTP draft**';
     $createPayload = [
         'widget_id' => '', 'revision' => '0', 'widget_action' => 'create',
-        'title' => 'Widget HTTP workflow', 'content_md' => $draftContent,
+        'title' => $ownedWidgetTitle, 'content_md' => $draftContent,
         'status' => 'draft', 'page_scope' => 'home', 'placement_mode' => 'flow',
         'flow_slot' => 'home_after_grid', 'floating_anchor' => 'bottom-right',
         'x_permille' => '900', 'y_permille' => '900', 'width_px' => '320',
@@ -92,14 +95,17 @@ try {
         };
         $titleInput = $xpath->query('.//input[@name="title"]', $form)->item(0);
         $content = $xpath->query('.//textarea[@name="content_md"]', $form)->item(0);
-        $error = $xpath->query('//*[@data-widget-error-field="revision"]')->item(0);
+        $error = $xpath->query('//*[@data-widget-error-field]')->item(0);
+        $errorField = $error instanceof DOMElement ? $error->getAttribute('data-widget-error-field') : '';
         return [
             'csrf_token' => $inputValue('csrf_token'),
             'widget_id' => $inputValue('widget_id'),
             'revision' => $inputValue('revision'),
             'title' => $titleInput instanceof DOMElement ? $titleInput->getAttribute('value') : '',
             'content_md' => $content instanceof DOMElement ? $content->textContent : '',
-            'revision_error' => $error instanceof DOMElement,
+            'error_field' => $errorField,
+            'error_message' => $error instanceof DOMElement ? trim($error->textContent) : '',
+            'revision_error' => $errorField === 'revision',
         ];
     };
     $editor = $readEditor($formResponse['body']);
@@ -125,6 +131,20 @@ try {
         'Invalid-CSRF widget preview was not rejected.');
     check(countRows($pdo, 'public_content_widgets') === $initialCount,
         'Rejected widget mutations or preview changed persistent rows.');
+
+    $stage = 'unsafe link create refusal and draft retention';
+    $unsafeCreate = $admin->request($widgetRoute, array_replace($createPayload, [
+        'csrf_token' => $editor['csrf_token'], 'content_md' => $forbiddenLinkDraft,
+    ]));
+    check($unsafeCreate['status'] === 200,
+        'Widget creation with a forbidden javascript: link was not returned to the editor.');
+    $unsafeForm = $readEditor($unsafeCreate['body']);
+    check($unsafeForm['title'] === $ownedWidgetTitle && $unsafeForm['content_md'] === $forbiddenLinkDraft,
+        'Rejected unsafe-link creation did not preserve the submitted title and Markdown draft.');
+    check($unsafeForm['error_field'] === 'content_md' && $unsafeForm['error_message'] !== '',
+        'Rejected unsafe-link creation did not identify and describe the content_md field error.');
+    check(countRows($pdo, 'public_content_widgets') === $initialCount,
+        'Rejected unsafe-link creation changed persistent widget rows.');
 
     $preview = $admin->request($widgetRoute, [
         'csrf_token' => $editor['csrf_token'], 'widget_action' => 'preview',
@@ -157,14 +177,14 @@ try {
         $createdIds[] = $widgetId;
     }
     check(preg_match('/^[a-f0-9]{32}$/D', $widgetId) === 1 && $createdForm['revision'] === '1'
-        && $createdForm['title'] === 'Widget HTTP workflow',
+        && $createdForm['title'] === $ownedWidgetTitle,
         'Reloaded widget form did not show the persisted new record.');
     check(countRows($pdo, 'public_content_widgets') === $initialCount + 1,
         'Widget creation did not persist exactly one owned row.');
     $savedRow = row($pdo,
         'SELECT title, content_md, status, revision FROM public_content_widgets WHERE widget_id = ?',
         [$widgetId]);
-    check($savedRow['title'] === 'Widget HTTP workflow' && $savedRow['content_md'] === $draftContent
+    check($savedRow['title'] === $ownedWidgetTitle && $savedRow['content_md'] === $draftContent
         && $savedRow['status'] === 'draft' && (int) $savedRow['revision'] === 1,
         'Created widget state was not committed as a draft.');
 
@@ -219,8 +239,16 @@ try {
         : basename($exception->getFile()) . ' line ' . $exception->getLine();
     $failureMessage = 'FAIL public content widget Admin HTTP ' . $stage . ': ' . $detail;
 } finally {
-    if (isset($pdo) && $pdo instanceof PDO && $createdIds !== []) {
+    if (isset($pdo) && $pdo instanceof PDO) {
         try {
+            $findOwned = $pdo->prepare('SELECT widget_id FROM public_content_widgets WHERE title = ?');
+            $findOwned->execute([$ownedWidgetTitle]);
+            foreach ($findOwned->fetchAll(PDO::FETCH_COLUMN) as $ownedId) {
+                if (is_string($ownedId) && preg_match('/^[a-f0-9]{32}$/D', $ownedId) === 1
+                    && !in_array($ownedId, $createdIds, true)) {
+                    $createdIds[] = $ownedId;
+                }
+            }
             $delete = $pdo->prepare('DELETE FROM public_content_widgets WHERE widget_id = ?');
             foreach ($createdIds as $createdId) {
                 $delete->execute([$createdId]);

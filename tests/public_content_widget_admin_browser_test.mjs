@@ -6,7 +6,7 @@
  * Purpose: Exercise real widget Admin positioning and protected public previews in Chromium.
  * Responsibilities:
  *   - Verify pointer drag, keyboard positioning, reset and draft-safe controls.
- *   - Verify Home/Gallery flow insertion, peer geometry, Gallery action clearance and mobile fallback.
+ *   - Verify Home/Gallery insertion, peer/action geometry, responsive fit, and mobile fallback.
  *   - Keep fixtures confined to an isolated, loopback-only browser profile.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -78,7 +78,52 @@ try {
     assert.ok(result?.includes('BROWSER PASS'), 'Widget pointer and keyboard fixture must complete.');
 
     const preview = await runHeadlessBrowserFixture(executable,
-        'http://127.0.0.1:' + server.address().port + '/preview', 'widget-admin-theme-preview-');
+        'http://127.0.0.1:' + server.address().port + '/preview', 'widget-admin-theme-preview-', {
+            viewport: {width: 1280, height: 900},
+            interact: async ({evaluate}) => {
+                const fitted = await evaluate(`new Promise(resolve => {
+                    const deadline = Date.now() + 5000;
+                    const check = () => {
+                        const result = document.getElementById('results')?.textContent || '';
+                        const frame = document.querySelector('.public-widgets-theme-frame');
+                        if (!result.startsWith('BROWSER PASS') || !frame?.contentDocument?.body) {
+                            if (Date.now() >= deadline) resolve(null);
+                            else setTimeout(check, 25);
+                            return;
+                        }
+                        const host = document.querySelector('[data-widget-theme-preview]');
+                        const shell = host?.querySelector('[data-widget-theme-frame-wrap]');
+                        if (!host || !shell) return resolve(null);
+                        host.style.width = '420px';
+                        host.style.maxWidth = 'none';
+                        const measure = () => {
+                            const hostBounds = host.getBoundingClientRect();
+                            const frameBounds = frame.getBoundingClientRect();
+                            const availableWidth = Math.max(1, hostBounds.width - 20);
+                            const expectedScale = Math.min(1, availableWidth / 1280);
+                            const scale = Number(frame.style.transform.match(/scale\\(([^)]+)\\)/)?.[1] || 0);
+                            const ready = Math.abs(scale - expectedScale) < 0.002
+                                && Math.abs(Number.parseFloat(shell.style.width) - 1280 * expectedScale) < 1
+                                && frameBounds.right <= hostBounds.right + 1
+                                && frame.contentDocument.documentElement.clientWidth === 1280
+                                && frame.contentDocument.body.dataset.previewFixturePage === 'gallery';
+                            if (ready) resolve({scale, expectedScale, frameWidth: frameBounds.width,
+                                hostWidth: hostBounds.width, viewportWidth: frame.contentDocument.documentElement.clientWidth});
+                            else if (Date.now() >= deadline) resolve(null);
+                            else setTimeout(measure, 25);
+                        };
+                        requestAnimationFrame(measure);
+                    };
+                    check();
+                })`);
+                assert.ok(fitted,
+                    'Gallery detail preview must refit after the Admin workspace narrows while retaining the selected desktop viewport.');
+                assert.ok(fitted.frameWidth <= fitted.hostWidth + 1,
+                    'The resized Gallery preview remains inside its Admin host.');
+                assert.equal(fitted.viewportWidth, 1280,
+                    'Resizing the Admin host changes only the preview scale, not the selected public device viewport.');
+            },
+        });
     console.log(preview.result || 'Protected widget preview fixture produced no status marker.');
     assert.equal(preview.exitCode, 0, 'Protected widget preview browser process must exit cleanly.');
     assert.ok(preview.result?.includes('BROWSER PASS: widget protected Home/Gallery floating geometry, flow insertion and mobile flow fallback'),
