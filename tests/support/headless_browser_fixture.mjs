@@ -33,7 +33,7 @@ const protocolFailureContextLength = 120;
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
- * @param {{readResult?:function():Promise<string>,timeoutMs?:number,interact?:function({evaluate:function(string):Promise<BrowserJsonValue|undefined>,mouse:function('mouseMoved'|'mousePressed'|'mouseReleased',number,number,number):Promise<void>,key:function('keyDown'|'keyUp',string):Promise<void>}):Promise<void>}} options Optional owned result reader, workflow deadline, and native input interaction. The evaluator returns a JSON-compatible protocol value or undefined when DevTools omits one.
+ * @param {{readResult?:function():Promise<string>,timeoutMs?:number,viewport?:{width:number,height:number},interact?:function({evaluate:function(string):Promise<BrowserJsonValue|undefined>,mouse:function('mouseMoved'|'mousePressed'|'mouseReleased',number,number,number):Promise<void>,key:function('keyDown'|'keyUp',string):Promise<void>}):Promise<void>}} options Optional owned result reader, workflow deadline, explicit CSS-pixel viewport and native input interaction. The evaluator returns a JSON-compatible protocol value or undefined when DevTools omits one.
  * @return {Promise<{result:string, exitCode:number|null}>} Fixture marker and owned process exit code.
  */
 export async function runHeadlessBrowserFixture(executable, url, profilePrefix, options = {}) {
@@ -117,6 +117,16 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         if (!target) throw new Error('Owned loopback fixture page not found');
         const {sessionId} = await command('Target.attachToTarget', {targetId: target.targetId, flatten: true});
         await command('Page.enable', {}, sessionId);
+        if (options.viewport) {
+            const {width, height} = options.viewport;
+            if (!Number.isSafeInteger(width) || width < 320 || width > 3840
+                || !Number.isSafeInteger(height) || height < 240 || height > 2160) {
+                throw new Error('Owned Chromium viewport must use bounded positive CSS pixels');
+            }
+            await command('Emulation.setDeviceMetricsOverride', {
+                width, height, deviceScaleFactor: 1, mobile: false,
+            }, sessionId);
+        }
         // Keep native focus and :focus-visible behavior available in this owned headless page.
         await command('Emulation.setFocusEmulationEnabled', {enabled: true}, sessionId);
         // One explicit navigation avoids command-line startup stalls and never
