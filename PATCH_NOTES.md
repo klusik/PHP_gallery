@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.126.3
+
+Version 0.126.3 restored access to the Live Visual CSS Editor while keeping it safely unavailable until its protected preview was validated. It also made the editor’s optional setup failures less disruptive to manual theme editing.
+
+### Highlights
+
+#### Live Visual CSS Editor [#182](https://github.com/klusik/PHP_gallery/issues/182)
+- Kept the editor launcher visible but disabled until JavaScript validated the protected preview URL and completed setup.
+- Displayed localized availability messages when preview validation or optional editor modules failed, while preserving access to Manual CSS and other Theme controls.
+- Kept Manual CSS editing and background-file changes independent of the optional visual-editor workspace.
+
+### Technical Details
+
+#### Backend
+- Updated preview URL handling to use the actual installation mount and current browser origin, including subdirectory installs and nonstandard ports.
+- Preserved configured-base behavior for ordinary and canonical URLs, and retained protected-marker and origin validation for preview URLs.
+
+#### Frontend
+- Separated Manual CSS form handling and Theme background-file draft staging from optional visual-editor modules.
+- Added `public/assets/gallery-modules/theme-visual-editor-support.js` and updated the visual editor, theme customization, and form modules to handle unavailable modules and initialization failures.
+
+#### Tests
+- Expanded URL and preview workflow coverage for installation mounts, routing modes, configured origins, TLS proxy states, and nonstandard ports.
+- Expanded browser tests for disabled-launcher behavior, optional-module failures, preserved drafts, and avoiding unintended submission or navigation.
+
+#### Documentation
+- Updated `ARCHITECTURE.md`, `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `docs/LIVE_VISUAL_CSS_EDITOR.md`, and all four maintained administrator manual editions.
+
+#### Release metadata
+- Added immutable origin and predecessor records for `v_0.126.3`.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change. Protected visual-preview URLs used the actual installation mount and browser origin.
+
+#### For administrators
+- Administrators could continue using Manual CSS and other Theme controls when the optional visual editor could not initialize. The editor reported why it was unavailable and stayed disabled until preview validation and setup succeeded.
+
+#### For maintainers
+- Regression coverage documented preview URL behavior and editor fallbacks across the tested installation and browser conditions.
+
 ## Version 0.126.2
 
 Version 0.126.2 added idempotent preparation of an unpublished GitHub Release draft after the verified protected merge and immutable tag. Maintainers remained responsible for uploading assets and publishing the release.
