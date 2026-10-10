@@ -2077,6 +2077,7 @@
         "tests/fixtures/lightbox_race.html",
         "tests/fixtures/public_content_widget_admin_position.html",
         "tests/fixtures/public_content_widget_public_placement.html",
+        "tests/fixtures/public_content_widget_theme_home.html",
         "tests/fixtures/public_home_creation.html",
         "tests/fixtures/runtime_conditional_file.php",
         "tests/fixtures/runtime_fatal_user_error.php",
