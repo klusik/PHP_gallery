@@ -2224,6 +2224,7 @@
         "tests/public_content_widget_contract_test.php",
         "tests/public_content_widget_db_workflow_test.php",
         "tests/public_content_widget_floating_test.mjs",
+        "tests/public_content_widget_localized_errors_test.php",
         "tests/public_content_widget_markdown_test.php",
         "tests/public_content_widget_public_render_test.php",
         "tests/public_gallery_create_entrypoint_test.php",
