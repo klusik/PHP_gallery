@@ -389,3 +389,134 @@ function public_widget_public_rows(string $pageType): array
     }
     return $prepared;
 }
+
+
+/**
+ * Render emphasized widget text after escaping all user-authored HTML.
+ *
+ * Markdown controls are constrained to a tiny inline subset so neither Admin
+ * previews nor public pages ever execute author-provided HTML.
+ *
+ * @param string $text Untrusted plain inline text excluding recognized link tokens.
+ * @return string Escaped HTML with emphasis and code spans only.
+ */
+function public_widget_emphasis_html(string $text): string
+{
+    $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $escaped = preg_replace('/\x60([^\x60\n]+)\x60/u', '<code>$1</code>', $escaped) ?? $escaped;
+    $escaped = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $escaped) ?? $escaped;
+    $escaped = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped) ?? $escaped;
+    $escaped = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
+    $escaped = preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped) ?? $escaped;
+    return $escaped;
+}
+
+/**
+ * Resolve recognized Markdown links into safe markup without marker-token injection.
+ *
+ * External links intentionally open in a new tab; site-local routes and fragments
+ * remain in the current tab. Invalid or unrecognized Markdown remains inert text.
+ *
+ * @param string $text Untrusted Markdown inline content.
+ * @return string Safe escaped link and emphasis HTML.
+ */
+function public_widget_inline_html(string $text): string
+{
+    $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(([^()\s]{1,2048})\)/u';
+    $matchCount = preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
+    if ($matchCount === false || $matchCount === 0) {
+        return public_widget_emphasis_html($text);
+    }
+    $html = '';
+    $offset = 0;
+    for ($index = 0; $index < $matchCount; $index++) {
+        $token = (string) $matches[0][$index][0];
+        $start = (int) $matches[0][$index][1];
+        $html .= public_widget_emphasis_html(substr($text, $offset, $start - $offset));
+        $url = (string) $matches[2][$index][0];
+        try {
+            $href = public_widget_safe_url($url);
+        } catch (PublicWidgetInvalidField) {
+            $html .= public_widget_emphasis_html($token);
+            $offset = $start + strlen($token);
+            continue;
+        }
+        $external = preg_match('~^https?://~i', $href) === 1;
+        $attributes = $external ? ' target="_blank" rel="noopener noreferrer"' : '';
+        $html .= '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' . $attributes . '>'
+            . public_widget_emphasis_html((string) $matches[1][$index][0]) . '</a>';
+        $offset = $start + strlen($token);
+    }
+    return $html . public_widget_emphasis_html(substr($text, $offset));
+}
+
+/**
+ * Render the bounded, intentionally small Markdown subset shared by Admin and public pages.
+ *
+ * Supported blocks: paragraphs, hard line breaks, level 1-3 headings, ordered and
+ * unordered lists. Links, bold, italic and inline code share one escaping policy.
+ * HTML blocks, embedded media, CSS and arbitrary scripting remain inert source text.
+ *
+ * @param string $markdown Untrusted UTF-8 widget content from a stored or unsaved draft.
+ * @return string Safe HTML fragment, never a complete document or executable markup.
+ */
+function public_widget_markdown_html(string $markdown): string
+{
+    if (strlen($markdown) > PUBLIC_WIDGET_CONTENT_MAX_BYTES || preg_match('//u', $markdown) !== 1) {
+        return '';
+    }
+    $source = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
+    if ($source === '') {
+        return '';
+    }
+    $blocks = [];
+    $paragraph = [];
+    $listItems = [];
+    $listTag = '';
+    $flush = static function () use (&$blocks, &$paragraph, &$listItems, &$listTag): void {
+        if ($paragraph !== []) {
+            $parts = [];
+            foreach ($paragraph as $line) {
+                $parts[] = public_widget_inline_html($line);
+            }
+            $blocks[] = '<p>' . implode('<br>', $parts) . '</p>';
+            $paragraph = [];
+        }
+        if ($listItems !== []) {
+            $blocks[] = '<' . $listTag . '>' . implode('', $listItems) . '</' . $listTag . '>';
+            $listItems = [];
+            $listTag = '';
+        }
+    };
+    foreach (explode("\n", $source) as $line) {
+        if (trim($line) === '') {
+            $flush();
+            continue;
+        }
+        if (preg_match('/^\s{0,3}(#{1,3})\s+(.+)$/u', $line, $heading) === 1) {
+            $flush();
+            $level = min(4, strlen($heading[1]) + 1);
+            $blocks[] = '<h' . $level . '>' . public_widget_inline_html(trim($heading[2])) . '</h' . $level . '>';
+            continue;
+        }
+        if (preg_match('/^\s{0,3}(?:[-*+]\s+([^\r\n]+)|[0-9]{1,3}[.)]\s+([^\r\n]+))$/u', $line, $item) === 1) {
+            if ($paragraph !== []) {
+                $flush();
+            }
+            $tag = isset($item[2]) && $item[2] !== '' ? 'ol' : 'ul';
+            if ($listTag !== '' && $listTag !== $tag) {
+                $flush();
+            }
+            $listTag = $tag;
+            $itemText = $tag === 'ol' ? $item[2] : $item[1];
+            $listItems[] = '<li>' . public_widget_inline_html(trim($itemText)) . '</li>';
+            continue;
+        }
+        if ($listItems !== []) {
+            $flush();
+        }
+        $paragraph[] = trim($line);
+    }
+    $flush();
+    return implode("\n", $blocks);
+}
