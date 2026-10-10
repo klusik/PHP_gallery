@@ -2346,7 +2346,7 @@ För offentlig miniatyrbildsrendering undersöker du panelerna Elements och Netw
 
 Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föregående stabila tagg, färdigställ versionsanteckningar och permanent dokumentation och samordna alla fyra handboksutgåvor. Bygg varje PDF med index och flera körningar enligt \filepath{docs/LATEX_BUILD.md}; kontrollera kompilering, referenser, indexposter och layoutvarningar. Visuell PDF-granskning görs endast på uttrycklig begäran eller för att undersöka ett konkret layoutproblem; en lyckad rutinbyggnad kräver inget ytterligare visuellt godkännande.
 
-Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens bevarade lokala återställningsväg. Normal förberedelse och kvalificering körs på GitHub; agenter kör inte dessa kommandon lokalt som standard. Lokal återställning kräver uttrycklig begäran eller faktiskt oåtkomligt CI och förblir BLOCKED utan värdbaserade bevis. Skyddad promotion och publicering följer det senare beskrivna release-promotion-flödet.
+Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens bevarade lokala återställningsväg. Normal förberedelse och kvalificering körs på GitHub; agenter kör inte dessa kommandon lokalt som standard. Lokal återställning kräver uttrycklig begäran eller faktiskt oåtkomligt CI och förblir BLOCKED utan värdbaserade bevis. Det senare beskrivna granskningsflödet utför skyddad merge och taggning; GitHub Release publiceras manuellt.
 
 Generera manifestet efter sista ändringen, godkänn förkontroller för utgåva, manifest och blanksteg, initiera kvalificeringens fingeravtryck och frys underlaget. Kör exakt en central granskning med \codeword{--profile=release}, direkt eller genom den konfigurerade isolerade testinstallationen. Granskningen äger syntax, regressioner, kontrakt, webbläsartestfall och utgåvekonsekvens; lägg inte till en andra manuell genomgång av testträdet. Koppla rapporten till det oförändrade fingeravtrycket och redovisa täckningsluckor separat från väntande driftgranskningar.
 
@@ -2354,7 +2354,7 @@ Skapa distributionsmapp eller ZIP endast på uttrycklig begäran. Verktygen krä
 
 Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
 
-För~förberedelse på~GitHub skapar och~pushar du~en~gren med~namnet \codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~startar kvalificeringsflödet manuellt från~den~grenen. Flödet förbereder och~committar en~godkänd deterministisk kandidat tillbaka till~samma gren, bygger alla fyra PDF-filer tillsammans och~kvalificerar exakt den~commiten. Det~gör ingen merge till~\codeword{main}, skapar ingen tagg och~publicerar ingen utgåva.
+För~förberedelse på~GitHub skapar och~pushar du~en~gren med~namnet \codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}. Flödet förbereder och~committar en~godkänd deterministisk kandidat tillbaka till~samma gren, bygger alla fyra PDF-filer tillsammans och~kvalificerar exakt den~commiten. Det~gör ingen merge till~\codeword{main}, skapar ingen tagg och~publicerar ingen utgåva.
 
 \section{Få galleriet att kännas snabbt}
 \label{sec:performance}
@@ -2478,81 +2478,45 @@ Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
 
 
-% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
-\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+\subsubsection{Automatisk release efter PR-godkännande}
 
-Completed feature work is~squashed into one logical commit and~qualified again
-at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
-non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
-provide this guarantee. Existing history stays intact and~new develop commits
-remain linear. Agents never update develop or~main directly.
+Skapa grenen \codeword{release/v_X.Y[.Z]} från aktuell develop och pusha den.
+Arbetsflödet lägger till ett oföränderligt ursprung direkt efter vald commit
+ och kör Stage~A/B, befintliga AI-anteckningar, låst TinyTeX, alla fyra manualer,
+manifest och fullständig kvalificering av exakt Q. Historiska ursprung och den
+publicerade \codeword{v\_0.126} förblir oförändrade.
 
-The~release origin's only parent is~the~explicit selected develop commit D0.
-Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
-is~never rewritten. Tag object SHA, peeled published-main commit P, previous
-release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
-\codeword{v\_0.125} legacy pin records unknown historical qualification;
-it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
-scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
-locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
+Underhållaren godkänner dess exakta Q en gång. Den mänskliga granskningen startar
+skyddad standardmerge utan formulär eller extra deployment-godkännande. M måste
+ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
+Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
+hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
 
-The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
-qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
-PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
-wrong parents/tree, stale review or~missing/red CI stops publication.
+GitHub Release skapas eller publiceras fortfarande manuellt.
+\codeword{manual-release-assets} innehåller produktions-ZIP, fyra PDF-filer,
+anteckningar, kvalificeringsarkiv och SHA-256-kontrollsummor. Windows-installern
+byggs bara när levererat WinApp-innehåll ändras; dess separata version bevaras.
 
-After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
-without a~new commit. The~FF verifier independently rejects new merge commits.
-Parallel develop work requires a~single-parent L over its~observed head,
-complete three-way content proof, retained feature history,
-explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
-prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
-pushes develop. Completion is~\codeword{RECONCILED\_FF} or
-\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
-or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
-Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
-
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
-
-For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
-filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
-read-only contents permission permits only a~bot PR proposal. The~owner verifies
-workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
-publisher then exists on~main before a~separate publish approval. Never execute
-the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
-Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
-
-Future releases use \ui{Start New Release}: owner-approved version/optional develop
-SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
-to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
-GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
-block concurrent tag/source changes; an~origin created before a~detected race stays
-immutable for~explicit owner recovery.
-
-GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
-fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
-pushes a~reviewed finalization commit and~fresh full push qualification verifies
-its~exact SHA. Required-check app binding and~actual bot PR eligibility need
-live acceptance; an~external App/event bridge is~a~separate owner decision.
-Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
-GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
-matrix rather than~inferring qualification from~a~navigation URL.
-The~full operator contract and~remaining live tests are~in
-\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
+Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
+med aktivt skydd för linjär historik och CI. Parallell utveckling stoppar den
+separata synkroniseringen och bevarar den färdiga taggen. Ingen merge-, rebase-
+eller replay-commit skapas på develop. Föregående M behöver inte vara förfader
+till nästa Q. Saknad policyinsyn eller evidens, gammalt godkännande, rött CI
+ och andra föräldrar/träd blockerar avslut. Isolerad acceptans av verkligt
+GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; fixture-CI
+ersätter inte live-acceptans. Agenter utför inte skyddad integration eller
+produktionsrelease under implementeringen.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 
 \begin{enumerate}
-  \item \textbf{Gren och~förkontroll.} En~push till~\codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, eller~manuell start från~den~grenen, inleder förberedelsen. En~valfri angiven version måste motsvara grennamnet. Förberedelsen avvisar en~redan befintlig tagg \codeword{v_X.Y[.Z]}, hittar föregående utgåvetagg som~jämförelsebas och~kör \codeword{release-preflight} för~källsyntax, deklarationsdokumentation, filinventering, Pythons importpolicy och~arbetsflödeskontrakt före AI eller~TeX.
+  \item \textbf{Gren och~förkontroll.} En~push till~\codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, inleder förberedelsen. Förberedelsen avvisar en~redan befintlig tagg \codeword{v_X.Y[.Z]}, hittar föregående utgåvetagg som~jämförelsebas och~kör \codeword{release-preflight} för~källsyntax, deklarationsdokumentation, filinventering, Pythons importpolicy och~arbetsflödeskontrakt före AI eller~TeX.
   \item \textbf{Deterministiska metadata.} Hjälpskriptet samordnar programversion, utgåvemetadata, mall för~versionsanteckningar och~version-/datummarkeringar i~alla fyra handböcker och~uppdaterar produktionslistan. Det~skriver inte nytt sakligt innehåll i~TeX. Färdiga redaktionella anteckningar bevaras. Innehållet i~alla fyra handböcker måste vara samordnat före utgåvan.
   \item \textbf{Redaktionella anteckningar.} Ett~färdigt avsnitt skrivet av~underhållaren lämnas oförändrat. Om~det saknas eller~är ofullständigt används GitHub Copilot CLI med~\codeword{gpt-6-luna}; automatiskt modellval används bara om~den~modellen är otillgänglig. Generering kräver \codeword{COPILOT_GITHUB_TOKEN}. Hela Git-textdiffen skickas utan trunkering efter byteantal; genererade och~binära utgåveartefakter utelämnas. Separata tillfälliga utdatafiler förhindrar blockerade rör. Varje Git-kommando har~en~tidsgräns på~30 sekunder; hela underlagssteget har~en~gräns på~två minuter. Överskridna gränser för~metadata eller~diagnostik stoppar förberedelsen uttryckligen. Strikt Markdown-validering avvisar platshållare, fel versioner, extra avsnitt och~assistentkommentarer. Misslyckad generering eller~validering blockerar kvalificeringen i~stället för~att släppa igenom ofullständiga anteckningar. Hjälpskriptet \filepath{.github/scripts/patch_notes_ai_chunks.php} skickar varje ursprunglig diffbyte exakt en~gång i~sammanhängande UTF-8-säkra delar om~högst 100~000~byte. Ett~SHA-256-manifest verifierar hela underlaget och~varje del; varje del kräver en~giltig faktasammanfattning om~högst 6~500~byte. Om~alla sammanfattningar inte ryms inom slutpromptens gräns på~180~000~byte sammanförs de~i~ytterligare begränsade steg utan att~någon diffdel utelämnas. Tidsgränser för~Copilot, saknade svar, ändrade kontrollsummor eller~ogiltig slutlig Markdown stoppar kvalificeringen; ursprungsdiffen kortas aldrig tyst. Prompt och~validator delar de~obligatoriska huvudrubrikerna \codeword{Highlights}, \codeword{Technical Details} och~\codeword{User Impact}, även för~utgåvor med enbart test-, dokumentations- eller~verktygsändringar. Endast irrelevanta valfria underavsnitt får utelämnas. Beskriv belagd påverkan för~underhållare eller~oförändrat offentligt/Admin-beteende utan att~hitta på~produktfördelar. Omnämnda rubriker i~löptext eller~fel rubriknivå avvisas. Vid genererings- eller~valideringsfel sparas tillgänglig ursprunglig modelltext i~sju dagar i~Actions-artefakten \codeword{release-notes-rejected-response}; promptar och~autentiseringsdiagnostik utesluts. Ogiltig text blockerar fortfarande förberedelsen och~tillämpas aldrig.
   \item \textbf{Reproducerbara handböcker.} Flödet använder checksummeverifierad TinyTeX och~en~låst uppsättning TeX Live-paket och~återanvänder giltig cache enligt låsfilen och~paketlistan. Engelska, tjeckiska, tyska och~svenska handböcker byggs var för~sig med~\codeword{pdflatex}, \codeword{makeindex} och~ytterligare två \codeword{pdflatex}-körningar. Tidpunkten i~utgåvans metadata ger reproducerbara PDF- och~manifesttidsstämplar. Efter bygget verifieras produktionslistan, integritetsmanifestet och~utgåvans konsekvens.
   \item \textbf{Säker återskrivning.} Bara godkända förberedelsefiler läggs till~i~commiten. Om~fjärrgrenen har ändrats stoppas en~föråldrad push; ett~identiskt redan förberett träd får återanvända aktuell commit. Ändringar skrivs bara till~samma utgåvegren, inte till~\codeword{main}.
-  \item \textbf{Kontroll av~exakt kandidat.} Det~återanvändbara centrala CI-flödet checkar ut~det~exakta SHA-värdet för~förberedd commit och~kör hela utgåvematrisen inklusive obligatoriska Chromium-tester. Det~samlade kontrollsteget lyckas bara om~förberedelsen, anteckningarna och~hela matrisen lyckas och~grenen fortfarande pekar på~exakt samma commit. Merge, taggning och~publicering förblir underhållarens beslut.
+  \item \textbf{Kontroll av~exakt kandidat.} Det~återanvändbara centrala CI-flödet checkar ut~det~exakta SHA-värdet för~förberedd commit och~kör hela utgåvematrisen inklusive obligatoriska Chromium-tester. Det~samlade kontrollsteget lyckas bara om~förberedelsen, anteckningarna och~hela matrisen lyckas och~grenen fortfarande pekar på~exakt samma commit. När kontrollerade artefakter är~klara öppnar en~grön kontroll botens PR; ett mänskligt godkännande startar automatisk skyddad merge och~taggning. GitHub Release publiceras manuellt.
 \end{enumerate}
 
 Detaljer finns i~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} och~\filepath{docs/LATEX_BUILD.md}. En~vanlig ändring i~TeX-källan kräver varken omedelbar PDF-kompilering eller~en~separat utgåvegranskning.

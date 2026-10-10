@@ -7,15 +7,22 @@ Hosted source/release lifecycle ownership:
   matrix and stale-head gate; agents follow the CI-first contract in AGENTS.md.
 - `.github/workflows/release-qualification.yml`: release preparation/manual batch,
   authoritative release matrix, candidate-bound check and qualification record.
-- `.github/workflows/release-promotion.yml`: read-only evidence inspection/builds
-  followed by separately approved maintainer promotion/publication from main.
+- `.github/workflows/release-promotion.yml`: human review-event completion of exact Q,
+  protected standard merge, immutable tag and independent safe develop FF.
 - `.github/scripts/release-promotion.mjs`: immutable run/attempt/branch validation,
-  server protection checks, SHA-bound PR promotion, identical-main-tree check,
-  immutable tags and durable evidence publication. No ordinary agent bypass.
-- `.github/scripts/release-assets.mjs`: canonical integrity/package checks and
-  public report archive/hash preparation without publication credentials.
+  complete PR detail and ordered parent/tree verification; no GitHub publisher.
+- `.github/scripts/release-completion.mjs`: automatic qualified PR, reviewed merge,
+  idempotent tag, permanent approval/merge evidence and protected non-force develop
+  FF; manual publication only.
+- `.github/scripts/start-new-release.mjs`: origin initialization on an existing
+  maintainer-pushed release branch and same-run preparation handoff.
+- `.github/scripts/release-readiness.mjs`: actual workflow-token read-only policy proof.
+- `.github/scripts/release-asset-integrity.mjs`: exact-Q/base complete inventory and
+  SHA-256 validation, duplicate-checksum and symlink refusal.
+- `.github/scripts/release-assets.mjs`: deterministic production package, four PDFs,
+  notes, evidence archive and SHA-256 checksums for manual publication.
 - `tests/hosted_release_policy_test.mjs`: central Node regression for stale/red/
-  missing evidence, exact overrides, CI-first instructions and branch safety.
+  missing evidence, no red overrides, complete policy and branch safety.
 
 This file maps features to source files. It is optimized for fast maintenance and AI-assisted code changes.
 

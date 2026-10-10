@@ -126,16 +126,24 @@ Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
 explicitly requested or hosted preparation is unavailable; agents do not routinely
 duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
 
-### Reviewed release lifecycle (#101)
+### Automatic reviewed release lifecycle (#101)
 
-In addition to the mandatory hosted CI-first contract, release-only operations
-must follow `docs/RELEASE_LIFECYCLE.md`: record an exact selected `develop`
-origin, reject exact published-main/tag drift, and treat publication as `SYNC_PENDING`
-until an owner-approved true FF to Q or single-parent equivalent L is retained
-with full tree/patch evidence and exact-SHA hosted CI. Never require the tagged
-main merge to be a develop ancestor or introduce new develop merge commits. Never modify protected refs
-without the separately authorized GitHub workflow and server enforcement.
-Cleanup is an optional separately approved Git ref lease, never routine pruning.
+Follow `docs/RELEASE_LIFECYCLE.md` for future maintainer-pushed releases. A normal
+push of `release/v_X.Y[.Z]` initializes immutable origin and runs Stage A/B,
+preparation, four locked-toolchain manuals and full exact-Q hosted qualification.
+The resulting bot PR requires one human owner approval; review-triggered automation
+uses a standard protected merge M with parents [P,Q] and tree(Q), then creates an
+immutable tag on M. GitHub Release publication stays manual. No deployment approval,
+normal dispatch input, extra main commit, red override or privileged bypass is allowed.
+
+After tagging, the release workflow may attempt a true non-force develop FF to Q
+only with complete active policy and exact-Q CI proof. Parallel develop work blocks
+reconciliation without modifying the completed tag; no automatic replay/merge/rebase.
+This implemented future workflow does not authorize agents to execute protected
+writes, create production release branches, publish releases or modify server rules.
+Feature agents still write only their explicitly authorized working branch.
+Existing origins, published tags/assets and historical evidence stay immutable.
+Cleanup remains optional and separately leased; never routinely prune refs.
 
 ### Mandatory Agent Verification Contract
 

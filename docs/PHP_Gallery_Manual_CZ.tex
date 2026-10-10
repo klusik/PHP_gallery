@@ -2346,7 +2346,7 @@ U~veřejného vykreslování náhledů prozkoumejte panely Prvky a~Síť. Respon
 
 Úplný postup vydání určuje \filepath{RELEASE.md}. Porovnejte přesný předchozí stabilní tag, dokončete poznámky k~vydání a~trvalou dokumentaci a~slaďte všechny čtyři udržované příručky. Každé PDF sestavte víceprůchodovým postupem s~rejstříkem podle \filepath{docs/LATEX_BUILD.md}; ověřte úspěch kompilace, odkazy, položky rejstříku a~varování sazby. Vizuální kontrola PDF je vyhrazena výslovné žádosti nebo diagnostice konkrétního problému sazby; běžné úspěšné sestavení nevyžaduje další vizuální schvalování.
 
-Příkazy v této části popisují hostovanou přípravu vydání a zachovaný lokální postup obnovy pro správce. Běžná příprava a kvalifikace běží na GitHubu; agenti tyto příkazy běžně lokálně nespouštějí. Lokální obnova vyžaduje výslovný požadavek nebo skutečně nedostupné CI a zůstává BLOCKED bez hostovaných důkazů. Chráněnou propagaci a publikaci zajišťuje níže popsaný postup release-promotion.
+Příkazy v této části popisují hostovanou přípravu vydání a zachovaný lokální postup obnovy pro správce. Běžná příprava a kvalifikace běží na GitHubu; agenti tyto příkazy běžně lokálně nespouštějí. Lokální obnova vyžaduje výslovný požadavek nebo skutečně nedostupné CI a zůstává BLOCKED bez hostovaných důkazů. Níže popsaný postup po schválení PR provede chráněný merge a tagování; GitHub Release se zveřejňuje ručně.
 
 Po posledních úpravách vygenerujte manifest, proveďte předběžné kontroly vydání, manifestu a~bílých znaků, inicializujte kvalifikační otisk a~zmrazte vstupy. Spusťte právě jeden centrální audit \codeword{--profile=release}, přímo nebo prostřednictvím nakonfigurované izolované testovací instalace. Audit vlastní syntaxi, regrese, kontrakty, prohlížečové testy a~konzistenci vydání; nepřidávejte další ruční průchod stromem testů. Připojte jeho zprávu k~nezměněnému otisku a~oddělte mezery pokrytí od čekajících provozních kontrol.
 
@@ -2354,7 +2354,7 @@ Nasazovací složku nebo ZIP vytvořte pouze na výslovnou žádost. Nástroje v
 
 Při běžném vývoji současně upravujte a~kontrolujte obsah všech čtyř zdrojů \codeword{.tex}; po každé změně nesestavujte evidované soubory PDF. PDF mohou za zdroji zaostávat až do závěrečné přípravy vydání. Automatická změna verze a~data není generováním věcné dokumentace: správci softwaru musí nové funkce, zabezpečení, kompatibilitu a~provozní postupy sami doplnit do anglické, české, německé a~švédské příručky.
 
-Pro přípravu hostovanou na GitHubu vytvořte a~odešlete větev \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, případně ručně spusťte pracovní postup kvalifikace z~této větve. Postup připraví a~uloží schváleného deterministického kandidáta zpět do téže větve, sestaví společně všechna čtyři PDF a~ověří přesný výsledný commit. Neslučuje větev do \codeword{main}, nevytváří tag ani nezveřejňuje vydání.
+Pro přípravu hostovanou na GitHubu vytvořte a~odešlete větev \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}. Postup připraví a~uloží schváleného deterministického kandidáta zpět do téže větve, sestaví společně všechna čtyři PDF a~ověří přesný výsledný commit. Neslučuje větev do \codeword{main}, nevytváří tag ani nezveřejňuje vydání.
 
 \section{Jak zajistit svižný dojem galerie}
 \label{sec:performance}
@@ -2478,81 +2478,44 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 \subsection{Příprava a~kvalifikace vydání na GitHubu}
 
 
-% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
-\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+\subsubsection{Automatické vydání po schválení PR}
 
-Completed feature work is~squashed into one logical commit and~qualified again
-at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
-non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
-provide this guarantee. Existing history stays intact and~new develop commits
-remain linear. Agents never update develop or~main directly.
+Vytvořte z~aktuálního develop větev \codeword{release/v_X.Y[.Z]} a~pushněte ji.
+Workflow přidá neměnný origin přímo za vybraný commit a~spustí Stage~A/B,
+stávající AI poznámky, uzamčený TinyTeX, všechny čtyři manuály, manifesty
+ a~úplnou hostovanou kvalifikaci přesného Q. Historické originy a~již vydané
+\codeword{v\_0.126} zůstávají beze změny.
 
-The~release origin's only parent is~the~explicit selected develop commit D0.
-Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
-is~never rewritten. Tag object SHA, peeled published-main commit P, previous
-release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
-\codeword{v\_0.125} legacy pin records unknown historical qualification;
-it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
-scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
-locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+Po kvalifikaci a~přípravě artefaktů bot vytvoří jediný PR do main.
+Správce jednou schválí přesnou hlavu Q. Lidské schválení spustí chráněný
+standardní merge bez formuláře workflow a~schválení deploymentu. Výsledný M
+musí mít rodiče [P,Q] v~tomto pořadí a~úplný Git tree shodný s~Q. Stejná úloha
+vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
+jen chybějící tag; konfliktní tag způsobí chybu.
 
-The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
-qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
-PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
-wrong parents/tree, stale review or~missing/red CI stops publication.
+GitHub Release vytvoříte nebo zveřejníte ručně. Artefakt
+\codeword{manual-release-assets} obsahuje produkční ZIP, čtyři PDF, poznámky,
+archiv kvalifikace a~SHA-256 kontrolní součty. Windows installer vzniká pouze
+při změně dodávaného obsahu WinApp; jeho samostatná verze se zachovává.
 
-After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
-without a~new commit. The~FF verifier independently rejects new merge commits.
-Parallel develop work requires a~single-parent L over its~observed head,
-complete three-way content proof, retained feature history,
-explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
-prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
-pushes develop. Completion is~\codeword{RECONCILED\_FF} or
-\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
-or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
-Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
-
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
-
-For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
-filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
-read-only contents permission permits only a~bot PR proposal. The~owner verifies
-workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
-publisher then exists on~main before a~separate publish approval. Never execute
-the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
-Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
-
-Future releases use \ui{Start New Release}: owner-approved version/optional develop
-SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
-to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
-GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
-block concurrent tag/source changes; an~origin created before a~detected race stays
-immutable for~explicit owner recovery.
-
-GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
-fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
-pushes a~reviewed finalization commit and~fresh full push qualification verifies
-its~exact SHA. Required-check app binding and~actual bot PR eligibility need
-live acceptance; an~external App/event bridge is~a~separate owner decision.
-Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
-GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
-matrix rather than~inferring qualification from~a~navigation URL.
-The~full operator contract and~remaining live tests are~in
-\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
+Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
+s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou
+synchronizaci a~zachová dokončený tag. Na develop nevzniká merge, rebase ani
+replay commit. Předchozí M nemusí být předkem dalšího Q. Chybějící viditelnost
+pravidel, nedostupné důkazy, staré schválení, červené CI nebo odlišní rodiče/tree
+zablokují dokončení. Izolované ověření skutečného chování GitHubu popisuje
+\filepath{docs/RELEASE_LIFECYCLE.md}; testovací CI nenahrazuje živou akceptaci.
+Agenti při implementaci neprovádějí chráněnou integraci ani produkční vydání.
 
 Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
 
 \begin{enumerate}
-  \item \textbf{Větev a~předběžná kontrola.} Odeslání změn do \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, případně ruční spuštění z~této větve, zahájí přípravu. Volitelně zadaná verze musí odpovídat názvu větve. Příprava odmítne již existující tag \codeword{v_X.Y[.Z]}, určí předchozí tag vydání jako základ porovnání a~před AI nebo TeX spustí \codeword{release-preflight}, který ověřuje syntaxi, dokumentaci deklarací, soupis zdrojů, pravidla importu Pythonu a~kontrakty pracovních postupů.
+  \item \textbf{Větev a~předběžná kontrola.} Odeslání změn do \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, zahájí přípravu. Příprava odmítne již existující tag \codeword{v_X.Y[.Z]}, určí předchozí tag vydání jako základ porovnání a~před AI nebo TeX spustí \codeword{release-preflight}, který ověřuje syntaxi, dokumentaci deklarací, soupis zdrojů, pravidla importu Pythonu a~kontrakty pracovních postupů.
   \item \textbf{Deterministická metadata.} Pomocný skript sjednotí verzi aplikace, metadata vydání, kostru poznámek k~vydání a~označení verze a~data všech čtyř příruček. Obnoví i~produkční soupis souborů, ale nepíše věcná vysvětlení do TeXu. Již dokončené redakční poznámky zachová. Obsah všech čtyř příruček je třeba sladit před vydáním.
   \item \textbf{Redakční poznámky.} Úplná ručně napsaná sekce vydání zůstává nedotčená. Pokud chybí nebo není dokončená, postup použije GitHub Copilot CLI s~modelem \codeword{gpt-6-luna}; k~automatickému výběru modelu přejde pouze při jeho nedostupnosti. Pro generování vyžaduje nastavený \codeword{COPILOT_GITHUB_TOKEN}. Textový diff Gitu se předává celý bez krácení podle počtu bajtů; generované a~binární artefakty vydání se vynechávají. Oddělené dočasné soubory pro výstupy brání zablokování rour. Každý příkaz Gitu má limit 30 sekund a~celý sběr podkladů dvě minuty. Překročení limitů metadat či diagnostiky přípravu výslovně zastaví. Přísné ověření Markdownu brání přijetí zástupných textů, nesprávných verzí, cizích sekcí a~komentářů asistenta. Selhání generování či ověření zastaví kvalifikaci, místo aby zveřejnilo neúplné poznámky. Pomocník \filepath{.github/scripts/patch_notes_ai_chunks.php} předává každý původní bajt diffu právě jednou v~navazujících částech UTF-8 o~velikosti nejvýše 100~000~bajtů. Manifest SHA-256 ověřuje úplnost všech částí i~původních podkladů; každá část musí mít platný věcný výtah o~velikosti nejvýše 6~500~bajtů. Pokud se souhrny nevejdou do~závěrečného limitu promptu 180~000~bajtů, další omezené průchody sloučí všechny výtahy bez vynechání části diffu. Časový limit požadavku Copilotu, chybějící odpověď, porušený hash nebo neplatný závěrečný Markdown kvalifikaci zastaví; žádný výřez původního diffu se potichu nezkracuje. Prompt i~validátor sdílejí povinné hlavní nadpisy \codeword{Highlights}, \codeword{Technical Details} a~\codeword{User Impact}, také u~vydání omezeného na~testy, dokumentaci nebo nástroje. Vynechat lze pouze nepodstatné volitelné podsekce. Popište doložený dopad na~správce nebo nezměněné veřejné či administrační chování bez vymýšlení nových přínosů produktu. Pouhá zmínka nadpisu v~textu nebo nesprávná úroveň nadpisu se~odmítne. Při selhání generování či validace se~dostupný původní text modelu uchová sedm dní v~artefaktu Actions \codeword{release-notes-rejected-response}; prompty ani autentizační diagnostika se~neukládají. Neplatný text nadále blokuje přípravu a~nikdy se~nepoužije.
   \item \textbf{Reprodukovatelná dokumentace.} Postup používá TinyTeX ověřený kontrolními součty a~pevně danou sadu balíčků TeX Live; platnou mezipaměť znovu použije podle otisku uzamčené konfigurace. Anglickou, českou, německou a~švédskou příručku sestaví pomocí \codeword{pdflatex}, \codeword{makeindex} a~dalších dvou průchodů \codeword{pdflatex} na každé vydání. Čas z~metadat vydání určuje reprodukovatelné časové údaje PDF i~manifestu. Po sestavení se kontrolují produkční soupis, manifest integrity a~konzistence vydání.
   \item \textbf{Bezpečný zápis do větve.} K~uložení se připravují jen povolené soubory. Změní-li se vzdálená větev, zastaralý kandidát se neodešle; totožný již připravený strom může použít existující commit. Příprava ukládá změny pouze do stejné release větve, nikoli do \codeword{main}.
-  \item \textbf{Kontrola přesného kandidáta.} Sdílený centrální pracovní postup CI načte přesné SHA připraveného commitu a~spustí úplnou matici vydání včetně povinných testů Chromium. Souhrnná kontrola uspěje pouze při úspěšné přípravě, úplných poznámkách, zelené matici a~nezměněném SHA na konci větve. Slučování, označování tagem a~zveřejnění zůstávají v~rukou správce.
+  \item \textbf{Kontrola přesného kandidáta.} Sdílený centrální pracovní postup CI načte přesné SHA připraveného commitu a~spustí úplnou matici vydání včetně povinných testů Chromium. Souhrnná kontrola uspěje pouze při úspěšné přípravě, úplných poznámkách, zelené matici a~nezměněném SHA na konci větve. Po přípravě ověřených artefaktů zelená kontrola otevře PR bota; jediné lidské schválení spustí automatický chráněný merge a~tagování. GitHub Release se zveřejňuje ručně.
 \end{enumerate}
 
 Podrobnosti jsou v~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} a~\filepath{docs/LATEX_BUILD.md}. Pouhá úprava zdroje TeX není důvodem k~běžnému sestavení PDF ani samostatnému auditu vydání.

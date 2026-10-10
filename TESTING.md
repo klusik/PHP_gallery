@@ -150,14 +150,20 @@ dirty-tree or incomplete hosted results to qualified status.
 
 ### Source-only authoring feedback
 
-`tests/hosted_release_policy_test.mjs` is registered in the central Node suite.
-It executes the real release identity and PR/publication orchestration with inert
-API/command adapters: stale/foreign/missing jobs and mismatched final trees fail;
-exact overrides preserve red evidence; interrupted uploads retain a draft; identical
-retries are read-only; conflicting immutable tags/assets fail. It also checks
-CI-first agent entrypoints, all approved branch triggers and all four manual sources.
-These fixtures never merge, tag or publish on GitHub. Live release-write acceptance
-remains pending until server protections and independent approval are configured.
+The central Node registry owns hosted release policy, pushed-origin and completion
+contracts. `tests/start_new_release_test.mjs` and `tests/release_completion_test.mjs`
+use real disposable Git objects and bare remotes with isolated CI/review metadata.
+They cover version forms, immutable origins, same-run handoff, exact Q, no duplicate
+PR/commit, sole human approval, standard merge parents/tree, tags, interrupted
+tagging, true FF and preservation of parallel develop. Red CI, unapproved/stale
+heads, conflicting tags and unavailable policy inventory fail closed. The completion fixture runs two successive releases before manual publication;
+the existing linear graph independently verifies absence of previous-M ancestry.
+
+GitHub Release create/publish is absent from the automatic pipeline. Historical
+asset digest/reconciliation parsers retain regression coverage. Actual GitHub token
+readback is retained separately as `live-release-readiness`; source CI is not live
+operational acceptance. Follow the owner-approved disposable-repository E2E plan in
+`docs/RELEASE_LIFECYCLE.md`; no production release is an implementation test.
 
 Hosted preparation uses `release-preflight` for syntax, changed declarations/policy,
 whole-tree budgets, Python imports and workflow contracts before generation. This

@@ -1,282 +1,120 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/release-promotion.yml
-# Module Type: Protected Release Promotion Workflow
-# Purpose: Inspect an exact qualification, promote through a PR and publish verified assets.
+# Module Type: Automatic Reviewed Release Completion
+# Purpose: Merge and tag exact qualified release heads after one human approval.
 # Responsibilities:
-#   - Keep reader/build jobs isolated from protected publication credentials
-#   - Require manual single-owner environment approval for every release write
-#   - Retain original failed evidence for explicit maintainer exceptions
+#   - React to human PR review without relying on token-created merge or push events
+#   - Finish tagging in the same job and support reruns after an interrupted merge
+#   - Preserve server protections, immutable tags and linear develop history
+#   - Leave GitHub Release publication to the maintainer
 # Author: Rudolf Klusal
-name: Protected release promotion
+name: Automatic reviewed release completion
 
 on:
-  workflow_dispatch:
-    inputs:
-      qualification_run:
-        description: Completed Release qualification run ID (current attempt).
-        required: true
-        type: string
-      candidate_sha:
-        description: Exact 40-character prepared candidate SHA.
-        required: true
-        type: string
-      release_branch:
-        description: Qualified release/v_X.Y[.Z] branch.
-        required: true
-        type: string
-      mode:
-        description: Plan is read-only; promote opens a bot PR for manual owner review and merge; publish is separate; bootstrap only proposes the first release PR.
-        required: true
-        type: choice
-        default: plan
-        options: [plan, promote, publish, bootstrap]
-      manual_review:
-        description: Human acceptance evidence/reference (required for writes).
-        required: false
-        type: string
-      override_ack:
-        description: Read-only plan diagnostics only; red-check override cannot publish.
-        type: boolean
-        default: false
-      override_reason:
-        description: Maintainer reason for an exceptional release.
-        required: false
-        type: string
-      accepted_failures:
-        description: Exact failed/skipped job names, one per line, including the red gate.
-        required: false
-        type: string
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
 
 concurrency:
-  group: release-promotion-${{ inputs.release_branch }}
+  group: release-completion-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
-env:
-  QUALIFICATION_RUN: ${{ inputs.qualification_run }}
-  CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-  RELEASE_BRANCH: ${{ inputs.release_branch }}
-  OVERRIDE_ACK: ${{ inputs.override_ack }}
-  OVERRIDE_REASON: ${{ inputs.override_reason }}
-  ACCEPTED_FAILURES: ${{ inputs.accepted_failures }}
-  MANUAL_REVIEW: ${{ inputs.manual_review }}
-
 jobs:
-  inspect:
-    if: ${{ inputs.mode != 'bootstrap' }}
-    name: Inspect immutable qualification and scope
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      version: ${{ steps.inspect.outputs.version }}
-      source_base: ${{ steps.inspect.outputs.source_base }}
-      winapp_changed: ${{ steps.scope.outputs.winapp_changed }}
-    steps:
-      - name: Require trusted main dispatch
-        run: |
-          test "${GITHUB_REF}" = refs/heads/main
-          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: '22'
-          package-manager-cache: false
-      - name: Download candidate identity from the requested run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUESTED_MODE: ${{ inputs.mode }}
-        run: |
-          node --input-type=module <<'NODE'
-          import {readRequest,validateRequest} from './.github/scripts/release-promotion.mjs';
-          validateRequest({...readRequest(),mode:process.env.REQUESTED_MODE});
-          NODE
-          gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
-      - id: inspect
-        name: Validate all mandatory server-owned jobs and prepared SHA
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_MODE: plan
-          RELEASE_INSPECTION_TARGET: ${{ inputs.mode }}
-        run: node .github/scripts/release-promotion.mjs
-      - name: Retain bounded stale-main recovery evidence
-        if: failure()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: release-main-recovery-inspect
-          path: ${{ runner.temp }}/release-recovery.json
-          if-no-files-found: ignore
-          retention-days: 90
-      - id: scope
-        name: Determine required installer build from complete Git history
-        env:
-          SOURCE_BASE: ${{ steps.inspect.outputs.source_base }}
-        run: |
-          set -euo pipefail
-          paths="$(git diff --name-only "${SOURCE_BASE}" "${CANDIDATE_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
-          if [[ -n "${paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
-
-  package:
-    name: Build and verify public release assets without write credentials
-    needs: inspect
-    if: ${{ inputs.mode == 'publish' }}
+  complete:
+    if: >-
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      startsWith(github.event.pull_request.head.ref, 'release/v_') &&
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' ||
+       github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    name: Complete exact reviewed release and safe develop FF
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          path: tooling
-          persist-credentials: false
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.candidate_sha }}
-          path: candidate
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: zip
-          coverage: none
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: '22'
-          package-manager-cache: false
-      - name: Download complete qualification evidence
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --dir qualification-evidence
-      - name: Check final integrity and build canonical production archive
-        env:
-          SOURCE_BASE: ${{ needs.inspect.outputs.source_base }}
-          RELEASE_VERSION: ${{ needs.inspect.outputs.version }}
-          CANDIDATE_WORKSPACE: ${{ github.workspace }}/candidate
-          RELEASE_ASSETS: ${{ runner.temp }}/release-assets
-          QUALIFICATION_EVIDENCE: ${{ github.workspace }}/qualification-evidence
-        run: node tooling/.github/scripts/release-assets.mjs
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: verified-publication-assets
-          path: ${{ runner.temp }}/release-assets/*
-          if-no-files-found: error
-          retention-days: 30
-
-  installer:
-    name: Build required Windows companion installer
-    needs: inspect
-    if: ${{ inputs.mode == 'publish' && needs.inspect.outputs.winapp_changed == 'true' }}
-    runs-on: windows-2025
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.candidate_sha }}
-          persist-credentials: false
-      - name: Require hosted Inno Setup and build the canonical installer
-        shell: pwsh
-        run: |
-          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (!(Test-Path -LiteralPath $compiler)) { throw 'BLOCKED hosted Inno Setup 6 is unavailable.' }
-          python winapp/build_installer.py --iscc $compiler
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $installers = @(Get-ChildItem -LiteralPath winapp/dist -Filter '*.exe' -File -Recurse)
-          $metadata = @(Get-ChildItem -LiteralPath winapp/dist -Filter 'winapp-update.json' -File -Recurse)
-          if ($installers.Count -ne 1 -or $metadata.Count -ne 1) { throw 'BLOCKED ambiguous installer output.' }
-          $artifactDirectory = Join-Path $env:RUNNER_TEMP 'winapp-release'
-          New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
-          Copy-Item -LiteralPath $installers[0].FullName -Destination $artifactDirectory
-          Copy-Item -LiteralPath $metadata[0].FullName -Destination $artifactDirectory
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: release-winapp-installer
-          path: ${{ runner.temp }}/winapp-release/*
-          if-no-files-found: error
-          retention-days: 30
-
-  apply:
-    name: Owner-approved release PR or publication
-    needs: [inspect, package, installer]
-    if: ${{ always() && inputs.mode != 'plan' && inputs.mode != 'bootstrap' && needs.inspect.result == 'success' && (inputs.mode == 'promote' || (needs.package.result == 'success' && (needs.inspect.outputs.winapp_changed != 'true' || needs.installer.result == 'success'))) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: release-promotion
     permissions:
       contents: write
       pull-requests: write
       actions: read
+      checks: read
     steps:
+      - name: Verify server qualification before executing the release checkout
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only reviewed same-repository bot releases enter this job. Still require
+          # a real successful Actions release identity before checking out its code.
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${CANDIDATE_SHA}/check-runs?per_page=100&filter=all" > "${RUNNER_TEMP}/checks.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          const e=process.env, listing=JSON.parse(readFileSync(e.RUNNER_TEMP+'/checks.json','utf8'));
+          if (listing.total_count>=100 || listing.total_count!==listing.check_runs?.length) throw Error('BLOCKED incomplete checks');
+          const checks=listing.check_runs.filter(c=>c.name==='Release qualification' && c.app?.id===15368 && c.head_sha===e.CANDIDATE_SHA
+            && /^release:[1-9]\d*:[1-9]\d*:[a-f0-9]{40}$/.test(c.external_id)
+            && c.external_id.split(':')[3]===e.CANDIDATE_SHA).sort((a,b)=>b.id-a.id);
+          if (!checks.length || checks[0].status!=='completed' || checks[0].conclusion!=='success') throw Error('BLOCKED exact Q is not green');
+          appendFileSync(e.GITHUB_ENV,'QUALIFICATION_RUN='+checks[0].external_id.split(':')[1]+'\n');
+          NODE
+      - name: Wait for the qualification run to finish if approval arrived immediately
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: timeout 300s gh run watch "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --exit-status --interval 5
+      - name: Bind successful server run and retained Q record before checkout
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${QUALIFICATION_RUN}" > "${RUNNER_TEMP}/qualification-run.json"
+          gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir "${RUNNER_TEMP}/qualification-bootstrap"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const e=process.env, run=JSON.parse(readFileSync(e.RUNNER_TEMP+'/qualification-run.json','utf8'));
+          const record=JSON.parse(readFileSync(e.RUNNER_TEMP+'/qualification-bootstrap/release-candidate.json','utf8'));
+          const listing=JSON.parse(readFileSync(e.RUNNER_TEMP+'/checks.json','utf8'));
+          const identity='release:'+e.QUALIFICATION_RUN+':'+run.run_attempt+':'+e.CANDIDATE_SHA;
+          if (run.path!=='.github/workflows/release-qualification.yml' || run.event!=='push'
+            || run.head_branch!==e.RELEASE_BRANCH || run.repository?.full_name!==e.GITHUB_REPOSITORY
+            || run.status!=='completed' || run.conclusion!=='success' || String(run.id)!==e.QUALIFICATION_RUN
+            || record.repository!==e.GITHUB_REPOSITORY || record.branch!==e.RELEASE_BRANCH
+            || record.candidate_sha!==e.CANDIDATE_SHA || record.run_id!==e.QUALIFICATION_RUN
+            || record.run_attempt!==String(run.run_attempt) || record.ready!==true
+            || record.automated_result!=='success' || record.override!==false
+            || !listing.check_runs.some(c=>c.name==='Release qualification' && c.external_id===identity
+              && c.app?.id===15368 && c.head_sha===e.CANDIDATE_SHA && c.status==='completed' && c.conclusion==='success')) {
+            throw Error('BLOCKED server run or retained qualification does not authorize exact Q checkout');
+          }
+          NODE
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
-      - name: Download exact qualification identity again after approval
+      - name: Revalidate qualification and review, then protected merge, tag and FF
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
-      - uses: actions/download-artifact@v8.0.1
-        if: ${{ inputs.mode == 'publish' }}
-        with:
-          name: verified-publication-assets
-          path: release-assets
-      - uses: actions/download-artifact@v8.0.1
-        if: ${{ inputs.mode == 'publish' && needs.inspect.outputs.winapp_changed == 'true' }}
-        with:
-          name: release-winapp-installer
-          path: release-assets
-      - name: Revalidate protected controls, exact SHA and original CI before writes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_MODE: ${{ inputs.mode }}
-          RELEASE_ASSETS: ${{ github.workspace }}/release-assets
-        run: node .github/scripts/release-promotion.mjs
-      - name: Retain approved-action stale-main recovery decision
-        if: failure()
+        run: node .github/scripts/release-completion.mjs
+      - name: Retain immutable completion identity and reconciliation status
+        if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: release-main-recovery-approved
-          path: ${{ runner.temp }}/release-recovery.json
+          name: release-completion-record
+          path: |
+            ${{ runner.temp }}/release-completion.json
+            ${{ runner.temp }}/release-evidence.json
+            ${{ runner.temp }}/release-evidence.sha256
           if-no-files-found: ignore
           retention-days: 90
-
-  bootstrap:
-    name: Owner-dispatched first-release PR proposal only
-    if: ${{ inputs.mode == 'bootstrap' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    # This existing workflow filename is dispatchable at the reviewed release ref.
-    # Main-only deployment environments cannot authorize a release-ref deployment.
-    # No contents write permission means no main update, tag or publication authority.
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: '22'
-          package-manager-cache: false
-      - name: Read completed exact candidate qualification
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh run download "${QUALIFICATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-qualification-record --dir release-record
-      - name: Verify owner and legacy predecessor and propose the bot PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_MODE: bootstrap
-        run: node .github/scripts/release-promotion.mjs

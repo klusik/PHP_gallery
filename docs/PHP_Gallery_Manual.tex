@@ -2368,7 +2368,7 @@ For~public thumbnail rendering, inspect the~Elements and~Network panels. Respons
 
 Follow \filepath{RELEASE.md} for~the~complete release sequence. Compare the~exact previous stable tag, complete the~release notes and~permanent documentation, and~align all~four maintained manual editions. Rebuild each PDF with the~indexed multi-pass sequence in~\filepath{docs/LATEX_BUILD.md} and~check compiler success, references, index entries, and~layout warnings. Visual PDF review is~reserved for~an~explicit request or~diagnosis of~a~concrete layout problem; routine successful builds need no~additional visual-approval gate.
 
-The commands in this section describe hosted release ownership and the retained local maintainer recovery path. Normal preparation and qualification run on GitHub; agents do not execute these commands locally by default. Local recovery requires an explicit request or genuinely unavailable CI and remains BLOCKED / not CI-qualified until hosted evidence exists. Protected promotion/publication follows the release-promotion workflow described later.
+The commands in this section describe hosted release ownership and the retained local maintainer recovery path. Normal preparation and qualification run on GitHub; agents do not execute these commands locally by default. Local recovery requires an explicit request or genuinely unavailable CI and remains BLOCKED / not CI-qualified until hosted evidence exists. The later review workflow performs protected merge and tagging; GitHub Release publication stays manual.
 
 After the~final edits, generate the~manifest, pass the~release/manifest/whitespace preflight, initialize the~qualification fingerprint, and~freeze the~inputs. Run exactly one central \codeword{--profile=release} audit, directly or~through the~configured disposable workflow fixture. The~audit owns syntax, regression, contracts, browser fixtures, and~release consistency; do~not~add a~second manual test-tree sweep. Attach its report to~the~unchanged fingerprint and~report coverage gaps and~pending operational reviews separately.
 
@@ -2376,7 +2376,7 @@ Create a~deployment folder or~ZIP only when explicitly requested. The~helpers re
 
 During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
 
-For~GitHub-hosted preparation, push a~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z} branch, or~dispatch its~release-qualification workflow manually from~that branch. The~workflow prepares and~commits an~approved deterministic candidate back to~the~same branch, compiles all~four PDFs together, and~runs qualification on~the~resulting exact commit. It~does not~merge to~\codeword{main}, create a~tag, or~publish a~release.
+For~GitHub-hosted preparation, push a~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z} branch. The~workflow prepares and~commits an~approved deterministic candidate back to~the~same branch, compiles all~four PDFs together, and~runs qualification on~the~resulting exact commit. It~does not~merge to~\codeword{main}, create a~tag, or~publish a~release.
 
 \section{Making the~gallery feel fast}
 \label{sec:performance}
@@ -2552,81 +2552,45 @@ the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record command
 \subsection{GitHub-hosted release preparation and~qualification}
 
 
-% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
-\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+\subsubsection{Automatic reviewed release lifecycle}
 
-Completed feature work is~squashed into one logical commit and~qualified again
-at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
-non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
-provide this guarantee. Existing history stays intact and~new develop commits
-remain linear. Agents never update develop or~main directly.
+Create a~new \codeword{release/v_X.Y[.Z]} branch from~current develop and~push it.
+The~workflow adds an~immutable origin directly after that selected commit,
+then runs Stage~A/B, existing AI notes, locked TinyTeX, all four manuals,
+manifest generation and~complete exact-Q hosted qualification. Historical origins
+and~published \codeword{v\_0.126} remain unchanged.
 
-The~release origin's only parent is~the~explicit selected develop commit D0.
-Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
-is~never rewritten. Tag object SHA, peeled published-main commit P, previous
-release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
-\codeword{v\_0.125} legacy pin records unknown historical qualification;
-it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
-scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
-locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+After qualification and~manual-publication assets succeed, the~bot opens one PR
+to~main. The~maintainer approves its~exact Q head once. A~human review event starts
+protected standard merge completion; no~workflow form or~deployment approval
+is~required. The~result must have ordered parents [P,Q] and~Q's complete Git tree.
+The~same job creates the~immutable version tag on~M. A~retry after merge verifies
+the~full PR detail and~creates only a~missing tag; conflicting tags fail closed.
 
-The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
-qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
-PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
-wrong parents/tree, stale review or~missing/red CI stops publication.
+GitHub Release creation and~publication remain manual. Download
+\codeword{manual-release-assets} for~the~production ZIP, four PDFs, notes,
+qualification archive and~SHA-256 checksums. A~Windows installer is~built only
+when shipped WinApp content changed; its~independent version is~preserved.
 
-After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
-without a~new commit. The~FF verifier independently rejects new merge commits.
-Parallel develop work requires a~single-parent L over its~observed head,
-complete three-way content proof, retained feature history,
-explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
-prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
-pushes develop. Completion is~\codeword{RECONCILED\_FF} or
-\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
-or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
-Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
-
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
-
-For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
-filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
-read-only contents permission permits only a~bot PR proposal. The~owner verifies
-workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
-publisher then exists on~main before a~separate publish approval. Never execute
-the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
-Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
-
-Future releases use \ui{Start New Release}: owner-approved version/optional develop
-SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
-to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
-GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
-block concurrent tag/source changes; an~origin created before a~detected race stays
-immutable for~explicit owner recovery.
-
-GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
-fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
-pushes a~reviewed finalization commit and~fresh full push qualification verifies
-its~exact SHA. Required-check app binding and~actual bot PR eligibility need
-live acceptance; an~external App/event bridge is~a~separate owner decision.
-Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
-GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
-matrix rather than~inferring qualification from~a~navigation URL.
-The~full operator contract and~remaining live tests are~in
-\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
+Develop is~advanced only through a~true non-force fast-forward to~qualified Q,
+with active linear-history/CI protection. Parallel develop work stops that
+independent synchronization without changing the~completed tag. No~merge,
+rebase or~replay commit is~created on~develop. Previous M need not~be~an~ancestor
+of~the~next Q. Missing policy visibility, unavailable evidence, stale approval,
+red CI or~different parents/trees stop completion. Fixture CI does~not~prove
+live GitHub routing or~protected writes; isolated owner-approved acceptance
+is~documented in~\filepath{docs/RELEASE_LIFECYCLE.md}. Agents never perform
+protected integration or~a~production release during feature implementation.
 
 The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. Its~ordered contract is:
 
 \begin{enumerate}
-  \item \textbf{Branch and~preflight.} A~push to~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z}, or~a~manual dispatch on~that branch, starts preparation. An~optional dispatched version must match the~branch. Preparation rejects an~already existing \codeword{v_X.Y[.Z]} tag, identifies the~previous release tag for~its comparison base, and~runs \codeword{release-preflight} for~source syntax, declarations, inventory, Python policy, and~workflow contracts before AI or~TeX provisioning.
+  \item \textbf{Branch and~preflight.} A~push to~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z}, starts preparation. Preparation rejects an~already existing \codeword{v_X.Y[.Z]} tag, identifies the~previous release tag for~its comparison base, and~runs \codeword{release-preflight} for~source syntax, declarations, inventory, Python policy, and~workflow contracts before AI or~TeX provisioning.
   \item \textbf{Deterministic metadata.} The~candidate helper aligns the~runtime version, release metadata, patch-note scaffold, and~all~four manual version/date markers, and~refreshes the~production inventory. It~does not~write explanatory TeX content. Preserve previously completed editorial notes and~keep the~four manuals semantically aligned before release.
   \item \textbf{Editorial notes.} A~complete, maintainer-written version section is~kept unchanged. If~it~is~missing or~unfinished, the~workflow uses GitHub Copilot CLI with~\codeword{gpt-6-luna}, falling back to~automatic model selection only when that model is~unavailable. A~configured \codeword{COPILOT_GITHUB_TOKEN} is~required for~generation. The~complete Git text diff is~included without byte truncation, excluding generated and~binary release artifacts. Separate temporary output files prevent pipe deadlocks. Each Git command has~a~30-second deadline; the~complete evidence step has~a~two-minute limit. Metadata or~diagnostic overflow stops preparation explicitly. Strict Markdown validation prevents placeholders, wrong versions, extraneous sections, or~assistant commentary from~becoming release notes. Generation or~validation failure blocks qualification rather than~publishing incomplete prose. The~bounded evidence helper \filepath{.github/scripts/patch_notes_ai_chunks.php} sends every original diff byte exactly once in~contiguous UTF-8-safe slices of~at~most 100,000~bytes. A~SHA-256 manifest verifies every slice and~the~original evidence; each slice requires a~valid digest of~at~most 6,500~bytes. When the~combined digests exceed the~180,000-byte final prompt budget, further bounded reduction passes consolidate all digests without omitting any slice. Per-request Copilot deadlines, missing responses, corrupted hashes, or~invalid final Markdown stop qualification; no~source diff is~silently sampled or~truncated. The~generation prompt and~validator share the~mandatory main headings \codeword{Highlights}, \codeword{Technical Details}, and~\codeword{User Impact}, including for~test, documentation, or~tooling releases. Only irrelevant optional subsections may~be~omitted. State evidenced maintainer impact or~unchanged public/Admin behavior without inventing product benefits. Inline heading mentions or~incorrect heading levels are~rejected. On~AI generation or~validation failure, the~available raw model prose is~retained for~seven days in~the~Actions artifact \codeword{release-notes-rejected-response}; prompts and~authentication diagnostics are~excluded. Invalid prose still blocks preparation and~is~never applied.
   \item \textbf{Reproducible documentation.} The~workflow provisions checksum-locked TinyTeX and~the~frozen TeX Live package set, reusing a~cache keyed by~its lock and~package inventory when valid. It~builds English, Czech, German, and~Swedish manuals with~\codeword{pdflatex}, \codeword{makeindex}, and~two further \codeword{pdflatex} passes per~edition. The~release-metadata timestamp fixes the~PDF and~manifest build epoch. The~final inventory, integrity manifest, and~release consistency are~verified after compilation.
   \item \textbf{Safe branch write-back.} Only approved preparation files are~staged. A~changed remote branch prevents a~stale push; an~identical already-prepared tree may~reuse its~current commit. Preparation commits back to~the~same release branch, not~to~\codeword{main}.
-  \item \textbf{Exact-candidate gate.} The~reusable central CI workflow checks out the~prepared commit SHA and~runs the~complete release matrix, including required Chromium coverage. The~aggregate gate succeeds only if~preparation, editorial notes, and~the~full matrix succeed and~the~branch still points to~that exact commit. A~green gate leaves promotion, merge, tagging, and~publication under maintainer control.
+  \item \textbf{Exact-candidate gate.} The~reusable central CI workflow checks out the~prepared commit SHA and~runs the~complete release matrix, including required Chromium coverage. The~aggregate gate succeeds only if~preparation, editorial notes, and~the~full matrix succeed and~the~branch still points to~that exact commit. After checked assets are~ready, a~green gate opens the~bot PR; one human approval triggers automatic protected merge and~tagging. GitHub Release publication stays manual.
 \end{enumerate}
 
 See \filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md}, and~\filepath{docs/LATEX_BUILD.md} for~the~operational details. Do~not~run ordinary PDF compilation or~a~separate release audit merely because a~TeX source was edited.

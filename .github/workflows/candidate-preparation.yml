@@ -52,6 +52,16 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      - name: Inspect live release control visibility with the existing workflow token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-readiness.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: live-release-readiness
+          path: ${{ runner.temp }}/release-readiness.json
+          if-no-files-found: error
+          retention-days: 90
       - id: guard
         name: Check branch identity and source provenance
         shell: bash

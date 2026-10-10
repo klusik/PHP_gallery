@@ -1,0 +1,292 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: .github/scripts/release-completion.mjs
+ * Module Type: Automatic Release Completion
+ * Purpose: Complete a qualified release after its sole human PR approval.
+ * Responsibilities:
+ *   - Bind PR creation, protected merge and immutable tag to the same qualified Q
+ *   - Recheck predecessor, origin, review and effective server controls before writes
+ *   - Fast-forward develop only when its exact current head is an ancestor of Q
+ *   - Retain completion evidence without creating or publishing a GitHub Release
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {resolve,join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
+import {api,command,output,validateRequest,verifyQualification,fetchJobs,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
+import {originPath,verifyReleaseOrigin,peelReleaseTag} from './release-origin.mjs';
+import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,qualificationCheckBinding} from './release-owner-authorization.mjs';
+import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs';
+import {verifyPreparedAssets} from './release-asset-integrity.mjs';
+
+/** Exact qualification, provenance, lifecycle and installer-impact fields owned by the gate.
+ * @typedef {import('./release-promotion.mjs').ReleaseRecord} CompletionRecord
+ */
+/** Recursive transport values; completion independently validates consumed server fields.
+ * @typedef {import('./release-promotion.mjs').JsonValue} CompletionJson
+ */
+/** API transport with literal verb and optional JSON body.
+ * @typedef {function(string,string=,(CompletionJson|null)=):CompletionJson} CompletionApi
+ */
+/** Literal bounded Git and gh command transport with optional UTF-8 stdin.
+ * @typedef {function(string,string[],(string|null)=):string} CompletionCommand
+ */
+/** Permanent merge/approval/tag evidence uploaded alongside manual publication assets.
+ * @typedef {CompletionRecord & {schema_version:number,final_main_sha:string,final_tree:string,tag:string,
+ * tag_object_sha:string,tag_object_type:string,publication:string,promotion_pr:{number:number,url:string,author:string,
+ * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}}}} CompletionEvidence
+ */
+/** Tagged release and independently observed synchronization, including permanent publication proof.
+ * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,detail:string,evidence:CompletionEvidence}} CompletionResult
+ */
+
+/** Return an ordinary read-only qualification request derived from retained evidence.
+ * @param {{run_id:string,candidate_sha:string,branch:string}} record Exact server-bound candidate record.
+ * @returns {{runId:string,candidate:string,branch:string,mode:string,override:boolean,reason:string,acceptedFailures:string[],manualReview:string}} No-override verification inputs.
+ */
+export function qualificationRequest(record) {
+    return {runId:record.run_id,candidate:record.candidate_sha,branch:record.branch,mode:'plan',
+        override:false,reason:'',acceptedFailures:[],manualReview:''};
+}
+
+/** Find the unambiguous latest release check and download its bound qualification artifact.
+ * @param {string} repository Exact repository.
+ * @param {string} sha Exact Q candidate.
+ * @param {CompletionApi} call Server API reader.
+ * @param {CompletionCommand} execute Literal command adapter.
+ * @returns {CompletionRecord} Parsed record; full qualification and provenance are checked separately.
+ */
+export function loadQualification(repository,sha,call=api,execute=command) {
+    const checks=call('repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all');
+    if (!Array.isArray(checks.check_runs) || checks.total_count!==checks.check_runs.length || checks.total_count>=100) {
+        throw new Error('BLOCKED incomplete qualification check inventory.');
+    }
+    const candidates=checks.check_runs.filter(check=>check.name==='Release qualification'
+        && check.app?.id===15368 && check.head_sha===sha && qualificationCheckBinding(check.external_id)?.kind==='release')
+        .sort((a,b)=>b.id-a.id);
+    const check=candidates[0];
+    const binding=qualificationCheckBinding(check?.external_id);
+    if (!binding || check.status!=='completed' || check.conclusion!=='success'
+        || candidates.filter(value=>value.id===check.id).length!==1) throw new Error('BLOCKED latest exact release qualification is missing or red.');
+    const run=call('repos/'+repository+'/actions/runs/'+binding.runId);
+    if (run.run_attempt!==binding.attempt || run.status!=='completed' || run.conclusion!=='success') {
+        throw new Error('BLOCKED qualification attempt is unfinished, red or superseded.');
+    }
+    const directory=mkdtempSync(join(tmpdir(),'gallery-release-record-'));
+    try {
+        execute('gh',['run','download',binding.runId,'--repo',repository,'--name','release-qualification-record','--dir',directory]);
+        const record=JSON.parse(readFileSync(join(directory,'release-candidate.json'),'utf8'));
+        if (record.run_id!==binding.runId || record.run_attempt!==String(binding.attempt)
+            || record.candidate_sha!==sha) throw new Error('BLOCKED downloaded record differs from exact check identity.');
+        return record;
+    } finally {rmSync(directory,{recursive:true,force:true});}
+}
+
+/** Verify complete successful hosted qualification, exact release head and immutable origin.
+ * @param {CompletionRecord} record Retained candidate and predecessor identities.
+ * @param {string} repository Expected repository.
+ * @param {{api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,publishedMainSha?:string,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers and exact predecessor evidence.
+ * @returns {void} Throws for any stale source, red coverage, moved predecessor or changed origin.
+ */
+export function verifyCandidate(record,repository,adapters={}) {
+    const call=adapters.api ?? api;
+    const git=adapters.git ?? command;
+    const request=qualificationRequest(record);
+    const run=call('repos/'+repository+'/actions/runs/'+record.run_id);
+    const head=call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha;
+    verifyQualification(request,run,adapters.jobs ?? fetchJobs(repository,record.run_id,run.run_attempt,record.candidate_sha),record,repository,head);
+    requireQualificationChecks(call,repository,request,record.run_attempt);
+    const origin=JSON.parse(git('git',['show',record.candidate_sha+':'+originPath(record.version)]));
+    const checked=verifyReleaseOrigin(origin,record.version,record.candidate_sha,repository,adapters);
+    for (const [key,value] of Object.entries(checked)) {
+        if (record[key]!==value) throw new Error('BLOCKED qualified provenance changed: '+key);
+    }
+}
+
+/** Create or reuse one bot PR only after the preparation gate and assets succeed.
+ * @param {CompletionRecord} record Current run's successful exact-Q record.
+ * @param {string} repository Expected repository.
+ * @param {string} notes Validated target-version patch notes.
+ * @param {{api?:CompletionApi,evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers and exact predecessor evidence.
+ * @returns {{number:number,html_url:string}} Exact PR awaiting the sole owner approval.
+ */
+export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
+    const call=adapters.api ?? api;
+    if (record.ready!==true || record.automated_result!=='success' || record.override!==false
+        || record.repository!==repository || !notes.trim()) throw new Error('BLOCKED incomplete release gate or patch notes.');
+    const request=qualificationRequest(record);
+    if (validateRequest(request)!==record.version) throw new Error('BLOCKED record version differs from release branch.');
+    requireQualificationChecks(call,repository,request,record.run_attempt);
+    const base=requireCurrentMainBase(request,repository,{...adapters,api:call,record});
+    if (call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {
+        throw new Error('BLOCKED stale Q before PR creation.');
+    }
+    const pulls=call('repos/'+repository+'/pulls?state=all&base=main&head='
+        +encodeURIComponent(repository.split('/')[0]+':'+record.branch)+'&per_page=100');
+    if (!Array.isArray(pulls) || pulls.length>1) throw new Error('BLOCKED ambiguous release PR inventory.');
+    let pr=pulls[0];
+    if (pr) pr=call('repos/'+repository+'/pulls/'+pr.number);
+    if (pr && pr.state!=='open' && !pr.merged_at) throw new Error('BLOCKED release PR was closed without merge.');
+    if (!pr) pr=call('repos/'+repository+'/pulls','POST',{title:'Release v_'+record.version,head:record.branch,base:'main',
+        maintainer_can_modify:false,body:'Qualified head Q: `'+record.candidate_sha+'`\n\n'
+            +'[Complete qualification and manual publication assets](https://github.com/'+repository+'/actions/runs/'+record.run_id+')\n\n'
+            +'Approve this exact head once. The review workflow performs a protected standard merge, immutable tag and safe develop FF. '
+            +'GitHub Release publication remains manual.\n\n'+notes+'\n\nRefs #101, #133'});
+    requireBotPullRequest(pr,repository,record.candidate_sha,'main');
+    if (pr.base?.sha!==base || requireCurrentMainBase(request,repository,{...adapters,api:call,record})!==base
+        || call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {
+        throw new Error('BLOCKED main or Q changed during PR creation.');
+    }
+    return {number:pr.number,html_url:pr.html_url};
+}
+
+/** Wait briefly for GitHub's asynchronous test merge without accepting changed P or Q.
+ * @param {string} repository Exact repository.
+ * @param {number} number Exact server PR number.
+ * @param {string} candidate Immutable qualified Q SHA.
+ * @param {string} previousMain Expected first parent P.
+ * @param {CompletionApi} call Read-only server adapter.
+ * @param {function(number):Promise<void>} pause Delay adapter receiving milliseconds; the default uses a timer.
+ * @returns {Promise<void>} Resolves for an available preview or already merged PR; rejects conflicts, drift or a bounded unavailable preview.
+ */
+export async function waitForMergeability(repository,number,candidate,previousMain,call=api,pause=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds))) {
+    // GitHub computes the test merge asynchronously. Thirty two-second waits
+    // cover short metadata propagation without adding a second human action.
+    for (let attempt=0;attempt<30;attempt++) {
+        const pr=call('repos/'+repository+'/pulls/'+number);
+        requireBotPullRequest(pr,repository,candidate,'main');
+        if (pr.merged) return;
+        if (pr.state!=='open' || pr.base.sha!==previousMain
+            || call('repos/'+repository+'/git/ref/heads/main').object?.sha!==previousMain) {
+            throw new Error('BLOCKED main or PR changed while waiting for merge preview.');
+        }
+        if (pr.mergeable===false) throw new Error('BLOCKED release PR has merge conflicts.');
+        if (pr.mergeable===true && /^[a-f0-9]{40}$/.test(pr.merge_commit_sha ?? '')) return;
+        await pause(2000);
+    }
+    throw new Error('BLOCKED GitHub merge preview remained unavailable within the bounded wait.');
+}
+
+/** Complete one reviewed release using protected merge and a create-only immutable tag.
+ * @param {CompletionRecord} record Fully qualified exact-Q identities.
+ * @param {string} repository Expected repository.
+ * @param {number} number Server PR number derived from the review event.
+ * @param {{api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated server, Git and bound predecessor readers.
+ * @returns {CompletionResult} Completion with independently reported develop synchronization and immutable manual-publication evidence.
+ */
+export function completeRelease(record,repository,number,adapters={}) {
+    const call=adapters.api ?? api;
+    const git=adapters.git ?? command;
+    let pr=call('repos/'+repository+'/pulls/'+number);
+    requireBotPullRequest(pr,repository,record.candidate_sha,'main');
+    if (pr.head.ref!==record.branch || pr.base.repo?.full_name!==repository) throw new Error('BLOCKED foreign PR identity.');
+    const request=qualificationRequest(record);
+    const main=call('repos/'+repository+'/git/ref/heads/main').object?.sha;
+    const target=call('repos/'+repository+'/git/matching-refs/tags/v_'+record.version);
+    if (!Array.isArray(target)) throw new Error('BLOCKED target tag inventory unavailable.');
+    if (!pr.merged && target.some(ref=>ref.ref==='refs/tags/v_'+record.version)) {
+        throw new Error('BLOCKED conflicting target tag exists before merge.');
+    }
+    verifyCandidate(record,repository,{...adapters,publishedMainSha:pr.merged ? pr.merge_commit_sha : undefined});
+    requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
+    const reviews=call('repos/'+repository+'/pulls/'+number+'/reviews?per_page=100');
+    const approval=effectiveOwnerReview(reviews,{...pr,merged_at:pr.merged_at ?? new Date().toISOString()},repository.split('/')[0],record.candidate_sha);
+    if (!approval) throw new Error('BLOCKED sole human owner approval of exact Q is missing.');
+    if (!pr.merged) {
+        if (pr.state!=='open' || pr.base.sha!==record.initial_main_sha || main!==record.initial_main_sha
+            || !pr.mergeable || !/^[a-f0-9]{40}$/.test(pr.merge_commit_sha ?? '')) throw new Error('BLOCKED main drift or release is not mergeable.');
+        const preview=call('repos/'+repository+'/commits/'+pr.merge_commit_sha);
+        const candidate=call('repos/'+repository+'/commits/'+record.candidate_sha);
+        if (preview.parents?.length!==2 || preview.parents[0].sha!==record.initial_main_sha
+            || preview.parents[1].sha!==record.candidate_sha || preview.commit.tree.sha!==candidate.commit.tree.sha) {
+            throw new Error('BLOCKED GitHub test merge does not preserve [P,Q] and tree(Q).');
+        }
+        requireCurrentMainBase(request,repository,{...adapters,api:call,record});
+        requireQualificationChecks(call,repository,request,record.run_attempt);
+        if (call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) throw new Error('BLOCKED Q advanced before merge.');
+        const merged=call('repos/'+repository+'/pulls/'+number+'/merge','PUT',{sha:record.candidate_sha,merge_method:'merge',
+            commit_title:'Release v_'+record.version});
+        if (merged.merged!==true || !/^[a-f0-9]{40}$/.test(merged.sha ?? '')) throw new Error('BLOCKED server refused protected merge.');
+        pr=call('repos/'+repository+'/pulls/'+number);
+        if (pr.merge_commit_sha!==merged.sha) throw new Error('BLOCKED merge result differs from PR detail.');
+    }
+    const observed=inspectMergedPromotion(request,repository,{...adapters,api:call,record});
+    if (observed.pr.number!==number) throw new Error('BLOCKED merged PR identity changed.');
+    verifyCandidate(record,repository,{...adapters,publishedMainSha:observed.main.sha});
+    const tag='v_'+record.version;
+    const tags=call('repos/'+repository+'/git/matching-refs/tags/'+tag);
+    if (!Array.isArray(tags)) throw new Error('BLOCKED immutable tag inventory unavailable.');
+    const existing=tags.find(ref=>ref.ref==='refs/tags/'+tag);
+    if (existing) {
+        if (peelReleaseTag(call,repository,tag).commit_sha!==observed.main.sha) throw new Error('BLOCKED conflicting immutable release tag.');
+    } else {
+        // Recheck all mutable identities immediately before the create-only tag operation.
+        inspectMergedPromotion(request,repository,{...adapters,api:call,record});
+        requireQualificationChecks(call,repository,request,record.run_attempt);
+        if (call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {
+            throw new Error('BLOCKED Q changed between merge and tag.');
+        }
+        call('repos/'+repository+'/git/refs','POST',{ref:'refs/tags/'+tag,sha:observed.main.sha});
+    }
+    const identity=peelReleaseTag(call,repository,tag);
+    if (identity.commit_sha!==observed.main.sha) throw new Error('BLOCKED tag differs after creation.');
+    const evidence={...record,schema_version:1,final_main_sha:observed.main.sha,final_tree:observed.main.commit.tree.sha,
+        tag,tag_object_sha:identity.tag_object_sha,tag_object_type:identity.tag_object_type,publication:'MANUAL_PENDING',
+        promotion_pr:{number:observed.pr.number,url:observed.pr.html_url,author:observed.pr.user.login,
+            reviewed_sha:record.candidate_sha,merge_commit_sha:observed.pr.merge_commit_sha,
+            merged_at:observed.pr.merged_at,approval:observed.ownerReview}};
+    const result={state:'TAGGED',tag,main_sha:observed.main.sha,candidate_sha:record.candidate_sha,synchronization:'PENDING',detail:'',evidence};
+    // Tag completion remains valid if a concurrent feature prevents the independent develop FF.
+    try {
+        requireOwnerRuleset(call,repository,'develop','Reviewed main-to-develop release reconciliation','Complete required CI matrix');
+        const develop=call('repos/'+repository+'/git/ref/heads/develop').object?.sha;
+        if (develop===record.candidate_sha) result.synchronization='RECONCILED_FF';
+        else if (!isAncestor(call,repository,develop,record.candidate_sha)) {
+            result.synchronization='BLOCKED_DEVELOP_ADVANCED';result.detail='Current develop '+develop+' is not an ancestor of qualified Q; no merge or rebase was attempted.';
+        } else {
+            git('git',['fetch','origin','refs/heads/develop']);
+            verifyFastForwardHistory(record.selected_develop_sha,develop,record.candidate_sha,git);
+            requireQualificationChecks(call,repository,request,record.run_attempt);
+            if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==develop) throw new Error('BLOCKED develop raced before FF.');
+            // Server enforces its required check on Q and rejects every non-fast-forward update.
+            git('git',['push','origin',record.candidate_sha+':refs/heads/develop']);
+            if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==record.candidate_sha) throw new Error('BLOCKED develop differs after FF.');
+            result.synchronization='RECONCILED_FF';
+        }
+    } catch (error) {result.synchronization='BLOCKED_DEVELOP_POLICY_OR_RACE';result.detail=error.message;}
+    return result;
+}
+
+/** Create a qualified PR or finish the exact review-event candidate and retain completion evidence.
+ * @returns {Promise<void>} Opens a PR or awaits its merge preview and performs reviewed merge/tag/FF; never creates a GitHub Release.
+ */
+export async function main() {
+    const repository=process.env.GITHUB_REPOSITORY ?? '';
+    if (process.env.RELEASE_ACTION==='open') {
+        const record=JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD),'utf8'));
+        const notes=readFileSync(resolve(process.env.RELEASE_NOTES),'utf8');
+        verifyPreparedAssets(resolve(process.env.RELEASE_ASSETS),record.candidate_sha,record.source_base);
+        const pr=openQualifiedPullRequest(record,repository,notes);
+        output('GITHUB_STEP_SUMMARY','Approve the exact qualified release PR once: '+pr.html_url);
+        return;
+    }
+    const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
+    const pr=event.pull_request;
+    if (!['pull_request_review','pull_request'].includes(process.env.GITHUB_EVENT_NAME)
+        || !pr || !Number.isSafeInteger(pr.number)) throw new Error('BLOCKED release PR lifecycle event required.');
+    const record=loadQualification(repository,pr.head.sha);
+    await waitForMergeability(repository,pr.number,record.candidate_sha,record.initial_main_sha);
+    const result=completeRelease(record,repository,pr.number);
+    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-completion.json'),JSON.stringify(result,null,2)+'\n');
+    const proof=JSON.stringify(result.evidence,null,2)+'\n';
+    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.json'),proof);
+    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.sha256'),createHash('sha256').update(proof).digest('hex')+'  release-evidence.json\n');
+    output('GITHUB_STEP_SUMMARY',JSON.stringify(result,null,2));
+}
+if (process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
+    main().catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1;});
+}

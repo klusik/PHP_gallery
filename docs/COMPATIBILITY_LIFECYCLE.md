@@ -699,3 +699,26 @@ use normal durable qualification evidence. Regression: release_origin_test.mjs a
 linear_release_graph_test.mjs, registered in the central audit. Direct CLI release
 notes retain their explicit tag-based default; hosted preparation supplies verified
 release-side SHA and checks tree equality. Direct CLI usage is unknown.
+
+## Historical release evidence after automatic lifecycle simplification
+
+Release tooling owns permanent validation of existing schema-v1 origins,
+annotated/lightweight tags, digest-checked publication assets and prior linear
+reconciliation records. These protect immutable releases including v_0.126 and
+the explicit v_0.125 UNKNOWN_LEGACY pin; old records are not regenerated.
+Usage is unknown. Retire a parser only after inventorying all retained release
+records and proving replacement validation against original bytes and fixtures.
+Missing legacy evidence never becomes approval.
+
+New tagged releases may precede manual GitHub Release publication. Their owner is
+`release-origin.mjs`; the protected behavior is valid successor initialization
+from previous release-side Q without previous-M ancestry or automatic publication.
+Complete exact hosted qualification plus the bound reviewed merge is mandatory;
+unavailable or expired evidence blocks initialization. This remains supported
+while manual GitHub publication is the normal contract. The real-Git linear and
+completion contracts cover parent/tree identity and independent publication.
+
+Permanent repairs from hotfix `9d187d3663f96f7fa10451001d61ddb31e276479` are recorded
+in `docs/RELEASE_LIFECYCLE.md`. No hardcoded recovery identity, attestation comment
+or one-off environment is part of the normal path. Its cleanup stays PENDING
+until final CI and durable transfer are proven.

@@ -99,6 +99,9 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
         throw new Error('BLOCKED '+branch+' required owner ruleset is inactive or ambiguous.');
     }
     const installed=call(prefix+'/rulesets/'+candidates[0].id);
+    if (!Array.isArray(installed?.bypass_actors)) {
+        throw new Error('BLOCKED '+branch+' bypass-actor inventory is unavailable to the existing token; a separately approved read-only policy source is required.');
+    }
     if (installed?.name !== name || installed.enforcement !== 'active'
         || installed.target !== 'branch' || installed.source !== repository
         || !Array.isArray(installed.bypass_actors) || installed.bypass_actors.length !== 0
@@ -176,25 +179,4 @@ export function effectiveOwnerReview(reviews,pr,owner,sha) {
         || !Number.isInteger(latest.review.id) || latest.review.id < 1) return null;
     return {id:latest.review.id,reviewer:owner,commit_sha:sha,
         submitted_at:latest.review.submitted_at,url:latest.review.html_url ?? null};
-}
-
-/** Authorize a token-created qualification only through a completed owner initialization run.
- * @param {function(string):JsonValue} call Read-only GitHub API.
- * @param {string} repository Exact repository.
- * @param {string} runId Parent Start New Release run ID.
- * @param {{branch:string,origin_sha:string,selected_develop_sha:string,owner:string,run_id:string,run_attempt:string}} record Downloaded complete initialization artifact.
- * @param {string} branch Actual qualification branch.
- * @param {string} originSha Git-proven origin introduction commit.
- * @returns {void} Throws unless the exact origin was created by the successfully approved owner workflow.
- */
-export function requireInitializationHandoff(call,repository,runId,record,branch,originSha) {
-    if (!/^[1-9]\d*$/.test(runId) || record.run_id!==runId || record.branch!==branch
-        || record.origin_sha!==originSha || record.owner!==repository.split('/')[0]
-        || !/^[1-9]\d*$/.test(record.run_attempt)) throw new Error('BLOCKED unbound initialization handoff.');
-    const run=call('repos/'+repository+'/actions/runs/'+runId+'/attempts/'+record.run_attempt);
-    if (run.path!=='.github/workflows/start-new-release.yml' || run.event!=='workflow_dispatch'
-        || run.head_branch!=='main' || run.actor?.login!==record.owner
-        || run.run_attempt!==Number(record.run_attempt) || run.status!=='completed' || run.conclusion!=='success') {
-        throw new Error('BLOCKED initialization is not a completed owner-approved main workflow.');
-    }
 }
