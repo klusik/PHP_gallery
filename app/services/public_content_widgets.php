@@ -82,7 +82,7 @@ final class PublicWidgetInvalidField extends InvalidArgumentException
 /**
  * Validate a widget identifier without converting or accepting arbitrary SQL keys.
  *
- * @param mixed $value Submitted or persisted value.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Submitted or persisted value.
  * @return string Lowercase 32-character identifier.
  */
 function public_widget_id(mixed $value): string
@@ -96,7 +96,7 @@ function public_widget_id(mixed $value): string
 /**
  * Enforce an explicitly supported web destination without executable schemes.
  *
- * @param mixed $input Administrator-authored Markdown link target.
+ * @param scalar|array<array-key,mixed>|object|resource|null $input Administrator-authored Markdown link target.
  * @return string Valid internal site path/fragment or external HTTP(S) URL.
  */
 function public_widget_safe_url(mixed $input): string
@@ -222,7 +222,7 @@ function public_widget_normalize(array $input): array
 /**
  * Validate the revision supplied with a concurrent editor mutation.
  *
- * @param mixed $revision Submitted revision, not a source of database authority.
+ * @param scalar|array<array-key,mixed>|object|resource|null $revision Submitted revision, not a source of database authority.
  * @return int Positive optimistic revision.
  */
 function public_widget_revision(mixed $revision): int
@@ -264,7 +264,7 @@ function public_widget_create(array $input): string
  * Save one editor draft only if no other administrator has changed the widget.
  *
  * @param string $widgetId Validated stable identifier.
- * @param mixed $revision Editor's expected revision.
+ * @param scalar|array<array-key,mixed>|object|resource|null $revision Editor's expected revision.
  * @param array<string,mixed> $input Complete authoring values.
  * @return int Next revision after a successful conditional update.
  */
@@ -300,7 +300,7 @@ function public_widget_duplicate(string $widgetId): string
  * Delete an exact version of a widget after controller-confirmed user intent.
  *
  * @param string $widgetId Widget selected by its administrator.
- * @param mixed $revision Current editor revision.
+ * @param scalar|array<array-key,mixed>|object|resource|null $revision Current editor revision.
  * @return void Throws on a stale or absent row.
  */
 function public_widget_delete(string $widgetId, mixed $revision): void
