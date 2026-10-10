@@ -127,7 +127,9 @@ function public_widget_safe_url(mixed $input): string
 /**
  * Ensure authored Markdown link tokens contain only safe destinations.
  *
- * Recognize a bounded single balanced parenthesis group inside link destinations,\n * matching the shared output recognizer (for example `javascript:alert(1)`).\n * Non-Markdown plain text is always HTML-escaped by the eventual renderer.
+ * Recognize a bounded single balanced parenthesis group inside link destinations,
+ * matching the shared output recognizer (for example `javascript:alert(1)`).
+ * Non-Markdown plain text is always HTML-escaped by the eventual renderer.
  *
  * @param string $content UTF-8 authored Markdown source.
  * @return void Throws on unsupported or malicious Markdown link destinations.
@@ -414,7 +416,9 @@ function public_widget_emphasis_html(string $text): string
 /**
  * Resolve recognized Markdown links into safe markup without marker-token injection.
  *
- * Link recognition accepts bounded balanced parentheses in URLs, matching\n * the write-side link validator; every matched destination is revalidated.\n * External links intentionally open in a new tab; site-local routes and fragments
+ * Link recognition accepts bounded balanced parentheses in URLs, matching
+ * the write-side link validator; every matched destination is revalidated.
+ * External links intentionally open in a new tab; site-local routes and fragments
  * remain in the current tab. Invalid or unrecognized Markdown remains inert text.
  *
  * @param string $text Untrusted Markdown inline content.
