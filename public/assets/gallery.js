@@ -53,6 +53,7 @@
  */
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261010-visual-editor-draft-availability';
+import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261010-widgets-v1';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
@@ -199,6 +200,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryDownload();
     setupBackToTopButton();
     setupThemeOverrideForm();
+    setupAdminPublicWidgets();
     setupHeroTagDisclosure();
     setupFaviconCropper();
     setupTagSuggestions();

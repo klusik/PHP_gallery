@@ -780,6 +780,7 @@
         "public/assets/gallery-modules/admin-nested-tabs.js",
         "public/assets/gallery-modules/admin-openai-text-assist.js",
         "public/assets/gallery-modules/admin-operation-keys.js",
+        "public/assets/gallery-modules/admin-public-widgets.js",
         "public/assets/gallery-modules/admin-operations.js",
         "public/assets/gallery-modules/admin-panel-drafts.js",
         "public/assets/gallery-modules/admin-panel-lifecycle.js",
