@@ -355,6 +355,10 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'public_content_widget_public_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'admin_side_panel_created_gallery_refresh_test.mjs' => [],
         'admin_side_panel_delegation_test.mjs' => [],
         'admin_side_panel_gallery_refresh_test.mjs' => [],
