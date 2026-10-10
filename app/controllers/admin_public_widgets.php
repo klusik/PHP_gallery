@@ -20,7 +20,9 @@ use Gallery\Services\PublicWidgetInvalidField;
 use Throwable;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\public_visual_preview_home_url;
+use function Gallery\Core\public_visual_preview_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -29,6 +31,9 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_settings_url;
+use function Gallery\Services\gallery_access_requirement;
+use function Gallery\Services\gallery_is_public_listed;
+use function Gallery\Services\public_home_physical_galleries;
 use function Gallery\Services\public_widget_admin_list;
 use function Gallery\Services\public_widget_create;
 use function Gallery\Services\public_widget_delete;
@@ -39,10 +44,47 @@ use function Gallery\Services\public_widget_normalize;
 use function Gallery\Services\public_widget_reorder;
 use function Gallery\Services\public_widget_save;
 use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery_without_admin_bypass;
 use function Gallery\Views\view_render_admin_public_widgets;
 
 require_once dirname(__DIR__) . '/services/public_content_widgets.php';
 require_once dirname(__DIR__) . '/views/admin_public_widgets.php';
+
+/**
+ * Prepare one anonymous-safe public Gallery URL for the protected Admin preview.
+ *
+ * The Admin view model receives only the controller-prepared route, not a
+ * gallery row or title. Candidate root rows must be publicly listed, have no
+ * inherited password requirement, and pass visitor checks without an Admin
+ * identity or unlock bypass; the iframe renders its ordinary public page.
+ *
+ * @return string Same-origin protected preview URL, or empty when no safe Gallery is available.
+ */
+function admin_public_widget_preview_gallery_url(): string
+{
+    try {
+        foreach (public_home_physical_galleries() as $gallery) {
+            if (!is_array($gallery) || !gallery_is_public_listed($gallery)
+                || gallery_access_requirement($gallery) !== null
+                || !visitor_can_access_gallery_without_admin_bypass($gallery)) {
+                continue;
+            }
+            $url = public_visual_preview_url(gallery_public_url($gallery), true);
+            $parts = parse_url($url);
+            if (!is_array($parts) || !isset($parts['path'], $parts['query'])) {
+                continue;
+            }
+            parse_str((string) $parts['query'], $query);
+            if (($query['preview'] ?? null) !== 'visual' || ($query['view_as'] ?? null) !== 'anonymous') {
+                continue;
+            }
+            return $url;
+        }
+    } catch (Throwable) {
+        return '';
+    }
+    return '';
+}
 
 /**
  * Whitelist semantic fields before invoking the independent widget service.
@@ -311,6 +353,7 @@ function cms_admin_public_widgets(): void
         'error_field' => $errorField,
         'preview_html' => public_widget_markdown_html($content),
         'preview_home_url' => public_visual_preview_home_url(true),
+        'preview_gallery_url' => admin_public_widget_preview_gallery_url(),
         'csrf_html' => csrf_field(),
         'editor_url' => url_for('admin_theme', ['widgets' => '1']),
         'new_url' => url_for('admin_theme', ['widgets' => '1', 'id' => 'new']),

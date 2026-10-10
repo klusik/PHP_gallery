@@ -550,7 +550,7 @@ function public_widget_markdown_html(string $markdown): string
  *
  * @param list<array<string,mixed>> $rows Prepared or fixture records in administrator order.
  * @param string $pageType Authorized public page type: home or gallery.
- * @return array<string,list<array<string,int|string>>> Named zones with safe, pre-rendered widget view models.
+ * @return array<string,list<array{widget_id:string,title:string,body_html:string,appearance:string,source_language:string,placement_mode:string,floating_anchor:string,x_permille:int,y_permille:int,width_px:int,sort_order:int}>> Named zones with ordered, safe, pre-rendered widget view models.
  */
 function public_widget_plan_rows(array $rows, string $pageType): array
 {
@@ -585,6 +585,7 @@ function public_widget_plan_rows(array $rows, string $pageType): array
                 'x_permille' => $widget['x_permille'],
                 'y_permille' => $widget['y_permille'],
                 'width_px' => $widget['width_px'],
+                'sort_order' => $widget['sort_order'],
             ];
         } catch (InvalidArgumentException) {
             // Legacy, invalid or unpublished records can never emit public markup.
@@ -600,7 +601,7 @@ function public_widget_plan_rows(array $rows, string $pageType): array
  * row reader. Neither the shared layout nor its Views may query the widget DB.
  *
  * @param string $pageType Explicit controller-approved home or gallery document.
- * @return array<string,list<array<string,int|string>>> Ordered, safe presentation regions.
+ * @return array<string,list<array{widget_id:string,title:string,body_html:string,appearance:string,source_language:string,placement_mode:string,floating_anchor:string,x_permille:int,y_permille:int,width_px:int,sort_order:int}>> Ordered, safe presentation regions.
  */
 function public_widget_public_plan(string $pageType): array
 {

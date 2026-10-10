@@ -3,10 +3,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/gallery-modules/public-content-widgets.js
  * Module Type: Browser Module
- * Purpose: Progressively enhance published floating content widgets without changing their source markup.
+ * Purpose: Share floating-widget geometry and progressively enhance published visitor widgets.
  * Responsibilities:
  *   - Keep all content in normal document flow if scripting, viewport space or placement fails.
  *   - Place at most two bounded, dismissible panels below existing public dialog layers.
+ *   - Expose the bounded public placement geometry for the protected Admin preview.
  *   - Avoid navigation, back-to-top controls and other positioned widgets on viewport changes.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -15,7 +16,7 @@
 /**
  * Minimum desktop width for a fixed, visitor-facing widget enhancement.
  * Type: number. Units: CSS pixels. Scope: public document layout.
- * Consumers: updateFloatingWidgets viewport admission.
+ * Consumers: readPublicWidgetFloatingGeometry public and Admin viewport admission.
  * Rationale: reserve sufficient primary-content and navigation width before overlay placement.
  */
 const FLOAT_MIN_VIEWPORT_WIDTH = 960;
@@ -23,7 +24,7 @@ const FLOAT_MIN_VIEWPORT_WIDTH = 960;
 /**
  * Minimum viewport height for an unobstructed desktop floating panel.
  * Type: number. Units: CSS pixels. Scope: public document layout.
- * Consumers: updateFloatingWidgets viewport admission.
+ * Consumers: readPublicWidgetFloatingGeometry public and Admin viewport admission.
  * Rationale: small browser windows must retain the accessible inline article instead of an overlay.
  */
 const FLOAT_MIN_VIEWPORT_HEIGHT = 620;
@@ -31,15 +32,15 @@ const FLOAT_MIN_VIEWPORT_HEIGHT = 620;
 /**
  * Maximum simultaneous floating panels regardless of configured widget count.
  * Type: number. Units: visitor-visible floating articles per page.
- * Scope: one public-page display. Consumers: updateFloatingWidgets candidate loop.
+ * Scope: one public-page display. Consumers: public runtime and protected Admin preview candidate loops.
  * Rationale: prevent stacked overlays from consuming most of the viewport.
  */
-const FLOAT_LIMIT = 2;
+export const FLOAT_LIMIT = 2;
 
 /**
  * Minimum margin between a floating article and its usable viewport edges.
  * Type: number. Units: CSS pixels. Scope: fixed public widget geometry.
- * Consumers: resolvePublicWidgetFloatingRect clamping.
+ * Consumers: readPublicWidgetFloatingGeometry top inset and resolvePublicWidgetFloatingRect clamping.
  * Rationale: keep the complete panel, focus ring and close control reachable.
  */
 const FLOAT_EDGE_PADDING = 16;
@@ -145,6 +146,34 @@ function visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight) {
 }
 
 /**
+ * Read the public viewport and protected-control geometry used by floating widgets.
+ *
+ * Admin previews pass the isolated public document and its window so placement
+ * uses the same measured Theme controls and viewport policy as visitor pages.
+ *
+ * @param {Document} doc Public page document whose layout is being measured.
+ * @param {Window} win Window owning the document and optional visual viewport.
+ * @returns {{viewportWidth:number,viewportHeight:number,topInset:number,exclusions:Array<{left:number,top:number,width:number,height:number}>,supported:boolean}} Measured geometry and whether an overlay is allowed.
+ */
+export function readPublicWidgetFloatingGeometry(doc, win) {
+    const viewportWidth = doc.documentElement.clientWidth;
+    const viewportHeight = win.visualViewport ? win.visualViewport.height : win.innerHeight;
+    const scale = win.visualViewport ? win.visualViewport.scale : 1;
+    const header = doc.querySelector('.site-header');
+    const headerBounds = header ? header.getBoundingClientRect() : null;
+    const topInset = headerBounds && headerBounds.bottom > 0
+        ? Math.max(FLOAT_EDGE_PADDING, headerBounds.bottom + 12) : FLOAT_EDGE_PADDING;
+    const supported = viewportWidth >= FLOAT_MIN_VIEWPORT_WIDTH
+        && viewportHeight >= FLOAT_MIN_VIEWPORT_HEIGHT
+        && scale <= 1.05
+        && topInset <= viewportHeight * 0.45;
+    const exclusions = supported ? Array.from(doc.querySelectorAll(
+        '.site-header, .public-home-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav'
+    )).map((element) => visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight)).filter(Boolean) : [];
+    return {viewportWidth, viewportHeight, topInset, exclusions, supported};
+}
+
+/**
  * Read one bounded integer from a sanitized data attribute, rejecting edited DOM values.
  *
  * @param {string|undefined} input Encoded saved width or normalized permille.
@@ -153,7 +182,7 @@ function visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight) {
  * @param {number} maximum Highest accepted value.
  * @returns {number} Valid integral coordinate or fallback.
  */
-function publicWidgetBoundedNumber(input, fallback, minimum, maximum) {
+export function publicWidgetBoundedNumber(input, fallback, minimum, maximum) {
     if (typeof input !== 'string' || !/^(0|[1-9]\d*)$/.test(input)) {
         return fallback;
     }
@@ -200,26 +229,14 @@ export function setupPublicContentWidgets() {
      * @returns {void} Apply CSS only to rectangles that do not obscure protected controls.
      */
     function updateFloatingWidgets() {
-        const viewportWidth = document.documentElement.clientWidth;
-        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const geometry = readPublicWidgetFloatingGeometry(document, window);
         for (const widget of widgets) {
             restoreFlow(widget);
         }
-        if (viewportWidth < FLOAT_MIN_VIEWPORT_WIDTH || viewportHeight < FLOAT_MIN_VIEWPORT_HEIGHT
-            || window.visualViewport && window.visualViewport.scale > 1.05) {
+        if (!geometry.supported) {
             return;
         }
-
-        const header = document.querySelector('.site-header');
-        const headerBounds = header ? header.getBoundingClientRect() : null;
-        const topInset = headerBounds && headerBounds.bottom > 0
-            ? Math.max(FLOAT_EDGE_PADDING, headerBounds.bottom + 12) : FLOAT_EDGE_PADDING;
-        if (topInset > viewportHeight * 0.45) {
-            return;
-        }
-        const exclusions = Array.from(document.querySelectorAll(
-            '.site-header, .public-home-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav'
-        )).map((element) => visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight)).filter(Boolean);
+        const {viewportWidth, viewportHeight, topInset, exclusions} = geometry;
         let visible = 0;
         for (const widget of widgets) {
             if (widget.hidden || visible >= FLOAT_LIMIT) {

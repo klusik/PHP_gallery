@@ -14,9 +14,13 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
+const geometrySource = readFileSync(new URL('../public/assets/gallery-modules/public-content-widgets.js', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../public/assets/gallery-modules/admin-public-widgets.js', import.meta.url), 'utf8');
-const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
-const {publicWidgetPointerPosition, publicWidgetPlacementWarnings, publicWidgetProtectedHomeUrl} = module;
+const adminSource = source.replace(/^import \{[\s\S]*?\} from '\.\/public-content-widgets\.js\?[^']+';\r?\n/m, '');
+assert.notEqual(adminSource, source, 'Admin preview imports the shared public geometry implementation');
+const sharedModuleSource = geometrySource.replace(/^export /gm, '') + '\n' + adminSource;
+const module = await import('data:text/javascript;base64,' + Buffer.from(sharedModuleSource).toString('base64'));
+const {publicWidgetPointerPosition, publicWidgetPlacementWarnings, publicWidgetProtectedHomeUrl, publicWidgetProtectedPageUrl} = module;
 const rect = {left: 20, top: 30, width: 200, height: 100};
 
 assert.deepEqual(publicWidgetPointerPosition(120, 80, rect), {x: 500, y: 500});
@@ -53,10 +57,15 @@ assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'custom', x: 8
 const base = 'https://gallery.example.test/galerie/index.php?page=admin_theme';
 assert.equal(publicWidgetProtectedHomeUrl('/galerie/index.php?page=home&preview=visual&view_as=anonymous', base)?.pathname,
     '/galerie/index.php', 'Mounted query-routing preview is accepted');
-assert.equal(publicWidgetProtectedHomeUrl('/galerie/?preview=visual', base)?.pathname,
+assert.equal(publicWidgetProtectedHomeUrl('/galerie/?preview=visual&view_as=anonymous', base)?.pathname,
     '/galerie/', 'Clean routed homepage preview is accepted');
+assert.equal(publicWidgetProtectedPageUrl('/galerie/index.php?page=gallery&public_path=preview-gallery&preview=visual&view_as=anonymous', base, 'gallery')?.pathname,
+    '/galerie/index.php', 'Mounted query-routing Gallery preview is accepted');
+assert.equal(publicWidgetProtectedPageUrl('/galerie/gallery/preview-gallery/?preview=visual&view_as=anonymous', base, 'gallery')?.pathname,
+    '/galerie/gallery/preview-gallery/', 'Mounted clean Gallery preview is accepted');
 for (const candidate of [
     '/galerie/index.php?page=home',
+    '/galerie/?preview=visual',
     '/galerie/index.php?page=gallery&preview=visual',
     '/galerie/index.php?page=home&preview=visual&preview=visual',
     '/galerie/index.php?page=home&preview=visual&widget_action=delete',
@@ -67,7 +76,17 @@ for (const candidate of [
 ]) {
     assert.equal(publicWidgetProtectedHomeUrl(candidate, base), null, 'Unsafe preview URL refused: ' + candidate);
 }
+for (const candidate of [
+    '/galerie/index.php?page=home&preview=visual&view_as=anonymous',
+    '/galerie/index.php?page=gallery&preview=visual&view_as=anonymous',
+    '/galerie/index.php?page=gallery&public_path=&preview=visual&view_as=anonymous',
+    '/galerie/index.php?page=gallery&public_path=../admin&preview=visual&view_as=anonymous',
+    'https://external.example.test/galerie/gallery/example/?preview=visual&view_as=anonymous',
+]) {
+    assert.equal(publicWidgetProtectedPageUrl(candidate, base, 'gallery'), null,
+        'Unsafe Gallery preview URL refused: ' + candidate);
+}
 assert.ok(source.includes("frame.setAttribute('sandbox', 'allow-same-origin')"), 'Iframe denies public scripts and form submission');
-assert.ok(source.includes("doc.addEventListener('click', event => event.preventDefault(), true)"),
-    'Parent intercepts navigation in the scriptless frame');
+assert.ok(source.includes("doc.addEventListener('click', event => {") && source.includes("event.preventDefault();"),
+    'Parent intercepts navigation and dismissals in the sandboxed frame');
 console.log('public_content_widget_admin_position_test: PASS');

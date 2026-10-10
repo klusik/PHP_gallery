@@ -1,0 +1,40 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_theme_gallery.html
+Module Type: Browser Test Fixture
+Purpose: Exercise protected Gallery Theme preview markup without public-page scripts.
+Responsibilities:
+  - Provide a real gallery-detail container, header, footer, and public widget zones.
+  - Keep all links inert through the parent Admin sandbox.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protected Gallery preview fixture</title><link rel="stylesheet" href="/widget-public.css">
+<body class="public-page" data-preview-fixture-page="gallery">
+<header class="site-header"><a href="/untrusted-gallery-route">Gallery navigation</a></header>
+<main class="site-main">
+<div class="public-widget-content-layout public-widget-content-layout--right"><div class="public-widget-primary">
+<section class="hero" data-public-gallery-id="preview-gallery">
+    <div class="public-gallery-detail" data-public-gallery-detail>
+        <h1>Published gallery detail</h1>
+        <div class="gallery-detail-content" data-gallery-detail-content>
+            <article class="gallery-card">Gallery photo content stays in its own page layout.</article>
+        </div>
+    </div>
+</section>
+</div><aside class="public-widget-region public-widget-region--right_rail" data-public-widget-zone="right_rail">
+    <article class="public-content-widget" data-public-widget-id="cccccccccccccccccccccccccccccccc" data-public-widget-sort-order="10">
+        Saved Gallery widget being edited
+    </article>
+    <article class="public-content-widget" data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        data-public-widget-floating="1" data-public-widget-width="280" data-public-widget-anchor="bottom-right"
+        data-public-widget-sort-order="20" data-public-widget-x="900" data-public-widget-y="900" data-public-widget-dismiss-label="Close">
+        Other published floating Gallery widget
+    </article>
+</aside></div>
+</main>
+<footer class="site-footer">Existing Gallery footer</footer>
+</body></html>

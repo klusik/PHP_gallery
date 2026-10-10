@@ -13,18 +13,26 @@ License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Protected Home preview fixture</title><link rel="stylesheet" href="/widget-public.css">
-<body class="public-page">
+<body class="public-page" data-preview-fixture-page="home">
 <header class="site-header"><a href="/untrusted-route">Gallery header</a></header>
 <main class="site-main">
-<div class="public-widget-content-layout public-widget-content-layout--left"><div class="public-widget-primary">
+<div class="public-widget-content-layout public-widget-content-layout--both"><div class="public-widget-primary">
 <div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list>
 <div data-public-gallery-index hidden></div>
+<nav class="pagination" data-preview-top-pagination><a href="/page/2">Next</a></nav>
 <section class="grid public-home-gallery-grid" data-public-gallery-index-grid><article class="gallery-card">Existing gallery</article></section>
+<nav class="pagination" data-preview-bottom-pagination><a href="/page/2">Next</a></nav>
 </div></div>
-</div><section class="public-widget-region public-widget-region--left_rail" data-public-widget-zone="left_rail">
-<article class="public-content-widget" data-public-widget-id="cccccccccccccccccccccccccccccccc">Published version being edited</article>
-<article class="public-content-widget" data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb">Other published widget</article>
-</section></div>
+</div><aside class="public-widget-region public-widget-region--left_rail" data-public-widget-zone="left_rail">
+<article class="public-content-widget" data-public-widget-id="cccccccccccccccccccccccccccccccc" data-public-widget-sort-order="10">Published version being edited</article>
+<article class="public-content-widget" data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    data-public-widget-floating="1" data-public-widget-width="280" data-public-widget-anchor="bottom-right"
+    data-public-widget-sort-order="20" data-public-widget-x="900" data-public-widget-y="900" data-public-widget-dismiss-label="Close">
+    Other published floating widget
+</article>
+</aside><aside class="public-widget-region public-widget-region--right_rail" data-public-widget-zone="right_rail">
+<article class="public-content-widget" data-public-widget-id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" data-public-widget-sort-order="20">Earlier right-rail widget</article>
+</aside></div>
 </main>
 <footer class="site-footer">Existing footer</footer>
 </body></html>

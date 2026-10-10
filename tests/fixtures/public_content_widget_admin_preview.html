@@ -1,0 +1,324 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_admin_preview.html
+Module Type: Browser Test Fixture
+Purpose: Exercise Home/Gallery protected flow and floating previews through the production Admin module.
+Responsibilities:
+  - Verify flow insertion, public floating peer geometry, and unsupported mobile in-flow fallback on both pages.
+  - Keep preview documents scriptless, sandboxed, unsaved, and navigation-inert.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Widget protected public preview contract</title>
+<link rel="stylesheet" href="/widget-admin.css">
+<body class="admin-page">
+<main>
+    <form action="/preview" method="post" data-public-widget-editor
+        data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","close":"Close","reset_position":"Reset floating position","floating_hint":"Set floating location"}'
+        data-widget-published-peers="[]">
+        <input type="hidden" name="widget_id" value="cccccccccccccccccccccccccccccccc">
+        <input type="hidden" name="sort_order" value="30">
+        <label>Scope <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option><option value="all" selected>All</option></select></label>
+        <label>Placement <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select></label>
+        <fieldset data-widget-flow-controls>
+            <label>Flow zone <select name="flow_slot"><option value="content_bottom">Below content</option><option value="home_before_grid">Before homepage grid</option><option value="right_rail">Right rail</option></select></label>
+        </fieldset>
+        <fieldset data-widget-floating-controls>
+            <label>Anchor <select name="floating_anchor"><option value="bottom-right" selected>Bottom right</option><option value="custom">Custom</option></select></label>
+            <label>X <input name="x_permille" type="number" value="900" min="0" max="1000"></label>
+            <label>Y <input name="y_permille" type="number" value="900" min="0" max="1000"></label>
+        </fieldset>
+        <label>Width <input name="width_px" type="number" value="320" min="180" max="480"></label>
+        <label>Appearance <select name="appearance"><option value="card" selected>Card</option><option value="minimal">Minimal</option></select></label>
+        <input type="hidden" name="status" value="draft">
+        <textarea data-widget-source name="content_md">Unsaved draft with a safe link.</textarea>
+        <button type="submit" name="widget_action" value="save">Save</button>
+    </form>
+    <section data-widget-preview>
+        <article class="public-content-widget public-content-widget--card">
+            <h4 class="public-content-widget-title">Unsaved partner links</h4>
+            <div data-widget-preview-body><p>Draft links: <a href="https://example.test/partner">Open the partner gallery</a></p></div>
+        </article>
+    </section>
+    <section data-widget-theme-preview
+        data-widget-preview-home-url="/index.php?page=home&amp;preview=visual&amp;view_as=anonymous"
+        data-widget-preview-gallery-url="/index.php?page=gallery&amp;public_path=preview-gallery&amp;preview=visual&amp;view_as=anonymous">
+        <h3>Protected public Theme preview</h3>
+        <p role="status" data-widget-theme-status></p>
+        <div class="public-widgets-theme-frame-wrap" data-widget-theme-frame-wrap hidden></div>
+    </section>
+    <pre id="results">BROWSER PENDING</pre>
+</main>
+<script type="module">
+import {setupAdminPublicWidgets} from '/widget-admin.js';
+import {readPublicWidgetFloatingGeometry, resolvePublicWidgetFloatingRect} from '/public-content-widgets.js';
+
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const pause = () => new Promise(resolve => setTimeout(resolve, 25));
+const waitFor = async (condition, message) => {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+        if (condition()) return;
+        await pause();
+    }
+    throw new Error(message);
+};
+const form = document.querySelector('[data-public-widget-editor]');
+const host = document.querySelector('[data-widget-theme-preview]');
+const startUrl = location.href;
+let submissions = 0;
+form.addEventListener('submit', event => { event.preventDefault(); submissions += 1; });
+
+try {
+    setupAdminPublicWidgets();
+    const pageSelect = document.querySelector('[data-widget-preview-page-selector]');
+    const frame = document.querySelector('.public-widgets-theme-frame');
+    check(pageSelect?.closest('.public-widgets-placement-tools'),
+        'The Admin placement tools own the protected Home/Gallery selector.');
+    check(frame && frame.getAttribute('sandbox') === 'allow-same-origin',
+        'Protected preview keeps same-origin access without scripts or forms.');
+    check(!frame.hasAttribute('allow') && !frame.hasAttribute('allowfullscreen'),
+        'Protected preview does not grant extra browser capabilities.');
+    const devices = Array.from(document.querySelectorAll('.public-widgets-device-toggle button'));
+    check(devices.length === 3, 'Admin positioning map retains desktop/tablet/mobile choices.');
+    const chooseDevice = name => {
+        const button = devices.find(candidate => candidate.textContent.trim().toLowerCase() === name);
+        check(button, 'Missing Admin device option: ' + name);
+        button.click();
+    };
+    const waitForPage = async page => {
+        await waitFor(() => {
+            const doc = frame.contentDocument;
+            return pageSelect.value === page
+                && frame.contentWindow?.location.search.includes('page=' + page)
+                && doc?.body?.dataset.previewFixturePage === page
+                && doc.querySelector('[data-widget-theme-draft]');
+        }, 'Protected ' + page + ' preview did not render its unsaved draft.');
+    };
+    const measureFlowHeight = widget => {
+        const floating = widget.classList.contains('is-public-widget-floating');
+        const left = widget.style.left;
+        const top = widget.style.top;
+        widget.classList.remove('is-public-widget-floating');
+        widget.style.removeProperty('left');
+        widget.style.removeProperty('top');
+        const height = Math.ceil(widget.getBoundingClientRect().height);
+        if (floating) {
+            widget.classList.add('is-public-widget-floating');
+            widget.style.left = left;
+            widget.style.top = top;
+        }
+        return height;
+    };
+    const checkDesktopGeometry = page => {
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+        const draft = doc.querySelector('[data-widget-theme-draft]');
+        check(doc.body.classList.contains('public-page'), page + ' preview uses the public document shell.');
+        check(doc.querySelector('.site-header') && doc.querySelector('main.site-main') && doc.querySelector('.site-footer'),
+            page + ' preview retains the real public header, content container and footer.');
+        check(page === 'home'
+            ? Boolean(doc.querySelector('.gallery-list-frame [data-public-gallery-index-grid]'))
+                && !doc.querySelector('.public-gallery-detail')
+            : Boolean(doc.querySelector('.hero[data-public-gallery-id] .public-gallery-detail'))
+                && !doc.querySelector('.gallery-list-frame'),
+            page + ' preview retains the expected Home grid or Gallery detail page container.');
+        check(doc.querySelectorAll('[data-widget-theme-draft]').length === 1,
+            page + ' preview contains exactly one unsaved draft article.');
+        const editedRecords = Array.from(doc.querySelectorAll(
+            '[data-public-widget-id="cccccccccccccccccccccccccccccccc"]'));
+        check(editedRecords.length <= 1 && editedRecords.every(node => node === draft),
+            page + ' preview replaces the saved version with at most one projected draft.');
+        check(draft.dataset.publicWidgetFloating === '1'
+            && draft.dataset.publicWidgetWidth === '320'
+            && draft.dataset.publicWidgetDismissLabel === 'Close'
+            && draft.dataset.publicWidgetAnchor === 'bottom-right'
+            && draft.dataset.publicWidgetX === '900'
+            && draft.dataset.publicWidgetY === '900',
+            page + ' draft exposes the same bounded placement attributes as a public widget.');
+        check(doc.querySelectorAll('script').length === 0,
+            page + ' document remains scriptless while Admin projects the draft.');
+        const geometry = readPublicWidgetFloatingGeometry(doc, win);
+        check(geometry.supported, page + ' desktop preview satisfies public floating viewport policy.');
+        const peers = Array.from(doc.querySelectorAll('[data-public-widget-floating="1"]'))
+            .filter(widget => widget !== draft);
+        check(peers.length === 1
+            && (peers[0].compareDocumentPosition(draft) & win.Node.DOCUMENT_POSITION_FOLLOWING),
+            page + ' published floating peer remains ahead of the draft in public document order.');
+        const peer = peers[0];
+        const peerBounds = peer.getBoundingClientRect();
+        const expectedPeer = resolvePublicWidgetFloatingRect({
+            anchor: peer.dataset.publicWidgetAnchor,
+            x: Number(peer.dataset.publicWidgetX),
+            y: Number(peer.dataset.publicWidgetY),
+            width: Number(peer.dataset.publicWidgetWidth),
+            height: measureFlowHeight(peer),
+            viewportWidth: geometry.viewportWidth,
+            viewportHeight: geometry.viewportHeight,
+            topInset: geometry.topInset,
+            exclusions: geometry.exclusions,
+        });
+        check(peer.classList.contains('is-public-widget-floating')
+            && expectedPeer
+            && win.getComputedStyle(peer).position === 'fixed'
+            && Math.abs(peerBounds.left - expectedPeer.left) <= 1
+            && Math.abs(peerBounds.top - expectedPeer.top) <= 1
+            && Math.abs(peerBounds.width - expectedPeer.width) <= 1
+            && peerBounds.left >= 0 && peerBounds.top >= 0
+            && peerBounds.right <= geometry.viewportWidth + 1
+            && peerBounds.bottom <= geometry.viewportHeight + 1,
+            page + ' published floating peer matches the shared solver before draft placement.');
+        const expected = resolvePublicWidgetFloatingRect({
+            anchor: draft.dataset.publicWidgetAnchor,
+            x: Number(draft.dataset.publicWidgetX),
+            y: Number(draft.dataset.publicWidgetY),
+            width: Number(draft.dataset.publicWidgetWidth),
+            height: measureFlowHeight(draft),
+            viewportWidth: geometry.viewportWidth,
+            viewportHeight: geometry.viewportHeight,
+            topInset: geometry.topInset,
+            exclusions: [...geometry.exclusions, expectedPeer],
+        });
+        const actual = draft.getBoundingClientRect();
+        check(expected && draft.classList.contains('is-public-widget-floating')
+            && win.getComputedStyle(draft).position === 'fixed',
+            page + ' preview applies the production public floating solver.');
+        check(Math.abs(actual.left - expected.left) <= 1 && Math.abs(actual.top - expected.top) <= 1
+            && Math.abs(actual.width - expected.width) <= 1,
+            page + ' preview coordinates match the shared production geometry result.');
+        const header = doc.querySelector('.site-header').getBoundingClientRect();
+        check(actual.left >= 0 && actual.top >= 0 && actual.right <= geometry.viewportWidth + 1
+            && actual.bottom <= geometry.viewportHeight + 1
+            && (actual.right <= header.left || actual.left >= header.right
+                || actual.bottom <= header.top || actual.top >= header.bottom),
+            page + ' floating draft stays within the viewport and clear of navigation.');
+        const link = draft.querySelector('a');
+        check(link?.textContent === 'Open the partner gallery', page + ' unsaved Markdown link remains visible.');
+        const previewHref = win.location.href;
+        link.dispatchEvent(new win.MouseEvent('click', {bubbles: true, cancelable: true}));
+        check(win.location.href === previewHref, page + ' public links cannot navigate the protected preview.');
+    };
+    const checkMobileFallback = page => {
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+        const draft = doc.querySelector('[data-widget-theme-draft]');
+        const geometry = readPublicWidgetFloatingGeometry(doc, win);
+        const bounds = draft.getBoundingClientRect();
+        check(doc.documentElement.clientWidth === 390 && !geometry.supported,
+            page + ' mobile preview uses the unsupported narrow public viewport.');
+        check(!draft.classList.contains('is-public-widget-floating')
+            && win.getComputedStyle(draft).position !== 'fixed' && !draft.hidden,
+            page + ' floating draft falls back to visible in-flow content on mobile.');
+        check(bounds.width <= geometry.viewportWidth + 1
+            && bounds.bottom > 0 && bounds.top < geometry.viewportHeight,
+            page + ' mobile fallback remains within the page layout.');
+        check(Array.from(doc.querySelectorAll('[data-public-widget-floating="1"]'))
+            .every(widget => !widget.classList.contains('is-public-widget-floating')
+                && win.getComputedStyle(widget).position !== 'fixed' && !widget.hidden),
+            page + ' saved floating peers and the draft all remain visible in normal page flow on mobile.');
+        check(draft.querySelector('a')?.textContent === 'Open the partner gallery',
+            page + ' mobile fallback keeps authored links accessible.');
+    };
+    const checkFlowInsertion = async page => {
+        const mode = form.querySelector('[name="placement_mode"]');
+        const zone = form.querySelector('[name="flow_slot"]');
+        mode.value = 'flow';
+        zone.value = 'right_rail';
+        mode.dispatchEvent(new Event('change', {bubbles: true}));
+        await waitFor(() => {
+            const draft = frame.contentDocument?.querySelector('[data-widget-theme-draft]');
+            return draft?.closest('[data-public-widget-zone="right_rail"]');
+        }, page + ' flow draft was not inserted in the selected public right rail.');
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+        const draft = doc.querySelector('[data-widget-theme-draft]');
+        const region = draft.closest('[data-public-widget-zone="right_rail"]');
+        check(region.classList.contains('public-widget-region--right_rail')
+            && !draft.hasAttribute('data-public-widget-floating')
+            && !draft.classList.contains('is-public-widget-floating')
+            && win.getComputedStyle(draft).position !== 'fixed',
+            page + ' flow placement stays in its selected in-page public zone.');
+        check(draft.querySelector('a')?.textContent === 'Open the partner gallery',
+            page + ' flow insertion keeps the unsaved draft content available.');
+        const sameSlot = Array.from(region.children).filter(node => node.hasAttribute('data-public-widget-id'));
+        check(sameSlot.at(-1) === draft && draft.dataset.publicWidgetSortOrder === '30',
+            page + ' flow draft follows lower-order published widgets in its selected zone.');
+        mode.value = 'floating';
+        mode.dispatchEvent(new Event('change', {bubbles: true}));
+        await waitForPage(page);
+    };
+
+    const checkHomeBeforeGridInsertion = async () => {
+        const mode = form.querySelector('[name="placement_mode"]');
+        const zone = form.querySelector('[name="flow_slot"]');
+        mode.value = 'flow';
+        zone.value = 'home_before_grid';
+        zone.dispatchEvent(new Event('change', {bubbles: true}));
+        await waitFor(() => {
+            const draft = frame.contentDocument?.querySelector('[data-widget-theme-draft]');
+            return draft?.closest('[data-public-widget-zone="home_before_grid"]');
+        }, 'Homepage grid draft was not inserted into its public flow zone.');
+        const doc = frame.contentDocument;
+        const region = doc.querySelector('[data-public-widget-zone="home_before_grid"]');
+        check(region.nextElementSibling === doc.querySelector('[data-preview-top-pagination]')
+            && (region.compareDocumentPosition(doc.querySelector('[data-public-gallery-index-grid]'))
+                & frame.contentWindow.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+            'Homepage before-grid preview appears before top pagination and the gallery grid.');
+        mode.value = 'floating';
+        mode.dispatchEvent(new Event('change', {bubbles: true}));
+        await waitForPage('home');
+    };
+
+    for (const page of ['home', 'gallery']) {
+        pageSelect.value = page;
+        pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+        await waitForPage(page);
+        checkDesktopGeometry(page);
+        chooseDevice('mobile');
+        await waitFor(() => frame.contentDocument?.documentElement.clientWidth === 390,
+            page + ' mobile Theme viewport did not resize.');
+        checkMobileFallback(page);
+        chooseDevice('desktop');
+        await waitFor(() => frame.contentDocument?.documentElement.clientWidth >= 960,
+            page + ' desktop Theme viewport did not restore.');
+        await waitForPage(page);
+        await checkFlowInsertion(page);
+        checkDesktopGeometry(page);
+        if (page === 'home') await checkHomeBeforeGridInsertion();
+    }
+    pageSelect.value = 'home';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    await waitForPage('home');
+    const homePeer = frame.contentDocument.querySelector('[data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]');
+    homePeer.querySelector('.public-widget-dismiss').click();
+    check(homePeer.hidden, 'A Home visitor can dismiss the published floating peer in the Home preview.');
+    pageSelect.value = 'gallery';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    await waitForPage('gallery');
+    const galleryPeer = frame.contentDocument.querySelector('[data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]');
+    check(galleryPeer && !galleryPeer.hidden,
+        'A Home dismissal does not carry into a fresh Gallery page preview for the same all-scope widget.');
+    const dismissibleDraft = frame.contentDocument.querySelector('[data-widget-theme-draft]');
+    const close = dismissibleDraft.querySelector('.public-widget-dismiss');
+    close.click();
+    check(dismissibleDraft.hidden && location.href === startUrl,
+        'The projected public close control hides only its panel without leaving Admin.');
+    const x = form.querySelector('[name="x_permille"]');
+    x.value = '910';
+    x.dispatchEvent(new Event('input', {bubbles: true}));
+    await waitFor(() => frame.contentDocument?.querySelector('[data-widget-theme-draft]')?.hidden,
+        'A form refresh restored the dismissed public draft instead of preserving its preview state.');
+    check(host.dataset.widgetPreviewHomeUrl.includes('page=home')
+        && host.dataset.widgetPreviewGalleryUrl.includes('page=gallery'),
+        'Home and Gallery use distinct controller-provided protected preview routes.');
+    check(submissions === 0 && location.href === startUrl
+        && form.querySelector('[name="content_md"]').value === 'Unsaved draft with a safe link.',
+        'Preview geometry does not submit, navigate the Admin page, or change authored input.');
+    document.getElementById('results').textContent =
+        'BROWSER PASS: widget protected Home/Gallery floating geometry, flow insertion and mobile flow fallback';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script>
+</body></html>

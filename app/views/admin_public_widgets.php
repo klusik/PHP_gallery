@@ -139,11 +139,12 @@ function view_render_admin_public_widgets(array $model): void
         'warning_limit' => t('admin.widgets.preview_warning_limit', 'Only two published floating panels can be active per page; additional panels remain in page flow.'),
         'warning_invalid' => t('admin.widgets.preview_warning_invalid', 'Choose numeric coordinates from 0 to 1000 before saving.'),
         'warning_disclaimer' => t('admin.widgets.preview_warning_disclaimer', 'Illustrative safety guides only. Actual Theme geometry and widget height determine final placement.'),
-        'theme_loading' => t('admin.widgets.preview_theme_loading', 'Loading protected homepage Theme preview…'),
-        'theme_unavailable' => t('admin.widgets.preview_theme_unavailable', 'The protected homepage Theme preview is unavailable; the editor remains usable.'),
-        'theme_gallery' => t('admin.widgets.preview_theme_gallery', 'The real public Theme preview currently supports Home only. Gallery placement remains illustrative.'),
-        'theme_floating' => t('admin.widgets.preview_theme_floating', 'Floating widgets use a scriptless in-page fallback here. The positioning map shows floating anchors.'),
-        'theme_ready' => t('admin.widgets.preview_theme_ready', 'Actual public homepage Theme and in-page widget position. Preview only: changes are not saved.'),
+        'theme_loading' => t('admin.widgets.preview_theme_loading', 'Loading protected public-page Theme preview…'),
+        'theme_unavailable' => t('admin.widgets.preview_theme_unavailable', 'The protected public-page preview is unavailable; the editor remains usable.'),
+        'theme_gallery' => t('admin.widgets.preview_theme_gallery', 'Gallery Theme preview is unavailable; the editor remains usable.'),
+        'theme_floating' => t('admin.widgets.preview_theme_floating', 'Floating placement uses measured public-page geometry when supported; otherwise the widget stays in page flow.'),
+        'theme_ready' => t('admin.widgets.preview_theme_ready', 'Actual public Theme and widget position shown. Preview only: changes are not saved.'),
+        'theme_close' => t('lightbox.close', 'Close'),
     ];
     $browserLabelsJson = json_encode($browserLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $publishedPeersJson = json_encode((array) ($model['published_peers'] ?? []), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
@@ -210,9 +211,11 @@ function view_render_admin_public_widgets(array $model): void
         echo '<h4 class="public-content-widget-title">' . e(view_public_widget_field($draft['title'])) . '</h4>';
     }
     echo '<div class="public-content-widget-body" data-widget-preview-body>' . (string) ($model['preview_html'] ?? '') . '</div></article></section>';
-    echo '<section class="public-widgets-theme-preview" data-widget-theme-preview data-widget-preview-url="' . e((string) ($model['preview_home_url'] ?? '')) . '">';
-    echo '<h3>' . e(t('admin.widgets.preview_theme_title', 'Actual homepage Theme preview')) . '</h3>';
-    echo '<p class="muted">' . e(t('admin.widgets.preview_theme_hint', 'This protected preview uses real public Home markup and Theme CSS. Only server-rendered draft content is inserted; floating overlays and gallery pages remain separate acceptance work.')) . '</p>';
+    $homePreviewUrl = (string) ($model['preview_home_url'] ?? '');
+    $galleryPreviewUrl = (string) ($model['preview_gallery_url'] ?? '');
+    echo '<section class="public-widgets-theme-preview" data-widget-theme-preview data-widget-preview-url="' . e($homePreviewUrl) . '" data-widget-preview-home-url="' . e($homePreviewUrl) . '" data-widget-preview-gallery-url="' . e($galleryPreviewUrl) . '">';
+    echo '<h3>' . e(t('admin.widgets.preview_theme_title', 'Actual public-page Theme preview')) . '</h3>';
+    echo '<p class="muted">' . e(t('admin.widgets.preview_theme_hint', 'The protected preview uses real public Home or Gallery markup and Theme CSS. Only sanitized draft content is inserted; no data is saved.')) . '</p>';
     echo '<p role="status" data-widget-theme-status></p><div class="public-widgets-theme-frame-wrap" data-widget-theme-frame-wrap hidden></div></section>';
     echo '</section></div>';
 }

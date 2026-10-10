@@ -26,7 +26,7 @@ use function Gallery\Services\t;
  * Visitor JavaScript may progressively fix the same article to the viewport;
  * no duplicate responsive/no-JS markup is generated.
  *
- * @param array<string,list<array<string,int|string>>> $plan Controller-prepared zones.
+ * @param array<string,list<array{widget_id:string,title:string,body_html:string,appearance:string,source_language:string,placement_mode:string,floating_anchor:string,x_permille:int,y_permille:int,width_px:int,sort_order:int}>> $plan Controller-prepared, ordered widget zones.
  * @param string $slot One of the server-defined region keys.
  * @return string Escaped, semantically grouped widget HTML or an empty string.
  */
@@ -46,7 +46,8 @@ function view_public_widget_region_html(array $plan, string $slot): string
             ? (string) $row['source_language'] : 'en';
         $floating = $slot === 'floating';
         $html .= '<article class="public-content-widget public-content-widget--' . $appearance
-            . '" data-public-widget-id="' . e($id) . '" lang="' . e($language) . '"'
+            . '" data-public-widget-id="' . e($id) . '" data-public-widget-sort-order="'
+            . max(0, (int) ($row['sort_order'] ?? 0)) . '" lang="' . e($language) . '"'
             . ' style="--public-widget-max-width:' . (int) ($row['width_px'] ?? 320) . 'px"';
         if ($floating) {
             $html .= ' data-public-widget-floating="1" data-public-widget-width="' . (int) ($row['width_px'] ?? 320) . '"'
@@ -70,7 +71,7 @@ function view_public_widget_region_html(array $plan, string $slot): string
 /**
  * Emit one controller-prepared public region, skipping empty zones entirely.
  *
- * @param array<string,list<array<string,int|string>>> $plan Prepared safe widget groups.
+ * @param array<string,list<array{widget_id:string,title:string,body_html:string,appearance:string,source_language:string,placement_mode:string,floating_anchor:string,x_permille:int,y_permille:int,width_px:int,sort_order:int}>> $plan Prepared safe widget groups.
  * @param string $slot Known position to render.
  * @return void Write one markup instance for every entry in the given zone.
  */

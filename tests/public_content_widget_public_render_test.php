@@ -77,7 +77,7 @@ namespace {
             ...public_widget_normalize([
                 'title' => $title, 'content_md' => $content,
                 'page_scope' => $scope, 'placement_mode' => $mode,
-                'flow_slot' => $slot, 'status' => $status,
+                'flow_slot' => $slot, 'status' => $status, 'sort_order' => $number * 10,
             ]),
         ];
     }
@@ -99,6 +99,7 @@ namespace {
     $check(str_contains($top, '&lt;script&gt;alert(1)&lt;/script&gt;'), 'Authored title escaped');
     $check(str_contains($top, '<strong>friends</strong>'), 'Sanitized formatted content survives');
     $check(str_contains($top, 'rel="noopener noreferrer"'), 'External links protected');
+    $check(str_contains($top, 'data-public-widget-sort-order="10"'), 'Stable saved order is available to transient Admin previews');
     $check(!str_contains($top, '<script'), 'No executable title markup');
     $float = view_public_widget_region_html($home, 'floating');
     $check(str_contains($float, 'data-public-widget-floating="1"'), 'Floating remains in initial HTML');

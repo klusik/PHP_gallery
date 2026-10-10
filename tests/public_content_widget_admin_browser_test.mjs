@@ -3,9 +3,10 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/public_content_widget_admin_browser_test.mjs
  * Module Type: Browser Regression Test
- * Purpose: Exercise the real widget Admin positioning module in disposable Chromium.
+ * Purpose: Exercise real widget Admin positioning and protected public previews in Chromium.
  * Responsibilities:
  *   - Verify pointer drag, keyboard positioning, reset and draft-safe controls.
+ *   - Verify Home/Gallery flow insertion, peer-aware public floating geometry and mobile fallback.
  *   - Keep fixtures confined to an isolated, loopback-only browser profile.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -25,13 +26,35 @@ if (!executable) {
 }
 const routes = new Map([
     ['/', 'tests/fixtures/public_content_widget_admin_position.html'],
+    ['/preview', 'tests/fixtures/public_content_widget_admin_preview.html'],
     ['/widget-admin.js', 'public/assets/gallery-modules/admin-public-widgets.js'],
+    ['/public-content-widgets.js', 'public/assets/gallery-modules/public-content-widgets.js'],
     ['/widget-admin.css', 'public/assets/styles/admin-public-widgets.css'],
     ['/widget-public.css', 'public/assets/styles/public-content-widgets.css'],
-    ['/index.php', 'tests/fixtures/public_content_widget_theme_home.html'],
 ]);
 const server = createServer(async (request, response) => {
-    const relative = routes.get(new URL(request.url, 'http://localhost').pathname);
+    const url = new URL(request.url, 'http://localhost');
+    const page = url.searchParams.get('page');
+    const previewKeys = [...url.searchParams.keys()];
+    const protectedPreview = url.pathname === '/index.php'
+        && url.searchParams.getAll('page').length === 1
+        && url.searchParams.getAll('preview').length === 1
+        && url.searchParams.get('preview') === 'visual'
+        && url.searchParams.getAll('view_as').length === 1
+        && url.searchParams.get('view_as') === 'anonymous'
+        && (page === 'home' && previewKeys.length === 3
+            || page === 'gallery' && previewKeys.length === 4
+                && url.searchParams.getAll('public_path').length === 1
+                && url.searchParams.get('public_path') === 'preview-gallery');
+    const legacyHomePreview = url.pathname === '/index.php'
+        && page === 'home' && url.searchParams.getAll('page').length === 1
+        && url.searchParams.getAll('preview').length === 1
+        && url.searchParams.get('preview') === 'visual'
+        && previewKeys.length === 2;
+    const relative = protectedPreview || legacyHomePreview
+        ? page === 'gallery' ? 'tests/fixtures/public_content_widget_theme_gallery.html'
+            : 'tests/fixtures/public_content_widget_theme_home.html'
+        : url.pathname === '/index.php' ? null : routes.get(url.pathname);
     if (!relative) {
         response.writeHead(404).end();
         return;
@@ -51,6 +74,13 @@ try {
     console.log(result || 'Widget Admin fixture produced no status marker.');
     assert.equal(exitCode, 0);
     assert.ok(result?.includes('BROWSER PASS'), 'Widget pointer and keyboard fixture must complete.');
+
+    const preview = await runHeadlessBrowserFixture(executable,
+        'http://127.0.0.1:' + server.address().port + '/preview', 'widget-admin-theme-preview-');
+    console.log(preview.result || 'Protected widget preview fixture produced no status marker.');
+    assert.equal(preview.exitCode, 0, 'Protected widget preview browser process must exit cleanly.');
+    assert.ok(preview.result?.includes('BROWSER PASS: widget protected Home/Gallery floating geometry, flow insertion and mobile flow fallback'),
+        'Protected public preview must exercise both pages, flow insertion, peer-aware desktop geometry, mobile fallback and sandbox behavior.');
 } finally {
     server.close();
 }

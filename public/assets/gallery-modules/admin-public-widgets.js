@@ -9,6 +9,13 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
+import {
+    FLOAT_LIMIT,
+    publicWidgetBoundedNumber,
+    readPublicWidgetFloatingGeometry,
+    resolvePublicWidgetFloatingRect,
+} from './public-content-widgets.js?v=20261011-widget-geometry-preview-v1';
+
 /**
  * Replace only the selected Markdown text with an intentionally simple formatting token.
  *
@@ -119,7 +126,7 @@ export function publicWidgetPlacementWarnings(draft, peers) {
  *
  * @param {HTMLFormElement} form Active widget editor.
  * @param {Record<string,string>} labels Server-provided localized accessible labels.
- * @returns {Function} Safe refresh callback shared by preview controls.
+ * @returns {() => void} Safe refresh callback shared by preview controls.
  */
 function setupWidgetPlacement(form, labels) {
     const translated = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
@@ -167,6 +174,7 @@ function setupWidgetPlacement(form, labels) {
     pageLabel.textContent = translated('page_label', 'Placement warning page');
     const pageSelect = document.createElement('select');
     pageSelect.className = 'public-widgets-page-select';
+    pageSelect.setAttribute('data-widget-preview-page-selector', '');
     for (const page of ['home', 'gallery']) {
         const option = document.createElement('option');
         option.value = page;
@@ -348,45 +356,92 @@ function setupWidgetPlacement(form, labels) {
 
 
 /**
- * Validate the controller-prepared same-origin, marked public Home URL.
+ * Validate one controller-prepared, same-origin protected public-page URL.
  *
- * The server enforces Admin authentication, GET-only preview routing and asset
- * isolation. This client allowlist prevents accidental non-preview navigation.
+ * Only the expected Home or Gallery route plus visual-preview markers are
+ * accepted. Routed Gallery URLs may carry one public_path; clean Gallery URLs
+ * must remain beneath the application's mounted /gallery/ route.
  *
- * @param {string} value Server-generated Home preview URL.
+ * @param {string} value Server-generated protected preview URL.
  * @param {string} baseHref URL of the authenticated Admin editor.
- * @returns {URL|null} Allowed protected Home URL, or null.
+ * @param {'home'|'gallery'} page Expected public page type.
+ * @returns {URL|null} Allowed protected Home or Gallery URL, or null.
  */
-export function publicWidgetProtectedHomeUrl(value, baseHref) {
+export function publicWidgetProtectedPageUrl(value, baseHref, page) {
     try {
-        if (typeof value !== 'string' || !value.trim()) return null;
+        if (typeof value !== 'string' || !value.trim() || !['home', 'gallery'].includes(page)) return null;
         const url = new URL(value, baseHref);
         const origin = new URL(baseHref);
         if (url.origin !== origin.origin || url.username || url.password || url.hash) return null;
+        const basePath = origin.pathname || '/';
+        const indexPath = basePath.lastIndexOf('/index.php');
+        const adminPath = basePath.indexOf('/admin/');
+        const mountRoot = indexPath >= 0 && indexPath + '/index.php'.length === basePath.length
+            ? basePath.slice(0, indexPath + 1)
+            : adminPath >= 0 ? basePath.slice(0, adminPath + 1)
+                : basePath.endsWith('/') ? basePath : basePath.slice(0, basePath.lastIndexOf('/') + 1);
         const keys = [...url.searchParams.keys()];
-        if (keys.some(key => !['page', 'preview', 'view_as'].includes(key))
-            || keys.some(key => url.searchParams.getAll(key).length !== 1)
+        if (keys.some(key => url.searchParams.getAll(key).length !== 1)
             || url.searchParams.get('preview') !== 'visual'
-            || (url.searchParams.has('view_as') && url.searchParams.get('view_as') !== 'anonymous')) return null;
-        const routed = url.pathname.endsWith('/index.php') && url.searchParams.get('page') === 'home';
-        const clean = url.pathname.endsWith('/') && !url.searchParams.has('page');
-        return routed || clean ? url : null;
+            || url.searchParams.get('view_as') !== 'anonymous') return null;
+
+        const routed = url.pathname === mountRoot + 'index.php' && url.searchParams.get('page') === page;
+        const cleanHome = page === 'home' && url.pathname === mountRoot
+            && !url.searchParams.has('page') && !url.searchParams.has('public_path');
+        let cleanGallery = false;
+        if (page === 'gallery' && url.pathname.startsWith(mountRoot + 'gallery/') && url.pathname.endsWith('/')) {
+            const segments = url.pathname.slice((mountRoot + 'gallery/').length, -1).split('/');
+            cleanGallery = segments.length > 0 && segments.every(segment => {
+                if (!segment) return false;
+                try {
+                    const decoded = decodeURIComponent(segment);
+                    return decoded !== '.' && decoded !== '..' && !/[\\/\u0000-\u001f\u007f]/.test(decoded);
+                } catch (_) {
+                    return false;
+                }
+            }) && !url.searchParams.has('page') && !url.searchParams.has('public_path');
+        }
+        const routedKeys = page === 'gallery'
+            ? ['page', 'public_path', 'preview', 'view_as'] : ['page', 'preview', 'view_as'];
+        const cleanKeys = ['preview', 'view_as'];
+        if (routed && keys.every(key => routedKeys.includes(key))) {
+            const publicPath = url.searchParams.get('public_path');
+            if (page === 'gallery' && publicPath === null) return null;
+            if (publicPath !== null && (!publicPath || /[\\\u0000-\u001f\u007f]/.test(publicPath)
+                || publicPath.split('/').some(segment => !segment || segment === '.' || segment === '..'))) return null;
+            return url;
+        }
+        if ((cleanHome || cleanGallery) && keys.every(key => cleanKeys.includes(key))) return url;
+        return null;
     } catch (_) {
         return null;
     }
 }
 
 /**
- * Reconcile the actual public Home CSS rail mode after a transient draft move.
+ * Validate the controller-prepared same-origin, marked public Home URL.
  *
- * An edited published widget may have been the only article in an old rail.
- * Removing its now-empty region must not leave an obsolete grid column or
- * overlap an unrelated published rail. No live public DOM is modified.
+ * This compatibility entry point retains the Home-only API used by existing
+ * browser fixtures while applying the stricter mounted-route allowlist.
  *
- * @param {Element} main Public preview's isolated main content container.
- * @returns {void} Normalizes actual public rails and primary content.
+ * @param {string} value Server-generated Home preview URL.
+ * @param {string} baseHref URL of the authenticated Admin editor.
+ * @returns {URL|null} Allowed protected Home URL, or null.
  */
-function publicWidgetReconcileHomeRails(main) {
+export function publicWidgetProtectedHomeUrl(value, baseHref) {
+    return publicWidgetProtectedPageUrl(value, baseHref, 'home');
+}
+
+/**
+ * Reconcile the actual public CSS rail mode after a transient draft move.
+ *
+ * Removing the only article from a rail must not leave an obsolete grid column
+ * or overlap another rail. This changes only the isolated preview document.
+ *
+ * @param {Element} main Protected public page main content container.
+ * @returns {void} Normalizes rendered public rails and their primary content.
+ */
+function publicWidgetReconcileRails(main) {
     const layout = main.querySelector('.public-widget-content-layout');
     if (!layout) return;
     const left = Boolean(layout.querySelector('.public-widget-region--left_rail'));
@@ -403,27 +458,27 @@ function publicWidgetReconcileHomeRails(main) {
 }
 
 /**
- * Project the sanitized Admin draft onto real public Home layout slots.
+ * Insert the sanitized unsaved draft into the selected protected public page.
  *
- * The source DOM is the existing authenticated scriptless Home renderer, so
- * page styles, grid, rails and footer use actual Theme/public CSS. This
- * modifies only the isolated iframe document, never persistence or live DOM.
+ * Home and Gallery use their actual server-rendered DOM, Theme CSS, and widget
+ * zones. Only the sandboxed iframe document changes; its public scripts cannot
+ * execute, and the editor and persistence remain untouched. Gallery-only grid
+ * slots degrade to the public content-bottom zone.
  *
- * @param {Document} doc Protected public Home document.
+ * @param {Document} doc Protected public Home or Gallery document.
  * @param {HTMLFormElement} form Current unsaved widget form.
  * @param {Element} preview Sanitized Markdown preview owned by the server.
- * @returns {void} Inserts exactly one draft into the selected Home slot.
+ * @param {'home'|'gallery'} page Route selected for the iframe.
+ * @param {Record<string,string>} labels Maintained browser translations.
+ * @returns {HTMLElement|null} Inserted draft article, or null when the draft does not apply.
  */
-function publicWidgetRenderHomeDraft(doc, form, preview) {
+function publicWidgetRenderDraft(doc, form, preview, page, labels) {
     const main = doc.querySelector('main.site-main');
     const footer = doc.querySelector('.site-footer');
     const content = preview?.querySelector('[data-widget-preview-body]');
-    if (!main || !footer || !content || form.querySelector('[name="page_scope"]')?.value === 'gallery') return;
-    const floating = form.querySelector('[name="placement_mode"]')?.value === 'floating';
-    const slot = floating ? 'floating' : form.querySelector('[name="flow_slot"]')?.value || 'content_bottom';
-    const requested = Number(form.querySelector('[name="width_px"]')?.value);
-    const width = Number.isFinite(requested) ? Math.min(480, Math.max(180, Math.round(requested))) : 320;
-    const appearance = form.querySelector('[name="appearance"]')?.value === 'minimal' ? 'minimal' : 'card';
+    const scope = form.querySelector('[name="page_scope"]')?.value;
+    if (!main || !footer || !content || !['home', 'gallery'].includes(page)) return null;
+
     const editId = form.querySelector('[name="widget_id"]')?.value || '';
     if (/^[a-f0-9]{32}$/.test(editId)) {
         for (const saved of doc.querySelectorAll('[data-public-widget-id="' + editId + '"]')) {
@@ -431,11 +486,45 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
             saved.remove();
             if (oldRegion && !oldRegion.querySelector('.public-content-widget')) oldRegion.remove();
         }
+        publicWidgetReconcileRails(main);
     }
+    if (scope !== 'all' && scope !== page) return null;
+
+    const floating = form.querySelector('[name="placement_mode"]')?.value === 'floating';
+    const acceptedSlots = ['content_top', 'content_bottom', 'left_rail', 'right_rail',
+        'home_before_grid', 'home_after_grid', 'footer'];
+    let slot = floating ? 'floating' : form.querySelector('[name="flow_slot"]')?.value || 'content_bottom';
+    if (!floating && !acceptedSlots.includes(slot)) slot = 'content_bottom';
+    if (page === 'gallery' && ['home_before_grid', 'home_after_grid'].includes(slot)) slot = 'content_bottom';
+    const widthInput = form.querySelector('[name="width_px"]')?.value;
+    const width = publicWidgetBoundedNumber(widthInput, 320, 180, 480);
+    const anchor = form.querySelector('[name="floating_anchor"]')?.value || 'bottom-right';
+    const x = publicWidgetBoundedNumber(form.querySelector('[name="x_permille"]')?.value, 900, 0, 1000);
+    const y = publicWidgetBoundedNumber(form.querySelector('[name="y_permille"]')?.value, 900, 0, 1000);
+    const appearance = form.querySelector('[name="appearance"]')?.value === 'minimal' ? 'minimal' : 'card';
+    const sortOrder = publicWidgetBoundedNumber(form.querySelector('[name="sort_order"]')?.value, 0, 0, 10000);
+
     const article = doc.createElement('article');
     article.className = 'public-content-widget public-content-widget--' + appearance;
+    if (/^[a-f0-9]{32}$/.test(editId)) article.dataset.publicWidgetId = editId;
     article.style.setProperty('--public-widget-max-width', String(width) + 'px');
     article.dataset.widgetThemeDraft = '1';
+    article.dataset.publicWidgetSortOrder = String(sortOrder);
+    if (floating) {
+        article.dataset.publicWidgetFloating = '1';
+        article.dataset.publicWidgetWidth = String(width);
+        article.dataset.publicWidgetDismissLabel = labels.theme_close || 'Close';
+        article.dataset.publicWidgetAnchor = anchor;
+        article.dataset.publicWidgetX = String(x);
+        article.dataset.publicWidgetY = String(y);
+        const close = doc.createElement('button');
+        close.type = 'button';
+        close.className = 'public-widget-dismiss';
+        close.textContent = '\u00d7';
+        close.setAttribute('aria-label', article.dataset.publicWidgetDismissLabel);
+        close.title = article.dataset.publicWidgetDismissLabel;
+        article.append(close);
+    }
     const sourceTitle = preview.querySelector('.public-content-widget-title');
     if (sourceTitle && !sourceTitle.hidden && sourceTitle.textContent) {
         const title = doc.createElement('h2');
@@ -447,13 +536,19 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
     body.className = 'public-content-widget-body';
     for (const child of content.childNodes) body.append(doc.importNode(child, true));
     article.append(body);
-    // One region per slot: extra grid-area siblings would overlap other
-    // published widgets in the same left/right rail.
+
     const publishedRegion = doc.querySelector('[data-public-widget-zone="' + slot + '"]');
     if (publishedRegion) {
-        publishedRegion.append(article);
-        publicWidgetReconcileHomeRails(main);
-        return;
+        const nextWidget = Array.from(publishedRegion.children).find((saved) => {
+            if (!saved.hasAttribute('data-public-widget-id')) return false;
+            const savedOrder = publicWidgetBoundedNumber(saved.dataset.publicWidgetSortOrder, 10000, 0, 10000);
+            if (savedOrder !== sortOrder) return savedOrder > sortOrder;
+            const savedId = saved.dataset.publicWidgetId || '';
+            return editId ? savedId > editId : true;
+        });
+        publishedRegion.insertBefore(article, nextWidget || null);
+        publicWidgetReconcileRails(main);
+        return article;
     }
     const region = doc.createElement('section');
     region.className = 'public-widget-region public-widget-region--' + slot;
@@ -468,8 +563,10 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
         footer.prepend(region);
     } else if (slot === 'home_before_grid' || slot === 'home_after_grid') {
         const list = main.querySelector('.gallery-list-content');
-        const grid = main.querySelector('[data-public-gallery-index-grid]');
-        if (slot === 'home_before_grid' && grid) grid.before(region);
+        const topPagination = slot === 'home_before_grid' ? list?.querySelector('nav.pagination') : null;
+        const grid = slot === 'home_before_grid' ? list?.querySelector('[data-public-gallery-index-grid]') : null;
+        if (slot === 'home_before_grid' && topPagination) topPagination.before(region);
+        else if (slot === 'home_before_grid' && grid) grid.before(region);
         else if (list) list.append(region);
         else main.append(region);
     } else if (slot === 'left_rail' || slot === 'right_rail') {
@@ -493,82 +590,208 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
     } else {
         main.append(region);
     }
-    publicWidgetReconcileHomeRails(main);
+    publicWidgetReconcileRails(main);
+    return article;
 }
 
 /**
- * Render a noninteractive real-Theme Home iframe for editor-only draft inspection.
+ * Apply the public floating solver in the rendered widget document order.
  *
- * The protected frame has no allow-scripts/allow-forms permissions. The
- * controller prepares its only URL, and public scripts never run in it.
- * Page-specific gallery and public floating geometry remain out of scope.
+ * The same measured iframe geometry, bounds, rectangle solver, two-panel cap,
+ * and document order as visitor pages are used. Unsupported viewports and
+ * non-fitting boxes remain in their server-rendered flow zones.
+ *
+ * @param {Document} doc Protected public document containing rendered widgets.
+ * @param {Window} win Window owning the iframe viewport.
+ * @param {HTMLElement|null} draft Unsaved draft article, if one was inserted.
+ * @returns {boolean} True when the draft becomes an actual positioned overlay.
+ */
+function publicWidgetApplyFloatingPreview(doc, win, draft) {
+    const widgets = Array.from(doc.querySelectorAll('[data-public-widget-floating="1"]'))
+        .filter(widget => widget instanceof win.HTMLElement);
+    for (const widget of widgets) {
+        widget.classList.remove('is-public-widget-floating');
+        widget.style.removeProperty('left');
+        widget.style.removeProperty('top');
+        widget.style.removeProperty('width');
+        if (!widget.querySelector('.public-widget-dismiss')) {
+            const close = doc.createElement('button');
+            close.type = 'button';
+            close.className = 'public-widget-dismiss';
+            close.textContent = '\u00d7';
+            close.setAttribute('aria-label', widget.dataset.publicWidgetDismissLabel || 'Close');
+            close.title = widget.dataset.publicWidgetDismissLabel || 'Close';
+            widget.prepend(close);
+        }
+    }
+    const geometry = readPublicWidgetFloatingGeometry(doc, win);
+    if (!geometry.supported) return false;
+    let visible = 0;
+    let draftPositioned = false;
+    const place = widget => {
+        if (visible >= FLOAT_LIMIT || widget.hidden) return false;
+        const persistedWidth = publicWidgetBoundedNumber(widget.dataset.publicWidgetWidth, 320, 180, 480);
+        const width = Math.min(persistedWidth, geometry.viewportWidth - 32);
+        widget.style.width = width + 'px';
+        const height = Math.ceil(widget.getBoundingClientRect().height);
+        const rect = resolvePublicWidgetFloatingRect({
+            anchor: widget.dataset.publicWidgetAnchor || 'bottom-right',
+            x: publicWidgetBoundedNumber(widget.dataset.publicWidgetX, 900, 0, 1000),
+            y: publicWidgetBoundedNumber(widget.dataset.publicWidgetY, 900, 0, 1000),
+            width, height, viewportWidth: geometry.viewportWidth,
+            viewportHeight: geometry.viewportHeight, topInset: geometry.topInset,
+            exclusions: geometry.exclusions,
+        });
+        if (rect === null) {
+            widget.style.removeProperty('width');
+            return false;
+        }
+        widget.classList.add('is-public-widget-floating');
+        widget.style.left = rect.left + 'px';
+        widget.style.top = rect.top + 'px';
+        geometry.exclusions.push(rect);
+        visible += 1;
+        return true;
+    };
+    for (const widget of widgets) {
+        if (place(widget) && widget === draft) draftPositioned = true;
+    }
+    return draftPositioned;
+}
+
+/**
+ * Render a sandboxed real-Theme Home or Gallery iframe with scripts disabled.
+ *
+ * The protected frame has only `allow-same-origin`; public scripts and forms
+ * remain disabled. Route selection uses controller-prepared URLs that are
+ * revalidated on load, and all draft geometry is temporary and read-only.
  *
  * @param {HTMLFormElement} form Active editor.
  * @param {Record<string,string>} labels Maintained browser translations.
- * @returns {Function} Refresh callback after preview or placement edits.
+ * @returns {() => void} Refresh callback after preview, route, device, or placement edits.
  */
 function setupWidgetThemePreview(form, labels) {
     const host = document.querySelector('[data-widget-theme-preview]');
     const shell = host?.querySelector('[data-widget-theme-frame-wrap]');
     const status = host?.querySelector('[data-widget-theme-status]');
     const preview = document.querySelector('[data-widget-preview]');
+    const pageSelect = document.querySelector('[data-widget-preview-page-selector]');
     if (!host || !shell || !status || !preview) return () => {};
     const label = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
-    const url = publicWidgetProtectedHomeUrl(host.dataset.widgetPreviewUrl || '', window.location.href);
-    if (!url) {
-        status.textContent = label('theme_unavailable', 'Protected Home preview is unavailable.');
-        return () => {};
-    }
+    const legacyHomeOnly = !host.hasAttribute('data-widget-preview-home-url')
+        && !host.hasAttribute('data-widget-preview-gallery-url');
+    const homeValue = host.dataset.widgetPreviewHomeUrl || host.dataset.widgetPreviewUrl || '';
+    const galleryValue = host.dataset.widgetPreviewGalleryUrl || '';
     const frame = document.createElement('iframe');
     frame.className = 'public-widgets-theme-frame';
-    frame.title = host.querySelector('h3')?.textContent || 'Public homepage Theme preview';
+    frame.title = host.querySelector('h3')?.textContent || 'Public page Theme preview';
     frame.setAttribute('sandbox', 'allow-same-origin');
     frame.setAttribute('referrerpolicy', 'same-origin');
     shell.append(frame);
-    let mainSnapshot = null, footerSnapshot = null, ready = false;
+    let activePage = 'home';
+    let activeUrl = null;
+    let mainSnapshot = null;
+    let footerSnapshot = null;
+    let ready = false;
+    const dismissedPreviewWidgets = new Set();
+    const pageName = page => label('page_' + page, page === 'home' ? 'Homepage' : 'Gallery page');
+    const statusUnavailable = page => status.textContent = page === 'gallery' && !galleryValue
+            ? label('theme_gallery', 'Gallery Theme preview is unavailable; the editor remains usable.')
+        : label('theme_unavailable', 'The protected public-page preview is unavailable; the editor remains usable.');
     const refresh = () => {
-        const scope = form.querySelector('[name="page_scope"]')?.value;
-        const page = document.querySelector('.public-widgets-page-select')?.value || 'home';
-        if (scope === 'gallery' || page === 'gallery') {
+        const page = pageSelect?.value === 'gallery' ? 'gallery' : 'home';
+        if (legacyHomeOnly && page === 'gallery') {
             shell.hidden = true;
-            status.textContent = label('theme_gallery', 'Gallery page preview is not available yet.');
+            statusUnavailable(page);
+            return;
+        }
+        const value = page === 'gallery' ? galleryValue : homeValue;
+        const url = publicWidgetProtectedPageUrl(value, window.location.href, page);
+        if (!url) {
+            shell.hidden = true;
+            statusUnavailable(page);
             return;
         }
         shell.hidden = false;
+        if (activeUrl === null || url.href !== activeUrl.href) {
+            activePage = page;
+            activeUrl = url;
+            mainSnapshot = null;
+            footerSnapshot = null;
+            ready = false;
+            status.textContent = label('theme_loading', 'Loading protected public-page Theme preview…');
+            frame.src = url.href;
+            return;
+        }
         if (!ready) {
-            status.textContent = label('theme_loading', 'Loading public Theme preview…');
+            status.textContent = label('theme_loading', 'Loading protected public-page Theme preview…');
             return;
         }
         const doc = frame.contentDocument;
-        const main = doc?.querySelector('main.site-main'), footer = doc?.querySelector('.site-footer');
-        if (!doc || !main || !footer || !mainSnapshot || !footerSnapshot) return;
+        const win = frame.contentWindow;
+        const main = doc?.querySelector('main.site-main');
+        const footer = doc?.querySelector('.site-footer');
+        if (!doc || !win || !main || !footer || !mainSnapshot || !footerSnapshot) return;
         const device = document.querySelector('.public-widgets-placement-stage')?.dataset.device || 'desktop';
-        const width = ({desktop:1280,tablet:768,mobile:390})[device] || 1280;
+        const viewport = {
+            desktop: {width: 1280, height: 900},
+            tablet: {width: 768, height: 1024},
+            mobile: {width: 390, height: 740},
+        }[device] || {width: 1280, height: 900};
+        const width = viewport.width;
+        const height = viewport.height;
         const scale = Math.min(1, Math.max(1, host.getBoundingClientRect().width - 20) / width);
         frame.style.width = width + 'px';
-        frame.style.height = '760px';
+        frame.style.height = height + 'px';
         frame.style.transform = 'scale(' + scale + ')';
         shell.style.width = String(width * scale) + 'px';
-        shell.style.height = String(760 * scale) + 'px';
-        const sourceMain = mainSnapshot.cloneNode(true), sourceFooter = footerSnapshot.cloneNode(true);
+        shell.style.height = String(height * scale) + 'px';
+        const sourceMain = mainSnapshot.cloneNode(true);
+        const sourceFooter = footerSnapshot.cloneNode(true);
         main.replaceChildren(...sourceMain.childNodes);
         footer.replaceChildren(...sourceFooter.childNodes);
-        publicWidgetRenderHomeDraft(doc, form, preview);
-        status.textContent = form.querySelector('[name="placement_mode"]')?.value === 'floating'
-            ? label('theme_floating', 'Floating widgets remain in their no-script flow position.')
-            : label('theme_ready', 'Real Home Theme and widget position shown. No data saved.');
+        const draft = publicWidgetRenderDraft(doc, form, preview, activePage, labels);
+        for (const widget of doc.querySelectorAll('[data-public-widget-floating="1"]')) {
+            const key = widget.dataset.publicWidgetId || (widget.hasAttribute('data-widget-theme-draft') ? 'draft' : '');
+            if (key && dismissedPreviewWidgets.has(activePage + ':' + key)) widget.hidden = true;
+        }
+        const floating = form.querySelector('[name="placement_mode"]')?.value === 'floating';
+        const positioned = publicWidgetApplyFloatingPreview(doc, win, draft);
+        const previewState = floating && !positioned
+            ? label('theme_floating', 'Floating placement uses measured public-page geometry when supported; otherwise the widget stays in page flow.')
+            : label('theme_ready', 'Actual public Theme and widget position shown. Preview only: changes are not saved.');
+        status.textContent = pageName(activePage) + ': ' + previewState;
     };
     frame.addEventListener('load', () => {
         try {
             const doc = frame.contentDocument;
-            const current = publicWidgetProtectedHomeUrl(frame.contentWindow?.location.href || '', window.location.href);
+            const win = frame.contentWindow;
+            const current = publicWidgetProtectedPageUrl(win?.location.href || '', window.location.href, activePage);
             const main = doc?.querySelector('body.public-page main.site-main');
             const footer = doc?.querySelector('.site-footer');
-            if (!current || current.href !== url.href || !main || !footer
-                || !main.querySelector('.gallery-list-frame') || doc.querySelector('[data-visual-preview-blocked]')) {
-                throw new Error('Protected Home did not pass verification.');
+            const pageMarker = activePage === 'home'
+                ? main?.querySelector('.gallery-list-frame')
+                : main?.querySelector('.hero[data-public-gallery-id]');
+            if (!current || current.href !== activeUrl?.href || !main || !footer || !doc?.querySelector('.site-header')
+                || !pageMarker || doc.querySelector('[data-visual-preview-blocked]')) {
+                throw new Error('Protected public page did not pass verification.');
             }
-            doc.addEventListener('click', event => event.preventDefault(), true);
+            const previewPage = activePage;
+            doc.addEventListener('click', event => {
+                const target = event.target;
+                const close = target instanceof win.Element ? target.closest('.public-widget-dismiss') : null;
+                const widget = close?.closest('[data-public-widget-floating="1"]');
+                if (widget) {
+                    event.preventDefault();
+                    const key = widget.dataset.publicWidgetId || 'draft';
+                    dismissedPreviewWidgets.add(previewPage + ':' + key);
+                    widget.hidden = true;
+                    publicWidgetApplyFloatingPreview(doc, win, doc.querySelector('[data-widget-theme-draft]'));
+                    return;
+                }
+                event.preventDefault();
+            }, true);
+            doc.addEventListener('auxclick', event => event.preventDefault(), true);
             doc.addEventListener('submit', event => event.preventDefault(), true);
             mainSnapshot = main.cloneNode(true);
             footerSnapshot = footer.cloneNode(true);
@@ -577,12 +800,12 @@ function setupWidgetThemePreview(form, labels) {
         } catch (_) {
             shell.hidden = true;
             ready = false;
-            status.textContent = label('theme_unavailable', 'Protected Home preview is unavailable.');
+            statusUnavailable(activePage);
         }
     });
     form.addEventListener('public-widget-preview-change', refresh);
-    status.textContent = label('theme_loading', 'Loading public Theme preview…');
-    frame.src = url.href;
+    pageSelect?.addEventListener('change', refresh);
+    refresh();
     return refresh;
 }
 
