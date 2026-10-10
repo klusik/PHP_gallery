@@ -123,7 +123,8 @@ function view_render_admin_public_widgets(array $model): void
         'stage_hint' => t('admin.widgets.preview_stage_hint', 'Choose a device. Click the preview or use arrow keys to position a floating widget.'),
         'mobile_hint' => t('admin.widgets.preview_mobile_hint', 'On mobile the widget falls back to accessible in-page content.'),
         'flow_hint' => t('admin.widgets.preview_flow_hint', 'An in-page widget follows the normal layout and selected content zone.'),
-        'floating_hint' => t('admin.widgets.preview_floating_hint', 'Click or use arrow keys to customize the floating position.'),
+        'floating_hint' => t('admin.widgets.preview_floating_hint', 'Drag, click or use arrow keys to customize the floating position.'),
+        'reset_position' => t('admin.widgets.reset_position', 'Reset floating position'),
     ];
     $browserLabelsJson = json_encode($browserLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     echo '<form action="' . e($url) . '" method="post" class="public-widgets-form" data-public-widget-editor data-widget-i18n="' . e($browserLabelsJson) . '">' . $csrf;

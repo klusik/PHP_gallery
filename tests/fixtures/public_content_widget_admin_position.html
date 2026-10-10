@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_admin_position.html
+Module Type: Browser Test Fixture
+Purpose: Exercise the production widget editor's pointer positioning without a gallery installation.
+Responsibilities:
+  - Render the semantic saved-widget form inputs and read-only preview.
+  - Prove pointer, keyboard, Reset, scope and content-preservation behavior.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Widget Admin placement contract</title>
+<link rel="stylesheet" href="/widget-admin.css">
+<body class="admin-page">
+<main>
+<form action="/" method="post" data-public-widget-editor data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","reset_position":"Reset floating position","floating_hint":"Drag widget position"}'>
+    <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option></select>
+    <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select>
+    <fieldset data-widget-flow-controls>
+        <select name="flow_slot"><option value="content_top">Top</option><option value="home_before_grid">Before grid</option></select>
+    </fieldset>
+    <fieldset data-widget-floating-controls>
+        <select name="floating_anchor"><option value="bottom-right" selected>Bottom right</option><option value="custom">Custom</option></select>
+        <input name="x_permille" type="number" value="900" min="0" max="1000">
+        <input name="y_permille" type="number" value="900" min="0" max="1000">
+    </fieldset>
+    <label>Width <input name="width_px" type="number" value="320"></label>
+    <textarea data-widget-source name="content_md">Initial **draft** with a [link](https://example.org)</textarea>
+    <button type="submit" name="widget_action" value="save">Save</button>
+</form>
+<section data-widget-preview><article class="public-content-widget public-content-widget--card"><h4 class="public-content-widget-title">Preview</h4><div data-widget-preview-body>Published source remains unchanged.</div></article></section>
+<pre id="results">BROWSER PENDING</pre>
+</main>
+<script type="module">
+import {setupAdminPublicWidgets} from '/widget-admin.js';
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const form = document.querySelector('[data-public-widget-editor]');
+const value = (name) => form.querySelector('[name="' + name + '"]').value;
+let submissions = 0;
+form.addEventListener('submit', (event) => { event.preventDefault(); submissions++; });
+const startUrl = location.href;
+try {
+    setupAdminPublicWidgets();
+    setupAdminPublicWidgets();
+    const stage = document.querySelector('.public-widgets-placement-stage');
+    check(stage && document.querySelectorAll('.public-widgets-placement-stage').length === 1, 'Idempotent stage creation');
+    check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
+    check(document.querySelector('[data-widget-flow-controls]').hidden, 'Floating form hides flow controls');
+    const r = stage.getBoundingClientRect();
+    stage.setPointerCapture = () => {};
+    stage.hasPointerCapture = () => false;
+    stage.releasePointerCapture = () => {};
+    const pointer = (name, clientX, clientY) => new PointerEvent(name, {
+        bubbles: true, cancelable: true, pointerId: 7, pointerType: 'pen', isPrimary: true,
+        button: 0, clientX, clientY,
+    });
+    stage.dispatchEvent(pointer('pointerdown', r.left + r.width * .25, r.top + r.height * .4));
+    check(value('floating_anchor') === 'custom', 'Pointer down selects custom anchor');
+    stage.dispatchEvent(pointer('pointermove', r.left + r.width * .75, r.top + r.height * .6));
+    stage.dispatchEvent(pointer('pointerup', r.left + r.width * .75, r.top + r.height * .6));
+    check(Math.abs(Number(value('x_permille')) - 750) <= 1 && Math.abs(Number(value('y_permille')) - 600) <= 1, 'Drag updates both bounded saved values');
+    const keyboard = new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true, cancelable: true});
+    stage.dispatchEvent(keyboard);
+    check(keyboard.defaultPrevented && Number(value('x_permille')) >= 759, 'Accessible arrow-key alternative');
+    const reset = document.querySelector('.public-widgets-reset-position');
+    check(reset && reset.type === 'button' && !reset.hidden, 'Localized nonpublishing Reset control');
+    reset.click();
+    check(value('floating_anchor') === 'bottom-right' && value('x_permille') === '900' && value('y_permille') === '900', 'Reset restores a valid default');
+    form.querySelector('[name="page_scope"]').value = 'gallery';
+    form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(value('flow_slot') === 'content_top', 'Invalid gallery-only homepage grid slot is sanitized');
+    form.querySelector('[name="placement_mode"]').value = 'flow';
+    form.querySelector('[name="placement_mode"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(reset.hidden && stage.dataset.mode === 'flow', 'Flow mode disables floating controls');
+    check(form.querySelector('textarea').value.includes('Initial **draft**'), 'Preview never edits authored draft');
+    check(document.querySelector('[data-widget-preview-body]').textContent.includes('Published source'), 'Read-only preview preserved');
+    check(submissions === 0 && location.href === startUrl, 'No save or navigation triggered');
+    document.getElementById('results').textContent = 'BROWSER PASS: widget pointer, keyboard, reset, scopes and unsaved draft preservation';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script>
+</html>

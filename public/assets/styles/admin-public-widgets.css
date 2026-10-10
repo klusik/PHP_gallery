@@ -42,3 +42,8 @@
 @media(max-width:900px){.admin-page .public-widgets-workspace{grid-template-columns:1fr}}
 @media(max-width:560px){.admin-page .public-widgets-dimensions{grid-template-columns:1fr}.admin-page .public-widgets-placement-stage[data-device="mobile"]{width:75%}}
 @media(prefers-reduced-motion:reduce){.admin-page .public-widgets-placement-stage{transition:none}}
+
+/* Pointer gestures manipulate only the Admin preview stage, never visitor placement. */
+.admin-page .public-widgets-placement-stage[data-mode="floating"]{touch-action:none;user-select:none}
+.admin-page .public-widgets-reset-position{justify-self:start}
+.admin-page .public-widgets-reset-position[hidden]{display:none}

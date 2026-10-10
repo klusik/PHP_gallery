@@ -7039,7 +7039,7 @@
     "admin.widgets.confirm_delete": "Bekräfta permanent borttagning",
     "admin.widgets.delete": "Ta bort",
     "admin.widgets.preview_heading": "Skrivskyddad innehållsförhandsvisning",
-    "admin.widgets.preview_hint": "Säker Markdown-förhandsvisning på servern. Placering på offentliga sidor läggs till separat.",
+    "admin.widgets.preview_hint": "Säker serverrenderad Markdown-förhandsvisning. Positionskartan är illustrativ; sparade positioner använder den offentliga layouten.",
     "admin.menu.widgets": "Widgetar",
     "admin.widgets.field.status": "Publiceringsstatus",
     "admin.widgets.field.page_scope": "Sidomfattning",
@@ -7087,8 +7087,9 @@
     "admin.widgets.preview_stage_hint": "Välj en enhet. Klicka i förhandsvisningen eller använd piltangenterna för att placera en widget.",
     "admin.widgets.preview_mobile_hint": "På mobilen visas widgeten som tillgängligt innehåll i sidan.",
     "admin.widgets.preview_flow_hint": "En widget i sidinnehållet följer layouten och valt innehållsområde.",
-    "admin.widgets.preview_floating_hint": "Ändra flytande placering genom att klicka eller använda piltangenterna.",
+    "admin.widgets.preview_floating_hint": "Ändra positionen genom att dra, klicka eller använda piltangenterna.",
     "admin.settings.item.public_content_widgets": "Widgetar för offentligt innehåll",
     "admin.settings.item.public_content_widgets.hint": "Skapa och hantera offentliga widgetar, länksamlingar, placering och synlighet i den särskilda temaredigeraren.",
-    "admin.settings.item.public_content_widgets.example": "Exempel: en panel med partnergallerier och utvalda länkar på startsidan."
+    "admin.settings.item.public_content_widgets.example": "Exempel: en panel med partnergallerier och utvalda länkar på startsidan.",
+    "admin.widgets.reset_position": "Återställ flytande position"
 }

@@ -7039,7 +7039,7 @@
     "admin.widgets.confirm_delete": "Confirm permanent deletion",
     "admin.widgets.delete": "Delete",
     "admin.widgets.preview_heading": "Read-only content preview",
-    "admin.widgets.preview_hint": "Safe server-side Markdown preview. Public-page placement is a separate integration stage.",
+    "admin.widgets.preview_hint": "Safe server-rendered Markdown preview. The position map is illustrative; saved positions use the public layout.",
     "admin.menu.widgets": "Widgets",
     "admin.widgets.field.status": "Publication status",
     "admin.widgets.field.page_scope": "Page scope",
@@ -7087,8 +7087,9 @@
     "admin.widgets.preview_stage_hint": "Choose a device. Click the preview or use arrow keys to position a floating widget.",
     "admin.widgets.preview_mobile_hint": "On mobile the widget falls back to accessible in-page content.",
     "admin.widgets.preview_flow_hint": "An in-page widget follows the normal layout and selected content zone.",
-    "admin.widgets.preview_floating_hint": "Click or use arrow keys to customize the floating position.",
+    "admin.widgets.preview_floating_hint": "Drag, click or use arrow keys to customize the floating position.",
     "admin.settings.item.public_content_widgets": "Public content widgets",
     "admin.settings.item.public_content_widgets.hint": "Create and manage public content widgets, including curated links, placement and visibility, in the dedicated Theme editor.",
-    "admin.settings.item.public_content_widgets.example": "For example: a Partner galleries panel with curated links on the homepage."
+    "admin.settings.item.public_content_widgets.example": "For example: a Partner galleries panel with curated links on the homepage.",
+    "admin.widgets.reset_position": "Reset floating position"
 }

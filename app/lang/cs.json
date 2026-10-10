@@ -7039,7 +7039,7 @@
     "admin.widgets.confirm_delete": "Potvrzuji trvalé odstranění",
     "admin.widgets.delete": "Odstranit",
     "admin.widgets.preview_heading": "Náhled obsahu pouze pro čtení",
-    "admin.widgets.preview_hint": "Bezpečný serverový náhled Markdownu. Umístění na veřejných stránkách bude doplněno samostatně.",
+    "admin.widgets.preview_hint": "Bezpečný serverový náhled Markdownu. Mapa umístění je orientační; uložené pozice používají veřejné rozvržení.",
     "admin.menu.widgets": "Widgety",
     "admin.widgets.field.status": "Stav zveřejnění",
     "admin.widgets.field.page_scope": "Rozsah stránek",
@@ -7087,8 +7087,9 @@
     "admin.widgets.preview_stage_hint": "Vyberte zařízení. Pro nastavení polohy plovoucího widgetu klikněte do náhledu nebo použijte šipky.",
     "admin.widgets.preview_mobile_hint": "Na mobilu se widget přesune do přístupného obsahu stránky.",
     "admin.widgets.preview_flow_hint": "Widget v obsahu dodržuje běžné rozvržení a zvolenou oblast.",
-    "admin.widgets.preview_floating_hint": "Polohu plovoucího widgetu nastavte kliknutím nebo šipkami.",
+    "admin.widgets.preview_floating_hint": "Polohu plovoucího widgetu změňte přetažením, kliknutím nebo šipkami.",
     "admin.settings.item.public_content_widgets": "Widgety veřejného obsahu",
     "admin.settings.item.public_content_widgets.hint": "V samostatném editoru vzhledu můžete vytvářet widgety, seznamy odkazů a nastavit jejich umístění a viditelnost.",
-    "admin.settings.item.public_content_widgets.example": "Například panel Spřátelené galerie s vlastními odkazy na úvodní stránce."
+    "admin.settings.item.public_content_widgets.example": "Například panel Spřátelené galerie s vlastními odkazy na úvodní stránce.",
+    "admin.widgets.reset_position": "Obnovit polohu plovoucího widgetu"
 }

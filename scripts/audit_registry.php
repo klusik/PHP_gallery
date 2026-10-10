@@ -351,6 +351,10 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'public_content_widget_admin_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'admin_side_panel_created_gallery_refresh_test.mjs' => [],
         'admin_side_panel_delegation_test.mjs' => [],
         'admin_side_panel_gallery_refresh_test.mjs' => [],
@@ -393,6 +397,7 @@ $registry = [
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_content_widget_floating_test.mjs' => [],
+        'public_content_widget_admin_position_test.mjs' => [],
         'public_search_progressive_test.mjs' => [],
         'telemetry_image_observability_test.mjs' => [],
         'telemetry_photo_lifecycle_test.mjs' => [],

@@ -37,6 +37,29 @@ function formatWidgetMarkdown(editor, command) {
 }
 
 /**
+ * Normalize pointer coordinates in a bounded editor-only viewport stage.
+ *
+ * Pointer movement is never persisted by this helper. The form remains the
+ * only source of publication authority after explicit user Save.
+ *
+ * @param {number} clientX Pointer client X in CSS pixels.
+ * @param {number} clientY Pointer client Y in CSS pixels.
+ * @param {{left:number,top:number,width:number,height:number}} bounds Current preview stage rectangle.
+ * @returns {{x:number,y:number}|null} Bounded 0..1000 coordinates or null on missing viewport geometry.
+ */
+export function publicWidgetPointerPosition(clientX, clientY, bounds) {
+    if (![clientX, clientY, bounds.left, bounds.top, bounds.width, bounds.height].every(Number.isFinite)
+        || bounds.width <= 0 || bounds.height <= 0) {
+        return null;
+    }
+    const clamp = (value) => Math.min(1000, Math.max(0, Math.round(value)));
+    return {
+        x: clamp(1000 * (clientX - bounds.left) / bounds.width),
+        y: clamp(1000 * (clientY - bounds.top) / bounds.height),
+    };
+}
+
+/**
  * Synchronize supported page zones and flow/floating settings before form submission.
  *
  * @param {HTMLFormElement} form Active widget editor.
@@ -88,7 +111,11 @@ function setupWidgetPlacement(form, labels) {
     const caption = document.createElement('p');
     caption.className = 'public-widgets-placement-caption';
     caption.textContent = translated('stage_hint', 'Select desktop, tablet or mobile. Click inside the dashed preview to set a custom floating location.');
-    tools.append(toggle, stage, caption);
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'secondary public-widgets-reset-position';
+    reset.textContent = translated('reset_position', 'Reset floating position');
+    tools.append(toggle, stage, reset, caption);
     floating?.insertAdjacentElement('afterend', tools);
     const clamp = (value) => Math.min(1000, Math.max(0, Math.round(Number(value) || 0)));
     const anchorCoords = {
@@ -106,6 +133,7 @@ function setupWidgetPlacement(form, labels) {
             option.disabled = galleryOnly && ['home_before_grid', 'home_after_grid'].includes(option.value);
         }
         stage.dataset.mode = isFloating ? 'floating' : 'flow';
+        reset.hidden = !isFloating;
         const xy = anchorCoords[anchor?.value] || [clamp(x?.value), clamp(y?.value)];
         marker.style.left = String(xy[0] / 10) + '%';
         marker.style.top = String(xy[1] / 10) + '%';
@@ -115,18 +143,53 @@ function setupWidgetPlacement(form, labels) {
             : isFloating ? translated('floating_hint', 'Click or use arrow keys in the preview to customize the floating position.')
                 : translated('flow_hint', 'In-page widget follows normal page flow and the selected content zone.');
     };
-    stage.addEventListener('click', (event) => {
-        if (mode?.value !== 'floating') return;
-        const rect = stage.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return;
-        x.value = String(clamp(1000 * (event.clientX - rect.left) / rect.width));
-        y.value = String(clamp(1000 * (event.clientY - rect.top) / rect.height));
+    const applyPointer = (event) => {
+        if (mode?.value !== 'floating' || !x || !y || !anchor) return;
+        const coordinates = publicWidgetPointerPosition(event.clientX, event.clientY, stage.getBoundingClientRect());
+        if (!coordinates) return;
+        x.value = String(coordinates.x);
+        y.value = String(coordinates.y);
         anchor.value = 'custom';
         refresh();
+    };
+    let activePointer = null;
+    stage.addEventListener('pointerdown', (event) => {
+        if (mode?.value !== 'floating' || !event.isPrimary
+            || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        activePointer = event.pointerId;
+        stage.setPointerCapture?.(event.pointerId);
+        applyPointer(event);
+        event.preventDefault();
+    });
+    stage.addEventListener('pointermove', (event) => {
+        if (activePointer !== event.pointerId) return;
+        applyPointer(event);
+        event.preventDefault();
+    });
+    const finishPointer = (event) => {
+        if (activePointer !== event.pointerId) return;
+        activePointer = null;
+        if (stage.hasPointerCapture?.(event.pointerId)) {
+            stage.releasePointerCapture(event.pointerId);
+        }
+    };
+    stage.addEventListener('pointerup', finishPointer);
+    stage.addEventListener('pointercancel', finishPointer);
+    stage.addEventListener('click', (event) => {
+        if (activePointer === null) applyPointer(event);
+    });
+    reset.addEventListener('click', () => {
+        if (!anchor || !x || !y) return;
+        anchor.value = 'bottom-right';
+        x.value = '900';
+        y.value = '900';
+        refresh();
+        stage.focus();
     });
     stage.addEventListener('keydown', (event) => {
-        const dx = event.key === 'ArrowLeft' ? -10 : event.key === 'ArrowRight' ? 10 : 0;
-        const dy = event.key === 'ArrowUp' ? -10 : event.key === 'ArrowDown' ? 10 : 0;
+        const step = event.shiftKey ? 50 : 10;
+        const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+        const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
         if ((!dx && !dy) || mode?.value !== 'floating') return;
         event.preventDefault();
         x.value = String(clamp((anchorCoords[anchor?.value]?.[0] ?? Number(x.value)) + dx));
