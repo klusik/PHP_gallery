@@ -87,6 +87,51 @@ function admin_public_widget_select(array $rows, mixed $requested): ?array
 }
 
 /**
+ * Translate one known widget validation failure without exposing storage exceptions.
+ *
+ * Domain validation remains service-owned and language-neutral. Only this Admin
+ * boundary resolves a stable English failure sentence to the maintained catalog.
+ * Unexpected internal validation messages use a safe generic translation.
+ *
+ * @param PublicWidgetInvalidField $failure Domain rejection with field identity.
+ * @return string Localized, visitor-inert text suitable for HTML or JSON responses.
+ */
+function admin_public_widget_error_message(PublicWidgetInvalidField $failure): string
+{
+    $keys = [
+        'Choose an existing widget.' => 'admin.widgets.validation.select_existing',
+        'Links need a safe URL without whitespace, control characters or quotes.' => 'admin.widgets.validation.link_safe',
+        'Enter an absolute HTTP(S) address with a valid host.' => 'admin.widgets.validation.link_host',
+        'Use a site-relative destination or an HTTP(S) URL.' => 'admin.widgets.validation.link_scheme',
+        'The content contains invalid UTF-8 or link syntax.' => 'admin.widgets.validation.markdown_invalid',
+        'Enter valid widget text.' => 'admin.widgets.validation.text_invalid',
+        'Keep the widget title within 180 characters.' => 'admin.widgets.validation.title_length',
+        'Widget content is too long.' => 'admin.widgets.validation.content_length',
+        'Widget text must contain valid UTF-8.' => 'admin.widgets.validation.text_utf8',
+        'Choose one of the supported widget options.' => 'admin.widgets.validation.option_invalid',
+        'Homepage gallery-grid positions are unavailable for gallery-only widgets.' => 'admin.widgets.validation.gallery_slot',
+        'Add content before publishing this widget.' => 'admin.widgets.validation.publish_content',
+        'Enter a value inside the supported widget range.' => 'admin.widgets.validation.numeric_range',
+        'Reload the widget before saving.' => 'admin.widgets.validation.revision_invalid',
+        'The widget changed in another tab. Reload before saving.' => 'admin.widgets.validation.revision_stale',
+        'The widget no longer exists.' => 'admin.widgets.validation.widget_missing',
+        'The widget changed in another tab. Reload before deletion.' => 'admin.widgets.validation.delete_stale',
+        'Choose between 1 and 48 widgets to reorder.' => 'admin.widgets.validation.reorder_count',
+        'Widget order contains invalid or repeated values.' => 'admin.widgets.validation.reorder_invalid',
+        'Widget positions changed in another tab. Reload before reordering.' => 'admin.widgets.validation.reorder_stale',
+        'The selected widget is no longer available.' => 'admin.widgets.validation.selection_missing',
+        'Confirm permanent deletion first.' => 'admin.widgets.validation.delete_confirm',
+        'Submit a complete ordered widget list.' => 'admin.widgets.validation.reorder_missing',
+        'Invalid widget ordering input.' => 'admin.widgets.validation.reorder_payload',
+        'Choose a supported widget action.' => 'admin.widgets.validation.action_invalid',
+    ];
+    $key = $keys[$failure->getMessage()] ?? null;
+    return $key === null
+        ? t('admin.widgets.validation.generic', 'The widget contains invalid input. Review the fields and try again.')
+        : t($key, $failure->getMessage());
+}
+
+/**
  * Route independent widget edits through the existing authenticated Theme page.
  *
  * A read-only preview always follows CSRF validation and never invokes a model
@@ -184,7 +229,7 @@ function cms_admin_public_widgets(): void
             }
         } catch (PublicWidgetInvalidField $failure) {
             $errorField = $failure->field;
-            $error = $failure->getMessage();
+            $error = admin_public_widget_error_message($failure);
         } catch (Throwable) {
             $error = t('admin.widgets.storage_error', 'Widget storage is unavailable. Check database migrations and try again.');
         }
@@ -207,7 +252,7 @@ function cms_admin_public_widgets(): void
         $selected = admin_public_widget_select($rows, $selection);
     } catch (PublicWidgetInvalidField $failure) {
         $errorField = $failure->field;
-        $error = $failure->getMessage();
+        $error = admin_public_widget_error_message($failure);
     }
     if ($draft === null) {
         $draft = $selected ?? public_widget_normalize(['title' => '', 'content_md' => '']);

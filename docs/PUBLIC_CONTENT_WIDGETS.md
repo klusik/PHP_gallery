@@ -60,7 +60,7 @@ Floating panels include a keyboard-reachable Close button with the existing tran
 
 ## Multilingual content
 
-Administrative controls are translated using the maintained EN/CS/DE/SV catalogs. `source_language` labels the authored widget title/Markdown. The current database record stores **one authored version**, not four translated variants. A visitor using another interface language sees the original authored text rather than a fabricated translation. A per-language authored content editor or richer fallback chain is future work; publication does not require a translation.
+Administrative controls and known field-specific validation failures are translated using the maintained EN/CS/DE/SV catalogs. Unknown error messages receive a translated generic fallback rather than leaking internal details. `source_language` labels the authored widget title/Markdown. The current database record stores **one authored version**, not four translated variants. A visitor using another interface language sees the original authored text rather than a fabricated translation. A per-language authored content editor or richer fallback chain is future work; publication does not require a translation.
 
 ## Persistence and MVC ownership
 
@@ -84,10 +84,11 @@ Tests are registered in the existing central audit, not a feature-specific workf
 - `tests/public_content_widget_public_render_test.php` verifies SSR page targeting, unpublished suppression, escaping, unique IDs, normal-flow fallback and home-to-gallery slot translation.
 - `tests/public_content_widget_floating_test.mjs` validates viewport geometry, bounds, presets/custom positions and collision failure-to-flow.
 - `tests/public_content_widget_db_workflow_test.php` uses the explicitly owned disposable MySQL/MariaDB fixture to exercise real committed widget CRUD, independent PDO connections, optimistic edit/delete conflicts, safe publication state, draft duplication, and all-or-nothing transactional reorder.
+- `tests/public_content_widget_localized_errors_test.php` checks the source validation error contract and safe EN/CS/DE/SV Admin error responses with preserved catalog key order.
 - `tests/public_content_widget_admin_position_test.mjs` and `public_content_widget_admin_browser_test.mjs` exercise Admin pointer/keyboard/Reset and draft preservation, including an isolated Chromium page.
 
 Run GitHub Actions candidate preparation and the full required matrix on the authorized feature branch. Check the **exact final prepared head SHA**, not an older green commit. A green earlier checkpoint does not qualify later code or documentation changes.
 
 ## Known limitations and required follow-up
 
-The current Admin position map is illustrative, not a faithful visual inspector using the actual homepage/gallery CSS. Precise forbidden-area/collision guides, wider mobile/zoom/overlay accessibility tests, complete database-backed concurrency/permission workflows, field-specific localized validation errors, richer authored-content localization and optional image uploads remain incomplete. These are not grounds to hide authored content silently or to claim that the entire parent #126 is finished.
+The current Admin position map is illustrative, not a faithful visual inspector using the actual homepage/gallery CSS. Precise forbidden-area/collision guides, wider mobile/zoom/overlay accessibility tests, complete database-backed concurrency/permission workflows, additional locale-specific visual safety warnings, richer authored-content localization and optional image uploads remain incomplete. These are not grounds to hide authored content silently or to claim that the entire parent #126 is finished.
