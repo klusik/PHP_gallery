@@ -1,6 +1,6 @@
 {
     "version": "0.126.3",
-    "generated_at": "2026-10-10T18:58:57+00:00",
+    "generated_at": "2026-10-10T19:16:56+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -232,7 +232,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:45918e455ccdb64652a91c0dc7f2e60c88ca86271be81e9010fc2bd71aa02389",
-        "app/production-files.json": "sha256:c664558a3b69ac44953f3c4b80d18aae0d9cf5812ce31d103b3222fbe4d99b96",
+        "app/production-files.json": "sha256:8d2b8741db8bd3c6c85dfef8bd6382d05588a301582e50a869bd39c25b168993",
         "app/release_file_policy.php": "sha256:fa464740e3b559dfd056d9cc28ff73328b430dffe33b2b1e74767f76e5fbcde5",
         "app/request_data.php": "sha256:b0236b57a40dfab623932c2fb945e3d784b603e5cf67d87199f1c534e124acff",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",
@@ -431,7 +431,7 @@
         "app/services/picture_game.php": "sha256:b5014010715fa3036ab02d6f440ba3f16c57f20c84eaa9639db561b9daaf896b",
         "app/services/picture_manager.php": "sha256:1d012691424bd884c30fe0c66f95935c572706880e730fa7f25aba21f4433cdc",
         "app/services/presentation_schema_policy.php": "sha256:5210fa32804281975ebc333d743d1dfb72656c5361ac92ec9b9fb05704c07c46",
-        "app/services/public_content_widgets.php": "sha256:02c3bb45c8b072bc40b020cc574bb4480be82424efc45ec97586971e7f952f9d",
+        "app/services/public_content_widgets.php": "sha256:8ad3d8724e7a6b544e3d041d12de567eaede9f3d8661b70af214122cdabb6e05",
         "app/services/public_gallery_media_manifest.php": "sha256:f259447a07e468cb75099dbb94bba3a131add16e4eca3712f206518def4318c3",
         "app/services/public_paths.php": "sha256:94f9fd5e327b39ce89c03ac21e74c1d93c5b61d5a755bf6f2f952ce66e914642",
         "app/services/public_render_profiler.php": "sha256:0c19d283a8969d73359b0fd6c0a5460217d785f5c581f301e02edc728190ef43",

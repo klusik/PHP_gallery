@@ -2204,6 +2204,7 @@
         "tests/public_card_visibility_eye_test.php",
         "tests/public_content_localization_test.php",
         "tests/public_content_widget_contract_test.php",
+        "tests/public_content_widget_markdown_test.php",
         "tests/public_gallery_create_entrypoint_test.php",
         "tests/public_gallery_mvc_boundary_test.php",
         "tests/public_home_clean_url_test.php",
