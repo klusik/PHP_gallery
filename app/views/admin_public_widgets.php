@@ -42,6 +42,15 @@ function view_public_widget_select(string $name, mixed $current, array $options)
     $label = t('admin.widgets.field.' . $name, ucwords(str_replace('_', ' ', $name)));
     echo '<label for="public-widget-' . e($name) . '">' . e($label) . '<select id="public-widget-' . e($name) . '" name="' . e($name) . '" data-widget-field="' . e($name) . '">';
     foreach ($options as $value => $text) {
+        if ($name === 'flow_slot') {
+            $text = t('admin.widgets.slot.' . $value, $text);
+        } elseif ($name === 'floating_anchor') {
+            $text = t('admin.widgets.anchor.' . $value, $text);
+        } elseif ($name === 'appearance') {
+            $text = t('admin.widgets.appearance.' . $value, $text);
+        } elseif ($name === 'mobile_fallback' && $value === 'flow') {
+            $text = t('admin.widgets.mobile_flow', $text);
+        }
         echo '<option value="' . e($value) . '"' . ($current === $value ? ' selected' : '') . '>' . e($text) . '</option>';
     }
     echo '</select></label>';
@@ -104,7 +113,20 @@ function view_render_admin_public_widgets(array $model): void
     }
     echo '</section>';
     echo '<section class="panel public-widgets-editor"><h2>' . e($editing ? t('admin.widgets.edit', 'Edit widget') : t('admin.widgets.create', 'New widget')) . '</h2>';
-    echo '<form action="' . e($url) . '" method="post" class="public-widgets-form" data-public-widget-editor>' . $csrf;
+    $browserLabels = [
+        'loading' => t('admin.widgets.preview_while_loading', 'Rendering preview…'),
+        'failure' => t('admin.widgets.preview_failure', 'Preview unavailable.'),
+        'desktop' => t('admin.widgets.preview_position_desktop', 'Desktop'),
+        'tablet' => t('admin.widgets.preview_position_tablet', 'Tablet'),
+        'mobile' => t('admin.widgets.preview_position_mobile', 'Mobile'),
+        'coordinates' => t('admin.widgets.preview_coordinates', 'Floating widget position preview. Click or use arrow keys to set coordinates.'),
+        'stage_hint' => t('admin.widgets.preview_stage_hint', 'Choose a device. Click the preview or use arrow keys to position a floating widget.'),
+        'mobile_hint' => t('admin.widgets.preview_mobile_hint', 'On mobile the widget falls back to accessible in-page content.'),
+        'flow_hint' => t('admin.widgets.preview_flow_hint', 'An in-page widget follows the normal layout and selected content zone.'),
+        'floating_hint' => t('admin.widgets.preview_floating_hint', 'Click or use arrow keys to customize the floating position.'),
+    ];
+    $browserLabelsJson = json_encode($browserLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    echo '<form action="' . e($url) . '" method="post" class="public-widgets-form" data-public-widget-editor data-widget-i18n="' . e($browserLabelsJson) . '">' . $csrf;
     echo '<input type="hidden" name="widget_id" value="' . e($id) . '"><input type="hidden" name="revision" value="' . $revision . '">';
     echo '<label for="public-widget-title">' . e(t('admin.widgets.field.title', 'Title (optional)')) . '<input id="public-widget-title" name="title" type="text" maxlength="180" value="' . e(view_public_widget_field($draft['title'] ?? '')) . '"></label>';
     echo '<label for="public-widget-content">' . e(t('admin.widgets.field.content_md', 'Formatted text and links')) . '</label><div class="public-widgets-toolbar" role="toolbar" aria-label="' . e(t('admin.widgets.toolbar', 'Formatting tools')) . '">';
