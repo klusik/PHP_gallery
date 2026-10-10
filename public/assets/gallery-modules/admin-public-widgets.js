@@ -126,7 +126,7 @@ export function publicWidgetPlacementWarnings(draft, peers) {
  *
  * @param {HTMLFormElement} form Active widget editor.
  * @param {Record<string,string>} labels Server-provided localized accessible labels.
- * @returns {() => void} Safe refresh callback shared by preview controls.
+ * @returns {function():void} Safe refresh callback shared by preview controls.
  */
 function setupWidgetPlacement(form, labels) {
     const translated = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
@@ -171,7 +171,7 @@ function setupWidgetPlacement(form, labels) {
     });
     const pageLabel = document.createElement('label');
     pageLabel.className = 'public-widgets-preview-page';
-    pageLabel.textContent = translated('page_label', 'Placement warning page');
+    pageLabel.textContent = translated('page_label', 'Preview page');
     const pageSelect = document.createElement('select');
     pageSelect.className = 'public-widgets-page-select';
     pageSelect.setAttribute('data-widget-preview-page-selector', '');
@@ -668,7 +668,7 @@ function publicWidgetApplyFloatingPreview(doc, win, draft) {
  *
  * @param {HTMLFormElement} form Active editor.
  * @param {Record<string,string>} labels Maintained browser translations.
- * @returns {() => void} Refresh callback after preview, route, device, or placement edits.
+ * @returns {function():void} Refresh callback after preview, route, device, or placement edits.
  */
 function setupWidgetThemePreview(form, labels) {
     const host = document.querySelector('[data-widget-theme-preview]');

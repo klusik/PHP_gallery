@@ -126,7 +126,7 @@ function view_render_admin_public_widgets(array $model): void
         'floating_hint' => t('admin.widgets.preview_floating_hint', 'Drag, click or use arrow keys to customize the floating position.'),
         'reset_position' => t('admin.widgets.reset_position', 'Reset floating position'),
         'preview_marker' => t('admin.widgets.preview_marker', 'Widget'),
-        'page_label' => t('admin.widgets.preview_page_label', 'Placement warning page'),
+        'page_label' => t('admin.widgets.preview_page_label', 'Preview page'),
         'page_home' => t('admin.widgets.preview_page_home', 'Homepage'),
         'page_gallery' => t('admin.widgets.preview_page_gallery', 'Gallery page'),
         'guide_header' => t('admin.widgets.preview_guide_header', 'Illustrative reserved header'),
@@ -205,7 +205,7 @@ function view_render_admin_public_widgets(array $model): void
         echo '<button type="submit" name="widget_action" value="delete" class="secondary" formnovalidate>' . e(t('admin.widgets.delete', 'Delete')) . '</button></div>';
     }
     echo '</form><section class="public-widgets-preview" data-widget-preview><h3>' . e(t('admin.widgets.preview_heading', 'Read-only content preview')) . '</h3>';
-    echo '<p class="muted">' . e(t('admin.widgets.preview_hint', 'Safe server-side Markdown preview. Public-page placement is a separate integration stage.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.widgets.preview_hint', 'Safe server-rendered Markdown preview. The protected Home or Gallery page shows the selected public placement; nothing is saved.')) . '</p>';
     echo '<article class="public-content-widget public-content-widget--' . e(in_array((string) ($draft['appearance'] ?? 'card'), ['card', 'minimal'], true) ? (string) $draft['appearance'] : 'card') . '">';
     if (view_public_widget_field($draft['title'] ?? '') !== '') {
         echo '<h4 class="public-content-widget-title">' . e(view_public_widget_field($draft['title'])) . '</h4>';
