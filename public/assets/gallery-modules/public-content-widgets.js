@@ -53,6 +53,14 @@ const FLOAT_EDGE_PADDING = 16;
 const FLOAT_GAP = 12;
 
 /**
+ * Prevent duplicate visitor controls and event listeners when public bootstrap repeats.
+ * Type: WeakSet<HTMLElement>. Units: initialized document roots.
+ * Scope: one browser module lifetime. Consumers: setupPublicContentWidgets.
+ * Rationale: repeated module initialization must not duplicate dismissal or geometry work.
+ */
+const FLOAT_INITIALIZED_ROOTS = new WeakSet();
+
+/**
  * Compute a bounded non-overlapping viewport rectangle for one floating panel.
  *
  * This is deliberately pure so invalid offsets and screen-space collisions can
@@ -167,9 +175,10 @@ export function setupPublicContentWidgets() {
         return;
     }
     const widgets = Array.from(document.querySelectorAll('[data-public-widget-floating="1"]'));
-    if (widgets.length === 0) {
+    if (widgets.length === 0 || FLOAT_INITIALIZED_ROOTS.has(document.body)) {
         return;
     }
+    FLOAT_INITIALIZED_ROOTS.add(document.body);
     let pendingFrame = false;
 
     /**
