@@ -1,0 +1,41 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-public-widgets.css
+ * Module Type: Stylesheet
+ * Purpose: Responsive Admin widget management, preview and placement controls.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+.admin-page .public-widgets-heading nav,.admin-page .public-widgets-toolbar,.admin-page .public-widgets-actions,.admin-page .public-widgets-danger,.admin-page .public-widgets-device-toggle{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.admin-page .public-widgets-workspace{display:grid;grid-template-columns:minmax(230px,.75fr) minmax(0,1.6fr);gap:1rem;align-items:start}
+.admin-page .public-widgets-list,.admin-page .public-widgets-editor{min-width:0}
+.admin-page .public-widgets-items{list-style:none;padding:0;display:grid;gap:.4rem}
+.admin-page .public-widgets-items a{display:grid;gap:.3rem;padding:.6rem;border:1px solid var(--line,#dcdcde);border-radius:6px;text-decoration:none;color:var(--ink,#222);overflow-wrap:anywhere}
+.admin-page .public-widgets-items a[aria-current="page"]{outline:2px solid #2271b1;outline-offset:1px}
+.admin-page .public-widgets-items small{color:var(--muted,#666)}
+.admin-page .public-widgets-form,.admin-page .public-widgets-order-form fieldset{display:grid;gap:.7rem}
+.admin-page .public-widgets-form label,.admin-page .public-widgets-order-form label{display:grid;gap:.3rem}
+.admin-page .public-widgets-form textarea{width:100%;min-height:190px;resize:vertical;font-family:ui-monospace,monospace}
+.admin-page .public-widgets-form fieldset{min-width:0;border:1px solid var(--line,#ddd);border-radius:6px;padding:.7rem}
+.admin-page .public-widgets-form fieldset[hidden]{display:none}
+.admin-page .public-widgets-dimensions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
+.admin-page .public-widgets-danger{border-top:1px solid var(--line,#ddd);padding-top:.8rem}
+.admin-page .public-widgets-danger label{display:flex;align-items:center;gap:.3rem}
+.admin-page .public-widgets-preview{margin-top:1.2rem;border-top:1px solid var(--line,#ddd);padding-top:.8rem}
+.admin-page .public-content-widget{max-width:480px;border:1px solid var(--line,#ddd);border-radius:8px;background:var(--panel,#fff);padding:1rem;color:var(--ink,#222);overflow-wrap:anywhere}
+.admin-page .public-content-widget--minimal{border:0;background:transparent;padding:0}
+.admin-page .public-content-widget h4{margin:0 0 .7rem}
+.admin-page .public-content-widget-body ul,.admin-page .public-content-widget-body ol{padding-left:1.5rem}
+.admin-page .public-widgets-placement-tools{display:grid;gap:.5rem;margin:.8rem 0}
+.admin-page .public-widgets-device-toggle button[aria-pressed="true"]{outline:2px solid #2271b1;outline-offset:1px}
+.admin-page .public-widgets-placement-stage{position:relative;box-sizing:border-box;width:100%;height:190px;max-width:100%;border:2px dashed #8293a8;border-radius:8px;background:repeating-linear-gradient(0deg,#f6f9fb,#f6f9fb 36px,#e7eef5 37px);cursor:crosshair;margin:.6rem auto;transition:width .2s}
+.admin-page .public-widgets-placement-stage[data-device="tablet"]{width:75%}
+.admin-page .public-widgets-placement-stage[data-device="mobile"]{width:40%;min-width:160px}
+.admin-page .public-widgets-placement-stage[data-mode="flow"]{cursor:default}
+.admin-page .public-widgets-position-marker{position:absolute;left:85%;top:85%;transform:translate(-50%,-50%);background:#175ea3;color:#fff;border-radius:6px;padding:.4rem;font-size:.8rem;min-width:65px;text-align:center;pointer-events:none}
+.admin-page .public-widgets-placement-stage[data-mode="flow"] .public-widgets-position-marker,.admin-page .public-widgets-placement-stage[data-device="mobile"] .public-widgets-position-marker{left:50%!important;top:85%!important}
+.admin-page .public-widgets-placement-stage:focus-visible{outline:3px solid #2271b1}
+@media(max-width:900px){.admin-page .public-widgets-workspace{grid-template-columns:1fr}}
+@media(max-width:560px){.admin-page .public-widgets-dimensions{grid-template-columns:1fr}.admin-page .public-widgets-placement-stage[data-device="mobile"]{width:75%}}
+@media(prefers-reduced-motion:reduce){.admin-page .public-widgets-placement-stage{transition:none}}

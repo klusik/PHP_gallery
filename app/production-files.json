@@ -871,6 +871,7 @@
         "public/assets/styles/admin-subtabs.css",
         "public/assets/styles/admin-tags.css",
         "public/assets/styles/admin-telemetry.css",
+        "public/assets/styles/admin-public-widgets.css",
         "public/assets/styles/admin-theme-custom-css.css",
         "public/assets/styles/admin-theme-editor.css",
         "public/assets/styles/admin-theme-language.css",

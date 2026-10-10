@@ -95,6 +95,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-layout.css', 'assets/styles/admin-dashboard.css', 'assets/styles/admin-maintenance-center.css',
         'assets/styles/admin-telemetry.css', 'assets/styles/admin-logs.css', 'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css', 'assets/styles/admin-setup-wizard.css', 'assets/styles/admin-reordering.css',
+        'assets/styles/admin-public-widgets.css',
         'assets/styles/admin-media-tools.css', 'assets/styles/admin-theme-editor.css', 'assets/styles/admin-theme-media.css',
         'assets/styles/admin-theme-layout.css', 'assets/styles/admin-theme-language.css', 'assets/styles/admin-theme-custom-css.css',
         'assets/styles/admin-gallery-list.css', 'assets/styles/admin-smart-galleries.css', 'assets/styles/admin-gallery-title-completion.css',
