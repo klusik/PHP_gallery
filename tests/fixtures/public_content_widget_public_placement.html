@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_public_placement.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production public-widget CSS and floating progressive enhancement in desktop and mobile Chromium.
+Responsibilities:
+  - Verify that server-rendered content is accessible before browser enhancement.
+  - Exercise fixed positioning, same-anchor collisions, scrolling and visitor dismissal.
+  - Verify a narrow viewport keeps every published widget in ordinary document flow.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public content widget placement fixture</title>
+<link rel="stylesheet" href="/public-widgets.css">
+<style>
+body { margin: 0; font: 16px/1.5 sans-serif; }
+.site-header { position: sticky; top: 0; height: 76px; box-sizing: border-box; padding: 1rem; background: #eee; z-index: 100; }
+main { min-height: 2400px; padding: 1rem; box-sizing: border-box; }
+.public-widget-region--floating { max-width: 900px; }
+</style>
+</head>
+<body class="public-page">
+<header class="site-header"><nav><a href="#site-main">Public navigation</a></nav></header>
+<main id="site-main">
+<h1>Published gallery page</h1>
+<section class="public-widget-region public-widget-region--floating" data-public-widget-zone="floating">
+<article id="widget-one" class="public-content-widget public-content-widget--card" lang="en"
+    data-public-widget-id="00000000000000000000000000000001" data-public-widget-floating="1"
+    data-public-widget-width="280" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:280px">
+  <h2 class="public-content-widget-title">Partner galleries</h2>
+  <div class="public-content-widget-body"><p>Our links: <a href="https://example.org">Public gallery A</a></p></div>
+</article>
+<article id="widget-two" class="public-content-widget public-content-widget--minimal" lang="cs"
+    data-public-widget-id="00000000000000000000000000000002" data-public-widget-floating="1"
+    data-public-widget-width="280" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:280px">
+  <h2 class="public-content-widget-title">Druhá galerie</h2>
+  <div class="public-content-widget-body"><p>Visit <a href="/index.php?page=gallery">our gallery</a></p></div>
+</article>
+<article id="widget-three" class="public-content-widget public-content-widget--card" lang="sv"
+    data-public-widget-id="00000000000000000000000000000003" data-public-widget-floating="1"
+    data-public-widget-width="260" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:260px">
+  <h2 class="public-content-widget-title">Tredje galleri</h2>
+  <div class="public-content-widget-body"><p>Additional published gallery content.</p></div>
+</article>
+</section>
+<p>Other gallery content remains in normal page layout.</p>
+</main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupPublicContentWidgets} from '/public-widgets.js';
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const articles = Array.from(document.querySelectorAll('[data-public-widget-id]'));
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const floating = () => articles.filter(node => node.classList.contains('is-public-widget-floating'));
+const rectangle = node => node.getBoundingClientRect();
+const intersect = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+try {
+    check(articles.length === 3 && new Set(articles.map(node => node.dataset.publicWidgetId)).size === 3,
+        'Only the three published SSR articles are present once each');
+    check(articles.every(node => !node.hidden && node.textContent.trim() !== ''
+        && getComputedStyle(node).position !== 'fixed'), 'Original server HTML remains safely in normal flow');
+    check(articles[0].querySelector('a')?.getAttribute('href') === 'https://example.org',
+        'Text and links exist before enhancement');
+    const desktop = document.documentElement.clientWidth >= 960 && window.innerHeight >= 620;
+    setupPublicContentWidgets();
+    setupPublicContentWidgets();
+    await frame();
+    await frame();
+    check(articles.every(node => node.querySelectorAll('.public-widget-dismiss').length === 1),
+        'Public enhancer adds at most one dismiss control per article');
+    if (desktop) {
+        check(floating().length === 2, 'Desktop floats at most two widgets');
+        check(!intersect(rectangle(floating()[0]), rectangle(floating()[1])),
+            'Same-anchor widgets must not overlap');
+        check(floating().every(node => getComputedStyle(node).position === 'fixed'),
+            'Desktop floating uses true fixed viewport positioning');
+        const header = document.querySelector('.site-header');
+        check(floating().every(node => !intersect(rectangle(node), rectangle(header))),
+            'Floating widgets must not block navigation');
+        const first = floating()[0];
+        const before = rectangle(first).top;
+        window.scrollTo(0, 1000);
+        await frame();
+        await frame();
+        check(Math.abs(rectangle(first).top - before) <= 1,
+            'Floating anchor position must remain fixed while scrolling');
+        first.querySelector('.public-widget-dismiss').click();
+        await frame();
+        await frame();
+        check(first.hidden && !first.classList.contains('is-public-widget-floating'),
+            'Visitor dismiss hides only their article and never saves Admin state');
+        check(floating().length === 2 && floating().every(node => node !== first),
+            'A remaining published article can fill an available floating slot');
+        check(document.cookie === '', 'Visitor dismiss must not set cookies');
+    } else {
+        check(floating().length === 0, 'Narrow viewport must keep all published panels in-flow');
+        check(articles.every(node => !node.hidden && getComputedStyle(node).position !== 'fixed'),
+            'Mobile content and links cannot disappear');
+        check(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+            'Mobile published widget content may not create horizontal scroll');
+    }
+    check(document.querySelectorAll('[data-public-widget-id]').length === 3,
+        'Floating, dismissal and fallback must never duplicate the SSR content');
+    document.getElementById('results').textContent = 'BROWSER PASS: public widgets ' +
+        (desktop ? 'desktop fixed placement, collision, scroll and dismissal' : 'mobile no-overlay accessible SSR fallback');
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script>
+</body>
+</html>
