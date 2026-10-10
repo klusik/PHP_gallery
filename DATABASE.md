@@ -19,6 +19,12 @@ historical versions, and unqualified newer lines are defined in
 qualification for every later server series. PHP 8.1 remains a source/runtime
 compatibility floor and does not imply a database test combination.
 
+### Public content widget foundation (#126 / #170)
+
+Migration `202610100001_public_content_widgets.php` creates the empty `public_content_widgets` table (InnoDB/utf8mb4). Each row has a random 32-character stable identifier, optional title, bounded Markdown content, draft/published/disabled status, home/gallery/all page scope, normal-flow or floating mode, seven flow slots, preset/custom viewport anchor, X/Y in 0..1000 permille, bounded pixel width, mobile flow fallback, card/minimal appearance, ordering, source language, a positive monotonic revision and UTC timestamps. The compound status/scope/order index supports bounded public reads. No rows are seeded and no public layout is changed by applying this migration alone.
+
+The service `app/services/public_content_widgets.php` validates one complete semantic draft, including supported link destinations and mode/position combinations. The model `app/models/public_content_widgets.php` owns all SQL, conditional revision updates and transactional ordering. Existing theme settings never own these rows. Until the widget Admin controller and shared public renderer are wired, this is an **internal foundation**, not a public authoring feature. A feature-route integration must authenticate/CSRF-check every mutation; public read errors must fail to empty output, not disclose unapproved content. The explicit source language field does not imply that translated widget variants are implemented yet.
+
 ### Multilingual content
 
 Migration `202608150001_multilingual_content.php` adds nullable `content_language` tags to `galleries` and `images`, plus `gallery_translations` and `image_translations`. Existing titles/descriptions are not copied or reclassified; null means the source language is unspecified. Translation tables use owner/language unique keys and cascading foreign keys. Nullable title and description fields permit independent fallback, and rows with both fields blank are removed.

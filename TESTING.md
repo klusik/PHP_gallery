@@ -17,6 +17,10 @@ This guide applies to PHP Gallery Version 0.126.3. Release verification uses the
 Retained Version 0.107 thumbnail acceptance: open a gallery editor, run **Create all thumbnails** with and without **Include subgalleries**, and confirm only the selected branch is processed. Confirm browser generation is initially selected there and in the all-gallery Maintenance card, server generation remains selectable, progress completes in place, and every gallery-editor tab still responds after the Images tab is opened. For the Metadata Organizer, verify a successful move changes the physical file location and an induced move failure gives a safe reason while the pending journal remains available for reconciliation. The central release audit owns automated verification; these are manual browser and filesystem acceptance checks.
 This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
 
+## Public content widget foundation (#126)
+
+`tests/public_content_widget_contract_test.php` is registered for quick and full/release PHP audits. Its no-database fixtures verify migration shape, empty/draft defaults, known page scopes, seven normalized flow regions, supported floating anchors and clamped input ranges, validated internal/HTTP(S) links, rejection of executable schemes and unknown modes, and early denial of non-public page types. It does **not** claim to exercise a live Admin workflow, migration replay on MariaDB, database revision races, generated markup or browser floating interactions. Those remain required before closing #126 and are tracked by #174/#175. Hosted candidate preparation and the exact-candidate full matrix remain authoritative.
+
 ## Issue #127 visual CSS editor contracts
 
 `tests/public_visual_preview_workflow_test.php` exercises the disposable HTTP

@@ -46,6 +46,10 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
 
+## Public content widgets: dormant domain foundation (#126)
+
+The dedicated `public_content_widgets` model is the sole SQL owner. Its service validates closed enums for page scopes, seven in-flow slots, floating anchor presets/custom permille coordinates, publication state and bounded Markdown/link inputs; it orchestrates revision-guarded writes and returns no rows for non-public routes. New rows default to draft and the migration seeds nothing. This foundation is intentionally not connected to public pages or Admin until the scoped controller/view/renderer and localization flows are implemented. A later public integration must resolve the gallery's existing visitor access decision *before* reading scope-filtered widget rows and must not turn an inaccessible gallery into a widget display route. The shared renderer must consume controller-prepared rows without querying storage.
+
 ## Strict MVC Layer Contract
 
 The long-term application flow is `Bootstrap/Router -> Controller -> Service -> Model`, with controllers selecting views for presentation. This is a repository contract, not a naming convention. New code and materially refactored code must not introduce responsibility leakage between these layers.
