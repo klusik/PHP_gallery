@@ -19,7 +19,7 @@ namespace Gallery\Services {
      * Read the selected maintained language map without installing application state.
      *
      * @param string $key Existing catalog key.
-     * @param mixed $default Service-supplied English fallback or null.
+     * @param string|int|float|bool|null $default Service-supplied English fallback scalar or null.
      * @param array<string,mixed> $parameters Optional unused replacement parameters.
      * @return string Selected real catalog string or its explicit English fallback.
      */
