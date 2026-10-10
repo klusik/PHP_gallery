@@ -79,11 +79,11 @@ namespace {
     /**
      * Minimal config shim used by helpers.php in this isolated test process.
      *
-     * @return array<string,mixed> Test configuration.
+     * @return array{base_url:string} Fixture public base, including deliberate origin/mount mismatches.
      */
     function cms_config(): array
     {
-        return ['base_url' => 'https://example.test'];
+        return ['base_url' => (string) ($GLOBALS['preview_media_base_url'] ?? 'https://example.test')];
     }
 
     require_once __DIR__ . '/../app/models/app_settings.php';
@@ -143,20 +143,20 @@ require_once __DIR__ . '/../app/services/app_settings.php';
     $_SERVER['SCRIPT_NAME'] = '/index.php';
     $_SERVER['REQUEST_URI'] = '/index.php?page=gallery&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001';
     $_GET = ['preview' => 'visual', 'view_as' => 'anonymous'];
-    $queryPreviewImageUrl = $queryImageUrl . '&preview=visual&view_as=anonymous';
-    $queryPreviewMediaUrl = str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryMediaUrl);
-    $queryPreviewThumbnailUrl = str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryThumbnailUrl);
+    $queryPreviewImageUrl = str_replace('https://example.test', '', $queryImageUrl . '&preview=visual&view_as=anonymous');
+    $queryPreviewMediaUrl = str_replace('https://example.test', '', str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryMediaUrl));
+    $queryPreviewThumbnailUrl = str_replace('https://example.test', '', str_replace('&v=', '&preview=visual&view_as=anonymous&v=', $queryThumbnailUrl));
     assert_public_media_url_same($queryPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-disabled preview image URL');
     assert_public_media_url_same($queryPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-disabled preview media URL');
     assert_public_media_url_same($queryPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-disabled preview thumbnail URL');
-    assert_public_media_url_same($queryImageUrl, public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-disabled preview manifest base remains undecorated');
+    assert_public_media_url_same(str_replace('https://example.test', '', $queryImageUrl), public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-disabled preview manifest base remains undecorated and request-relative');
     assert_public_media_url_same($queryPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $queryBaseUrl), 'rewrite-disabled preview manifest media URL');
     assert_public_media_url_same($queryPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $queryBaseUrl, 300, 'webp'), 'rewrite-disabled preview manifest thumbnail URL');
 
     $_GET = ['preview' => 'visual', 'view_as' => 'administrator'];
-    $querySignedPreviewImageUrl = $queryImageUrl . '&preview=visual';
-    $querySignedPreviewMediaUrl = str_replace('&v=', '&preview=visual&v=', $queryMediaUrl);
-    $querySignedPreviewThumbnailUrl = str_replace('&v=', '&preview=visual&v=', $queryThumbnailUrl);
+    $querySignedPreviewImageUrl = str_replace('https://example.test', '', $queryImageUrl . '&preview=visual');
+    $querySignedPreviewMediaUrl = str_replace('https://example.test', '', str_replace('&v=', '&preview=visual&v=', $queryMediaUrl));
+    $querySignedPreviewThumbnailUrl = str_replace('https://example.test', '', str_replace('&v=', '&preview=visual&v=', $queryThumbnailUrl));
     assert_public_media_url_same($querySignedPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-disabled administrator preview image URL');
     assert_public_media_url_same($querySignedPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-disabled administrator preview media URL');
     assert_public_media_url_same($querySignedPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-disabled administrator preview thumbnail URL');
@@ -186,22 +186,61 @@ require_once __DIR__ . '/../app/services/app_settings.php';
     $cleanPreviewImageUrl = $cleanImageUrl . '?preview=visual&view_as=anonymous';
     $cleanPreviewMediaUrl = rtrim($cleanImageUrl, '/') . '/media?preview=visual&view_as=anonymous&v=' . $assetVersion;
     $cleanPreviewThumbnailUrl = rtrim($cleanImageUrl, '/') . '/thumb-300.webp?preview=visual&view_as=anonymous&v=' . $assetVersion;
-    assert_public_media_url_same($cleanPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-enabled preview image URL');
-    assert_public_media_url_same($cleanPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-enabled preview media URL');
-    assert_public_media_url_same($cleanPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled preview thumbnail URL');
-    assert_public_media_url_same(rtrim($cleanImageUrl, '/'), public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-enabled preview manifest base remains undecorated');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanPreviewImageUrl), image_public_url($image, $gallery), 'rewrite-enabled preview image URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanPreviewMediaUrl), image_public_media_url($image, $gallery), 'rewrite-enabled preview media URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanPreviewThumbnailUrl), image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled preview thumbnail URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', rtrim($cleanImageUrl, '/')), public_gallery_media_manifest_image_base_url($image, $gallery), 'rewrite-enabled preview manifest base remains undecorated and request-relative');
     assert_public_media_url_same($cleanPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled preview manifest media URL');
     assert_public_media_url_same($cleanPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled preview manifest thumbnail URL');
+    $cleanPreviewBaseUrl = public_gallery_media_manifest_image_base_url($image, $gallery);
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanPreviewMediaUrl), public_gallery_media_manifest_media_url($image, $gallery, $cleanPreviewBaseUrl), 'rewrite-enabled request-mounted preview manifest media URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanPreviewThumbnailUrl), public_gallery_media_manifest_variant_url($image, $gallery, $cleanPreviewBaseUrl, 300, 'webp'), 'rewrite-enabled request-mounted preview manifest thumbnail URL');
 
     $_GET = ['preview' => 'visual', 'view_as' => 'administrator'];
     $cleanSignedPreviewImageUrl = $cleanImageUrl . '?preview=visual';
     $cleanSignedPreviewMediaUrl = rtrim($cleanImageUrl, '/') . '/media?preview=visual&v=' . $assetVersion;
     $cleanSignedPreviewThumbnailUrl = rtrim($cleanImageUrl, '/') . '/thumb-300.webp?preview=visual&v=' . $assetVersion;
-    assert_public_media_url_same($cleanSignedPreviewImageUrl, image_public_url($image, $gallery), 'rewrite-enabled administrator preview image URL');
-    assert_public_media_url_same($cleanSignedPreviewMediaUrl, image_public_media_url($image, $gallery), 'rewrite-enabled administrator preview media URL');
-    assert_public_media_url_same($cleanSignedPreviewThumbnailUrl, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled administrator preview thumbnail URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanSignedPreviewImageUrl), image_public_url($image, $gallery), 'rewrite-enabled administrator preview image URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanSignedPreviewMediaUrl), image_public_media_url($image, $gallery), 'rewrite-enabled administrator preview media URL');
+    assert_public_media_url_same(str_replace('https://example.test', '', $cleanSignedPreviewThumbnailUrl), image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'rewrite-enabled administrator preview thumbnail URL');
     assert_public_media_url_same($cleanSignedPreviewMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled administrator preview manifest media URL');
     assert_public_media_url_same($cleanSignedPreviewThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled administrator preview manifest thumbnail URL');
+
+    foreach (['', '/galerie'] as $mount) {
+        foreach (['example.test:8443', 'alternate.example:8888'] as $host) {
+            foreach ([false, true] as $rewrite) {
+                foreach ([false, true] as $anonymous) {
+                    $GLOBALS['preview_media_base_url'] = 'https://foreign.example/wrong-mount';
+                    $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => $rewrite ? '1' : '0'];
+                    $_SERVER['HTTP_HOST'] = $host;
+                    $_SERVER['SCRIPT_NAME'] = $mount . '/index.php';
+                    $_SERVER['REQUEST_URI'] = $mount . '/index.php?page=gallery';
+                    $_GET = ['preview' => 'visual'] + ($anonymous ? ['view_as' => 'anonymous'] : []);
+                    $expectedImage = $mount . ($rewrite
+                        ? str_replace('https://example.test', '', $anonymous ? $cleanPreviewImageUrl : $cleanSignedPreviewImageUrl)
+                        : ($anonymous ? $queryPreviewImageUrl : $querySignedPreviewImageUrl));
+                    $expectedMedia = $mount . ($rewrite
+                        ? str_replace('https://example.test', '', $anonymous ? $cleanPreviewMediaUrl : $cleanSignedPreviewMediaUrl)
+                        : ($anonymous ? $queryPreviewMediaUrl : $querySignedPreviewMediaUrl));
+                    $expectedThumb = $mount . ($rewrite
+                        ? str_replace('https://example.test', '', $anonymous ? $cleanPreviewThumbnailUrl : $cleanSignedPreviewThumbnailUrl)
+                        : ($anonymous ? $queryPreviewThumbnailUrl : $querySignedPreviewThumbnailUrl));
+                    $markers = '&preview=visual' . ($anonymous ? '&view_as=anonymous' : '');
+                    $expectedGallery = $rewrite
+                        ? $mount . '/gallery/Test%20na%20Macu/VLC%20snapy/?' . ltrim($markers, '&')
+                        : $mount . '/index.php?page=gallery&public_path=Test+na+Macu%2FVLC+snapy' . $markers;
+                    assert_public_media_url_same($expectedGallery, \Gallery\Core\gallery_public_url($gallery), 'foreign configured origin keeps preview gallery navigation on actual mount');
+                    assert_public_media_url_same($expectedImage, image_public_url($image, $gallery), 'foreign configured origin keeps preview image navigation on actual mount');
+                    assert_public_media_url_same($expectedMedia, image_public_media_url($image, $gallery), 'foreign configured origin keeps preview media on actual mount');
+                    assert_public_media_url_same($expectedThumb, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'foreign configured origin keeps preview thumbnail on actual mount');
+                    $previewBase = public_gallery_media_manifest_image_base_url($image, $gallery);
+                    assert_public_media_url_same($expectedMedia, public_gallery_media_manifest_media_url($image, $gallery, $previewBase), 'foreign configured origin keeps manifest media on actual mount');
+                    assert_public_media_url_same($expectedThumb, public_gallery_media_manifest_variant_url($image, $gallery, $previewBase, 300, 'webp'), 'foreign configured origin keeps manifest thumbnail on actual mount');
+                }
+            }
+        }
+    }
+    unset($GLOBALS['preview_media_base_url']);
 
     $replacement = $image;
     $replacement['id'] = 43;

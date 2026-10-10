@@ -25,6 +25,17 @@ namespace Gallery\Core {
     }
 }
 
+namespace Gallery\Services {
+    /**
+     * Keep transport fixtures on the supported query-routing entry point.
+     * @return bool False because these fixtures do not enable URL rewriting.
+     */
+    function url_rewrite_should_emit_clean_urls(): bool
+    {
+        return false;
+    }
+}
+
 namespace {
     use function Gallery\Core\cms_start_session;
     use function Gallery\Core\public_base_url;
@@ -152,6 +163,12 @@ namespace {
         request_aware_base_url('http://other.example.test/galerie') === 'http://other.example.test/galerie',
         'Request transport must not rewrite an unrelated configured host.'
     );
+
+    foreach ([[], $trusted] as $proxyPolicy) {
+        $GLOBALS['request_https_proxy_config']['security'] = $proxyPolicy;
+        request_https_proxy_assert(\Gallery\Core\public_visual_preview_home_url() === '/galerie/index.php?page=home&preview=visual',
+            'Protected Home remains on the browser origin and actual mount with either trusted or untrusted TLS forwarding.');
+    }
 
     echo "Shared HTTPS proxy and Admin cookie policy passed.\n";
 }

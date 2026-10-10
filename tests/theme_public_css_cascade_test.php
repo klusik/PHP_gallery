@@ -21,6 +21,11 @@ namespace Gallery\Core {
      * @return string Fixture mount path.
      */
     function request_script_base_path(): string { return '/sub'; }
+    /** Build one internal path from the fixture's actual application mount.
+     * @param string $path Application path/query suffix, empty for the mounted home directory.
+     * @return string Root-relative fixture URL under /sub.
+     */
+    function request_mount_url(string $path = ''): string { return request_script_base_path() . '/' . ltrim($path, '/'); }
     /** Model direct HTTP for the prepared CSS URL fixture.
      * @return bool The fixture is not served over TLS.
      */

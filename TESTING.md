@@ -10,7 +10,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.126.2. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.126.3. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -1457,6 +1457,31 @@ Use a gallery with enough photos to create several viewport lengths. Test with b
 The browser/network observations above are manual verification only. The standalone PHP and Node tests do not claim coverage of real browser request scheduling or visual decode behavior.
 
 ### Live Visual CSS Editor Acceptance Test
+
+`theme_custom_css_rendering_test.php` verifies the visible disabled accessible
+fallback without JavaScript. `public_visual_preview_asset_url_test.php` covers
+six document-root/mount layouts, HTTP/HTTPS, localhost/nondefault-port/production
+hosts, rewrite modes, configured foreign origin/port/mount and both audiences;
+it also checks marked-preview asset paths and Home navigation while retaining
+ordinary URL assertions. `public_media_url_rewrite_test.php` additionally covers
+clean/query gallery and image navigation, media, thumbnails and fresh manifest
+bases under foreign configured origin, actual root/subdirectory mounts,
+nondefault ports and both preview audiences. `request_https_proxy_test.php`
+covers internal Home under trusted and untrusted TLS forwarding. Existing SEO, route/method/Admin,
+private-media, no-store, stylesheet refusal and draft-only contracts remain
+required. `theme_visual_editor_browser_test.mjs` verifies enabled launch,
+localized malformed/origin/marker refusals, one-shot setup failure, and missing
+workspace/draft/resize/import modules while Manual CSS Clear/Undo and other
+Theme controls remain functional without navigation or persistent requests.
+The browser fixtures also stage a File before optional loading completes, keep
+its operation through import/setup failures, exercise fallback Keep/Remove and
+require successful mocked CSS Save to preserve the disabled visual launcher.
+
+For deployment diagnosis, distinguish an absent server-rendered editor subtab
+from a disabled launcher and from a post-launch iframe refusal. Inspect only
+sanitized reason categories and failed asset status/MIME/redirects. Hosted
+fixtures do not establish the affected WEDOS installation's deployed bytes,
+OPcache, proxy/session or asset delivery; production confirmation remains manual.
 
 Use a disposable installation with a public gallery, at least one private or
 password-gated gallery, representative photographs, and an administrator

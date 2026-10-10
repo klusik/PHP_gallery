@@ -43,7 +43,7 @@ use function Gallery\Core\asset_url;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
 use function Gallery\Core\public_visual_preview_url;
-use function Gallery\Core\request_script_base_path;
+use function Gallery\Core\request_mount_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\admin_legacy_upload_navigation_enabled;
 use function Gallery\Services\admin_test_run_active;
@@ -212,7 +212,7 @@ function shared_layout_preview_asset_href(string $assetPath, string $query, bool
  */
 function shared_layout_preview_route_href(string $page, bool $anonymous): string
 {
-    $path = rtrim(request_script_base_path(), '/') . '/index.php?page=' . rawurlencode($page);
+    $path = request_mount_url('index.php?page=' . rawurlencode($page));
     return public_visual_preview_url($path, $anonymous);
 }
 

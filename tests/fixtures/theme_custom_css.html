@@ -14,6 +14,7 @@ License: MIT License (see LICENSE file in repository)
 import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupOptionalThemeVisualEditor} from '/public/assets/gallery-modules/theme-customization.js?v=20261010-visual-editor-draft-availability';
 import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
 let assertions=0; const submissions=[];
 /** Require native behavior or actual geometry. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
@@ -28,6 +29,7 @@ function edit(control,value) { control.value=value; control.dispatchEvent(new Ev
 function tab(name) { find(`[data-admin-subtab-target="admin-theme-css-subtab-${name}"]`).click(); }
 try {
     setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupGallerySearchPickers();
+    await setupOptionalThemeVisualEditor(find('[data-css-override-editor]'),find('[data-css-override-text]'));
     const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
     form.addEventListener('submit',/** Capture actual successful controls and cancel fixture transport. @param {SubmitEvent} event Native form submission. @return {void} Records complete intent with no live POST. */ event=>{submissions.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault();});
     find('[data-admin-tab-target="admin-theme-tab-custom-css"]').click();
@@ -78,6 +80,9 @@ try {
     find('[name="css_override_action"][value="save"]').click(); await settle();
     check(requests.length===1 && requests[0].get('css_override_revision').length===64 && !requests[0].has('theme_accent') && requests[0].get('csrf_token')==='theme-fixture','explicit save sends only editor text, revision, action and CSRF');
     check(editor.value!==savedCss && find('[data-css-override-status]').textContent==='Saved' && find('[data-css-override-revision]').value==='b'.repeat(64),'successful save updates the optimistic revision and clean state');
+    check(!find('[data-visual-editor-launch]').hidden && find('[data-visual-editor-launch]').disabled
+        && find('[data-visual-editor-availability]').dataset.visualEditorReason==='preview_url_invalid',
+        'successful CSS Save preserves the refused visual launch state instead of enabling every button');
     edit(editor,'</textarea><style>body{display:none}</style>');
     find('[data-css-override-preview]').click(); await settle();
     check(find('[data-css-override-frame]').getAttribute('sandbox')==='' && !find('[data-css-override-frame]').srcdoc.includes(editor.value) && getComputedStyle(document.body).display!=='none','draft CSS is linked in a sandbox without entering Admin HTML or styling');
@@ -102,8 +107,9 @@ try {
     const keepBackground=find('[data-visual-editor-background-keep]');
     const removeBackground=find('[data-visual-editor-background-remove]');
     const backgroundSave=find('[name="css_override_action"][value="save"]');
-    check(editorRoot.dataset.visualEditorPreviewUrl==='' && find('[data-visual-editor-launch]').hidden,
-        'fixture without an authorized preview keeps launch hidden while initializing the separate image draft controls');
+    check(editorRoot.dataset.visualEditorPreviewUrl==='' && !find('[data-visual-editor-launch]').hidden && find('[data-visual-editor-launch]').disabled
+        && find('[data-visual-editor-availability]').dataset.visualEditorReason==='preview_url_invalid',
+        'fixture without an authorized preview explains disabled launch while initializing the separate image draft controls');
     check(editorRoot.dataset.visualEditorBackgroundReady==='1' && !pendingBackground.disabled,
         'an explicit ready snapshot permits choosing the first Theme image when none is saved');
     const submittedFile=new File(['submitted image'],'submitted.png',{type:'image/png'});

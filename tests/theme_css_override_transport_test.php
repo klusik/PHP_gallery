@@ -44,6 +44,13 @@ namespace Gallery\Core {
      * @return string Deterministic fixture preview URL.
      */
     function public_visual_preview_url(string $url): string { return '/fixture-preview' . $url; }
+    /** Prepare the mounted protected Home URL consumed by the actual controller.
+     * @param bool $anonymous Whether anonymous audience is selected.
+     * @return string Deterministic same-origin preview Home URL with the requested audience.
+     */
+    function public_visual_preview_home_url(bool $anonymous = false): string {
+        return '/index.php?page=home&preview=visual' . ($anonymous ? '&view_as=anonymous' : '');
+    }
     /**
      * Capture the ordinary reset fallback instead of leaving the CLI fixture.
      * @param string $url Controller-prepared fallback URL.

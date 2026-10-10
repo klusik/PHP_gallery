@@ -744,3 +744,25 @@ and current-user bypass are independently validated. Usage: observed for both
 production Actions-token responses; hidden membership is never claimed as checked.
 Retire omission handling only if GitHub guarantees this field for the existing
 token permission scope and live/negative regression evidence proves that contract.
+
+## Visual CSS availability and synchronous draft helpers
+
+- **Reason / protected environment:** Shared hosting can fail an optional ES
+  module or supply an unrelated configured public origin. Server-rendered
+  availability keeps Manual CSS usable with disabled/blocked JavaScript; caught
+  optional workspace loading preserves synchronous Theme form operations.
+- **Owner:** Core request helpers own mounted preview URLs; Theme customization
+  owns optional loading; `theme-visual-editor-support.js` owns availability and
+  synchronous background File/operation helpers. The workspace retains the
+  historical `restoreVisualEditorBackgroundFile` and
+  `setVisualEditorBackgroundOperation` exports for direct consumers.
+- **Permanent support rationale:** Keep native Manual CSS/Theme form submission
+  and visible uninitialized state when JavaScript is unavailable. Keep helper
+  re-exports until every direct consumer is migrated and regression evidence
+  proves removal preserves the include/import contract.
+- **Regression evidence:** Custom CSS rendering, preview asset URL and HTTPS
+  proxy PHP fixtures; the visual editor browser fixture exercises missing
+  optional dependencies, setup failure and intact draft/Theme controls.
+- **Usage / introduction:** Production incidence and direct-export usage are
+  unknown. This availability contract is authored for #182; the actual original
+  production trigger remains unverified until deployment is checked.
