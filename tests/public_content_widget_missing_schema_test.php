@@ -46,12 +46,12 @@ namespace {
          *
          * @param string $query Model-owned SQL statement expected to select public widgets.
          * @param int|null $fetchMode Optional PDO fetch mode supplied by the caller.
-         * @param mixed ...$fetchModeArgs Optional driver fetch arguments accepted by PDO.
+         * @param scalar|array<array-key,mixed>|object|resource|null ...$fetchModeArgs Optional inherited PDO fetch arguments, accepted and ignored by this disconnected fixture.
          * @return \PDOStatement|false Never returns because the optional table is absent.
          */
         public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): \PDOStatement|false
         {
-            if (!str_contains($query, 'FROM public_content_widgets') || $fetchMode !== null || $fetchModeArgs !== []) {
+            if (!str_contains($query, 'FROM public_content_widgets') || $fetchMode !== null) {
                 throw new \RuntimeException('Unexpected public widget missing-schema query.');
             }
             $this->queryCount++;

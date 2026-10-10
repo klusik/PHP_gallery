@@ -18,12 +18,12 @@ namespace Gallery\Core {
     /**
      * Escape one editor value for an HTML text or attribute context.
      *
-     * @param mixed $value Scalar content emitted by the Admin view.
-     * @return string HTML-escaped scalar text, or empty text for other values.
+     * @param string|int|float|bool|null $value Scalar content emitted by the Admin view.
+     * @return string HTML-escaped scalar text, or empty text for null.
      */
-    function e(mixed $value): string
+    function e(string|int|float|bool|null $value): string
     {
-        return htmlspecialchars(is_scalar($value) ? (string) $value : '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars($value === null ? '' : (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }
 
@@ -32,17 +32,17 @@ namespace Gallery\Services {
      * Resolve one Admin label from the test-selected maintained catalog.
      *
      * @param string $key Flat translation catalog key.
-     * @param mixed $default English fallback value supplied by the view.
+     * @param string|null $default Optional English fallback label supplied by the view.
      * @return string Catalog translation or the explicit English fallback.
      */
-    function t(string $key, mixed $default = null): string
+    function t(string $key, ?string $default = null): string
     {
         $catalog = $GLOBALS['public_widget_editor_locale_test_catalog'] ?? [];
         $value = is_array($catalog) ? ($catalog[$key] ?? null) : null;
         if (is_string($value)) {
             return $value;
         }
-        return is_string($default) ? $default : $key;
+        return $default ?? $key;
     }
 }
 
