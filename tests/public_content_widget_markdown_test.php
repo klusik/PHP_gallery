@@ -17,6 +17,7 @@ require_once dirname(__DIR__) . '/app/services/public_content_widgets.php';
 
 use function Gallery\Services\public_widget_inline_html;
 use function Gallery\Services\public_widget_markdown_html;
+use function Gallery\Services\public_widget_normalize;
 
 $source = "# Friend galleries\n\nVisit our **friends** and *resources*:\n\n"
     . "- [Aircraft photos](https://example.org/pictures?q=1&v=2)\n"
@@ -52,4 +53,32 @@ if (public_widget_markdown_html(str_repeat('a', 16385)) !== ''
 if (str_contains(public_widget_inline_html('[bad](data:text/html,hi)'), '<a')) {
     throw new RuntimeException('Executable URI created a link.');
 }
+// Parenthesized link destinations must be recognized by BOTH admission and output.
+// Otherwise a malformed executable URI could escape the write-time Markdown guard.
+$parenthesized = '[Reference](https://example.org/wiki/Topic_(aviation))';
+$normalized = public_widget_normalize([
+    'title' => 'References',
+    'content_md' => $parenthesized,
+    'status' => 'published',
+]);
+$parenthesizedHtml = public_widget_markdown_html($normalized['content_md']);
+if (!str_contains($parenthesizedHtml,
+    '<a href="https://example.org/wiki/Topic_(aviation)" target="_blank" rel="noopener noreferrer">Reference</a>')) {
+    throw new RuntimeException('A safe balanced-parenthesis link must render as a validated link.');
+}
+foreach (['[bad](javascript:alert(1))', '[bad](data:text/html,(evil))', '[bad](javascript:alert)'] as $unsafe) {
+    $rejected = false;
+    try {
+        public_widget_normalize(['title' => 'Blocked', 'content_md' => $unsafe, 'status' => 'published']);
+    } catch (\Gallery\Services\PublicWidgetInvalidField $exception) {
+        $rejected = $exception->field === 'content_md';
+    }
+    if (!$rejected) {
+        throw new RuntimeException('An unsafe Markdown link was admitted: ' . $unsafe);
+    }
+    if (str_contains(public_widget_markdown_html($unsafe), '<a ')) {
+        throw new RuntimeException('An unsafe Markdown link was rendered: ' . $unsafe);
+    }
+}
+
 echo "public_content_widget_markdown_test: PASS\n";
