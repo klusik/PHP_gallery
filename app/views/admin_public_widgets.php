@@ -59,7 +59,7 @@ function view_public_widget_select(string $name, mixed $current, array $options)
 /**
  * Render a separate, revision-aware widget workspace within Theme / Appearance.
  *
- * @param array<string,mixed> $model Prepared records, URLs, draft fields, notices, and safe preview HTML.
+ * @param array<string,mixed> $model Prepared records, URLs, draft fields, notices, an optional submitted revision retained after a rejected save, and safe preview HTML.
  * @return void Emits the independent widget editor and read-only preview.
  */
 function view_render_admin_public_widgets(array $model): void
@@ -71,7 +71,9 @@ function view_render_admin_public_widgets(array $model): void
     $csrf = (string) ($model['csrf_html'] ?? '');
     $url = (string) ($model['editor_url'] ?? '');
     $id = $editing ? (string) ($selected['widget_id'] ?? '') : '';
-    $revision = $editing ? (int) ($selected['revision'] ?? 0) : 0;
+    $revision = $editing
+        ? (int) ($model['submitted_revision'] ?? $selected['revision'] ?? 0)
+        : 0;
 
     echo '<section class="panel public-widgets-heading"><p class="admin-kicker">' . e(t('admin.widgets.kicker', 'Appearance / Widgets')) . '</p>';
     echo '<h1>' . e(t('admin.widgets.title', 'Public content widgets')) . '</h1>';

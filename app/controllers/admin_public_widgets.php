@@ -214,7 +214,9 @@ function admin_public_widget_error_message(PublicWidgetInvalidField $failure): s
  *
  * A read-only preview always follows CSRF validation and never invokes a model
  * write. All successful mutations follow post/redirect/get, preserving revision
- * guards against concurrent editors. Unauthorized routes never reach this action.
+ * guards against concurrent editors. A rejected stale save keeps its submitted
+ * revision token so the retained draft cannot be silently rebased by resubmission.
+ * Unauthorized routes never reach this action.
  *
  * @return void Renders an editor or redirects after a successful mutation.
  */
@@ -224,6 +226,7 @@ function cms_admin_public_widgets(): void
     $notice = (string) (flash_message('admin_public_widget_notice') ?? '');
     $error = '';
     $errorField = '';
+    $submittedRevision = null;
     $selection = $_GET['id'] ?? null;
     $draft = null;
     if (request_method() === 'POST') {
@@ -308,6 +311,13 @@ function cms_admin_public_widgets(): void
         } catch (PublicWidgetInvalidField $failure) {
             $errorField = $failure->field;
             $error = admin_public_widget_error_message($failure);
+            if ($action === 'save' && $failure->field === 'revision') {
+                $rawRevision = $_POST['revision'] ?? null;
+                $parsedRevision = is_scalar($rawRevision)
+                    ? filter_var((string) $rawRevision, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+                    : false;
+                $submittedRevision = is_int($parsedRevision) ? $parsedRevision : 0;
+            }
         } catch (Throwable) {
             $error = t('admin.widgets.storage_error', 'Widget storage is unavailable. Check database migrations and try again.');
         }
@@ -348,6 +358,7 @@ function cms_admin_public_widgets(): void
         'published_peers' => admin_public_widget_published_peers($rows),
         'selected' => $selected,
         'draft' => $draft,
+        'submitted_revision' => $submittedRevision,
         'notice' => $notice,
         'error' => $error,
         'error_field' => $errorField,

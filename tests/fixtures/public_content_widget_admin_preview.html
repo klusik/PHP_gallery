@@ -154,15 +154,20 @@ try {
                 'Gallery preview geometry contains the actual rendered hero action cluster.');
             const candidate = {
                 anchor: 'top-right', x: 900, y: 100, width: Number(draft.dataset.publicWidgetWidth),
-                height: measureFlowHeight(draft), viewportWidth: geometry.viewportWidth,
+                height: Math.ceil(geometry.viewportHeight * 0.4), viewportWidth: geometry.viewportWidth,
                 viewportHeight: geometry.viewportHeight, topInset: geometry.topInset,
             };
             const unprotected = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions
                 .filter(box => box !== actionExclusion)});
             const protectedCandidate = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions});
-            check(unprotected && unprotected.left < actionBounds.right && unprotected.left + unprotected.width > actionBounds.left
-                && unprotected.top < actionBounds.bottom && unprotected.top + unprotected.height > actionBounds.top,
-            'A top-right Gallery panel would overlap the rendered actions without their protected rectangle.');
+            const overlapsActions = unprotected && unprotected.left < actionBounds.right
+                && unprotected.left + unprotected.width > actionBounds.left
+                && unprotected.top < actionBounds.bottom && unprotected.top + unprotected.height > actionBounds.top;
+            check(overlapsActions,
+                'A valid tall top-right Gallery panel would overlap actions without protection (panel '
+                + JSON.stringify(unprotected) + ', actions ' + JSON.stringify({
+                    left: actionBounds.left, top: actionBounds.top, right: actionBounds.right, bottom: actionBounds.bottom,
+                }) + ', top inset ' + geometry.topInset + ').');
             check(protectedCandidate && (protectedCandidate.left + protectedCandidate.width <= actionBounds.left
                 || protectedCandidate.left >= actionBounds.right || protectedCandidate.top + protectedCandidate.height <= actionBounds.top
                 || protectedCandidate.top >= actionBounds.bottom),

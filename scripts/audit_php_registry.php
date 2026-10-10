@@ -87,6 +87,8 @@ return [
         'admin_updates_ui_test.php' => 'Optional preview output uses the fixed repository cache/admin-updates-ui-preview.html path.',
         'updater_resumable_state_machine_test.php' => 'Exercises real repository cache/updates/jobs paths and cleanup alongside updater fixture state.',
         'admin_operation_keys_http_test.php' => 'Mutates the externally supplied shared disposable HTTP/database workflow fixture.',
+        'public_content_widget_db_workflow_test.php' => 'Mutates the shared widget table and checks its exact baseline row count in the disposable workflow database.',
+        'public_content_widget_admin_http_workflow_test.php' => 'Uses separate authenticated sessions to mutate the shared widget table in the disposable HTTP/database workflow fixture.',
         'gallery_edit_concurrency_mysql_test.php' => 'Runs competing writers against the externally supplied shared disposable HTTP/database fixture.',
         'gallery_image_move_crash_test.php' => 'Kills its own mutation workers and repairs shared disposable database and gallery state.',
         'gallery_workflow_browser_test.php' => 'Browser journeys mutate the externally supplied shared disposable HTTP/database fixture.',
