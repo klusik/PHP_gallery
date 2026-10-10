@@ -154,19 +154,39 @@ namespace {
             && (int) public_widget_model_find($id)['revision'] === 3,
             'Failed multi-row reorder left partial writes or revision bumps.');
 
-        $stage = 'disable, stale delete and committed cleanup';
-        public_widget_save($id, 3, [...$original, 'status' => 'disabled', 'sort_order' => 100]);
+        $stage = 'disable, re-enable, stale delete and committed cleanup';
+        $beforeDisable = public_widget_model_find($id);
+        check(is_array($beforeDisable) && (int) $beforeDisable['revision'] === 3,
+            'Published widget is missing before the visibility lifecycle.');
+        public_widget_save($id, 3, [...$beforeDisable, 'status' => 'disabled']);
         check(count(array_filter(public_widget_public_rows('home'),
             static fn (array $row): bool => $row['widget_id'] === $id)) === 0,
             'Disabled item remains publicly visible.');
+        $afterDisable = public_widget_model_find($id);
+        check(is_array($afterDisable) && (int) $afterDisable['revision'] === 4
+            && $afterDisable['status'] === 'disabled',
+            'Disabled widget did not persist its state and revision.');
+        public_widget_save($id, 4, [...$beforeDisable, 'status' => 'published']);
+        $restored = public_widget_model_find($id);
+        check(is_array($restored) && (int) $restored['revision'] === 5
+            && $restored['status'] === 'published'
+            && $restored['content_md'] === $beforeDisable['content_md']
+            && $restored['title'] === $beforeDisable['title']
+            && $restored['flow_slot'] === $beforeDisable['flow_slot']
+            && (int) $restored['sort_order'] === (int) $beforeDisable['sort_order'],
+            'Re-enabling changed saved content, placement or ordering.');
+        check(count(array_filter(public_widget_public_rows('home'),
+            static fn (array $row): bool => $row['widget_id'] === $id)) === 1,
+            'Re-enabled published item is not visible exactly once.');
+        public_widget_save($id, 5, [...$beforeDisable, 'status' => 'disabled']);
         $staleDeleteDenied = false;
         try {
-            public_widget_delete($id, 3);
+            public_widget_delete($id, 5);
         } catch (PublicWidgetInvalidField $exception) {
             $staleDeleteDenied = $exception->field === 'revision';
         }
         check($staleDeleteDenied, 'Stale delete unexpectedly removed the newer revision.');
-        public_widget_delete($id, 4);
+        public_widget_delete($id, 6);
         $createdIds = array_values(array_diff($createdIds, [$id]));
         public_widget_delete($copy, 2);
         $createdIds = array_values(array_diff($createdIds, [$copy]));
@@ -174,7 +194,7 @@ namespace {
             'Deleted widget still exists.');
         check((int) $pdo->query('SELECT COUNT(*) FROM public_content_widgets')->fetchColumn() === $initialCount,
             'DB widget workflow failed to restore the original table row count.');
-        echo "PASS public content widget real DB CRUD, scope, optimistic revision, duplication and atomic reorder\n";
+        echo "PASS public content widget real DB CRUD, scope, visibility restore, optimistic revision, duplication and atomic reorder\n";
     } catch (\Throwable $exception) {
         throw new \RuntimeException('FAIL public content widget DB workflow at ' . $stage . ': '
             . get_class($exception) . ' ' . $exception->getMessage(), 0, $exception);
