@@ -127,14 +127,14 @@ function public_widget_safe_url(mixed $input): string
 /**
  * Ensure authored Markdown link tokens contain only safe destinations.
  *
- * Non-Markdown plain text is always HTML-escaped by the eventual renderer.
+ * Recognize a bounded single balanced parenthesis group inside link destinations,\n * matching the shared output recognizer (for example `javascript:alert(1)`).\n * Non-Markdown plain text is always HTML-escaped by the eventual renderer.
  *
  * @param string $content UTF-8 authored Markdown source.
  * @return void Throws on unsupported or malicious Markdown link destinations.
  */
 function public_widget_validate_markdown_links(string $content): void
 {
-    if (preg_match_all('/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(([^()\s]{1,2048})\)/u', $content, $matches) === false) {
+    if (preg_match_all('/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(((?:[^()\s]|\([^()\s]{1,256}\)){1,2048})\)/u', $content, $matches) === false) {
         throw new PublicWidgetInvalidField('content_md', 'The content contains invalid UTF-8 or link syntax.');
     }
     foreach ($matches[1] as $url) {
@@ -414,7 +414,7 @@ function public_widget_emphasis_html(string $text): string
 /**
  * Resolve recognized Markdown links into safe markup without marker-token injection.
  *
- * External links intentionally open in a new tab; site-local routes and fragments
+ * Link recognition accepts bounded balanced parentheses in URLs, matching\n * the write-side link validator; every matched destination is revalidated.\n * External links intentionally open in a new tab; site-local routes and fragments
  * remain in the current tab. Invalid or unrecognized Markdown remains inert text.
  *
  * @param string $text Untrusted Markdown inline content.
@@ -422,7 +422,7 @@ function public_widget_emphasis_html(string $text): string
  */
 function public_widget_inline_html(string $text): string
 {
-    $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(([^()\s]{1,2048})\)/u';
+    $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(((?:[^()\s]|\([^()\s]{1,256}\)){1,2048})\)/u';
     $matchCount = preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
     if ($matchCount === false || $matchCount === 0) {
         return public_widget_emphasis_html($text);
