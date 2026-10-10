@@ -6,7 +6,7 @@
  * Purpose: Exercise real widget Admin positioning and protected public previews in Chromium.
  * Responsibilities:
  *   - Verify pointer drag, keyboard positioning, reset and draft-safe controls.
- *   - Verify Home/Gallery flow insertion, peer-aware public floating geometry and mobile fallback.
+ *   - Verify Home/Gallery flow insertion, peer geometry, Gallery action clearance and mobile fallback.
  *   - Keep fixtures confined to an isolated, loopback-only browser profile.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -31,6 +31,8 @@ const routes = new Map([
     ['/public-content-widgets.js', 'public/assets/gallery-modules/public-content-widgets.js'],
     ['/widget-admin.css', 'public/assets/styles/admin-public-widgets.css'],
     ['/widget-public.css', 'public/assets/styles/public-content-widgets.css'],
+    ['/widget-shared.css', 'public/assets/styles/public-shared.css'],
+    ['/widget-shell.css', 'public/assets/styles/public.css'],
 ]);
 const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');

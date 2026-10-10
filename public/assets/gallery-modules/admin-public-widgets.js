@@ -14,7 +14,7 @@ import {
     publicWidgetBoundedNumber,
     readPublicWidgetFloatingGeometry,
     resolvePublicWidgetFloatingRect,
-} from './public-content-widgets.js?v=20261011-widget-geometry-preview-v1';
+} from './public-content-widgets.js?v=20261011-gallery-action-widget-exclusion-v2';
 
 /**
  * Replace only the selected Markdown text with an intentionally simple formatting token.

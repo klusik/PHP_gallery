@@ -129,8 +129,8 @@ try {
         'Preview retains the real gallery list content and a single article');
     form.querySelector('[name="flow_slot"]').value = 'left_rail';
     form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
-    check(previewDoc.querySelector('.public-widget-content-layout--left .public-widget-region--left_rail [data-widget-theme-draft="1"]'),
-        'Left rail uses the actual public responsive CSS layout');
+    check(previewDoc.querySelector('.public-widget-content-layout--both .public-widget-region--left_rail [data-widget-theme-draft="1"]'),
+        'Left rail shares the actual public two-rail CSS layout with its retained right rail');
     check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"]').length === 1,
         'Draft shares the original rail region instead of creating overlapping grid areas');
     check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"] .public-content-widget').length === 2,

@@ -8,7 +8,7 @@
  *   - Keep all content in normal document flow if scripting, viewport space or placement fails.
  *   - Place at most two bounded, dismissible panels below existing public dialog layers.
  *   - Expose the bounded public placement geometry for the protected Admin preview.
- *   - Avoid navigation, back-to-top controls and other positioned widgets on viewport changes.
+ *   - Avoid navigation, Gallery hero actions, back-to-top controls and other positioned widgets.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -146,10 +146,11 @@ function visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight) {
 }
 
 /**
- * Read the public viewport and protected-control geometry used by floating widgets.
+ * Read the public viewport and visible controls that floating widgets must avoid.
  *
  * Admin previews pass the isolated public document and its window so placement
  * uses the same measured Theme controls and viewport policy as visitor pages.
+ * Gallery detail action buttons join Home controls and fixed tools as exclusions.
  *
  * @param {Document} doc Public page document whose layout is being measured.
  * @param {Window} win Window owning the document and optional visual viewport.
@@ -168,7 +169,7 @@ export function readPublicWidgetFloatingGeometry(doc, win) {
         && scale <= 1.05
         && topInset <= viewportHeight * 0.45;
     const exclusions = supported ? Array.from(doc.querySelectorAll(
-        '.site-header, .public-home-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav'
+        '.site-header, .public-home-actions, .hero[data-public-gallery-id] .hero-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav'
     )).map((element) => visiblePublicWidgetExclusion(element, viewportWidth, viewportHeight)).filter(Boolean) : [];
     return {viewportWidth, viewportHeight, topInset, exclusions, supported};
 }

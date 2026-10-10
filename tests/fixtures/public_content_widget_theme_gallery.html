@@ -6,20 +6,29 @@ File: tests/fixtures/public_content_widget_theme_gallery.html
 Module Type: Browser Test Fixture
 Purpose: Exercise protected Gallery Theme preview markup without public-page scripts.
 Responsibilities:
-  - Provide a real gallery-detail container, header, footer, and public widget zones.
+  - Provide a Gallery hero action cluster, detail container, header, footer, and widget zones.
   - Keep all links inert through the parent Admin sandbox.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Protected Gallery preview fixture</title><link rel="stylesheet" href="/widget-public.css">
+<title>Protected Gallery preview fixture</title>
+<link rel="stylesheet" href="/widget-shell.css"><link rel="stylesheet" href="/widget-shared.css"><link rel="stylesheet" href="/widget-public.css">
 <body class="public-page" data-preview-fixture-page="gallery">
 <header class="site-header"><a href="/untrusted-gallery-route">Gallery navigation</a></header>
 <main class="site-main">
 <div class="public-widget-content-layout public-widget-content-layout--right"><div class="public-widget-primary">
 <section class="hero" data-public-gallery-id="preview-gallery">
+    <div class="hero-topbar">
+        <div class="hero-primary"><h1>Published gallery detail</h1></div>
+        <div class="hero-meta">
+            <div class="hero-actions" data-widget-fixture-gallery-actions aria-label="Gallery actions">
+                <a class="button" href="/download-gallery">Download gallery</a>
+                <button class="button" type="button">Open map</button>
+            </div>
+        </div>
+    </div>
     <div class="public-gallery-detail" data-public-gallery-detail>
-        <h1>Published gallery detail</h1>
         <div class="gallery-detail-content" data-gallery-detail-content>
             <article class="gallery-card">Gallery photo content stays in its own page layout.</article>
         </div>

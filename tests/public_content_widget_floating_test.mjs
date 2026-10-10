@@ -22,15 +22,23 @@ const header = {
     closest: () => null,
     getBoundingClientRect: () => ({left: 0, top: 0, right: 1280, bottom: 52, width: 1280, height: 52}),
 };
+const galleryActions = {
+    hidden: false,
+    closest: () => null,
+    getBoundingClientRect: () => ({left: 870, top: 90, right: 1260, bottom: 134, width: 390, height: 44}),
+};
 const publicDocument = {
     documentElement: {clientWidth: 1280},
     querySelector: selector => selector === '.site-header' ? header : null,
-    querySelectorAll: () => [header],
+    querySelectorAll: () => [header, galleryActions],
 };
 const desktopGeometry = readPublicWidgetFloatingGeometry(publicDocument, {innerHeight: 800, visualViewport: null});
 assert.equal(desktopGeometry.supported, true, 'Desktop Theme geometry supports a floating preview');
 assert.equal(desktopGeometry.topInset, 64, 'The real header bottom protects the floating panel');
-assert.deepEqual(desktopGeometry.exclusions, [{left: 0, top: 0, width: 1280, height: 52}]);
+assert.deepEqual(desktopGeometry.exclusions, [
+    {left: 0, top: 0, width: 1280, height: 52},
+    {left: 870, top: 90, width: 390, height: 44},
+]);
 assert.equal(readPublicWidgetFloatingGeometry({
     ...publicDocument, documentElement: {clientWidth: 390},
 }, {innerHeight: 844, visualViewport: null}).supported, false, 'Mobile retains its in-flow fallback');
@@ -46,6 +54,27 @@ const defaults = {
     width: 300, height: 160, viewportWidth: 1280,
     viewportHeight: 800, topInset: 130, exclusions: [],
 };
+const galleryActionBox = desktopGeometry.exclusions[1];
+const galleryTopRightInput = {
+    ...defaults, anchor: 'top-right', width: 300, height: 100,
+    topInset: desktopGeometry.topInset, exclusions: [desktopGeometry.exclusions[0]],
+};
+const galleryTopRightWithoutAction = resolvePublicWidgetFloatingRect(galleryTopRightInput);
+assert.ok(galleryTopRightWithoutAction
+    && galleryTopRightWithoutAction.left < galleryActionBox.left + galleryActionBox.width
+    && galleryTopRightWithoutAction.left + galleryTopRightWithoutAction.width > galleryActionBox.left
+    && galleryTopRightWithoutAction.top < galleryActionBox.top + galleryActionBox.height
+    && galleryTopRightWithoutAction.top + galleryTopRightWithoutAction.height > galleryActionBox.top,
+'A top-right Gallery panel would cover the real hero action cluster without its protected rectangle');
+const galleryTopRightWithAction = resolvePublicWidgetFloatingRect({
+    ...galleryTopRightInput, exclusions: desktopGeometry.exclusions,
+});
+assert.ok(galleryTopRightWithAction
+    && (galleryTopRightWithAction.left + galleryTopRightWithAction.width <= galleryActionBox.left
+        || galleryTopRightWithAction.left >= galleryActionBox.left + galleryActionBox.width
+        || galleryTopRightWithAction.top + galleryTopRightWithAction.height <= galleryActionBox.top
+        || galleryTopRightWithAction.top >= galleryActionBox.top + galleryActionBox.height),
+'Shared Gallery geometry moves a top-right panel clear of the hero action cluster');
 const right = resolvePublicWidgetFloatingRect(defaults);
 assert.deepEqual(right, {left: 964, top: 624, width: 300, height: 160});
 

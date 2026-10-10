@@ -141,6 +141,33 @@ try {
             page + ' document remains scriptless while Admin projects the draft.');
         const geometry = readPublicWidgetFloatingGeometry(doc, win);
         check(geometry.supported, page + ' desktop preview satisfies public floating viewport policy.');
+        const galleryActions = page === 'gallery'
+            ? doc.querySelector('[data-widget-fixture-gallery-actions]') : null;
+        if (galleryActions) {
+            const actionBounds = galleryActions.getBoundingClientRect();
+            const actionExclusion = geometry.exclusions.find(box =>
+                Math.abs(box.left - actionBounds.left) <= 1
+                && Math.abs(box.top - actionBounds.top) <= 1
+                && Math.abs(box.width - actionBounds.width) <= 1
+                && Math.abs(box.height - actionBounds.height) <= 1);
+            check(actionExclusion,
+                'Gallery preview geometry contains the actual rendered hero action cluster.');
+            const candidate = {
+                anchor: 'top-right', x: 900, y: 100, width: Number(draft.dataset.publicWidgetWidth),
+                height: measureFlowHeight(draft), viewportWidth: geometry.viewportWidth,
+                viewportHeight: geometry.viewportHeight, topInset: geometry.topInset,
+            };
+            const unprotected = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions
+                .filter(box => box !== actionExclusion)});
+            const protectedCandidate = resolvePublicWidgetFloatingRect({...candidate, exclusions: geometry.exclusions});
+            check(unprotected && unprotected.left < actionBounds.right && unprotected.left + unprotected.width > actionBounds.left
+                && unprotected.top < actionBounds.bottom && unprotected.top + unprotected.height > actionBounds.top,
+            'A top-right Gallery panel would overlap the rendered actions without their protected rectangle.');
+            check(protectedCandidate && (protectedCandidate.left + protectedCandidate.width <= actionBounds.left
+                || protectedCandidate.left >= actionBounds.right || protectedCandidate.top + protectedCandidate.height <= actionBounds.top
+                || protectedCandidate.top >= actionBounds.bottom),
+            'The shared Gallery solver keeps a top-right panel clear of rendered actions.');
+        }
         const peers = Array.from(doc.querySelectorAll('[data-public-widget-floating="1"]'))
             .filter(widget => widget !== draft);
         check(peers.length === 1
