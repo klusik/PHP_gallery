@@ -483,6 +483,9 @@ function view_render_footer(string $page = 'home', array $model = []): void
         view_render_admin_test_run_panel($adminTestRunPanel);
     }
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
+    if (in_array($page, ['home', 'gallery'], true)) {
+        echo (string) ($model['public_widget_footer_html'] ?? '');
+    }
     $githubProjectUrl = trim((string) ($model['github_project_url'] ?? ''));
     if ($githubProjectUrl !== '') {
         echo '<a class="site-footer-link" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';

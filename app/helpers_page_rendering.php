@@ -397,13 +397,18 @@ function render_browser_i18n_script(): void
 /**
  * Render the shared footer and JavaScript include for the current page.
  *
+ * @param string $publicWidgetFooterHtml Escaped and service-sanitized widget fragment prepared by the public View.
  * @return void Select the footer model from the normalized request page.
  */
-function render_footer(): void
+function render_footer(string $publicWidgetFooterHtml = ''): void
 {
     if (!function_exists('Gallery\Views\view_render_footer')) {
         throw new RuntimeException('Shared footer view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
     $page = (string) (request_data('query')['page'] ?? 'home');
-    view_render_footer($page, shared_layout_footer_model($page));
+    $model = shared_layout_footer_model($page);
+    if (in_array($page, ['home', 'gallery'], true) && $publicWidgetFooterHtml !== '') {
+        $model['public_widget_footer_html'] = $publicWidgetFooterHtml;
+    }
+    view_render_footer($page, $model);
 }

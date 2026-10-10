@@ -53,6 +53,15 @@ use function Gallery\Services\t;
 function view_render_public_gallery_home(array $viewModel): void
 {
     render_header((string) ($viewModel['site_name'] ?? ''));
+    $widgets = (array) ($viewModel['public_widgets'] ?? []);
+    view_render_public_widget_region($widgets, 'content_top');
+    $hasRails = !empty($widgets['left_rail']) || !empty($widgets['right_rail']);
+    if ($hasRails) {
+        $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
+            : (!empty($widgets['left_rail']) ? 'left' : 'right');
+        echo '<div class="public-widget-content-layout public-widget-content-layout--' . $railMode
+            . '"><div class="public-widget-primary">';
+    }
 
     $physicalCount = (int) ($viewModel['physical_gallery_count'] ?? 0);
     $smartCount = (int) ($viewModel['smart_gallery_count'] ?? 0);
@@ -78,6 +87,7 @@ function view_render_public_gallery_home(array $viewModel): void
         view_render_public_gallery_admin_add_child_link(array_merge($creationAction, ['label' => t('gallery.home.add_first', 'Add your first gallery'), 'show_label' => true]));
         echo '</section>';
     }
+    view_render_public_widget_region($widgets, 'home_before_grid');
     if ((int) ($viewModel['gallery_count'] ?? 0) > 0) {
         echo (string) ($viewModel['pagination_html'] ?? '');
         echo '<section class="grid public-home-gallery-grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-gallery-index-grid data-public-root-gallery-count="' . $physicalCount . '" data-public-root-gallery-revision="' . e($revision) . '" data-public-root-smart-gallery-count="' . $smartCount . '" data-public-gallery-page="' . (int) ($viewModel['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($viewModel['total_pages'] ?? 1) . '">';
@@ -85,10 +95,18 @@ function view_render_public_gallery_home(array $viewModel): void
         echo '</section>';
         echo (string) ($viewModel['pagination_html'] ?? '');
     }
+    view_render_public_widget_region($widgets, 'home_after_grid');
     echo '</div>' . (string) ($viewModel['back_to_top_html'] ?? '') . '</div>';
-
+    if ($hasRails) {
+        echo '</div>';
+        view_render_public_widget_region($widgets, 'left_rail');
+        view_render_public_widget_region($widgets, 'right_rail');
+        echo '</div>';
+    }
+    view_render_public_widget_region($widgets, 'content_bottom');
+    view_render_public_widget_region($widgets, 'floating');
     echo (string) ($viewModel['render_profile_html'] ?? '');
-    render_footer();
+    render_footer(view_public_widget_region_html($widgets, 'footer'));
 }
 
 /**
@@ -297,12 +315,21 @@ function view_render_public_gallery_detail(array $viewModel): void
 {
     $gallery = (array) ($viewModel['gallery'] ?? []);
     render_header((string) ($viewModel['page_title'] ?? ''), $gallery, !empty($viewModel['public_only']));
+    $widgets = (array) ($viewModel['public_widgets'] ?? []);
 
     $notice = (string) ($viewModel['notice'] ?? '');
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
 
+    view_render_public_widget_region($widgets, 'content_top');
+    $hasRails = !empty($widgets['left_rail']) || !empty($widgets['right_rail']);
+    if ($hasRails) {
+        $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
+            : (!empty($widgets['left_rail']) ? 'left' : 'right');
+        echo '<div class="public-widget-content-layout public-widget-content-layout--' . $railMode
+            . '"><div class="public-widget-primary">';
+    }
     view_render_public_gallery_hero((array) ($viewModel['hero'] ?? []));
     echo (string) ($viewModel['branding_separator_html'] ?? '');
     echo (string) ($viewModel['preview_toolbar_html'] ?? '');
@@ -323,7 +350,15 @@ function view_render_public_gallery_detail(array $viewModel): void
         echo '</div>';
     }
 
+    if ($hasRails) {
+        echo '</div>';
+        view_render_public_widget_region($widgets, 'left_rail');
+        view_render_public_widget_region($widgets, 'right_rail');
+        echo '</div>';
+    }
+    view_render_public_widget_region($widgets, 'content_bottom');
+    view_render_public_widget_region($widgets, 'floating');
     echo (string) ($viewModel['lightbox_html'] ?? '');
     echo (string) ($viewModel['render_profile_html'] ?? '');
-    render_footer();
+    render_footer(view_public_widget_region_html($widgets, 'footer'));
 }

@@ -534,3 +534,71 @@ function public_widget_markdown_html(string $markdown): string
     public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
     return implode("\n", $blocks);
 }
+
+
+/**
+ * Group published records into the seven public in-flow zones and a single
+ * progressive floating fallback zone without altering their persisted IDs.
+ *
+ * A home-grid slot on an eligible gallery page is not present there, so an
+ * all-pages widget in that slot degrades to content_bottom exactly once.
+ * The caller supplies a closed, access-checked public page type.
+ *
+ * @param list<array<string,mixed>> $rows Prepared or fixture records in administrator order.
+ * @param string $pageType Authorized public page type: home or gallery.
+ * @return array<string,list<array<string,int|string>>> Named zones with safe, pre-rendered widget view models.
+ */
+function public_widget_plan_rows(array $rows, string $pageType): array
+{
+    $plan = [
+        'content_top' => [], 'content_bottom' => [],
+        'left_rail' => [], 'right_rail' => [],
+        'home_before_grid' => [], 'home_after_grid' => [],
+        'footer' => [], 'floating' => [],
+    ];
+    if (!in_array($pageType, ['home', 'gallery'], true)) {
+        return $plan;
+    }
+    foreach ($rows as $row) {
+        try {
+            $widget = public_widget_normalize($row);
+            if (!public_widget_visible_on_page($widget, $pageType)) {
+                continue;
+            }
+            $widgetId = public_widget_id($row['widget_id'] ?? null);
+            $slot = $widget['placement_mode'] === 'floating' ? 'floating' : $widget['flow_slot'];
+            if ($pageType === 'gallery' && in_array($slot, ['home_before_grid', 'home_after_grid'], true)) {
+                $slot = 'content_bottom';
+            }
+            $plan[$slot][] = [
+                'widget_id' => $widgetId,
+                'title' => $widget['title'],
+                'body_html' => public_widget_markdown_html($widget['content_md']),
+                'appearance' => $widget['appearance'],
+                'source_language' => $widget['source_language'],
+                'placement_mode' => $widget['placement_mode'],
+                'floating_anchor' => $widget['floating_anchor'],
+                'x_permille' => $widget['x_permille'],
+                'y_permille' => $widget['y_permille'],
+                'width_px' => $widget['width_px'],
+            ];
+        } catch (InvalidArgumentException) {
+            // Legacy, invalid or unpublished records can never emit public markup.
+        }
+    }
+    return $plan;
+}
+
+/**
+ * Resolve the only public widget query for an authorized home/gallery document.
+ *
+ * Missing migrations or datastore errors are already handled by the published
+ * row reader. Neither the shared layout nor its Views may query the widget DB.
+ *
+ * @param string $pageType Explicit controller-approved home or gallery document.
+ * @return array<string,list<array<string,int|string>>> Ordered, safe presentation regions.
+ */
+function public_widget_public_plan(string $pageType): array
+{
+    return public_widget_plan_rows(public_widget_public_rows($pageType), $pageType);
+}

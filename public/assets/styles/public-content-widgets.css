@@ -1,0 +1,73 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/public-content-widgets.css
+ * Module Type: Stylesheet
+ * Purpose: Shared public in-flow zones and no-JS-safe widget presentation.
+ * Responsibilities:
+ *   - Keep side rails in document flow with a narrow viewport stack.
+ *   - Reuse theme colors and page-width rules without modifying empty pages.
+ *   - Bound link, heading and floating fallback dimensions at every zoom level.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.public-page .public-widget-region {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    margin: 1.1rem 0;
+}
+.public-page .public-content-widget {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: min(100%, var(--public-widget-max-width, 320px));
+    padding: 1rem;
+    background: var(--panel, #fff);
+    border: 1px solid var(--line, #d2d6da);
+    border-radius: var(--radius, 10px);
+    color: var(--ink, #222);
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+.public-page .public-content-widget--minimal {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: .25rem 0;
+}
+.public-page .public-content-widget-title { margin: 0 0 .65rem; font-size: 1.12rem; line-height: 1.3; }
+.public-page .public-content-widget-body > :first-child { margin-top: 0; }
+.public-page .public-content-widget-body > :last-child { margin-bottom: 0; }
+.public-page .public-content-widget-body h2,
+.public-page .public-content-widget-body h3,
+.public-page .public-content-widget-body h4 { font-size: 1.06rem; margin: 1em 0 .5em; }
+.public-page .public-content-widget-body li { margin: .25rem 0; }
+.public-page .public-content-widget-body ul,
+.public-page .public-content-widget-body ol { padding-inline-start: 1.5rem; }
+.public-page .public-content-widget-body a { color: var(--accent, #0867ac); text-decoration: underline; }
+.public-page .public-content-widget-body a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.public-page .public-widget-content-layout { display: grid; gap: clamp(.75rem, 1.5vw, 1.5rem); min-width: 0; align-items: start; }
+.public-page .public-widget-content-layout--left { grid-template-areas: "rail-left primary"; grid-template-columns: minmax(180px, min(24%, 240px)) minmax(0, 1fr); }
+.public-page .public-widget-content-layout--right { grid-template-areas: "primary rail-right"; grid-template-columns: minmax(0, 1fr) minmax(180px, min(24%, 240px)); }
+.public-page .public-widget-content-layout--both { grid-template-areas: "rail-left primary rail-right"; grid-template-columns: minmax(180px, 21%) minmax(0, 1fr) minmax(180px, 21%); }
+.public-page .public-widget-primary { grid-area: primary; min-width: 0; }
+.public-page .public-widget-region--left_rail { grid-area: rail-left; margin-top: 0; }
+.public-page .public-widget-region--right_rail { grid-area: rail-right; margin-top: 0; }
+.public-page .public-widget-region--left_rail .public-content-widget,
+.public-page .public-widget-region--right_rail .public-content-widget { width: 100%; }
+.public-page .public-widget-region--footer { margin: 0 auto 1.5rem; max-width: min(100%, 960px); justify-content: center; }
+.public-page .public-widget-region--footer .public-content-widget { margin-inline: auto; }
+.public-page .public-widget-region--floating { margin-block: 1rem; }
+@media (max-width: 1080px) {
+    .public-page .public-widget-content-layout--left,
+    .public-page .public-widget-content-layout--right,
+    .public-page .public-widget-content-layout--both { display: flex; flex-direction: column; align-items: stretch; }
+    .public-page .public-widget-content-layout > .public-widget-primary { order: 0; }
+    .public-page .public-widget-content-layout > .public-widget-region--left_rail { order: 1; }
+    .public-page .public-widget-content-layout > .public-widget-region--right_rail { order: 2; }
+    .public-page .public-widget-content-layout > .public-widget-region { width: 100%; }
+}
+@media (max-width: 680px) {
+    .public-page .public-content-widget { width: 100%; max-width: 100%; }
+}
