@@ -251,13 +251,26 @@ function request_aware_base_url(string $base): string
 }
 
 /**
- * Build an absolute or root-relative URL using the configured base URL.
+ * Build an internal root-relative URL from the actual front controller mount.
+ * @param string $path Application path and optional query, or empty for the mounted home directory.
+ * @return string Mounted same-origin path without a configured hostname, scheme or port.
+ */
+function request_mount_url(string $path = ''): string
+{
+    return rtrim(request_script_base_path(), '/') . '/' . ltrim($path, '/');
+}
+
+/**
+ * Build an application URL using configuration, or the actual mount inside visual preview.
  *
- * @param string $path Filesystem path.
- * @return string Text result for the caller.
+ * @param string $path Application path and optional query, or empty for Home.
+ * @return string Configured absolute/root-relative URL for ordinary requests; marked visual-preview requests keep app-owned links and assets root-relative on the authenticated origin.
  */
 function base_url(string $path = ''): string
 {
+    if ((string) ($_GET['preview'] ?? '') === 'visual') {
+        return request_mount_url($path);
+    }
     // Variable $base stores this steps working value.
     $base = request_aware_base_url(rtrim((string) cms_config()['base_url'], '/'));
     // Variable $basePath stores this steps working value.
@@ -541,10 +554,23 @@ function anonymous_preview_url(string $url, bool $enabled): string
 }
 
 /**
+ * Build the protected Home preview on the current front controller's mount.
+ * @param bool $anonymous Whether to simulate anonymous visitor visibility.
+ * @return string Root-relative Home URL using the supported rewrite mode and validated preview markers; an invalid request origin leaves the markers absent for fail-closed client validation.
+ */
+function public_visual_preview_home_url(bool $anonymous = false): string
+{
+    $home = url_rewrite_should_emit_clean_urls()
+        ? request_mount_url()
+        : request_mount_url('index.php?page=home');
+    return public_visual_preview_url($home, $anonymous);
+}
+
+/**
  * Add the authenticated visual-preview and audience markers to an application URL.
  * @param string $url Same-origin application URL whose route and existing query must be preserved.
  * @param bool $anonymous Whether the URL should render using anonymous visitor visibility rules.
- * @return string The URL carrying the visual-preview marker and requested audience marker.
+ * @return string The URL carrying the visual-preview and audience markers, or the original URL when origin, mount or marker validation refuses it.
  */
 function public_visual_preview_url(string $url, bool $anonymous = false): string
 {

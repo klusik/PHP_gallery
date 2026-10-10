@@ -1465,6 +1465,19 @@ Supported branding concepts include:
 11. Gallery hero tag disclosure, ordering and row-based scrolling.
 12. Custom CSS presets.
 
+The visual CSS launcher has a visible disabled server fallback and a localized
+availability explanation. Core `public_visual_preview_home_url()` builds the
+initial Home URL from `request_mount_url()` and the supported rewrite mode,
+independent of configured origin. Application links/assets inside marked preview
+requests also use that mount; ordinary and canonical URLs retain configuration.
+The synchronous Manual CSS form depends only on the small visual support module;
+the optional workspace and its draft/resize/import graph load through a caught
+per-editor dynamic import. Strict validation and completed setup enable the
+launcher; failed loading/validation cannot silently hide it or disable the basic
+Theme controls. Background File and Keep/Remove draft staging stay synchronous
+through optional loading failures, and CSS AJAX completion preserves the
+observed visual availability state.
+
 Issue #127's Live Visual CSS Editor is a draft workspace over the existing
 manual CSS override editor. The editor continues to own the only CSS textarea,
 revision, validation and explicit save path; its deterministic visual-edit block

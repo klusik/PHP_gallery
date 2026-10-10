@@ -9,6 +9,10 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
+import { restoreVisualEditorBackgroundFile, setThemeVisualEditorAvailability, visualEditorBackgroundDraftMessage } from './theme-visual-editor-support.js?v=20261010-visual-editor-draft-availability';
+// Retain the historical helper exports for direct visual-editor consumers.
+export { restoreVisualEditorBackgroundFile, setVisualEditorBackgroundOperation } from './theme-visual-editor-support.js?v=20261010-visual-editor-draft-availability';
+
 import {
     applyVisualCssDraftChanges,
     parseVisualCssDraft,
@@ -22,22 +26,6 @@ import {
     classifyVisualCssResizeProfile,
 } from './theme-visual-css-resize.js?v=20261009-visual-editor-overlay-routing';
 import {hasVisualCssImport} from './theme-visual-css-import.js?v=20261009-visual-editor-import';
-
-/**
- * Set the global Theme background operation draft from an Admin form lifecycle action.
- * @param {HTMLElement} root The Custom CSS editor root containing the operation field.
- * @param {'keep'|'replace'|'remove'} operation Background operation represented by the draft.
- * @returns {boolean} True when the operation was accepted and announced to the visual editor.
- */
-export function setVisualEditorBackgroundOperation(root, operation) {
-    if (!(root instanceof HTMLElement) || !['keep', 'replace', 'remove'].includes(operation)) return false;
-    const input = root.querySelector('[data-visual-editor-background-operation]');
-    if (!(input instanceof HTMLInputElement)) return false;
-    input.value = operation;
-    root.dataset.visualEditorBackgroundOperation = operation;
-    root.dispatchEvent(new CustomEvent('theme-background-operation-change', {detail: {operation}}));
-    return true;
-}
 
 /**
  * Define real responsive viewport widths used by the preview workspace.
@@ -69,28 +57,6 @@ const VISUAL_PROFILE_PROPERTIES = Object.freeze({
     hero: Object.freeze(['color', 'background-color', 'border-radius', 'border-width', 'border-style', 'border-color', 'box-shadow', 'padding', 'margin', 'min-height', 'backdrop-filter', '-webkit-backdrop-filter']),
     header: Object.freeze(['color', 'background-color', 'border-radius', 'border-width', 'border-style', 'border-color', 'box-shadow', 'padding', 'margin', 'min-height', 'gap', 'backdrop-filter', '-webkit-backdrop-filter']),
 });
-
-/**
- * Restore a pending image File to the existing Admin form input without uploading it.
- * @param {HTMLInputElement|null} input Existing multipart background file control.
- * @param {File|null} file File snapshot to restore, or null to clear the pending attachment.
- * @returns {boolean} True when the browser accepted the requested file-list state.
- */
-export function restoreVisualEditorBackgroundFile(input, file) {
-    if (!(input instanceof HTMLInputElement)) return file === null;
-    if (file === null) {
-        input.value = '';
-        return true;
-    }
-    try {
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        input.files = transfer.files;
-        return input.files.length === 1 && input.files[0] === file;
-    } catch {
-        return false;
-    }
-}
 
 /**
  * Classify an actual selected element into the smallest useful visual property profile.
@@ -179,20 +145,24 @@ function visualPreviewMountRoot(launchUrl) {
 }
 
 /**
- * Validate the controller-prepared homepage using its actual application mount prefix.
+ * Validate the prepared homepage and classify only directly observable launch failures.
  * @param {string} value Server-prepared same-origin public homepage URL.
- * @returns {URL|null} Validated launch route or null when it is not a canonical app-root homepage.
+ * @returns {{url:URL|null,reason:'preview_url_invalid'|'preview_origin_mismatch'|'preview_marker_missing'|''}} Validated launch URL or a bounded failure category.
  */
 function visualInitialPreviewUrl(value) {
     try {
+        if (value.trim() === '') return {url: null, reason: 'preview_url_invalid'};
         const candidate = new URL(value, window.location.href);
-        if (candidate.origin !== window.location.origin || candidate.username !== '' || candidate.password !== ''
-            || candidate.hash !== '' || !(candidate.pathname.endsWith('/index.php') || candidate.pathname.endsWith('/'))) {
-            return null;
+        if (candidate.origin !== window.location.origin) return {url: null, reason: 'preview_origin_mismatch'};
+        if (candidate.username !== '' || candidate.password !== '' || candidate.hash !== ''
+            || !(candidate.pathname.endsWith('/index.php') || candidate.pathname.endsWith('/'))) {
+            return {url: null, reason: 'preview_url_invalid'};
         }
-        return visualPreviewUrl(candidate.href, visualPreviewMountRoot(candidate));
+        if (!candidate.searchParams.has('preview')) return {url: null, reason: 'preview_marker_missing'};
+        const url = visualPreviewUrl(candidate.href, visualPreviewMountRoot(candidate));
+        return {url, reason: url ? '' : 'preview_url_invalid'};
     } catch {
-        return null;
+        return {url: null, reason: 'preview_url_invalid'};
     }
 }
 
@@ -398,7 +368,7 @@ function visualThemeWidthSelectors() {
  * Initialize background draft controls independently, then optionally launch a protected scriptless CSS preview.
  * @param {HTMLElement} root Existing Custom CSS editor root carrying escaped preview labels and URL.
  * @param {HTMLTextAreaElement} text Authoritative unsaved CSS textarea.
- * @returns {void} Installs background draft lifecycle handlers and, when a safe preview URL exists, owns each opened workspace until exit.
+ * @returns {void} Binds each root once, keeps invalid launch URLs visibly disabled with bounded reasons, and enables the workspace only after safe URL validation and completed setup; background drafts remain independent.
  */
 export function setupThemeVisualEditor(root, text) {
     const launch = root.querySelector('[data-visual-editor-launch]');
@@ -411,19 +381,16 @@ export function setupThemeVisualEditor(root, text) {
     const backgroundTargetReview = root.querySelector('[data-visual-editor-background-target-review]');
     const backgroundOperationReview = root.querySelector('[data-visual-editor-background-operation-review]');
     const backgroundSourceReview = root.querySelector('[data-visual-editor-background-source-review]');
-    const initialUrl = visualInitialPreviewUrl(root.dataset.visualEditorPreviewUrl || '');
+    const initialPreview = visualInitialPreviewUrl(root.dataset.visualEditorPreviewUrl || '');
+    const initialUrl = initialPreview.url;
     const canLaunchPreview = launch instanceof HTMLButtonElement && initialUrl !== null;
     if (!(text instanceof HTMLTextAreaElement)) return;
-    if (canLaunchPreview && launch.dataset.visualEditorReady === '1') return;
+    if (root.dataset.visualEditorInitialized === '1') return;
     if (backgroundOperationInput instanceof HTMLInputElement) backgroundOperationInput.disabled = false;
     if (backgroundTargetInput instanceof HTMLInputElement) backgroundTargetInput.disabled = false;
     const mountRoot = initialUrl ? visualPreviewMountRoot(initialUrl) : '';
-    if (canLaunchPreview) {
-        launch.hidden = false;
-        launch.dataset.visualEditorReady = '1';
-    } else if (launch instanceof HTMLButtonElement) {
-        launch.hidden = true;
-    }
+    setThemeVisualEditorAvailability(root, initialPreview.reason);
+    if (canLaunchPreview) launch.disabled = true;
 
     const labelSource = root.querySelector('[data-visual-editor-labels]');
     const backgroundLabelSource = root.querySelector('[data-visual-editor-background-labels]');
@@ -433,13 +400,7 @@ export function setupThemeVisualEditor(root, text) {
     const label = key => root.dataset[key] || labelSource?.dataset[key]
         || backgroundLabelSource?.dataset[key] || lifecycleLabelSource?.dataset[key]
         || backgroundFitPositionLabelSource?.dataset[key] || extensionLabelSource?.dataset[key] || '';
-    const pendingBackgroundMessage = (operation, file) => {
-        const operationLabel = label(`visualEditorBackgroundOperation${operation[0].toUpperCase()}${operation.slice(1)}Label`);
-        const parts = [operationLabel, label('visualEditorBackgroundTargetGlobalLabel')];
-        if (operation === 'replace' && file) parts.push(file.name);
-        if (operation !== 'keep') parts.push(label('visualEditorBackgroundReviewHintLabel'));
-        return operation === 'keep' ? '' : parts.filter(Boolean).join(' · ');
-    };
+
     let pendingBackgroundFile = backgroundFileInput instanceof HTMLInputElement ? backgroundFileInput.files?.[0] || null : null;
     let pendingBackgroundOperation = backgroundOperationInput instanceof HTMLInputElement
         && ['keep', 'replace', 'remove'].includes(backgroundOperationInput.value)
@@ -530,7 +491,7 @@ export function setupThemeVisualEditor(root, text) {
             const unsupported = backgroundVisualTarget !== 'theme';
             if (!backgroundReady) backgroundStatus.textContent = label('visualEditorBackgroundUnavailableLabel');
             else if (unsupported) backgroundStatus.textContent = label('visualEditorBackgroundGlobalPreviewUnavailableLabel');
-            else backgroundStatus.textContent = pendingBackgroundMessage(pendingBackgroundOperation, pendingBackgroundFile);
+            else backgroundStatus.textContent = visualEditorBackgroundDraftMessage(root, pendingBackgroundOperation, pendingBackgroundFile);
         }
         const keepButton = root.querySelector('[data-visual-editor-background-keep]');
         const removeButton = root.querySelector('[data-visual-editor-background-remove]');
@@ -731,6 +692,7 @@ export function setupThemeVisualEditor(root, text) {
             syncBackgroundOperationPreview();
         });
     }
+    root.dataset.visualEditorInitialized = '1';
     if (!canLaunchPreview) return;
     launch.addEventListener('click', () => {
         if (hasVisualCssImport(text.value)) {
@@ -2346,4 +2308,6 @@ export function setupThemeVisualEditor(root, text) {
         updateControls();
         exitButton.focus({preventScroll: true});
     });
+    launch.dataset.visualEditorReady = '1';
+    setThemeVisualEditorAvailability(root, '');
 }

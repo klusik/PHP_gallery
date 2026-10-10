@@ -37,12 +37,12 @@ namespace Gallery\Core {
 
 namespace Gallery\Services {
     /**
-     * Keep route generation in the supported front-controller form.
-     * @return bool The fixture does not enable clean URL rewriting.
+     * Select the routing mode supplied by each deployment fixture.
+     * @return bool True when the fixture requests clean URLs, otherwise front-controller URLs.
      */
     function url_rewrite_should_emit_clean_urls(): bool
     {
-        return false;
+        return ($GLOBALS['preview_asset_url_config']['rewrite'] ?? false) === true;
     }
 }
 
@@ -192,6 +192,47 @@ namespace {
     $hadOriginalConfig = array_key_exists('preview_asset_url_config', $GLOBALS);
     $originalConfig = $GLOBALS['preview_asset_url_config'] ?? null;
     try {
+        foreach ($deploymentLayouts as $layout) {
+            foreach (['localhost', 'localhost:8888', 'gallery.example'] as $host) {
+                foreach ([false, true] as $https) {
+                    foreach ([false, true] as $rewrite) {
+                        foreach (['', 'https://foreign.example/unrelated', '/wrong-mount', 'https://' . $host . ':9443/wrong-mount'] as $base) {
+                            $GLOBALS['preview_asset_url_config'] = ['base_url' => $base, 'rewrite' => $rewrite];
+                            $_GET = [];
+                            $_SERVER = ['SCRIPT_NAME' => $layout['script_name'], 'SCRIPT_FILENAME' => $layout['script_filename'],
+                                'HTTP_HOST' => $host, 'HTTPS' => $https ? 'on' : 'off', 'REMOTE_ADDR' => ''];
+                            $home = $layout['mount'] . ($rewrite ? '/' : '/index.php?page=home');
+                            foreach ([false, true] as $anonymous) {
+                                $expected = $home . ($rewrite ? '?' : '&') . 'preview=visual' . ($anonymous ? '&view_as=anonymous' : '');
+                                preview_asset_url_require(\Gallery\Core\public_visual_preview_home_url($anonymous) === $expected,
+                                    'Protected Home must use the actual mount, routing mode and audience independently of configured origin: '
+                                    . $layout['name'] . ', host=' . $host . ', https=' . (int) $https . ', rewrite=' . (int) $rewrite . ', base=' . $base);
+                            }
+                            if ($base === 'https://foreign.example/unrelated') {
+                                $oldUrl = \Gallery\Core\public_visual_preview_url(\Gallery\Core\url_for('home'));
+                                preview_asset_url_require(!str_contains($oldUrl, 'preview=visual'),
+                                    'The original configured-origin pipeline must reproduce its refused, unmarked URL.');
+                            }
+                            $_GET = ['preview' => 'visual', 'view_as' => 'anonymous'];
+                            $asset = \Gallery\Core\asset_url('assets/styles/base.css');
+                            preview_asset_url_require($asset === $layout['asset_prefix'] . '/assets/styles/base.css',
+                                'App-owned marked-preview assets must use the actual document root even with a foreign configured base.');
+                            preview_asset_url_require(\Gallery\Core\url_for('home') === $layout['mount'] . '/index.php?page=home&preview=visual&view_as=anonymous',
+                                'Marked-preview navigation must retain its actual origin, mount and anonymous audience.');
+                            $urls = \Gallery\Controllers\shared_layout_stylesheet_urls('public-page', ['id' => 1, 'username' => 'fixture'],
+                                true, true, [], \Gallery\Core\asset_url('assets/custom.css'), 17);
+                            preview_asset_url_assert_stylesheets($urls,
+                                preview_asset_url_expected_asset_paths($root, ['id' => 1, 'username' => 'fixture'], true),
+                                $layout['mount'], '', true, true, 'configured-origin mismatch preview ' . $layout['name']);
+                        }
+                    }
+                }
+            }
+        }
+        $_SERVER['HTTP_HOST'] = 'user:secret@foreign.example';
+        preview_asset_url_require(!str_contains(\Gallery\Core\public_visual_preview_home_url(), 'preview=visual'),
+            'An invalid request authority must remain fail-closed rather than bypass server marker validation.');
+
         foreach ($scenarios as $scenario) {
             $GLOBALS['preview_asset_url_config'] = ['base_url' => $scenario['base_url']];
             $_GET = [];

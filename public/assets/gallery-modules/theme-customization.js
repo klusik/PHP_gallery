@@ -9,7 +9,13 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
-import { restoreVisualEditorBackgroundFile, setVisualEditorBackgroundOperation, setupThemeVisualEditor } from './theme-visual-editor.js?v=20261009-visual-editor-overlay-routing';
+import { restoreVisualEditorBackgroundFile, setVisualEditorBackgroundOperation, setThemeVisualEditorAvailability, visualEditorBackgroundDraftMessage } from './theme-visual-editor-support.js?v=20261010-visual-editor-draft-availability';
+
+// Share one settled initialization attempt per mounted editor, including concurrent callers.
+// Type: WeakMap<HTMLElement,Promise<void>>. Units: initialization promises.
+// Scope: mounted Custom CSS editor roots. Consumers: optional workspace bootstrap.
+// Rationale: avoid duplicate listeners without retaining detached editor roots.
+const visualEditorLoads = new WeakMap();
 
 /**
  * Synchronize service-bounded appearance inputs and their miniature public preview.
@@ -130,7 +136,6 @@ export function setupThemeCssOverrideEditor() {
     const status = root.querySelector('[data-css-override-status]');
     const message = root.querySelector('[data-css-override-message]');
     if (!(text instanceof HTMLTextAreaElement) || !(revision instanceof HTMLInputElement)) return;
-    setupThemeVisualEditor(root, text);
     form.dataset.cssOverrideReady = '1';
     const nativeClearConfirmation = root.querySelector('[data-css-override-clear-confirm]');
     if (nativeClearConfirmation) nativeClearConfirmation.hidden = true;
@@ -151,6 +156,12 @@ export function setupThemeCssOverrideEditor() {
         || backgroundOperation instanceof HTMLInputElement && backgroundOperation.value !== 'keep';
     const syncStatus = () => { if (status) status.textContent = dirty() ? root.dataset.unsavedLabel : root.dataset.savedLabel; };
     root.addEventListener('theme-background-operation-change', () => {
+        if (root.dataset.visualEditorInitialized !== '1') {
+            const backgroundStatus = root.querySelector('[data-visual-editor-background-status]');
+            if (backgroundStatus instanceof HTMLElement) {
+                backgroundStatus.textContent = visualEditorBackgroundDraftMessage(root, backgroundOperation?.value || 'keep', backgroundFile?.files?.[0] || null);
+            }
+        }
         if (!applyingDraftAction) clearDraftSnapshot = null;
         if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = !clearDraftSnapshot;
         syncStatus();
@@ -161,9 +172,26 @@ export function setupThemeCssOverrideEditor() {
         syncStatus();
     });
     backgroundFile?.addEventListener('change', () => {
+        if (root.dataset.visualEditorInitialized !== '1' && root.dataset.visualEditorBackgroundReady !== '0'
+            && backgroundFile.files.length > 0) setVisualEditorBackgroundOperation(root, 'replace');
         if (!applyingDraftAction) clearDraftSnapshot = null;
         if (undoClearDraftButton instanceof HTMLButtonElement) undoClearDraftButton.hidden = !clearDraftSnapshot;
         syncStatus();
+    });
+    // Keep native background drafts usable while the optional workspace is loading or unavailable.
+    // Once initialized, its existing handlers own the same controls and richer preview feedback.
+    root.querySelector('[data-visual-editor-background-keep]')?.addEventListener('click', () => {
+        if (root.dataset.visualEditorInitialized === '1') return;
+        if (backgroundFile instanceof HTMLInputElement && !restoreVisualEditorBackgroundFile(backgroundFile, null)) {
+            if (message) message.textContent = backgroundLabels?.dataset.visualEditorBackgroundUnavailableLabel || root.dataset.failedLabel;
+            return;
+        }
+        backgroundFile?.dispatchEvent(new Event('change', {bubbles: true}));
+        setVisualEditorBackgroundOperation(root, 'keep');
+    });
+    root.querySelector('[data-visual-editor-background-remove]')?.addEventListener('click', () => {
+        if (root.dataset.visualEditorInitialized === '1' || root.dataset.visualEditorBackgroundReady === '0') return;
+        setVisualEditorBackgroundOperation(root, 'remove');
     });
     restoreSavedButton?.addEventListener('click', () => {
         if (dirty() && !window.confirm(lifecycleLabels?.dataset.visualEditorRestoreConfirmLabel || '')) return;
@@ -353,7 +381,43 @@ export function setupThemeCssOverrideEditor() {
                 backgroundFile.disabled = backgroundFileWasDisabled;
             }
             buttons.forEach((button, index) => { button.disabled = disabled[index]; });
+            const availability = root.querySelector('[data-visual-editor-availability]');
+            if (availability instanceof HTMLElement) {
+                setThemeVisualEditorAvailability(root, availability.dataset.visualEditorReason || '');
+            }
         }
     });
     syncStatus();
+    void setupOptionalThemeVisualEditor(root, text);
+}
+
+/**
+ * Load the optional workspace after synchronous Manual CSS form binding has completed.
+ * @param {HTMLElement} root Mounted Custom CSS editor with server-rendered fallback and translated reasons.
+ * @param {HTMLTextAreaElement} text Authoritative unsaved CSS field preserved during loading and failures.
+ * @returns {Promise<void>} Settles after one initialization attempt; import and setup failures remain visible and do not reject the main application entrypoint.
+ */
+export function setupOptionalThemeVisualEditor(root, text) {
+    const existing = visualEditorLoads.get(root);
+    if (existing) return existing;
+    root.dataset.visualEditorLoadState = 'loading';
+    const loading = (async () => {
+        let workspace;
+        try {
+            workspace = await import('./theme-visual-editor.js?v=20261010-visual-editor-draft-availability');
+        } catch {
+            root.dataset.visualEditorLoadState = 'failed';
+            setThemeVisualEditorAvailability(root, 'preview_module_unavailable');
+            return;
+        }
+        try {
+            workspace.setupThemeVisualEditor(root, text);
+            root.dataset.visualEditorLoadState = 'loaded';
+        } catch {
+            root.dataset.visualEditorLoadState = 'failed';
+            setThemeVisualEditorAvailability(root, 'preview_initialization_failed');
+        }
+    })();
+    visualEditorLoads.set(root, loading);
+    return loading;
 }

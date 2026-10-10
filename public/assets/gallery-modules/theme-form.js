@@ -32,7 +32,7 @@
 
 import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
 import { setupAdminGalleryGridControls } from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
-import { setupThemeAdvancedAppearance, setupThemeCssOverrideEditor } from './theme-customization.js?v=20261009-visual-editor-overlay-routing';
+import { setupThemeAdvancedAppearance, setupThemeCssOverrideEditor } from './theme-customization.js?v=20261010-visual-editor-draft-availability';
 
 /**
  * Theme and pagination form helpers

@@ -1458,6 +1458,31 @@ The browser/network observations above are manual verification only. The standal
 
 ### Live Visual CSS Editor Acceptance Test
 
+`theme_custom_css_rendering_test.php` verifies the visible disabled accessible
+fallback without JavaScript. `public_visual_preview_asset_url_test.php` covers
+six document-root/mount layouts, HTTP/HTTPS, localhost/nondefault-port/production
+hosts, rewrite modes, configured foreign origin/port/mount and both audiences;
+it also checks marked-preview asset paths and Home navigation while retaining
+ordinary URL assertions. `public_media_url_rewrite_test.php` additionally covers
+clean/query gallery and image navigation, media, thumbnails and fresh manifest
+bases under foreign configured origin, actual root/subdirectory mounts,
+nondefault ports and both preview audiences. `request_https_proxy_test.php`
+covers internal Home under trusted and untrusted TLS forwarding. Existing SEO, route/method/Admin,
+private-media, no-store, stylesheet refusal and draft-only contracts remain
+required. `theme_visual_editor_browser_test.mjs` verifies enabled launch,
+localized malformed/origin/marker refusals, one-shot setup failure, and missing
+workspace/draft/resize/import modules while Manual CSS Clear/Undo and other
+Theme controls remain functional without navigation or persistent requests.
+The browser fixtures also stage a File before optional loading completes, keep
+its operation through import/setup failures, exercise fallback Keep/Remove and
+require successful mocked CSS Save to preserve the disabled visual launcher.
+
+For deployment diagnosis, distinguish an absent server-rendered editor subtab
+from a disabled launcher and from a post-launch iframe refusal. Inspect only
+sanitized reason categories and failed asset status/MIME/redirects. Hosted
+fixtures do not establish the affected WEDOS installation's deployed bytes,
+OPcache, proxy/session or asset delivery; production confirmation remains manual.
+
 Use a disposable installation with a public gallery, at least one private or
 password-gated gallery, representative photographs, and an administrator
 account. The automated coverage is split across

@@ -78,6 +78,88 @@ function serveVisualPreview(request, response) {
 }
 
 /**
+ * Render a fault-injection page that keeps real Manual CSS and Theme controls bound.
+ * @param {import('node:http').ServerResponse} response Owned loopback response writer.
+ * @param {string} scenario Missing workspace/dependency name or a one-shot initialization exception.
+ * @returns {void} Emits a browser contract using production bootstrap with no persistent submission.
+ */
+function serveVisualAvailabilityFixture(response, scenario) {
+    const missing = ['workspace', 'draft', 'resize', 'import'].includes(scenario);
+    const prefix = missing ? '/unavailable/' + scenario : '';
+    response.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    response.end(`<!doctype html><html><head><meta charset="utf-8"></head><body>
+<form data-theme-form><div data-theme-advanced-control data-theme-advanced-key="public_type_scale" data-theme-advanced-default="100">
+<input type="number" min="80" max="120" value="100" data-theme-advanced-value><input type="range" min="80" max="120" value="100" data-theme-advanced-slider><button type="button" data-theme-advanced-reset>Reset</button></div></form>
+<form id="css-form" data-css-override-form action="/mutate" method="post"></form>
+<section data-css-override-editor data-visual-editor-preview-url="/app/index.php?page=home&amp;preview=visual" data-saved-label="Saved" data-unsaved-label="Unsaved">
+<textarea form="css-form" data-css-override-text>saved CSS</textarea><input data-css-override-revision value="revision">
+<textarea hidden data-css-override-saved-text>saved CSS</textarea><input data-css-override-saved-revision value="revision">
+<button type="button" data-visual-editor-launch disabled>Visual editor</button>
+<span hidden data-visual-editor-availability-labels data-preview-module-unavailable="Localized module unavailable" data-preview-initialization-failed="Localized initialization failed"></span>
+<p data-visual-editor-availability data-visual-editor-reason="preview_not_initialized">Server fallback</p>
+<input type="file" name="theme_background_file" form="css-form" data-visual-editor-background-file><input name="theme_background_operation" value="keep" form="css-form" data-visual-editor-background-operation>
+<span hidden data-visual-editor-background-labels data-visual-editor-background-operation-replace-label="Replace" data-visual-editor-background-operation-remove-label="Remove" data-visual-editor-background-target-global-label="Global Theme" data-visual-editor-background-review-hint-label="Draft only"></span><p data-visual-editor-background-status></p>
+<button type="button" data-visual-editor-background-keep>Keep</button><button type="button" data-visual-editor-background-remove>Remove</button>
+<button type="submit" name="css_override_action" value="save" form="css-form">Save</button>
+<button type="button" data-css-override-clear-draft>Clear</button><button type="button" data-css-override-undo-clear-draft hidden>Undo</button><p data-css-override-status></p><p data-css-override-message></p></section>
+<pre id="results"></pre><script type="module">
+import {setupThemeCssOverrideEditor,setupThemeAdvancedAppearance,setupOptionalThemeVisualEditor} from '${prefix}/public/assets/gallery-modules/theme-customization.js?v=20261010-visual-editor-draft-availability';
+const root=document.querySelector('[data-css-override-editor]');
+const text=root.querySelector('textarea');
+const initialUrl=location.href;
+const launch=root.querySelector('[data-visual-editor-launch]');
+try {
+ if(launch.hidden||!launch.disabled)throw new Error('Server fallback must be visible and disabled');
+ if(${JSON.stringify(scenario)}==='initialization'){
+  const originalQuery=root.querySelector.bind(root);
+  root.querySelector=selector=>{
+   if(selector==='[data-visual-editor-launch]'){root.querySelector=originalQuery;throw new Error('Injected DOM initialization failure');}
+   return originalQuery(selector);
+  };
+ }
+ setupThemeAdvancedAppearance(document.querySelector('[data-theme-form]'));
+ setupThemeCssOverrideEditor();
+ const backgroundFile=root.querySelector('[data-visual-editor-background-file]');
+ const draftFile=new File(['pending bytes'],'pending.png',{type:'image/png'});
+ const transfer=new DataTransfer();transfer.items.add(draftFile);backgroundFile.files=transfer.files;
+ backgroundFile.dispatchEvent(new Event('change',{bubbles:true}));
+ if(root.querySelector('[data-visual-editor-background-operation]').value!=='replace')throw new Error('Pending File must stage before optional loading completes');
+ const first=setupOptionalThemeVisualEditor(root,text);
+ const second=setupOptionalThemeVisualEditor(root,text);
+ if(first!==second)throw new Error('Concurrent startup must share the same initialization promise');
+ await first;
+ const status=root.querySelector('[data-visual-editor-availability]');
+ const reason=${JSON.stringify(missing ? 'preview_module_unavailable' : 'preview_initialization_failed')};
+ if(launch.hidden||!launch.disabled||status.hidden||status.dataset.visualEditorReason!==reason
+  ||status.textContent!==${JSON.stringify(missing ? 'Localized module unavailable' : 'Localized initialization failed')})throw new Error('Observed failure must have a bounded localized fallback');
+ if(backgroundFile.files[0]!==draftFile||root.querySelector('[data-visual-editor-background-operation]').value!=='replace')throw new Error('Initialization failure must preserve pending File and operation');
+ root.querySelector('[data-visual-editor-background-remove]').click();
+ if(root.querySelector('[data-visual-editor-background-operation]').value!=='remove'||backgroundFile.files[0]!==draftFile)throw new Error('Fallback Remove stages without discarding File');
+ root.querySelector('[data-visual-editor-background-keep]').click();
+ if(backgroundFile.files.length!==0||root.querySelector('[data-visual-editor-background-operation]').value!=='keep')throw new Error('Fallback Keep clears only the pending background draft');
+ text.value='unsaved draft';text.dispatchEvent(new Event('input',{bubbles:true}));
+ if(root.querySelector('[data-css-override-status]').textContent!=='Unsaved')throw new Error('Manual CSS dirty-state binding must survive');
+ root.querySelector('[data-css-override-clear-draft]').click();
+ if(text.value!=='')throw new Error('Manual clear remains synchronous');
+ root.querySelector('[data-css-override-undo-clear-draft]').click();
+ if(text.value!=='unsaved draft')throw new Error('Manual Undo preserves the unsaved draft');
+ const value=document.querySelector('[data-theme-advanced-value]');value.value='110';value.dispatchEvent(new Event('input'));
+ if(document.querySelector('[data-theme-advanced-slider]').value!=='110')throw new Error('Other Theme controls remain bound');
+ document.querySelector('[data-theme-advanced-reset]').click();
+ if(value.value!=='100')throw new Error('Other Theme reset remains functional');
+ window.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true,message:'Saved',state:{text:text.value,revision:'saved-revision'}})});
+ root.querySelector('[name="css_override_action"]').click();
+ await new Promise(resolve=>setTimeout(resolve,0));
+ if(!launch.disabled||status.dataset.visualEditorReason!==reason)throw new Error('CSS Save must preserve unavailable visual launch');
+ setupThemeCssOverrideEditor();await setupOptionalThemeVisualEditor(root,text);
+ launch.click();
+ if(location.href!==initialUrl||document.querySelector('.theme-visual-editor-workspace')||text.value!=='unsaved draft')throw new Error('Unavailable editor must neither navigate, open nor change CSS');
+ document.getElementById('results').textContent='BROWSER PASS visual availability '+${JSON.stringify(scenario)};
+} catch(error){document.getElementById('results').textContent='BROWSER FAIL '+error.stack;}
+</script></body></html>`);
+}
+
+/**
  * Serve only the editor fixture, its first-party modules and its protected home-page fixture.
  * @param {import('node:http').IncomingMessage} request Owned loopback browser request.
  * @param {import('node:http').ServerResponse} response Loopback response writer.
@@ -85,6 +167,11 @@ function serveVisualPreview(request, response) {
  */
 async function serveFixture(request, response) {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
+    if (request.method === 'GET' && url.pathname === '/availability/') {
+        serveVisualAvailabilityFixture(response, url.searchParams.get('case') || 'workspace');
+        return;
+    }
+
     if (request.method === 'GET' && url.pathname === '/app/gallery/redirect/') {
         response.writeHead(302, {Location: '/admin/'}).end();
         return;
@@ -97,12 +184,20 @@ async function serveFixture(request, response) {
     const assetPaths = new Map([
         ['/public/assets/gallery-modules/theme-visual-editor.js', 'public/assets/gallery-modules/theme-visual-editor.js'],
         ['/public/assets/gallery-modules/theme-customization.js', 'public/assets/gallery-modules/theme-customization.js'],
+        ['/public/assets/gallery-modules/theme-visual-editor-support.js', 'public/assets/gallery-modules/theme-visual-editor-support.js'],
         ['/public/assets/gallery-modules/theme-visual-css-draft.js', 'public/assets/gallery-modules/theme-visual-css-draft.js'],
         ['/public/assets/gallery-modules/theme-visual-css-resize.js', 'public/assets/gallery-modules/theme-visual-css-resize.js'],
         ['/public/assets/gallery-modules/theme-visual-css-import.js', 'public/assets/gallery-modules/theme-visual-css-import.js'],
         ['/public/assets/styles/admin-theme-visual-editor.css', 'public/assets/styles/admin-theme-visual-editor.css'],
     ]);
-    const assetPath = assetPaths.get(url.pathname);
+    const failure = url.pathname.match(/^\/unavailable\/(workspace|draft|resize|import)/);
+    const assetPathname = failure ? url.pathname.slice(failure[0].length) : url.pathname;
+    const missingModules = {workspace: 'theme-visual-editor.js', draft: 'theme-visual-css-draft.js', resize: 'theme-visual-css-resize.js', import: 'theme-visual-css-import.js'};
+    if (failure && assetPathname.endsWith('/' + missingModules[failure[1]])) {
+        response.writeHead(404).end('Injected missing optional dependency');
+        return;
+    }
+    const assetPath = assetPaths.get(assetPathname);
     if (request.method === 'GET' && assetPath) {
         response.writeHead(200, {'Content-Type': assetPath.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8'});
         response.end(await readFile(path.join(repositoryRoot, assetPath)));
@@ -191,7 +286,7 @@ data-visual-editor-width-precedence-hint-label="A CSS width draft takes preceden
 <input type="file" form="admin-theme-css-overrides-form" data-visual-editor-background-file><input type="hidden" data-visual-editor-background-revision value="fixture-revision">
 <input type="hidden" name="theme_background_operation" value="keep" data-visual-editor-background-operation><input type="hidden" name="theme_background_target" value="theme" data-visual-editor-background-target>
 <section data-visual-editor-background-review><p data-visual-editor-background-target-review></p><p data-visual-editor-background-source-review></p><img data-visual-editor-current-background-preview><p data-visual-editor-background-empty hidden></p><img data-visual-editor-pending-background-preview hidden><p data-visual-editor-background-operation-review></p><button type="button" data-visual-editor-background-keep>Keep current</button><button type="button" data-visual-editor-background-remove>Remove background</button></section>
-<p data-visual-editor-background-status></p><button type="button" data-visual-editor-launch hidden>Live Visual CSS Editor</button>
+<p data-visual-editor-background-status></p><button type="button" data-visual-editor-launch disabled>Live Visual CSS Editor</button>
 <button type="button" data-css-override-restore-saved>Restore saved CSS</button><button type="button" data-css-override-clear-draft>Clear draft</button>
 <button type="button" data-css-override-undo-clear-draft hidden>Undo clear draft</button><p data-css-override-status></p><p data-css-override-message></p>
 </section></main><pre id="results"></pre>
@@ -237,8 +332,8 @@ window.__visualKeyboardCompletion=null;
 window.__visualKeyboardPublishRequest=request=>{window.__visualKeyboardPendingRequest=request;};
 </script>
 <script type="module">
-import {setupThemeCssOverrideEditor} from '/public/assets/gallery-modules/theme-customization.js?v=20261009-visual-editor-overlay-routing';
-import {setupThemeVisualEditor} from '/public/assets/gallery-modules/theme-visual-editor.js?v=20261009-visual-editor-overlay-routing';
+import {setupThemeCssOverrideEditor, setupOptionalThemeVisualEditor} from '/public/assets/gallery-modules/theme-customization.js?v=20261010-visual-editor-draft-availability';
+import {setupThemeVisualEditor} from '/public/assets/gallery-modules/theme-visual-editor.js?v=20261010-visual-editor-draft-availability';
 import {applyVisualCssDraftChanges, parseVisualCssDraft, serializeVisualCssDraft, visualCssDraftSelectorIsValid} from '/public/assets/gallery-modules/theme-visual-css-draft.js?v=20261009-visual-editor-overlay-routing';
 import {classifyVisualCssResizeProfile, createVisualCssResizeTransaction} from '/public/assets/gallery-modules/theme-visual-css-resize.js?v=20261009-visual-editor-overlay-routing';
 const root=document.querySelector('[data-css-override-editor]');
@@ -253,6 +348,15 @@ root.querySelector('[data-css-override-saved-text]').value=originalDraft;
 window.__confirmCalls=0;
 window.confirm=()=>{window.__confirmCalls++;return true;};
 setupThemeCssOverrideEditor();
+const preloadedFile=new File(['loading draft'],'loading-draft.png',{type:'image/png'});
+const preloadedTransfer=new DataTransfer();preloadedTransfer.items.add(preloadedFile);
+const preloadedInput=root.querySelector('[data-visual-editor-background-file]');
+preloadedInput.files=preloadedTransfer.files;preloadedInput.dispatchEvent(new Event('change',{bubbles:true}));
+if(root.querySelector('[data-visual-editor-background-operation]').value!=='replace')throw new Error('Background selection must stage synchronously before workspace loading');
+await setupOptionalThemeVisualEditor(root,text);
+if(preloadedInput.files[0]!==preloadedFile||root.querySelector('[data-visual-editor-background-operation]').value!=='replace'||text.value!==originalDraft)throw new Error('Workspace startup must preserve pending File, operation and CSS drafts');
+root.querySelector('[data-visual-editor-background-keep]').click();
+if(preloadedInput.files.length!==0||root.querySelector('[data-visual-editor-background-operation]').value!=='keep')throw new Error('Keep cancels the loading-time background draft');
 window.__visualEditorTestReady=true;
 /** Require an actual editor state transition or browser layout invariant. @param {boolean} condition Expected behavior. @param {string} message Failure context. @returns {void} Increments the fixture assertion count or throws. */
 function check(condition,message){if(!condition)throw new Error(message);assertions++;}
@@ -285,7 +389,7 @@ async function pressNativeKey(target,key,phase){target.focus({preventScroll:true
 let assertions=0;
 try{
  const launch=root.querySelector('[data-visual-editor-launch]');
- check(!launch.hidden,'launch button appears when a protected preview URL exists');
+ check(!launch.hidden&&!launch.disabled,'launch button appears and enables when a protected preview URL exists');
  const initialLocation=location.href;
  text.value='/* unsaved manual edit */';text.dispatchEvent(new Event('input',{bubbles:true}));
  root.querySelector('[data-css-override-restore-saved]').click();
@@ -439,7 +543,32 @@ try{
  externalLaunch.hidden=true;
  externalProbe.append(externalText,externalLaunch);
  setupThemeVisualEditor(externalProbe,externalText);
- check(externalLaunch.hidden,'initial route validation rejects an external origin');
+ check(!externalLaunch.hidden&&externalLaunch.disabled&&externalLaunch.dataset.visualEditorReady!=='1','initial route validation rejects an external origin with a visible disabled launcher');
+ const invalidPreviewScenarios=[
+  ['https://example.invalid/index.php?page=home&preview=visual','preview_origin_mismatch'],
+  ['/app/index.php?page=home','preview_marker_missing'],
+  ['http://[','preview_url_invalid'],
+  ['/app/index.php?page=home&preview=visual&preview=visual','preview_url_invalid'],
+  ['/app/index.php?page=admin&preview=visual','preview_url_invalid'],
+  ['/app/index.php?page=home&preview=visual#fragment','preview_url_invalid'],
+  [location.origin.replace('http:','https:')+'/app/index.php?page=home&preview=visual','preview_origin_mismatch'],
+  ['http://127.0.0.1:1/app/index.php?page=home&preview=visual','preview_origin_mismatch'],
+ ];
+ for(const [url,reason] of invalidPreviewScenarios){
+  const probe=document.createElement('section');
+  probe.dataset.visualEditorPreviewUrl=url;
+  probe.innerHTML='<textarea>preserved draft</textarea><button type="button" data-visual-editor-launch disabled>Visual</button><span hidden data-visual-editor-availability-labels></span><p data-visual-editor-availability></p>';
+  const probeText=probe.querySelector('textarea');
+  const probeStatus=probe.querySelector('[data-visual-editor-availability]');
+  probe.querySelector('[data-visual-editor-availability-labels]').setAttribute('data-'+reason.replaceAll('_','-'),'Localized bounded reason');
+  setupThemeVisualEditor(probe,probeText);
+  setupThemeVisualEditor(probe,probeText);
+  const probeLaunch=probe.querySelector('button');
+  check(!probeLaunch.hidden&&probeLaunch.disabled&&probeStatus.dataset.visualEditorReason===reason&&probeStatus.textContent==='Localized bounded reason','invalid initial URL reports only its bounded translated category');
+  probeLaunch.click();
+  check(probeText.value==='preserved draft'&&!document.querySelector('.theme-visual-editor-workspace'),'refused launcher cannot open or change the draft');
+ }
+
  launch.click();
  const dialog=document.querySelector('.theme-visual-editor-workspace');
  check(dialog instanceof HTMLDialogElement&&dialog.open,'launch opens a viewport workspace');
@@ -1811,6 +1940,14 @@ const browserUrl = `http://127.0.0.1:${address.port}/`;
     assert.match(result.result, /^BROWSER PASS/, result.result || 'The visual editor fixture did not report completion.');
     assert.deepEqual(mutationRequests, [], 'Preview controls never submit a persistent request.');
     console.log(result.result);
+    for (const scenario of ['workspace', 'draft', 'resize', 'import', 'initialization']) {
+        const availabilityUrl = new URL('/availability/?case=' + scenario, browserUrl).href;
+        const availability = await runHeadlessBrowserFixture(browserExecutable, availabilityUrl, 'theme-visual-availability-');
+        assert.equal(availability.exitCode, 0, 'Availability fixture browser exits successfully.');
+        assert.match(availability.result, /^BROWSER PASS/, availability.result || 'Availability fixture did not finish.');
+        console.log(availability.result);
+    }
+    assert.deepEqual(mutationRequests, [], 'Failure fallbacks and Manual CSS draft controls never submit a persistent request.');
 } finally {
     await new Promise(resolve => server.close(resolve));
 }

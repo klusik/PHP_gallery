@@ -59,7 +59,7 @@ use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
-use function Gallery\Core\public_visual_preview_url;
+use function Gallery\Core\public_visual_preview_home_url;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\app_setting;
@@ -309,7 +309,7 @@ function render_admin_theme_custom_css_tab(): void
     view_render_admin_theme_custom_css_tab([
         'presets' => $presetOptions,
         'errors' => $errors,
-        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor']), 'preview_url' => public_visual_preview_url(url_for('home')), 'background' => $background, 'page_width' => ['mode' => (string) ($themeSettings['page_width'] ?? 'default'), 'custom_px' => (int) ($themeSettings['page_width_custom'] ?? 1440)]],
+        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor']), 'preview_url' => public_visual_preview_home_url(), 'background' => $background, 'page_width' => ['mode' => (string) ($themeSettings['page_width'] ?? 'default'), 'custom_px' => (int) ($themeSettings['page_width_custom'] ?? 1440)]],
         'current_css' => [
             'active' => $state['active'],
             'status_label' => $state['active']

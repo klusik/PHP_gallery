@@ -607,7 +607,7 @@ try {
         $originScheme = strtolower((string) ($originParts['scheme'] ?? ''));
         $locationScheme = strtolower((string) ($parts['scheme'] ?? $originScheme));
         $originPort = (int) ($originParts['port'] ?? ($originScheme === 'https' ? 443 : 80));
-        $locationPort = (int) ($parts['port'] ?? ($locationScheme === 'https' ? 443 : 80));
+        $locationPort = (int) ($parts['port'] ?? (isset($parts['host']) ? ($locationScheme === 'https' ? 443 : 80) : $originPort));
         $sameOrigin = in_array($locationScheme, ['http', 'https'], true)
             && $locationScheme === $originScheme
             && strtolower((string) ($parts['host'] ?? $originParts['host'] ?? '')) === strtolower((string) ($originParts['host'] ?? ''))
@@ -637,6 +637,13 @@ try {
             'no_denied_identity' => !str_contains(strtolower($location), 'protected'),
         ];
     };
+    check($previewFallbackRoute('/index.php?page=home&preview=visual', 'home')['same_origin'],
+        'A root-relative preview redirect inherits the disposable browser origin including its nondefault port.');
+    foreach (['http://127.0.0.1:1/index.php?page=home&preview=visual', '//foreign.example/index.php?page=home&preview=visual',
+        'https://foreign.example/index.php?page=home&preview=visual', $origin . '/index.php?page=home&preview=visual#fragment'] as $unsafeRedirect) {
+        check(!$previewFallbackRoute($unsafeRedirect, 'home')['same_origin'],
+            'Wrong-port, network-path, foreign-origin and fragmented preview redirects remain refused.');
+    }
     $previewDocumentFacts = static function (string $html, int $rootGalleryId): array {
         $document = new DOMDocument();
         if (!@$document->loadHTML($html)) {

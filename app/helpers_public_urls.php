@@ -116,7 +116,7 @@ function gallery_public_path_segment(string $folderPath): string
  * Build the preferred public URL for one gallery, using its clean public path and active preview audience state when available.
  *
  * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.
- * @return string Public gallery URL in the configured route mode.
+ * @return string Public gallery URL in the configured route mode; marked preview uses the actual mount and browser origin while ordinary clean URLs retain the configured public base.
  */
 function gallery_public_url(array $gallery): string
 {
@@ -134,7 +134,10 @@ function gallery_public_url(array $gallery): string
     if (!url_rewrite_should_emit_clean_urls()) {
         return url_for('gallery', ['public_path' => $urlPath]);
     }
-    $url = public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
+    $routePath = 'gallery/' . public_path_segment($urlPath) . '/';
+    $url = (string) ($_GET['preview'] ?? '') === 'visual'
+        ? request_mount_url($routePath)
+        : public_base_url() . '/' . $routePath;
     return (string) ($_GET['preview'] ?? '') === 'visual'
         ? public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous')
         : $url;
@@ -182,7 +185,7 @@ function image_public_route_path(array $image, array $gallery): string
  *
  * @param array{url_slug?:string|null,filename?:string|null} $image Image URL slug or source filename fallback.
  * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the route.
- * @return string Public image route without visual-preview markers.
+ * @return string Undecorated public image route; marked preview uses a root-relative request mount and ordinary clean URLs retain the configured public base.
  */
 function image_public_route_url(array $image, array $gallery): string
 {
@@ -190,7 +193,10 @@ function image_public_route_url(array $image, array $gallery): string
     if (!url_rewrite_should_emit_clean_urls()) {
         return base_url('index.php?' . http_build_query(['page' => 'gallery', 'public_path' => $publicPath]));
     }
-    return public_base_url() . '/gallery/' . public_path_segment($publicPath) . '/';
+    $routePath = 'gallery/' . public_path_segment($publicPath) . '/';
+    return (string) ($_GET['preview'] ?? '') === 'visual'
+        ? request_mount_url($routePath)
+        : public_base_url() . '/' . $routePath;
 }
 
 /**
