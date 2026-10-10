@@ -127,10 +127,10 @@ function setupWidgetPlacement(form, labels) {
         const isFloating = mode?.value === 'floating';
         if (flow) flow.hidden = isFloating;
         if (floating) floating.hidden = !isFloating;
-        if (scope?.value === 'gallery' && ['home_before_grid', 'home_after_grid'].includes(zone?.value)) zone.value = 'content_top';
+        if (!isFloating && scope?.value === 'gallery' && ['home_before_grid', 'home_after_grid'].includes(zone?.value)) zone.value = 'content_top';
         const galleryOnly = scope?.value === 'gallery';
         for (const option of Array.from(zone?.options || [])) {
-            option.disabled = galleryOnly && ['home_before_grid', 'home_after_grid'].includes(option.value);
+            option.disabled = galleryOnly && !isFloating && ['home_before_grid', 'home_after_grid'].includes(option.value);
         }
         stage.dataset.mode = isFloating ? 'floating' : 'flow';
         reset.hidden = !isFloating;

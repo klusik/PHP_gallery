@@ -194,7 +194,7 @@ function public_widget_normalize(array $input): array
         }
         $validated[$field] = $value;
     }
-    if ($validated['page_scope'] === 'gallery' && in_array($validated['flow_slot'], ['home_before_grid', 'home_after_grid'], true)) {
+    if ($validated['page_scope'] === 'gallery' && $validated['placement_mode'] === 'flow' && in_array($validated['flow_slot'], ['home_before_grid', 'home_after_grid'], true)) {
         throw new PublicWidgetInvalidField('flow_slot', 'Homepage gallery-grid positions are unavailable for gallery-only widgets.');
     }
     if ($validated['status'] === 'published' && $content === '') {

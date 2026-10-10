@@ -71,10 +71,11 @@ try {
     form.querySelector('[name="page_scope"]').value = 'gallery';
     form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
     form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
-    check(value('flow_slot') === 'content_top', 'Invalid gallery-only homepage grid slot is sanitized');
+    check(value('flow_slot') === 'home_before_grid', 'Inactive home-grid slot is retained in floating mode');
     form.querySelector('[name="placement_mode"]').value = 'flow';
     form.querySelector('[name="placement_mode"]').dispatchEvent(new Event('change', {bubbles: true}));
     check(reset.hidden && stage.dataset.mode === 'flow', 'Flow mode disables floating controls');
+    check(value('flow_slot') === 'content_top', 'Invalid active gallery flow slot is safely replaced');
     check(form.querySelector('textarea').value.includes('Initial **draft**'), 'Preview never edits authored draft');
     check(document.querySelector('[data-widget-preview-body]').textContent.includes('Published source'), 'Read-only preview preserved');
     check(submissions === 0 && location.href === startUrl, 'No save or navigation triggered');

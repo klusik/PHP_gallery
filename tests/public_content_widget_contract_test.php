@@ -72,6 +72,8 @@ foreach (['javascript:alert(1)', 'data:text/html,hi', '//example.net', 'ftp://ex
 $invalid(static fn (): array => public_widget_normalize(['title' => 'X', 'content_md' => '[x](javascript:alert)']), 'content_md');
 $invalid(static fn (): array => public_widget_normalize([...$base, 'status' => 'published', 'content_md' => '']), 'content_md');
 $invalid(static fn (): array => public_widget_normalize([...$base, 'page_scope' => 'gallery', 'flow_slot' => 'home_after_grid']), 'flow_slot');
+$inactiveFlow = public_widget_normalize([...$base, 'page_scope' => 'gallery', 'placement_mode' => 'floating', 'flow_slot' => 'home_after_grid']);
+$equal('home_after_grid', $inactiveFlow['flow_slot'], 'Inactive flow location survives a gallery-only floating edit');
 $invalid(static fn (): array => public_widget_normalize([...$base, 'placement_mode' => 'fixed']), 'placement_mode');
 $invalid(static fn (): array => public_widget_normalize([...$base, 'floating_anchor' => 'middle-center']), 'floating_anchor');
 $invalid(static fn (): array => public_widget_normalize([...$base, 'x_permille' => '-1']), 'x_permille');

@@ -48,7 +48,7 @@ No editor preview, drag, device toggle or visitor action writes a published widg
 | `home_after_grid` | Homepage immediately after the gallery grid |
 | `footer` | Within the established global footer flow without replacing its credits |
 
-For `all`-scope widgets using a homepage-grid position on a gallery-detail page, the resolved location falls back to `content_bottom` once. Side rails are normal document-flow regions and stack **after primary content** below 1080 CSS pixels. Multiple items in one region render in saved order. Empty regions emit no wrappers.
+For `all`-scope widgets using a homepage-grid position on a gallery-detail page, the resolved location falls back to `content_bottom` once. A saved homepage-grid slot may remain stored as an **inactive** flow preference while the widget uses Floating mode on gallery pages. The gallery-only restriction is enforced when selecting an **active** in-flow position, without unnecessarily discarding prior placement configuration. Side rails are normal document-flow regions and stack **after primary content** below 1080 CSS pixels. Multiple items in one region render in saved order. Empty regions emit no wrappers.
 
 ### Floating placement and accessibility
 
