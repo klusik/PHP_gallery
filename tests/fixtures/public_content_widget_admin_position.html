@@ -16,6 +16,7 @@ License: MIT License (see LICENSE file in repository)
 <body class="admin-page">
 <main>
 <form action="/" method="post" data-public-widget-editor data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","reset_position":"Reset floating position","floating_hint":"Drag widget position"}' data-widget-published-peers='[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope":"home","anchor":"bottom-right","x":900,"y":900,"width":320}]'>
+    <input type="hidden" name="widget_id" value="cccccccccccccccccccccccccccccccc">
     <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option><option value="all">All</option></select>
     <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select>
     <fieldset data-widget-flow-controls>
@@ -61,6 +62,10 @@ try {
     check(previewDoc.querySelector('.site-header') && previewDoc.querySelector('[data-public-gallery-index-grid]'),
         'Existing public header and gallery grid remain present');
     check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Only one safe draft article exists');
+    check(!previewDoc.querySelector('[data-public-widget-id="cccccccccccccccccccccccccccccccc"]'),
+        'Saved version of the edited published widget is absent from the preview');
+    check(previewDoc.querySelector('[data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'),
+        'Other published widgets remain in the preview');
     check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
     check(document.querySelector('[data-widget-flow-controls]').hidden, 'Floating form hides flow controls');
     const warnings = document.querySelector('.public-widgets-placement-warnings');
@@ -125,6 +130,10 @@ try {
     form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
     check(previewDoc.querySelector('.public-widget-content-layout--left .public-widget-region--left_rail [data-widget-theme-draft="1"]'),
         'Left rail uses the actual public responsive CSS layout');
+    check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"]').length === 1,
+        'Draft shares the original rail region instead of creating overlapping grid areas');
+    check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"] .public-content-widget').length === 2,
+        'Unrelated published widget and draft coexist in one public rail');
     form.querySelector('[name="flow_slot"]').value = 'footer';
     form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
     check(previewDoc.querySelector('.site-footer .public-widget-region--footer [data-widget-theme-draft="1"]'),

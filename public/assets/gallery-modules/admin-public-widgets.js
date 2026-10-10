@@ -388,6 +388,32 @@ export function publicWidgetProtectedHomeUrl(value, baseHref) {
  * @param {Element} preview Sanitized Markdown preview owned by the server.
  * @returns {void} Inserts exactly one draft into the selected Home slot.
  */
+/**
+ * Reconcile the actual public Home CSS rail mode after a transient draft move.
+ *
+ * An edited published widget may have been the only article in an old rail.
+ * Removing its now-empty region must not leave an obsolete grid column or
+ * overlap an unrelated published rail. No live public DOM is modified.
+ *
+ * @param {Element} main Public preview's isolated main content container.
+ * @returns {void} Normalizes actual public rails and primary content.
+ */
+function publicWidgetReconcileHomeRails(main) {
+    const layout = main.querySelector('.public-widget-content-layout');
+    if (!layout) return;
+    const left = Boolean(layout.querySelector('.public-widget-region--left_rail'));
+    const right = Boolean(layout.querySelector('.public-widget-region--right_rail'));
+    if (!left && !right) {
+        const primary = layout.querySelector('.public-widget-primary');
+        if (primary) layout.replaceWith(...primary.childNodes);
+        else layout.remove();
+        return;
+    }
+    layout.classList.remove('public-widget-content-layout--left', 'public-widget-content-layout--right',
+        'public-widget-content-layout--both');
+    layout.classList.add('public-widget-content-layout--' + (left && right ? 'both' : left ? 'left' : 'right'));
+}
+
 function publicWidgetRenderHomeDraft(doc, form, preview) {
     const main = doc.querySelector('main.site-main');
     const footer = doc.querySelector('.site-footer');
@@ -400,7 +426,11 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
     const appearance = form.querySelector('[name="appearance"]')?.value === 'minimal' ? 'minimal' : 'card';
     const editId = form.querySelector('[name="widget_id"]')?.value || '';
     if (/^[a-f0-9]{32}$/.test(editId)) {
-        for (const saved of doc.querySelectorAll('[data-public-widget-id="' + editId + '"]')) saved.remove();
+        for (const saved of doc.querySelectorAll('[data-public-widget-id="' + editId + '"]')) {
+            const oldRegion = saved.closest('[data-public-widget-zone]');
+            saved.remove();
+            if (oldRegion && !oldRegion.querySelector('.public-content-widget')) oldRegion.remove();
+        }
     }
     const article = doc.createElement('article');
     article.className = 'public-content-widget public-content-widget--' + appearance;
@@ -417,6 +447,14 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
     body.className = 'public-content-widget-body';
     for (const child of content.childNodes) body.append(doc.importNode(child, true));
     article.append(body);
+    // One region per slot: extra grid-area siblings would overlap other
+    // published widgets in the same left/right rail.
+    const publishedRegion = doc.querySelector('[data-public-widget-zone="' + slot + '"]');
+    if (publishedRegion) {
+        publishedRegion.append(article);
+        publicWidgetReconcileHomeRails(main);
+        return;
+    }
     const region = doc.createElement('section');
     region.className = 'public-widget-region public-widget-region--' + slot;
     region.dataset.widgetThemeDraftRegion = '1';
@@ -452,14 +490,10 @@ function publicWidgetRenderHomeDraft(doc, form, preview) {
             else main.append(layout);
         }
         layout.append(region);
-        const left = Boolean(layout.querySelector('.public-widget-region--left_rail'));
-        const right = Boolean(layout.querySelector('.public-widget-region--right_rail'));
-        layout.classList.remove('public-widget-content-layout--left','public-widget-content-layout--right',
-            'public-widget-content-layout--both');
-        layout.classList.add('public-widget-content-layout--' + (left && right ? 'both' : left ? 'left' : 'right'));
     } else {
         main.append(region);
     }
+    publicWidgetReconcileHomeRails(main);
 }
 
 /**
