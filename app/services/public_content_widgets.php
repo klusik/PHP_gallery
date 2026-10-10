@@ -136,7 +136,7 @@ function public_widget_safe_url(mixed $input): string
  */
 function public_widget_validate_markdown_links(string $content): void
 {
-    if (preg_match_all('/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(((?:[^()\s]|\([^()\s]{1,256}\)){1,2048})\)/u', $content, $matches) === false) {
+    if (preg_match_all('/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(((?:[^()\s]|\([^()\s]*\))+)\)/u', $content, $matches) === false) {
         throw new PublicWidgetInvalidField('content_md', 'The content contains invalid UTF-8 or link syntax.');
     }
     foreach ($matches[1] as $url) {
@@ -426,7 +426,7 @@ function public_widget_emphasis_html(string $text): string
  */
 function public_widget_inline_html(string $text): string
 {
-    $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(((?:[^()\s]|\([^()\s]{1,256}\)){1,2048})\)/u';
+    $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(((?:[^()\s]|\([^()\s]*\))+)\)/u';
     $matchCount = preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
     if ($matchCount === false || $matchCount === 0) {
         return public_widget_emphasis_html($text);
