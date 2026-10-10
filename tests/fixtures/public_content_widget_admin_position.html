@@ -62,8 +62,9 @@ try {
     check(previewDoc.querySelector('.site-header') && previewDoc.querySelector('[data-public-gallery-index-grid]'),
         'Existing public header and gallery grid remain present');
     check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Only one safe draft article exists');
-    check(!previewDoc.querySelector('[data-public-widget-id="cccccccccccccccccccccccccccccccc"]'),
-        'Saved version of the edited published widget is absent from the preview');
+    check(previewDoc.querySelectorAll('[data-public-widget-id="cccccccccccccccccccccccccccccccc"]').length === 1
+        && previewDoc.querySelector('[data-public-widget-id="cccccccccccccccccccccccccccccccc"][data-widget-theme-draft="1"]'),
+        'Unsaved preview replaces the saved widget while retaining its identity for stable ordering');
     check(previewDoc.querySelector('[data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'),
         'Other published widgets remain in the preview');
     check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
