@@ -86,6 +86,7 @@ function view_admin_menu_structure(array $model = []): array
             'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
                 ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme'), 'icon' => 'theme'],
+                ['label' => t('admin.menu.widgets', 'Widgets'), 'page' => 'admin_widgets', 'url' => url_for('admin_theme', ['widgets' => '1']), 'icon' => 'theme'],
                 ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features'), 'icon' => 'features'],
             ],
         ],

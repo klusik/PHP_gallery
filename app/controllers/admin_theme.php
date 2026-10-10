@@ -48,6 +48,7 @@ require_once __DIR__ . '/admin_theme_layout.php';
 require_once __DIR__ . '/admin_theme_language.php';
 require_once __DIR__ . '/admin_theme_custom_css.php';
 require_once __DIR__ . '/admin_theme_page.php';
+require_once __DIR__ . '/admin_public_widgets.php';
 
 /**
  * Render and process visual theme settings.
@@ -55,6 +56,11 @@ require_once __DIR__ . '/admin_theme_page.php';
 function cms_admin_theme(): void
 {
     require_admin();
+    if (($_GET['widgets'] ?? null) === '1' || array_key_exists('widget_action', $_POST)) {
+        cms_admin_public_widgets();
+        return;
+    }
+
     // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
     $gpsMapsFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
     // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
