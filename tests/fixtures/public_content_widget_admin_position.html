@@ -19,7 +19,7 @@ License: MIT License (see LICENSE file in repository)
     <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option><option value="all">All</option></select>
     <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select>
     <fieldset data-widget-flow-controls>
-        <select name="flow_slot"><option value="content_top">Top</option><option value="home_before_grid">Before grid</option></select>
+        <select name="flow_slot"><option value="content_top">Top</option><option value="home_before_grid">Before grid</option><option value="home_after_grid">After grid</option><option value="left_rail">Left rail</option><option value="right_rail">Right rail</option><option value="footer">Footer</option></select>
     </fieldset>
     <fieldset data-widget-floating-controls>
         <select name="floating_anchor"><option value="bottom-right" selected>Bottom right</option><option value="custom">Custom</option></select>
@@ -31,6 +31,7 @@ License: MIT License (see LICENSE file in repository)
     <button type="submit" name="widget_action" value="save">Save</button>
 </form>
 <section data-widget-preview><article class="public-content-widget public-content-widget--card"><h4 class="public-content-widget-title">Preview</h4><div data-widget-preview-body>Published source remains unchanged.</div></article></section>
+<section data-widget-theme-preview data-widget-preview-url="/index.php?page=home&amp;preview=visual"><h3>Actual homepage Theme preview</h3><p data-widget-theme-status></p><div data-widget-theme-frame-wrap hidden></div></section>
 <pre id="results">BROWSER PENDING</pre>
 </main>
 <script type="module">
@@ -46,6 +47,20 @@ try {
     setupAdminPublicWidgets();
     const stage = document.querySelector('.public-widgets-placement-stage');
     check(stage && document.querySelectorAll('.public-widgets-placement-stage').length === 1, 'Idempotent stage creation');
+    const frame = document.querySelector('.public-widgets-theme-frame');
+    check(frame && frame.getAttribute('sandbox') === 'allow-same-origin', 'Theme preview is scriptless');
+    await new Promise((resolve, reject) => {
+        if (frame.contentDocument?.querySelector('[data-widget-theme-draft="1"]')) return resolve();
+        const timeout = setTimeout(() => reject(new Error('Protected public Home preview did not load')), 8000);
+        frame.addEventListener('load', () => { clearTimeout(timeout); resolve(); }, {once:true});
+    });
+    const previewDoc = frame.contentDocument;
+    check(previewDoc?.querySelector('body.public-page main.site-main'), 'Real public Home is shown');
+    check(previewDoc.querySelector('.public-widget-region--floating [data-widget-theme-draft="1"]'),
+        'Initial floating draft appears in its scriptless in-page fallback');
+    check(previewDoc.querySelector('.site-header') && previewDoc.querySelector('[data-public-gallery-index-grid]'),
+        'Existing public header and gallery grid remain present');
+    check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Only one safe draft article exists');
     check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
     check(document.querySelector('[data-widget-flow-controls]').hidden, 'Floating form hides flow controls');
     const warnings = document.querySelector('.public-widgets-placement-warnings');
@@ -95,6 +110,28 @@ try {
     check(reset.hidden && stage.dataset.mode === 'flow', 'Flow mode disables floating controls');
     check(warnings.textContent === '' && document.querySelectorAll('.public-widgets-restricted-guide:not([hidden])').length === 0, 'Flow mode removes floating warnings and guides');
     check(value('flow_slot') === 'content_top', 'Invalid active gallery flow slot is safely replaced');
+    check(document.querySelector('[data-widget-theme-frame-wrap]').hidden,
+        'Gallery-only scope does not pretend that the real Home preview is a gallery page');
+    form.querySelector('[name="page_scope"]').value = 'home';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles:true}));
+    form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    const injected = previewDoc.querySelector('[data-widget-theme-draft="1"]');
+    check(injected?.closest('[data-public-widget-zone="home_before_grid"]'),
+        'Unsaved article is located before the actual homepage gallery grid');
+    check(injected.closest('.gallery-list-content') && previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1,
+        'Preview retains the real gallery list content and a single article');
+    form.querySelector('[name="flow_slot"]').value = 'left_rail';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    check(previewDoc.querySelector('.public-widget-content-layout--left .public-widget-region--left_rail [data-widget-theme-draft="1"]'),
+        'Left rail uses the actual public responsive CSS layout');
+    form.querySelector('[name="flow_slot"]').value = 'footer';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    check(previewDoc.querySelector('.site-footer .public-widget-region--footer [data-widget-theme-draft="1"]'),
+        'Footer draft is rendered inside the existing public footer');
+    check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Switching zones does not duplicate drafts');
+    previewDoc.querySelector('.site-header a').dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true}));
+    check(frame.contentWindow.location.href.includes('preview=visual'), 'Public links cannot navigate the scriptless preview');
     check(form.querySelector('textarea').value.includes('Initial **draft**'), 'Preview never edits authored draft');
     check(document.querySelector('[data-widget-preview-body]').textContent.includes('Published source'), 'Read-only preview preserved');
     check(submissions === 0 && location.href === startUrl, 'No save or navigation triggered');

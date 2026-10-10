@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_theme_home.html
+Module Type: Browser Test Fixture
+Purpose: Exercise protected scriptless Home Theme draft insertion in Chromium.
+Responsibilities:
+  - Include the real public widget CSS and Home placement hooks.
+  - Keep navigation inert through the parent Admin sandbox.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protected Home preview fixture</title><link rel="stylesheet" href="/widget-public.css">
+<body class="public-page">
+<header class="site-header"><a href="/untrusted-route">Gallery header</a></header>
+<main class="site-main">
+<div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list>
+<div data-public-gallery-index hidden></div>
+<section class="grid public-home-gallery-grid" data-public-gallery-index-grid><article class="gallery-card">Existing gallery</article></section>
+</div></div>
+</main>
+<footer class="site-footer">Existing footer</footer>
+</body></html>

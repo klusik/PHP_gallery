@@ -16,7 +16,7 @@ import {readFileSync} from 'node:fs';
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/admin-public-widgets.js', import.meta.url), 'utf8');
 const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
-const {publicWidgetPointerPosition, publicWidgetPlacementWarnings} = module;
+const {publicWidgetPointerPosition, publicWidgetPlacementWarnings, publicWidgetProtectedHomeUrl} = module;
 const rect = {left: 20, top: 30, width: 200, height: 100};
 
 assert.deepEqual(publicWidgetPointerPosition(120, 80, rect), {x: 500, y: 500});
@@ -50,4 +50,24 @@ assert.deepEqual(publicWidgetPlacementWarnings(draft, [other, {...other, id: 'se
     ['limit', 'collision'], 'Overlay limit and likely collision are separate risks');
 assert.deepEqual(publicWidgetPlacementWarnings({...draft, anchor: 'custom', x: 850, y: 850}, [other]),
     ['collision'], 'Nearby custom coordinates warn');
+const base = 'https://gallery.example.test/galerie/index.php?page=admin_theme';
+assert.equal(publicWidgetProtectedHomeUrl('/galerie/index.php?page=home&preview=visual&view_as=anonymous', base)?.pathname,
+    '/galerie/index.php', 'Mounted query-routing preview is accepted');
+assert.equal(publicWidgetProtectedHomeUrl('/galerie/?preview=visual', base)?.pathname,
+    '/galerie/', 'Clean routed homepage preview is accepted');
+for (const candidate of [
+    '/galerie/index.php?page=home',
+    '/galerie/index.php?page=gallery&preview=visual',
+    '/galerie/index.php?page=home&preview=visual&preview=visual',
+    '/galerie/index.php?page=home&preview=visual&widget_action=delete',
+    '/galerie/index.php?page=home&preview=visual&view_as=admin',
+    'https://external.example.test/galerie/index.php?page=home&preview=visual',
+    '/galerie/index.php?page=home&preview=visual#fragment',
+    '/galerie/api/widgets?preview=visual',
+]) {
+    assert.equal(publicWidgetProtectedHomeUrl(candidate, base), null, 'Unsafe preview URL refused: ' + candidate);
+}
+assert.ok(source.includes("frame.setAttribute('sandbox', 'allow-same-origin')"), 'Iframe denies public scripts and form submission');
+assert.ok(source.includes("doc.addEventListener('click', event => event.preventDefault(), true)"),
+    'Parent intercepts navigation in the scriptless frame');
 console.log('public_content_widget_admin_position_test: PASS');

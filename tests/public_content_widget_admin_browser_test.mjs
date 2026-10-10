@@ -27,6 +27,8 @@ const routes = new Map([
     ['/', 'tests/fixtures/public_content_widget_admin_position.html'],
     ['/widget-admin.js', 'public/assets/gallery-modules/admin-public-widgets.js'],
     ['/widget-admin.css', 'public/assets/styles/admin-public-widgets.css'],
+    ['/widget-public.css', 'public/assets/styles/public-content-widgets.css'],
+    ['/index.php', 'tests/fixtures/public_content_widget_theme_home.html'],
 ]);
 const server = createServer(async (request, response) => {
     const relative = routes.get(new URL(request.url, 'http://localhost').pathname);
