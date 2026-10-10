@@ -1,5 +1,54 @@
 # Patch notes
 
+## Version 0.126.1
+
+Version 0.126.1 simplified the reviewed release lifecycle with maintainer-pushed release branches, exact-candidate qualification, and automated completion after one owner approval. GitHub Release publication remained manual, and this release did not establish that a production release was approved or published.
+
+### Highlights
+
+#### Reviewed release lifecycle [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+- Started release preparation from maintainer-pushed `release/v_X.Y[.Z]` branches and recorded immutable origins and predecessor evidence.
+- Automated exact-candidate pull request completion after one owner approval, with guarded merge, immutable tagging, and a non-forced `develop` fast-forward when safe.
+- Kept GitHub Release publication manual and blocked `develop` synchronization when parallel work prevented a fast-forward.
+
+#### Exact-candidate qualification
+- Bound qualification, prepared assets, and completion to the exact candidate commit and comparison base.
+- Added integrity checks for production and evidence assets, all four manual PDFs, and checksum records.
+- Removed the separate manual start-new-release and release-reconciliation workflows.
+
+### Technical Details
+
+#### Backend
+- Added release readiness, completion handoff, completion, and asset-integrity logic under `.github/scripts/`.
+- Updated origin, owner-authorization, promotion, reconciliation, and retirement logic to validate release identity and preserve guarded, non-forced operations.
+- Added immutable origin and predecessor records for `v_0.126.1`.
+
+#### Frontend
+- Updated GitHub Actions workflows for release initialization, exact-candidate qualification, automatic completion, and manual publication assets.
+- Kept the Windows installer build conditional on changes to shipped WinApp content.
+
+#### Database
+- Added no database migration.
+
+#### Tests
+- Added coverage for release asset integrity and completion handoff and expanded lifecycle tests for qualification, approval, retries, merge identity, tagging, and safe `develop` synchronization.
+- Added a disposable Git and synthetic GitHub API fixture; these tests did not establish live protected-write acceptance.
+- Recorded live feature-branch dispatch probes as successful; protected approval, merge, tagging, and fast-forward acceptance remained unrun.
+
+#### Documentation
+- Updated release lifecycle, qualification, testing, architecture, contributor, and agent guidance, including all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Administrator-facing gallery behavior did not change.
+
+#### For maintainers
+- Maintainers gained a documented release path from a pushed release branch through exact-candidate qualification and one-owner-approval completion. They retained responsibility for publishing the GitHub Release; protected-write acceptance was not performed.
+
 ## Version 0.126
 
 Version 0.126 established an immutable, owner-reviewed release lifecycle with exact-SHA hosted qualification, guarded promotion, and optional post-publication reconciliation and branch retirement. It also added release initialization and expanded documentation and regression coverage; these changes did not themselves establish that a release was approved or published.
