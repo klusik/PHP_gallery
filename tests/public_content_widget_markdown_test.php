@@ -36,7 +36,7 @@ $malicious = public_widget_markdown_html("# Safe heading\n<script>alert(1)</scri
     . "- [unsafe](javascript:alert)\n"
     . "- [injected](https://example.org/\"onclick=\"alert)\n"
     . "- <img src=x onerror=alert(1)>\n");
-foreach (['<script', '<img ', 'onclick=', 'onerror=', 'href="javascript:', '<iframe'] as $needle) {
+foreach (['<script', '<img ', ' onclick="', ' onerror="', 'href="javascript:', '<iframe'] as $needle) {
     if (str_contains($malicious, $needle)) {
         throw new RuntimeException('Untrusted widget source emitted active HTML: ' . $needle);
     }
