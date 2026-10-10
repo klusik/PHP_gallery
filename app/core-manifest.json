@@ -1,6 +1,6 @@
 {
     "version": "0.126.3",
-    "generated_at": "2026-10-10T18:52:46+00:00",
+    "generated_at": "2026-10-10T18:58:57+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -834,7 +834,7 @@
         "scripts/audit_lib.php": "sha256:2d61e81c6e53362c0dead4aeefcdad825ffe611ddc69a5c88d623d3db1972e5b",
         "scripts/audit_performance.php": "sha256:32b68d8206f3ffa9a9917886141b2c72368a71c0fb5ae6e7b03578be72a212ea",
         "scripts/audit_performance_registry.php": "sha256:0ad9b8d81e74d85acbfb4b4b480cf14f2fbdb8d709e712bb0b47fd8a9c058f47",
-        "scripts/audit_php_registry.php": "sha256:439f1dda873b3d65544ce3c2d017db92c4af0ef1f61cc6ef67b263ea54d348db",
+        "scripts/audit_php_registry.php": "sha256:ced548e5e68dea5a7a81a7ecd760f8fb3fdfc068223c4c70084cfcc0d02506a5",
         "scripts/audit_process.php": "sha256:42373be3b20bf69553bbd9da015290c5790478e11766dfd9bfe4117dbbade165",
         "scripts/audit_registry.php": "sha256:451bbbf3204b96efab27e36b0cc93382ebbaf36877992fb8a5fec1b93c4f71db",
         "scripts/audit_route_performance.php": "sha256:6e9d9de8bad9121382caf92b0602f00470598f0de1f222ec6527b860fb756bc4",
