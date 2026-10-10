@@ -7087,5 +7087,8 @@
     "admin.widgets.preview_stage_hint": "Gerät auswählen. In die Vorschau klicken oder Pfeiltasten verwenden, um ein Widget zu platzieren.",
     "admin.widgets.preview_mobile_hint": "Auf Mobilgeräten erscheint das Widget barrierefrei im Seiteninhalt.",
     "admin.widgets.preview_flow_hint": "Ein Widget im Seiteninhalt folgt dem Layout und dem ausgewählten Bereich.",
-    "admin.widgets.preview_floating_hint": "Schwebende Position durch Klicken oder mit Pfeiltasten ändern."
+    "admin.widgets.preview_floating_hint": "Schwebende Position durch Klicken oder mit Pfeiltasten ändern.",
+    "admin.settings.item.public_content_widgets": "Widgets für öffentliche Inhalte",
+    "admin.settings.item.public_content_widgets.hint": "Erstellen und verwalten Sie öffentliche Widgets, Linksammlungen, Platzierung und Sichtbarkeit im spezialisierten Design-Editor.",
+    "admin.settings.item.public_content_widgets.example": "Beispiel: eine Partnergalerien-Karte mit ausgewählten Links auf der Startseite."
 }

@@ -7087,5 +7087,8 @@
     "admin.widgets.preview_stage_hint": "Choose a device. Click the preview or use arrow keys to position a floating widget.",
     "admin.widgets.preview_mobile_hint": "On mobile the widget falls back to accessible in-page content.",
     "admin.widgets.preview_flow_hint": "An in-page widget follows the normal layout and selected content zone.",
-    "admin.widgets.preview_floating_hint": "Click or use arrow keys to customize the floating position."
+    "admin.widgets.preview_floating_hint": "Click or use arrow keys to customize the floating position.",
+    "admin.settings.item.public_content_widgets": "Public content widgets",
+    "admin.settings.item.public_content_widgets.hint": "Create and manage public content widgets, including curated links, placement and visibility, in the dedicated Theme editor.",
+    "admin.settings.item.public_content_widgets.example": "For example: a Partner galleries panel with curated links on the homepage."
 }
