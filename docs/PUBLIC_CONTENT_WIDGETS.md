@@ -83,6 +83,7 @@ Tests are registered in the existing central audit, not a feature-specific workf
 - `tests/public_content_widget_contract_test.php` and `public_content_widget_markdown_test.php` validate persistence/URL/state and safe formatting contracts.
 - `tests/public_content_widget_public_render_test.php` verifies SSR page targeting, unpublished suppression, escaping, unique IDs, normal-flow fallback and home-to-gallery slot translation.
 - `tests/public_content_widget_floating_test.mjs` validates viewport geometry, bounds, presets/custom positions and collision failure-to-flow.
+- `tests/public_content_widget_db_workflow_test.php` uses the explicitly owned disposable MySQL/MariaDB fixture to exercise real committed widget CRUD, independent PDO connections, optimistic edit/delete conflicts, safe publication state, draft duplication, and all-or-nothing transactional reorder.
 - `tests/public_content_widget_admin_position_test.mjs` and `public_content_widget_admin_browser_test.mjs` exercise Admin pointer/keyboard/Reset and draft preservation, including an isolated Chromium page.
 
 Run GitHub Actions candidate preparation and the full required matrix on the authorized feature branch. Check the **exact final prepared head SHA**, not an older green commit. A green earlier checkpoint does not qualify later code or documentation changes.
