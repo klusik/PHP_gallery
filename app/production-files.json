@@ -547,6 +547,7 @@
         "app/views/admin_maintenance_center.php",
         "app/views/admin_media_renamer.php",
         "app/views/admin_public_inline.php",
+        "app/views/admin_public_widgets.php",
         "app/views/admin_render_profiler.php",
         "app/views/admin_search_diagnostics.php",
         "app/views/admin_settings.php",
