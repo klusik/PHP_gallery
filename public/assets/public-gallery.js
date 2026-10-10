@@ -44,6 +44,7 @@ const optionalPublicModules = {
     viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
     ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat',
+    publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261010-widget-floating-v1',
 };
 
 /**
@@ -122,6 +123,7 @@ function bootPublicGalleryBrowserFeatures() {
         setupOptionalPublicFeature(optionalPublicModules.viewerFavourites, 'setupViewerFavourites', '[data-viewer-favourite-form]');
         setupOptionalPublicFeature(optionalPublicModules.galleryDownload, 'setupGalleryDownload', '[data-gallery-download]');
         setupOptionalPublicFeature(optionalPublicModules.ofpViewer, 'setupSimbriefOfpViewer', '[data-simbrief-ofp-open]');
+        setupOptionalPublicFeature(optionalPublicModules.publicContentWidgets, 'setupPublicContentWidgets', '[data-public-widget-floating]');
     });
 }
 

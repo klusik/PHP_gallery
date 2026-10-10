@@ -392,6 +392,7 @@ $registry = [
         'lightbox_resource_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
+        'public_content_widget_floating_test.mjs' => [],
         'public_search_progressive_test.mjs' => [],
         'telemetry_image_observability_test.mjs' => [],
         'telemetry_photo_lifecycle_test.mjs' => [],

@@ -17,6 +17,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\e;
+use function Gallery\Services\t;
 
 /**
  * Return one complete region of widget markup without querying persistence.
@@ -48,7 +49,9 @@ function view_public_widget_region_html(array $plan, string $slot): string
             . '" data-public-widget-id="' . e($id) . '" lang="' . e($language) . '"'
             . ' style="--public-widget-max-width:' . (int) ($row['width_px'] ?? 320) . 'px"';
         if ($floating) {
-            $html .= ' data-public-widget-floating="1" data-public-widget-anchor="'
+            $html .= ' data-public-widget-floating="1" data-public-widget-width="' . (int) ($row['width_px'] ?? 320) . '"'
+                . ' data-public-widget-dismiss-label="' . e(t('lightbox.close', 'Close')) . '"'
+                . ' data-public-widget-anchor="'
                 . e((string) ($row['floating_anchor'] ?? 'bottom-right')) . '"'
                 . ' data-public-widget-x="' . (int) ($row['x_permille'] ?? 900) . '"'
                 . ' data-public-widget-y="' . (int) ($row['y_permille'] ?? 900) . '"';

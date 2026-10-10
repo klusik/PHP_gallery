@@ -71,3 +71,39 @@
 @media (max-width: 680px) {
     .public-page .public-content-widget { width: 100%; max-width: 100%; }
 }
+
+/* Progressive enhancement only. Server HTML stays in flow until this class is set. */
+.public-page .public-content-widget.is-public-widget-floating {
+    position: fixed;
+    z-index: 25;
+    margin: 0;
+    max-height: 42vh;
+    max-height: 42dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.public-page .public-widget-dismiss {
+    display: none;
+}
+.public-page .is-public-widget-floating .public-widget-dismiss {
+    position: sticky;
+    top: 0;
+    float: right;
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: -.5rem -.5rem .25rem .5rem;
+    padding: 0;
+    color: var(--ink, #222);
+    background: var(--panel, #fff);
+    border: 1px solid var(--line, #d2d6da);
+    border-radius: 50%;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.public-page .is-public-widget-floating .public-widget-dismiss:focus-visible {
+    outline: 3px solid var(--accent, #0867ac);
+    outline-offset: 3px;
+}
