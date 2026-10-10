@@ -26,6 +26,7 @@ if (!executable) {
 }
 const routes = new Map([
     ['/', 'tests/fixtures/public_content_widget_public_placement.html'],
+    ['/nojs', 'tests/fixtures/public_content_widget_public_placement.html'],
     ['/public-widgets.js', 'public/assets/gallery-modules/public-content-widgets.js'],
     ['/public-widgets.css', 'public/assets/styles/public-content-widgets.css'],
 ]);
@@ -38,7 +39,9 @@ const server = createServer(async (request, response) => {
     try {
         response.setHeader('Content-Type', relative.endsWith('.html') ? 'text/html; charset=utf-8'
             : relative.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8');
-        response.end(await readFile(path.join(root, relative)));
+        const source = await readFile(path.join(root, relative), 'utf8');
+        response.end(new URL(request.url, 'http://localhost').pathname === '/nojs'
+            ? source.replace(/<script type="module">[\s\S]*?<\/script>/, '') : source);
     } catch {
         response.writeHead(500).end();
     }
@@ -57,6 +60,36 @@ try {
         assert.ok(result?.startsWith('BROWSER PASS') && result.includes(expected),
             'Public widget ' + label + ' geometry and fallback must pass');
     }
+    // Remove the browser enhancer entirely and verify the actual initial HTML/CSS fallback.
+    // DevTools evaluates assertions only; no public widget script is included in /nojs.
+    const noScript = await runHeadlessBrowserFixture(executable,
+        'http://127.0.0.1:' + server.address().port + '/nojs', 'widget-public-nojs-',
+        {
+            viewport: {width: 1280, height: 900},
+            interact: async ({evaluate}) => {
+                const result = await evaluate(`(async () => {
+                    for (let i = 0; i < 80 && document.readyState !== 'complete'; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 30));
+                    }
+                    const widgets = Array.from(document.querySelectorAll('[data-public-widget-id]'));
+                    const unique = new Set(widgets.map(node => node.dataset.publicWidgetId));
+                    const pass = widgets.length === 3 && unique.size === 3
+                        && widgets.every(node => !node.hidden && getComputedStyle(node).position !== 'fixed')
+                        && widgets.every(node => node.querySelector('a, p'))
+                        && document.querySelector('.public-widget-dismiss') === null
+                        && !document.querySelector('script[type="module"]')
+                        && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1;
+                    const marker = pass ? 'BROWSER PASS: public widgets genuine no-script SSR fallback'
+                        : 'BROWSER FAIL: no-script SSR content or document flow missing';
+                    document.getElementById('results').textContent = marker;
+                    return marker;
+                })()`);
+                assert.ok(String(result).startsWith('BROWSER PASS'), 'No-script SSR must remain usable');
+            },
+        });
+    console.log(noScript.result || 'No-script fixture produced no status marker.');
+    assert.equal(noScript.exitCode, 0, 'No-script browser process must exit cleanly.');
+    assert.ok(noScript.result.includes('genuine no-script SSR fallback'), 'No-script fixture must pass');
 } finally {
     server.close();
 }
