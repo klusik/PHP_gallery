@@ -21,7 +21,7 @@ use function Gallery\Services\t;
 /**
  * Keep malformed form input inert instead of coercing arrays into strings.
  *
- * @param mixed $value Draft value that may be an untrusted array.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Draft value that may be an untrusted array.
  * @return string Printable field text, or empty on invalid types.
  */
 function view_public_widget_field(mixed $value): string
@@ -33,7 +33,7 @@ function view_public_widget_field(mixed $value): string
  * Render a bounded enum selector without exposing raw CSS or DOM identifiers.
  *
  * @param string $name Known semantic widget field.
- * @param mixed $current Submitted value or persisted state.
+ * @param scalar|array<array-key,mixed>|object|resource|null $current Submitted value or persisted state.
  * @param array<string,string> $options Stable allowed values and human labels.
  * @return void Emits a labeled select with escaped option text.
  */

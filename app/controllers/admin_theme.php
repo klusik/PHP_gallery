@@ -52,6 +52,7 @@ require_once __DIR__ . '/admin_public_widgets.php';
 
 /**
  * Render and process visual theme settings.
+ * @return void Applies isolated Admin actions or renders the configured Theme view.
  */
 function cms_admin_theme(): void
 {

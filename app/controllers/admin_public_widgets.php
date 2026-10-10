@@ -69,7 +69,7 @@ function admin_public_widget_submitted_draft(array $post): array
  * Find an authorized editor row, resolving the literal new-draft sentinel.
  *
  * @param list<array<string,mixed>> $rows Bounded database rows for this administrator.
- * @param mixed $requested Selected GET/POST identifier or sentinel.
+ * @param scalar|array<array-key,mixed>|object|resource|null $requested Selected GET/POST identifier or sentinel.
  * @return array<string,mixed>|null Matching stored row or a new-draft selection.
  */
 function admin_public_widget_select(array $rows, mixed $requested): ?array

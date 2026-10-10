@@ -4,6 +4,9 @@
  * File: public/assets/styles/admin-public-widgets.css
  * Module Type: Stylesheet
  * Purpose: Responsive Admin widget management, preview and placement controls.
+ * Responsibilities:
+ *   - Scope widget authoring styles to authenticated Admin documents.
+ *   - Preserve accessible focus, responsive layout and preview positioning.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
