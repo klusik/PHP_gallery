@@ -2,26 +2,23 @@
  * Project: PHP Gallery
  * Repository: https://github.com/klusik/PHP_gallery
  * File: .github/scripts/release-reconciliation.mjs
- * Module Type: Protected Release Reconciliation
- * Purpose: Prepare and verify owner-approved linear release reconciliation without updating develop.
+ * Module Type: Historical Release Reconciliation Validation
+ * Purpose: Read retained owner-approved linear reconciliation and verify complete historical content.
  * Responsibilities:
  *   - Verify immutable published tag, evidence, ancestry and source identity
- *   - Propose a single-parent working branch without modifying protected refs
  *   - Report reconciliation only after owner acceptance, complete content proof and exact-SHA CI
  *   - Keep inspection read-only and refuse missing server controls
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {pathToFileURL} from 'node:url';
-import {resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {peelReleaseTag} from './release-origin.mjs';
-import {api,command,output} from './release-promotion.mjs';
-import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
+import {api,command,workflowCoverageJobs} from './release-promotion.mjs';
+import {requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive GitHub JSON transport value consumed by read-only reconciliation validators.
  * @typedef {null|boolean|number|string|JsonValue[]|{[key:string]:JsonValue}} JsonValue
@@ -34,17 +31,14 @@ import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,require
 /** @typedef {{path:string,base:string,develop:string,release:string,result:string,decision:string,review:string}} Resolution */
 /** @typedef {{tagSha:string,candidateSha:string,branch:string,state:string,detail:string,developSha:string,mainSha:string,syncBranch:string,pr:number|null,qualificationRun:string|null,selectedDevelopSha:string,expectedTree?:string,conflicts?:string[],resultSha?:string}} SyncPlan */
 
-/** Validate the requested release identity and requested level of authority.
- * @param {SyncRequest} request Explicit workflow dispatch fields.
+/** Validate an exact release identity for read-only historical inspection.
+ * @param {SyncRequest} request Exact release branch and read-only plan mode; manualReview is retained historical request metadata.
  * @returns {string} Canonical release version.
  */
 export function validateSyncRequest(request) {
     const match = /^release\/v_((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?)$/.exec(request.branch);
-    if (!match || !['plan','propose','verify'].includes(request.mode)) {
+    if (!match || request.mode !== 'plan') {
         throw new Error('BLOCKED invalid release branch or reconciliation mode.');
-    }
-    if (request.mode === 'propose' && !request.manualReview.trim()) {
-        throw new Error('BLOCKED sync proposal requires explicit maintainer acceptance evidence.');
     }
     return match[1];
 }
@@ -351,20 +345,21 @@ export function verifyLinearContent(selected,develop,candidate,result,git=undefi
  * @param {GithubReader} call GitHub read-only API.
  * @param {string} repository Exact repository.
  * @param {string} sha Result SHA that must be green before a protected FF.
- * @returns {string|null} Exact completed run URL, or null for unavailable/red/incomplete CI.
+ * @returns {string|null} Exact completed run URL or null for red/unqualified CI; unreadable or incomplete server evidence throws.
  */
 export function qualifiedLinearCandidate(call,repository,sha) {
-    const checks = call('repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100');
-    if (!Array.isArray(checks?.check_runs) || checks.total_count >= 100) throw new Error('BLOCKED exact check inventory incomplete.');
-    const required = checks.check_runs.filter(check=>check.name==='Complete required CI matrix'
-        && check.head_sha===sha && check.app?.id===15368);
-    if (!required.length || required.some(check=>check.status!=='completed' || check.conclusion!=='success')) return null;
+    const checks = call('repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all');
+    if (!Array.isArray(checks?.check_runs) || checks.total_count >= 100
+        || checks.total_count!==checks.check_runs.length) throw new Error('BLOCKED exact check inventory incomplete.');
     const candidates = checks.check_runs.filter(check=>['Candidate qualification','Release qualification'].includes(check.name)
         && check.head_sha===sha && check.app?.id===15368);
-    if (!candidates.length || candidates.some(check=>check.status!=='completed' || check.conclusion!=='success')) return null;
     for (const check of candidates) {
         const binding=qualificationCheckBinding(check.external_id);
-        if (!binding || binding.sha!==sha || (binding.kind==='release')!==(check.name==='Release qualification')) continue;
+        if (!binding || binding.sha!==sha || (binding.kind==='release')!==(check.name==='Release qualification')
+            || check.status!=='completed' || check.conclusion!=='success') continue;
+        const required=checks.check_runs.filter(value=>value.name==='Complete required CI matrix' && value.external_id===check.external_id);
+        if (required.length!==1 || required[0].app?.id!==15368 || required[0].head_sha!==sha
+            || required[0].status!=='completed' || required[0].conclusion!=='success') continue;
         const run = call('repos/'+repository+'/actions/runs/'+binding.runId);
         if (!['.github/workflows/candidate-preparation.yml','.github/workflows/release-qualification.yml',
             '.github/workflows/gallery-workflows.yml'].includes(run.path)
@@ -373,13 +368,16 @@ export function qualifiedLinearCandidate(call,repository,sha) {
             || String(run.id)!==binding.runId
             || run.path!==(binding.kind==='release' ? '.github/workflows/release-qualification.yml' : '.github/workflows/candidate-preparation.yml')) continue;
         const listing = call('repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100');
+        if (!Array.isArray(listing.jobs) || listing.total_count>=100 || listing.total_count!==listing.jobs.length) {
+            throw new Error('BLOCKED historical job inventory incomplete.');
+        }
+        const coverage=workflowCoverageJobs(listing.jobs,repository,binding.runId,binding.attempt,sha,binding.kind,call);
         const requiredNames = ['Read-only generated-state and source preflight',
             'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
             'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
             'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
             'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
-        if (Array.isArray(listing.jobs) && listing.total_count < 100
-            && requiredNames.every(name=>listing.jobs.filter(job=>(job.name===name || job.name.endsWith(' / '+name))
+        if (requiredNames.every(name=>coverage.filter(job=>(job.name===name || job.name.endsWith(' / '+name))
                 && job.status==='completed' && job.conclusion==='success').length===1)) return 'https://github.com/'+repository+'/actions/runs/'+binding.runId;
     }
     return null;
@@ -465,122 +463,4 @@ export function inspectSync(request, repository, adapters = {}) {
     }
     return {...plan,state:proof.state,resultSha:proof.result_sha,qualificationRun:ci,
         detail:'Owner-approved linear reconciliation, full content proof and exact hosted CI verified.'};
-}
-
-/** Require the owner-approved environment and active develop linear/CI rules.
- * @param {string} repository Expected owner/name.
- * @param {GithubReader} call GitHub API reader.
- * @param {Record<string,string|undefined>} context Trusted workflow context.
- * @returns {void} Throws instead of allowing unapproved or unprotected writes.
- */
-export function verifySyncWriteControls(repository, call, context = process.env) {
-    requireOwnerDispatch(repository,call,context);
-    requireOwnerEnvironment(call,repository,'release-reconciliation');
-    requireOwnerRuleset(call,repository,'develop',
-        'Reviewed main-to-develop release reconciliation','Complete required CI matrix');
-}
-
-/** Prepare a linear working branch and request central qualification, without updating develop.
- * @param {SyncRequest} request Reviewed propose-mode dispatch.
- * @param {string} repository Owner/repository.
- * @param {{api?:GithubReader,evidence?:Record<string,unknown>,context?:Record<string,string|undefined>}} adapters Optional isolated fixtures.
- * @returns {SyncPlan} Verified pending or completed linear synchronization state.
- */
-export function proposeSync(request, repository, adapters = {}) {
-    if (request.mode!=='propose') throw new Error('BLOCKED proposal requires explicit propose mode.');
-    const call = adapters.api ?? api;
-    const execute = adapters.git ?? command;
-    verifySyncWriteControls(repository,call,adapters.context ?? process.env);
-    const snapshot = inspectSync(request,repository,adapters);
-    if (snapshot.state==='SYNC_BLOCKED') throw new Error('BLOCKED '+snapshot.detail);
-    if (snapshot.state.startsWith('RECONCILED_')) return snapshot;
-    if (isAncestor(call,repository,snapshot.developSha,snapshot.candidateSha)) return snapshot;
-    const merge = linearMergeTree(snapshot.selectedDevelopSha,snapshot.developSha,snapshot.candidateSha,adapters.git);
-    if (merge.conflicts.length) throw new Error('BLOCKED explicit owner conflict decisions required.');
-    const existing = matchingBranchSha(call,repository,snapshot.syncBranch);
-    if (!existing) {
-        execute('git',['config','user.name','github-actions[bot]']);
-        execute('git',['config','user.email','41898282+github-actions[bot]@users.noreply.github.com']);
-        const result = execute('git',['commit-tree',merge.tree,'-p',snapshot.developSha,'-m',
-            'Reconcile released v_'+validateSyncRequest(request)+' on parallel develop (refs #101)']);
-        if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==snapshot.developSha
-            || matchingBranchSha(call,repository,snapshot.syncBranch)) throw new Error('BLOCKED raced reconciliation refs.');
-        execute('gh',['auth','setup-git']);
-        // The zero-ref lease permits creation only; it never overwrites an existing branch.
-        execute('git',['push','--force-with-lease=refs/heads/'+snapshot.syncBranch+':',
-            'origin',result+':refs/heads/'+snapshot.syncBranch]);
-    } else {
-        if (!isAncestor(call,repository,snapshot.developSha,existing)) throw new Error('BLOCKED existing proposal lost observed develop ancestry.');
-    }
-    call('repos/'+repository+'/actions/workflows/candidate-preparation.yml/dispatches','POST',{ref:snapshot.syncBranch});
-    return {...snapshot,detail:'Working proposal prepared; qualify final single-parent SHA after any generated-artifact squash. Owner alone performs develop FF.'};
-}
-
-/** Record owner acceptance only after the actual FF and exact full CI, without updating develop.
- * @param {SyncRequest} request Owner verify-mode dispatch.
- * @param {string} repository Exact repository.
- * @returns {void} Creates immutable reconciliation evidence; conflicting retries are refused.
- */
-export function recordReconciliation(request,repository) {
-    verifySyncWriteControls(repository,api,process.env);
-    const version = validateSyncRequest(request);
-    const snapshot = inspectSync(request,repository);
-    if (snapshot.state==='SYNC_BLOCKED' && snapshot.detail!=='Explicit owner conflict decisions required.') throw new Error('BLOCKED '+snapshot.detail);
-    const tag = 'v_'+version;
-    const published = api('repos/'+repository+'/releases/tags/'+tag);
-    const existing = published.assets?.find(item=>item.name==='release-reconciliation.json');
-    if (existing) {
-        const snapshot = inspectSync(request,repository);
-        if (!snapshot.state.startsWith('RECONCILED_')) throw new Error('BLOCKED existing immutable proof is not valid.');
-        output('GITHUB_STEP_SUMMARY',JSON.stringify(snapshot,null,2));
-        return;
-    }
-    const evidence = downloadReleaseEvidence(repository,tag,published.assets.find(item=>item.name==='release-evidence.json'));
-    const identity = peelReleaseTag(api,repository,tag);
-    const result = process.env.SYNC_RESULT_SHA ?? '';
-    const base = process.env.SYNC_BASE_SHA ?? '';
-    const current = api('repos/'+repository+'/git/ref/heads/develop').object?.sha;
-    if (!request.manualReview.trim() || !isAncestor(api,repository,base,result)
-        || !isAncestor(api,repository,result,current)) throw new Error('BLOCKED approved FF has not preserved exact develop/result history.');
-    const resolutions = JSON.parse(process.env.SYNC_RESOLUTIONS ?? '[]');
-    if (result===evidence.candidate_sha) verifyFastForwardHistory(evidence.selected_develop_sha,base,result);
-    const content = result===evidence.candidate_sha ? {expected_tree:identity.tree_sha,result_tree:identity.tree_sha,
-        resolutions:[]} : verifyLinearContent(evidence.selected_develop_sha,base,evidence.candidate_sha,result,undefined,resolutions);
-    const ci = qualifiedLinearCandidate(api,repository,result);
-    if (!ci) throw new Error('BLOCKED exact reconciliation result lacks full hosted CI.');
-    const proof = {schema_version:1,repository,state:result===evidence.candidate_sha ? 'RECONCILED_FF':'RECONCILED_EQUIVALENT',
-        candidate_sha:evidence.candidate_sha,published_main_sha:identity.commit_sha,
-        selected_develop_sha:evidence.selected_develop_sha,develop_base_sha:base,result_sha:result,...content,
-        qualification_url:ci,owner:process.env.GITHUB_ACTOR,owner_run_id:process.env.GITHUB_RUN_ID,
-        owner_run_attempt:process.env.GITHUB_RUN_ATTEMPT,manual_review:request.manualReview};
-    const file = resolve(process.env.RUNNER_TEMP,'release-reconciliation.json');
-    writeFileSync(file,JSON.stringify(proof,null,2)+'\n');
-    if (api('repos/'+repository+'/git/ref/heads/develop').object?.sha!==current
-        || peelReleaseTag(api,repository,tag).tag_object_sha!==identity.tag_object_sha) throw new Error('BLOCKED refs raced during owner acceptance.');
-    command('gh',['release','upload',tag,file,'--repo',repository]);
-    output('GITHUB_STEP_SUMMARY',JSON.stringify(proof,null,2));
-}
-
-/** Run read-only status inspection or the separately reviewed proposal.
- * @returns {Promise<void>} Reports status, prepares a working ref or records owner acceptance without updating develop.
- */
-export async function main() {
-    const request = {branch:process.env.RELEASE_BRANCH ?? '', mode:process.env.SYNC_MODE ?? 'plan',
-        manualReview:process.env.MANUAL_REVIEW ?? ''};
-    validateSyncRequest(request);
-    const repository = process.env.GITHUB_REPOSITORY ?? '';
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repository)
-        || process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || process.env.GITHUB_REF !== 'refs/heads/main') {
-        throw new Error('BLOCKED reconciliation inspection requires trusted main workflow dispatch.');
-    }
-    if (request.mode==='verify') { recordReconciliation(request,repository); return; }
-    const plan = request.mode === 'propose' ? proposeSync(request,repository) : inspectSync(request,repository);
-    output('GITHUB_STEP_SUMMARY','Release reconciliation: ' + plan.state + '\n'
-        + 'Published main: ' + plan.tagSha + '\nDevelop: ' + plan.developSha + '\n'
-        + 'Working proposal: ' + plan.syncBranch + '\n' + plan.detail + '\n'
-        + 'Exact CI: ' + (plan.qualificationRun ?? 'PENDING'));
-    process.stdout.write(JSON.stringify(plan,null,2) + '\n');
-}
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-    main().catch(error => {process.stderr.write(error.message + '\n');process.exitCode = 1;});
 }

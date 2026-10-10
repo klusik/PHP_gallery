@@ -15,7 +15,9 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {api,command,output} from './release-promotion.mjs';
+import {api,command,output,verifyQualification,fetchJobs,requireQualificationChecks} from './release-promotion.mjs';
+import {loadQualification,qualificationRequest} from './release-completion.mjs';
+import {requireBotPullRequest,effectiveOwnerReview} from './release-owner-authorization.mjs';
 import {isAncestor,downloadReleaseEvidence,verifyLinearContent,qualifiedLinearCandidate} from './release-reconciliation.mjs';
 
 /** Explicit origin chosen by the maintainer before stabilizing a release branch.
@@ -172,16 +174,22 @@ export function peelReleaseTag(call,repository,tag) {
  * @param {GithubReader} call GitHub reader.
  * @param {string} repository Exact repository.
  * @param {string} tag Previous immutable stable tag.
- * @param {{evidence?:Record<string,unknown>,legacy?:Record<string,unknown>}} adapters Optional inert evidence fixtures.
+ * @param {{evidence?:Record<string,unknown>,legacy?:Record<string,unknown>,predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional inert historical asset or exact hosted predecessor fixtures.
  * @returns {{previous_stable_tag:string,previous_tag_object_sha:string,previous_tag_object_type:string,previous_stable_sha:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string}} Complete predecessor identities.
  */
 export function verifyPredecessor(call,repository,tag,adapters={}) {
     const identity = peelReleaseTag(call,repository,tag);
-    const published = call('repos/'+repository+'/releases/tags/'+tag);
-    if (published.tag_name !== tag || published.draft !== false || published.prerelease !== false) {
+    let published;
+    try {published=call('repos/'+repository+'/releases/tags/'+tag);}
+    catch (error) {
+        if (!error.message.startsWith('BLOCKED_API_NOT_FOUND:')) throw error;
+        // A tagged release is the automatic lifecycle boundary; GitHub publication is manual.
+        published=null;
+    }
+    if (published && (published.tag_name !== tag || published.prerelease !== false)) {
         throw new Error('BLOCKED predecessor is not an immutable published stable release.');
     }
-    const asset = published.assets?.find(value=>value.name === 'release-evidence.json');
+    const asset = published?.draft===false ? published.assets?.find(value=>value.name === 'release-evidence.json') : null;
     let qualified;
     let kind;
     let expectedFirstParent;
@@ -195,7 +203,7 @@ export function verifyPredecessor(call,repository,tag,adapters={}) {
         }
         qualified = proof.candidate_sha;
         kind = 'qualified';
-    } else {
+    } else if (repository==='klusik/PHP_gallery' && tag==='v_0.125') {
         // This exception protects the real pre-evidence v_0.125 only. It is not a CI approval.
         const legacy = adapters.legacy ?? JSON.parse(readFileSync(resolve('.github/release-legacy/v_0.125.json'),'utf8'));
         if (repository !== 'klusik/PHP_gallery' || tag !== 'v_0.125'
@@ -208,6 +216,31 @@ export function verifyPredecessor(call,repository,tag,adapters={}) {
         expectedFirstParent = legacy.first_parent_sha;
         qualified = legacy.release_candidate_sha;
         kind = 'legacy-v_0.125';
+    } else {
+        const merge=call('repos/'+repository+'/commits/'+identity.commit_sha);
+        qualified=merge.parents?.[1]?.sha;
+        if (merge.parents?.length!==2 || !/^[a-f0-9]{40}$/.test(qualified ?? '')) {
+            throw new Error('BLOCKED tagged predecessor lacks the standard release merge.');
+        }
+        const record=adapters.predecessorRecord ?? loadQualification(repository,qualified,call);
+        const request=qualificationRequest(record);
+        const run=call('repos/'+repository+'/actions/runs/'+record.run_id);
+        // Historical qualification binds Q even when the original release branch was retired.
+        verifyQualification(request,run,adapters.predecessorJobs ?? fetchJobs(repository,record.run_id,run.run_attempt,qualified),record,repository,qualified);
+        requireQualificationChecks(call,repository,request,record.run_attempt);
+        const listed=call('repos/'+repository+'/commits/'+identity.commit_sha+'/pulls?per_page=100');
+        if (!Array.isArray(listed) || listed.length>=100) throw new Error('BLOCKED predecessor PR inventory incomplete.');
+        const matches=listed.filter(pr=>pr.merge_commit_sha===identity.commit_sha && pr.head?.sha===qualified && pr.base?.ref==='main');
+        if (matches.length!==1) throw new Error('BLOCKED predecessor merged PR is ambiguous.');
+        const pr=call('repos/'+repository+'/pulls/'+matches[0].number);
+        requireBotPullRequest(pr,repository,qualified,'main');
+        const review=effectiveOwnerReview(call('repos/'+repository+'/pulls/'+pr.number+'/reviews?per_page=100'),pr,repository.split('/')[0],qualified);
+        if (!pr.merged || pr.merge_commit_sha!==identity.commit_sha || record.version!==tag.slice(2)
+            || pr.head.ref!==record.branch || !review || record.initial_main_sha!==merge.parents[0].sha) {
+            throw new Error('BLOCKED predecessor tag, exact CI or human approval differs.');
+        }
+        expectedFirstParent=record.initial_main_sha;
+        kind='qualified';
     }
     if (!/^[a-f0-9]{40}$/.test(qualified ?? '')) throw new Error('BLOCKED previous release candidate identity missing.');
     const previous = call('repos/'+repository+'/commits/'+identity.commit_sha);
@@ -271,7 +304,7 @@ export function main() {
     const path = originPath(match[1]);
     const record = JSON.parse(readFileSync(resolve(path),'utf8'));
     const candidate = command('git',['rev-parse','HEAD']);
-    if (candidate !== process.env.GITHUB_SHA) {
+    if (candidate !== (process.env.ORIGIN_CHECKOUT_SHA ?? process.env.GITHUB_SHA)) {
         throw new Error('BLOCKED event SHA differs from the origin-verification checkout.');
     }
     const evidence = verifyReleaseOrigin(record,match[1],candidate,process.env.GITHUB_REPOSITORY ?? '');

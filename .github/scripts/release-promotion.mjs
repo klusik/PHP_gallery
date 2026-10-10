@@ -3,35 +3,38 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: .github/scripts/release-promotion.mjs
  * Module Type: Hosted Release Orchestration
- * Purpose: Bind protected promotion and publication to immutable hosted evidence.
+ * Purpose: Validate exact hosted release evidence and Git identities for automatic completion.
  * Responsibilities:
  *   - Refuse incomplete, stale, foreign or superseded qualification
- *   - Keep maintainer overrides explicit without changing red checks
- *   - Promote through a PR and verify identical final content before immutable tagging
- *   - Publish packages and permanent qualification evidence idempotently
+ *   - Reject red, skipped or stale qualification without overrides
+ *   - Verify complete PR detail, parent order and identical content before tagging
+ *   - Preserve reviewed historical evidence without publishing GitHub Releases
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
 import {spawnSync} from 'node:child_process';
-import {readFileSync, writeFileSync, appendFileSync, readdirSync} from 'node:fs';
-import {resolve, basename} from 'node:path';
-import {pathToFileURL} from 'node:url';
-import {createHash} from 'node:crypto';
-import {verifyPredecessor,verifyReleaseOrigin,originPath} from './release-origin.mjs';
-import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
+import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {verifyPredecessor} from './release-origin.mjs';
+import {requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive JSON transport values; domain validators narrow the fields they consume.
  * @typedef {null|boolean|number|string|JsonValue[]|{[key: string]: JsonValue}} JsonValue
  */
-/** Requested immutable qualification and separately authorized maintainer action.
+/** Exact immutable qualification inputs; normal automatic completion never overrides red CI.
  * @typedef {{runId:string,candidate:string,branch:string,mode:string,override:boolean,reason:string,acceptedFailures:string[],manualReview:string}} ReleaseRequest
  */
-/** GitHub's server-owned job identity and outcome for one workflow attempt.
- * @typedef {{name:string,status:string,conclusion:string|null,html_url:string}} ReleaseJob
+/** GitHub's server-owned job identity and outcome; optional id binds real API rows to their check details, while inert historical fixtures may omit it.
+ * @typedef {{id?:number,name:string,status:string,conclusion:string|null,html_url:string}} ReleaseJob
  */
 /** Qualification record produced by the aggregate release gate.
  * @typedef {{repository:string,branch:string,candidate_sha:string,source_base:string,version:string,run_id:string,run_attempt:string,ready:boolean,origin_commit_sha:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string,origin_blob_sha:string,previous_tag_object_sha:string,
- * previous_tag_object_type:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string}} ReleaseRecord
+ * previous_tag_object_type:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string,
+ * automated_result:string,override:boolean,lifecycle_schema?:number,winapp_changed?:boolean}} ReleaseRecord
+ */
+/** Mandatory historical publication evidence fields consumed by predecessor validation.
+ * @typedef {{repository:string,version:string,final_main_sha:string,final_tree:string,candidate_sha:string,
+ * ready:boolean,automated_result:string,override:boolean,run_id:string}} PublicationEvidence
  */
 
 /** Execute bounded tooling without a shell or inherited input stream.
@@ -43,10 +46,13 @@ import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,require
 export function command(executable, args, input = null) {
     const result = spawnSync(executable, args, {encoding:'utf8', input, timeout:60000, maxBuffer:16 * 1024 * 1024});
     if (result.error || result.status !== 0) {
-        throw new Error(`BLOCKED ${executable} command failed (${result.status ?? 'unavailable'}).`);
+        const denied=executable==='gh' && args[0]==='api' && /HTTP (401|403)/.test(result.stderr ?? '');
+        const missing=executable==='gh' && args[0]==='api' && /HTTP 404/.test(result.stderr ?? '');
+        throw new Error((denied ? 'BLOCKED_API_PERMISSION: ' : missing ? 'BLOCKED_API_NOT_FOUND: ' : 'BLOCKED_COMMAND: ')+executable+' command failed ('+(result.status ?? 'unavailable')+').');
     }
     return executable==='git' && (args.includes('-z') || args[0]==='diff') ? result.stdout : result.stdout.trim();
 }
+
 
 /** Call the repository API with literal paths and JSON request bodies.
  * @param {string} path GitHub REST path relative to the authenticated API.
@@ -60,8 +66,9 @@ export function api(path, method = 'GET', payload = null) {
     return JSON.parse(command('gh', args, payload === null ? null : JSON.stringify(payload)) || 'null');
 }
 
-/** Validate identifiers and require explicit human review for write modes.
- * @param {ReleaseRequest} request Maintainer dispatch inputs.
+
+/** Validate exact qualification identifiers and refuse removed write modes or red overrides.
+ * @param {ReleaseRequest} request Read-only no-override qualification inputs.
  * @returns {string} Version encoded in the validated release branch.
  */
 export function validateRequest(request) {
@@ -69,16 +76,14 @@ export function validateRequest(request) {
     if (!match || !/^[a-f0-9]{40}$/.test(request.candidate) || !/^[1-9]\d*$/.test(request.runId)) {
         throw new Error('BLOCKED invalid release branch, exact SHA or qualification run.');
     }
-    if (!['plan','promote','publish','bootstrap'].includes(request.mode)) throw new Error('BLOCKED unknown release action.');
-    if (request.mode !== 'plan' && !request.manualReview.trim()) throw new Error('BLOCKED human acceptance evidence is required.');
-    if (request.override && (!request.reason.trim() || request.acceptedFailures.length === 0)) {
-        throw new Error('BLOCKED override requires a reason and exact failed job names.');
-    }
-    if (!request.override && (request.reason.trim() || request.acceptedFailures.length)) {
+    if (request.mode !== 'plan') throw new Error('BLOCKED unknown release action.');
+    if (request.override) throw new Error('BLOCKED release qualification overrides are unsupported.');
+    if (request.reason.trim() || request.acceptedFailures.length) {
         throw new Error('BLOCKED override fields supplied without explicit acknowledgement.');
     }
     return match[1];
 }
+
 
 /** Require the final main merge commit to contain exactly the qualified Git tree.
  * @param {string} mainSha Current main commit SHA.
@@ -93,6 +98,7 @@ export function verifyFinalContent(mainSha, mergeSha, mainTree, candidateTree) {
     }
 }
 
+
 /** Require current GitHub Actions checks bound to the exact SHA, requested run and attempt.
  * @param {function(string):JsonValue} call Read-only server API.
  * @param {string} repository Exact owner/repository.
@@ -101,14 +107,23 @@ export function verifyFinalContent(mainSha, mergeSha, mainTree, candidateTree) {
  * @returns {void} Throws for unavailable, foreign, stale, pending or red status checks.
  */
 export function requireQualificationChecks(call,repository,request,runAttempt) {
-    const checks=call('repos/'+repository+'/commits/'+request.candidate+'/check-runs?per_page=100');
-    if (!Array.isArray(checks?.check_runs) || !Number.isInteger(checks.total_count) || checks.total_count>=100) {
+    const checks=call('repos/'+repository+'/commits/'+request.candidate+'/check-runs?per_page=100&filter=all');
+    if (!Array.isArray(checks?.check_runs) || !Number.isInteger(checks.total_count) || checks.total_count>=100
+        || checks.total_count!==checks.check_runs.length) {
         throw new Error('BLOCKED exact qualification check inventory unavailable or incomplete.');
     }
     for (const name of ['Release qualification','Complete required CI matrix']) {
-        const matches=checks.check_runs.filter(check=>check.name===name && check.app?.id===15368);
+        // Count every matching release identity before validating its App and outcome.
+        // Independent PR checks with this display name cannot authorize or invalidate Q.
+        const identity='release:'+request.runId+':'+runAttempt+':'+request.candidate;
+        const matches=checks.check_runs.filter(check=>check.name===name && check.external_id===identity);
+        const superseded=checks.check_runs.some(check=>{
+            const newer=qualificationCheckBinding(check.external_id);
+            return check.name===name && check.app?.id===15368 && check.head_sha===request.candidate
+                && newer?.kind==='release' && newer.sha===request.candidate && check.id>matches[0]?.id;
+        });
         const binding=qualificationCheckBinding(matches[0]?.external_id);
-        if (matches.length!==1 || matches[0].head_sha!==request.candidate
+        if (matches.length!==1 || superseded || matches[0].app?.id!==15368 || matches[0].head_sha!==request.candidate
             || matches[0].status!=='completed' || matches[0].conclusion!=='success'
             || binding?.kind!=='release' || binding.runId!==request.runId || binding.sha!==request.candidate
             || String(binding.attempt)!==runAttempt) {
@@ -117,19 +132,6 @@ export function requireQualificationChecks(call,repository,request,runAttempt) {
     }
 }
 
-/** Refuse promotion from a dispatch-only qualification with unproven PR check eligibility.
- * GitHub excludes workflow-dispatch job checks from required PR checks. This owner
- * must publish a reviewed finalization commit normally and obtain fresh push CI;
- * an external App bridge would require separate live acceptance and authorization.
- * @param {{event:string}} run Server-reported qualification trigger.
- * @returns {void} Throws unless the exact qualification was triggered by a normal push.
- */
-export function requireEligibleQualificationEvent(run) {
-    if (run.event!=='push') {
-        throw new Error('BLOCKED_PR_CHECK_ELIGIBILITY: dispatch-only qualification cannot authorize promotion; '
-            +'owner must push a reviewed finalization commit and qualify its new exact SHA through the push event.');
-    }
-}
 
 /** Enforce coverage owners and exact attempt/candidate binding using server evidence.
  * @param {ReleaseRequest} request Authorized immutable inputs.
@@ -138,7 +140,7 @@ export function requireEligibleQualificationEvent(run) {
  * @param {ReleaseRecord} record Downloaded aggregate qualification record.
  * @param {string} repository Expected owner/repository identity.
  * @param {string} currentHead Current release branch head observed from GitHub.
- * @returns {ReleaseJob[]} Red/skipped/cancelled jobs explicitly accepted by an override, otherwise empty.
+ * @returns {ReleaseJob[]} Empty collection after complete successful qualification; throws for any mandatory failure or missing coverage.
  */
 export function verifyQualification(request, run, jobs, record, repository, currentHead) {
     const version = validateRequest(request);
@@ -150,7 +152,8 @@ export function verifyQualification(request, run, jobs, record, repository, curr
     if (record.repository !== repository || record.branch !== request.branch
         || record.candidate_sha !== request.candidate || record.run_id !== request.runId
         || record.run_attempt !== String(run.run_attempt) || record.version !== version
-        || record.ready !== true || !/^[a-f0-9]{40}$/.test(record.source_base) || currentHead !== request.candidate) {
+        || record.ready !== true || record.automated_result !== 'success' || record.override !== false
+        || !/^[a-f0-9]{40}$/.test(record.source_base) || currentHead !== request.candidate) {
         throw new Error('BLOCKED stale or unbound prepared candidate evidence.');
     }
     if (![record.origin_commit_sha,record.selected_develop_sha,record.initial_main_sha,
@@ -170,45 +173,92 @@ export function verifyQualification(request, run, jobs, record, repository, curr
         'PHP 8.1 source (unicode)', 'PHP 8.5 source (ascii)', 'Required Chromium fixtures',
         'Authoritative release audit', 'Complete required CI matrix', 'Release qualification gate',
     ];
+    if (record.lifecycle_schema === 2) {
+        owners.push('Prepare manual release assets','Open qualified release PR');
+        if (record.winapp_changed === true) owners.push('Prepare Windows companion installer');
+        else if (record.winapp_changed !== false) throw new Error('BLOCKED installer impact is unknown.');
+    }
     for (const owner of owners) {
         const matches = jobs.filter(job => job.name === owner || job.name.endsWith(` / ${owner}`));
         if (matches.length !== 1 || matches[0].status !== 'completed') throw new Error(`BLOCKED missing/ambiguous required job: ${owner}`);
     }
     const prepare = jobs.find(job => job.name === 'Prepare release candidate');
     if (prepare.conclusion !== 'success') throw new Error('BLOCKED preparation integrity cannot be overridden.');
-    const failures = jobs.filter(job => job.conclusion !== 'success');
-    if (!request.override && (run.conclusion !== 'success' || failures.length)) throw new Error('BLOCKED mandatory release CI is red.');
-    if (request.override) {
-        const actual = failures.map(job => job.name).sort();
-        const accepted = [...new Set(request.acceptedFailures)].sort();
-        if (!actual.length || JSON.stringify(actual) !== JSON.stringify(accepted)) {
-            throw new Error('BLOCKED override must acknowledge every exact red/skipped job and no unrelated jobs.');
-        }
-    }
+    const failures = jobs.filter(job => job.conclusion !== 'success'
+        && !(record.lifecycle_schema === 2 && record.winapp_changed === false
+            && job.name === 'Prepare Windows companion installer' && job.status === 'completed' && job.conclusion === 'skipped'));
+    if (run.conclusion !== 'success' || failures.length) throw new Error('BLOCKED mandatory release CI is red.');
     return failures;
 }
 
-/** Read all jobs from the specified workflow attempt, without first-page truncation.
+
+/** Read complete attempt coverage without counting its bound programmatic qualification checks as workflow jobs.
  * @param {string} repository Owner/repository identity.
  * @param {string} runId Server workflow run identifier.
  * @param {number} attempt Current immutable attempt number.
- * @returns {ReleaseJob[]} Complete attempt-specific job evidence.
+ * @param {string} candidate Exact Q SHA carried by the retained qualification record.
+ * @param {function(string,string[],(string|null)=):string} execute Literal paginated transport; optional stdin defaults to null.
+ * @param {function(string):JsonValue} call Server check-detail reader used to identify programmatic aggregate rows.
+ * @returns {ReleaseJob[]} Complete workflow coverage, excluding only successful exact release checks independently required by requireQualificationChecks; foreign/unbound rows remain visible and malformed evidence throws.
  */
-export function fetchJobs(repository, runId, attempt) {
-    const pages = JSON.parse(command('gh', ['api', `repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`, '--paginate', '--slurp']));
-    return pages.flatMap(page => page.jobs);
+export function fetchJobs(repository, runId, attempt, candidate, execute=command, call=api) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[1-9]\d*$/.test(runId)
+        || !Number.isSafeInteger(attempt) || attempt<1 || !/^[a-f0-9]{40}$/.test(candidate)) {
+        throw new Error('BLOCKED invalid exact job inventory identity.');
+    }
+    const pages=JSON.parse(execute('gh',['api',`repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,'--paginate','--slurp']));
+    if (!Array.isArray(pages) || !pages.length || pages.some(page=>!page || !Array.isArray(page.jobs))) {
+        throw new Error('BLOCKED malformed job inventory pages.');
+    }
+    const jobs=pages.flatMap(page=>page.jobs);
+    if (jobs.some(job=>!job || typeof job.name!=='string' || typeof job.status!=='string')) {
+        throw new Error('BLOCKED malformed job inventory fields.');
+    }
+    if (pages.some(page=>page.total_count!==jobs.length)) throw new Error('BLOCKED incomplete job inventory.');
+    return workflowCoverageJobs(jobs,repository,runId,attempt,candidate,'release',call);
 }
 
-/** Read dispatch inputs from environment without evaluating their content.
- * @returns {ReleaseRequest} Normalized request; further validation remains mandatory.
+/** Separate workflow coverage from successful programmatic checks bound to the exact candidate attempt.
+ * @param {ReleaseJob[]} jobs Complete server-owned Actions inventory, whose completeness is checked by its reader.
+ * @param {string} repository Exact owner/repository.
+ * @param {string} runId Immutable qualification run ID.
+ * @param {number} attempt Exact server attempt.
+ * @param {string} candidate Exact qualified candidate SHA.
+ * @param {'candidate'|'release'} kind Qualification owner used by current or retained historical evidence.
+ * @param {function(string):JsonValue} call Read-only check detail adapter.
+ * @returns {ReleaseJob[]} Required workflow rows and all foreign/unbound rows; only independently validated exact successful qualification checks are excluded, and mismatched identities throw.
  */
-export function readRequest() {
-    return {runId:process.env.QUALIFICATION_RUN ?? '', candidate:process.env.CANDIDATE_SHA ?? '',
-        branch:process.env.RELEASE_BRANCH ?? '', mode:process.env.RELEASE_MODE ?? 'plan',
-        override:process.env.OVERRIDE_ACK === 'true', reason:process.env.OVERRIDE_REASON ?? '',
-        acceptedFailures:(process.env.ACCEPTED_FAILURES ?? '').split('\n').map(value => value.trim()).filter(Boolean),
-        manualReview:process.env.MANUAL_REVIEW ?? ''};
+export function workflowCoverageJobs(jobs,repository,runId,attempt,candidate,kind,call=api) {
+    if (!['candidate','release'].includes(kind)) throw new Error('BLOCKED unknown qualification coverage owner.');
+    return jobs.filter(job=>{
+        if (![kind==='release'?'Release qualification':'Candidate qualification','Complete required CI matrix'].includes(job.name)
+            || !Number.isSafeInteger(job.id) || job.id<1) return true;
+        // GitHub includes POST /check-runs rows in the Actions jobs endpoint.
+        // Authenticate their exact external binding; display names alone cannot omit coverage.
+        const check=call('repos/'+repository+'/check-runs/'+job.id);
+        if (check.id!==job.id || check.name!==job.name) throw new Error('BLOCKED job/check identity differs.');
+        return !(check.external_id===kind+':'+runId+':'+attempt+':'+candidate
+            && check.app?.id===15368 && check.head_sha===candidate
+            && check.status==='completed' && check.conclusion==='success');
+    });
 }
+
+
+/** Read complete release inventory through the existing bounded GitHub transport.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {function(string,string[],(string|null)=):string} execute Command adapter; its optional stdin defaults to null.
+ * @returns {Array<{id:number,tag_name:string,draft:boolean,prerelease:boolean,html_url:string,assets:Array<{name:string,size:number,digest?:string|null}>}>} All server releases and their assets; throws for failed or malformed pagination.
+ */
+export function fetchReleases(repository,execute=command) {
+    const pages=JSON.parse(execute('gh',['api',`repos/${repository}/releases?per_page=100`,'--paginate','--slurp']));
+    if (!Array.isArray(pages) || pages.length===0 || pages.some(page=>!Array.isArray(page) || page.length>100
+        || page.some(release=>!release || !Number.isInteger(release.id) || typeof release.tag_name!=='string'
+            || typeof release.draft!=='boolean' || typeof release.prerelease!=='boolean' || !Array.isArray(release.assets)))) {
+        throw new Error('BLOCKED release inventory unavailable or malformed.');
+    }
+    return pages.flat();
+}
+
 
 /** Append an escaped workflow output or human-readable summary in the owned runner file.
  * @param {string} variable GitHub environment filename variable.
@@ -220,15 +270,6 @@ export function output(variable, value) {
     if (path) appendFileSync(path, value + '\n');
 }
 
-/** Refuse write authority without reviewed environment and protected PR/status policy.
- * @param {string} repository Owner/repository identity.
- * @returns {void} Throws unless server controls and maintainer identity are established.
- */
-export function verifyWriteControls(repository) {
-    requireOwnerDispatch(repository,api,process.env);
-    requireOwnerEnvironment(api,repository,'release-promotion');
-    requireOwnerRuleset(api,repository,'main','Reviewed release promotion to main','Release qualification');
-}
 
 /** Preserve a read-only, fail-closed recovery decision for an advanced main.
  * @param {ReleaseRequest} request Immutable candidate/qualification identity.
@@ -263,6 +304,7 @@ export function refuseAdvancedMain(request,repository,mainSha,reason,call=api) {
         + ', tree '+(tree ?? 'UNKNOWN')+'. Reviewed NEW_CANDIDATE_REQUIRED; no branch or tag changed.');
 }
 
+
 /** Inspect main lineage before claiming a qualified candidate can still be promoted.
  * @param {ReleaseRequest} request Explicit qualified candidate.
  * @param {string} repository Owner/repository.
@@ -287,59 +329,10 @@ export function requireCurrentMainBase(request, repository, adapters = null) {
     return sha;
 }
 
-/** Create/reuse the bot PR for separately performed owner review and manual merge.
- * @param {ReleaseRequest} request Checked maintainer request.
- * @param {string} repository Owner/repository identity.
- * @param {ReleaseJob[]} failures Original accepted red evidence.
- * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,command:function(string,string[],(string|null)=):string}|null} adapters Optional inert API/command adapters for hosted regression tests; API method defaults to GET and command input defaults to null.
- * @returns {Promise<void>} Reports the exact bot PR requiring manual owner approval and merge.
- */
-export async function promote(request, repository, failures, adapters = null) {
-    if (request.override || failures.length) {
-        throw new Error('BLOCKED owner-only promotion cannot bypass any required red or skipped CI job.');
-    }
-    const call = adapters?.api ?? api;
-    const record=adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
-    requireQualificationChecks(call,repository,request,record.run_attempt);
-    const owner = repository.split('/')[0];
-    const observedMainSha = requireCurrentMainBase(request,repository,adapters);
-    const pulls = call('repos/' + repository + '/pulls?state=all&base=main&head='
-        + encodeURIComponent(owner + ':' + request.branch) + '&per_page=100');
-    if (!Array.isArray(pulls) || pulls.length > 1) {
-        throw new Error('BLOCKED ambiguous or incomplete release PR inventory.');
-    }
-    let pr = pulls[0] ?? null;
-    if (pr && pr.state !== 'open' && !pr.merged_at) {
-        throw new Error('BLOCKED previous release PR was closed without merge; manual recovery required.');
-    }
-    const body = 'Prepared candidate: ' + request.candidate + '\n'
-        + 'Qualification: https://github.com/' + repository + '/actions/runs/' + request.runId + '\n'
-        + 'Owner dispatch acceptance: ' + request.manualReview + '\n'
-        + 'Manual PR approval and merge by ' + owner + ' are REQUIRED after all GitHub CI passes.\n'
-        + 'No automatic merge, red-check override or protected-branch bypass is authorized.\n'
-        + 'Refs #101 #133';
-    if (!pr) {
-        pr = call('repos/' + repository + '/pulls','POST',{
-            title:'Release v_' + validateRequest(request),head:request.branch,base:'main',
-            body,maintainer_can_modify:false});
-    }
-    requireBotPullRequest(pr,repository,request.candidate,'main');
-    if (pr.merged_at) return;
-    if (pr.base?.sha !== observedMainSha) throw new Error('BLOCKED PR base changed before owner review.');
-    if (call('repos/' + repository + '/git/ref/heads/' + request.branch).object?.sha !== request.candidate) {
-        throw new Error('BLOCKED stale release candidate after PR creation.');
-    }
-    if (requireCurrentMainBase(request,repository,adapters) !== observedMainSha) {
-        refuseAdvancedMain(request,repository,observedMainSha,
-            'main changed after creation of the bot-authored PR',call);
-    }
-    output('GITHUB_STEP_SUMMARY','Review and manually merge release PR: '+pr.html_url+'\n'
-        + 'Owner approver: '+owner+'\nExact qualified candidate: '+request.candidate+'\n'
-        + 'PR CI may first require an explicit Approve workflows to run action.\n'
-        + 'Do not run publish before a real owner approval and protected merge.');
-}
 
 /** Read-only verification of the actual merged bot PR and latest owner review.
+ * Discover one merged PR in the listing, then bind its complete detail before
+ * using the detail-only merger identity and the SHA-bound owner approval.
  * @param {ReleaseRequest} request Exact qualified candidate and branch.
  * @param {string} repository Expected owner/name.
  * @param {{api?:function(string,string=,(JsonValue|null)=):JsonValue}} adapters Inert test reader, when supplied.
@@ -348,16 +341,43 @@ export async function promote(request, repository, failures, adapters = null) {
 export function inspectMergedPromotion(request,repository,adapters=null) {
     const call=adapters?.api ?? api;
     const owner=repository.split('/')[0];
-    const pulls=call('repos/'+repository+'/pulls?state=closed&base=main&head='
+    const readPr=path=>{
+        try { return call(path); }
+        catch (error) { throw new Error('BLOCKED release promotion PR API unavailable.',{cause:error}); }
+    };
+    const pulls=readPr('repos/'+repository+'/pulls?state=closed&base=main&head='
         + encodeURIComponent(owner+':'+request.branch)+'&per_page=100');
     if (!Array.isArray(pulls) || pulls.length > 1) {
         throw new Error('BLOCKED ambiguous or truncated release promotion PR inventory.');
     }
-    const pr=pulls.find(item=>item.merged_at);
-    if (!pr) throw new Error('BLOCKED exact release candidate has not been promoted through a PR.');
+    const listed=pulls.find(item=>item?.merged_at);
+    if (!listed) throw new Error('BLOCKED exact release candidate has not been promoted through a PR.');
+    requireBotPullRequest(listed,repository,request.candidate,'main');
+    if (!Number.isSafeInteger(listed.number) || typeof listed.node_id!=='string' || !listed.node_id) {
+        throw new Error('BLOCKED release promotion PR identity unavailable in the listing.');
+    }
+    // GitHub's PR listing omits merged_by; only the bound detail can prove the merger.
+    const pr=readPr('repos/'+repository+'/pulls/'+listed.number);
     requireBotPullRequest(pr,repository,request.candidate,'main');
-    if (pr.merged_by?.login?.toLowerCase()!==owner.toLowerCase()) {
-        throw new Error('BLOCKED release PR must be manually merged by the human owner.');
+    const identities=[
+        [listed.node_id,pr.node_id],
+        [listed.head?.ref,pr.head?.ref],[listed.head?.sha,pr.head?.sha],
+        [listed.head?.repo?.full_name,pr.head?.repo?.full_name],
+        [listed.base?.ref,pr.base?.ref],[listed.base?.sha,pr.base?.sha],
+        [listed.base?.repo?.full_name,pr.base?.repo?.full_name],
+        [listed.user?.login,pr.user?.login],[listed.merge_commit_sha,pr.merge_commit_sha],
+        [listed.merged_at,pr.merged_at],[listed.created_at,pr.created_at],
+        [listed.html_url,pr.html_url],
+    ];
+    if (pr.number!==listed.number || listed.state!=='closed' || pr.state!=='closed' || pr.merged!==true
+        || pr.head.ref!==request.branch || pr.base.repo?.full_name!==repository
+        || !identities.every(([summary,detail])=>typeof summary==='string' && summary.length>0 && summary===detail)
+        || !Number.isFinite(Date.parse(pr.merged_at)) || !Number.isFinite(Date.parse(pr.created_at))
+        || (listed.merged_by!==undefined && listed.merged_by?.login!==pr.merged_by?.login)) {
+        throw new Error('BLOCKED release promotion PR list/detail identity differs or is incomplete.');
+    }
+    if (typeof pr.merged_by?.login!=='string' || ![owner.toLowerCase(),'github-actions[bot]'].includes(pr.merged_by.login.toLowerCase())) {
+        throw new Error('BLOCKED release PR merger must be the reviewed owner or workflow bot.');
     }
     const reviews=call('repos/'+repository+'/pulls/'+pr.number+'/reviews?per_page=100');
     const ownerReview=effectiveOwnerReview(reviews,pr,owner,request.candidate);
@@ -375,154 +395,4 @@ export function inspectMergedPromotion(request,repository,adapters=null) {
     }
     verifyFinalContent(main.sha,pr.merge_commit_sha,main.commit.tree.sha,candidate.commit.tree.sha);
     return {pr,ownerReview,main,candidate};
-}
-
-/** Verify release assets and upload permanent evidence before making a release public.
- * @param {ReleaseRequest} request Checked maintainer request.
- * @param {string} repository Owner/repository identity.
- * @param {ReleaseRecord} record Bound qualification identity.
- * @param {ReleaseJob[]} failures Original accepted red evidence.
- * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,command:function(string,string[],(string|null)=):string}|null} adapters Optional inert API/command adapters for hosted regression tests; API method defaults to GET and command input defaults to null.
- * @returns {Promise<void>} Publishes/reconciles only the verified immutable release.
- */
-export async function publish(request, repository, record, failures, adapters = null) {
-    if (request.override || failures.length) {
-        throw new Error('BLOCKED owner-only publication cannot bypass a failed mandatory qualification.');
-    }
-    const call = adapters?.api ?? api;
-    requireQualificationChecks(call,repository,request,record.run_attempt);
-    const execute = adapters?.command ?? command;
-    const {pr,ownerReview,main}=inspectMergedPromotion(request,repository,adapters);
-    const directory = resolve(process.env.RELEASE_ASSETS ?? 'release-assets');
-    const files = readdirSync(directory).filter(name => name !== 'release-evidence.json').sort();
-    for (const required of ['production.zip','core-manifest.json','production-files.json','release-metadata.json','release-notes.md','SHA256SUMS','qualification-evidence.zip','final-integrity.json']) {
-        if (!files.includes(required)) throw new Error(`BLOCKED missing publication asset ${required}.`);
-    }
-    const integrity = JSON.parse(readFileSync(resolve(directory, 'final-integrity.json'), 'utf8'));
-    if (integrity.candidate_sha !== request.candidate || integrity.source_base !== record.source_base || integrity.result !== 'PASS') throw new Error('BLOCKED final integrity evidence is unbound.');
-    for (const [name, expected] of Object.entries(integrity.hashes)) {
-        if (basename(name) !== name || createHash('sha256').update(readFileSync(resolve(directory,name))).digest('hex') !== expected) throw new Error('BLOCKED publication asset bytes changed.');
-    }
-    // Endpoint tree comparison is required; GitHub compare files describe a merge-base diff.
-    const changed = execute('git',['diff','--name-only','--no-renames',record.source_base,request.candidate,
-        '--','winapp',':!winapp/tests',':!winapp/README.md']);
-    if (changed.trim() && !files.some(name => name.endsWith('.exe'))) {
-        throw new Error('BLOCKED changed WinApp requires its hosted installer asset.');
-    }
-    const installers = files.filter(name => name.endsWith('.exe'));
-    if (installers.length) {
-        if (installers.length !== 1 || !files.includes('winapp-update.json')) throw new Error('BLOCKED incomplete companion installer pair.');
-        const metadata = JSON.parse(readFileSync(resolve(directory,'winapp-update.json'),'utf8'));
-        const installer = readFileSync(resolve(directory,installers[0]));
-        const entry = metadata.assets?.find(asset => asset.name === installers[0]);
-        if (!entry || entry.size !== installer.length || entry.sha256 !== createHash('sha256').update(installer).digest('hex')) {
-            throw new Error('BLOCKED companion installer metadata does not match its bytes.');
-        }
-    }
-    const assetHashes = Object.fromEntries(files.map(name => [name,createHash('sha256').update(readFileSync(resolve(directory,name))).digest('hex')]));
-    const permanent = {...record, final_main_sha:main.sha, final_tree:main.commit.tree.sha, asset_sha256:assetHashes,
-        actor:process.env.GITHUB_ACTOR,
-        promotion_pr:{number:pr.number,url:pr.html_url,author:pr.user.login,
-            reviewed_sha:request.candidate,approval:ownerReview,
-            merge_commit_sha:pr.merge_commit_sha,merged_at:pr.merged_at},
-        manual_review:request.manualReview, override:false,
-        override_reason:request.reason, accepted_failures:failures,
-        qualification_url:`https://github.com/${repository}/actions/runs/${request.runId}`,
-        post_publication_host_smoke:'PENDING: no production installation credentials used'};
-    writeFileSync(resolve(directory,'release-evidence.json'), JSON.stringify(permanent,null,2) + '\n');
-    const tag = `v_${record.version}`;
-    const tags = call(`repos/${repository}/git/matching-refs/tags/${tag}`);
-    const existing = tags.find(ref => ref.ref === `refs/tags/${tag}`);
-    if (existing && (existing.object.type !== 'commit' || existing.object.sha !== main.sha)) throw new Error('BLOCKED immutable tag collision.');
-    if (!existing) call(`repos/${repository}/git/refs`, 'POST', {ref:`refs/tags/${tag}`,sha:main.sha});
-    const releases = call(`repos/${repository}/releases?per_page=100`);
-    let release = releases.find(item => item.tag_name === tag);
-    if (!release) {
-        execute('gh',['release','create',tag,'--repo',repository,'--verify-tag','--draft','--title',`PHP Gallery ${record.version}`,'--notes-file',resolve(directory,'release-notes.md')]);
-        release = call(`repos/${repository}/releases/tags/${tag}`);
-    }
-    for (const name of readdirSync(directory).sort()) {
-        const data = readFileSync(resolve(directory,name));
-        const digest = 'sha256:' + createHash('sha256').update(data).digest('hex');
-        const asset = release.assets.find(item => item.name === name);
-        if (asset) {
-            if (asset.digest !== digest || asset.size !== data.length) throw new Error(`BLOCKED existing release asset differs: ${name}`);
-        } else {
-            if (!release.draft) throw new Error('BLOCKED published release is missing immutable assets.');
-            execute('gh',['release','upload',tag,resolve(directory,name),'--repo',repository]);
-        }
-    }
-    // Recheck both refs after uploads; interrupted drafts remain recoverable, never public early.
-    if (call(`repos/${repository}/git/ref/heads/main`).object.sha !== main.sha
-        || call(`repos/${repository}/git/ref/heads/${request.branch}`).object.sha !== request.candidate
-        || call(`repos/${repository}/git/ref/tags/${tag}`).object.sha !== main.sha) throw new Error('BLOCKED refs changed during publication.');
-    if (release.draft) call(`repos/${repository}/releases/${release.id}`,'PATCH',{draft:false});
-    const published = call(`repos/${repository}/releases/tags/${tag}`);
-    if (published.draft || published.prerelease || published.tag_name !== tag
-        || call(`repos/${repository}/git/ref/tags/${tag}`).object.sha !== main.sha) throw new Error('BLOCKED post-publication tag/release identity failed.');
-    for (const name of readdirSync(directory)) {
-        const asset = published.assets.find(item => item.name === name);
-        const data = readFileSync(resolve(directory,name));
-        if (!asset || asset.digest !== 'sha256:' + createHash('sha256').update(data).digest('hex') || asset.size !== data.length) throw new Error('BLOCKED post-publication asset verification failed.');
-    }
-    output('GITHUB_STEP_SUMMARY', `Published: ${published.html_url}\nFinal main: ${main.sha}\nProduction hosting smoke: pending`);
-}
-
-/** Inspect evidence or perform the separately approved release action on trusted main tooling.
- * @returns {Promise<void>} Reports a plan or completes the selected protected action.
- */
-export async function main() {
-    const request = readRequest();
-    validateRequest(request);
-    const repository = process.env.GITHUB_REPOSITORY;
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '')) throw new Error('BLOCKED repository identity unavailable.');
-    const run = api(`repos/${repository}/actions/runs/${request.runId}`);
-    const jobs = fetchJobs(repository, request.runId, run.run_attempt);
-    const record = JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
-    const current = api(`repos/${repository}/git/ref/heads/${request.branch}`).object.sha;
-    const failures = verifyQualification(request,run,jobs,record,repository,current);
-    if (request.mode!=='plan' || ['promote','publish'].includes(process.env.RELEASE_INSPECTION_TARGET)) {
-        requireEligibleQualificationEvent(run);
-    }
-    if (!request.override) requireQualificationChecks(api,repository,request,record.run_attempt);
-    const origin = JSON.parse(command('git',['show',request.candidate+':'+originPath(record.version)]));
-    const checked = verifyReleaseOrigin(origin,record.version,request.candidate,repository,
-        request.mode === 'publish' || process.env.RELEASE_INSPECTION_TARGET === 'publish'
-            ? {publishedMainSha:inspectMergedPromotion(request,repository).main.sha} : {});
-    for (const [key,value] of Object.entries(checked)) {
-        if (record[key] !== value) throw new Error('BLOCKED current provenance differs from qualified record: '+key);
-    }
-    output('GITHUB_OUTPUT', `version=${record.version}\nsource_base=${record.source_base}\nrun_attempt=${record.run_attempt}`);
-    output('GITHUB_STEP_SUMMARY', `Qualification: https://github.com/${repository}/actions/runs/${request.runId}\nBranch: ${request.branch}\nCandidate: ${request.candidate}\nComparison: ${record.source_base}\nRequired jobs: ${jobs.length}\nOverride: ${request.override}\nHuman acceptance: ${request.manualReview || 'pending'}`);
-    if (request.mode === 'plan') {
-        if (process.env.RELEASE_INSPECTION_TARGET === 'publish') {
-            const observed=inspectMergedPromotion(request,repository);
-            output('GITHUB_STEP_SUMMARY','Merged bot PR: '+observed.pr.html_url
-                + '\nEffective owner review: '+observed.ownerReview.id
-                + '\nFinal verified main SHA: '+observed.main.sha);
-        } else {
-            requireCurrentMainBase(request,repository);
-        }
-        return;
-    }
-    if (request.mode !== 'publish') requireCurrentMainBase(request,repository);
-    if (request.mode === 'bootstrap') {
-        const owner = repository.split('/')[0];
-        if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || process.env.GITHUB_ACTOR !== owner
-            || process.env.GITHUB_REF !== 'refs/heads/'+request.branch || process.env.GITHUB_SHA !== request.candidate
-            || record.predecessor_kind !== 'legacy-v_0.125' || record.version !== '0.126'
-            || !['admin','maintain'].includes(api('repos/'+repository+'/collaborators/'+owner+'/permission').permission)) {
-            throw new Error('BLOCKED bootstrap is limited to an owner-dispatched exact first qualified release.');
-        }
-        await promote(request,repository,failures);
-        return;
-    }
-    if (request.override) throw new Error('BLOCKED red-check override is unavailable for a single-owner release.');
-    verifyWriteControls(repository);
-    if (request.mode === 'promote') await promote(request,repository,failures);
-    else await publish(request,repository,record,failures);
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-    main().catch(error => { process.stderr.write(error.message + '\n'); process.exitCode = 1; });
 }

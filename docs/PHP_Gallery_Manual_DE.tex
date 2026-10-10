@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.126}
+\newcommand{\version}{0.126.1}
 \newcommand{\manualdate}{10.~Oktober~2026}
 
 \hypersetup{
@@ -2352,7 +2352,7 @@ Prüfen Sie für öffentliche Vorschaubilddarstellung die Bereiche Elemente und 
 
 Der vollständige Release-Ablauf steht in \filepath{RELEASE.md}. Vergleichen Sie den genauen vorherigen stabilen Tag, vervollständigen Sie Versionshinweise und dauerhafte Dokumentation und gleichen Sie alle vier Handbuchausgaben ab. Erstellen Sie jedes PDF mit der indizierten Mehrpassfolge aus \filepath{docs/LATEX_BUILD.md}; prüfen Sie Compiler-Erfolg, Verweise, Indexeinträge und Layoutwarnungen. Visuelle PDF-Prüfung ist ausdrücklichen Anforderungen oder der Diagnose eines konkreten Layoutproblems vorbehalten; ein erfolgreicher Routinebau benötigt keine zusätzliche visuelle Freigabe.
 
-Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen lokalen Wiederherstellungspfad für Maintainer. Normale Vorbereitung und Qualifikation laufen auf GitHub; Agenten führen diese Befehle standardmäßig nicht lokal aus. Lokale Wiederherstellung setzt eine ausdrückliche Anforderung oder tatsächlich unerreichbares CI voraus und bleibt ohne gehostete Nachweise BLOCKED. Geschützte Promotion und Veröffentlichung folgen dem später beschriebenen release-promotion-Workflow.
+Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen lokalen Wiederherstellungspfad für Maintainer. Normale Vorbereitung und Qualifikation laufen auf GitHub; Agenten führen diese Befehle standardmäßig nicht lokal aus. Lokale Wiederherstellung setzt eine ausdrückliche Anforderung oder tatsächlich unerreichbares CI voraus und bleibt ohne gehostete Nachweise BLOCKED. Der später beschriebene Review-Workflow führt geschützten Merge und Tag-Erstellung aus; die GitHub-Release-Veröffentlichung bleibt manuell.
 
 Erzeugen Sie nach den letzten Änderungen das Manifest, bestehen Sie Release-, Manifest- und Whitespace-Vorprüfungen, initialisieren Sie den Qualifizierungsfingerabdruck und frieren Sie die Eingaben ein. Führen Sie genau ein zentrales Audit \codeword{--profile=release} aus, direkt oder über die konfigurierte isolierte Testinstallation. Das Audit besitzt Syntax-, Regressions-, Vertrags-, Browser- und Release-Prüfungen; ergänzen Sie keinen zweiten manuellen Testbaumdurchlauf. Binden Sie seinen Bericht an den unveränderten Fingerabdruck und melden Sie Abdeckungslücken getrennt von ausstehenden Betriebsprüfungen.
 
@@ -2360,7 +2360,7 @@ Erstellen Sie Bereitstellungsordner oder ZIP nur auf ausdrückliche Anforderung.
 
 Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
 
-Für~die~Vorbereitung auf~GitHub erstellen und~pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} oder~starten die~Release-Qualifikation manuell von~diesem Zweig. Der~Ablauf erstellt und~committet einen geprüften deterministischen Kandidaten zurück in~denselben Zweig, baut alle vier PDFs gemeinsam und~qualifiziert genau diesen Commit. Er~führt weder einen Merge nach~\codeword{main} aus, noch erstellt er~einen Tag oder~veröffentlicht ein~Release.
+Für~die~Vorbereitung auf~GitHub erstellen und~pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z}. Der~Ablauf erstellt und~committet einen geprüften deterministischen Kandidaten zurück in~denselben Zweig, baut alle vier PDFs gemeinsam und~qualifiziert genau diesen Commit. Er~führt weder einen Merge nach~\codeword{main} aus, noch erstellt er~einen Tag oder~veröffentlicht ein~Release.
 
 \section{Die Galerie schnell wirken lassen}
 \label{sec:performance}
@@ -2484,81 +2484,49 @@ Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose ein
 \subsection{GitHub-gehostete Release-Vorbereitung und~Qualifikation}
 
 
-% Owner-controlled linear Git lifecycle; PDF compilation remains hosted.
-\subsubsection{Linear Git release lifecycle and first-release bootstrap}
+\subsubsection{Automatische Freigabe nach PR-Genehmigung}
 
-Completed feature work is~squashed into one logical commit and~qualified again
-at~the~resulting SHA. The~owner integrates it~into \codeword{develop} by~a~true,
-non-forced fast-forward; GitHub Rebase and~merge may~rewrite SHAs and~does~not
-provide this guarantee. Existing history stays intact and~new develop commits
-remain linear. Agents never update develop or~main directly.
+Erstellen Sie vom aktuellen develop den Zweig \codeword{release/v_X.Y[.Z]}
+und pushen Sie ihn. Der Workflow ergänzt direkt nach dem gewählten Commit einen
+unveränderlichen Ursprung und führt Stage~A/B, vorhandene KI-Notizen, gesperrtes
+TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q aus.
+Historische Ursprünge und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
 
-The~release origin's only parent is~the~explicit selected develop commit D0.
-Immutable schema~v1 stays supported: the~existing \codeword{v\_0.126} origin
-is~never rewritten. Tag object SHA, peeled published-main commit P, previous
-release-side candidate Qprev and~tree SHA are~separate identities. The~explicit
-\codeword{v\_0.125} legacy pin records unknown historical qualification;
-it~does~not~invent approval or~CI. Audits, release-note commit ranges and~WinApp
-scope use verified Qprev and~direct endpoint tree comparisons. Stage~A/B,
-locked TinyTeX, all four hosted PDF builds, SHA-256 and~full Stage~D remain mandatory.
+Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
+nach main und startet den Abschluss automatisch auf Q über die auf main bereits
+registrierte Workflow-Datei. Der Maintainer genehmigt den exakten Q-Stand einmal.
+Der Worker prüft P/Q erneut und fordert den geschützten Standard-Merge an ohne Workflow-Formular oder zusätzliche
+Deployment-Genehmigung. M muss die geordneten Eltern [P,Q] und denselben vollständigen
+Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
+Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
+fehlenden Tag; widersprüchliche Tags führen zum Fehler.
 
-The~new main release commit has~exactly ordered parents [P,Q] and~Q's complete
-qualified tree. P does~not~need to~be~an~ancestor of~Q. Owner approval of~the~bot
-PR and~manual merge are~separate from~the~later publish dispatch. Stale main,
-wrong parents/tree, stale review or~missing/red CI stops publication.
+GitHub Releases werden weiterhin manuell erstellt oder veröffentlicht.
+\codeword{manual-release-assets} enthält Produktions-ZIP, vier PDFs, Notizen,
+Prüfarchiv und SHA-256-Prüfsummen. Der Windows-Installer wird nur bei Änderungen
+am ausgelieferten WinApp-Inhalt gebaut; seine eigenständige Version bleibt erhalten.
 
-After publication, unchanged develop is~fast-forwarded by~the~owner to~exact Q
-without a~new commit. The~FF verifier independently rejects new merge commits.
-Parallel develop work requires a~single-parent L over its~observed head,
-complete three-way content proof, retained feature history,
-explicit decisions for~every conflict and~full hosted CI on~exact L. The~workflow
-prepares working branches and~immutable tree/patch/owner/CI evidence; it~never
-pushes develop. Completion is~\codeword{RECONCILED\_FF} or
-\codeword{RECONCILED\_EQUIVALENT}; unresolved work is~\codeword{SYNC\_PENDING}
-or~\codeword{SYNC\_BLOCKED}. A~tagged main merge need not~be~in~develop ancestry.
-Optional release-branch retirement requires a~separate owner approval and~exact-SHA lease.
-
-Main protection requires owner-reviewed merge PRs and~loose Release qualification;
-develop requires linear, non-force history and~Complete required CI matrix without
-mandatory PRs. The~existing rulesets stay disabled until separately approved live
-check/merge/FF acceptance. All three release environments remain owner-reviewed
-and~main-only. No~red-check override is~permitted.
-
-For~the~first \codeword{v\_0.126}, dispatch the~already-present promotion workflow
-filename's \codeword{bootstrap} mode at~the~exact qualified release ref. Its~isolated
-read-only contents permission permits only a~bot PR proposal. The~owner verifies
-workflow routing and~required checks, approves and~manually merges [P,Q]. The~new
-publisher then exists on~main before a~separate publish approval. Never execute
-the~older automatic-merge publisher or~add an~intermediate untagged main feature commit.
-Unsupported GitHub routing is~BLOCKED and~requires an~explicit owner decision.
-
-Future releases use \ui{Start New Release}: owner-approved version/optional develop
-SHA, verified predecessor, create-only atomic origin/ref, safe retry and~handoff
-to~existing qualification. It~excludes the~already initialized \codeword{v\_0.126}.
-GitHub cannot atomically lease several refs. Fresh checks before creation and~handoff
-block concurrent tag/source changes; an~origin created before a~detected race stays
-immutable for~explicit owner recovery.
-
-GitHub excludes workflow-dispatch job checks from~required PR checks. Promotion
-fails closed with~\codeword{BLOCKED\_PR\_CHECK\_ELIGIBILITY} until the~owner
-pushes a~reviewed finalization commit and~fresh full push qualification verifies
-its~exact SHA. Required-check app binding and~actual bot PR eligibility need
-live acceptance; an~external App/event bridge is~a~separate owner decision.
-Checks retain an~explicit \codeword{external\_id} with~kind, run, attempt and~SHA.
-GitHub rewrites check URLs; verifiers recheck the~bound server run and~complete
-matrix rather than~inferring qualification from~a~navigation URL.
-The~full operator contract and~remaining live tests are~in
-\filepath{docs/RELEASE_LIFECYCLE.md}; implementation CI does~not~authorize publication.
+Develop wird nur durch echtes nicht erzwungenes Fast-forward auf geprüftes Q
+mit aktivem Schutz für lineare Historie und CI aktualisiert. Parallele Entwicklung
+stoppt diese separate Synchronisierung und lässt den fertigen Tag bestehen.
+Auf develop entsteht kein Merge-, Rebase- oder Replay-Commit. Das vorherige M
+muss kein Vorfahr des nächsten Q sein. Ausgelassene Bypass-Daten werden ausdrücklich
+protokolliert und bleiben serverseitig geschützt; sichtbarer Bypass oder unlesbare
+effektive Regeln blockieren. Fehlende Nachweise, veraltete Genehmigung, rotes CI und andere Eltern/Bäume blockieren
+den Abschluss. Isolierte Abnahme des echten GitHub-Verhaltens beschreibt
+\filepath{docs/RELEASE_LIFECYCLE.md}; Fixture-CI ersetzt keine Live-Abnahme.
+Agenten führen während der Implementierung keine geschützte Integration
+oder Produktionsveröffentlichung aus.
 
 Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Seine Schritte folgen diesem Vertrag:
 
 \begin{enumerate}
-  \item \textbf{Zweig und~Vorprüfung.} Ein~Push nach~\codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} oder~ein~manueller Start auf~diesem Zweig löst die~Vorbereitung aus. Eine~optional angegebene Version muss zum Zweignamen passen. Ein~bereits vorhandener Tag \codeword{v_X.Y[.Z]} führt zur Ablehnung. Der~vorige Release-Tag liefert die~Vergleichsbasis. Vor AI oder~TeX prüft \codeword{release-preflight} Quellsyntax, Deklarationsdokumentation, Dateiinventar, Python-Importrichtlinie und~Workflow-Verträge.
+  \item \textbf{Zweig und~Vorprüfung.} Ein~Push nach~\codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z}  löst die~Vorbereitung aus. Eine~optional angegebene Version muss zum Zweignamen passen. Ein~bereits vorhandener Tag \codeword{v_X.Y[.Z]} führt zur Ablehnung. Der~vorige Release-Tag liefert die~Vergleichsbasis. Vor AI oder~TeX prüft \codeword{release-preflight} Quellsyntax, Deklarationsdokumentation, Dateiinventar, Python-Importrichtlinie und~Workflow-Verträge.
   \item \textbf{Deterministische Metadaten.} Der~Helfer gleicht Anwendungsversion, Release-Metadaten, Versionshinweis-Gerüst sowie Versions- und~Datumsmarkierungen aller vier Handbücher ab und~aktualisiert das~Produktionsinventar. Er~verfasst keine inhaltliche TeX-Dokumentation. Fertige redaktionelle Versionshinweise bleiben erhalten. Gleichen Sie vor der~Freigabe die~Inhalte aller vier Handbücher ab.
   \item \textbf{Redaktionelle Hinweise.} Eine~vollständige von~Betreuern verfasste Versionssektion bleibt unverändert. Fehlt sie oder~ist sie unvollständig, nutzt der~Workflow GitHub Copilot CLI mit~\codeword{gpt-6-luna}; nur bei fehlender Verfügbarkeit dieses Modells wechselt er~zur automatischen Modellauswahl. Für~die~Erzeugung ist \codeword{COPILOT_GITHUB_TOKEN} erforderlich. Der~vollständige Git-Textdiff wird ohne Kürzung nach Bytezahl übergeben; generierte und~binäre Release-Artefakte bleiben ausgeschlossen. Getrennte temporäre Ausgabedateien verhindern blockierte Pipes. Jeder Git-Befehl hat~eine Frist von~30 Sekunden; der~gesamte Belegschritt ist auf~zwei Minuten begrenzt. Überschrittene Metadaten- oder~Diagnoselimits stoppen die~Vorbereitung ausdrücklich. Strenge Markdown-Prüfung verhindert Platzhalter, falsche Versionen, zusätzliche Abschnitte und~Assistentenkommentare. Fehler bei Erzeugung oder~Validierung blockieren die~Qualifikation, statt unvollständige Hinweise zu~veröffentlichen. Der~Helfer \filepath{.github/scripts/patch_notes_ai_chunks.php} übergibt jedes Originalbyte des~Git-Diffs genau einmal in~aufeinanderfolgenden, UTF-8-sicheren Teilen von~höchstens 100.000~Bytes. Ein~SHA-256-Manifest prüft alle Teile und~den~vollständigen ursprünglichen Beleg; jeder Teil benötigt eine~gültige sachliche Zusammenfassung von~höchstens 6.500~Bytes. Überschreiten die~Zusammenfassungen das~Limit von~180.000~Bytes für~die~Endanfrage, fassen weitere begrenzte Durchläufe alle Nachweise zusammen, ohne Teile wegzulassen. Copilot-Zeitüberschreitungen, fehlende Antworten, veränderte Prüfsummen oder~ungültiges endgültiges Markdown stoppen die~Qualifikation; der~Originaldiff wird nie stillschweigend gekürzt. Prompt und~Validator teilen die~verpflichtenden Hauptüberschriften \codeword{Highlights}, \codeword{Technical Details} und~\codeword{User Impact}, auch bei reinen Test-, Dokumentations- oder~Werkzeugveröffentlichungen. Nur irrelevante optionale Unterabschnitte dürfen entfallen. Beschreiben Sie belegte Auswirkungen für~Betreuer oder~unverändertes öffentliches/Admin-Verhalten ohne erfundene Produktvorteile. Erwähnungen im~Fließtext oder~falsche Überschriftenebenen werden abgelehnt. Bei Generierungs- oder~Validierungsfehlern bleibt verfügbarer ursprünglicher Modelltext sieben Tage im~Actions-Artefakt \codeword{release-notes-rejected-response}; Prompts und~Authentifizierungsdiagnostik sind ausgeschlossen. Ungültiger Text blockiert weiterhin die~Vorbereitung und~wird niemals angewendet.
   \item \textbf{Reproduzierbare Handbücher.} Der~Workflow verwendet durch Prüfsummen gesperrtes TinyTeX und~eine festgelegte TeX-Live-Paketliste. Ein~gültiger Cache wird anhand der~Lockdatei und~des~Paketinventars wiederverwendet. Englische, tschechische, deutsche und~schwedische Ausgaben werden jeweils mit~\codeword{pdflatex}, \codeword{makeindex} und~zwei weiteren \codeword{pdflatex}-Durchläufen gebaut. Der~Zeitpunkt aus~den~Release-Metadaten steuert reproduzierbare PDF- und~Manifest-Zeitstempel. Danach werden Produktionsinventar, Integritätsmanifest und~Release-Konsistenz geprüft.
   \item \textbf{Sicheres Zurückschreiben.} Nur freigegebene Vorbereitungsdateien werden gestaged. Eine~zwischenzeitliche Änderung am~Remote-Zweig verhindert einen veralteten Push; ein~identischer bereits vorbereiteter Tree darf den~aktuellen Commit wiederverwenden. Geschrieben wird nur in~denselben Release-Zweig, nicht nach~\codeword{main}.
-  \item \textbf{Gate für~den~exakten Kandidaten.} Der~wiederverwendbare zentrale CI-Workflow checkt die~genaue SHA des~vorbereiteten Commits aus und~führt die~vollständige Release-Matrix einschließlich verpflichtender Chromium-Prüfung aus. Das~Gesamt-Gate besteht nur bei erfolgreicher Vorbereitung, vollständigen Hinweisen, erfolgreicher Matrix und~unveränderter Zweig-SHA. Merge, Tag und~Veröffentlichung bleiben Entscheidungen des~Betreuers.
+  \item \textbf{Gate für~den~exakten Kandidaten.} Der~wiederverwendbare zentrale CI-Workflow checkt die~genaue SHA des~vorbereiteten Commits aus und~führt die~vollständige Release-Matrix einschließlich verpflichtender Chromium-Prüfung aus. Das~Gesamt-Gate besteht nur bei erfolgreicher Vorbereitung, vollständigen Hinweisen, erfolgreicher Matrix und~unveränderter Zweig-SHA. Sobald geprüfte Artefakte bereitstehen, öffnet ein~grünes Gate den~Bot-PR; eine menschliche Freigabe startet den~automatischen geschützten Merge und~die Tag-Erstellung. Die GitHub-Release-Veröffentlichung bleibt manuell.
 \end{enumerate}
 
 Weitere Einzelheiten stehen in~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} und~\filepath{docs/LATEX_BUILD.md}. Eine~gewöhnliche TeX-Quelländerung erfordert weder sofortige PDF-Kompilierung noch ein~separates Release-Audit.

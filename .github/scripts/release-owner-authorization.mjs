@@ -75,21 +75,24 @@ export function requireOwnerEnvironment(call,repository,name) {
     }
 }
 
-/** Require branch-specific non-bypassable policies: reviewed main merges or true linear develop FF.
+/** Require branch-specific server policies: reviewed main merges or true linear develop FF.
  * Last-push approval is deliberately disabled: the only human owner may also
  * have pushed the candidate. Stale approvals are dismissed and exact SHA-bound
  * review is independently validated after merge.
- * @param {function(string):object} call GitHub API reader.
+ * GitHub installation tokens may omit bypass_actors. Report that visibility
+ * honestly and rely on server enforcement, never manufacture an empty inventory.
+ * Any exposed bypass or weakened installed/effective policy still fails closed.
+ * @param {function(string):JsonValue} call GitHub API reader returning installed and effective policy fields.
  * @param {string} repository Expected owner/name.
  * @param {'main'|'develop'} branch Target protected branch.
  * @param {string} name Installed ruleset name.
  * @param {string} check Exact mandatory status context.
- * @returns {void} Throws on absent, inactive or weakened rules.
+ * @returns {{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}} Verified visible policy identity and explicit bypass visibility; throws on absent, inactive or weakened rules.
  */
 export function requireOwnerRuleset(call,repository,branch,name,check) {
     if (!['main','develop'].includes(branch)) throw new Error('BLOCKED unknown protected branch.');
     const prefix='repos/'+repository;
-    const all=call(prefix+'/rulesets');
+    const all=call(prefix+'/rulesets?per_page=100');
     if (!Array.isArray(all) || all.length >= 100) throw new Error('BLOCKED ruleset listing incomplete.');
     // GitHub may omit target in the ruleset inventory; verify it on the fetched detail.
     const candidates=all.filter(rule=>rule.name===name
@@ -99,9 +102,11 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
         throw new Error('BLOCKED '+branch+' required owner ruleset is inactive or ambiguous.');
     }
     const installed=call(prefix+'/rulesets/'+candidates[0].id);
-    if (installed?.name !== name || installed.enforcement !== 'active'
+    const hasBypass=installed != null && Object.hasOwn(installed,'bypass_actors');
+    if (installed?.id !== candidates[0].id || installed.name !== name || installed.enforcement !== 'active'
         || installed.target !== 'branch' || installed.source !== repository
-        || !Array.isArray(installed.bypass_actors) || installed.bypass_actors.length !== 0
+        || (installed.source_type !== undefined && installed.source_type !== 'Repository')
+        || (hasBypass && (!Array.isArray(installed.bypass_actors) || installed.bypass_actors.length !== 0))
         || (installed.current_user_can_bypass !== undefined && installed.current_user_can_bypass !== 'never')
         || JSON.stringify(installed.conditions?.ref_name?.include) !== JSON.stringify(['refs/heads/'+branch])
         || JSON.stringify(installed.conditions?.ref_name?.exclude) !== '[]') {
@@ -119,10 +124,14 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
         const common = rules.some(rule=>rule.type==='deletion')
             && rules.some(rule=>rule.type==='non_fast_forward')
             && Array.isArray(ci?.required_status_checks)
+            && ci.required_status_checks.length === 1
             && ci.do_not_enforce_on_create === false
             && ci.required_status_checks.some(required=>required.context===check && required.integration_id === 15368);
         const mainPolicy = review?.required_approving_review_count === 1
             && review.dismiss_stale_reviews_on_push === true
+            && review.require_code_owner_review === false
+            && (review.require_extra_approval_for_unattributed_changes === undefined || review.require_extra_approval_for_unattributed_changes === true)
+            && (review.required_reviewers === undefined || Array.isArray(review.required_reviewers) && review.required_reviewers.length === 0)
             && review.require_last_push_approval === false
             && review.required_review_thread_resolution === true
             && JSON.stringify(review.allowed_merge_methods) === '["merge"]'
@@ -134,11 +143,18 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
         if (!common || !(branch === 'main' ? mainPolicy : developPolicy)) {
             throw new Error('BLOCKED '+branch+' lacks compatible owner/linear history and exact hosted CI protections.');
         }
+        if (rules.some(rule=>(rule.ruleset_id !== undefined && rule.ruleset_id !== installed.id)
+            || (rule.ruleset_source !== undefined && rule.ruleset_source !== repository)
+            || (rule.ruleset_source_type !== undefined && rule.ruleset_source_type !== 'Repository'))) {
+            throw new Error('BLOCKED effective policies belong to a different ruleset identity.');
+        }
     }
+    return {id:installed.id,name,branch,bypass_inventory:hasBypass?'VISIBLE_EMPTY':'NOT_RETURNED_SERVER_ENFORCED',
+        current_actor_bypass:installed.current_user_can_bypass ?? 'NOT_RETURNED_SERVER_ENFORCED'};
 }
 
 /** Reject any PR not authored by the workflow bot for the exact source SHA.
- * @param {{number:number,user:{login:string},head:{sha:string,repo:{full_name:string}},base:{ref:string},merged_at?:string|null,created_at?:string,merge_commit_sha?:string,html_url?:string}} pr Complete GitHub pull-request REST object.
+ * @param {{number:number,user:{login:string},head:{sha:string,repo:{full_name:string}},base:{ref:string},auto_merge?:null|{merge_method:string,enabled_by:{login:string}},merged_at?:string|null,created_at?:string,merge_commit_sha?:string,html_url?:string}} pr Complete GitHub pull-request REST object, including optional server Auto-merge metadata.
  * @param {string} repository Expected owner/name.
  * @param {string} sha Exact candidate source.
  * @param {'main'|'develop'} target Intended protected branch.
@@ -147,8 +163,12 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
 export function requireBotPullRequest(pr,repository,sha,target) {
     if (pr?.user?.login?.toLowerCase() !== 'github-actions[bot]'
         || pr.head?.sha !== sha || pr.head?.repo?.full_name !== repository
-        || pr.base?.ref !== target || pr.auto_merge != null || !Number.isInteger(pr.number) || pr.number < 1) {
+        || pr.base?.ref !== target || !Number.isSafeInteger(pr.number) || pr.number < 1) {
         throw new Error('BLOCKED exact PR must be authored by github-actions[bot], not the human reviewer.');
+    }
+    if (pr.auto_merge != null && (pr.auto_merge.merge_method !== 'merge'
+        || !['github-actions[bot]',repository.split('/')[0].toLowerCase()].includes(pr.auto_merge.enabled_by?.login?.toLowerCase()))) {
+        throw new Error('BLOCKED Auto-merge must preserve standard merge and be enabled by the workflow bot or owner.');
     }
 }
 
@@ -176,25 +196,4 @@ export function effectiveOwnerReview(reviews,pr,owner,sha) {
         || !Number.isInteger(latest.review.id) || latest.review.id < 1) return null;
     return {id:latest.review.id,reviewer:owner,commit_sha:sha,
         submitted_at:latest.review.submitted_at,url:latest.review.html_url ?? null};
-}
-
-/** Authorize a token-created qualification only through a completed owner initialization run.
- * @param {function(string):JsonValue} call Read-only GitHub API.
- * @param {string} repository Exact repository.
- * @param {string} runId Parent Start New Release run ID.
- * @param {{branch:string,origin_sha:string,selected_develop_sha:string,owner:string,run_id:string,run_attempt:string}} record Downloaded complete initialization artifact.
- * @param {string} branch Actual qualification branch.
- * @param {string} originSha Git-proven origin introduction commit.
- * @returns {void} Throws unless the exact origin was created by the successfully approved owner workflow.
- */
-export function requireInitializationHandoff(call,repository,runId,record,branch,originSha) {
-    if (!/^[1-9]\d*$/.test(runId) || record.run_id!==runId || record.branch!==branch
-        || record.origin_sha!==originSha || record.owner!==repository.split('/')[0]
-        || !/^[1-9]\d*$/.test(record.run_attempt)) throw new Error('BLOCKED unbound initialization handoff.');
-    const run=call('repos/'+repository+'/actions/runs/'+runId+'/attempts/'+record.run_attempt);
-    if (run.path!=='.github/workflows/start-new-release.yml' || run.event!=='workflow_dispatch'
-        || run.head_branch!=='main' || run.actor?.login!==record.owner
-        || run.run_attempt!==Number(record.run_attempt) || run.status!=='completed' || run.conclusion!=='success') {
-        throw new Error('BLOCKED initialization is not a completed owner-approved main workflow.');
-    }
 }

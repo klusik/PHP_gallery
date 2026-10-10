@@ -17,17 +17,6 @@ on:
   push:
     branches:
       - 'release/v_*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Optional X.Y or X.Y.Z cross-check; the selected branch remains authoritative.
-        required: false
-        type: string
-
-      initialization_run:
-        description: Completed owner Start New Release run; required only for token-created handoff.
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -57,6 +46,7 @@ jobs:
       previous_stable_sha: ${{ steps.origin.outputs.previous_stable_sha }}
       ready: ${{ steps.final.outputs.ready }}
       preparation_changed: ${{ steps.commit.outputs.changed }}
+      winapp_changed: ${{ steps.final.outputs.winapp_changed }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -73,55 +63,22 @@ jobs:
       - id: release
         name: Validate release branch identity
         shell: bash
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-          INITIALIZATION_RUN: ${{ inputs.initialization_run }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          permission=bot
-          if [[ "${GITHUB_ACTOR}" != 'github-actions[bot]' ]]; then
-            permission="$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${GITHUB_ACTOR}/permission" --jq '.permission')"
-          fi
-          if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
-            echo "Release preparation must run from a branch." >&2
-            exit 1
-          fi
           if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v_((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.((0|[1-9][0-9]*)))?)$ ]]; then
-            echo "Expected release/v_X.Y or release/v_X.Y.Z branch, got: ${GITHUB_REF_NAME}" >&2
+            echo "::error::Expected canonical release/v_X.Y[.Z] branch." >&2
             exit 1
           fi
-          version="${GITHUB_REF_NAME#release/v_}"
-          if [[ -n "${REQUESTED_VERSION}" && "${REQUESTED_VERSION}" != "${version}" ]]; then
-            echo "Requested version ${REQUESTED_VERSION} does not match branch version ${version}." >&2
-            exit 1
-          fi
-          if git show-ref --verify --quiet "refs/tags/v_${version}"; then
-            echo "Refusing preparation because immutable tag v_${version} already exists." >&2
-            exit 1
-          fi
-          if [[ "${permission}" != admin && "${permission}" != maintain ]]; then
-            if [[ "${GITHUB_ACTOR}" != 'github-actions[bot]' || ! "${INITIALIZATION_RUN}" =~ ^[1-9][0-9]*$ ]]; then
-              echo "BLOCKED release preparation requires owner/maintainer or an exact owner initialization handoff." >&2
-              exit 1
-            fi
-            timeout 120s gh run watch "${INITIALIZATION_RUN}" --repo "${GITHUB_REPOSITORY}" --exit-status --interval 5
-            gh run download "${INITIALIZATION_RUN}" --repo "${GITHUB_REPOSITORY}" --name release-initialization --dir "${RUNNER_TEMP}/release-initialization"
-            node --input-type=module <<'NODE'
-          import {readFileSync} from 'node:fs';
-          import {api,command} from './.github/scripts/release-promotion.mjs';
-          import {requireInitializationHandoff} from './.github/scripts/release-owner-authorization.mjs';
-          const e=process.env;
-          const record=JSON.parse(readFileSync(e.RUNNER_TEMP+'/release-initialization/release-initialization.json','utf8'));
-          const origin=command('git',['log','--format=%H','--diff-filter=A',e.GITHUB_SHA,'--',
-            '.github/release-origins/v_'+e.GITHUB_REF_NAME.slice('release/v_'.length)+'.json']);
-          requireInitializationHandoff(api,e.GITHUB_REPOSITORY,e.INITIALIZATION_RUN,record,e.GITHUB_REF_NAME,origin);
-          NODE
-          fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "version=${GITHUB_REF_NAME#release/v_}" >> "${GITHUB_OUTPUT}"
+      - id: initialize
+        name: Initialize or reuse immutable origin after release push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/start-new-release.mjs
       - id: origin
         name: Verify immutable release develop origin and prior main tag
         env:
+          ORIGIN_CHECKOUT_SHA: ${{ steps.initialize.outputs.candidate_sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/release-origin.mjs
       - name: Cheap release source preflight
@@ -414,7 +371,7 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
-          ORIGINAL_SHA: ${{ github.sha }}
+          ORIGINAL_SHA: ${{ steps.initialize.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           allowed='^(app/bootstrap\.php|app/core-manifest\.json|app/production-files\.json|README\.md|TESTING\.md|DATABASE\.md|ARCHITECTURE\.md|PATCH_NOTES\.md|release-metadata\.json|docs/PHP_Gallery_Manual(_CZ|_DE|_SV)?\.(tex|pdf))$'
@@ -496,6 +453,8 @@ jobs:
           php scripts/generate_production_files.php --check
           php scripts/generate_manifest.php --check
           php scripts/check_release.php "${RELEASE_VERSION}"
+          paths="$(git diff --name-only "${{ steps.origin.outputs.source_base }}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          if [[ -n "${paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
           echo "ready=true" >> "${GITHUB_OUTPUT}"
           {
             echo "### Release preparation"
@@ -589,6 +548,7 @@ jobs:
           PROVENANCE_JSON: ${{ needs.prepare.outputs.provenance_json }}
           READY: ${{ needs.prepare.outputs.ready }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
+          WINAPP_CHANGED: ${{ needs.prepare.outputs.winapp_changed }}
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
@@ -600,7 +560,7 @@ jobs:
             initial_main_sha:e.INITIAL_MAIN_SHA,previous_stable_tag:e.PREVIOUS_STABLE_TAG,
             previous_stable_sha:e.PREVIOUS_STABLE_SHA,run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
             ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
-            manual_review:'PENDING', promotion:'NOT_REQUESTED', override:false};
+            lifecycle_schema:2,winapp_changed:e.WINAPP_CHANGED==='true',manual_review:'PENDING',promotion:'AUTOMATIC_AFTER_REVIEW',override:false};
           writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');
           writeFileSync(e.RUNNER_TEMP + '/release-check.json', JSON.stringify({name:'Release qualification',
             external_id:`release:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.CANDIDATE_SHA}`,
@@ -627,3 +587,117 @@ jobs:
           path: ${{ runner.temp }}/release-candidate.json
           if-no-files-found: error
           retention-days: 90
+
+  assets:
+    name: Prepare manual release assets
+    needs: [prepare, qualification, release-gate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          path: ${{ runner.temp }}/qualification-evidence
+      - name: Build deterministic production package and checksums
+        env:
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          CANDIDATE_WORKSPACE: ${{ github.workspace }}
+          RELEASE_ASSETS: ${{ runner.temp }}/release-assets
+          QUALIFICATION_EVIDENCE: ${{ runner.temp }}/qualification-evidence
+        run: node .github/scripts/release-assets.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: manual-release-assets
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 90
+
+  installer:
+    name: Prepare Windows companion installer
+    if: ${{ needs.prepare.outputs.winapp_changed == 'true' }}
+    needs: [prepare, qualification, release-gate]
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          persist-credentials: false
+      - name: Build canonical installer with hosted Inno Setup
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path -LiteralPath $compiler)) { throw 'BLOCKED hosted Inno Setup 6 is unavailable.' }
+          python winapp/build_installer.py --iscc $compiler
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installers = @(Get-ChildItem -LiteralPath winapp/dist -Filter '*.exe' -File -Recurse)
+          $metadata = @(Get-ChildItem -LiteralPath winapp/dist -Filter 'winapp-update.json' -File -Recurse)
+          if ($installers.Count -ne 1 -or $metadata.Count -ne 1) { throw 'BLOCKED ambiguous installer output.' }
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP 'winapp-release'
+          New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $artifactDirectory
+          Copy-Item -LiteralPath $metadata[0].FullName -Destination $artifactDirectory
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: manual-winapp-installer
+          path: ${{ runner.temp }}/winapp-release/*
+          if-no-files-found: error
+          retention-days: 90
+
+  propose:
+    name: Open qualified release PR
+    if: ${{ always() && needs.prepare.result == 'success' && needs.release-gate.result == 'success' && needs.assets.result == 'success' && (needs.installer.result == 'success' || needs.installer.result == 'skipped' && needs.prepare.outputs.winapp_changed == 'false') }}
+    needs: [prepare, release-gate, assets, installer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      # Dispatch the existing completion filename at Q; GITHUB_TOKEN-created
+      # PR/merge events are not the first-release bootstrap mechanism.
+      actions: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-qualification-record
+          path: ${{ runner.temp }}/release-record
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: manual-release-assets
+          path: ${{ runner.temp }}/release-assets
+      - name: Open or reuse exact-Q PR awaiting one human approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ACTION: open
+          RELEASE_RECORD: ${{ runner.temp }}/release-record/release-candidate.json
+          RELEASE_NOTES: ${{ runner.temp }}/release-assets/release-notes.md
+          RELEASE_ASSETS: ${{ runner.temp }}/release-assets
+        run: node .github/scripts/release-completion.mjs

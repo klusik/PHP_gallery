@@ -123,3 +123,13 @@ rebuilds tracked manual PDFs.
    mention any setup needed to reproduce them.
 
 Opening a pull request does not authorize a release, publication, or deployment.
+
+## Maintainer release workflow
+
+Push a new `release/v_X.Y[.Z]` from develop, wait for automatic preparation and
+exact-Q hosted qualification, then approve the bot PR once. Automation performs
+a protected standard merge, immutable tag and safe develop FF; GitHub Release
+publication stays manual. Feature integration remains a maintainer-performed
+true non-force FF of one qualified logical squash commit. See
+[the release lifecycle](docs/RELEASE_LIFECYCLE.md) for policy visibility, retries,
+parallel develop and separately authorized live acceptance.

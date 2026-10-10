@@ -10,7 +10,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.126. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.126.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -150,14 +150,20 @@ dirty-tree or incomplete hosted results to qualified status.
 
 ### Source-only authoring feedback
 
-`tests/hosted_release_policy_test.mjs` is registered in the central Node suite.
-It executes the real release identity and PR/publication orchestration with inert
-API/command adapters: stale/foreign/missing jobs and mismatched final trees fail;
-exact overrides preserve red evidence; interrupted uploads retain a draft; identical
-retries are read-only; conflicting immutable tags/assets fail. It also checks
-CI-first agent entrypoints, all approved branch triggers and all four manual sources.
-These fixtures never merge, tag or publish on GitHub. Live release-write acceptance
-remains pending until server protections and independent approval are configured.
+The central Node registry owns hosted release policy, pushed-origin and completion
+contracts. `tests/start_new_release_test.mjs` and `tests/release_completion_test.mjs`
+use real disposable Git objects and bare remotes with isolated CI/review metadata.
+They cover version forms, immutable origins, same-run handoff, exact Q, no duplicate
+PR/commit, sole human approval, standard merge parents/tree, tags, interrupted
+tagging, true FF and preservation of parallel develop. Red CI, unapproved/stale
+heads, conflicting tags and unavailable policy inventory fail closed. The completion fixture runs two successive releases before manual publication;
+the existing linear graph independently verifies absence of previous-M ancestry.
+
+GitHub Release create/publish is absent from the automatic pipeline. Historical
+asset digest/reconciliation parsers retain regression coverage. Actual GitHub token
+readback is retained separately as `live-release-readiness`; source CI is not live
+operational acceptance. Follow the owner-approved disposable-repository E2E plan in
+`docs/RELEASE_LIFECYCLE.md`; no production release is an implementation test.
 
 Hosted preparation uses `release-preflight` for syntax, changed declarations/policy,
 whole-tree budgets, Python imports and workflow contracts before generation. This
@@ -2600,10 +2606,26 @@ GitHub environment or ruleset is installed, that a human approved an actual
 PR, or that a real release was published/reconciled. CI-first hosted qualification
 and exact source SHA remain authoritative; no new local handoff gate is implied.
 
-Required live acceptance remains separate: ref-dispatched first-release bot PR,
-owner workflow-run and PR approval, exact Release qualification head/test-merge
-eligibility, ordered [P,Q] main parents with tree(Q), owner-only true FF preserving
-Q or exact single-parent L, immutable acceptance assets and the next release.
-Both rulesets stay disabled until separately approved real server testing. Source
-fixtures and a green feature matrix do not establish production release approval.
-No local manual PDF build is part of feature verification.
+`tests/release_completion_handoff_test.mjs` is registered centrally and covers
+limited/redacted API fields on both branches, exposed bypass and effective-policy
+drift, exact-Q dispatch through the registered filename, pagination of existing
+observers, continuation while review is pending, safe non-null Auto-merge metadata,
+foreign/stale/red refusals, full-detail merged PR reuse and automatic interrupted
+tag retry with real Git merge/FF. Existing completion tests retain two consecutive
+versions, ordered parents, tree equality, immutable tag and parallel-develop refusal.
+
+Live `probe` and `probe-child` modes run only on feature/fix/codex branches. They
+record the actually selected workflow ref and dispatch one read-only child using
+GITHUB_TOKEN. Neither job has contents write permission or performs protected
+writes. Their artifacts prove branch dispatch and token-policy visibility, not
+review, merge, tagging or reconciliation acceptance.
+
+Required live acceptance remains separate: automatic exact-Q completion dispatch,
+one human PR approval with no workflow approval/form, exact required-check eligibility,
+ordered [P,Q] main parents with tree(Q), create-only tag on M, true develop FF to Q,
+parallel drift refusal, interruption recovery and a second release. Main ruleset
+24808772 and develop ruleset 24808873 were observed active on 2026-10-10. No server
+settings are changed. The owner declined a test repository; this full E2E remains
+NOT RUN until the later maintainer acceptance. Source fixtures and green feature
+CI do not prove protected release operations. No local manual PDF build is part
+of feature verification.

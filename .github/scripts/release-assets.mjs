@@ -14,6 +14,7 @@ import {mkdirSync,copyFileSync,readFileSync,writeFileSync,readdirSync,utimesSync
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {command} from './release-promotion.mjs';
+import {verifyPreparedAssets} from './release-asset-integrity.mjs';
 
 /** Normalize archive metadata in an owned staging tree without following links.
  * @param {string} directory Absolute owned staging/evidence directory.
@@ -51,6 +52,10 @@ command('unzip',['-tq',resolve(assets,'production.zip')]);
 process.chdir(workspace);
 for (const name of ['core-manifest.json','production-files.json']) copyFileSync(resolve('app',name),resolve(assets,name));
 copyFileSync('release-metadata.json',resolve(assets,'release-metadata.json'));
+for (const edition of ['', '_CZ', '_DE', '_SV']) {
+    const name='PHP_Gallery_Manual'+edition+'.pdf';
+    copyFileSync(resolve('docs',name),resolve(assets,name));
+}
 const notes = readFileSync('PATCH_NOTES.md','utf8');
 const start = notes.indexOf(`## Version ${process.env.RELEASE_VERSION}`);
 if (start < 0) throw new Error('BLOCKED release note section unavailable.');
@@ -66,3 +71,4 @@ writeFileSync(resolve(assets,'SHA256SUMS'),Object.entries(hashes).map(([name,dig
 hashes.SHA256SUMS = createHash('sha256').update(readFileSync(resolve(assets,'SHA256SUMS'))).digest('hex');
 writeFileSync(resolve(assets,'final-integrity.json'),JSON.stringify({candidate_sha:process.env.CANDIDATE_SHA,
     source_base:process.env.SOURCE_BASE,result:'PASS',hashes},null,2) + '\n');
+verifyPreparedAssets(assets,process.env.CANDIDATE_SHA,process.env.SOURCE_BASE);

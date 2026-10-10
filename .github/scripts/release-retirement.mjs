@@ -44,7 +44,7 @@ export function validateRetirementRequest(request) {
  */
 export function hasActiveReleaseWork(call, repository, branch) {
     for (const state of ['queued','in_progress','waiting','pending']) {
-        for (const workflow of ['release-qualification.yml','release-promotion.yml','release-reconciliation.yml']) {
+        for (const workflow of ['release-qualification.yml','release-promotion.yml']) {
             const list = call('repos/' + repository + '/actions/workflows/' + workflow
                 + '/runs?status=' + state + '&per_page=100');
             if (!Array.isArray(list?.workflow_runs) || !Number.isInteger(list.total_count)

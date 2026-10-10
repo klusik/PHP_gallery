@@ -1,5 +1,12 @@
 # Release qualification evidence
 
+Normal release qualification is automatic after pushing `release/v_X.Y[.Z]`.
+The maintainer approves the resulting exact-Q PR once; automation merges and tags,
+while GitHub Release publication remains manual. The steps below describe the
+retained local evidence/recovery utility, not additional required release steps.
+See [RELEASE_LIFECYCLE.md](RELEASE_LIFECYCLE.md) for hosted ownership and live
+acceptance limits. CI-first instructions in root `AGENTS.md` take precedence.
+
 `RELEASE.md` remains the authoritative release workflow. This companion tool
 records what still needs human review for an exact release artifact. It does not
 run tests, generate a manifest, build the manual, package a release, or perform

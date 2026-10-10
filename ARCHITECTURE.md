@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.126';
+const CMS_VERSION = '0.126.1';
 ```
 
 Update-related code uses:
@@ -2194,48 +2194,33 @@ Detailed behavior is documented in `docs/SMART_GALLERIES.md`.
 
 ## Release Documentation
 
-The guarded release architecture is in [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
-`.github/scripts/release-origin.mjs` binds each release to a human-selected
-immutable develop commit, original published main tag and unchanged origin
-record. Tag object, peeled published commit, previous release-side commit and
-tree are separate; schema v1 stays immutable and v_0.125 uses explicit
-UNKNOWN_LEGACY evidence. Release Stage A/B runs centrally before generated assets, while
-`.github/scripts/release-promotion.mjs` remains the sole protected publisher.
-An advanced main returns a bounded fail-closed decision with current main
-SHA/tree, previous qualification and a separately reviewed new-candidate path.
-Publication is not equivalent to lifecycle completion.
+The automatic reviewed release architecture is in
+[docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md). A maintainer push initializes
+an immutable O directly after selected develop D0. Existing Stage A/B, AI notes,
+locked TinyTeX/manuals and complete hosted matrix qualify exact prepared Q.
+The bot opens one PR and dispatches completion at Q through the already registered
+workflow filename. Its observer waits for one owner approval before protected standard merge
+M=[P,Q], full-tree verification, create-only tag and independent safe develop FF.
+GitHub Release publication remains manual. Previous main M need not be an ancestor
+of later Q. A tagged predecessor remains usable before manual publication when
+its exact hosted qualification and reviewed merge can be proved.
 
-`.github/scripts/release-reconciliation.mjs` verifies an owner-performed true FF
-to release-side Q or a single-parent L over parallel develop. It recomputes the
-complete D0/D/Q tree, verifies retained history, explicit conflict decisions and
-binary/full-index patch digests, and binds exact CI/owner acceptance to immutable
-release evidence. No tagged-main ancestry or develop merge is required.
-The unchanged-develop FF verifier independently checks retained selected ancestry
-and rejects any merge commit in the new develop range.
-`.github/scripts/start-new-release.mjs` atomically creates future immutable origins
-and predecessor pins and hands off to existing qualification. The first v_0.126
-uses a qualified release-ref PR-only bootstrap before the new main publisher.
-The create-only ref operation cannot lease several refs at once; fresh checks
-before creation and handoff reject tag/source races and retain any created origin
-unchanged for explicit owner recovery.
-`.github/scripts/release-retirement.mjs` checks publication, linear CI evidence,
-dependent PRs/workflows and an expected-SHA remote deletion lease. These are
-hosted-maintainer tools rather than shipped application modules. Checked-in
-example GitHub rulesets and tests do not activate effective server protections.
-
-Qualification can prepare by dispatch, but promotion requires a completed normal
-push-triggered qualification because GitHub excludes dispatch job checks from PR
-requirements. Exact custom checks and complete central matrix evidence are still
-required. Unknown check eligibility or app binding remains fail-closed; a future
-event/App bridge needs separate live acceptance rather than a token fallback.
-SHA-bound checks carry explicit kind/run/attempt/SHA `external_id` evidence;
-GitHub Actions rewrites `details_url`, so release verifiers never infer the run
-identity from that navigation URL. Actual run metadata and central jobs remain
-independent mandatory server evidence.
-
-`RELEASE.md` is the authoritative release lifecycle contract. `scripts/prepare_release.php` applies only registered mechanical current-version markers and delegates reusable operations to `scripts/release_lib.php`; it deliberately leaves editorial release notes, behavior-sensitive documentation, manual compilation, manifest generation, Git history, and publication explicit. `scripts/check_release.php` is read-only and validates runtime/document/manual/metadata/patch-note/manifest version consistency plus manual-PDF freshness. The central `release` audit profile registers that checker as `release-consistency`, so maintainers and agents do not need to run a second consistency pass immediately before release qualification. Audit profiles are alternatives rather than cumulative steps: release work finishes with one `--profile=release` run, not quick then full then release.
-
-Patch note formatting remains standardized in `PATCH_NOTES_TEMPLATE.md`. AI coding agents and maintainers should use it when replacing the preparation scaffold in `PATCH_NOTES.md` so releases keep consistent structure, technical references, filename citation style, and user impact descriptions.
+`release-promotion.mjs` now owns verification and literal bounded transports;
+`release-completion.mjs` owns the automatic PR/merge/tag/FF orchestration.
+`release-completion-handoff.mjs` owns automatic ref dispatch, bounded approval
+observation/continuation and guarded completion retry. Safe standard Auto-merge
+metadata is supported; no long-lived native Auto-merge is armed before approval.
+`start-new-release.mjs` initializes an existing pushed release branch inside the
+same preparation run. `release-assets.mjs` produces checked manual-publication
+assets. `release-readiness.mjs` records actual token policy visibility read-only.
+Unreadable effective policy, red or stale CI and different merge parents/trees fail
+closed. Ruleset IDs/targets and all effective protections are checked. Omitted
+bypass membership is reported explicitly and remains server enforced; visible
+bypass and malformed policy are rejected for both protected branches. Parallel develop work remains untouched and reports blocked reconciliation.
+Historical origin and reconciliation readers remain for immutable prior evidence;
+manual initialization/reconciliation workflows and automatic publication are retired.
+Optional separately approved branch retirement keeps its historical gates.
+No runtime application responsibilities or production routes change.
 
 ## Phase 1.0 Viewer Account HTTP Boundary
 

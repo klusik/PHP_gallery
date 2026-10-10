@@ -286,7 +286,8 @@ namespace {
 
     $releaseWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml'));
     check(str_contains($releaseWorkflow, "      - 'release/v_*'")
-        && str_contains($releaseWorkflow, 'workflow_dispatch:')
+        && !str_contains($releaseWorkflow, 'workflow_dispatch:')
+        && str_contains($releaseWorkflow, 'Initialize or reuse immutable origin after release push')
         && str_contains($releaseWorkflow, 'name: Prepare release candidate')
         && str_contains($releaseWorkflow, 'contents: write')
         && str_contains($releaseWorkflow, 'prepare_release_candidate.php')
