@@ -2222,6 +2222,7 @@
         "tests/public_content_widget_admin_browser_test.mjs",
         "tests/public_content_widget_admin_position_test.mjs",
         "tests/public_content_widget_contract_test.php",
+        "tests/public_content_widget_db_workflow_test.php",
         "tests/public_content_widget_floating_test.mjs",
         "tests/public_content_widget_markdown_test.php",
         "tests/public_content_widget_public_render_test.php",
