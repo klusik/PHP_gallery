@@ -2606,10 +2606,26 @@ GitHub environment or ruleset is installed, that a human approved an actual
 PR, or that a real release was published/reconciled. CI-first hosted qualification
 and exact source SHA remain authoritative; no new local handoff gate is implied.
 
-Required live acceptance remains separate: ref-dispatched first-release bot PR,
-owner workflow-run and PR approval, exact Release qualification head/test-merge
-eligibility, ordered [P,Q] main parents with tree(Q), owner-only true FF preserving
-Q or exact single-parent L, immutable acceptance assets and the next release.
-Both rulesets stay disabled until separately approved real server testing. Source
-fixtures and a green feature matrix do not establish production release approval.
-No local manual PDF build is part of feature verification.
+`tests/release_completion_handoff_test.mjs` is registered centrally and covers
+limited/redacted API fields on both branches, exposed bypass and effective-policy
+drift, exact-Q dispatch through the registered filename, pagination of existing
+observers, continuation while review is pending, safe non-null Auto-merge metadata,
+foreign/stale/red refusals, full-detail merged PR reuse and automatic interrupted
+tag retry with real Git merge/FF. Existing completion tests retain two consecutive
+versions, ordered parents, tree equality, immutable tag and parallel-develop refusal.
+
+Live `probe` and `probe-child` modes run only on feature/fix/codex branches. They
+record the actually selected workflow ref and dispatch one read-only child using
+GITHUB_TOKEN. Neither job has contents write permission or performs protected
+writes. Their artifacts prove branch dispatch and token-policy visibility, not
+review, merge, tagging or reconciliation acceptance.
+
+Required live acceptance remains separate: automatic exact-Q completion dispatch,
+one human PR approval with no workflow approval/form, exact required-check eligibility,
+ordered [P,Q] main parents with tree(Q), create-only tag on M, true develop FF to Q,
+parallel drift refusal, interruption recovery and a second release. Main ruleset
+24808772 and develop ruleset 24808873 were observed active on 2026-10-10. No server
+settings are changed. The owner declined a test repository; this full E2E remains
+NOT RUN until the later maintainer acceptance. Source fixtures and green feature
+CI do not prove protected release operations. No local manual PDF build is part
+of feature verification.

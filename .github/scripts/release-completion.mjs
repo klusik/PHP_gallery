@@ -37,12 +37,20 @@ import {verifyPreparedAssets} from './release-asset-integrity.mjs';
  */
 /** Permanent merge/approval/tag evidence uploaded alongside manual publication assets.
  * @typedef {CompletionRecord & {schema_version:number,final_main_sha:string,final_tree:string,tag:string,
- * tag_object_sha:string,tag_object_type:string,publication:string,promotion_pr:{number:number,url:string,author:string,
+ * tag_object_sha:string,tag_object_type:string,publication:string,main_policy:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string},promotion_pr:{number:number,url:string,author:string,
  * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}}}} CompletionEvidence
  */
 /** Tagged release and independently observed synchronization, including permanent publication proof.
  * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,detail:string,evidence:CompletionEvidence}} CompletionResult
  */
+
+/**
+ * Space guarded proposal attempts after temporary PR or dispatch transport failures.
+ * Type: number. Units: milliseconds. Scope: the current qualification proposal job.
+ * Consumers: the bounded PR creation and automatic completion handoff retry in main.
+ * Rationale: ten seconds allows transient GitHub transport/metadata failures to settle before full revalidation.
+ */
+const RELEASE_PROPOSAL_RETRY_DELAY_MS=10000;
 
 /** Return an ordinary read-only qualification request derived from retained evidence.
  * @param {{run_id:string,candidate_sha:string,branch:string}} record Exact server-bound candidate record.
@@ -112,7 +120,7 @@ export function verifyCandidate(record,repository,adapters={}) {
  * @param {string} repository Expected repository.
  * @param {string} notes Validated target-version patch notes.
  * @param {{api?:CompletionApi,evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers and exact predecessor evidence.
- * @returns {{number:number,html_url:string}} Exact PR awaiting the sole owner approval.
+ * @returns {{number:number,html_url:string}} Exact PR awaiting the sole owner approval, or a verified already merged PR reused for completion recovery.
  */
 export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     const call=adapters.api ?? api;
@@ -121,7 +129,6 @@ export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     const request=qualificationRequest(record);
     if (validateRequest(request)!==record.version) throw new Error('BLOCKED record version differs from release branch.');
     requireQualificationChecks(call,repository,request,record.run_attempt);
-    const base=requireCurrentMainBase(request,repository,{...adapters,api:call,record});
     if (call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {
         throw new Error('BLOCKED stale Q before PR creation.');
     }
@@ -131,10 +138,18 @@ export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     let pr=pulls[0];
     if (pr) pr=call('repos/'+repository+'/pulls/'+pr.number);
     if (pr && pr.state!=='open' && !pr.merged_at) throw new Error('BLOCKED release PR was closed without merge.');
+    if (pr?.merged) {
+        requireBotPullRequest(pr,repository,record.candidate_sha,'main');
+        const observed=inspectMergedPromotion(request,repository,{...adapters,api:call,record});
+        if (observed.pr.number!==pr.number) throw new Error('BLOCKED merged release PR identity changed.');
+        return {number:pr.number,html_url:pr.html_url};
+    }
+    const base=requireCurrentMainBase(request,repository,{...adapters,api:call,record});
+    requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
     if (!pr) pr=call('repos/'+repository+'/pulls','POST',{title:'Release v_'+record.version,head:record.branch,base:'main',
         maintainer_can_modify:false,body:'Qualified head Q: `'+record.candidate_sha+'`\n\n'
             +'[Complete qualification and manual publication assets](https://github.com/'+repository+'/actions/runs/'+record.run_id+')\n\n'
-            +'Approve this exact head once. The review workflow performs a protected standard merge, immutable tag and safe develop FF. '
+            +'Approve this exact head once. Automatically dispatched completion preserves the protected standard merge, immutable tag and safe develop FF. '
             +'GitHub Release publication remains manual.\n\n'+notes+'\n\nRefs #101, #133'});
     requireBotPullRequest(pr,repository,record.candidate_sha,'main');
     if (pr.base?.sha!==base || requireCurrentMainBase(request,repository,{...adapters,api:call,record})!==base
@@ -192,7 +207,7 @@ export function completeRelease(record,repository,number,adapters={}) {
         throw new Error('BLOCKED conflicting target tag exists before merge.');
     }
     verifyCandidate(record,repository,{...adapters,publishedMainSha:pr.merged ? pr.merge_commit_sha : undefined});
-    requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
+    const mainPolicy=requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
     const reviews=call('repos/'+repository+'/pulls/'+number+'/reviews?per_page=100');
     const approval=effectiveOwnerReview(reviews,{...pr,merged_at:pr.merged_at ?? new Date().toISOString()},repository.split('/')[0],record.candidate_sha);
     if (!approval) throw new Error('BLOCKED sole human owner approval of exact Q is missing.');
@@ -236,6 +251,7 @@ export function completeRelease(record,repository,number,adapters={}) {
     if (identity.commit_sha!==observed.main.sha) throw new Error('BLOCKED tag differs after creation.');
     const evidence={...record,schema_version:1,final_main_sha:observed.main.sha,final_tree:observed.main.commit.tree.sha,
         tag,tag_object_sha:identity.tag_object_sha,tag_object_type:identity.tag_object_type,publication:'MANUAL_PENDING',
+        main_policy:mainPolicy,
         promotion_pr:{number:observed.pr.number,url:observed.pr.html_url,author:observed.pr.user.login,
             reviewed_sha:record.candidate_sha,merge_commit_sha:observed.pr.merge_commit_sha,
             merged_at:observed.pr.merged_at,approval:observed.ownerReview}};
@@ -261,26 +277,49 @@ export function completeRelease(record,repository,number,adapters={}) {
     return result;
 }
 
-/** Create a qualified PR or finish the exact review-event candidate and retain completion evidence.
- * @returns {Promise<void>} Opens a PR or awaits its merge preview and performs reviewed merge/tag/FF; never creates a GitHub Release.
+/** Create and automatically dispatch a qualified PR or complete its server-bound approval and retain evidence.
+ * @returns {Promise<void>} Opens/dispatches a PR, continues an approval wait or performs reviewed merge/tag/FF; never creates a GitHub Release.
  */
 export async function main() {
     const repository=process.env.GITHUB_REPOSITORY ?? '';
+    const {retryDispatch,observeApproval,retryCompletion}=await import('./release-completion-handoff.mjs');
     if (process.env.RELEASE_ACTION==='open') {
         const record=JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD),'utf8'));
         const notes=readFileSync(resolve(process.env.RELEASE_NOTES),'utf8');
         verifyPreparedAssets(resolve(process.env.RELEASE_ASSETS),record.candidate_sha,record.source_base);
-        const pr=openQualifiedPullRequest(record,repository,notes);
-        output('GITHUB_STEP_SUMMARY','Approve the exact qualified release PR once: '+pr.html_url);
-        return;
+        for (let attempt=0;attempt<3;attempt++) {
+            try {
+                const pr=openQualifiedPullRequest(record,repository,notes);
+                const handoff=await retryDispatch(record,repository,pr.number);
+                output('GITHUB_STEP_SUMMARY','Approve the exact qualified release PR once: '+pr.html_url+'; completion '+handoff+'.');
+                return;
+            } catch (error) {if (attempt===2) throw error;}
+            await new Promise(resolve=>{
+                setTimeout(resolve,RELEASE_PROPOSAL_RETRY_DELAY_MS);
+            });
+        }
     }
     const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-    const pr=event.pull_request;
-    if (!['pull_request_review','pull_request'].includes(process.env.GITHUB_EVENT_NAME)
+    const dispatched=process.env.GITHUB_EVENT_NAME==='workflow_dispatch';
+    const pr=dispatched?api('repos/'+repository+'/pulls/'+process.env.RELEASE_PR_NUMBER):event.pull_request;
+    if (!['pull_request_review','pull_request','workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME)
         || !pr || !Number.isSafeInteger(pr.number)) throw new Error('BLOCKED release PR lifecycle event required.');
     const record=loadQualification(repository,pr.head.sha);
-    await waitForMergeability(repository,pr.number,record.candidate_sha,record.initial_main_sha);
-    const result=completeRelease(record,repository,pr.number);
+    if (dispatched) {
+        if (process.env.GITHUB_REF!=='refs/heads/'+record.branch || process.env.GITHUB_SHA!==record.candidate_sha
+            || process.env.CANDIDATE_SHA!==record.candidate_sha || process.env.QUALIFICATION_RUN!==record.run_id) {
+            throw new Error('BLOCKED completion dispatch differs from qualified release ref, Q or run.');
+        }
+        await waitForMergeability(repository,pr.number,record.candidate_sha,record.initial_main_sha);
+        const current=api('repos/'+repository+'/pulls/'+pr.number);
+        verifyCandidate(record,repository,{publishedMainSha:current.merged?current.merge_commit_sha:undefined});
+        if (await observeApproval(record,repository,pr.number)==='PENDING') {
+            const handoff=await retryDispatch(record,repository,pr.number,api,process.env.GITHUB_RUN_ID);
+            output('GITHUB_STEP_SUMMARY','Exact-Q owner review remains pending; automatic continuation '+handoff+'.');
+            return;
+        }
+    }
+    const result=await retryCompletion(record,repository,pr.number);
     writeFileSync(resolve(process.env.RUNNER_TEMP,'release-completion.json'),JSON.stringify(result,null,2)+'\n');
     const proof=JSON.stringify(result.evidence,null,2)+'\n';
     writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.json'),proof);

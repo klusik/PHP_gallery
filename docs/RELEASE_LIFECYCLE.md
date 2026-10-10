@@ -28,9 +28,14 @@ The active main policy requires one human approval, stale-review dismissal,
 merge commits only, no force/deletion and the Actions `Release qualification`
 context. The active develop policy requires linear history, non-force/deletion
 and the Actions `Complete required CI matrix` context, without a mandatory PR.
-The scripts also require the complete installed/effective policy and empty bypass
-inventory. Missing or redacted policy data is BLOCKED, never implicit approval.
-No new privileged integration or policy bypass is introduced.
+The scripts verify the installed ruleset ID/name/source, active branch target and
+all effective branch rules. Exposed bypass inventories must be empty; exposed
+current-user bypass must be `never`. An omitted `bypass_actors` is reported as
+`NOT_RETURNED_SERVER_ENFORCED`, never synthesized as `[]`. Server enforcement
+remains authoritative for hidden bypass membership. Malformed/null inventories,
+visible bypass, unknown rules, extra required contexts and changed review or
+history requirements block completion. This client visibility correction applies
+to both main and develop; it changes no server protection or credential.
 
 ## Ownership and event handoff
 
@@ -51,36 +56,59 @@ integrity metadata are independently rehashed before the bot creates or reuses o
 The independent WinApp version is preserved; its installer is built only for
 shipped WinApp changes. WinApp regression coverage remains mandatory in CI.
 
-`release-promotion.yml` reacts to human `pull_request_review: submitted` approval.
-It uses the qualified PR head carried by that event, not a default-branch dispatch.
-This permits the first release carrying the new completion code without an
-intermediate main commit. Before candidate code executes, inline checks require a
-successful Actions release binding on Q, wait for the run if approval arrives
-immediately, and bind its server workflow/event/attempt to the retained exact-Q
-record. The completion helper then requires the complete successful latest attempt, exact record/origin/predecessor,
-full PR detail, final effective owner approval on Q and active compatible policies.
-It polls the asynchronously computed test merge for at most sixty seconds, while
-refusing changed P/Q or an explicit conflict. It checks the preview parent order/tree, rechecks P and Q, and asks the
-server to merge with `merge_method=merge` and expected head Q. GitHub enforces the
-review and status rules. Completion independently verifies the resulting M before
-creating a tag. A concurrent main change or differing merge result stops tagging.
-GitHub's merge API has no conditional expected-base field: the guards narrow this
-race and post-merge verification refuses a mismatched result; they cannot roll
-back an already server-accepted merge. Live isolated acceptance must measure it.
+Qualification opens/reuses the full-detail bot PR and automatically dispatches
+`release-promotion.yml` at the exact release branch Q. The filename already exists
+on default main with `workflow_dispatch`, which supplies GitHub registration;
+the dispatch `ref` selects the new workflow from Q. No new commit on main, manual
+form, workflow-run approval or extra integration is required. Inputs are populated
+by qualification and bind PR number, Q, branch and run. The observer waits for
+that qualification run to finish successfully before executing Q's helpers.
 
-Tagging occurs in that same job because token-created closed/push events cannot
-be assumed to start another workflow. A real human merged-PR `closed` event is an
-additional retry path. Re-running a failed completion job re-reads the full PR:
-if merge already succeeded it verifies M, then creates the missing tag. An
-existing correct tag is read-only; a conflicting tag fails without moving it.
-No GitHub Release create/edit/publish operation exists in this pipeline.
+This is the first-release bootstrap, independent of new review subscriptions
+being installed on main. GitHub documents
+[dispatch branch selection](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+and the [GITHUB_TOKEN dispatch exception](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+The existing human review/merged-PR events remain additional completion paths;
+the lifecycle does not require those events to route the new workflow before
+its first merge. Token-created closed/push events are not completion triggers.
 
-GitHub can require separate workflow approval for PRs opened with GITHUB_TOKEN.
-Release PRs to main therefore do not trigger the redundant generic PR matrix;
-full exact-Q release qualification has already run. The required release context
-is authored by the same Actions App and explicitly verified. Review-triggered
-completion is human initiated. Actual GitHub routing and check eligibility remain
-a live acceptance item until an isolated E2E run proves them.
+Inline bootstrap verifies the complete same-repository bot PR and latest Actions
+check binding, then the successful run/path/event/attempt and retained record,
+before checking out exact Q. The helper validates full qualification, immutable
+origin/predecessor, actual required checks, effective policies and final owner
+approval of Q. It observes reviews in one-minute intervals for up to four hours.
+A still-pending review automatically dispatches another exact-Q observer below
+the five-hour job limit. Observable active workers are reused; per-PR concurrency
+serializes possible overlapping dispatches. Drift or a closed unmerged PR stops
+without writes. This waiting consumes hosted runner time while review is pending.
+
+A safe existing `auto_merge` object is accepted only for standard `merge` enabled
+by the workflow bot or human owner, with the same exact bot PR identity. Native
+Auto-merge was inspected through GitHub's actual GraphQL input schema: it supports
+`expectedHeadOid` but no conditional expected-base P. The lifecycle therefore
+does not arm a long-lived native Auto-merge request while awaiting approval.
+Instead, its automatic observer rechecks P/Q immediately after approval, validates
+the test merge parents/tree and requests protected server merge with expected Q.
+If native Auto-merge or the owner already merged, it inspects that actual M and
+continues. Server review and required checks remain mandatory.
+
+GitHub's asynchronous test merge is polled for at most sixty seconds. Main and Q
+are rechecked before the server merge; the accepted M is independently required
+to have `parents(M)=[P,Q]` and `tree(M)=tree(Q)` before any tag write. The merge API
+has no expected-base field, so a concurrent accepted base update remains a narrow
+server race: verification refuses tagging a differing result and cannot undo an
+already accepted merge. This limit is unchanged and requires live acceptance.
+
+PR creation/dispatch and completion each retry temporary interruptions up to
+three times, re-reading and validating mutable identities. Each approval observation
+also retries temporary read failures rather than silently abandoning the first-release
+worker; persistent unreadable or invalid state still blocks without writes. Completion observes
+an existing M, creates only a missing tag and retries transient develop transport
+failure. A correct tag is read-only; a conflicting tag fails without moving it.
+A pending review continues automatically, while a persistent safety blocker is
+reported rather than bypassed. No GitHub Release create/edit/publish operation
+exists. The generic PR matrix excludes main to avoid redundant token-created
+PR workflow approvals; exact-Q release qualification owns the required context.
 
 ## Previous release and immutable evidence
 
@@ -119,9 +147,10 @@ conflicting replay is part of the normal lifecycle.
 ## Retired and historical mechanisms
 
 The manual Start New Release workflow and separately approved reconciliation
-workflow are removed. Promotion workflow dispatch modes, deployment approvals,
-first-release bootstrap dispatch, red-check override and automatic GitHub publisher
-are removed from the active path. The optional separately approved release-ref
+workflow are removed. Legacy manual promotion/publication modes, deployment approvals, owner-entered
+first-release bootstrap inputs, red-check override and automatic GitHub publisher
+are removed from the active path. Machine-populated completion dispatch is the
+normal bootstrap and approval-wait continuation, never publication authority. The optional separately approved release-ref
 retirement workflow remains because it has independent historical evidence consumers;
 it is never a prerequisite for creating, reviewing, merging or tagging a release.
 Historical origin/predecessor/reconciliation parsers remain for already retained
@@ -160,7 +189,7 @@ The candidate workflow retains actual GITHUB_TOKEN policy readback separately as
 Before claiming operational completion, run the same workflows in an owner-approved
 disposable repository with mirrored policies and existing token permissions. Use
 two successive version branches, one exact-Q human approval each, and negative
-unapproved/red/stale/main-drift/tag-conflict cases. Verify review routing before the
+unapproved/red/stale/main-drift/tag-conflict cases. Verify automatic ref dispatch before the
 workflow reaches default main, rejected protected updates, no extra CI approval,
 M parents/tree, restart after merge and develop FF/parallel refusal. Never use a
 production release as this experiment. Provisioning that separate repository or
@@ -179,10 +208,32 @@ explains that this field is returned only to a principal with write access to th
 ruleset. Merely adding read-only Metadata/Administration access cannot be assumed
 to solve the redaction.
 
-The minimal next decision is a separately approved policy-evidence reader that
-can see the complete installed policy, executes only allowlisted GET operations,
-and never supplies its credential to the merge/tag/FF worker. Prove visibility
-and isolation before configuring it; the existing write worker continues to use
-GITHUB_TOKEN and server protections. No such integration, credential or server
-setting was created by this feature. Until it is approved and qualified, live
-automatic completion remains BLOCKED despite successful source CI.
+The P0 repair authorized on 2026-10-10 removes that unavailable client-side
+precondition for both branches. It does not claim hidden lists were read. Installed
+identity, branch conditions and effective protections are independently checked;
+actual token diagnostics retain the omission and server-enforcement status. No
+attestation comment, privileged reader, new secret or server setting is needed.
+
+The feature-only `probe`/`probe-child` dispatch modes permit live observation of
+selected workflow ref and token-created child dispatch using the existing token,
+with contents read and no merge/tag/develop operations. They retain routing and
+policy artifacts. They cannot run on release/main/develop and cannot qualify a
+release. A green transport probe proves routing and token visibility only.
+
+Measured on 2026-10-10 at source `890ad88b8fee6f16f1c9de56818e4987e9979f91`:
+[parent probe 38038292598](https://github.com/klusik/PHP_gallery/actions/runs/38038292598)
+and [token-dispatched child 38038309384](https://github.com/klusik/PHP_gallery/actions/runs/38038309384)
+both succeeded. Their retained `dispatch-routing.json` identifies the new workflow
+at `refs/heads/feature/ci_fix`; the child actor is `github-actions[bot]`, even though
+main still contains the legacy dispatch-only workflow. Both release completion
+jobs were deliberately skipped and the probe jobs had no contents write permission.
+Actual token readback verified rulesets 24808772/24808873 and effective controls,
+reported missing bypass membership honestly and observed current-actor bypass
+`never`. This proves the chosen automatic dispatch transport under current repository
+settings without assuming new review events exist on main. It does not prove a
+real PR approval, required-check eligibility, merge, tag or develop update.
+
+The owner declined a disposable test repository for this task. Full live
+approval/merge/tag/FF and the next release are therefore NOT RUN, pending the
+maintainer's subsequent acceptance. Feature CI and real-Git fixtures must not be
+presented as proof that a production release has completed.

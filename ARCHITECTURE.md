@@ -2198,7 +2198,8 @@ The automatic reviewed release architecture is in
 [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md). A maintainer push initializes
 an immutable O directly after selected develop D0. Existing Stage A/B, AI notes,
 locked TinyTeX/manuals and complete hosted matrix qualify exact prepared Q.
-The bot opens one PR; its sole owner approval triggers protected standard merge
+The bot opens one PR and dispatches completion at Q through the already registered
+workflow filename. Its observer waits for one owner approval before protected standard merge
 M=[P,Q], full-tree verification, create-only tag and independent safe develop FF.
 GitHub Release publication remains manual. Previous main M need not be an ancestor
 of later Q. A tagged predecessor remains usable before manual publication when
@@ -2206,11 +2207,16 @@ its exact hosted qualification and reviewed merge can be proved.
 
 `release-promotion.mjs` now owns verification and literal bounded transports;
 `release-completion.mjs` owns the automatic PR/merge/tag/FF orchestration.
+`release-completion-handoff.mjs` owns automatic ref dispatch, bounded approval
+observation/continuation and guarded completion retry. Safe standard Auto-merge
+metadata is supported; no long-lived native Auto-merge is armed before approval.
 `start-new-release.mjs` initializes an existing pushed release branch inside the
 same preparation run. `release-assets.mjs` produces checked manual-publication
 assets. `release-readiness.mjs` records actual token policy visibility read-only.
-Missing/redacted policy, red or stale CI and different merge parents/trees fail
-closed. Parallel develop work remains untouched and reports blocked reconciliation.
+Unreadable effective policy, red or stale CI and different merge parents/trees fail
+closed. Ruleset IDs/targets and all effective protections are checked. Omitted
+bypass membership is reported explicitly and remains server enforced; visible
+bypass and malformed policy are rejected for both protected branches. Parallel develop work remains untouched and reports blocked reconciliation.
 Historical origin and reconciliation readers remain for immutable prior evidence;
 manual initialization/reconciliation workflows and automatic publication are retired.
 Optional separately approved branch retirement keeps its historical gates.

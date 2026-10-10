@@ -6,7 +6,7 @@
  * Purpose: Report whether the existing workflow token can prove active release controls.
  * Responsibilities:
  *   - Read actual effective and installed policies without changing GitHub configuration
- *   - Distinguish verified controls from unavailable bypass inventory or incompatible rules
+ *   - Record unavailable bypass membership explicitly beside verified effective controls
  *   - Keep operational blockers visible without treating source CI as production acceptance
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -20,7 +20,7 @@ import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 /** Inspect the live token's policy visibility and required branch controls without writes.
  * @param {string} repository Exact owner/repository.
  * @param {function(string,string=,(import('./release-promotion.mjs').JsonValue|null)=):import('./release-promotion.mjs').JsonValue} call Read-only API adapter whose response fields are independently checked by the policy owner.
- * @returns {{repository:string,main:{status:string,detail:string},develop:{status:string,detail:string},publication:string,operational_acceptance:string}} Independent verified or blocked controls and explicit unperformed live acceptance.
+ * @returns {{repository:string,main:{status:string,detail:string,policy?:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}},develop:{status:string,detail:string,policy?:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}},publication:string,operational_acceptance:string}} Independently verified visible policies, explicit hidden-field visibility and unperformed live acceptance.
  */
 export function inspectReadiness(repository,call=api) {
     const result={repository,main:{status:'BLOCKED',detail:''},develop:{status:'BLOCKED',detail:''},
@@ -28,8 +28,9 @@ export function inspectReadiness(repository,call=api) {
     for (const [branch,name,check] of [['main','Reviewed release promotion to main','Release qualification'],
         ['develop','Reviewed main-to-develop release reconciliation','Complete required CI matrix']]) {
         try {
-            requireOwnerRuleset(call,repository,branch,name,check);
-            result[branch]={status:'VERIFIED',detail:'Active compatible rules, no bypass actors and complete policy visibility.'};
+            const policy=requireOwnerRuleset(call,repository,branch,name,check);
+            result[branch]={status:'VERIFIED',policy,
+                detail:'Installed identity and effective protections verified. Bypass inventory: '+policy.bypass_inventory+'. Server protections remain authoritative.'};
         } catch (error) {result[branch]={status:'BLOCKED',detail:error.message};}
     }
     return result;

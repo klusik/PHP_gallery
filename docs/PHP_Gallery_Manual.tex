@@ -2561,8 +2561,9 @@ manifest generation and~complete exact-Q hosted qualification. Historical origin
 and~published \codeword{v\_0.126} remain unchanged.
 
 After qualification and~manual-publication assets succeed, the~bot opens one PR
-to~main. The~maintainer approves its~exact Q head once. A~human review event starts
-protected standard merge completion; no~workflow form or~deployment approval
+to~main and~automatically dispatches completion at~Q using the~workflow filename
+already registered on~main. The~maintainer approves its~exact Q head once.
+The~observer rechecks P/Q and~requests protected standard merge completion; no~workflow form or~deployment approval
 is~required. The~result must have ordered parents [P,Q] and~Q's complete Git tree.
 The~same job creates the~immutable version tag on~M. A~retry after merge verifies
 the~full PR detail and~creates only a~missing tag; conflicting tags fail closed.
@@ -2576,7 +2577,8 @@ Develop is~advanced only through a~true non-force fast-forward to~qualified Q,
 with active linear-history/CI protection. Parallel develop work stops that
 independent synchronization without changing the~completed tag. No~merge,
 rebase or~replay commit is~created on~develop. Previous M need not~be~an~ancestor
-of~the~next Q. Missing policy visibility, unavailable evidence, stale approval,
+of~the~next Q. Omitted bypass membership is~reported and~remains server enforced;
+visible bypass or~unreadable effective rules stop completion. Unavailable evidence, stale approval,
 red CI or~different parents/trees stop completion. Fixture CI does~not~prove
 live GitHub routing or~protected writes; isolated owner-approved acceptance
 is~documented in~\filepath{docs/RELEASE_LIFECYCLE.md}. Agents never perform

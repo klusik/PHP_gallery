@@ -2487,8 +2487,9 @@ manifest och fullständig kvalificering av exakt Q. Historiska ursprung och den
 publicerade \codeword{v\_0.126} förblir oförändrade.
 
 Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
-Underhållaren godkänner dess exakta Q en gång. Den mänskliga granskningen startar
-skyddad standardmerge utan formulär eller extra deployment-godkännande. M måste
+Arbetsflödet startar avslutet automatiskt på Q genom filen som redan är registrerad
+på main. Underhållaren godkänner exakt Q en gång. Observatören kontrollerar P/Q
+igen och begär skyddad standardmerge utan formulär eller extra deployment-godkännande. M måste
 ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
 Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
 hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
@@ -2502,7 +2503,8 @@ Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
 med aktivt skydd för linjär historik och CI. Parallell utveckling stoppar den
 separata synkroniseringen och bevarar den färdiga taggen. Ingen merge-, rebase-
 eller replay-commit skapas på develop. Föregående M behöver inte vara förfader
-till nästa Q. Saknad policyinsyn eller evidens, gammalt godkännande, rött CI
+till nästa Q. Utelämnade bypass-data redovisas och förblir serverstyrda; synlig
+bypass eller oläsbara effektiva regler stoppar avslutet. Saknad evidens, gammalt godkännande, rött CI
  och andra föräldrar/träd blockerar avslut. Isolerad acceptans av verkligt
 GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; fixture-CI
 ersätter inte live-acceptans. Agenter utför inte skyddad integration eller

@@ -2487,8 +2487,9 @@ stávající AI poznámky, uzamčený TinyTeX, všechny čtyři manuály, manife
 \codeword{v\_0.126} zůstávají beze změny.
 
 Po kvalifikaci a~přípravě artefaktů bot vytvoří jediný PR do main.
-Správce jednou schválí přesnou hlavu Q. Lidské schválení spustí chráněný
-standardní merge bez formuláře workflow a~schválení deploymentu. Výsledný M
+Workflow automaticky spustí dokončení na Q pomocí souboru již registrovaného
+na main. Správce jednou schválí přesnou hlavu Q. Worker znovu ověří P/Q
+a~požádá server o~chráněný standardní merge bez formuláře workflow a~schválení deploymentu. Výsledný M
 musí mít rodiče [P,Q] v~tomto pořadí a~úplný Git tree shodný s~Q. Stejná úloha
 vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
 jen chybějící tag; konfliktní tag způsobí chybu.
@@ -2501,8 +2502,10 @@ při změně dodávaného obsahu WinApp; jeho samostatná verze se zachovává.
 Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
 s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou
 synchronizaci a~zachová dokončený tag. Na develop nevzniká merge, rebase ani
-replay commit. Předchozí M nemusí být předkem dalšího Q. Chybějící viditelnost
-pravidel, nedostupné důkazy, staré schválení, červené CI nebo odlišní rodiče/tree
+replay commit. Předchozí M nemusí být předkem dalšího Q. Vynechaný seznam bypass
+se výslovně zaznamená a~zůstává pod serverovou ochranou; viditelný bypass nebo
+nečitelná efektivní pravidla dokončení odmítnou. Nedostupné důkazy, staré
+schválení, červené CI nebo odlišní rodiče/tree
 zablokují dokončení. Izolované ověření skutečného chování GitHubu popisuje
 \filepath{docs/RELEASE_LIFECYCLE.md}; testovací CI nenahrazuje živou akceptaci.
 Agenti při implementaci neprovádějí chráněnou integraci ani produkční vydání.

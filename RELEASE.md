@@ -101,15 +101,17 @@ The final gate checks that the release branch still points to the qualified cand
    required `manual-winapp-installer`.
 
 No normal step requests SHA/run IDs, a workflow dispatch or deployment approval.
-A changed head needs fresh qualification. Missing/red mandatory checks or policy
-visibility are BLOCKED. GitHub Release publication is never automatic.
+A changed head needs fresh qualification. Missing/red mandatory checks or unreadable effective
+policy are BLOCKED. Omitted bypass membership is explicitly recorded and remains
+server enforced; it is never replaced with a fabricated empty list. GitHub Release publication is never automatic.
 
 The complete parent/tree, token-event, retry and synchronization contract is in
 [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md). Main requires one human
 approval and merge commits; develop requires linear non-force FF and exact CI.
 The installed controls are inspected, never changed by the implementation.
 Origin initialization and preparation write only the corresponding release branch.
-Review-triggered completion independently verifies `parents(M)=[P,Q]` and
+Qualification automatically dispatches completion at Q before the workflow reaches
+default main. The observer waits for the single owner approval and independently verifies `parents(M)=[P,Q]` and
 `tree(M)=tree(Q)` before tagging M. Parallel develop work is retained and reported
 as blocked reconciliation without undoing the correct tag.
 

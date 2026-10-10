@@ -117,8 +117,13 @@ export function requireQualificationChecks(call,repository,request,runAttempt) {
         // Independent PR checks with this display name cannot authorize or invalidate Q.
         const identity='release:'+request.runId+':'+runAttempt+':'+request.candidate;
         const matches=checks.check_runs.filter(check=>check.name===name && check.external_id===identity);
+        const superseded=checks.check_runs.some(check=>{
+            const newer=qualificationCheckBinding(check.external_id);
+            return check.name===name && check.app?.id===15368 && check.head_sha===request.candidate
+                && newer?.kind==='release' && newer.sha===request.candidate && check.id>matches[0]?.id;
+        });
         const binding=qualificationCheckBinding(matches[0]?.external_id);
-        if (matches.length!==1 || matches[0].app?.id!==15368 || matches[0].head_sha!==request.candidate
+        if (matches.length!==1 || superseded || matches[0].app?.id!==15368 || matches[0].head_sha!==request.candidate
             || matches[0].status!=='completed' || matches[0].conclusion!=='success'
             || binding?.kind!=='release' || binding.runId!==request.runId || binding.sha!==request.candidate
             || String(binding.attempt)!==runAttempt) {

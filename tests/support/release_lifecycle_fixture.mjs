@@ -25,7 +25,7 @@ import {verifyReleaseOrigin} from '../../.github/scripts/release-origin.mjs';
  * @typedef {import('../../.github/scripts/release-promotion.mjs').JsonValue} FixtureJson
  */
 /** Complete PR fields needed to bind list/detail, exact head, protected merge and human review.
- * @typedef {{number:number,node_id:string,user:{login:string},state:string,merged:boolean,auto_merge:null,
+ * @typedef {{number:number,node_id:string,user:{login:string},state:string,merged:boolean,auto_merge:null|{merge_method:string,enabled_by:{login:string}},
  * head:{ref:string,sha:string,repo:{full_name:string}},base:{ref:string,sha:string,repo:{full_name:string}},
  * mergeable:boolean,merge_commit_sha:string,merged_at:string|null,created_at:string,html_url:string,merged_by?:{login:string}} FixturePullRequest
  */
@@ -96,7 +96,7 @@ export function lifecycleFixture(version='1.2.1') {
         if (method!=='GET') state.writes.push({path,method,payload});
         const tail=path.replace('repos/'+repository+'/','');
         if (/^collaborators\/[\w.-]+\/permission$/.test(tail)) return {permission:state.permission};
-        if (tail==='rulesets') return rules.map(rule=>({id:rule.id,name:rule.name,enforcement:rule.enforcement}));
+        if (tail==='rulesets?per_page=100') return rules.map(rule=>({id:rule.id,name:rule.name,enforcement:rule.enforcement}));
         if (/^rulesets\/[12]$/.test(tail)) {
             const rule=structuredClone(rules[Number(tail.at(-1))-1]);
             if (!state.policyVisible) delete rule.bypass_actors;

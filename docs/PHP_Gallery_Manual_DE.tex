@@ -2493,8 +2493,9 @@ TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q
 Historische Ursprünge und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
 
 Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
-nach main. Der Maintainer genehmigt dessen exakten Q-Stand einmal. Das menschliche
-Review startet den geschützten Standard-Merge ohne Workflow-Formular oder zusätzliche
+nach main und startet den Abschluss automatisch auf Q über die auf main bereits
+registrierte Workflow-Datei. Der Maintainer genehmigt den exakten Q-Stand einmal.
+Der Worker prüft P/Q erneut und fordert den geschützten Standard-Merge an ohne Workflow-Formular oder zusätzliche
 Deployment-Genehmigung. M muss die geordneten Eltern [P,Q] und denselben vollständigen
 Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
 Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
@@ -2509,8 +2510,9 @@ Develop wird nur durch echtes nicht erzwungenes Fast-forward auf geprüftes Q
 mit aktivem Schutz für lineare Historie und CI aktualisiert. Parallele Entwicklung
 stoppt diese separate Synchronisierung und lässt den fertigen Tag bestehen.
 Auf develop entsteht kein Merge-, Rebase- oder Replay-Commit. Das vorherige M
-muss kein Vorfahr des nächsten Q sein. Fehlende Richtliniensichtbarkeit oder
-Nachweise, veraltete Genehmigung, rotes CI und andere Eltern/Bäume blockieren
+muss kein Vorfahr des nächsten Q sein. Ausgelassene Bypass-Daten werden ausdrücklich
+protokolliert und bleiben serverseitig geschützt; sichtbarer Bypass oder unlesbare
+effektive Regeln blockieren. Fehlende Nachweise, veraltete Genehmigung, rotes CI und andere Eltern/Bäume blockieren
 den Abschluss. Isolierte Abnahme des echten GitHub-Verhaltens beschreibt
 \filepath{docs/RELEASE_LIFECYCLE.md}; Fixture-CI ersetzt keine Live-Abnahme.
 Agenten führen während der Implementierung keine geschützte Integration

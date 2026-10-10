@@ -722,3 +722,25 @@ Permanent repairs from hotfix `9d187d3663f96f7fa10451001d61ddb31e276479` are rec
 in `docs/RELEASE_LIFECYCLE.md`. No hardcoded recovery identity, attestation comment
 or one-off environment is part of the normal path. Its cleanup stays PENDING
 until final CI and durable transfer are proven.
+
+## Completion before the workflow reaches default main
+
+Owner: hosted release completion/handoff tooling. The existing dispatchable
+`release-promotion.yml` on main supplies registration while its exact-Q release
+ref supplies the new automatic workflow. This protects the first release after
+integration without an untagged main commit or manual bootstrap form. Usage is
+unknown until live release acceptance; feature-only transport probes and central
+handoff/real-Git fixtures cover the selection and idempotence contracts. Retire
+this bootstrap only after confirming every supported installation has the new
+completion subscriptions on default main and proving equivalent single-approval
+recovery. Bounded review-wait continuation remains supported while asynchronous
+owner approval is part of the release contract.
+
+Ruleset installation-token omission of `bypass_actors` is supported for both
+protected branches. Missing is explicitly distinguished from visible empty or
+malformed/nonempty. Server protection remains authoritative for hidden membership;
+visible policy identity, active target, effective checks/review/history requirements
+and current-user bypass are independently validated. Usage: observed for both
+production Actions-token responses; hidden membership is never claimed as checked.
+Retire omission handling only if GitHub guarantees this field for the existing
+token permission scope and live/negative regression evidence proves that contract.

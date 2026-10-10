@@ -10,8 +10,28 @@
 #   - Leave GitHub Release publication to the maintainer
 # Author: Rudolf Klusal
 name: Automatic reviewed release completion
+run-name: Release completion ${{ inputs.mode || github.event_name }} at ${{ github.ref_name }}
 
 on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Automatic completion or read-only feature-branch transport probe.
+        type: choice
+        default: complete
+        options: [complete, probe, probe-child]
+      pr_number:
+        description: Server-derived bot release PR number; supplied by qualification.
+        type: string
+      candidate_sha:
+        description: Exact qualified Q; supplied by qualification.
+        type: string
+      qualification_run:
+        description: Exact hosted release run; supplied by qualification.
+        type: string
+      release_branch:
+        description: Qualified release branch; supplied by qualification.
+        type: string
   pull_request_review:
     types: [submitted]
   pull_request:
@@ -21,34 +41,55 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-completion-${{ github.event.pull_request.number }}
+  group: release-completion-${{ inputs.pr_number || github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+  CANDIDATE_SHA: ${{ inputs.candidate_sha || github.event.pull_request.head.sha }}
+  REQUESTED_RUN: ${{ inputs.qualification_run }}
+  RELEASE_BRANCH: ${{ inputs.release_branch || github.event.pull_request.head.ref }}
 
 jobs:
   complete:
     if: >-
-      github.event.pull_request.base.ref == 'main' &&
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'complete' && startsWith(github.ref, 'refs/heads/release/v_')) ||
+      (github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login == 'github-actions[bot]' &&
       startsWith(github.event.pull_request.head.ref, 'release/v_') &&
       (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' ||
-       github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+       github.event_name == 'pull_request' && github.event.pull_request.merged == true))
     name: Complete exact reviewed release and safe develop FF
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Four-hour review observation plus bounded qualification/transport retries;
+    # pending reviews dispatch the same Q again without another human action.
+    timeout-minutes: 300
     permissions:
       contents: write
       pull-requests: write
-      actions: read
+      actions: write
       checks: read
     steps:
       - name: Verify server qualification before executing the release checkout
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${RELEASE_PR_NUMBER}" > "${RUNNER_TEMP}/completion-pr.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const e=process.env, pr=JSON.parse(readFileSync(e.RUNNER_TEMP+'/completion-pr.json','utf8'));
+          if (!/^[1-9]\d*$/.test(e.RELEASE_PR_NUMBER) || pr.number!==Number(e.RELEASE_PR_NUMBER)
+            || !/^[a-f0-9]{40}$/.test(e.CANDIDATE_SHA) || pr.head?.sha!==e.CANDIDATE_SHA
+            || pr.head?.repo?.full_name!==e.GITHUB_REPOSITORY || pr.base?.repo?.full_name!==e.GITHUB_REPOSITORY
+            || pr.base?.ref!=='main' || pr.user?.login!=='github-actions[bot]' || pr.head?.ref!==e.RELEASE_BRANCH
+            || !/^release\/v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(e.RELEASE_BRANCH)
+            || (e.GITHUB_EVENT_NAME==='workflow_dispatch' && (e.GITHUB_REF!=='refs/heads/'+e.RELEASE_BRANCH || e.GITHUB_SHA!==e.CANDIDATE_SHA))) {
+            throw Error('BLOCKED foreign or stale automatic release handoff');
+          }
+          NODE
           # Only reviewed same-repository bot releases enter this job. Still require
           # a real successful Actions release identity before checking out its code.
           gh api "repos/${GITHUB_REPOSITORY}/commits/${CANDIDATE_SHA}/check-runs?per_page=100&filter=all" > "${RUNNER_TEMP}/checks.json"
@@ -60,6 +101,7 @@ jobs:
             && /^release:[1-9]\d*:[1-9]\d*:[a-f0-9]{40}$/.test(c.external_id)
             && c.external_id.split(':')[3]===e.CANDIDATE_SHA).sort((a,b)=>b.id-a.id);
           if (!checks.length || checks[0].status!=='completed' || checks[0].conclusion!=='success') throw Error('BLOCKED exact Q is not green');
+          if (e.REQUESTED_RUN && e.REQUESTED_RUN!==checks[0].external_id.split(':')[1]) throw Error('BLOCKED superseded dispatch qualification');
           appendFileSync(e.GITHUB_ENV,'QUALIFICATION_RUN='+checks[0].external_id.split(':')[1]+'\n');
           NODE
       - name: Wait for the qualification run to finish if approval arrived immediately
@@ -70,8 +112,6 @@ jobs:
       - name: Bind successful server run and retained Q record before checkout
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
           set -euo pipefail
@@ -97,7 +137,7 @@ jobs:
           NODE
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.CANDIDATE_SHA }}
           fetch-depth: 0
       - uses: actions/setup-node@v7.0.0
         with:
@@ -117,4 +157,55 @@ jobs:
             ${{ runner.temp }}/release-evidence.json
             ${{ runner.temp }}/release-evidence.sha256
           if-no-files-found: ignore
+          retention-days: 90
+
+  transport-probe:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.mode == 'probe' || inputs.mode == 'probe-child') &&
+      (startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/fix/') || startsWith(github.ref, 'refs/heads/codex/'))
+    name: Observe dispatch routing and Actions-token policy without release writes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Retain actual selected workflow identity and policy visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELECTED_WORKFLOW: ${{ github.workflow_ref }}
+          PROBE_MODE: ${{ inputs.mode }}
+        run: |
+          node .github/scripts/release-readiness.mjs
+          node --input-type=module <<'NODE'
+          import {writeFileSync,appendFileSync} from 'node:fs';
+          const e=process.env;
+          const proof={event:e.GITHUB_EVENT_NAME,ref:e.GITHUB_REF,sha:e.GITHUB_SHA,workflow:e.SELECTED_WORKFLOW,
+            actor:e.GITHUB_ACTOR,mode:e.PROBE_MODE,run:e.GITHUB_RUN_ID,protected_writes:'NONE',release_acceptance:'NOT_RUN'};
+          writeFileSync(e.RUNNER_TEMP+'/dispatch-routing.json',JSON.stringify(proof,null,2)+'\n');
+          appendFileSync(e.GITHUB_STEP_SUMMARY,JSON.stringify(proof,null,2)+'\n');
+          if (e.PROBE_MODE==='probe') writeFileSync(e.RUNNER_TEMP+'/dispatch-child.json',JSON.stringify({
+            ref:e.GITHUB_REF_NAME,inputs:{mode:'probe-child'}}));
+          NODE
+      - name: Dispatch one read-only child using the existing GITHUB_TOKEN
+        if: ${{ inputs.mode == 'probe' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-promotion.yml/dispatches" --method POST --input "${RUNNER_TEMP}/dispatch-child.json"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-dispatch-transport-${{ inputs.mode }}
+          path: |
+            ${{ runner.temp }}/dispatch-routing.json
+            ${{ runner.temp }}/release-readiness.json
+          if-no-files-found: error
           retention-days: 90

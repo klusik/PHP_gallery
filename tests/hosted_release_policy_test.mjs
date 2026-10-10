@@ -73,7 +73,7 @@ const ownerCall=path=>{
     if (path.endsWith('/environments/release-promotion')) return server.environment;
     if (path.endsWith('/environments/release-promotion/deployment-branch-policies?per_page=100'))
         return server.policies;
-    if (path.endsWith('/rulesets')) return [{id:24808772,name:server.ruleset.name,
+    if (path.endsWith('/rulesets?per_page=100')) return [{id:24808772,name:server.ruleset.name,
         enforcement:server.ruleset.enforcement}];
     if (path.endsWith('/rulesets/24808772')) return server.ruleset;
     if (path.endsWith('/rules/branches/main')) return server.ruleset.rules;
@@ -105,9 +105,18 @@ assert.throws(()=>requireOwnerEnvironment(ownerCall,ownerRepo,'release-promotion
 server.policies=structuredClone(ownerPolicies);
 for (const mutate of [
     state=>{state.enforcement='disabled';},
+    state=>{state.id=24808773;},
+    state=>{state.source='intruder/gallery';},
+    state=>{state.target='tag';},
+    state=>{state.current_user_can_bypass='always';},
+    state=>{state.bypass_actors=null;},
     state=>{state.bypass_actors=[{actor_id:1,actor_type:'RepositoryRole',bypass_mode:'always'}];},
     state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.require_last_push_approval=true;},
     state=>{state.rules.find(rule=>rule.type==='required_status_checks').parameters.required_status_checks=[];},
+    state=>{state.rules.find(rule=>rule.type==='required_status_checks').parameters.required_status_checks.push({context:'Foreign CI',integration_id:1});},
+    state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.require_code_owner_review=true;},
+    state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.require_extra_approval_for_unattributed_changes=false;},
+    state=>{state.rules.find(rule=>rule.type==='pull_request').parameters.required_reviewers=[{reviewer_id:1,reviewer_type:'Team'}];},
     state=>{state.rules.push({type:'required_linear_history'});},
     state=>{state.rules.push(structuredClone(state.rules.find(rule=>rule.type==='required_status_checks')));},
     state=>{state.conditions.ref_name.include=['refs/heads/main','refs/heads/develop'];},
@@ -119,13 +128,22 @@ for (const mutate of [
 }
 server.ruleset=structuredClone(ownerRule);
 delete server.ruleset.bypass_actors;
-assert.throws(()=>requireOwnerRuleset(ownerCall,ownerRepo,'main',ownerRule.name,'Release qualification'),
-    /BLOCKED/,'GitHub REST bypass-actor redaction must fail closed.');
+assert.equal(requireOwnerRuleset(ownerCall,ownerRepo,'main',ownerRule.name,'Release qualification').bypass_inventory,
+    'NOT_RETURNED_SERVER_ENFORCED');
+assert.equal(Object.hasOwn(server.ruleset,'bypass_actors'),false,'Redacted fields must not be fabricated.');
+const effectiveMismatch=path=>path.endsWith('/rules/branches/main')
+    ?server.ruleset.rules.filter(rule=>rule.type!=='non_fast_forward'):ownerCall(path);
+assert.throws(()=>requireOwnerRuleset(effectiveMismatch,ownerRepo,'main',ownerRule.name,'Release qualification'),/BLOCKED/);
 server.ruleset=structuredClone(ownerRule);
 const botPr={number:7,user:{login:'github-actions[bot]'},head:{sha:candidate,
     repo:{full_name:ownerRepo}},base:{ref:'main'},created_at:'2026-10-07T15:00:00Z',
 merged_at:'2026-10-08T00:00:00Z'};
 requireBotPullRequest(botPr,ownerRepo,candidate,'main');
+requireBotPullRequest({...botPr,auto_merge:{merge_method:'merge',enabled_by:{login:'github-actions[bot]'}}},ownerRepo,candidate,'main');
+for (const auto_merge of [{merge_method:'squash',enabled_by:{login:'github-actions[bot]'}},
+    {merge_method:'rebase',enabled_by:{login:'owner'}},{merge_method:'merge',enabled_by:{login:'intruder'}}]) {
+    assert.throws(()=>requireBotPullRequest({...botPr,auto_merge},ownerRepo,candidate,'main'),/BLOCKED/);
+}
 assert.throws(()=>requireBotPullRequest({...botPr,user:{login:'owner'}},ownerRepo,candidate,'main'),/BLOCKED/);
 assert.throws(()=>requireBotPullRequest(botPr,ownerRepo,'c'.repeat(40),'main'),/BLOCKED/);
 const ownerReview={id:17,user:{login:'owner'},state:'APPROVED',commit_id:candidate,
@@ -151,6 +169,11 @@ for (const patch of [{app:{id:1}},{head_sha:'b'.repeat(40)},{status:'in_progress
 }
 assert.throws(()=>requireQualificationChecks(()=>({total_count:3,check_runs:[...boundChecks,boundChecks[0]]}),record.repository,request,'1'),/BLOCKED/);
 assert.throws(()=>requireQualificationChecks(()=>({total_count:100,check_runs:boundChecks}),record.repository,request,'1'),/incomplete/);
+for (const conclusion of ['success','failure',null]) {
+    const newer={...boundChecks[0],id:2,external_id:'release:124:1:'+candidate,conclusion};
+    assert.throws(()=>requireQualificationChecks(()=>({total_count:3,check_runs:[...boundChecks,newer]}),record.repository,request,'1'),/stale/,
+        'A later exact-Q release check supersedes an earlier observer even if the older check remains green.');
+}
 // Real GitHub Actions inventory includes both its runner aggregate and programmatic checks.
 const coverageJobs=jobs.map(job=>job.name==='Complete required CI matrix'?{...job,name:'Full CI / '+job.name}:job);
 const synthetic=boundChecks.map((check,index)=>({...check,id:900+index,html_url:'https://example.test/check'}));
@@ -175,7 +198,11 @@ assert.match(completion,/pull_request_review:/);
 assert.match(completion,/types: \[submitted\]/);
 assert.match(completion,/Bind successful server run and retained Q record before checkout/);
 assert.match(completion,/record\.candidate_sha!==e\.CANDIDATE_SHA/);
-assert.doesNotMatch(completion,/workflow_dispatch:|environment:|gh release create|gh release edit|merge_method:'squash'/);
+assert.match(completion,/workflow_dispatch:/);
+assert.match(completion,/inputs.mode == 'complete' && startsWith\(github.ref, 'refs\/heads\/release\/v_'\)/);
+assert.match(completion,/e.GITHUB_SHA!==e.CANDIDATE_SHA/);
+assert.ok(completion.includes("e.REQUESTED_RUN!==checks[0].external_id.split(':')[1]"));
+assert.doesNotMatch(completion,/environment:|gh release create|gh release edit|merge_method:'squash'/);
 assert.match(qualification,/manual-release-assets/);
 assert.match(read('.github/scripts/release-completion.mjs'),/merge_method:'merge'/);
 assert.doesNotMatch(read('.github/scripts/release-completion.mjs'),/release','create|release','edit|force-with-lease/);

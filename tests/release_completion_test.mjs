@@ -6,7 +6,7 @@
  * Purpose: Verify automatic reviewed merge, immutable tagging and linear synchronization with real Git.
  * Responsibilities:
  *   - Cover single approval, exact Q, parent order, full trees and interrupted tag creation
- *   - Refuse red CI, missing policy visibility, stale heads and conflicting tags
+ *   - Refuse red CI, weakened effective policy, stale heads and conflicting tags
  *   - Keep parallel develop work and leave GitHub Release publication manual
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -17,7 +17,7 @@ import {openQualifiedPullRequest,completeRelease,waitForMergeability} from '../.
 import {inspectReadiness} from '../.github/scripts/release-readiness.mjs';
 import {lifecycleFixture} from './support/release_lifecycle_fixture.mjs';
 
-for (const scenario of ['normal','interrupted','parallel','unapproved','red','policy','wrong-tree','conflicting-tag','main-drift','head-drift']) {
+for (const scenario of ['normal','interrupted','parallel','unapproved','red','redacted-policy','wrong-tree','conflicting-tag','main-drift','head-drift']) {
     const f=lifecycleFixture();
     try {
         const initialized=startNewRelease({version:'1.2.1',selected:f.selected},f.repository,f);
@@ -40,7 +40,14 @@ for (const scenario of ['normal','interrupted','parallel','unapproved','red','po
         }
         if (scenario==='unapproved') f.state.review=false;
         if (scenario==='red') f.state.ci=false;
-        if (scenario==='policy') f.state.policyVisible=false;
+        if (scenario==='redacted-policy') {
+            f.state.policyVisible=false;
+            const visible=inspectReadiness(f.repository,f.api);
+            for (const branch of ['main','develop']) {
+                assert.equal(visible[branch].status,'VERIFIED');
+                assert.equal(visible[branch].policy.bypass_inventory,'NOT_RETURNED_SERVER_ENFORCED');
+            }
+        }
         if (scenario==='wrong-tree') f.state.wrongTree=true;
         if (scenario==='conflicting-tag') {
             f.git('git',['push','origin',f.previousMain+':refs/tags/v_1.2.1']);
@@ -61,9 +68,9 @@ for (const scenario of ['normal','interrupted','parallel','unapproved','red','po
             assert.throws(()=>completeRelease(record,f.repository,pr.number,f),/interruption/);
             assert.equal(f.state.pr.merged,true,'Restart observes the real completed merge.');
         }
-        if (['unapproved','red','policy','wrong-tree','conflicting-tag','main-drift','head-drift'].includes(scenario)) {
+        if (['unapproved','red','wrong-tree','conflicting-tag','main-drift','head-drift'].includes(scenario)) {
             assert.throws(()=>completeRelease(record,f.repository,pr.number,f),/BLOCKED/);
-            if (['unapproved','red','policy','main-drift','head-drift'].includes(scenario)) assert.equal(f.state.writes.length,count,'No write without exact approval, CI, policies and unchanged P/Q.');
+            if (['unapproved','red','main-drift','head-drift'].includes(scenario)) assert.equal(f.state.writes.length,count,'No write without exact approval, CI, policies and unchanged P/Q.');
             assert.equal(f.state.tagCreated,0,'Invalid final trees and conflicting tags cannot be tagged.');
             continue;
         }
