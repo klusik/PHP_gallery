@@ -40,9 +40,11 @@ function formatWidgetMarkdown(editor, command) {
  * Synchronize supported page zones and flow/floating settings before form submission.
  *
  * @param {HTMLFormElement} form Active widget editor.
+ * @param {Record<string,string>} labels Server-provided localized accessible labels.
  * @returns {Function} Safe refresh callback shared by preview controls.
  */
-function setupWidgetPlacement(form) {
+function setupWidgetPlacement(form, labels) {
+    const translated = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
     const mode = form.querySelector('[name="placement_mode"]');
     const scope = form.querySelector('[name="page_scope"]');
     const zone = form.querySelector('[name="flow_slot"]');
@@ -63,7 +65,7 @@ function setupWidgetPlacement(form) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'secondary';
-        button.textContent = name.slice(0, 1).toUpperCase() + name.slice(1);
+        button.textContent = translated(name, name.slice(0, 1).toUpperCase() + name.slice(1));
         button.setAttribute('aria-pressed', name === 'desktop' ? 'true' : 'false');
         button.addEventListener('click', () => {
             stage.dataset.device = name;
@@ -78,14 +80,14 @@ function setupWidgetPlacement(form) {
     stage.dataset.device = 'desktop';
     stage.tabIndex = 0;
     stage.setAttribute('role', 'button');
-    stage.setAttribute('aria-label', 'Floating widget location preview. Click or use arrow keys to select custom coordinates.');
+    stage.setAttribute('aria-label', translated('coordinates', 'Floating widget location preview. Click or use arrow keys to select custom coordinates.'));
     const marker = document.createElement('span');
     marker.className = 'public-widgets-position-marker';
     marker.textContent = 'Widget';
     stage.append(marker);
     const caption = document.createElement('p');
     caption.className = 'public-widgets-placement-caption';
-    caption.textContent = 'Select desktop, tablet or mobile. Click inside the dashed preview to set a custom floating location.';
+    caption.textContent = translated('stage_hint', 'Select desktop, tablet or mobile. Click inside the dashed preview to set a custom floating location.');
     tools.append(toggle, stage, caption);
     floating?.insertAdjacentElement('afterend', tools);
     const clamp = (value) => Math.min(1000, Math.max(0, Math.round(Number(value) || 0)));
@@ -109,9 +111,9 @@ function setupWidgetPlacement(form) {
         marker.style.top = String(xy[1] / 10) + '%';
         if (card && width) card.style.maxWidth = String(Math.min(480, Math.max(180, Number(width.value) || 320))) + 'px';
         caption.textContent = stage.dataset.device === 'mobile'
-            ? 'Mobile uses an accessible in-page fallback instead of a fixed overlay.'
-            : isFloating ? 'Click or use arrow keys in the preview to customize the floating position.'
-                : 'In-page widget follows normal page flow and the selected content zone.';
+            ? translated('mobile_hint', 'Mobile uses an accessible in-page fallback instead of a fixed overlay.')
+            : isFloating ? translated('floating_hint', 'Click or use arrow keys in the preview to customize the floating position.')
+                : translated('flow_hint', 'In-page widget follows normal page flow and the selected content zone.');
     };
     stage.addEventListener('click', (event) => {
         if (mode?.value !== 'floating') return;
@@ -157,7 +159,15 @@ export function setupAdminPublicWidgets() {
     for (const button of form.querySelectorAll('[data-widget-format]')) {
         button.addEventListener('click', () => formatWidgetMarkdown(editor, button.dataset.widgetFormat || ''));
     }
-    const refresh = setupWidgetPlacement(form);
+    let labels = {};
+    try {
+        const parsed = JSON.parse(form.dataset.widgetI18n || '{}');
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) labels = parsed;
+    } catch (_) {
+        labels = {};
+    }
+    const translated = (key, fallback) => typeof labels[key] === 'string' ? labels[key] : fallback;
+    const refresh = setupWidgetPlacement(form, labels);
     const preview = document.querySelector('[data-widget-preview]');
     const body = preview?.querySelector('[data-widget-preview-body]');
     const title = preview?.querySelector('.public-content-widget-title');
@@ -173,7 +183,7 @@ export function setupAdminPublicWidgets() {
         const data = new FormData(form);
         data.set('widget_action', 'preview');
         data.set('widget_preview_json', '1');
-        notice.textContent = 'Rendering preview…';
+        notice.textContent = translated('loading', 'Rendering preview…');
         submitter.disabled = true;
         try {
             const response = await fetch(form.action, {
@@ -202,7 +212,7 @@ export function setupAdminPublicWidgets() {
             refresh();
             notice.textContent = result.message || 'Preview updated. No changes saved.';
         } catch (error) {
-            notice.textContent = error instanceof Error ? error.message : 'Preview unavailable.';
+            notice.textContent = error instanceof Error ? error.message : translated('failure', 'Preview unavailable.');
         } finally {
             submitter.disabled = false;
         }
