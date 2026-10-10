@@ -18,7 +18,7 @@ namespace Gallery\Core {
     /**
      * Escape test HTML attributes and text using the production output encoding contract.
      *
-     * @param mixed $value Untrusted data under test.
+     * @param string|int|float|bool|null $value Untrusted scalar text, including optional null, under test.
      * @return string HTML-safe UTF-8 text.
      */
     function e(mixed $value): string

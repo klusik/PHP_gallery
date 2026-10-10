@@ -12,10 +12,44 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
+/**
+ * Minimum desktop width for a fixed, visitor-facing widget enhancement.
+ * Type: number. Units: CSS pixels. Scope: public document layout.
+ * Consumers: updateFloatingWidgets viewport admission.
+ * Rationale: reserve sufficient primary-content and navigation width before overlay placement.
+ */
 const FLOAT_MIN_VIEWPORT_WIDTH = 960;
+
+/**
+ * Minimum viewport height for an unobstructed desktop floating panel.
+ * Type: number. Units: CSS pixels. Scope: public document layout.
+ * Consumers: updateFloatingWidgets viewport admission.
+ * Rationale: small browser windows must retain the accessible inline article instead of an overlay.
+ */
 const FLOAT_MIN_VIEWPORT_HEIGHT = 620;
+
+/**
+ * Maximum simultaneous floating panels regardless of configured widget count.
+ * Type: number. Units: visitor-visible floating articles per page.
+ * Scope: one public-page display. Consumers: updateFloatingWidgets candidate loop.
+ * Rationale: prevent stacked overlays from consuming most of the viewport.
+ */
 const FLOAT_LIMIT = 2;
+
+/**
+ * Minimum margin between a floating article and its usable viewport edges.
+ * Type: number. Units: CSS pixels. Scope: fixed public widget geometry.
+ * Consumers: resolvePublicWidgetFloatingRect clamping.
+ * Rationale: keep the complete panel, focus ring and close control reachable.
+ */
 const FLOAT_EDGE_PADDING = 16;
+
+/**
+ * Minimum gap used when rejecting overlaps with existing controls and panels.
+ * Type: number. Units: CSS pixels. Scope: viewport collision calculations.
+ * Consumers: resolvePublicWidgetFloatingRect overlap checks.
+ * Rationale: preserve separation between widget controls, gallery actions and navigation.
+ */
 const FLOAT_GAP = 12;
 
 /**
