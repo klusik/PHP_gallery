@@ -70,6 +70,7 @@
         "app/controllers/admin_media_renamer.php",
         "app/controllers/admin_openai_text_assist.php",
         "app/controllers/admin_public_inline.php",
+        "app/controllers/admin_public_widgets.php",
         "app/controllers/admin_search_diagnostics.php",
         "app/controllers/admin_settings.php",
         "app/controllers/admin_setup_wizard.php",
