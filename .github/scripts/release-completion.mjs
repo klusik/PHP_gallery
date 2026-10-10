@@ -8,7 +8,7 @@
  *   - Bind PR creation, protected merge and immutable tag to the same qualified Q
  *   - Recheck predecessor, origin, review and effective server controls before writes
  *   - Fast-forward develop only when its exact current head is an ancestor of Q
- *   - Retain completion evidence without creating or publishing a GitHub Release
+ *   - Stage an idempotent unpublished GitHub Release draft after verifying the immutable tag
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -17,7 +17,7 @@ import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {api,command,output,validateRequest,verifyQualification,fetchJobs,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
+import {api,command,output,validateRequest,verifyQualification,fetchJobs,fetchReleases,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
 import {originPath,verifyReleaseOrigin,peelReleaseTag} from './release-origin.mjs';
 import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,qualificationCheckBinding} from './release-owner-authorization.mjs';
 import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs';
@@ -41,7 +41,7 @@ import {verifyPreparedAssets} from './release-asset-integrity.mjs';
  * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}}}} CompletionEvidence
  */
 /** Tagged release and independently observed synchronization, including permanent publication proof.
- * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,detail:string,evidence:CompletionEvidence}} CompletionResult
+ * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,detail:string,evidence:CompletionEvidence,draft_status?:string,draft_url?:string,draft_release_id?:number,draft_error?:string}} CompletionResult
  */
 
 /**
@@ -277,8 +277,104 @@ export function completeRelease(record,repository,number,adapters={}) {
     return result;
 }
 
+
+/** Completion validators with two additional draft-only source/inventory adapters.
+ * @typedef {Parameters<typeof completeRelease>[3] & {execute?:CompletionCommand,readPatchNotes?:()=>string}} DraftAdapters
+ */
+/** Stage one unpublished Release after rechecking exact-Q qualification, reviewed M and immutable tag.
+ * @param {CompletionRecord} record Exact qualified release candidate.
+ * @param {string} repository Expected owner/repository identity.
+ * @param {CompletionResult} result Verified TAGGED completion and its immutable evidence.
+ * @param {DraftAdapters} adapters Isolated API, Git, pagination and exact-Q source adapters.
+ * @returns {{status:'DRAFT_CREATED'|'DRAFT_ALREADY_EXISTS'|'ALREADY_PUBLISHED',release_id:number,url:string}} No publication or asset upload is performed.
+ */
+export function prepareDraftRelease(record,repository,result,adapters={}) {
+    const call=adapters.api ?? api;
+    const git=adapters.git ?? command;
+    const tag='v_'+record.version;
+    if (result.state!=='TAGGED' || record.repository!==repository
+        || validateRequest(qualificationRequest(record))!==record.version
+        || result.tag!==tag || result.candidate_sha!==record.candidate_sha
+        || !/^[a-f0-9]{40}$/.test(result.main_sha)
+        || result.evidence?.final_main_sha!==result.main_sha
+        || result.evidence?.tag!==tag || result.evidence?.candidate_sha!==record.candidate_sha
+        || result.evidence?.promotion_pr?.reviewed_sha!==record.candidate_sha) {
+        throw new Error('BLOCKED draft requires a matching TAGGED exact-Q completion.');
+    }
+    verifyCandidate(record,repository,{...adapters,publishedMainSha:result.main_sha});
+    const observed=inspectMergedPromotion(qualificationRequest(record),repository,{...adapters,api:call,record});
+    if (observed.main.sha!==result.main_sha || observed.pr.merge_commit_sha!==result.main_sha
+        || observed.main.commit.tree.sha!==result.evidence.final_tree
+        || observed.pr.number!==result.evidence.promotion_pr.number) {
+        throw new Error('BLOCKED draft merge, tree or owner-reviewed PR differs from completion evidence.');
+    }
+    if (peelReleaseTag(call,repository,tag).commit_sha!==result.main_sha) {
+        throw new Error('BLOCKED draft tag is missing or does not resolve to verified M.');
+    }
+    const releases=fetchReleases(repository,adapters.execute ?? command);
+    const matches=releases.filter(release=>release.tag_name===tag);
+    if (matches.length>1 || releases.some(release=>release.tag_name!==tag && release.name==='Version '+record.version)) {
+        throw new Error('BLOCKED conflicting release version or duplicate tag identity in complete inventory.');
+    }
+    const releaseUrl=release=>{
+        const prefix='https://github.com/'+repository+'/releases/';
+        if (!Number.isSafeInteger(release.id) || release.id<1
+            || typeof release.html_url!=='string' || !release.html_url.startsWith(prefix)) {
+            throw new Error('BLOCKED release ID or browser URL is unavailable or foreign.');
+        }
+        return release.draft ? release.html_url.replace('/releases/tag/','/releases/edit/') : release.html_url;
+    };
+    if (matches.length===1) {
+        const listed=matches[0];
+        const existing=call('repos/'+repository+'/releases/'+listed.id);
+        if (existing.id!==listed.id || existing.tag_name!==tag || existing.draft!==listed.draft
+            || existing.prerelease!==false || !Array.isArray(existing.assets)) {
+            throw new Error('BLOCKED existing release identity changed or is a conflicting prerelease.');
+        }
+        return {status:existing.draft?'DRAFT_ALREADY_EXISTS':'ALREADY_PUBLISHED',
+            release_id:existing.id,url:releaseUrl(existing)};
+    }
+
+    // release-assets.mjs already uses this exact section of PATCH_NOTES.md to write release-notes.md.
+    // Read the unchanged checkout of Q rather than regenerating notes or downloading large ZIP/PDF assets.
+    if (git('git',['rev-parse','HEAD'])!==record.candidate_sha
+        || git('git',['hash-object','PATCH_NOTES.md'])!==git('git',['rev-parse',record.candidate_sha+':PATCH_NOTES.md'])) {
+        throw new Error('BLOCKED draft source PATCH_NOTES.md does not exactly match qualified Q.');
+    }
+    const source=(adapters.readPatchNotes ?? (()=>readFileSync(resolve('PATCH_NOTES.md'),'utf8')))();
+    const heading='## Version '+record.version;
+    const start=source.indexOf(heading);
+    const end=source.indexOf('\n## Version ',start+1);
+    const notes=start<0?'':source.slice(start,end<0?source.length:end);
+    if (!notes.startsWith(heading+'\n') && !notes.startsWith(heading+'\r\n')) {
+        throw new Error('BLOCKED exact version heading is absent from qualified release notes.');
+    }
+    if (!notes.trim() || source.indexOf(heading,start+heading.length)!==-1) {
+        throw new Error('BLOCKED duplicate or empty exact-version release notes.');
+    }
+    let created;
+    try {
+        created=call('repos/'+repository+'/releases','POST',{
+            tag_name:tag,target_commitish:result.main_sha,name:'Version '+record.version,
+            body:notes,draft:true,prerelease:false,generate_release_notes:false});
+    } catch (error) {
+        throw new Error('Draft create API failed for '+tag+' on verified M '+result.main_sha+': '+error.message,{cause:error});
+    }
+    if (!Number.isSafeInteger(created?.id) || created.id<1) {
+        throw new Error('Draft create API did not return a valid release ID for '+tag+'.');
+    }
+    const confirmed=call('repos/'+repository+'/releases/'+created.id);
+    if (confirmed.id!==created.id || confirmed.tag_name!==tag || confirmed.name!=='Version '+record.version
+        || confirmed.body!==notes || confirmed.draft!==true || confirmed.prerelease!==false
+        || !Array.isArray(confirmed.assets) || confirmed.assets.length!==0
+        || peelReleaseTag(call,repository,tag).commit_sha!==result.main_sha) {
+        throw new Error('BLOCKED newly created draft, notes, assets or immutable tag failed verification.');
+    }
+    return {status:'DRAFT_CREATED',release_id:confirmed.id,url:releaseUrl(confirmed)};
+}
+
 /** Create and automatically dispatch a qualified PR or complete its server-bound approval and retain evidence.
- * @returns {Promise<void>} Opens/dispatches a PR, continues an approval wait or performs reviewed merge/tag/FF; never creates a GitHub Release.
+ * @returns {Promise<void>} Opens/dispatches a PR, waits for approval, or completes verified merge/tag/FF and stages an unpublished draft.
  */
 export async function main() {
     const repository=process.env.GITHUB_REPOSITORY ?? '';
@@ -320,11 +416,32 @@ export async function main() {
         }
     }
     const result=await retryCompletion(record,repository,pr.number);
-    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-completion.json'),JSON.stringify(result,null,2)+'\n');
-    const proof=JSON.stringify(result.evidence,null,2)+'\n';
-    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.json'),proof);
-    writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.sha256'),createHash('sha256').update(proof).digest('hex')+'  release-evidence.json\n');
-    output('GITHUB_STEP_SUMMARY',JSON.stringify(result,null,2));
+    let draftError=null;
+    try {
+        const draft=prepareDraftRelease(record,repository,result);
+        result.draft_status=draft.status;
+        result.draft_url=draft.url;
+        result.draft_release_id=draft.release_id;
+    } catch (error) {
+        draftError=error;
+        result.draft_status='DRAFT_PENDING';
+        result.draft_error=error.message;
+    } finally {
+        // Preserve verified tag/merge evidence even if the optional draft API step fails.
+        writeFileSync(resolve(process.env.RUNNER_TEMP,'release-completion.json'),JSON.stringify(result,null,2)+'\n');
+        const proof=JSON.stringify(result.evidence,null,2)+'\n';
+        writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.json'),proof);
+        writeFileSync(resolve(process.env.RUNNER_TEMP,'release-evidence.sha256'),createHash('sha256').update(proof).digest('hex')+'  release-evidence.json\n');
+        const lines=['### Release '+result.tag,
+            '- Merge: verified ('+result.main_sha+')','- Tag: verified',
+            '- Develop reconciliation: '+result.synchronization,
+            '- Draft: '+result.draft_status,
+            result.draft_url?'- GitHub Release: '+result.draft_url:'',
+            result.draft_error?'- Draft error: '+result.draft_error:'',
+            '- Publication: '+(result.draft_status==='ALREADY_PUBLISHED'?'already published; unchanged':'awaiting manual Publish release')];
+        output('GITHUB_STEP_SUMMARY',lines.filter(Boolean).join('\n'));
+    }
+    if (draftError) throw new Error('TAGGED / DRAFT_PENDING: '+draftError.message,{cause:draftError});
 }
 if (process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
     main().catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1;});

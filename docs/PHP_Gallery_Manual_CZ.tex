@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.126.1}
+\newcommand{\version}{0.126.2}
 \newcommand{\manualdate}{10.~října~2026}
 
 \hypersetup{
@@ -2494,10 +2494,14 @@ musí mít rodiče [P,Q] v~tomto pořadí a~úplný Git tree shodný s~Q. Stejn�
 vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
 jen chybějící tag; konfliktní tag způsobí chybu.
 
-GitHub Release vytvoříte nebo zveřejníte ručně. Artefakt
-\codeword{manual-release-assets} obsahuje produkční ZIP, čtyři PDF, poznámky,
-archiv kvalifikace a~SHA-256 kontrolní součty. Windows installer vzniká pouze
-při změně dodávaného obsahu WinApp; jeho samostatná verze se zachovává.
+Po ověření merge a~tagu workflow připraví jeden nezveřejněný koncept
+GitHub Release s~již vytvořenými poznámkami přesného Q. Existující koncepty
+ani zveřejněná vydání nemění. Chyba přípravy zachová tag a~ohlásí
+\codeword{TAGGED / DRAFT\_PENDING}. Otevřete koncept, podle potřeby
+přiložte \codeword{manual-release-assets} (produkční ZIP, čtyři PDF,
+poznámky, archiv kvalifikace a~SHA-256 součty) a~ručně zvolte
+\ui{Publish release}. Přílohy se automaticky nenahrávají. Windows installer
+vzniká pouze při změně dodávaného obsahu WinApp; jeho verze se zachovává.
 
 Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
 s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou

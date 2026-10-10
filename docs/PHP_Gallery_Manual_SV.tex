@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.126.1}
+\newcommand{\version}{0.126.2}
 \newcommand{\manualdate}{10~oktober~2026}
 
 \hypersetup{
@@ -2494,10 +2494,15 @@ ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
 Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
 hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
 
-GitHub Release skapas eller publiceras fortfarande manuellt.
-\codeword{manual-release-assets} innehåller produktions-ZIP, fyra PDF-filer,
-anteckningar, kvalificeringsarkiv och SHA-256-kontrollsummor. Windows-installern
-byggs bara när levererat WinApp-innehåll ändras; dess separata version bevaras.
+Efter verifierad merge och tagg förbereder arbetsflödet ett opublicerat
+GitHub Release-utkast med de befintliga anteckningarna från exakt Q.
+Befintliga utkast och publicerade utgåvor ändras inte. Vid fel bevaras
+taggen och statusen blir \codeword{TAGGED / DRAFT\_PENDING}.
+Öppna utkastet, bifoga vid behov \codeword{manual-release-assets}
+(produktions-ZIP, fyra PDF-filer, anteckningar, kvalificeringsarkiv och
+SHA-256-kontrollsummor), och välj \ui{Publish release} manuellt.
+Inga filer laddas upp automatiskt. Windows-installern byggs endast när
+levererat WinApp-innehåll ändras; dess separata version bevaras.
 
 Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
 med aktivt skydd för linjär historik och CI. Parallell utveckling stoppar den

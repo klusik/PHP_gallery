@@ -3,8 +3,9 @@
 The maintainer starts a release by creating `release/v_X.Y` or `release/v_X.Y.Z`
 from current `develop` and pushing that branch. After preparation succeeds,
 approve the bot-created PR to `main` once. Automation performs the protected
-standard merge, creates the immutable tag and attempts safe develop synchronization.
-Create or publish the GitHub Release manually using the retained artifacts.
+standard merge, creates the immutable tag, attempts safe develop synchronization
+and stages one unpublished GitHub Release draft with the existing qualified notes.
+Open the draft, add optional artifacts and manually choose Publish release.
 No normal step asks for a SHA, run ID, operation mode or deployment approval.
 
 ## Git and authorization contract
@@ -106,8 +107,16 @@ worker; persistent unreadable or invalid state still blocks without writes. Comp
 an existing M, creates only a missing tag and retries transient develop transport
 failure. A correct tag is read-only; a conflicting tag fails without moving it.
 A pending review continues automatically, while a persistent safety blocker is
-reported rather than bypassed. No GitHub Release create/edit/publish operation
-exists. The generic PR matrix excludes main to avoid redundant token-created
+reported rather than bypassed. After verified M/tag, the same completion job
+reads unchanged PATCH_NOTES.md from the exact Q checkout and selects the same
+version section previously saved as release-notes.md. It uses the existing complete,
+paginated GitHub Releases inventory, including drafts, before any create-only POST.
+DRAFT_CREATED means a single unpublished, empty-asset draft was verified by ID;
+DRAFT_ALREADY_EXISTS preserves existing manual edits/assets and ALREADY_PUBLISHED
+does not modify the public release. Version/tag conflicts fail closed. Draft API
+failure reports TAGGED / DRAFT_PENDING without undoing M/tag or requiring another
+merge; a retry inventories all drafts before deciding whether to create.
+Only the human maintainer uploads optional packages and clicks Publish release. The generic PR matrix excludes main to avoid redundant token-created
 PR workflow approvals; exact-Q release qualification owns the required context.
 
 ## Previous release and immutable evidence

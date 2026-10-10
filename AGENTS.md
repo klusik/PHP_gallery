@@ -133,8 +133,12 @@ push of `release/v_X.Y[.Z]` initializes immutable origin and runs Stage A/B,
 preparation, four locked-toolchain manuals and full exact-Q hosted qualification.
 The resulting bot PR requires one human owner approval; qualification-dispatched automation
 uses a standard protected merge M with parents [P,Q] and tree(Q), then creates an
-immutable tag on M. GitHub Release publication stays manual. No deployment approval,
-manual dispatch input, extra main commit, red override or privileged bypass is allowed.
+immutable tag on M, then idempotently stages one unpublished GitHub Release draft
+with existing exact-Q release notes. The maintainer alone uploads any assets and
+clicks Publish release. Existing drafts, published releases, tags and manually
+edited descriptions are immutable to the automation; draft failure never rolls
+back the verified M/tag. No deployment approval, manual dispatch input, extra
+main commit, red override or privileged bypass is allowed.
 Machine-populated completion dispatch selects qualified Q before its workflow reaches
 main. Both branches verify installed/effective policy and record omitted bypass
 inventory honestly while relying on server enforcement; never fabricate that field.

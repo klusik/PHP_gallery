@@ -1,5 +1,42 @@
 # Patch notes
 
+## Version 0.126.2
+
+Version 0.126.2 added idempotent preparation of an unpublished GitHub Release draft after the verified protected merge and immutable tag. Maintainers remained responsible for uploading assets and publishing the release.
+
+### Highlights
+
+#### Automatic release draft preparation [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+- Staged an unpublished GitHub Release draft using the exact-version notes from the qualified candidate after verifying the protected merge and immutable tag.
+- Left existing drafts and published releases unchanged, rejected conflicts, and reported `TAGGED / DRAFT_PENDING` on staging failure without rolling back the verified merge or tag.
+- Kept asset uploads and publication as manual maintainer actions.
+
+### Technical Details
+
+#### Backend
+- Updated `.github/scripts/release-completion.mjs` to check the complete paginated release inventory and stage drafts idempotently.
+- Added immutable origin and predecessor records for `v_0.126.2`.
+
+#### Frontend
+- Updated `.github/workflows/release-promotion.yml` to use the revised release completion flow.
+
+#### Tests
+- Added `tests/release_draft_test.mjs` coverage for exact candidate notes, pagination, conflicts, preserving existing draft edits and assets, publication safety, and recovery after a lost create response.
+
+#### Documentation
+- Updated `AGENTS.md`, `RELEASE.md`, `docs/RELEASE_LIFECYCLE.md`, and all four maintained manual editions with the draft preparation behavior.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Administrator-facing gallery behavior did not change.
+
+#### For maintainers
+- Maintainers gained automatic, retry-safe staging of an unpublished release draft after the verified merge and tag, while retaining responsibility for uploading assets and publishing it.
+
 ## Version 0.126.1
 
 Version 0.126.1 simplified the reviewed release lifecycle with maintainer-pushed release branches, exact-candidate qualification, and automated completion after one owner approval. GitHub Release publication remained manual, and this release did not establish that a production release was approved or published.

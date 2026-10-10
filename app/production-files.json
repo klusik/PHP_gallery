@@ -2226,6 +2226,7 @@
         "tests/release_asset_integrity_test.mjs",
         "tests/release_completion_handoff_test.mjs",
         "tests/release_completion_test.mjs",
+        "tests/release_draft_test.mjs",
         "tests/release_origin_test.mjs",
         "tests/release_qualification_test.php",
         "tests/release_reconciliation_test.mjs",

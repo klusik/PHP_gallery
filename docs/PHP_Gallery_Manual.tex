@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.126.1}
+\newcommand{\version}{0.126.2}
 \newcommand{\manualdate}{10 October 2026}
 
 \hypersetup{
@@ -2568,10 +2568,15 @@ is~required. The~result must have ordered parents [P,Q] and~Q's complete Git tre
 The~same job creates the~immutable version tag on~M. A~retry after merge verifies
 the~full PR detail and~creates only a~missing tag; conflicting tags fail closed.
 
-GitHub Release creation and~publication remain manual. Download
-\codeword{manual-release-assets} for~the~production ZIP, four PDFs, notes,
-qualification archive and~SHA-256 checksums. A~Windows installer is~built only
-when shipped WinApp content changed; its~independent version is~preserved.
+After verifying the~merge and~tag, completion prepares one unpublished GitHub
+Release draft with the~existing exact-Q release notes. Existing drafts and~public
+releases are~not~modified. Draft failure retains the~tag and~reports
+\codeword{TAGGED / DRAFT\_PENDING}. Open the~draft, optionally add
+\codeword{manual-release-assets} (production ZIP, four PDFs, notes,
+qualification archive and~SHA-256 checksums), and~manually select
+\ui{Publish release}. No~attachments are~uploaded automatically.
+A~Windows installer is~built only when shipped WinApp content changed;
+its~independent version is~preserved.
 
 Develop is~advanced only through a~true non-force fast-forward to~qualified Q,
 with active linear-history/CI protection. Parallel develop work stops that

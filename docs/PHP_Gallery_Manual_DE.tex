@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.126.1}
+\newcommand{\version}{0.126.2}
 \newcommand{\manualdate}{10.~Oktober~2026}
 
 \hypersetup{
@@ -2501,10 +2501,16 @@ Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
 Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
 fehlenden Tag; widersprüchliche Tags führen zum Fehler.
 
-GitHub Releases werden weiterhin manuell erstellt oder veröffentlicht.
-\codeword{manual-release-assets} enthält Produktions-ZIP, vier PDFs, Notizen,
-Prüfarchiv und SHA-256-Prüfsummen. Der Windows-Installer wird nur bei Änderungen
-am ausgelieferten WinApp-Inhalt gebaut; seine eigenständige Version bleibt erhalten.
+Nach geprüftem Merge und~Tag erstellt der Workflow genau einen
+unveröffentlichten GitHub-Release-Entwurf mit den vorhandenen Notizen des
+exakten Q. Bestehende Entwürfe und veröffentlichte Releases bleiben unverändert.
+Bei Fehlern bleibt der Tag erhalten; der Status lautet
+\codeword{TAGGED / DRAFT\_PENDING}. Öffnen Sie den Entwurf, fügen Sie
+optional \codeword{manual-release-assets} (Produktions-ZIP, vier PDFs,
+Notizen, Prüfarchiv und SHA-256-Prüfsummen) hinzu und wählen Sie manuell
+\ui{Publish release}. Es werden keine Dateien automatisch hochgeladen.
+Der Windows-Installer wird nur bei Änderungen am ausgelieferten WinApp-Inhalt
+gebaut; seine eigenständige Version bleibt erhalten.
 
 Develop wird nur durch echtes nicht erzwungenes Fast-forward auf geprüftes Q
 mit aktivem Schutz für lineare Historie und CI aktualisiert. Parallele Entwicklung
