@@ -40,7 +40,7 @@ function formatWidgetMarkdown(editor, command) {
  * Synchronize supported page zones and flow/floating settings before form submission.
  *
  * @param {HTMLFormElement} form Active widget editor.
- * @returns {() => void} Safe refresh function shared by preview controls.
+ * @returns {Function} Safe refresh callback shared by preview controls.
  */
 function setupWidgetPlacement(form) {
     const mode = form.querySelector('[name="placement_mode"]');
