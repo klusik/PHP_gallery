@@ -239,6 +239,7 @@ namespace Gallery\Tests\HomeCreation {
     require_once __DIR__ . '/../app/controllers/public_gallery_home.php';
     require_once __DIR__ . '/../app/views/public_gallery_cards.php';
     require_once __DIR__ . '/../app/views/public_search.php';
+    require_once __DIR__ . '/../app/views/public_content_widgets.php';
     require_once __DIR__ . '/../app/views/public_gallery_pages.php';
 
     Fixture::reset();

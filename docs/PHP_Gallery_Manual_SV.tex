@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.126.3}
-\newcommand{\manualdate}{10~oktober~2026}
+\newcommand{\version}{0.127}
+\newcommand{\manualdate}{11~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -778,6 +778,8 @@ Databasen kommer ihåg titlar, beskrivningar, datum, synlighet, lösenord och å
 
 Databasen gör sökning och administration snabba. Den låter också en fil ha en lättbegriplig titel, utförlig beskrivning, taggar, vald ordning och åtkomstregler utan att ändra originalbildens byte.
 
+Tabellen \texttt{public\_content\_widgets} lagrar egna titlar, Markdown, sidomfattning, sju platser i~det normala sidflödet, ankare och~normaliserade fönsterkoordinater för~flytande paneler, publiceringsstatus, ordning och~revisioner för~samtidig redigering. En~uppgradering skapar en~tom tabell och~visar inga widgetar förrän en~administratör publicerar dem uttryckligen. Endast publicerade poster visas på~berättigade offentliga start- och~gallerisidor; utkast och~inaktiverade poster saknas helt i~offentlig HTML. Ta~med dessa poster i~den vanliga databassäkerhetskopian.
+
 \subsection{Hur användare drar nytta av databasen}
 \index{d00049@databas!f00093@fördelar}
 
@@ -867,6 +869,24 @@ Ett galleri kan visa mindre gallerier först och fotografier därefter. Till exe
 Paginering delar en lång samling i hanterbara sidor. Det hjälper första sidan att visas snabbt och gör rullningen bekväm. En liten utställning kan se bäst ut på en enda sida. Ett bröllop med 1~500 fotografier har vanligen nytta av flera sidor eller undergallerier. Den stora bildvisaren kan fortsätta genom galleriets större bildföljd och läsa in ytterligare information efter behov.\footnote{Paginering ändrar hur många kort som visas samtidigt. De underliggande fotografierna och deras ordning bevaras.}
 
 Långa offentliga listor visar en flytande kontroll \ui{Till toppen} efter att besökaren har rullat in i gallerilistan. Den använder webbläsarens mjuka rullning, försvinner utanför den aktiva listan och förblir dold medan ljuslådan eller helskärmsvisaren är öppen så att den inte konkurrerar med bildkontrollerna.
+
+\subsection{Anpassningsbara widgetar för offentligt innehåll}
+\index{widgetar för offentligt innehåll}
+
+Öppna \ui{Utseende} och~\ui{Widgetar} i~administrationen för~att skapa flera fristående innehållspaneler, till~exempel \emph{Partnergallerier}, meddelanden eller~användbara länkar. En~widget har en~titel, Markdown-text, publiceringsstatus, sidomfattning, utseende och~sparad position. Redigera ett~utkast, välj \ui{Förhandsvisa utan att spara} och~tryck uttryckligen \ui{Spara widget}. Det~går även att~duplicera till~ett opublicerat utkast, ändra ordning, inaktivera och~bekräfta borttagning. Samtidig redigering i~en~annan administratörsflik får inte tyst skriva över en~nyare revision.
+
+Samma widget kan innehålla rubriker, stycken, betoning, listor och~flera länkar med~valfri synlig text. Säkra interna gallerisökvägar och~externa HTTP(S)-länkar stöds. Körbara URL-scheman, godtycklig HTML, skript och~inbäddade externa appar tillåts inte. Uppladdning av~widgetlogotyper eller~bilder ingår ännu inte i~redigeraren. Lägg inte privat information i~offentliga widgetar.
+
+Välj sidomfattningen \emph{Startsida}, \emph{Gallerisidor} eller~\emph{Startsida och~gallerier}. Platser i~sidflödet omfattar toppen/botten av~huvudinnehållet, vänster/höger sidofält, direkt före/efter startsidans gallerirutnät och~den globala sidfoten. En~widget för~alla sidor med~en startsidesposition visas i~stället längst ned i~huvudinnehållet på~galleridetaljsidor. Sidofälten följer sidans normala layout och~staplas efter huvudinnehållet på~smala skärmar. Navigeringshuvudet och~hero-panelen är~inte tillåtna platser.
+
+I~läget \emph{Flytande} väljer du~ett av~åtta fönsterankare eller~egna X/Y-koordinater mellan 0 och~1000. På~en~tillräckligt stor datorskärm kan panelen vara fast förankrad i~fönstret och~stängas. Högst två paneler förstärks samtidigt; vid~kollisioner, små fönster, zoomning eller~för liten höjd visas samma artikel tillgängligt i~det vanliga sidflödet. Besökarens \ui{Stäng} döljer bara panelen under den~aktuella sidvisningen och~ändrar inte administratörens publiceringsval. Utan~JavaScript finns text och~länkar exakt en~gång i~sidans ursprungliga HTML.
+
+På~offentliga sidor beräknas placeringen också när~kontroller eller~widgetinnehåll ändrar storlek, exempelvis när~galleriets verktygsfält fälls ut och~typsnitt har laddats. Om~ingen säker placering finns återgår samma artikel till~det vanliga sidflödet.
+
+Den~skyddade förhandsvisningen av~startsidan/galleriet använder det~riktiga Theme-upplägget och~den~sparade widgetordningen, medan offentliga skript hålls avstängda. Om~startsidan saknar gallerikort behåller en~widget efter rutnätet sin plats före innehållsbotten och~flytande områden; en~ny sidokolumn följer samma responsiva stapling som den~offentliga layouten. I~den separata positionskartan kan du~dra med~mus, pekpenna eller~finger, klicka eller~använda piltangenter för~att ändra koordinater. Skift med~piltangent ger ett~större steg; \ui{Återställ flytande position} väljer en~giltig standardposition nere till~höger. Val av~dator/surfplatta/mobil och~förhandsvisning publicerar inga osparade ändringar. Positionskartan är~fortfarande vägledande. Granska den~riktiga offentliga sidan efter att~du har sparat.
+
+Administrationsgränssnittet har översättningar i~EN/CS/DE/SV, men~egen titel och~Markdown behåller det~valda källspråket utan~automatisk innehållsöversättning. Anpassad Theme-CSS kan rikta sig mot \texttt{.public-content-widget} eller~den stabila selektorn \texttt{data-public-widget-id}. Widgetredigeraren lagrar aldrig godtycklig CSS eller~JavaScript.
+
 
 \subsection{Sökning, taggar och navigering}
 \index{s00240@sökning}
@@ -2480,18 +2500,19 @@ Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
 
 
-\subsubsection{Automatisk release efter PR-godkännande}
+\subsubsection{Automatisk utgivning efter PR-godkännande}
 
-Skapa grenen \codeword{release/v_X.Y[.Z]} från aktuell develop och pusha den.
-Arbetsflödet lägger till ett oföränderligt ursprung direkt efter vald commit
+Skapa grenen \codeword{release/v_X.Y[.Z]} från den aktuella
+\codeword{develop}-grenen och skicka den till fjärrarkivet.
+Arbetsflödet lägger till en oföränderlig utgångspunkt direkt efter vald commit
  och kör Stage~A/B, befintliga AI-anteckningar, låst TinyTeX, alla fyra manualer,
-manifest och fullständig kvalificering av exakt Q. Historiska ursprung och den
+manifest och fullständig kvalificering av exakt Q. Tidigare utgångspunkter och den
 publicerade \codeword{v\_0.126} förblir oförändrade.
 
 Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
 Arbetsflödet startar avslutet automatiskt på Q genom filen som redan är registrerad
 på main. Underhållaren godkänner exakt Q en gång. Observatören kontrollerar P/Q
-igen och begär skyddad standardmerge utan formulär eller extra deployment-godkännande. M måste
+igen och begär skyddad standardmerge utan formulär eller ytterligare godkännande för driftsättning. M måste
 ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
 Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
 hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
@@ -2503,7 +2524,7 @@ taggen och statusen blir \codeword{TAGGED / DRAFT\_PENDING}.
 Öppna utkastet, bifoga vid behov \codeword{manual-release-assets}
 (produktions-ZIP, fyra PDF-filer, anteckningar, kvalificeringsarkiv och
 SHA-256-kontrollsummor), och välj \ui{Publish release} manuellt.
-Inga filer laddas upp automatiskt. Windows-installern byggs endast när
+Inga filer laddas upp automatiskt. Installationsprogrammet för Windows byggs endast när
 levererat WinApp-innehåll ändras; dess separata version bevaras.
 
 Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
@@ -2513,9 +2534,9 @@ eller replay-commit skapas på develop. Föregående M behöver inte vara förfa
 till nästa Q. Utelämnade bypass-data redovisas och förblir serverstyrda; synlig
 bypass eller oläsbara effektiva regler stoppar avslutet. Saknad evidens, gammalt godkännande, rött CI
  och andra föräldrar/träd blockerar avslut. Isolerad acceptans av verkligt
-GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; fixture-CI
-ersätter inte live-acceptans. Agenter utför inte skyddad integration eller
-produktionsrelease under implementeringen.
+GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; CI med testfixturer
+ersätter inte godkännandeprov i den verkliga GitHub-miljön. Agenter utför inte skyddad integration eller
+publicering av en produktionsversion under implementeringen.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 

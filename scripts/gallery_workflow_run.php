@@ -49,7 +49,13 @@ try {
         $stage = 'HTTP development checks';
         $fixture->run([PHP_BINARY, dirname(__DIR__) . '/tests/gallery_workflow_integration_test.php'], 180, $stage, true);
         $stage = 'browser development checks';
-        $fixture->run([PHP_BINARY, dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php'], 170, $stage, true);
+        // Purpose: Bound the development-mode live Gallery browser regression.
+        // Type: integer.
+        // Units: seconds.
+        // Scope: The child-process deadline around gallery_workflow_browser_test.php.
+        // Consumers: Disposable workflow fixture used by the development check mode.
+        // Rationale: The 240-second browser result window allows up to 30 seconds for startup and 30 seconds for shutdown and fixture cleanup.
+        $fixture->run([PHP_BINARY, dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php'], 300, $stage, true);
     } elseif ($mode === '--route-probes') {
         $stage = 'route lifecycle probes';
         $fixture->run([PHP_BINARY, dirname(__DIR__) . '/scripts/audit_route_performance.php', $routeProbeLabel], 600, $stage, true);
@@ -88,6 +94,7 @@ try {
                 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php']);
             if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
                 $requiredTests[] = 'gallery_workflow_browser_test.php';
+                $requiredTests[] = 'public_widget_persistence_browser_test.php';
             }
         }
         foreach ($requiredTests as $test) {

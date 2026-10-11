@@ -24,20 +24,35 @@ try {
     const {url} = JSON.parse(await readFile(path.join(actual, 'endpoint.json'), 'utf8'));
     if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{3,4}$/.test(url)) throw new Error();
     let result;
+    // Purpose: Bound result polling for the authenticated live Gallery journey below its PHP audit child limit.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: Result-polling deadline for this full-stack Chromium regression.
+    // Consumers: runHeadlessBrowserFixture() result poller.
+    // Rationale: Run 38110623103 reached the 260-second result deadline and used about 7 seconds for outer browser/test cleanup; a 280-second window adds time while retaining 20 seconds within the registered 300-second PHP child budget.
+    const workflowBrowserTimeoutMs = 280000;
     // Chromium launchers may exit before their actual browser process on Windows.
     // The owned DevTools session closes the real browser and its cache-holding children.
-    const {result: marker} = await runHeadlessBrowserFixture(executable, `${url}/__workflow_${token}`,
-        'workflow-browser-profile-', {timeoutMs: 145000, readResult: async () => {
+    const {result: marker, timeoutDetail} = await runHeadlessBrowserFixture(executable, `${url}/__workflow_${token}`,
+        'workflow-browser-profile-', {timeoutMs: workflowBrowserTimeoutMs,
+            timeoutExpression: 'JSON.stringify({stage:window.__galleryWorkflowStage||"missing",readyState:document.readyState})',
+            readResult: async () => {
             try { result = JSON.parse(await readFile(path.join(actual, 'browser-result.json'), 'utf8')); }
             catch { return ''; }
             if (!/^[a-zA-Z0-9 ._-]{1,100}$/.test(result.stage || '')) return 'BROWSER FAIL invalid workflow result';
             return `BROWSER ${result.ok ? 'PASS' : 'FAIL'} ${result.stage}`;
         }});
-    if (!marker.startsWith('BROWSER ') || !result) throw new Error();
+    if (!marker.startsWith('BROWSER ') || !result) {
+        const safeTimeoutDetail = typeof timeoutDetail === 'string'
+            ? timeoutDetail.replace(/[^a-zA-Z0-9 ._-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+        throw new Error('Browser result timeout' + (safeTimeoutDetail ? ' ' + safeTimeoutDetail : ''));
+    }
     if (!result || !/^[a-zA-Z0-9 ._-]{1,100}$/.test(result.stage || '')) throw new Error();
     console.log(`${result.ok ? 'PASS' : 'FAIL'} gallery workflow ${result.stage}`);
     if (!result.ok) process.exitCode = 1;
-} catch {
-    console.log('FAIL gallery workflow browser launch or result timeout');
+} catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown browser fixture error';
+    const safeReason = reason.replace(/[^a-zA-Z0-9 ._-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    console.log('FAIL gallery workflow browser ' + (safeReason || 'launch or result timeout'));
     process.exitCode = 1;
 }

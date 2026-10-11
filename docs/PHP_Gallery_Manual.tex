@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.126.3}
-\newcommand{\manualdate}{10 October 2026}
+\newcommand{\version}{0.127}
+\newcommand{\manualdate}{11 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -782,6 +782,8 @@ The~database remembers titles, descriptions, dates, visibility, passwords and~ac
 
 The~database makes search and~administration fast. It~also allows a~file to~have a~friendly title, rich description, tags, a~chosen order, and~access rules without changing the~original image bytes.
 
+The~\texttt{public\_content\_widgets} table persists authored titles, Markdown, page scopes, seven in-flow zones, floating anchors and normalized coordinates, publication state, ordering and optimistic revision numbers. An~upgrade creates an~empty table and displays no~widgets until an~administrator explicitly publishes one. Published records are rendered on eligible public home/gallery pages; drafts and disabled records are never included in~public HTML. Back up~these records together with the~rest of~the~database.
+
 \subsection{How users benefit from the~database}
 \index{database!benefits}
 
@@ -872,6 +874,24 @@ A~gallery can~show smaller galleries first and~photographs afterward. For~exampl
 Pagination divides a~long collection into manageable pages. This helps the~first page appear promptly and~keeps scrolling comfortable. A~small exhibition may~look best on~one page. A~wedding with 1,500 photographs will usually benefit from pages or~child galleries. The~large photo viewer can~continue through the~wider gallery sequence while loading additional information as~needed.\footnote{Pagination changes how many cards appear at~once. It~leaves the~underlying photographs and~their order intact.}
 
 Long public listings include a~floating \ui{Top} control after the~visitor has~scrolled into the~gallery listing. It~uses smooth browser scrolling, disappears outside the~active listing, and~stays hidden while the~lightbox or~fullscreen viewer is~open so~it~does not~compete with photo controls.
+
+\subsection{Configurable public content widgets}
+\index{public content widgets}
+
+Open \ui{Appearance} and \ui{Widgets} in~the~Admin Zone to~create independent content panels such as \emph{Partner galleries}, announcements or~useful links. Each widget has a~title, a~Markdown text body, a~publication state, page scope, appearance and~a~saved position. Create or~edit a~draft, choose \ui{Preview without saving}, and then explicitly \ui{Save}. The~editor also supports duplication as~an~unpublished draft, numeric ordering, disabling and~confirmed deletion. A~concurrent edit from another Admin tab is rejected rather than silently overwriting a~newer revision.
+
+Use headings, paragraphs, emphasis, lists and~links with your own visible captions in~one Markdown body. Both safe internal gallery URLs and~external HTTP(S) links are supported. Executable URL schemes, arbitrary HTML, scripts and~remote embeds are not permitted. Images or~logo uploads are not part of~the~current widget editor. Widget authors must not place privileged information in~public content.
+
+Select the \emph{Homepage}, \emph{Gallery pages}, or~\emph{Homepage and galleries} scope. In~page mode, the~available zones are top/bottom of~public content, left/right content rails, immediately before/after the~homepage gallery grid, and~the~global footer. A~homepage-only grid position on~a~gallery page falls back to~the~bottom of~the~main content for an~all-pages widget. Side rails remain part of~the~document layout and~stack after the~main content on~narrow screens; the~navigation header and~hero are not widget targets.
+
+In~\emph{Floating} mode choose one of~eight viewport anchors or~set custom X/Y coordinates from 0 to~1000. The~published widget may become a~fixed, dismissible panel on~a~sufficiently large desktop viewport. Up~to~two panels are enhanced at~once; unsafe overlaps, small screens, zoom or~insufficient height retain the~same accessible article in~normal document flow. The~visitor's \ui{Close} hides the~panel only on~that page view and~does not update the~administrator's publication settings. With~JavaScript disabled, authored content and~links remain in~the~initial HTML exactly once.
+
+On public pages, floating placement is recalculated when protected controls or widget content change size, including an expanded Gallery toolbar and loaded fonts. Unsafe placement returns the same article to normal flow.
+
+The~protected Home/Gallery preview uses the~real Theme layout and~saved widget order while keeping public scripts disabled. If Home has~no gallery cards, an~after-grid draft remains ahead of~content-bottom and~floating zones; a~new side rail follows the~same responsive stacking behavior as~the public layout. In~the~separate Admin placement map, drag with mouse, touch or~pen, click, or~use arrow keys to~set custom coordinates. Shift with~an~arrow makes a~larger step; \ui{Reset floating position} restores a~valid bottom-right preset. Desktop/tablet/mobile selectors and~the~content preview do~not save the~draft. The~position map remains advisory. Use the~actual public page for final visual verification after saving.
+
+The~EN/CS/DE/SV Admin interface strings are translated, but authored titles and~Markdown remain in~their selected source language without automatic content translation. Theme/Custom CSS can target \texttt{.public-content-widget} or~a~stable \texttt{data-public-widget-id} selector. Widget editing itself never stores arbitrary CSS or~JavaScript.
+
 
 \subsection{Search, tags, and~navigation}
 \index{search}

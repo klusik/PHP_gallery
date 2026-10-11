@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.126.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.127. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -18,6 +18,12 @@ historical versions, and unqualified newer lines are defined in
 [Database support](docs/DATABASE_SUPPORT.md). A `+` suffix must not be read as
 qualification for every later server series. PHP 8.1 remains a source/runtime
 compatibility floor and does not imply a database test combination.
+
+### Public content widgets (#126 / #170)
+
+Migration `202610100001_public_content_widgets.php` creates the empty `public_content_widgets` table (InnoDB/utf8mb4). Each row has a random 32-character stable identifier, optional title, bounded Markdown content, draft/published/disabled status, home/gallery/all page scope, normal-flow or floating mode, seven flow slots, preset/custom viewport anchor, X/Y in 0..1000 permille, bounded pixel width, mobile flow fallback, card/minimal appearance, ordering, source language, a positive monotonic revision and UTC timestamps. The compound status/scope/order index supports bounded public reads. No rows are seeded and no public layout is changed by applying this migration alone.
+
+The service `app/services/public_content_widgets.php` validates one complete semantic draft, including supported link destinations and mode/position combinations. The model `app/models/public_content_widgets.php` owns all SQL, conditional revision updates and transactional ordering. The Admin controller handles authenticated, CSRF-protected widget mutations and preview. Public Home/Gallery controllers prepare published widget plans after existing access checks, and the shared view renders escaped markup. Public reads fail closed to an empty plan if widget storage is unavailable. Existing Theme settings do not own these rows. The explicit source language field does not imply that translated widget variants are implemented yet.
 
 ### Multilingual content
 

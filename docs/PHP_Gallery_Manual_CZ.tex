@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.126.3}
-\newcommand{\manualdate}{10.~října~2026}
+\newcommand{\version}{0.127}
+\newcommand{\manualdate}{11.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -778,6 +778,8 @@ Databáze uchovává názvy, popisy, data, viditelnost, hesla a~konfiguraci př�
 
 Databáze zrychluje vyhledávání a~správu. Umožňuje také přiřadit souboru přívětivý název, bohatý popis, štítky, zvolené pořadí a~pravidla přístupu bez změny původních bajtů obrázku.
 
+Tabulka \texttt{public\_content\_widgets} ukládá vlastní názvy, Markdown, rozsah stránek, sedm umístění v~toku stránky, kotvy a~normalizované souřadnice plovoucích panelů, stav zveřejnění, pořadí a~revize pro souběžné úpravy. Při aktualizaci vzniká prázdná tabulka; bez výslovného zveřejnění správcem se žádný widget nezobrazí. Publikované záznamy se vykreslují pouze na odpovídajících veřejných stránkách, koncepty a~vypnuté widgety nejsou ve veřejném HTML vůbec. Data widgetů zahrňte do běžné databázové zálohy.
+
 \subsection{Jak databáze pomáhá uživatelům}
 \index{d00024@databáze!p00185@přínosy}
 
@@ -867,6 +869,24 @@ Galerie může nejprve zobrazovat menší galerie a~poté fotografie. Napříkla
 Stránkování rozděluje dlouhou sbírku na zvládnutelné stránky. Pomáhá rychle zobrazit první stránku a~udržuje posouvání pohodlné. Malá výstava může nejlépe vypadat na jediné stránce. Svatbě s~1,500 fotografiemi obvykle prospějí stránky nebo podřízené galerie. Velký prohlížeč fotografií může pokračovat širší posloupností galerie a~podle potřeby načítat další informace.\footnote{Stránkování mění počet karet zobrazených najednou. Samotné fotografie i~jejich pořadí ponechává beze změny.}
 
 Dlouhé veřejné seznamy obsahují plovoucí ovládací prvek \ui{Nahoru}, jakmile se návštěvník posune do výpisu galerie. Používá plynulé posouvání prohlížeče, mimo aktivní výpis mizí a~při otevřeném lightboxu nebo celoobrazovkovém prohlížeči zůstává skrytý, aby nekonkuroval ovládání fotografií.
+
+\subsection{Konfigurovatelné widgety veřejného obsahu}
+\index{widgety veřejného obsahu}
+
+V~administraci otevřete \ui{Vzhled} a~\ui{Widgety}. Můžete vytvořit více nezávislých panelů, například \emph{Spřátelené galerie}, oznámení nebo~užitečné odkazy. Widget má název, text ve~formátu Markdown, stav zveřejnění, rozsah stránek, vzhled a~uloženou polohu. Připravte koncept, použijte \ui{Náhled bez uložení} a~změny potvrďte tlačítkem \ui{Uložit widget}. K~dispozici je~duplikování do~nezveřejněného konceptu, číselné pořadí, vypnutí a~odstranění s~potvrzením. Souběžná úprava z~jiného panelu administrace nesmí tiše přepsat novější revizi.
+
+Do~jednoho widgetu můžete zapsat nadpisy, odstavce, zvýraznění, seznamy a~více odkazů s~vlastními popisky. Podporovány jsou bezpečné interní cesty galerie a~externí HTTP(S) odkazy. Spustitelná schémata URL, libovolné HTML, skripty a~externí vložené aplikace jsou zakázány. Nahrávání obrázků nebo~log widgetů současný editor zatím nenabízí. Do~veřejného widgetu nevkládejte neveřejné informace.
+
+Rozsah určíte volbou \emph{Úvodní stránka}, \emph{Stránky galerií} nebo~\emph{Úvodní stránka a~galerie}. Umístění v~obsahu zahrnuje horní a~dolní část hlavního obsahu, levý a~pravý sloupec, prostor bezprostředně před a~za~mřížkou galerií na~úvodní stránce a~globální patičku. Widget určený pro~všechny stránky s~pozicí u~úvodní mřížky se~v~detailu galerie zobrazí na~konci hlavního obsahu. Postranní sloupce jsou součástí rozvržení a~na~úzkém displeji se~řadí za~hlavní obsah. Widgety se~nevkládají do~navigačního záhlaví ani~do~hero panelu.
+
+V~režimu \emph{Plovoucí} vyberte jednu z~osmi kotev okna prohlížeče nebo~vlastní souřadnice X/Y v~rozsahu 0 až~1000. Na~dostatečně velkém desktopovém okně může být widget pevně ukotvený a~zavírací. Současně se~vylepšují nejvýše dva panely; při kolizi, malém displeji, zvětšení stránky nebo~nedostatku výšky se~stejný obsah zobrazí bezpečně v~běžném toku. Návštěvnické \ui{Zavřít} skryje panel pouze při~daném zobrazení stránky a~nemění publikované nastavení. Bez~JavaScriptu zůstávají texty a~odkazy v~počátečním HTML právě jednou.
+
+Na~veřejných stránkách se~poloha přepočítá také při~změně velikosti ovládacích prvků nebo~obsahu widgetu, například po~rozbalení nástrojové lišty Galerie a~načtení písem. Pokud bezpečné umístění není možné, stejný článek se~vrátí do~běžného toku.
+
+Chráněný náhled úvodní stránky nebo galerie používá skutečné rozvržení Theme a~pořadí uložených widgetů, ale~veřejné skripty v~něm zůstávají vypnuté. Pokud úvodní stránka nemá žádné karty galerií, zachová náhled pozici za~mřížkou před widgety v~dolní části obsahu a~plovoucími widgety; nový postranní sloupec se~řídí stejným responzivním skládáním jako veřejná stránka. V~samostatné mapě umístění administrace můžete polohu upravit přetažením myší, dotykem, perem, kliknutím nebo~šipkami. Shift se~šipkou provádí větší krok; \ui{Obnovit polohu plovoucího widgetu} nastaví bezpečnou výchozí kotvu dole vpravo. Přepínání počítač/tablet/mobil ani~náhled obsah nepublikují. Mapa umístění zůstává orientační. Po~uložení ověřte vzhled přímo na~veřejné stránce.
+
+Rozhraní administrace je~přeloženo do~EN/CS/DE/SV, ale~vlastní název a~Markdown zůstávají v~zadaném zdrojovém jazyce bez~automatického překladu. Ve~vlastních stylech Theme můžete cílit na~\texttt{.public-content-widget} nebo~stálý atribut \texttt{data-public-widget-id}. Samotný editor widgetů neukládá libovolný CSS ani~JavaScript.
+
 
 \subsection{Vyhledávání, štítky a~navigace}
 \index{v00261@vyhledávání}
@@ -2482,28 +2502,31 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 
 \subsubsection{Automatické vydání po schválení PR}
 
-Vytvořte z~aktuálního develop větev \codeword{release/v_X.Y[.Z]} a~pushněte ji.
-Workflow přidá neměnný origin přímo za vybraný commit a~spustí Stage~A/B,
-stávající AI poznámky, uzamčený TinyTeX, všechny čtyři manuály, manifesty
- a~úplnou hostovanou kvalifikaci přesného Q. Historické originy a~již vydané
+Vytvořte z~aktuální větve \codeword{develop} novou větev
+\codeword{release/v_X.Y[.Z]} a~odešlete ji do vzdáleného repozitáře.
+Pracovní postup přidá neměnný výchozí bod přímo za vybraný commit
+ a~spustí Stage~A/B,
+stávající poznámky AI, uzamčený TinyTeX, všechny čtyři příručky, manifesty
+ a~úplnou kvalifikaci přesného Q na~serverech GitHubu. Dřívější výchozí body a~již vydané
 \codeword{v\_0.126} zůstávají beze změny.
 
 Po kvalifikaci a~přípravě artefaktů bot vytvoří jediný PR do main.
-Workflow automaticky spustí dokončení na Q pomocí souboru již registrovaného
-na main. Správce jednou schválí přesnou hlavu Q. Worker znovu ověří P/Q
-a~požádá server o~chráněný standardní merge bez formuláře workflow a~schválení deploymentu. Výsledný M
-musí mít rodiče [P,Q] v~tomto pořadí a~úplný Git tree shodný s~Q. Stejná úloha
+Pracovní postup automaticky spustí dokončení na Q pomocí souboru již registrovaného
+na main. Správce jednou schválí přesnou hlavu Q. Vykonávací proces znovu ověří P/Q
+a~požádá server o~chráněné standardní sloučení bez formuláře pracovního postupu
+ani dalšího schválení nasazení. Výsledný M
+musí mít rodiče [P,Q] v~tomto pořadí a~úplný strom Gitu shodný s~Q. Stejná úloha
 vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
 jen chybějící tag; konfliktní tag způsobí chybu.
 
-Po ověření merge a~tagu workflow připraví jeden nezveřejněný koncept
+Po ověření sloučení a~tagu pracovní postup připraví jeden nezveřejněný koncept
 GitHub Release s~již vytvořenými poznámkami přesného Q. Existující koncepty
 ani zveřejněná vydání nemění. Chyba přípravy zachová tag a~ohlásí
 \codeword{TAGGED / DRAFT\_PENDING}. Otevřete koncept, podle potřeby
 přiložte \codeword{manual-release-assets} (produkční ZIP, čtyři PDF,
 poznámky, archiv kvalifikace a~SHA-256 součty) a~ručně zvolte
-\ui{Publish release}. Přílohy se automaticky nenahrávají. Windows installer
-vzniká pouze při změně dodávaného obsahu WinApp; jeho verze se zachovává.
+\ui{Publish release}. Přílohy se automaticky nenahrávají. Instalátor pro Windows se sestavuje pouze při změně dodávaného obsahu WinApp;
+jeho samostatná verze se zachovává.
 
 Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
 s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou
@@ -2511,7 +2534,7 @@ synchronizaci a~zachová dokončený tag. Na develop nevzniká merge, rebase ani
 replay commit. Předchozí M nemusí být předkem dalšího Q. Vynechaný seznam bypass
 se výslovně zaznamená a~zůstává pod serverovou ochranou; viditelný bypass nebo
 nečitelná efektivní pravidla dokončení odmítnou. Nedostupné důkazy, staré
-schválení, červené CI nebo odlišní rodiče/tree
+schválení, neúspěšné CI nebo odlišní rodiče či Git strom
 zablokují dokončení. Izolované ověření skutečného chování GitHubu popisuje
 \filepath{docs/RELEASE_LIFECYCLE.md}; testovací CI nenahrazuje živou akceptaci.
 Agenti při implementaci neprovádějí chráněnou integraci ani produkční vydání.

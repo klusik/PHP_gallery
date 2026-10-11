@@ -3,7 +3,7 @@
     "scope": "runtime-plan-route-ratchet",
     "captured_at": "2026-10-05T20:49:17+00:00",
     "source": "Issue 93 shared authored-localization ownership review; route counters retained from qualified pre-issue-79 disposable MySQL routes.",
-    "plan_reviewed_at": "2026-10-06",
+    "plan_reviewed_at": "2026-10-10",
     "php_version": "8.3.30",
     "generated_plan_sha256": "35f18f239371e4f68bb7578097224095c2e70390b6f290cf5d0a82f8150d6e02",
     "allowances": {
@@ -86,9 +86,9 @@
             "root_module": "public-home",
             "root_count": 1,
             "transitive_module_count": 4,
-            "plan_file_count": 109,
-            "shared_file_count": 109,
-            "direct_file_entries": 109,
+            "plan_file_count": 117,
+            "shared_file_count": 117,
+            "direct_file_entries": 117,
             "direct_duplicate_file_entries": 0,
             "included_php_files": 175,
             "peak_memory_bytes": 16777216
@@ -126,5 +126,6 @@
             "included_php_files": 142,
             "peak_memory_bytes": 12582912
         }
-    }
+    },
+    "issue_126_review_note": "Reviewed intentional #126 public-home closure growth: 117 files (original baseline 109), with published-widget model, service and shared SSR view integration. The 5% / four-file future growth allowance, duplicate-file check and every other route baseline remain unchanged; see #126 CI checkpoint. This is a reviewed baseline, not a test-limit override."
 }

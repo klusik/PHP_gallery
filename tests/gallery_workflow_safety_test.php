@@ -78,7 +78,7 @@ check(str_contains($runnerSource, "'--release' => 'release'") && !str_contains($
     'Release mode must select release without a preceding full audit.');
 check(str_contains($runnerSource, "'--profile=' . \$profile"),
     'Selected profile must flow to the authoritative audit.');
-check(str_contains($mysqlSource, "\$mode === '--development' ? 480 : 1320"),
-    'Both central audit modes require the full timeout budget.');
+check(str_contains($mysqlSource, "\$mode === '--development' ? 540 : 1320"),
+    'Development and non-development workflow modes require their full timeout budgets.');
 
 echo "PASS gallery workflow opt-in connection identity cleanup and audit-profile guards\n";

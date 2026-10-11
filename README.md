@@ -13,9 +13,11 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.126.3
+**Current Version:** 0.127
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
+
+Configurable public content widgets are available on the #126 working branch through Appearance / Widgets. Administrators can author safe Markdown and manually curated links, select home/gallery page scope, seven in-flow regions or bounded floating placement, and explicitly publish or disable independent widgets. Public content is server-rendered once, with a non-obstructive no-JavaScript fallback. The feature remains under acceptance; see the [widget operations and architecture guide](docs/PUBLIC_CONTENT_WIDGETS.md) for shipped behavior, tests and current limitations.
 
 The Admin gallery workspace shows hierarchy, direct/descendant image counts and branch feature state. Stage Maps, File names, Voting or Picture Game intentions, review their exact descendant scope, then apply the reviewed plan. Own-password quick actions retain unrelated preferences and token protection. Settings > Uploads integrates ordinary upload preferences and mobile connections; its legacy-menu switch restores old links without changing route availability.
 

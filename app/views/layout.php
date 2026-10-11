@@ -483,6 +483,9 @@ function view_render_footer(string $page = 'home', array $model = []): void
         view_render_admin_test_run_panel($adminTestRunPanel);
     }
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
+    if (in_array($page, ['home', 'gallery'], true)) {
+        echo (string) ($model['public_widget_footer_html'] ?? '');
+    }
     $githubProjectUrl = trim((string) ($model['github_project_url'] ?? ''));
     if ($githubProjectUrl !== '') {
         echo '<a class="site-footer-link" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
@@ -508,6 +511,7 @@ function view_render_footer(string $page = 'home', array $model = []): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/viewer-favourites.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-home-search.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-content-widgets.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/back-to-top.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/responsive-thumbnails.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',

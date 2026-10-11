@@ -6,6 +6,8 @@
  * Purpose: Run the same-origin browser journey inside a disposable application.
  * Responsibilities:
  *   - Exercise real workflow controls and capture observable browser postconditions.
+ *   - Deliver an unsaved authenticated widget draft into protected Home and Gallery iframes.
+ *   - Check live page, placement and device changes while guarding persisted widget state.
  * Author: Rudolf Klusal
  * Real same-origin application journey executed by a standalone headless Chromium fixture.
  */
@@ -13,6 +15,50 @@
 /** Run the complete same-origin browser journey. @return {Promise<void>} Writes a bounded fixture result. */
 async () => {
     let stage = 'browser login';
+    Object.defineProperty(window, '__galleryWorkflowStage', {
+        configurable: false,
+        enumerable: false,
+        get: () => stage,
+    });
+    // Purpose: Bound one browser request and response body in the disposable workflow.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: HTTP requests awaited by the outer page and its same-origin application frames.
+    // Consumers: fixture fetch wrappers used by the live Gallery browser journey.
+    // Rationale: surface a stalled local request at its current workflow step instead of consuming the full fixture result window.
+    const workflowFetchTimeoutMs = 30000;
+    const nativeFetch = window.fetch.bind(window);
+    const fetchWithDeadline = async (fetchFunction, ...args) => {
+        const [request, init] = args;
+        const requestOptions = init && typeof init === 'object' ? init : {};
+        const existingSignal = requestOptions.signal ?? request?.signal;
+        const timeoutSignal = AbortSignal.timeout(workflowFetchTimeoutMs);
+        const signal = existingSignal ? AbortSignal.any([existingSignal, timeoutSignal]) : timeoutSignal;
+        try {
+            return await fetchFunction(request, {...requestOptions, signal});
+        } catch (error) {
+            if (timeoutSignal.aborted) {
+                const safeStage = stage.replace(/[^a-zA-Z0-9 ._-]/g, ' ').replace(/\s+/g, ' ').trim();
+                stage = ('fetch timeout ' + safeStage).slice(0, 100);
+            }
+            throw error;
+        }
+    };
+    const fetch = (...args) => fetchWithDeadline(nativeFetch, ...args);
+    // Purpose: Bound native canvas encoding used to create the synthetic upload image.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: one JPEG callback in the disposable Gallery browser journey.
+    // Consumers: the browser-upload fixture's canvas.toBlob() call.
+    // Rationale: a missing native encoding callback must not hold the browser result poll indefinitely.
+    const workflowCanvasEncodingTimeoutMs = 10000;
+    // Purpose: Bound the pair of animation frames used to settle a replaced Admin panel.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: one stale-fragment ordering check in the disposable Gallery browser journey.
+    // Consumers: the two-frame Admin panel settle point.
+    // Rationale: a suspended iframe must report its active stage instead of holding the full browser result poll.
+    const workflowFrameSettleTimeoutMs = 2000;
     /** Yield briefly while actual HTTP and rendering work completes. */
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     /** Wait for an observable application postcondition without assuming request duration. */
@@ -32,7 +78,7 @@ async () => {
         const safeRoute = value => {
             try {
                 const route = new URL(value, location.href).searchParams.get('page') || 'home';
-                return ['admin_login', 'admin_logout', 'admin_theme', 'home'].includes(route) ? route : 'other';
+                return ['admin', 'admin_login', 'admin_logout', 'admin_theme', 'admin_new_gallery', 'home'].includes(route) ? route : 'other';
             } catch {
                 return 'unknown';
             }
@@ -51,41 +97,62 @@ async () => {
             }
         };
         const credentials = JSON.parse(document.querySelector('#credentials').textContent);
-        const loginResponse = await fetch('/index.php?page=admin_login', {credentials: 'same-origin', cache: 'no-store'});
-        const login = new DOMParser().parseFromString(await loginResponse.text(), 'text/html');
-        const csrfField = login.querySelector('[name="csrf_token"]');
-        stage = 'login GET status ' + loginResponse.status + ' route ' + safeRoute(loginResponse.url) + ' csrf ' + Boolean(csrfField);
-        expect(loginResponse.ok && csrfField instanceof HTMLInputElement);
-        const csrf = csrfField.value;
-        stage = 'verify nonempty CSRF extracted before login POST';
-        expect(csrf.length > 0);
-        const result = await fetch('/index.php?page=admin_login', {method: 'POST', credentials: 'same-origin', cache: 'no-store', body: new URLSearchParams({
-            identifier: credentials.username, password: credentials.password, csrf_token: csrf,
-        })});
-        const loginFailureBody = result.status === 400 ? await result.text() : '';
-        const loginInvalidCsrf = loginFailureBody.trim() === 'Invalid CSRF token.';
-        stage = 'login POST status ' + result.status + ' route ' + safeRoute(result.url)
-            + ' csrf-posted ' + Boolean(csrf) + ' invalid-csrf ' + loginInvalidCsrf + ' ok ' + result.ok;
-        expect(result.ok);
         const frame = document.querySelector('#application');
-        stage = 'open admin home after login';
+        expect(frame instanceof HTMLIFrameElement);
+        // Use the real login form in the application's own browsing context.
+        // Fetch follows redirects and can report HTTP 200 for a failed login form;
+        // only navigation to the authenticated Admin route proves sign-in.
+        stage = 'open native admin login form';
+        frame.src = '/index.php?page=admin_login';
+        const loginDocument = await until(() => {
+            const current = frame.contentDocument;
+            if (current?.readyState !== 'complete') return null;
+            const form = current.querySelector('form[method="post"]');
+            return form?.querySelector('[name="csrf_token"]')?.value ? current : null;
+        });
+        const loginForm = loginDocument.querySelector('form[method="post"]');
+        const loginIdentifier = loginForm.querySelector('input[name="identifier"]');
+        const loginPassword = loginForm.querySelector('input[name="password"]');
+        expect(loginIdentifier instanceof frame.contentWindow.HTMLInputElement
+            && loginPassword instanceof frame.contentWindow.HTMLInputElement);
+        loginIdentifier.value = credentials.username;
+        loginPassword.value = credentials.password;
+        stage = 'submit native admin login form';
+        loginForm.requestSubmit();
+        const afterLoginDocument = await until(() => {
+            const current = frame.contentDocument;
+            return current && current !== loginDocument && current.readyState === 'complete' ? current : null;
+        });
+        stage = 'native login destination ' + safeRoute(frame.contentWindow.location.href)
+            + ' login-form ' + Boolean(afterLoginDocument.querySelector('input[name="password"]'));
+        expect(new URL(frame.contentWindow.location.href).searchParams.get('page') === 'admin'
+            && !afterLoginDocument.querySelector('input[name="password"]'));
+        stage = 'open authenticated admin home';
         frame.src = '/index.php?page=home';
+        let actualCreateLink;
         try {
-            await until(() => frame.contentDocument?.body?.dataset.adminGallerySidePanelBound === '1');
+            actualCreateLink = await until(() => {
+                const current = frame.contentDocument;
+                if (current?.readyState !== 'complete'
+                    || current.body?.dataset.adminGallerySidePanelBound !== '1') return null;
+                return current.querySelector('[data-gallery-side-panel-link][data-admin-side-panel-workflow="create"]');
+            });
         } catch {
-            const frameDocument = frame.contentDocument;
-            const body = frameDocument?.body;
+            const current = frame.contentDocument;
             stage = 'admin home route ' + safeRoute(frame.contentWindow?.location.href || '')
-                + ' document ' + Boolean(frameDocument)
-                + ' login-form ' + Boolean(frameDocument?.querySelector('input[type="password"]'))
-                + ' panel-bound ' + (body?.dataset.adminGallerySidePanelBound === '1');
-            throw new Error('Authenticated Admin page did not publish its side-panel binding marker.');
+                + ' panel-bound ' + Boolean(current?.body?.dataset.adminGallerySidePanelBound === '1')
+                + ' admin-create ' + Boolean(current?.querySelector('[data-admin-side-panel-workflow="create"]'))
+                + ' login-form ' + Boolean(current?.querySelector('input[name="password"]'));
+            throw new Error('Authenticated Home did not expose its real create-gallery entry point.');
         }
         const win = frame.contentWindow;
         const doc = frame.contentDocument;
         const initialUrl = win.location.href;
         const initialDocument = doc;
         let posts = 0;
+        let createPanelResponseStatus = 0;
+        let createPanelResponseRoute = 'none';
+        let createPanelRedirected = false;
         let lastMutationStatus = 0;
         const imageMutationResponses = [];
         let holdNextEditorRefresh = false;
@@ -99,8 +166,13 @@ async () => {
                 && ['admin_new_gallery', 'admin_edit_gallery'].includes(route);
             const isImageMutation = String(args[1]?.method || '').toUpperCase() === 'POST' && route === 'admin_bulk_images';
             if (isMutation) posts++;
-            const response = await originalFetch(...args);
+            const response = await fetchWithDeadline(originalFetch, ...args);
             if (isMutation) lastMutationStatus = response.status;
+            if (route === 'admin_new_gallery' && !isMutation) {
+                createPanelResponseStatus = response.status;
+                createPanelResponseRoute = safeRoute(response.url);
+                createPanelRedirected = response.redirected;
+            }
             if (isImageMutation) {
                 const payload = await response.clone().json();
                 imageMutationResponses.push(payload);
@@ -120,15 +192,25 @@ async () => {
             return response;
         };
         stage = 'open actual create panel';
-        // Exercise the installed delegated handler with a dynamically inserted normal create link.
-        const link = doc.createElement('a');
-        link.href = '/index.php?page=admin_new_gallery';
-        link.dataset.gallerySidePanelLink = '';
-        link.dataset.adminSidePanelWorkflow = 'create';
-        link.textContent = 'Create fixture gallery';
+        // Keep the dynamic-link delegation test, but use a real authorized
+        // production link including its server-generated panel destination.
+        const link = actualCreateLink.cloneNode(true);
+        expect(link instanceof win.HTMLAnchorElement);
         doc.body.append(link);
         link.click();
-        const form = await until(() => doc.querySelector('[data-gallery-panel-create-form]'));
+        let form;
+        try {
+            form = await until(() => doc.querySelector('[data-gallery-panel-create-form]'));
+        } catch {
+            const panelElement = doc.querySelector('[data-admin-side-panel]');
+            const panelBody = panelElement?.querySelector('[data-admin-side-panel-body]');
+            stage = 'create panel status ' + createPanelResponseStatus
+                + ' route ' + createPanelResponseRoute
+                + ' redirected ' + Number(createPanelRedirected)
+                + ' panel ' + Number(Boolean(panelElement))
+                + ' loading ' + Number(Boolean(panelBody?.querySelector('.admin-side-panel-loading')));
+            throw new Error('Real create-gallery panel did not contain the expected form.');
+        }
         const panel = form.closest('[data-admin-side-panel]');
         expect(form.querySelector('[name="title"]').getAttribute('aria-label') === 'Gallery name');
         form.querySelector('[name="title"]').value = 'Browser workflow';
@@ -178,7 +260,16 @@ async () => {
         const latestEditor = doc.querySelector('[data-admin-panel-edit-form]');
         heldEditorRefresh.release();
         await until(() => heldEditorReturned);
-        await new Promise((resolve) => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
+        await new Promise((resolve, reject) => {
+            const settleTimeout = setTimeout(() => {
+                stage = 'gallery panel animation frame timeout';
+                reject(new Error('Admin panel replacement did not settle in two animation frames.'));
+            }, workflowFrameSettleTimeoutMs);
+            win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
+                clearTimeout(settleTimeout);
+                resolve();
+            }));
+        });
         stage = 'stale editor response cannot replace newer fragment';
         expect(doc.querySelector('[data-admin-panel-edit-form]') === latestEditor);
         expect(latestEditor.querySelector('[name="title"]').value === 'Browser edited 2');
@@ -241,7 +332,17 @@ async () => {
         const drawing = canvas.getContext('2d');
         drawing.fillStyle = '#338899';
         drawing.fillRect(0, 0, 48, 32);
-        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg'));
+        const blob = await new Promise((resolve, reject) => {
+            const encodingTimeout = setTimeout(() => {
+                stage = 'browser upload canvas encoding timeout';
+                reject(new Error('Canvas JPEG encoding did not complete before its workflow deadline.'));
+            }, workflowCanvasEncodingTimeoutMs);
+            canvas.toBlob((encoded) => {
+                clearTimeout(encodingTimeout);
+                if (encoded) resolve(encoded);
+                else reject(new Error('Canvas JPEG encoding returned no image.'));
+            }, 'image/jpeg');
+        });
         const bytes = await blob.arrayBuffer();
         const hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
         const imageHash = Array.from(hashBytes, (value) => value.toString(16).padStart(2, '0')).join('');
@@ -373,6 +474,327 @@ async () => {
         stage = 'admin probe status ' + adminProbe.status + ' route ' + safeRoute(adminProbe.url)
             + ' editor ' + adminEditorMarker + ' login-form ' + adminLoginForm;
         expect(adminProbe.status === 200 && adminEditorMarker);
+        stage = 'read disposable widget persistence baseline';
+        const workflowTokenForWidget = location.pathname.match(/^\/__workflow_([a-f0-9]{24})$/)?.[1] || '';
+        expect(workflowTokenForWidget !== '');
+        const widgetStateUrl = location.pathname + '/preview-state';
+        const readWidgetStateHash = async () => {
+            const response = await fetch(widgetStateUrl, {cache: 'no-store'});
+            if (!response.ok) return '';
+            const state = await response.json();
+            return typeof state.public_widgets_sha256 === 'string' ? state.public_widgets_sha256 : '';
+        };
+        const widgetStateBefore = await readWidgetStateHash();
+        expect(/^[a-f0-9]{64}$/.test(widgetStateBefore));
+        const widgetEditorRoute = '/index.php?page=admin_theme&widgets=1&id=new';
+        stage = 'navigate authenticated app to real widget editor';
+        frame.src = widgetEditorRoute;
+        const widgetDocument = await until(() => {
+            const currentUrl = new URL(frame.contentWindow.location.href);
+            if (currentUrl.origin !== win.location.origin || currentUrl.pathname !== '/index.php'
+                || currentUrl.searchParams.get('page') !== 'admin_theme'
+                || currentUrl.searchParams.get('widgets') !== '1') return null;
+            const editor = frame.contentDocument?.querySelector('[data-public-widget-editor]');
+            return editor?.dataset.widgetEnhanced === '1' ? frame.contentDocument : null;
+        });
+        const widgetWindow = frame.contentWindow;
+        const widgetForm = widgetDocument.querySelector('[data-public-widget-editor]');
+        const widgetTitleInput = widgetForm.querySelector('[name="title"]');
+        const widgetContentInput = widgetForm.querySelector('[name="content_md"]');
+        const widgetScopeInput = widgetForm.querySelector('[name="page_scope"]');
+        const widgetFlowSlotInput = widgetForm.querySelector('[name="flow_slot"]');
+        const widgetPlacementModeInput = widgetForm.querySelector('[name="placement_mode"]');
+        const widgetPageSelect = widgetDocument.querySelector('[data-widget-preview-page-selector]');
+        const widgetDeviceButtons = Array.from(widgetDocument.querySelectorAll('.public-widgets-device-toggle button'));
+        const widgetPreviewButton = widgetForm.querySelector('button[type="submit"][name="widget_action"][value="preview"]');
+        const widgetThemeHost = widgetDocument.querySelector('[data-widget-theme-preview]');
+        const widgetPublicFrame = widgetDocument.querySelector('iframe.public-widgets-theme-frame');
+        const widgetTitleMarker = 'Workflow browser widget ' + workflowTokenForWidget;
+        const widgetBoldMarker = 'Delivered through the authenticated editor';
+        const widgetContentMarker = 'Unsaved widget payload ' + workflowTokenForWidget
+            + ' **' + widgetBoldMarker + '** [Safe destination](https://example.test/widget-' + workflowTokenForWidget + ')';
+        expect(widgetTitleInput && widgetContentInput && widgetScopeInput && widgetFlowSlotInput
+            && widgetPageSelect && widgetPreviewButton && widgetThemeHost && widgetPublicFrame);
+        widgetTitleInput.value = widgetTitleMarker;
+        widgetTitleInput.dispatchEvent(new widgetWindow.Event('input', {bubbles: true}));
+        widgetContentInput.value = widgetContentMarker;
+        widgetContentInput.dispatchEvent(new widgetWindow.Event('input', {bubbles: true}));
+        widgetScopeInput.value = 'all';
+        widgetScopeInput.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        widgetFlowSlotInput.value = 'home_before_grid';
+        widgetFlowSlotInput.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        widgetPageSelect.value = 'home';
+        widgetPageSelect.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        const originalWidgetFetch = widgetWindow.fetch.bind(widgetWindow);
+        let widgetPreviewRequests = 0;
+        let widgetPreviewResponse = null;
+        widgetWindow.fetch = async (...args) => {
+            const requestUrl = new URL(String(args[0]), widgetWindow.location.href);
+            const isWidgetEditorPost = String(args[1]?.method || '').toUpperCase() === 'POST'
+                && requestUrl.pathname === '/index.php'
+                && requestUrl.searchParams.get('page') === 'admin_theme'
+                && requestUrl.searchParams.get('widgets') === '1';
+            const response = await fetchWithDeadline(originalWidgetFetch, ...args);
+            if (isWidgetEditorPost) {
+                widgetPreviewRequests++;
+                const payload = await response.clone().json().catch(() => null);
+                widgetPreviewResponse = {
+                    status: response.status,
+                    noStore: (response.headers.get('Cache-Control') || '').toLowerCase().includes('no-store'),
+                    ok: payload?.ok === true,
+                    title: payload?.title,
+                    html: typeof payload?.html === 'string' ? payload.html : '',
+                };
+            }
+            return response;
+        };
+        stage = 'request real authenticated unsaved widget preview';
+        widgetPreviewButton.click();
+        await until(() => widgetPreviewResponse !== null && !widgetPreviewButton.disabled);
+        expect(widgetPreviewRequests === 1 && widgetPreviewResponse.status === 200
+            && widgetPreviewResponse.noStore && widgetPreviewResponse.ok
+            && widgetPreviewResponse.title === widgetTitleMarker
+            && widgetPreviewResponse.html.includes(widgetBoldMarker)
+            && widgetPreviewResponse.html.includes('https://example.test/widget-' + workflowTokenForWidget));
+        expect(widgetDeviceButtons.length === 3 && widgetPlacementModeInput && widgetFlowSlotInput.value === 'home_before_grid');
+        const widgetPreviewViewportReady = (width, height) => {
+            const publicDocument = widgetPublicFrame.contentDocument;
+            const publicWindow = widgetPublicFrame.contentWindow;
+            return Boolean(publicDocument?.documentElement && publicWindow
+                && widgetPublicFrame.style.width === width + 'px'
+                && widgetPublicFrame.style.height === height + 'px'
+                && publicWindow.innerWidth === width
+                && publicWindow.innerHeight === height);
+        };
+        const widgetPreviewRouteReady = (page, viewport) => {
+            const publicDocument = widgetPublicFrame.contentDocument;
+            const publicUrl = new URL(widgetPublicFrame.contentWindow.location.href);
+            const routePage = publicUrl.searchParams.get('page');
+            const correctRoute = page === 'home'
+                ? routePage === 'home' || publicUrl.pathname === '/'
+                : routePage === 'gallery' || publicUrl.pathname.startsWith('/gallery/');
+            const correctPageContent = page === 'home'
+                ? Boolean(publicDocument?.querySelector('[data-public-gallery-index-grid], .gallery-list-frame'))
+                : Boolean(publicDocument?.querySelector('.hero[data-public-gallery-id]'));
+            const sameOriginProtectedRoute = publicUrl.origin === widgetWindow.location.origin
+                && publicUrl.searchParams.getAll('preview').length === 1
+                && publicUrl.searchParams.get('preview') === 'visual'
+                && publicUrl.searchParams.getAll('view_as').length === 1
+                && publicUrl.searchParams.get('view_as') === 'anonymous';
+            const safeFrame = widgetPublicFrame.getAttribute('sandbox') === 'allow-same-origin'
+                && widgetPublicFrame.getAttribute('referrerpolicy') === 'same-origin';
+            return Boolean(publicDocument?.body?.classList.contains('public-page')
+                && publicDocument.querySelector('main.site-main') && publicDocument.querySelector('.site-header')
+                && publicDocument.querySelector('.site-footer') && correctRoute && correctPageContent
+                && sameOriginProtectedRoute && safeFrame
+                && widgetPreviewViewportReady(viewport.width, viewport.height));
+        };
+        const widgetPreviewPageReady = (page, slot, viewport, floatingMode, floatingPositioned) => {
+            const publicDocument = widgetPublicFrame.contentDocument;
+            const draft = publicDocument?.querySelector('[data-widget-theme-draft="1"]');
+            const draftZone = draft?.closest('[data-public-widget-zone]');
+            return Boolean(widgetPreviewRouteReady(page, viewport) && draft
+                && draft.querySelector('.public-content-widget-title')?.textContent === widgetTitleMarker
+                && draft.querySelector('strong')?.textContent === widgetBoldMarker
+                && draft.querySelector('a')?.href === 'https://example.test/widget-' + workflowTokenForWidget
+                && draftZone?.dataset.publicWidgetZone === slot
+                && draft.hasAttribute('data-public-widget-floating') === floatingMode
+                && draft.classList.contains('is-public-widget-floating') === floatingPositioned);
+        };
+        const widgetPreviewReadinessDiagnostic = () => {
+            try {
+                const publicDocument = widgetPublicFrame.contentDocument;
+                const publicWindow = widgetPublicFrame.contentWindow;
+                const publicUrl = publicWindow?.location.href || '';
+                const draft = publicDocument?.querySelector('[data-widget-theme-draft="1"]');
+                const zone = draft?.closest('[data-public-widget-zone]')?.dataset.publicWidgetZone || 'none';
+                const widgetShell = widgetThemeHost.querySelector('[data-widget-theme-frame-wrap]');
+                const widgetTitle = draft?.querySelector('.public-content-widget-title')?.textContent;
+                const widgetBold = draft?.querySelector('strong')?.textContent;
+                const widgetLink = draft?.querySelector('a')?.href;
+                return 'p' + (widgetPageSelect.value === 'gallery' ? 'g' : 'h')
+                    + 'r' + safePublicRoute(publicUrl)
+                    + 'd' + Number(Boolean(draft))
+                    + 'z' + zone
+                    + 't' + Number(widgetTitle === widgetTitleMarker)
+                    + 'b' + Number(widgetBold === widgetBoldMarker)
+                    + 'l' + Number(widgetLink === 'https://example.test/widget-' + workflowTokenForWidget)
+                    + 'v' + (publicDocument?.documentElement.clientWidth || 0)
+                    + '/' + (publicWindow?.innerWidth || 0)
+                    + 's' + Number(widgetPublicFrame.getAttribute('sandbox') === 'allow-same-origin')
+                    + 'w' + Number(Boolean(widgetShell?.hidden));
+            } catch {
+                return 'preview-document-unreadable';
+            }
+        };
+        const widgetPreviewFailureStage = label =>
+            (label + ' ' + widgetPreviewReadinessDiagnostic()).slice(0, 100);
+        const verifyWidgetPersistenceUnchanged = async () => {
+            const currentHash = await readWidgetStateHash();
+            expect(/^[a-f0-9]{64}$/.test(currentHash) && currentHash === widgetStateBefore);
+        };
+        // Purpose: Keep the Admin preview's configured device viewports explicit in this live browser journey.
+        // Type: Record<'desktop'|'tablet'|'mobile',{width:number,height:number}>.
+        // Units: CSS pixels.
+        // Scope: Authenticated widget-preview browser fixture.
+        // Consumers: Protected iframe size and public floating/fallback assertions below.
+        // Rationale: Lock the editor's supported viewport presets without claiming real-device fidelity.
+        const WIDGET_PREVIEW_VIEWPORTS = Object.freeze({
+            desktop: Object.freeze({width: 1280, height: 900}),
+            tablet: Object.freeze({width: 768, height: 1024}),
+            mobile: Object.freeze({width: 390, height: 740}),
+        });
+        const desktopViewport = WIDGET_PREVIEW_VIEWPORTS.desktop;
+        stage = 'real protected Home iframe places the unsaved draft before the gallery grid';
+        try {
+            await until(() => widgetPreviewPageReady('home', 'home_before_grid', desktopViewport, false, false));
+        } catch {
+            stage = widgetPreviewFailureStage('Home placement');
+            throw new Error('Protected Home draft did not reach its expected placement.');
+        }
+        expect(widgetPreviewPageReady('home', 'home_before_grid', desktopViewport, false, false));
+        const homePreviewDocument = widgetPublicFrame.contentDocument;
+        const homePreviewDraft = homePreviewDocument.querySelector('[data-widget-theme-draft="1"]');
+        const homePreviewGrid = homePreviewDocument.querySelector('[data-public-gallery-index-grid]');
+        const homePreviewRegion = homePreviewDraft.closest('[data-public-widget-zone]');
+        expect(homePreviewGrid && homePreviewRegion
+            && Boolean(homePreviewRegion.compareDocumentPosition(homePreviewGrid)
+                & widgetPublicFrame.contentWindow.Node.DOCUMENT_POSITION_FOLLOWING));
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'switch the live draft preview to Gallery content-bottom fallback';
+        widgetPageSelect.value = 'gallery';
+        widgetPageSelect.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        try {
+            stage = 'load real protected Gallery page in the Admin preview';
+            await until(() => widgetPreviewRouteReady('gallery', desktopViewport));
+        } catch {
+            stage = widgetPreviewFailureStage('Gallery route');
+            throw new Error('Protected Gallery route did not pass its preview checks.');
+        }
+        try {
+            stage = 'insert the draft into the Gallery content-bottom fallback';
+            await until(() => widgetPreviewPageReady('gallery', 'content_bottom', desktopViewport, false, false));
+        } catch {
+            stage = widgetPreviewFailureStage('Gallery fallback');
+            throw new Error('Protected Gallery draft did not reach its expected placement.');
+        }
+        expect(widgetPreviewPageReady('gallery', 'content_bottom', desktopViewport, false, false));
+        const galleryPreviewDocument = widgetPublicFrame.contentDocument;
+        const galleryPreviewDraft = galleryPreviewDocument.querySelector('[data-widget-theme-draft="1"]');
+        const galleryPreviewRegion = galleryPreviewDraft.closest('[data-public-widget-zone]');
+        const galleryPreviewFooter = galleryPreviewDocument.querySelector('.site-footer');
+        expect(galleryPreviewDraft.closest('main.site-main') && galleryPreviewRegion && galleryPreviewFooter
+            && Boolean(galleryPreviewRegion.compareDocumentPosition(galleryPreviewFooter)
+                & widgetPublicFrame.contentWindow.Node.DOCUMENT_POSITION_FOLLOWING));
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'request desktop floating preview and check rendered Gallery control clearance';
+        widgetPlacementModeInput.value = 'floating';
+        widgetPlacementModeInput.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        await until(() => widgetPreviewPageReady('gallery', 'floating', desktopViewport, true, true));
+        expect(widgetPreviewPageReady('gallery', 'floating', desktopViewport, true, true));
+        const widgetPreviewFloatingClearance = page => {
+            const publicDocument = widgetPublicFrame.contentDocument;
+            const publicWindow = widgetPublicFrame.contentWindow;
+            const draft = publicDocument?.querySelector('[data-widget-theme-draft="1"]');
+            const bounds = draft?.getBoundingClientRect();
+            const viewportWidth = publicDocument?.documentElement.clientWidth || 0;
+            const viewportHeight = publicWindow?.innerHeight || 0;
+            const protectedControls = page === 'home'
+                ? '.site-header, .public-home-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav'
+                : '.site-header, .hero[data-public-gallery-id] .hero-actions, .back-to-top-button:not([hidden]), .picture-manager-toolbar, .nav';
+            const clearOfControls = draft && Array.from(publicDocument.querySelectorAll(protectedControls)).every(control => {
+                const rect = control.getBoundingClientRect();
+                const style = publicWindow.getComputedStyle(control);
+                if (style.display === 'none' || style.visibility === 'hidden' || rect.width <= 0 || rect.height <= 0) return true;
+                return bounds.right <= rect.left || bounds.left >= rect.right
+                    || bounds.bottom <= rect.top || bounds.top >= rect.bottom;
+            });
+            const close = draft?.querySelector('.public-widget-dismiss');
+            const closeBounds = close?.getBoundingClientRect();
+            return Boolean(draft?.classList.contains('is-public-widget-floating')
+                && bounds && bounds.width > 0 && bounds.height > 0
+                && bounds.left >= 15 && bounds.top >= 15
+                && bounds.right <= viewportWidth - 15 && bounds.bottom <= viewportHeight - 15
+                && clearOfControls && closeBounds && closeBounds.width > 0 && closeBounds.height > 0
+                && closeBounds.left >= bounds.left && closeBounds.right <= bounds.right
+                && closeBounds.top >= bounds.top && closeBounds.bottom <= bounds.bottom);
+        };
+        expect(widgetPreviewFloatingClearance('gallery'));
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'switch desktop floating draft to Home and clear its rendered controls';
+        widgetPageSelect.value = 'home';
+        widgetPageSelect.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        await until(() => widgetPreviewPageReady('home', 'floating', desktopViewport, true, true));
+        expect(widgetPreviewPageReady('home', 'floating', desktopViewport, true, true)
+            && widgetPreviewFloatingClearance('home'));
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'return desktop floating draft to Gallery before tablet fallback';
+        widgetPageSelect.value = 'gallery';
+        widgetPageSelect.dispatchEvent(new widgetWindow.Event('change', {bubbles: true}));
+        await until(() => widgetPreviewPageReady('gallery', 'floating', desktopViewport, true, true));
+        expect(widgetPreviewPageReady('gallery', 'floating', desktopViewport, true, true)
+            && widgetPreviewFloatingClearance('gallery'));
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'tablet preview uses the configured viewport and in-flow floating fallback';
+        widgetDeviceButtons[1].click();
+        const tabletViewport = WIDGET_PREVIEW_VIEWPORTS.tablet;
+        await until(() => widgetPreviewPageReady('gallery', 'floating', tabletViewport, true, false));
+        const tabletDraft = widgetPublicFrame.contentDocument.querySelector('[data-widget-theme-draft="1"]');
+        expect(widgetPreviewPageReady('gallery', 'floating', tabletViewport, true, false)
+            && widgetPublicFrame.contentWindow.getComputedStyle(tabletDraft).position !== 'fixed'
+            && tabletDraft.style.left === '' && tabletDraft.style.top === '' && tabletDraft.style.width === '');
+        await verifyWidgetPersistenceUnchanged();
+        stage = 'mobile preview uses the configured viewport and in-flow floating fallback';
+        widgetDeviceButtons[2].click();
+        const mobileViewport = WIDGET_PREVIEW_VIEWPORTS.mobile;
+        await until(() => widgetPreviewPageReady('gallery', 'floating', mobileViewport, true, false));
+        const mobileDraft = widgetPublicFrame.contentDocument.querySelector('[data-widget-theme-draft="1"]');
+        expect(widgetPreviewPageReady('gallery', 'floating', mobileViewport, true, false)
+            && widgetPublicFrame.contentWindow.getComputedStyle(mobileDraft).position !== 'fixed'
+            && mobileDraft.style.left === '' && mobileDraft.style.top === '' && mobileDraft.style.width === '');
+        await verifyWidgetPersistenceUnchanged();
+        widgetWindow.fetch = originalWidgetFetch;
+        stage = 'leave widget editor and reload the ordinary public Home';
+        frame.src = '/index.php?page=home';
+        const ordinaryHomeDocument = await until(() => {
+            const currentUrl = new URL(frame.contentWindow.location.href);
+            const publicDocument = frame.contentDocument;
+            return currentUrl.origin === win.location.origin && currentUrl.searchParams.get('page') === 'home'
+                && publicDocument?.readyState === 'complete'
+                && publicDocument.body?.classList.contains('public-page') ? publicDocument : null;
+        });
+        expect(!ordinaryHomeDocument.querySelector('[data-widget-theme-draft]')
+            && !ordinaryHomeDocument.body.textContent.includes(widgetTitleMarker)
+            && !ordinaryHomeDocument.body.textContent.includes(workflowTokenForWidget));
+        frame.contentWindow.location.reload();
+        const reloadedOrdinaryHome = await until(() => {
+            const publicDocument = frame.contentDocument;
+            const currentUrl = new URL(frame.contentWindow.location.href);
+            return publicDocument !== ordinaryHomeDocument && publicDocument?.readyState === 'complete'
+                && currentUrl.searchParams.get('page') === 'home'
+                && publicDocument.body?.classList.contains('public-page') ? publicDocument : null;
+        });
+        expect(!reloadedOrdinaryHome.querySelector('[data-widget-theme-draft]')
+            && !reloadedOrdinaryHome.body.textContent.includes(widgetTitleMarker)
+            && !reloadedOrdinaryHome.body.textContent.includes(workflowTokenForWidget));
+        stage = 'reload the authenticated widget editor without retaining the draft';
+        frame.src = widgetEditorRoute;
+        const reloadedWidgetDocument = await until(() => {
+            const currentUrl = new URL(frame.contentWindow.location.href);
+            if (currentUrl.origin !== win.location.origin || currentUrl.pathname !== '/index.php'
+                || currentUrl.searchParams.get('page') !== 'admin_theme'
+                || currentUrl.searchParams.get('widgets') !== '1') return null;
+            const editor = frame.contentDocument?.querySelector('[data-public-widget-editor]');
+            return editor?.dataset.widgetEnhanced === '1' ? frame.contentDocument : null;
+        });
+        const reloadedWidgetForm = reloadedWidgetDocument.querySelector('[data-public-widget-editor]');
+        const reloadedWidgetList = Array.from(reloadedWidgetDocument.querySelectorAll('.public-widgets-items strong'));
+        expect(reloadedWidgetForm.querySelector('[name="title"]')?.value === ''
+            && reloadedWidgetForm.querySelector('[name="content_md"]')?.value === ''
+            && !reloadedWidgetList.some(item => item.textContent === widgetTitleMarker)
+            && !reloadedWidgetDocument.body.textContent.includes(widgetTitleMarker));
+        stage = 'authenticated iframe draft preview leaves disposable widget state unchanged';
+        await verifyWidgetPersistenceUnchanged();
         const requestedEditorUrl = new URL(visualEditorUrl, win.location.href);
         stage = 'navigate authenticated application iframe to Custom CSS editor';
         frame.src = visualEditorUrl;
@@ -385,6 +807,8 @@ async () => {
         });
         const editorDocument = frame.contentDocument;
         const editorWindow = frame.contentWindow;
+        const originalEditorWindowFetch = editorWindow.fetch.bind(editorWindow);
+        editorWindow.fetch = (...args) => fetchWithDeadline(originalEditorWindowFetch, ...args);
         stage = 'wait for production visual-editor module to bind and reveal its launch button';
         let visualLaunch;
         try {
@@ -1151,9 +1575,7 @@ async () => {
         const visualSaveRequests = [];
         const visualSaveResponses = [];
         let releaseVisualSaveResponse = null;
-        let notifyVisualSaveRequest = null;
         const visualSaveResponseGate = new Promise(resolve => { releaseVisualSaveResponse = resolve; });
-        const visualSaveRequestArrived = new Promise(resolve => { notifyVisualSaveRequest = resolve; });
         const originalEditorFetch = editorWindow.fetch.bind(editorWindow);
         editorWindow.fetch = async (...args) => {
             const method = String(args[1]?.method || 'GET').toUpperCase();
@@ -1172,15 +1594,14 @@ async () => {
                     fileSize: submittedFile instanceof editorWindow.File ? submittedFile.size : 0,
                     fileType: submittedFile instanceof editorWindow.File ? submittedFile.type : '',
                 });
-                notifyVisualSaveRequest?.();
-                const response = await originalEditorFetch(...args);
+                const response = await fetchWithDeadline(originalEditorFetch, ...args);
                 if (action === 'save') {
                     await visualSaveResponseGate;
                     visualSaveResponses.push({ok: response.ok, status: response.status, body: await response.clone().json()});
                 }
                 return response;
             }
-            return originalEditorFetch(...args);
+            return fetchWithDeadline(originalEditorFetch, ...args);
         };
         const backgroundTransfer = new editorWindow.DataTransfer();
         backgroundTransfer.items.add(new editorWindow.File([bytes], 'visual-preview-background.jpg', {type: 'image/jpeg'}));
@@ -1281,7 +1702,8 @@ async () => {
         const saveButton = editorRoot.querySelector('button[name="css_override_action"][value="save"]');
         expect(saveButton && initialBackgroundRevision !== '' && initialCssRevision !== '');
         saveButton.click();
-        await visualSaveRequestArrived;
+        // The request list is populated synchronously by the intercepted fetch; use the bounded until() deadline
+        // so a missed submit event reports this exact stage instead of consuming the full fixture poll window.
         await until(() => visualSaveRequests.length === 1);
         const laterBackgroundFile = new editorWindow.File([bytes], 'selected-during-save.png', {type: 'image/jpeg'});
         const laterBackgroundTransfer = new editorWindow.DataTransfer();
@@ -1388,7 +1810,8 @@ async () => {
             && comparableAssetUrl(reloadedAssetUrl) === comparableAssetUrl(savedBackgroundUrl));
         let publicBackgroundAssetDelivered = false;
         if (reloadedAssetUrl && publicBackgroundAssetMatchesSave) {
-            const assetResponse = await reloadedPublicWindow.fetch(reloadedAssetUrl.href, {credentials: 'same-origin', cache: 'no-store'});
+            const assetResponse = await fetchWithDeadline(reloadedPublicWindow.fetch.bind(reloadedPublicWindow),
+                reloadedAssetUrl.href, {credentials: 'same-origin', cache: 'no-store'});
             const assetBytes = (await assetResponse.arrayBuffer()).byteLength;
             const assetContentType = (assetResponse.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
             publicBackgroundAssetDelivered = assetResponse.status === 200 && /^image\/[a-z0-9.+-]+$/.test(assetContentType)
@@ -1463,7 +1886,7 @@ async () => {
             && visualSaveResponses[2].body.background.operation === 'remove'
             && visualSaveResponses[2].body.background.target === 'theme'
             && backgroundRevision.value !== removeBackgroundRevision && cssRevision.value === removeCssRevision);
-        stage = 'browser create upload visibility trash restore expiry ordering and visual CSS preview';
+        stage = 'browser gallery workflows CSS and authenticated widget draft iframe';
         await fetch(location.pathname + '/result', {method: 'POST', body: JSON.stringify({ok: true, stage, imageHash})});
     } catch {
         savedPublicFrame?.remove();

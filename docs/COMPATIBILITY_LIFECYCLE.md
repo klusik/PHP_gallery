@@ -60,6 +60,22 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Database and migrations
 
+### WIDGET-2 — Public geometry without resize observation
+
+- **Reason / protected environment:** Browsers without `ResizeObserver` must still display the original published article and retain viewport/scroll-based floating placement. Dynamic control-size invalidation is an additive browser enhancement.
+- **Owner:** `setupPublicContentWidgets()` in `public-content-widgets.js` owns observation and the shared bounded geometry scheduler.
+- **Evidence:** The public placement Chromium fixture covers size changes of protected controls with observation available; it does not qualify older browser engines. Server-rendered and no-JavaScript coverage remain independent of this API.
+- **Usage:** Browser API availability and fallback frequency are unknown; no telemetry is added.
+- **Support rationale:** The original in-flow article remains permanently supported. Removing the observer guard requires an accepted browser-support policy and proof that supported engines provide the API.
+
+### WIDGET-1 — Unsupported persisted source-language metadata
+
+- **Reason / protected scenario:** A restored, older or directly edited published widget may have missing or unsupported optional `source_language` metadata. Public reads label that content as English so the otherwise valid title and body remain visible; current Admin writes still reject unsupported codes.
+- **Owner:** `public_widget_normalize_public_row()` in `app/services/public_content_widgets.php` owns the read fallback. `public_widget_normalize()` remains the strict validation path for Admin writes.
+- **Evidence:** `tests/public_content_widget_public_render_test.php` checks the safe fallback label and strict-write rejection. The owned MySQL/MariaDB `tests/public_content_widget_db_workflow_test.php` writes an unsupported code directly to its disposable row, then verifies the public reader and planner keep the content visible with an English label and do not rewrite storage. `docs/PUBLIC_CONTENT_WIDGETS.md` defines the visitor-facing language behavior.
+- **Usage / introduction:** Unsupported stored values are unmeasured; the introduction date of any such rows is unknown.
+- **Support rationale:** Keep this fallback while imported, restored or directly edited rows can contain optional unsupported language metadata. Retirement requires a measured inventory and a documented data-repair policy that guarantees those rows cannot silently disappear from public pages.
+
 ### UI-2 — Authored metadata language and source-field compatibility
 
 - **Reason / protected scenario:** Existing galleries and photos may have no

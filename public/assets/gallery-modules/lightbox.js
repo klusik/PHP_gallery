@@ -69,7 +69,7 @@ export { setupTagSuggestions } from './tag-suggestions.js?v=20261003-scoped-i18n
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
-import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261006-resource-lifecycle-v1';
+import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261011-resource-decode-v2';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
