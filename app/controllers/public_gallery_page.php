@@ -799,6 +799,7 @@ function cms_gallery(): void
         'back_to_top_html' => $backToTopHtml,
         'lightbox_html' => $lightboxHtml,
         'render_profile_html' => $renderProfileHtml,
+        'public_widgets' => \Gallery\Services\public_widget_public_plan('gallery'),
     ]);
     if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
         gallery_benchmark_record_public_render($gallery, public_render_profile_snapshot());

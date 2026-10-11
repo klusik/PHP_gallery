@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_admin_preview_empty_home.html
+Module Type: Browser Test Fixture
+Purpose: Exercise Admin widget preview ordering and rail cleanup on an empty Home page.
+Responsibilities:
+  - Match the production empty root gallery list without pagination or a gallery grid.
+  - Keep one published Home-after-grid widget to verify draft placement order.
+  - Load the production public widget stylesheet inside the protected preview.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protected empty Home preview fixture</title><link rel="stylesheet" href="/widget-public.css">
+<body class="public-page" data-preview-fixture-page="home">
+<header class="site-header"><a href="/untrusted-route">Gallery header</a></header>
+<main class="site-main">
+    <div class="gallery-list-frame" data-back-to-top-scope>
+        <div class="gallery-list-content" data-back-to-top-list>
+            <div data-public-gallery-index data-public-root-gallery-count="0"
+                data-public-root-gallery-revision="empty-home-fixture" data-public-root-smart-gallery-count="0" hidden></div>
+            <section class="public-widget-region public-widget-region--home_after_grid"
+                data-public-widget-zone="home_after_grid">
+                <article class="public-content-widget public-content-widget--card"
+                    data-public-widget-id="dddddddddddddddddddddddddddddddd" data-public-widget-sort-order="40" lang="en">
+                    <h2 class="public-content-widget-title">Saved after-grid widget</h2>
+                    <div class="public-content-widget-body"><p>The saved Home widget remains after the empty grid position.</p></div>
+                </article>
+            </section>
+        </div>
+    </div>
+    <section class="public-widget-region public-widget-region--floating" data-public-widget-zone="floating">
+        <article class="public-content-widget public-content-widget--card"
+            data-public-widget-id="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" data-public-widget-sort-order="50"
+            data-public-widget-floating="1" data-public-widget-width="280" data-public-widget-anchor="bottom-right"
+            data-public-widget-x="900" data-public-widget-y="900" data-public-widget-dismiss-label="Close">
+            <h2 class="public-content-widget-title">Saved floating widget</h2>
+            <div class="public-content-widget-body"><p>The saved floating region follows content-bottom widgets.</p></div>
+        </article>
+    </section>
+</main>
+<footer class="site-footer">Existing Home footer</footer>
+</body></html>

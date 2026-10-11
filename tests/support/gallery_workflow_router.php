@@ -7,6 +7,7 @@
  * Purpose: Route requests inside the disposable application copy.
  * Responsibilities:
  *   - Keep fixture serving separate from the active installation.
+ *   - Expose a bounded digest of disposable public-widget rows for browser read-only checks.
  * Author: Rudolf Klusal
  * Router copied into the disposable application; never served by the active installation.
  */
@@ -59,10 +60,78 @@ if ($path === '/__workflow_' . $token . '/preview-error') {
     return;
 }
 if ($path === '/__workflow_' . $token . '/preview-state') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+        http_response_code(405);
+        header('Allow: GET');
+        header('Cache-Control: no-store');
+        return;
+    }
     $snapshotStage = 'bootstrap';
     try {
         require_once __DIR__ . '/app/bootstrap_full.php';
         $pdo = \Gallery\Core\db();
+        $snapshotStage = 'public_content_widgets';
+        // Bound the row count, per-widget Markdown and total digest size for one disposable persistence snapshot.
+        // Type: array{row_limit:int,content_byte_limit:int,digest_byte_limit:int}; Units: rows and bytes as named.
+        // Scope: one preview-state response; Consumers: widget query, raw content validation and digest encoder.
+        // Rationale: reuse service-owned row/content caps and keep the canonical read-only hash bounded.
+        $widgetDigestLimits = [
+            'row_limit' => \Gallery\Services\PUBLIC_WIDGET_MAX_ITEMS,
+            'content_byte_limit' => \Gallery\Services\PUBLIC_WIDGET_CONTENT_MAX_BYTES,
+            'digest_byte_limit' => 1048576,
+        ];
+        $widgetRowLimit = $widgetDigestLimits['row_limit'];
+        $widgetContentByteLimit = $widgetDigestLimits['content_byte_limit'];
+        $widgetDigestByteLimit = $widgetDigestLimits['digest_byte_limit'];
+        $widgetRows = $pdo->query('SELECT widget_id, title,
+                CASE WHEN OCTET_LENGTH(content_md) <= ' . $widgetContentByteLimit . ' THEN content_md ELSE NULL END AS content_md,
+                status, page_scope, placement_mode, flow_slot, floating_anchor, x_permille, y_permille,
+                width_px, mobile_fallback, appearance, sort_order, source_language, revision,
+                created_at, updated_at, OCTET_LENGTH(content_md) AS content_bytes
+            FROM public_content_widgets ORDER BY widget_id LIMIT ' . ($widgetRowLimit + 1));
+        if ($widgetRows === false) {
+            throw new RuntimeException('Widget state could not be read.');
+        }
+        // Hash fixed-order length-prefixed raw values so valid control characters do not expand through JSON escaping.
+        $widgetDigestFields = [
+            'widget_id', 'title', 'content_md', 'status', 'page_scope', 'placement_mode', 'flow_slot',
+            'floating_anchor', 'x_permille', 'y_permille', 'width_px', 'mobile_fallback', 'appearance',
+            'sort_order', 'source_language', 'revision', 'created_at', 'updated_at',
+        ];
+        $widgetStateContext = hash_init('sha256');
+        $widgetRowCount = 0;
+        $widgetSerializedBytes = 0;
+        while (($widgetRow = $widgetRows->fetch(PDO::FETCH_ASSOC)) !== false) {
+            $widgetRowCount++;
+            if ($widgetRowCount > $widgetRowLimit) {
+                throw new RuntimeException('Widget state exceeds the row limit.');
+            }
+            $widgetContentBytes = (int) ($widgetRow['content_bytes'] ?? -1);
+            if ($widgetContentBytes < 0 || $widgetContentBytes > $widgetContentByteLimit
+                || !is_string($widgetRow['content_md'] ?? null)) {
+                throw new RuntimeException('Widget state exceeds the content limit.');
+            }
+            if ($widgetSerializedBytes + 2 > $widgetDigestByteLimit) {
+                throw new RuntimeException('Widget state exceeds the digest byte limit.');
+            }
+            hash_update($widgetStateContext, 'R;');
+            $widgetSerializedBytes += 2;
+            foreach ($widgetDigestFields as $field) {
+                $value = $widgetRow[$field] ?? null;
+                if ($value !== null && !is_string($value) && !is_int($value)) {
+                    throw new RuntimeException('Widget state contains an unsupported digest value.');
+                }
+                $encodedValue = $value === null ? 'N;' : strlen((string) $value) . ':' . (string) $value . ';';
+                $encodedField = $field . '=' . $encodedValue;
+                $encodedBytes = strlen($encodedField);
+                if ($widgetSerializedBytes + $encodedBytes > $widgetDigestByteLimit) {
+                    throw new RuntimeException('Widget state exceeds the digest byte limit.');
+                }
+                hash_update($widgetStateContext, $encodedField);
+                $widgetSerializedBytes += $encodedBytes;
+            }
+        }
+        $widgetStateHash = hash_final($widgetStateContext);
         $snapshotStage = 'telemetry_events';
         $telemetryCount = (int) $pdo->query('SELECT COUNT(*) FROM telemetry_events')->fetchColumn();
         $snapshotStage = 'telemetry_sessions';
@@ -97,7 +166,8 @@ if ($path === '/__workflow_' . $token . '/preview-state') {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['telemetry_events' => $telemetryCount, 'telemetry_sessions' => $telemetrySessionCount,
             'telemetry_hourly_metrics' => $telemetryHourlyCount, 'thumbnail_variants' => $variants,
-            'image_metadata' => $imageMetadata, 'gallery_files' => $galleryFiles], JSON_THROW_ON_ERROR);
+            'image_metadata' => $imageMetadata, 'gallery_files' => $galleryFiles,
+            'public_widgets_sha256' => $widgetStateHash], JSON_THROW_ON_ERROR);
     } catch (Throwable $exception) {
         // Keep disposable-server diagnostics useful without returning SQL messages, tokens or filesystem paths.
         http_response_code(500);
@@ -122,6 +192,32 @@ if ($path === '/__workflow_' . $token) {
 if ($path === '/__workflow_' . $token . '.js') {
     header('Content-Type: text/javascript');
     readfile(__DIR__ . '/browser.js');
+    return;
+}
+if ($path === '/__workflow_' . $token . '/public-widgets') {
+    header('Cache-Control: no-store');
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="en"><meta charset="utf-8"><title>Public widget persistence workflow</title><body>';
+    echo '<script id="credentials" type="application/json">' . json_encode(json_decode((string) file_get_contents(__DIR__ . '/seed.json'), true), JSON_HEX_TAG) . '</script>';
+    echo '<iframe id="application" title="Disposable gallery" style="width:1280px;height:900px"></iframe>';
+    echo '<script src="/__workflow_' . $token . '/public-widgets.js"></script></body></html>';
+    return;
+}
+if ($path === '/__workflow_' . $token . '/public-widgets.js') {
+    header('Content-Type: text/javascript');
+    readfile(__DIR__ . '/public-widget-persistence-browser.js');
+    return;
+}
+if ($path === '/__workflow_' . $token . '/public-widgets/result' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $result = json_decode((string) file_get_contents('php://input', false, null, 0, 4096), true);
+    $detail = is_array($result) ? ($result['detail'] ?? null) : null;
+    $detailIsSafe = !is_array($result) || !array_key_exists('detail', $result)
+        || (is_string($detail) && preg_match('/^[a-zA-Z0-9 ._-]{0,180}$/D', $detail) === 1);
+    if (is_array($result) && is_bool($result['ok'] ?? null)
+        && preg_match('/^[a-zA-Z0-9 ._-]{1,100}$/D', (string) ($result['stage'] ?? '')) === 1 && $detailIsSafe) {
+        file_put_contents(__DIR__ . '/browser-widget-result.json', json_encode($result, JSON_THROW_ON_ERROR));
+    }
+    http_response_code(204);
     return;
 }
 if ($path === '/__workflow_' . $token . '/result' && $_SERVER['REQUEST_METHOD'] === 'POST') {

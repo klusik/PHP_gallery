@@ -1,0 +1,452 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_theme_width_composition.html
+Module Type: Browser Test Fixture
+Purpose: Host production Home and Gallery documents for Theme width and rail composition checks.
+Responsibilities: Expose actual renderer output in same-origin frames that can be measured at bounded widths.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Public Theme width composition</title>
+    <style>
+        html, body { margin: 0; padding: 0; }
+        .public-page-frame { display: block; width: 1440px; height: 1200px; margin: 0; padding: 0; border: 0; }
+    </style>
+</head>
+<body>
+    <main>
+        <iframe class="public-page-frame" data-fixture-page="home" title="Production Home page" src="/home"></iframe>
+        <iframe class="public-page-frame" data-fixture-page="gallery" title="Production Gallery page" src="/gallery"></iframe>
+    </main>
+    <pre id="results">BROWSER RUNNING</pre>
+    <script type="module">
+        const modes = ['default', 'wide', 'custom', 'full'];
+        const widths = [1440, 1240, 1080, 960, 760, 390, 320];
+        let assertions = 0;
+
+        // Purpose: Bound one local production-route navigation before the audit child deadline.
+        // Type: integer.
+        // Units: milliseconds.
+        // Scope: Same-origin Home and Gallery iframe routes in this fixture.
+        // Consumers: waitForFrameDocument() timeout and actionable navigation failure.
+        // Rationale: The fixture serves only loopback documents and fixed repository assets; a longer wait indicates a stalled route.
+        const frameRouteTimeoutMs = 15000;
+
+        // Purpose: Bound the real Home search interaction and its loopback result request.
+        // Type: integer.
+        // Units: milliseconds.
+        // Scope: One query/clear cycle in the production Home iframe.
+        // Consumers: waitForCondition() failure when production search state does not settle.
+        // Rationale: The fixture uses an immediate local JSON endpoint and zero-delay progressive phases; a longer wait signals a stalled browser interaction.
+        const searchInteractionTimeoutMs = 10000;
+
+        /** Require one rendered layout invariant and retain a concise failure context.
+         * @param {boolean} condition Expected browser-observable condition.
+         * @param {string} message Failure context for the production page.
+         * @return {void} Counts success or stops this fixture with an actionable failure.
+         */
+        const check = (condition, message) => {
+            if (!condition) throw new Error(message);
+            assertions++;
+        };
+
+        /** Wait for the child document's layout and finite presentation transitions to settle.
+         * @param {Document} document Actual same-origin production Home or Gallery document.
+         * @return {Promise<void>} Resolves after layout frames and bounded animation completion.
+         */
+        const settleDocument = async document => {
+            await new Promise(resolve => document.defaultView.requestAnimationFrame(
+                () => document.defaultView.requestAnimationFrame(resolve)));
+            const finished = document.getAnimations({subtree: true}).map(animation => Promise.race([
+                animation.finished.catch(() => {}),
+                new Promise(resolve => setTimeout(resolve, 250)),
+            ]));
+            await Promise.all(finished);
+        };
+
+        /** Measure the intended shell width for a production Theme mode and child viewport.
+         * @param {string} mode Supported Theme page-width mode.
+         * @param {number} layoutWidth Child document's layout viewport width in CSS pixels.
+         * @param {number} viewportWidth Child browsing-context width used by viewport units.
+         * @return {number} Expected CSS width after the selected cap and viewport gutter.
+         */
+        const expectedShellWidth = (mode, layoutWidth, viewportWidth) => {
+            if (mode === 'wide') return Math.min(1440, layoutWidth - 32);
+            if (mode === 'custom') return Math.min(1320, layoutWidth - 32);
+            if (mode === 'full') return layoutWidth - Math.min(48, Math.max(16, viewportWidth * 0.03));
+            return Math.min(1120, layoutWidth - 32);
+        };
+
+        /** Verify that a real production element stays inside its expected rendered owner.
+         * @param {Element} element Rendered public page element.
+         * @param {Element} owner Parent layout region that owns the element.
+         * @param {string} label Page and component context.
+         * @return {void} Counts a successful horizontal containment assertion.
+         */
+        const checkInside = (element, owner, label) => {
+            const rect = element.getBoundingClientRect();
+            const ownerRect = owner.getBoundingClientRect();
+            check(rect.left >= ownerRect.left - 1 && rect.right <= ownerRect.right + 1,
+                label + ' remains inside its production owner (' + Math.round(rect.left) + '..' + Math.round(rect.right) + ')');
+        };
+
+        /** Check whether one actual production node precedes another in document order.
+         * @param {Document} document Production Home or Gallery document.
+         * @param {Node} first Earlier in-flow widget or page landmark.
+         * @param {Node} second Later page landmark or footer text node.
+         * @return {boolean} Whether the first node precedes the second node in DOM order.
+         */
+        const precedes = (document, first, second) => Boolean(first.compareDocumentPosition(second)
+            & document.defaultView.Node.DOCUMENT_POSITION_FOLLOWING);
+
+        /** Wait for one same-origin frame to finish loading its requested production route.
+         * @param {HTMLIFrameElement} frame Child frame assigned to a local Home or Gallery route.
+         * @param {string} [expectedPath] Expected route pathname after navigation; defaults to the frame's current source path.
+         * @return {Promise<Document>} The fully loaded production document after the initial about:blank page, or a route-specific timeout failure.
+         */
+        const waitForFrameDocument = (frame, expectedPath = new URL(frame.src, document.baseURI).pathname) => new Promise((resolve, reject) => {
+            let timeoutId;
+            const cleanup = () => {
+                frame.removeEventListener('load', inspect);
+                clearTimeout(timeoutId);
+            };
+            const inspect = () => {
+                try {
+                    const childDocument = frame.contentDocument;
+                    if (childDocument?.readyState !== 'complete'
+                        || childDocument.location.pathname !== expectedPath) {
+                        return;
+                    }
+                    cleanup();
+                    resolve(childDocument);
+                } catch (error) {
+                    cleanup();
+                    reject(new Error('Unable to inspect production iframe route ' + expectedPath + ': '
+                        + (error instanceof Error ? error.message : String(error))));
+                }
+            };
+            // Purpose: Stop waiting after the documented same-origin route window and report the actual frame state.
+            // Type: integer.
+            // Units: milliseconds.
+            // Scope: One Home or Gallery iframe navigation in this fixture.
+            // Consumers: The rejected wait observed by the fixture's BROWSER FAIL result.
+            // Rationale: Prevent a missing load event from consuming the registered 60-second Node child budget.
+            timeoutId = setTimeout(() => {
+                let currentPath = 'unavailable';
+                let readyState = 'unavailable';
+                try {
+                    const childDocument = frame.contentDocument;
+                    currentPath = childDocument?.location.pathname || currentPath;
+                    readyState = childDocument?.readyState || readyState;
+                } catch { /* Preserve the route failure if the frame state cannot be read. */ }
+                cleanup();
+                reject(new Error('Timed out waiting for production iframe route '
+                    + expectedPath + ' (current path ' + currentPath + ', readyState ' + readyState + ').'));
+            }, frameRouteTimeoutMs);
+            frame.addEventListener('load', inspect);
+            inspect();
+        });
+
+        /** Wait for a browser-observable search condition without polling outside the owning frame.
+         * @param {Document} childDocument Production Home document containing the search module.
+         * @param {() => boolean} predicate Search state expected from the production module.
+         * @param {string} label Actionable context for a stalled search state.
+         * @return {Promise<void>} Resolves when the predicate is true or rejects at the bounded interaction deadline.
+         */
+        const waitForCondition = (childDocument, predicate, label) => new Promise((resolve, reject) => {
+            const startedAt = Date.now();
+            const inspect = () => {
+                if (predicate()) {
+                    resolve();
+                    return;
+                }
+                if (Date.now() - startedAt >= searchInteractionTimeoutMs) {
+                    reject(new Error('Timed out waiting for ' + label + '.'));
+                    return;
+                }
+                childDocument.defaultView.requestAnimationFrame(inspect);
+            };
+            inspect();
+        });
+
+        /** Verify public content landmarks and horizontal overflow for one real route document.
+         * @param {Document} document Production Home or Gallery document rendered by PHP view functions.
+         * @param {string} page Fixture route family.
+         * @param {string} mode Current production Theme page-width class.
+         * @param {number} width Child frame width selected for this scenario.
+         * @return {void} Counts shell, rail, content, pagination, footer and overflow checks.
+         */
+        const checkPageScenario = (document, page, mode, width) => {
+            const context = page + ' ' + mode + ' at ' + width + 'px';
+            const layoutWidth = document.documentElement.clientWidth;
+            const viewportWidth = document.defaultView.innerWidth;
+            const body = document.body;
+            const header = document.querySelector('.site-header');
+            const main = document.querySelector('.site-main');
+            const footer = document.querySelector('.site-footer');
+            const rails = document.querySelector('.public-widget-rails-container');
+            const layout = document.querySelector('.public-widget-content-layout');
+            const primary = document.querySelector('.public-widget-primary');
+            const leftRail = document.querySelector('.public-widget-region--left_rail');
+            const rightRail = document.querySelector('.public-widget-region--right_rail');
+            const footerWidget = footer?.querySelector('.public-widget-region--footer');
+
+            check(body.classList.contains('public-page') && body.classList.contains('page-width-' + mode),
+                context + ' uses the actual public Theme width body class');
+            check(header && main && footer && rails && layout && primary && leftRail && rightRail && footerWidget,
+                context + ' contains production header, main, two rails, primary content and footer widget');
+            check(Math.abs(document.defaultView.innerWidth - width) <= 1,
+                context + ' child viewport matches its selected CSS-pixel width');
+
+            const expectedWidth = expectedShellWidth(mode, layoutWidth, viewportWidth);
+            for (const [selector, element] of [['header', header], ['main', main], ['footer', footer]]) {
+                const actualWidth = element.getBoundingClientRect().width;
+                check(Math.abs(actualWidth - expectedWidth) <= 1,
+                    context + ' ' + selector + ' width ' + actualWidth.toFixed(1) + 'px matches ' + expectedWidth + 'px Theme cap');
+                check(element.getBoundingClientRect().left >= -1
+                    && element.getBoundingClientRect().right <= layoutWidth + 1,
+                context + ' ' + selector + ' remains inside the viewport');
+            }
+            checkInside(rails, main, context + ' rail container');
+            checkInside(primary, rails, context + ' primary content');
+            checkInside(leftRail, rails, context + ' left rail');
+            checkInside(rightRail, rails, context + ' right rail');
+            checkInside(footerWidget, footer, context + ' footer widget');
+
+            const shouldStack = width <= 1080 || rails.getBoundingClientRect().width <= 1140;
+            const display = document.defaultView.getComputedStyle(layout).display;
+            if (shouldStack) {
+                const primaryRect = primary.getBoundingClientRect();
+                const leftRect = leftRail.getBoundingClientRect();
+                const rightRect = rightRail.getBoundingClientRect();
+                check(display === 'flex', context + ' stacks rails when its viewport or capped container is narrow');
+                check(primaryRect.top <= leftRect.top + 1 && leftRect.top <= rightRect.top + 1,
+                    context + ' orders primary content before the left and right rails');
+            } else {
+                const primaryRect = primary.getBoundingClientRect();
+                const leftRect = leftRail.getBoundingClientRect();
+                const rightRect = rightRail.getBoundingClientRect();
+                check(display === 'grid', context + ' retains the three-column rail layout when wide enough');
+                check(leftRect.right <= primaryRect.left + 1 && primaryRect.right <= rightRect.left + 1,
+                    context + ' positions both rails beside the real page content');
+            }
+
+            const paginations = Array.from(document.querySelectorAll('.site-main .pagination'));
+            if (page === 'home') {
+                const search = document.querySelector('[data-public-home-search]');
+                const homeBefore = document.querySelector('[data-public-widget-zone="home_before_grid"]');
+                const homeGrid = document.querySelector('[data-public-gallery-index-grid]');
+                const homeAfter = document.querySelector('[data-public-widget-zone="home_after_grid"]');
+                check(search?.querySelector('[data-public-home-search-input]'),
+                    context + ' renders the production Home search control');
+                check(homeGrid?.querySelectorAll('.gallery-card').length === 6,
+                    context + ' renders six actual Home gallery cards');
+                check(paginations.length === 2,
+                    context + ' retains top and bottom production Home pagination');
+                check(search && homeBefore && homeGrid && homeAfter
+                    && precedes(document, search, homeBefore)
+                    && precedes(document, homeBefore, paginations[0])
+                    && precedes(document, paginations[0], homeGrid)
+                    && precedes(document, homeGrid, paginations[1])
+                    && precedes(document, paginations[1], homeAfter),
+                context + ' preserves home_before_grid, pagination, grid and home_after_grid order');
+            } else {
+                const contentTop = document.querySelector('[data-public-widget-zone="content_top"]');
+                const hero = document.querySelector('.site-main .hero');
+                const galleryList = document.querySelector('.site-main .gallery-list-frame');
+                const contentBottom = document.querySelector('[data-public-widget-zone="content_bottom"]');
+                check(document.querySelector('.hero [aria-current="page"]')?.textContent === 'Production Gallery',
+                    context + ' renders the prepared Gallery hero and breadcrumb');
+                check(document.querySelectorAll('[data-public-subgallery-grid] .gallery-card').length === 2,
+                    context + ' renders actual Gallery child cards');
+                check(document.querySelectorAll('.gallery-image-grid .image-card').length === 6,
+                    context + ' renders actual Gallery photo cards');
+                check(paginations.length === 4,
+                    context + ' retains both production pagination pairs for children and photos');
+                check(contentTop && hero && galleryList && contentBottom
+                    && precedes(document, contentTop, hero)
+                    && precedes(document, hero, galleryList)
+                    && precedes(document, galleryList, contentBottom),
+                context + ' preserves Gallery content_top, hero/list and content_bottom order');
+            }
+            check(footerWidget?.parentElement === footer
+                && footer.lastChild?.nodeType === document.defaultView.Node.TEXT_NODE
+                && precedes(document, footerWidget, footer.lastChild),
+            context + ' keeps the prepared footer widget inside the real site footer before its credit');
+            check(document.querySelectorAll('.site-main .pagination').length > 0,
+                context + ' keeps production pagination inside the main public shell');
+
+            const galleryListFrame = document.querySelector('.site-main .gallery-list-frame');
+            const galleryListFrameStyle = galleryListFrame ? document.defaultView.getComputedStyle(galleryListFrame) : null;
+            // Purpose: Account for only the intentional mobile gallery-frame bleed in its owning main shell.
+            // Type: number.
+            // Units: CSS pixels.
+            // Scope: Real Home and Gallery Theme width fixture.
+            // Consumers: The frame viewport assertion and internal-overflow checks for its ancestor containers.
+            // Rationale: mobile-gallery.css extends this legacy frame by its computed negative margins while the frame remains inside the viewport.
+            const mobileGalleryFrameBleedAllowance = galleryListFrameStyle
+                ? ['marginLeft', 'marginRight'].reduce((total, property) => {
+                    const margin = Number.parseFloat(galleryListFrameStyle[property]);
+                    return total + (Number.isFinite(margin) ? Math.max(0, -margin) : 0);
+                }, 0)
+                : 0;
+            if (galleryListFrame && mobileGalleryFrameBleedAllowance > 0) {
+                const frameRect = galleryListFrame.getBoundingClientRect();
+                check(frameRect.left >= -1 && frameRect.right <= layoutWidth + 1,
+                    context + ' intentional mobile gallery-frame bleed stays inside the viewport');
+            }
+
+            const overflowOwners = [header, main, footer, rails, layout, primary, leftRail, rightRail, footerWidget,
+                galleryListFrame,
+                ...paginations, ...document.querySelectorAll('.site-main .hero, .site-main .grid, .public-content-widget')];
+            const originalFrameStyle = galleryListFrame?.getAttribute('style') ?? null;
+            try {
+                if (galleryListFrame && mobileGalleryFrameBleedAllowance > 0) {
+                    galleryListFrame.style.setProperty('margin-left', '0px', 'important');
+                    galleryListFrame.style.setProperty('margin-right', '0px', 'important');
+                }
+                for (const element of overflowOwners) {
+                    if (!element || element.clientWidth === 0) continue;
+                    const checkedScrollWidth = element.scrollWidth;
+                    const checkedClientWidth = element.clientWidth;
+                    const internalOverflow = checkedScrollWidth - checkedClientWidth;
+                    check(internalOverflow <= 1,
+                        context + ' ' + element.className + ' has no unexpected internal horizontal overflow '
+                        + '(' + checkedScrollWidth + 'px scroll, ' + checkedClientWidth + 'px client, '
+                        + (galleryListFrame && mobileGalleryFrameBleedAllowance > 0
+                            ? 'intentional mobile frame margins isolated'
+                            : 'no mobile frame margin isolation') + ')');
+                }
+            } finally {
+                if (galleryListFrame && mobileGalleryFrameBleedAllowance > 0) {
+                    if (originalFrameStyle === null) {
+                        galleryListFrame.removeAttribute('style');
+                    } else {
+                        galleryListFrame.setAttribute('style', originalFrameStyle);
+                    }
+                }
+            }
+            check(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+                context + ' production document has no page-level horizontal overflow');
+        };
+
+        try {
+            const frames = Array.from(document.querySelectorAll('iframe[data-fixture-page]'));
+            check(frames.length === 2, 'one production Home and one production Gallery document are hosted');
+            const childDocuments = await Promise.all(frames.map(frame => waitForFrameDocument(frame)));
+
+            for (const [index, frame] of frames.entries()) {
+                const page = String(frame.dataset.fixturePage);
+                const childDocument = childDocuments[index];
+                check(childDocument?.querySelector('.site-header') && childDocument?.querySelector('.site-footer'),
+                    page + ' route uses the production shared public shell');
+                check(childDocument.querySelector('#fixture-generated-theme-css')
+                    && childDocument.styleSheets.length >= 9,
+                page + ' route loads production public styles and the generated Theme CSS');
+
+                for (const width of widths) {
+                    frame.style.width = width + 'px';
+                    await settleDocument(childDocument);
+                    for (const mode of modes) {
+                        childDocument.body.className = 'public-page page-width-' + mode;
+                        await settleDocument(childDocument);
+                        checkPageScenario(childDocument, page, mode, width);
+                    }
+                }
+            }
+
+            const homeFrame = frames[0];
+            const homeDocument = homeFrame.contentDocument;
+            homeFrame.style.width = '1440px';
+            homeDocument.body.className = 'public-page page-width-default';
+            await settleDocument(homeDocument);
+            const searchRoot = homeDocument.querySelector('[data-public-home-search]');
+            const searchInput = searchRoot?.querySelector('[data-public-home-search-input]');
+            const floatingWidget = homeDocument.querySelector('[data-public-widget-floating="1"]');
+            await waitForCondition(homeDocument,
+                () => floatingWidget?.classList.contains('is-public-widget-floating') === true,
+                'the desktop Home widget to receive its production floating placement');
+            check(searchRoot && searchInput instanceof homeDocument.defaultView.HTMLInputElement
+                && floatingWidget,
+            'Desktop Home presents the public search input beside its actual floating widget.');
+
+            const searchRect = searchInput.getBoundingClientRect();
+            const widgetRect = floatingWidget.getBoundingClientRect();
+            const overlapsSearch = widgetRect.left < searchRect.right
+                && widgetRect.right > searchRect.left
+                && widgetRect.top < searchRect.bottom
+                && widgetRect.bottom > searchRect.top;
+            check(!overlapsSearch,
+                'The production floating widget does not cover the Home search input.');
+            const searchHit = homeDocument.elementFromPoint(
+                searchRect.left + searchRect.width / 2,
+                searchRect.top + searchRect.height / 2
+            );
+            check(searchHit === searchInput || searchInput.contains(searchHit),
+                'The Home search input remains the hit-tested target beneath the floating widget.');
+
+            const query = 'public widget search';
+            searchInput.focus();
+            searchInput.value = query;
+            searchInput.dispatchEvent(new homeDocument.defaultView.Event('input', {bubbles: true}));
+            await waitForCondition(homeDocument,
+                () => searchRoot.getAttribute('aria-busy') === 'false'
+                    && Boolean(searchRoot.querySelector('[data-public-home-search-result-key]')),
+                'all production Home search phases to render a result for the submitted query');
+            const searchResult = searchRoot.querySelector('[data-public-home-search-result-key]');
+            check(searchResult?.textContent.includes('Fixture match for ' + query)
+                && searchResult.getAttribute('href') === '/fixture/gallery/search-result',
+            'The production Home search renders the loopback result associated with the typed query.');
+            const clearSearch = searchRoot.querySelector('[data-public-home-search-clear]');
+            if (!(clearSearch instanceof homeDocument.defaultView.HTMLButtonElement)) {
+                throw new Error('The production Home search clear button is missing.');
+            }
+            check(!clearSearch.hidden,
+                'The production Home search exposes its clear action after query input.');
+            clearSearch.click();
+            check(searchInput.value === ''
+                && searchRoot.getAttribute('aria-busy') === 'false'
+                && searchRoot.querySelector('[data-public-home-search-results]')?.hidden
+                && clearSearch.hidden,
+            'Clearing the production Home search resets its query, result panel, busy state and clear action.');
+            const postClearInputRect = searchInput.getBoundingClientRect();
+            const postClearWidgetRect = floatingWidget.getBoundingClientRect();
+            check(!(postClearWidgetRect.left < postClearInputRect.right
+                && postClearWidgetRect.right > postClearInputRect.left
+                && postClearWidgetRect.top < postClearInputRect.bottom
+                && postClearWidgetRect.bottom > postClearInputRect.top),
+            'The floating widget still avoids the Home search input after query results are cleared.');
+
+            const homePageThreePath = '/fixture/home/page/3';
+            const pageThreeLink = homeDocument.querySelector(
+                '.site-main .pagination a[href="' + homePageThreePath + '"]'
+            );
+            check(pageThreeLink, 'The production Home pagination exposes a real next-page route.');
+            const pageThreeLoaded = waitForFrameDocument(homeFrame, homePageThreePath);
+            pageThreeLink.click();
+            const homePageThree = await pageThreeLoaded;
+            homeFrame.style.width = '1440px';
+            await settleDocument(homePageThree);
+            check(homeFrame.contentWindow.location.pathname === homePageThreePath,
+                'Following the production Home pager loads its selected page route.');
+            check(homePageThree.querySelector('.site-main .pagination [aria-current="page"]')?.textContent.trim() === '3'
+                && homePageThree.querySelector('.pagination-status')?.textContent.includes('3 of 3'),
+            'The selected Home page is reflected by the production pagination state.');
+            check(homePageThree.querySelectorAll('[data-public-gallery-index-grid] .gallery-card').length === 6
+                && homePageThree.querySelector('.gallery-card-title-link[href*="/fixture/gallery/300"]')
+                && homePageThree.querySelector('.gallery-card-title-link[href*="/fixture/gallery/305"]'),
+            'The selected Home page replaces the prior gallery cards with its own six-card page.');
+            checkPageScenario(homePageThree, 'home', 'default', 1440);
+            document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' production Home/Gallery Theme-width layout assertions';
+        } catch (error) {
+            document.getElementById('results').textContent = 'BROWSER FAIL ' + (error instanceof Error ? error.message : String(error));
+        }
+    </script>
+</body>
+</html>

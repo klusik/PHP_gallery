@@ -46,6 +46,18 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
 
+## Public content widgets: active MVC content and placement domain (#126)
+
+The [public content widget architecture and operating contract](docs/PUBLIC_CONTENT_WIDGETS.md) describes the currently implemented Admin lifecycle, seven public flow regions, floating enhancement, mobile/no-JavaScript fallback, security boundaries, maintenance and test ownership.
+
+The public widget browser module owns coalesced floating geometry invalidation for viewport changes, loaded fonts, widget content and protected control sizes, including the picture-manager's separately positioned action panel. The existing Admin fragment-refresh lifecycle calls its refresh hook after rebinding public controls, so replaced controls join the same observer and solver without creating a second refresh pipeline or reinstalling dismissal handlers.
+
+The append-only widget schema is owned by `database/migrations/202610100001_public_content_widgets.php`; `app/models/public_content_widgets.php` remains the only widget SQL owner. `app/services/public_content_widgets.php` owns closed enum normalization, safe authored Markdown/URL policy, published page-scope selection and deterministic region planning. Public controllers prepare a widget region plan **after** existing gallery access decisions, and `app/views/public_content_widgets.php` is the shared escaped SSR presentation owner. No view queries persistence, and no visitor input publishes widget content.
+
+The seven in-flow zones and the bounded floating fallback share exactly one widget identity and one server-rendered HTML instance. The browser may progressively fix at most two already-published panels to suitable desktop viewports; narrow/zoomed/colliding layouts retain the normal-flow content. The Admin pointer/keyboard map edits an unsaved draft and never invokes publication until explicit authorized Save. EN/CS/DE/SV UI translations are maintained independently of the single stored authored source language.
+
+An empty upgraded installation shows no widget markup. Disabled and draft rows are filtered before HTML creation; inaccessible gallery routes continue using their existing access gate rather than becoming a widget display surface. The sandboxed Admin preview projects unsaved drafts into the real Home/Gallery Theme layout, with a narrow browser journey against a disposable source-copy application. Broader Theme, device and accessibility coverage, database race and upgrade/backup acceptance, and green exact-candidate CI remain outstanding before the parent issue may close.
+
 ## Strict MVC Layer Contract
 
 The long-term application flow is `Bootstrap/Router -> Controller -> Service -> Model`, with controllers selecting views for presentation. This is a repository contract, not a naming convention. New code and materially refactored code must not introduce responsibility leakage between these layers.
@@ -156,6 +168,8 @@ The shared editor form renders Identity, API, Access and Display controls with c
 Dynamic tab binding in `public/assets/gallery-modules/admin-tabs.js` resolves panels within the current injected drawer body, not by global ID across a public page that may contain another editor fragment. Its sticky offset follows the measured header height, including wrapped titles. The gallery form's fixed Save gallery bar remains visible across the settings tabs after the drawer animation settles. Panel setup and save completion continue through the canonical mutation coordinator, with versioned imports in `public/assets/gallery.js` and `admin-operations.js` to replace cached handlers after deployment. Browser fixture coverage exercises physical tab hit targets, save-bar position during scrolling, fragment replacement and unchanged public URL.
 
 The single lightbox delegates nearby-preview queue scheduling, generation, concurrency and cancellation to `lightbox-preload-lifecycle.js`. Authorized source selection, decoding/cache ownership, foreground navigation, zoom and presentation stay with the existing viewer. The setup controller disposes the queue; close/navigation reset it according to the documented [lifecycle contract](docs/BROWSER_LIFECYCLE.md). This is not a second viewer or refresh coordinator.
+
+The detached-image resource owner accepts cache success only after decoding succeeds and both natural dimensions are positive. Decode rejection and zero-dimension responses settle as failures; a later foreground request retries rather than reusing an invalid preview entry. The registered `lightbox_resource_lifecycle_test.mjs` exercises both failure paths and foreground retries.
 
 Gallery route maps also initialize on pages with no photographs or lightbox markup. Their Leaflet viewport and follow-location state is created before the no-viewer early return; lazy payload loading, route markers, fit/reset controls and existing access policy remain shared with ordinary maps. Teardown aborts the independent map close handler, removes its Leaflet instance, hides the overlay and clears the body state before replacement.
 

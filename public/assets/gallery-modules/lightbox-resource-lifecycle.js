@@ -387,7 +387,7 @@ export function createLightboxResourceLifecycle(options = {}) {
      * Load and decode one detached image while owning all its listeners and cancellation.
      * @param {string} src Exact authorized URL supplied by the coordinator.
      * @param {LightboxFreshLoadOptions} options Decode priority, optional signal, and cache result label.
-     * @return {Promise<HTMLImageElement>} Decoded detached image node.
+     * @return {Promise<HTMLImageElement>} Resolves with a decoded image with positive natural dimensions; rejects on load, decode, or cancellation failure.
      */
     function loadFresh(src, options = {}) {
         if (disposed) {
@@ -440,12 +440,16 @@ export function createLightboxResourceLifecycle(options = {}) {
                     image.fetchPriority = options.priority;
                 }
                 image.onload = () => {
-                    Promise.resolve().then(() => decodeImage(image)).catch(() => undefined).then(() => {
+                    Promise.resolve().then(() => decodeImage(image)).then(() => {
                         if (settled) {
                             return;
                         }
                         if (operation.controller.signal.aborted) {
                             cancel();
+                            return;
+                        }
+                        if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+                            finishError(new Error('Lightbox image load failed.'));
                             return;
                         }
                         settled = true;
@@ -455,7 +459,7 @@ export function createLightboxResourceLifecycle(options = {}) {
                         }
                         report(onLoadEvent, {name: 'completed', src, priority: options.priority || '', width: image.naturalWidth || 0, height: image.naturalHeight || 0});
                         resolve(image);
-                    });
+                    }).catch((error) => finishError(error));
                 };
                 image.onerror = () => finishError(new Error('Lightbox image load failed.'));
                 image.src = src;

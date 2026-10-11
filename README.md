@@ -17,6 +17,8 @@ See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
+Configurable public content widgets are available on the #126 working branch through Appearance / Widgets. Administrators can author safe Markdown and manually curated links, select home/gallery page scope, seven in-flow regions or bounded floating placement, and explicitly publish or disable independent widgets. Public content is server-rendered once, with a non-obstructive no-JavaScript fallback. The feature remains under acceptance; see the [widget operations and architecture guide](docs/PUBLIC_CONTENT_WIDGETS.md) for shipped behavior, tests and current limitations.
+
 The Admin gallery workspace shows hierarchy, direct/descendant image counts and branch feature state. Stage Maps, File names, Voting or Picture Game intentions, review their exact descendant scope, then apply the reviewed plan. Own-password quick actions retain unrelated preferences and token protection. Settings > Uploads integrates ordinary upload preferences and mobile connections; its legacy-menu switch restores old links without changing route availability.
 
 Card orientation means vertical/photo above text and horizontal/photo beside text. Migration `202610020001_gallery_description_layout_semantics.php` preserves existing appearance across database values, sidecars, Smart Galleries and Trash. Back up those stores together and use the normal migration runner. Search defaults on only without a saved preference and when its capability is available.

@@ -95,6 +95,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-layout.css', 'assets/styles/admin-dashboard.css', 'assets/styles/admin-maintenance-center.css',
         'assets/styles/admin-telemetry.css', 'assets/styles/admin-logs.css', 'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css', 'assets/styles/admin-setup-wizard.css', 'assets/styles/admin-reordering.css',
+        'assets/styles/admin-public-widgets.css',
         'assets/styles/admin-media-tools.css', 'assets/styles/admin-theme-editor.css', 'assets/styles/admin-theme-media.css',
         'assets/styles/admin-theme-layout.css', 'assets/styles/admin-theme-language.css', 'assets/styles/admin-theme-custom-css.css',
         'assets/styles/admin-gallery-list.css', 'assets/styles/admin-smart-galleries.css', 'assets/styles/admin-gallery-title-completion.css',
@@ -114,7 +115,7 @@ function shared_layout_public_stylesheet_files(): array
 {
     return [
         'assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css',
-        'assets/styles/public-shared.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css',
+        'assets/styles/public-shared.css', 'assets/styles/public-content-widgets.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css',
     ];
 }
 
@@ -131,6 +132,9 @@ function shared_layout_stylesheet_files_for_context(string $bodyClass, ?array $u
         return shared_layout_public_stylesheet_files();
     }
     $files = shared_layout_admin_stylesheet_files();
+    if ($bodyClass !== 'admin-page' && !in_array('assets/styles/public-content-widgets.css', $files, true)) {
+        $files[] = 'assets/styles/public-content-widgets.css';
+    }
     if ($bodyClass !== 'admin-page' && $user !== null && !$anonymousPreview && !in_array('assets/styles/public-shared.css', $files, true)) {
         $lightboxIndex = array_search('assets/styles/lightbox.css', $files, true);
         $insertAt = $lightboxIndex === false ? 2 : ((int) $lightboxIndex + 1);

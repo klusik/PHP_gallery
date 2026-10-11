@@ -52,6 +52,7 @@ require_once __DIR__ . '/views/public_tags.php';
 require_once __DIR__ . '/views/breadcrumbs.php';
 require_once __DIR__ . '/views/public_gallery_controls.php';
 require_once __DIR__ . '/views/public_gallery_cards.php';
+require_once __DIR__ . '/views/public_content_widgets.php';
 require_once __DIR__ . '/views/public_gallery_pages.php';
 require_once __DIR__ . '/views/public_gallery_lightbox.php';
 require_once __DIR__ . '/views/picture_game.php';

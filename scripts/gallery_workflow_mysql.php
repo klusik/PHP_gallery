@@ -129,8 +129,14 @@ try {
         $childCommand[] = $routeProbeLabel;
         $environment['PHP_GALLERY_ROUTE_PROBE_EVIDENCE'] = $routeProbeLabel;
     }
+    // Purpose: Bound the owned workflow runner after private MySQL initialization.
+    // Type: integer.
+    // Units: seconds.
+    // Scope: Outer child deadline; 540 seconds for development mode and 1320 seconds for other workflow modes.
+    // Consumers: gallery_workflow_mysql_child() supervising gallery_workflow_run.php.
+    // Rationale: Development runs the 180-second HTTP child and 300-second browser child, leaving 60 seconds for fixture setup and cleanup; route probes and central audit modes retain their larger 1320-second envelope.
     gallery_workflow_mysql_child($childCommand, $directory, $environment,
-        $mode === '--development' ? 480 : 1320, true);
+        $mode === '--development' ? 540 : 1320, true);
 } catch (Throwable $exception) {
     fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at line ' . $exception->getLine() . ' code ' . (string) $exception->getCode() . "\n");
     $exit = 1;

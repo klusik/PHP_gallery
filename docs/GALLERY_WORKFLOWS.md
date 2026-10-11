@@ -39,7 +39,11 @@ device testing.
 The central audit remains the test orchestrator. The full and release profiles,
 and the explicit `php-regression` suite, discover
 tests/gallery_workflow_safety_test.php, tests/gallery_workflow_integration_test.php,
-and tests/gallery_workflow_browser_test.php through PHP regression discovery.
+tests/gallery_workflow_browser_test.php and
+tests/public_widget_persistence_browser_test.php through PHP regression discovery.
+Both browser tests use the shared owned HTTP/database fixture and run serially
+against its live Chromium and widget state; the persistence test owns and removes
+its unique widget row and verifies the table digest returns to baseline.
 The quick profile uses its curated PHP subset and does not run these disposable
 database workflow fixtures. The historical `--quick` convenience flag on either
 workflow launcher delegates straight to the central quick profile without
@@ -62,8 +66,11 @@ Ordinary audits without a disposable fixture run the safety test and explicitly
 SKIP the HTTP and browser integration tests. A skip is not full-stack evidence.
 GALLERY_WORKFLOW_REQUIRED=1 makes missing integration prerequisites BLOCKED with a
 nonzero exit code. Explicit GALLERY_WORKFLOW_BROWSER=disabled records only browser
-coverage as SKIP, including when workflows are required. Allow 180 seconds per
-integration PHP test in the audit registry.
+coverage as SKIP, including when workflows are required. Integration PHP tests
+have a 180-second child limit. The full Gallery browser test has a 300-second
+child limit for its 240-second result window plus browser startup, shutdown and
+fixture cleanup; the separate public-widget browser test has a 225-second limit
+for its 165-second result window and the same lifecycle overhead.
 
 Prerequisites: PHP 8.1+ with pdo_mysql, curl, gd, zip, dom and mbstring; Node.js;
 an installed Chrome/Chromium/Edge; and either MySQL 8 locally or a disposable

@@ -288,6 +288,7 @@ function cms_home(): void
         'cards_html' => $cardsHtml,
         'back_to_top_html' => $backToTopHtml,
         'render_profile_html' => $renderProfileHtml,
+        'public_widgets' => \Gallery\Services\public_widget_public_plan('home'),
     ]);
 }
 

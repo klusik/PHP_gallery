@@ -205,6 +205,7 @@ function admin_settings_specialized_catalog(): array
 {
     $definitions = [
         // Theme: appearance, identity, width, map pin, tags, and preview.
+        ['public_content_widgets', 'appearance', 'Public content widgets', 'Manage curated public text, links, page scope and placements independently from Theme settings.', 'admin_theme', ['widgets' => '1'], ''],
         ['theme_accent', 'appearance', 'Accent color', 'Buttons, selected pagination, and important public links.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-colors'], 'admin-theme-tab-appearance'],
         ['theme_accent_dark', 'appearance', 'Dark accent color', 'Hover states, outlines, and secondary public actions.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
         ['theme_paper', 'appearance', 'Page background color', 'Base public page color behind all content.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],

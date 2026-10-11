@@ -1,0 +1,244 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_admin_position.html
+Module Type: Browser Test Fixture
+Purpose: Exercise the production widget editor's pointer positioning without a gallery installation.
+Responsibilities:
+  - Render the semantic saved-widget form inputs and read-only preview.
+  - Prove emulated touch pointer, keyboard, Reset, scope and content-preservation behavior.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Widget Admin placement contract</title>
+<link rel="stylesheet" href="/widget-admin.css">
+<body class="admin-page">
+<main>
+<form action="/" method="post" data-public-widget-editor data-widget-i18n='{"desktop":"Desktop","tablet":"Tablet","mobile":"Mobile","reset_position":"Reset floating position","floating_hint":"Drag widget position"}' data-widget-published-peers='[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope":"home","anchor":"bottom-right","x":900,"y":900,"width":320}]'>
+    <input type="hidden" name="widget_id" value="cccccccccccccccccccccccccccccccc">
+    <select name="page_scope"><option value="home">Home</option><option value="gallery">Gallery</option><option value="all">All</option></select>
+    <select name="placement_mode"><option value="flow">Flow</option><option value="floating" selected>Floating</option></select>
+    <fieldset data-widget-flow-controls>
+        <select name="flow_slot"><option value="content_top">Top</option><option value="home_before_grid">Before grid</option><option value="home_after_grid">After grid</option><option value="left_rail">Left rail</option><option value="right_rail">Right rail</option><option value="footer">Footer</option></select>
+    </fieldset>
+    <fieldset data-widget-floating-controls>
+        <select name="floating_anchor"><option value="bottom-right" selected>Bottom right</option><option value="custom">Custom</option></select>
+        <input name="x_permille" type="number" value="900" min="0" max="1000">
+        <input name="y_permille" type="number" value="900" min="0" max="1000">
+    </fieldset>
+    <label>Width <input name="width_px" type="number" value="320"></label>
+    <textarea data-widget-source name="content_md">Initial **draft** with a [link](https://example.org)</textarea>
+    <button type="submit" name="widget_action" value="save">Save</button>
+</form>
+<section data-widget-preview><article class="public-content-widget public-content-widget--card"><h4 class="public-content-widget-title">Preview</h4><div data-widget-preview-body>Published source remains unchanged.</div></article></section>
+<section data-widget-theme-preview data-widget-preview-url="/index.php?page=home&amp;preview=visual&amp;view_as=anonymous"><h3>Actual homepage Theme preview</h3><p data-widget-theme-status></p><div class="public-widgets-theme-frame-wrap" data-widget-theme-frame-wrap hidden></div></section>
+<pre id="results">BROWSER PENDING</pre>
+</main>
+<script type="module">
+import {publicWidgetPointerPosition, setupAdminPublicWidgets} from '/widget-admin.js';
+import {readPublicWidgetFloatingGeometry} from '/public-content-widgets.js';
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const form = document.querySelector('[data-public-widget-editor]');
+const value = (name) => form.querySelector('[name="' + name + '"]').value;
+let submissions = 0;
+form.addEventListener('submit', (event) => { event.preventDefault(); submissions++; });
+const startUrl = location.href;
+const touchRun = new URL(location.href).searchParams.get('touch') === '1';
+try {
+    setupAdminPublicWidgets();
+    setupAdminPublicWidgets();
+    const stage = document.querySelector('.public-widgets-placement-stage');
+    check(stage && document.querySelectorAll('.public-widgets-placement-stage').length === 1, 'Idempotent stage creation');
+    const frame = document.querySelector('.public-widgets-theme-frame');
+    check(frame && frame.getAttribute('sandbox') === 'allow-same-origin', 'Theme preview is scriptless');
+    check(frame.parentElement?.classList.contains('public-widgets-theme-frame-wrap'),
+        'Theme preview stays inside its positioned clipping wrapper');
+    await new Promise((resolve, reject) => {
+        if (frame.contentDocument?.querySelector('[data-widget-theme-draft="1"]')) return resolve();
+        const timeout = setTimeout(() => reject(new Error('Protected public Home preview did not load')), 8000);
+        frame.addEventListener('load', () => { clearTimeout(timeout); resolve(); }, {once:true});
+    });
+    const previewDoc = frame.contentDocument;
+    check(previewDoc?.querySelector('body.public-page main.site-main'), 'Real public Home is shown');
+    check(previewDoc.querySelector('.public-widget-region--floating [data-widget-theme-draft="1"]'),
+        'Initial floating draft appears in its scriptless in-page fallback');
+    check(previewDoc.querySelector('.site-header') && previewDoc.querySelector('[data-public-gallery-index-grid]'),
+        'Existing public header and gallery grid remain present');
+    check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Only one safe draft article exists');
+    check(previewDoc.querySelectorAll('[data-public-widget-id="cccccccccccccccccccccccccccccccc"]').length === 1
+        && previewDoc.querySelector('[data-public-widget-id="cccccccccccccccccccccccccccccccc"][data-widget-theme-draft="1"]'),
+        'Unsaved preview replaces the saved widget while retaining its identity for stable ordering');
+    check(previewDoc.querySelector('[data-public-widget-id="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'),
+        'Other published widgets remain in the preview');
+    check(stage.dataset.mode === 'floating', 'Selected placement restores from saved form');
+    check(document.querySelector('[data-widget-flow-controls]').hidden, 'Floating form hides flow controls');
+    const warnings = document.querySelector('.public-widgets-placement-warnings');
+    const pageSelect = document.querySelector('.public-widgets-page-select');
+    check(pageSelect && pageSelect.disabled && pageSelect.value === 'home', 'Scope pins the advisory page');
+    check(warnings.textContent.includes('Another published widget'), 'Competing published anchor warning is visible');
+    const geometry = readPublicWidgetFloatingGeometry(previewDoc, frame.contentWindow);
+    check(stage.dataset.geometry === 'measured' && geometry.supported,
+        'Placement map waits for measured public desktop geometry.');
+    check(document.querySelectorAll('.public-widgets-exclusion-layer .public-widgets-restricted-guide').length
+        === geometry.exclusions.length, 'Map renders the public solver exclusion rectangles.');
+    check(document.querySelectorAll('.public-widgets-peer-marker').length === 1, 'Published peer position shown without authored content');
+    if (touchRun) {
+        stage.scrollIntoView({block: 'center'});
+        const trace = [];
+        for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+            stage.addEventListener(type, (event) => {
+                trace.push({type: event.type, pointerType: event.pointerType, trusted: event.isTrusted});
+            }, true);
+        }
+        const marker = stage.querySelector('.public-widgets-position-marker');
+        const touchDraft = previewDoc.querySelector('[data-widget-theme-draft="1"]');
+        const touchBounds = stage.getBoundingClientRect();
+        const bounds = {
+            left: touchBounds.left + stage.clientLeft, top: touchBounds.top + stage.clientTop,
+            width: stage.clientWidth, height: stage.clientHeight,
+        };
+        const pointerDown = {x: bounds.left + bounds.width * .25, y: bounds.top + bounds.height * .35};
+        const pointerMove = {x: bounds.left + bounds.width * .62, y: bounds.top + bounds.height * .56};
+        const panel = {width: touchDraft.getBoundingClientRect().width, height: Math.ceil(touchDraft.getBoundingClientRect().height)};
+        const touchGeometry = readPublicWidgetFloatingGeometry(previewDoc, frame.contentWindow);
+        const expectedPosition = publicWidgetPointerPosition(pointerMove.x, pointerMove.y, bounds, touchGeometry, panel);
+        const snapshot = () => ({
+            anchor: value('floating_anchor'), x: value('x_permille'), y: value('y_permille'),
+            markerLeft: marker.style.left, markerTop: marker.style.top, markerHidden: marker.hidden,
+            previewRect: (() => {
+                const rect = previewDoc.querySelector('[data-widget-theme-draft="1"]')?.getBoundingClientRect();
+                return rect ? {left: rect.left, top: rect.top, width: rect.width, height: rect.height} : null;
+            })(),
+            geometryWidth: touchGeometry.viewportWidth, geometryHeight: touchGeometry.viewportHeight,
+            submissions, url: location.href, content: value('content_md'),
+        });
+        window.__widgetPlacementTouchTrace = trace;
+        window.__widgetPlacementTouchSetup = {
+            bounds, pointerDown, pointerMove, expectedPosition, panel,
+            initial: snapshot(), url: startUrl,
+            viewport: {width: innerWidth, height: innerHeight, maxTouchPoints: navigator.maxTouchPoints},
+        };
+        window.__widgetPlacementTouchRefresh = () => {
+            if (!stage.isConnected) {
+                Object.assign(window.__widgetPlacementTouchSetup, {stageMissing: true});
+                return window.__widgetPlacementTouchSetup;
+            }
+            const currentRect = stage.getBoundingClientRect();
+            const currentBounds = {
+                left: currentRect.left + stage.clientLeft, top: currentRect.top + stage.clientTop,
+                width: stage.clientWidth, height: stage.clientHeight,
+            };
+            const currentPointerDown = {
+                x: currentBounds.left + currentBounds.width * .25,
+                y: currentBounds.top + currentBounds.height * .35,
+            };
+            const currentPointerMove = {
+                x: currentBounds.left + currentBounds.width * .62,
+                y: currentBounds.top + currentBounds.height * .56,
+            };
+            const currentGeometry = readPublicWidgetFloatingGeometry(previewDoc, frame.contentWindow);
+            const currentPosition = publicWidgetPointerPosition(
+                currentPointerMove.x, currentPointerMove.y, currentBounds, currentGeometry, panel);
+            Object.assign(window.__widgetPlacementTouchSetup, {
+                bounds: currentBounds,
+                pointerDown: currentPointerDown,
+                pointerMove: currentPointerMove,
+                expectedPosition: currentPosition,
+                stageMissing: false,
+            });
+            return window.__widgetPlacementTouchSetup;
+        };
+        window.__widgetPlacementTouchSnapshot = snapshot;
+        await new Promise((resolve) => { window.__resumeWidgetPlacementTouchFixture = resolve; });
+    }
+    const r = stage.getBoundingClientRect();
+    const bounds = {
+        left: r.left + stage.clientLeft, top: r.top + stage.clientTop,
+        width: stage.clientWidth, height: stage.clientHeight,
+    };
+    stage.setPointerCapture = () => {};
+    stage.hasPointerCapture = () => false;
+    stage.releasePointerCapture = () => {};
+    const pointer = (name, clientX, clientY) => new PointerEvent(name, {
+        bubbles: true, cancelable: true, pointerId: 7, pointerType: 'pen', isPrimary: true,
+        button: 0, clientX, clientY,
+    });
+    stage.dispatchEvent(pointer('pointerdown', bounds.left + bounds.width * .25, bounds.top + bounds.height * .4));
+    check(value('floating_anchor') === 'custom', 'Pointer down selects custom anchor');
+    const pointerX = bounds.left + bounds.width * .75;
+    const pointerY = bounds.top + bounds.height * .6;
+    const expectedDraft = previewDoc.querySelector('[data-widget-theme-draft="1"]');
+    const expectedGeometry = readPublicWidgetFloatingGeometry(previewDoc, frame.contentWindow);
+    const expectedPosition = publicWidgetPointerPosition(pointerX, pointerY, bounds, expectedGeometry, {
+        width: expectedDraft.getBoundingClientRect().width,
+        height: Math.ceil(expectedDraft.getBoundingClientRect().height),
+    });
+    stage.dispatchEvent(pointer('pointermove', pointerX, pointerY));
+    stage.dispatchEvent(pointer('pointerup', pointerX, pointerY));
+    check(expectedPosition && Number(value('x_permille')) === expectedPosition.x
+        && Number(value('y_permille')) === expectedPosition.y,
+        'Drag inverts the displayed public safe-area transform.');
+    const keyboard = new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true, cancelable: true});
+    stage.dispatchEvent(keyboard);
+    check(keyboard.defaultPrevented && Number(value('x_permille')) >= 759, 'Accessible arrow-key alternative');
+    const reset = document.querySelector('.public-widgets-reset-position');
+    check(reset && reset.type === 'button' && !reset.hidden, 'Localized nonpublishing Reset control');
+    reset.click();
+    check(value('floating_anchor') === 'bottom-right' && value('x_permille') === '900' && value('y_permille') === '900', 'Reset restores a valid default');
+    form.querySelector('[name="page_scope"]').value = 'all';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(!pageSelect.disabled, 'All-pages scope enables page-specific collision inspection');
+    pageSelect.value = 'gallery';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    check(!warnings.textContent.includes('Another published widget') && !document.querySelector('.public-widgets-peer-marker'), 'Home-only peer is absent on gallery preview');
+    pageSelect.value = 'home';
+    pageSelect.dispatchEvent(new Event('change', {bubbles: true}));
+    check(warnings.textContent.includes('Another published widget'), 'Home warning reappears without publication');
+    document.querySelector('.public-widgets-device-toggle button:nth-child(2)').click();
+    check(warnings.textContent.includes('in-page fallback'), 'Tablet preview exposes real public fallback policy');
+    document.querySelector('.public-widgets-device-toggle button:first-child').click();
+    form.querySelector('[name="page_scope"]').value = 'gallery';
+    form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(value('flow_slot') === 'home_before_grid', 'Inactive home-grid slot is retained in floating mode');
+    form.querySelector('[name="placement_mode"]').value = 'flow';
+    form.querySelector('[name="placement_mode"]').dispatchEvent(new Event('change', {bubbles: true}));
+    check(reset.hidden && stage.dataset.mode === 'flow', 'Flow mode disables floating controls');
+    check(warnings.textContent === '' && document.querySelectorAll('.public-widgets-restricted-guide:not([hidden])').length === 0, 'Flow mode removes floating warnings and guides');
+    check(value('flow_slot') === 'content_top', 'Invalid active gallery flow slot is safely replaced');
+    check(document.querySelector('[data-widget-theme-frame-wrap]').hidden,
+        'Gallery-only scope does not pretend that the real Home preview is a gallery page');
+    form.querySelector('[name="page_scope"]').value = 'home';
+    form.querySelector('[name="page_scope"]').dispatchEvent(new Event('change', {bubbles:true}));
+    form.querySelector('[name="flow_slot"]').value = 'home_before_grid';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    const injected = previewDoc.querySelector('[data-widget-theme-draft="1"]');
+    check(injected?.closest('[data-public-widget-zone="home_before_grid"]'),
+        'Unsaved article is located before the actual homepage gallery grid');
+    check(injected.closest('.gallery-list-content') && previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1,
+        'Preview retains the real gallery list content and a single article');
+    form.querySelector('[name="flow_slot"]').value = 'left_rail';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    check(previewDoc.querySelector('.public-widget-content-layout--both .public-widget-region--left_rail [data-widget-theme-draft="1"]'),
+        'Left rail shares the actual public two-rail CSS layout with its retained right rail');
+    check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"]').length === 1,
+        'Draft shares the original rail region instead of creating overlapping grid areas');
+    check(previewDoc.querySelectorAll('[data-public-widget-zone="left_rail"] .public-content-widget').length === 2,
+        'Unrelated published widget and draft coexist in one public rail');
+    form.querySelector('[name="flow_slot"]').value = 'footer';
+    form.querySelector('[name="flow_slot"]').dispatchEvent(new Event('change', {bubbles:true}));
+    check(previewDoc.querySelector('.site-footer .public-widget-region--footer [data-widget-theme-draft="1"]'),
+        'Footer draft is rendered inside the existing public footer');
+    check(previewDoc.querySelectorAll('[data-widget-theme-draft]').length === 1, 'Switching zones does not duplicate drafts');
+    previewDoc.querySelector('.site-header a').dispatchEvent(new MouseEvent('click', {bubbles:true,cancelable:true}));
+    check(frame.contentWindow.location.href.includes('preview=visual'), 'Public links cannot navigate the scriptless preview');
+    check(form.querySelector('textarea').value.includes('Initial **draft**'), 'Preview never edits authored draft');
+    check(document.querySelector('[data-widget-preview-body]').textContent.includes('Published source'), 'Read-only preview preserved');
+    check(submissions === 0 && location.href === startUrl, 'No save or navigation triggered');
+    document.getElementById('results').textContent = 'BROWSER PASS: widget pointer, keyboard, reset, scopes and unsaved draft preservation';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script>
+</html>

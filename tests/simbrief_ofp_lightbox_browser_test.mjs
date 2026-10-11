@@ -64,6 +64,13 @@ const html = String.raw`<!doctype html>
   let pageDelay = 0;
   let renderDelay = 0;
   let pageRequests = 0;
+  // Purpose: Let initial ResizeObserver fitting finish before counting navigation work.
+  // Type: integer.
+  // Units: milliseconds.
+  // Scope: The mock OFP viewer's initial fit-settle pause in this browser fixture.
+  // Consumers: The short navigation burst baseline and the later long-page queue setup.
+  // Rationale: A late first-page fit can request the same page and contaminate a keyboard-burst count.
+  const resizeFitSettleMs = 100;
   let pendingPages = 0;
   let maxPendingPages = 0;
   let pendingRenders = 0;
@@ -274,6 +281,7 @@ const html = String.raw`<!doctype html>
       unchangedPhoto();
       check(stage().clientWidth > stage().clientHeight, 'Landscape fixture was not landscape');
       wholePage('first A4 portrait page', 595, 842);
+      await pause(resizeFitSettleMs);
       const initialPageRequests = pageRequests;
       press('ArrowRight');
       for (let i = 0; i < 20; i += 1) press('ArrowRight', stage(), {repeat: true});
@@ -636,7 +644,7 @@ const html = String.raw`<!doctype html>
           await waitUntil(() => counter() === 'Page ' + page + ' of 150' && settled(), 'held arrow page ' + page);
           pageMatches(page);
       };
-      await pause(100); // Settle any initial ResizeObserver fitting before the queue budget.
+      await pause(resizeFitSettleMs); // Settle any initial ResizeObserver fitting before the queue budget.
       maxPendingPages = maxPendingRenders = 0;
       await step('ArrowRight', 2);
       const beforeBurst = pageRequests;

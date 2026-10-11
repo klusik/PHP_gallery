@@ -222,9 +222,14 @@ function row(\PDO $pdo, string $sql, array $parameters = []): array
     return $statement->fetch(\PDO::FETCH_ASSOC) ?: [];
 }
 
-/** Count a fixed allowlisted fixture table. */
+/**
+ * Count rows from one fixed allowlist of disposable workflow tables.
+ * @param \PDO $pdo Connection to the owned workflow fixture database.
+ * @param string $table Allowlisted galleries, images, Gallery Trash, or public widget table.
+ * @return int Number of rows stored in the selected fixture table.
+ */
 function countRows(\PDO $pdo, string $table): int
 {
-    check(in_array($table, ['galleries', 'images', 'gallery_trash_entries'], true), 'Unexpected fixture table.');
+    check(in_array($table, ['galleries', 'images', 'gallery_trash_entries', 'public_content_widgets'], true), 'Unexpected fixture table.');
     return (int) $pdo->query('SELECT COUNT(*) FROM `' . $table . '`')->fetchColumn();
 }

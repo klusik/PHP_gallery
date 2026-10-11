@@ -10,7 +10,7 @@
  *
  * Responsibilities:
  *   - Protect cache reuse, bounds, idle release, and retry behavior
- *   - Protect detached Image and tracked Fetch cancellation cleanup
+ *   - Protect detached Image decode failure, retry, and tracked Fetch cancellation cleanup
  *   - Verify optional diagnostics cannot interrupt resource settlement
  *
  * Author:
@@ -580,6 +580,54 @@ test('pending URL cache work reuses one promise and failed preview resolves null
         '/authorized/broken-preview.jpg',
         '/authorized/broken-preview.jpg',
     ]);
+    f.owner.dispose();
+});
+
+test('decode rejection and zero-dimension images fail the cache entry and permit foreground retry', async () => {
+    let rejectedDecodes = 0;
+    const f = createFixture({
+        decodeImage: image => {
+            // Only the first preview attempt fails; the fresh foreground image is valid.
+            if (image.src === '/authorized/decode-rejected.jpg' && rejectedDecodes++ === 0) {
+                return Promise.reject(new Error('Image decoder rejected the response.'));
+            }
+            return Promise.resolve();
+        },
+    });
+
+    const rejectedDecode = f.owner.preload('/authorized/decode-rejected.jpg');
+    f.images.images[0].finish();
+    assert.equal(await rejectedDecode, null, 'a rejected decoder must not become a reusable preview image');
+    assert.equal(f.owner.cacheStatus('/authorized/decode-rejected.jpg'), 'cached');
+    assert.equal(f.events.filter((event) => event.type === 'load' && event.src === '/authorized/decode-rejected.jpg' && event.name === 'completed').length, 0);
+    assert.equal(f.events.filter((event) => event.type === 'load' && event.src === '/authorized/decode-rejected.jpg' && event.name === 'failed').length, 1);
+
+    const rejectedRetry = f.owner.loadDecoded('/authorized/decode-rejected.jpg');
+    await settlePromises();
+    assert.equal(f.images.images.length, 2, 'foreground use must retry a decoder-rejected preview');
+    f.images.images[1].finish();
+    const retriedDecode = await rejectedRetry;
+    assert.equal(retriedDecode.naturalWidth, 120);
+    assert.equal(retriedDecode.naturalHeight, 80);
+    assert.equal(f.owner.cacheResultFor(retriedDecode), 'miss');
+
+    const zeroGeometry = f.owner.preload('/authorized/zero-dimensions.jpg');
+    f.images.images[2].naturalWidth = 0;
+    f.images.images[2].naturalHeight = 0;
+    f.images.images[2].finish();
+    assert.equal(await zeroGeometry, null, 'an image without decoded geometry must not be cached as successful');
+    assert.equal(f.owner.cacheStatus('/authorized/zero-dimensions.jpg'), 'cached');
+    assert.equal(f.events.filter((event) => event.type === 'load' && event.src === '/authorized/zero-dimensions.jpg' && event.name === 'completed').length, 0);
+    assert.equal(f.events.filter((event) => event.type === 'load' && event.src === '/authorized/zero-dimensions.jpg' && event.name === 'failed').length, 1);
+
+    const zeroRetry = f.owner.loadDecoded('/authorized/zero-dimensions.jpg');
+    await settlePromises();
+    assert.equal(f.images.images.length, 4, 'foreground use must retry a zero-dimension preview');
+    f.images.images[3].finish();
+    const retriedGeometry = await zeroRetry;
+    assert.equal(retriedGeometry.naturalWidth, 120);
+    assert.equal(retriedGeometry.naturalHeight, 80);
+    assert.equal(f.owner.cacheResultFor(retriedGeometry), 'miss');
     f.owner.dispose();
 });
 

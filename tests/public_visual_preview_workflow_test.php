@@ -4,10 +4,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/public_visual_preview_workflow_test.php
  * Module Type: Disposable Workflow Regression Test
- * Purpose: Exercise the visual CSS preview through real public HTTP routes and fixture persistence.
+ * Purpose: Exercise visual CSS and authenticated widget previews through real HTTP routes and fixture persistence.
  * Responsibilities:
  *   - Verify preview principal, method, route, gallery and media authorization boundaries.
  *   - Verify same-origin Referer context, stylesheet inspection refusals, and private cache responses.
+ *   - Verify an unsaved widget preview leaves persistent widget rows unchanged.
  *   - Prove preview reads do not write telemetry, thumbnail metadata or gallery assets.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -26,7 +27,7 @@ use function GalleryWorkflow\validateFixture;
  * @param string $origin Literal loopback origin recorded by the fixture runner.
  * @param string $token Fixture ownership token used to select the private snapshot route.
  * @param ?string $diagnostic Optional bounded transport/snapshot status summary for failure output; never contains response data.
- * @return array{telemetry_events:int,telemetry_sessions:int,telemetry_hourly_metrics:int,thumbnail_variants:list<array{id:int|string,image_id:int|string,size_px:int|string,format:string,derivative_version:int|string,width:int|string|null,height:int|string|null,file_size:int|string|null,modified_at:string|null,status:string,status_reason:string,checked_at:string,created_at:string,updated_at:string}>,image_metadata:list<array{id:int|string,thumbnail_metadata_refreshed_at:string|null}>,gallery_files:array<string,array{size:int,modified:int,sha256:string}>} Snapshot of fixture telemetry, canonical compact thumbnail metadata, and gallery files.
+ * @return array{telemetry_events:int,telemetry_sessions:int,telemetry_hourly_metrics:int,thumbnail_variants:list<array{id:int|string,image_id:int|string,size_px:int|string,format:string,derivative_version:int|string,width:int|string|null,height:int|string|null,file_size:int|string|null,modified_at:string|null,status:string,status_reason:string,checked_at:string,created_at:string,updated_at:string}>,image_metadata:list<array{id:int|string,thumbnail_metadata_refreshed_at:string|null}>,gallery_files:array<string,array{size:int,modified:int,sha256:string}>,public_widgets_sha256:string} Snapshot of fixture telemetry, the public-widget persistence digest, thumbnail metadata, and gallery files.
  */
 function visualPreviewWorkflowSnapshot(string $origin, string $token, ?string &$diagnostic = null): array
 {
@@ -62,7 +63,9 @@ function visualPreviewWorkflowSnapshot(string $origin, string $token, ?string &$
         'The owned preview state endpoint did not return a successful response.');
     $state = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
     $complete = is_array($state) && isset($state['telemetry_events'], $state['telemetry_sessions'],
-        $state['telemetry_hourly_metrics'], $state['thumbnail_variants'], $state['image_metadata'], $state['gallery_files']);
+        $state['telemetry_hourly_metrics'], $state['thumbnail_variants'], $state['image_metadata'], $state['gallery_files'])
+        && is_string($state['public_widgets_sha256'] ?? null)
+        && preg_match('/^[a-f0-9]{64}$/D', $state['public_widgets_sha256']) === 1;
     $diagnostic = 'snapshot_http=' . $status . ';snapshot_json=' . ($complete ? 'complete' : 'incomplete');
     check($complete, 'The preview state endpoint returned an incomplete persistence snapshot.');
     return $state;

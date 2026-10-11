@@ -35,6 +35,7 @@ import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=2026
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261003-scoped-i18n-v2';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
+import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261002-overview-navigation-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
@@ -2722,6 +2723,7 @@ function rebindPublicGalleryLifecycleAfterRefresh() {
     setupBackToTopButton();
     setupGalleryLightbox();
     setupPublicGalleryPageReordering();
+    refreshPublicWidgetFloatingGeometry(document);
 }
 
 /**

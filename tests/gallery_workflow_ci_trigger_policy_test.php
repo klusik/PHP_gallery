@@ -398,9 +398,11 @@ namespace {
 
     $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     $workflowBrowserTest = (string) file_get_contents(dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php');
+    $widgetBrowserTest = (string) file_get_contents(dirname(__DIR__) . '/tests/public_widget_persistence_browser_test.php');
     check(str_contains($runner, 'GALLERY_WORKFLOW_BROWSER_REQUIRED')
         && str_contains($runner, 'required real-app Chromium workflow has no verified browser executable')
-        && str_contains($workflowBrowserTest, "getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') !== '1'"),
+        && str_contains($workflowBrowserTest, "getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') !== '1'")
+        && str_contains($widgetBrowserTest, "getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') === '1'"),
         'A required real-app browser journey must fail closed when its verified executable or fixture is missing.');
     foreach (['gallery_workflow_run.php', 'gallery_workflow_mysql.php'] as $launcherName) {
         $launcher = (string) file_get_contents(dirname(__DIR__) . '/scripts/' . $launcherName);
@@ -426,7 +428,8 @@ namespace {
     check($selection('quick') === ['database_engine_contract_test.php'],
         'Quick workflow qualification must retain its database-engine contract without requiring full-only races.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = '';
-    check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests, 'gallery_workflow_browser_test.php'],
+    check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests,
+        'gallery_workflow_browser_test.php', 'public_widget_persistence_browser_test.php'],
         'Local defaults no longer require browser PASS in the workflow runner.');
     echo 'PASS CI schema-local migration account and browser-only opt-out: ' . count($cases) . " inert ownership and authority cases; no database or CI execution\n";
 }

@@ -76,6 +76,7 @@ final class Fixture
         $this->run([PHP_BINARY, $this->source . '/tests/support/gallery_workflow_seed.php', $this->directory, $this->token], 120, 'migration and seed', true);
         copy($this->source . '/tests/support/gallery_workflow_router.php', $this->directory . '/router.php');
         copy($this->source . '/tests/support/gallery_workflow_browser.js', $this->directory . '/browser.js');
+        copy($this->source . '/tests/support/public_widget_persistence_browser.js', $this->directory . '/public-widget-persistence-browser.js');
         $this->httpProcess = proc_open([PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=1',
             '-d', 'session.save_path=' . $this->directory . '/sessions', '-d', 'disable_functions=mail',
             '-S', '127.0.0.1:' . $port, '-t', $this->directory . '/public', $this->directory . '/router.php'],

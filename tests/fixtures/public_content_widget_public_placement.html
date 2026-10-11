@@ -1,0 +1,312 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/public_content_widget_public_placement.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production public-widget CSS and floating progressive enhancement in desktop and mobile Chromium.
+Responsibilities:
+  - Verify that server-rendered content is accessible before browser enhancement.
+  - Exercise fixed positioning, safe-area bounds, same-anchor collisions, wheel scroll chaining and visitor dismissal.
+  - Verify a narrow viewport keeps every published widget in ordinary document flow.
+  - Verify Theme-capped content widths stack side rails before narrowing gallery content.
+  - Provide a native modal dialog for top-layer hit-testing and focus coverage over floating widgets.
+  - Provide the production fixed picture-manager toolbar for responsive obstacle mutation coverage.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public content widget placement fixture</title>
+<link rel="stylesheet" href="/public-widgets.css">
+<link rel="stylesheet" href="/lightbox.css">
+<style>
+body { margin: 0; font: 16px/1.5 sans-serif; }
+.site-header { position: sticky; top: 0; height: 76px; box-sizing: border-box; padding: 1rem; background: #eee; z-index: 100; }
+main { min-height: 2400px; padding: 1rem; box-sizing: border-box; }
+.public-widget-region--floating { max-width: 900px; }
+#native-public-dialog { box-sizing: border-box; margin: 0; position: fixed; padding: 1rem; border: 2px solid #123; background: white; }
+#native-public-dialog button { width: 100%; height: 100%; }
+#results { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+</head>
+<body class="public-page">
+<header class="site-header"><nav><a href="#site-main">Public navigation</a></nav></header>
+<section id="geometry-picture-manager" class="picture-manager-toolbar is-picture-manager-collapsed" hidden>
+  <div class="picture-manager-summary">
+    <button type="button" class="picture-manager-toggle" aria-expanded="false">
+      <span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>
+      <span><strong>Picture manager</strong><small>Expand photo actions</small></span>
+    </button>
+    <span class="picture-manager-count">No items selected.</span>
+  </div>
+  <div class="picture-manager-panel" data-picture-manager-panel hidden>
+    <div class="picture-manager-heading"><strong>Photo actions</strong></div>
+    <div class="picture-manager-action-grid"><p>Move, copy, or organize the selected photos.</p></div>
+  </div>
+</section>
+<!-- Keep this page target below floating widgets so a page-sized click blocker is observable. -->
+<button id="outside-widget-action" type="button"
+    style="position:fixed;left:16px;top:128px;z-index:1">Outside floating widgets</button>
+<main id="site-main" class="site-main" style="width:720px; max-width:100%; margin-inline:auto">
+<h1>Published gallery page</h1>
+<section class="public-widget-region public-widget-region--floating" data-public-widget-zone="floating">
+<article id="widget-one" class="public-content-widget public-content-widget--card" lang="en"
+    data-public-widget-id="00000000000000000000000000000001" data-public-widget-floating="1"
+    data-public-widget-width="280" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:280px">
+  <h2 class="public-content-widget-title">Partner galleries</h2>
+  <div class="public-content-widget-body"><p>Our links: <a href="https://example.org">Public gallery A</a></p></div>
+</article>
+<article id="widget-two" class="public-content-widget public-content-widget--minimal" lang="cs"
+    data-public-widget-id="00000000000000000000000000000002" data-public-widget-floating="1"
+    data-public-widget-width="280" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:280px">
+  <h2 class="public-content-widget-title">Druhá galerie</h2>
+  <div class="public-content-widget-body"><p>Visit <a href="/index.php?page=gallery">our gallery</a></p></div>
+</article>
+<article id="widget-three" class="public-content-widget public-content-widget--card" lang="sv"
+    data-public-widget-id="00000000000000000000000000000003" data-public-widget-floating="1"
+    data-public-widget-width="260" data-public-widget-dismiss-label="Close"
+    data-public-widget-anchor="bottom-right" data-public-widget-x="900" data-public-widget-y="900"
+    style="--public-widget-max-width:260px">
+  <h2 class="public-content-widget-title">Tredje galleri</h2>
+  <div class="public-content-widget-body"><p>Additional published gallery content.</p></div>
+</article>
+</section>
+<p>Other gallery content remains in normal page layout.</p>
+<div class="public-widget-rails-container">
+  <section id="theme-capped-rails" class="public-widget-content-layout public-widget-content-layout--both">
+    <aside class="public-widget-region public-widget-region--left_rail"><article>Left rail</article></aside>
+    <div class="public-widget-primary"><div class="grid" id="theme-capped-gallery-grid"><article>Gallery content</article></div></div>
+    <aside class="public-widget-region public-widget-region--right_rail"><article>Right rail</article></aside>
+  </section>
+</div>
+</main>
+<div id="test-lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo viewer"></div>
+<dialog id="native-public-dialog" aria-label="Native public dialog"><button id="native-public-dialog-action" type="button" autofocus>Dialog action</button></dialog>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {
+    readPublicWidgetFloatingGeometry,
+    refreshPublicWidgetFloatingGeometry,
+    resolvePublicWidgetFloatingRect,
+    setupPublicContentWidgets,
+} from '/public-widgets.js';
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const articles = Array.from(document.querySelectorAll('[data-public-widget-id]'));
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const floating = () => articles.filter(node => node.classList.contains('is-public-widget-floating'));
+const rectangle = node => node.getBoundingClientRect();
+const intersect = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+const measuredViewportWidth = document.documentElement.clientWidth;
+const measuredViewportHeight = document.documentElement.clientHeight;
+const desktop = measuredViewportWidth >= 960 && measuredViewportHeight >= 620;
+const expectedSafeAreaInsets = JSON.parse(
+    new URL(location.href).searchParams.get('safeAreaInsets') || '{"top":0,"right":0,"bottom":0,"left":0}');
+let resolveWidgetWheelInteraction;
+const widgetWheelInteraction = new Promise(resolve => { resolveWidgetWheelInteraction = resolve; });
+let resolveWidgetDismissInteraction;
+const widgetDismissInteraction = new Promise(resolve => { resolveWidgetDismissInteraction = resolve; });
+let resolveWidgetDismissReset;
+const widgetDismissReset = new Promise(resolve => { resolveWidgetDismissReset = resolve; });
+let resolveWidgetPointerInteraction;
+const widgetPointerInteraction = new Promise(resolve => { resolveWidgetPointerInteraction = resolve; });
+window.__outsideWidgetActionClicks = 0;
+window.__refreshPublicWidgetFloatingGeometry = () => refreshPublicWidgetFloatingGeometry(document);
+document.getElementById('outside-widget-action').addEventListener('click', () => {
+    window.__outsideWidgetActionClicks += 1;
+});
+window.__nativePublicDialogActionClicks = 0;
+document.getElementById('native-public-dialog-action').addEventListener('click', () => {
+    window.__nativePublicDialogActionClicks += 1;
+});
+window.__publicWidgetWheelReady = false;
+window.__publicWidgetWheelFailure = '';
+window.__completePublicWidgetWheelInteraction = result => resolveWidgetWheelInteraction(result);
+window.__publicWidgetDismissReady = false;
+window.__completePublicWidgetDismissInteraction = result => resolveWidgetDismissInteraction(result);
+window.__continuePublicWidgetDismissInteraction = () => resolveWidgetDismissReset();
+window.__publicWidgetPointerReady = false;
+window.__completePublicWidgetPointerInteraction = result => resolveWidgetPointerInteraction(result);
+let geometry;
+try {
+    check(articles.length === 3 && new Set(articles.map(node => node.dataset.publicWidgetId)).size === 3,
+        'Only the three published SSR articles are present once each');
+    check(articles.every(node => !node.hidden && node.textContent.trim() !== ''
+        && getComputedStyle(node).position !== 'fixed'), 'Original server HTML remains safely in normal flow');
+    check(articles[0].querySelector('a')?.getAttribute('href') === 'https://example.org',
+        'Text and links exist before enhancement');
+    if (desktop) {
+        geometry = readPublicWidgetFloatingGeometry(document, window);
+        check(geometry.viewportWidth === measuredViewportWidth
+            && geometry.viewportHeight === measuredViewportHeight,
+        'The shared public geometry reader matches the browser-measured viewport.');
+        const probe = document.querySelector('[data-public-widget-safe-area-probe="1"]');
+        const computedProbe = probe ? getComputedStyle(probe) : null;
+        check(geometry.safeAreaInsets.top === expectedSafeAreaInsets.top
+            && geometry.safeAreaInsets.right === expectedSafeAreaInsets.right
+            && geometry.safeAreaInsets.bottom === expectedSafeAreaInsets.bottom
+            && geometry.safeAreaInsets.left === expectedSafeAreaInsets.left
+            && Number.parseFloat(computedProbe?.paddingTop) === expectedSafeAreaInsets.top
+            && Number.parseFloat(computedProbe?.paddingRight) === expectedSafeAreaInsets.right
+            && Number.parseFloat(computedProbe?.paddingBottom) === expectedSafeAreaInsets.bottom
+            && Number.parseFloat(computedProbe?.paddingLeft) === expectedSafeAreaInsets.left,
+        'The shared public geometry reader measures every safe-area edge.');
+        check(geometry.availableWidth === measuredViewportWidth - 32
+            - expectedSafeAreaInsets.left - expectedSafeAreaInsets.right,
+            'The available width subtracts horizontal safe-area insets and both 16px margins.');
+        const topLeft = resolvePublicWidgetFloatingRect({
+            anchor: 'top-left', x: 0, y: 0, width: 180, height: 100,
+            viewportWidth: measuredViewportWidth, viewportHeight: measuredViewportHeight,
+            topInset: geometry.topInset, safeAreaInsets: geometry.safeAreaInsets, exclusions: [],
+        });
+        const bottomRight = resolvePublicWidgetFloatingRect({
+            anchor: 'bottom-right', x: 1000, y: 1000, width: 180, height: 100,
+            viewportWidth: measuredViewportWidth, viewportHeight: measuredViewportHeight,
+            topInset: geometry.topInset, safeAreaInsets: geometry.safeAreaInsets, exclusions: [],
+        });
+        check(topLeft?.left === 16 + expectedSafeAreaInsets.left && topLeft.top === geometry.topInset
+            && bottomRight?.left === measuredViewportWidth - 180 - 16 - expectedSafeAreaInsets.right
+            && bottomRight.top === measuredViewportHeight - 100 - 16 - expectedSafeAreaInsets.bottom,
+        'The shared solver keeps all four edges outside the inset plus 16px margin.');
+    }
+    articles[0].dataset.publicWidgetWidth = '480';
+    articles[0].style.setProperty('--public-widget-max-width', '480px');
+    if (desktop) {
+        const scrollBody = articles[0].querySelector('.public-content-widget-body');
+        /** Fixture policy: provide enough content for the floating article to scroll.
+         * Type: integer paragraph count.
+         * Units: paragraphs.
+         * Scope: desktop Chromium placement fixture.
+         * Consumers: native wheel assertions for inner scrolling and boundary chaining.
+         * Rationale: reproduce an overflowing widget with deterministic local content.
+         */
+        for (let index = 0; index < 28; index += 1) {
+            const paragraph = document.createElement('p');
+            paragraph.textContent = 'Scrollable partner detail ' + (index + 1)
+                + ' remains available inside this floating public widget.';
+            scrollBody.append(paragraph);
+        }
+    }
+    setupPublicContentWidgets();
+    setupPublicContentWidgets();
+    await frame();
+    await frame();
+    check(articles.every(node => node.querySelectorAll('.public-widget-dismiss').length === 1),
+        'Public enhancer adds at most one dismiss control per article');
+    if (desktop) {
+        check(floating().length === 2, 'Desktop floats at most two widgets');
+        check(document.querySelectorAll('[data-public-widget-safe-area-probe="1"]').length === 1,
+            'The document reuses one hidden safe-area probe across geometry passes.');
+        const expectedPanelWidth = Math.min(480, measuredViewportWidth - 32
+            - expectedSafeAreaInsets.left - expectedSafeAreaInsets.right);
+        check(articles[0].style.width === expectedPanelWidth + 'px'
+            && Math.abs(rectangle(articles[0]).width - expectedPanelWidth) <= 1,
+            'A panel shrinks to the safe-area-adjusted available width.');
+        check(floating().every(node => {
+            const bounds = rectangle(node);
+            return bounds.left >= 16 + expectedSafeAreaInsets.left - 1
+                && bounds.right <= measuredViewportWidth - 16 - expectedSafeAreaInsets.right + 1
+                && bounds.top >= geometry.topInset - 1
+                && bounds.bottom <= measuredViewportHeight - 16 - expectedSafeAreaInsets.bottom + 1;
+        }), 'Rendered panels stay inside all four safe-area edges plus the 16px margin.');
+        check(!intersect(rectangle(floating()[0]), rectangle(floating()[1])),
+            'Same-anchor widgets must not overlap');
+        check(floating().every(node => getComputedStyle(node).position === 'fixed'),
+            'Desktop floating uses true fixed viewport positioning');
+        const header = document.querySelector('.site-header');
+        check(floating().every(node => !intersect(rectangle(node), rectangle(header))),
+            'Floating widgets must not block navigation');
+        const first = floating()[0];
+        const lightbox = document.getElementById('test-lightbox');
+        lightbox.hidden = false;
+        await frame();
+        const panelBounds = rectangle(first);
+        const lightboxHit = document.elementFromPoint(
+            panelBounds.left + panelBounds.width / 2, panelBounds.top + panelBounds.height / 2);
+        check(Number.parseInt(getComputedStyle(first).zIndex, 10)
+                < Number.parseInt(getComputedStyle(lightbox).zIndex, 10)
+            && lightbox.contains(lightboxHit),
+        'Open standard lightbox must paint and receive pointer input above floating widgets');
+        lightbox.hidden = true;
+        await frame();
+        check(first.scrollHeight > first.clientHeight + 120,
+            'The floating widget keeps useful independent scrolling for its full content.');
+        window.__publicWidgetWheelReady = true;
+        window.dispatchEvent(new Event('public-widget-wheel-ready'));
+        const wheelInteraction = await widgetWheelInteraction;
+        check(wheelInteraction?.innerWidgetScroll === true && wheelInteraction?.innerPageStayed === true,
+            'A wheel gesture over widget content scrolls the widget while the page stays in place.');
+        check(wheelInteraction?.topBoundaryChains === true && wheelInteraction?.bottomBoundaryChains === true,
+            'Wheel gestures at both floating-widget boundaries continue scrolling the background page.');
+        const before = rectangle(first).top;
+        window.scrollTo(0, 1000);
+        await frame();
+        await frame();
+        check(Math.abs(rectangle(first).top - before) <= 1,
+            'Floating anchor position must remain fixed while scrolling');
+        window.__publicWidgetDismissReady = true;
+        const keyboardDismissal = await widgetDismissInteraction;
+        check(keyboardDismissal?.reachedClose === true && keyboardDismissal?.activatedClose === true,
+            'Native Tab and Enter reach and activate the visitor Close button.');
+        check(keyboardDismissal?.onlyCurrentArticleHidden === true,
+            'Keyboard dismissal hides only the focused article.');
+        check(keyboardDismissal?.pageStateUnchanged === true && keyboardDismissal?.storageUnchanged === true,
+            'Keyboard dismissal preserves page state and does not persist visitor state.');
+        check(first.hidden && !first.classList.contains('is-public-widget-floating'),
+            'Visitor dismiss hides only their article and never saves Admin state');
+        check(floating().length === 2 && floating().every(node => node !== first),
+            'A remaining published article can fill an available floating slot');
+        check(document.cookie === '', 'Visitor dismiss must not set cookies');
+        const themeCappedRails = document.getElementById('theme-capped-rails');
+        check(getComputedStyle(themeCappedRails).display === 'flex'
+            && getComputedStyle(themeCappedRails).flexDirection === 'column',
+        'Theme-capped page width stacks side rails even when the browser viewport is wide');
+        check(themeCappedRails.scrollWidth <= themeCappedRails.clientWidth + 1,
+            'Theme-capped side rails cannot create horizontal overflow');
+
+        // Keep the keyboard-dismissed state until the host completes all three
+        // native key actions, then reset only for the separate pointer scenario.
+        await widgetDismissReset;
+        for (const widget of articles) widget.hidden = false;
+        window.dispatchEvent(new Event('resize'));
+        await frame();
+        await frame();
+        const outsideAction = document.getElementById('outside-widget-action');
+        check(floating().length === 2 && !first.hidden,
+            'Pointer dismissal starts with visible floating widgets after the isolated keyboard scenario.');
+        check(outsideAction instanceof HTMLButtonElement && outsideAction.getClientRects().length > 0,
+            'The page control outside floating widget bounds is visible for native pointer input.');
+        window.__publicWidgetPointerReady = true;
+        const pointerInteraction = await widgetPointerInteraction;
+        check(pointerInteraction?.closeHit === true && pointerInteraction?.closeOnlyOwnWidget === true,
+            'Native pointer activation of Close must hide only its own floating widget.');
+        check(pointerInteraction?.outsideControlHit === true && pointerInteraction?.outsideControlReceivedInput === true,
+            'Native pointer input outside visible widget bounds must reach the underlying page control.');
+    } else {
+        check(floating().length === 0, 'Narrow viewport must keep all published panels in-flow');
+        check(articles.every(node => !node.hidden && getComputedStyle(node).position !== 'fixed'),
+            'Mobile content and links cannot disappear');
+        check(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+            'Mobile published widget content may not create horizontal scroll');
+    }
+    check(document.querySelectorAll('[data-public-widget-id]').length === 3,
+        'Floating, dismissal and fallback must never duplicate the SSR content');
+    document.getElementById('results').textContent = 'BROWSER PASS: public widgets ' +
+        (desktop ? 'desktop fixed placement, safe-area bounds, collision, wheel scroll chaining, keyboard dismissal and native pointer click safety'
+            : 'mobile no-overlay accessible SSR fallback');
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+    window.__publicWidgetWheelFailure = error instanceof Error ? error.message : String(error);
+    window.__publicWidgetWheelReady = true;
+    window.__publicWidgetPointerReady = true;
+    window.dispatchEvent(new Event('public-widget-wheel-ready'));
+}
+</script>
+</body>
+</html>

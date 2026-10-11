@@ -201,8 +201,23 @@ $registry = [
         'breadcrumb_workflow_integration_test.php' => [
             'timeout' => 180,
         ],
+        // Purpose: Bound the existing full-stack Chromium workflow below the overall audit budget.
+        // Type: integer.
+        // Units: seconds.
+        // Scope: PHP child deadline for the authenticated live Gallery browser regression.
+        // Consumers: Central audit worker supervising gallery_workflow_browser_test.php.
+        // Rationale: Allow the 240-second browser result window, up to 30 seconds of browser startup, and 30 seconds for shutdown and fixture cleanup.
         'gallery_workflow_browser_test.php' => [
-            'timeout' => 180,
+            'timeout' => 300,
+        ],
+        // Purpose: Bound the isolated public-widget lifecycle browser workflow.
+        // Type: integer.
+        // Units: seconds.
+        // Scope: PHP child deadline for the authenticated public-widget persistence regression.
+        // Consumers: Central audit worker supervising public_widget_persistence_browser_test.php.
+        // Rationale: Cover 60 seconds for Chromium startup/navigation/DevTools setup, 78 seconds for bounded fullscreen target/input/acknowledgement (including 10 seconds of CDP polling overrun), 35 seconds for the post-interaction result, 20 seconds for both saved Home/Gallery preview checks under one shared deadline, and 30 seconds for shutdown and exact fixture cleanup: 223 seconds, leaving 22 seconds under this 245-second PHP child deadline.
+        'public_widget_persistence_browser_test.php' => [
+            'timeout' => 245,
         ],
         'thumbnail_format_metadata_consistency_test.php' => [
             'extensions' => ['gd'],
@@ -351,6 +366,25 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'public_content_widget_admin_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'public_content_widget_public_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        // Purpose: Bound production Home and Gallery Theme-width browser qualification, including the full layout matrix and Home page-three route.
+        // Type: integer.
+        // Units: seconds.
+        // Scope: Complete Node child, including PHP fixture generation, browser startup/navigation, result polling, and cleanup.
+        // Consumers: Central audit worker supervising public_theme_width_composition_browser_test.mjs.
+        // Rationale: The 60-second result window covers concurrent Home/Gallery iframe loads, all 56 width/mode layouts with capped animation settling, and Home page-three navigation; the 150-second child leaves 90 seconds for three PHP renders, browser/DevTools startup, profile cleanup and loopback server shutdown.
+        'public_theme_width_composition_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 150,
+        ],
         'admin_side_panel_created_gallery_refresh_test.mjs' => [],
         'admin_side_panel_delegation_test.mjs' => [],
         'admin_side_panel_gallery_refresh_test.mjs' => [],
@@ -392,6 +426,8 @@ $registry = [
         'lightbox_resource_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
+        'public_content_widget_floating_test.mjs' => [],
+        'public_content_widget_admin_position_test.mjs' => [],
         'public_search_progressive_test.mjs' => [],
         'telemetry_image_observability_test.mjs' => [],
         'telemetry_photo_lifecycle_test.mjs' => [],
