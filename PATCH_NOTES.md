@@ -1,5 +1,33 @@
 # Patch notes
 
+## Version 0.127.1
+
+Version 0.127.1 restored transparent child-gallery listings so their cards aligned with the public page while preserving the existing compact home and leaf presentations.
+
+### Highlights
+
+#### Child-gallery listings [#187](https://github.com/klusik/PHP_gallery/issues/187)
+- Removed the generic panel styling and section padding around child-gallery listings while retaining bottom spacing.
+- Preserved the card grid, AJAX attributes, sorting, reordering, pagination, and administrator controls.
+
+### Technical Details
+
+#### Frontend
+- Updated `app/views/public_gallery_pages.php` and `public/assets/styles/utilities.css` to remove the outer chrome from child-gallery listings.
+- Updated `TESTING.md` with desktop and mobile checks for listing transparency, page-width alignment, spacing, and administrator controls.
+
+#### Release metadata
+- Added immutable origin and predecessor records for `v_0.127.1`.
+
+### User Impact
+
+#### For visitors
+- Child-gallery cards aligned with the surrounding public page without the generic panel background or section padding.
+- Existing compact home and leaf presentations, cards, and sorting behavior remained in place.
+
+#### For administrators
+- Existing child-gallery controls, including sorting and reordering, remained available.
+
 ## Version 0.127
 
 Version 0.127 added configurable public content widgets for Home and Gallery pages, with independent administration, safe previews, responsive placement, and server-rendered output. It also expanded persistence, localization, browser, and workflow regression coverage.
