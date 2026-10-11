@@ -349,6 +349,11 @@ namespace {
         && !str_contains($releaseWorkflow, 'git describe --tags'),
         'Strict release preparation must authenticate integrated develop A before generation and freeze BASIC delta checks to A.');
     $bootstrapWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-bootstrap.yml'));
+    $releaseHeader = strstr($releaseWorkflow, "\njobs:", true) ?: '';
+    check(preg_match('/^[ \t]*concurrency:/m', $bootstrapWorkflow) === 0
+        && str_contains($releaseHeader, 'group: release-qualification-${{ github.ref }}')
+        && str_contains($releaseHeader, 'cancel-in-progress: true'),
+        'The calling release workflow must retain branch serialization; the reusable bootstrap must not reacquire a concurrency group and cancel or block its caller.');
     check(str_contains($bootstrapWorkflow, 'workflow_call:')
         && !str_contains(strstr($bootstrapWorkflow, "\njobs:", true) ?: '', 'push:')
         && str_contains($bootstrapWorkflow, 'php scripts/audit.php --profile=release-preflight')

@@ -121,3 +121,9 @@ Other API failures block. Once the workflow is installed, missing or red
 integration evidence cannot fall back to the legacy matrix. This one installation
 exception installs the requested cadence without requiring the new button to
 exist before the release that introduces it.
+
+The calling `release-qualification.yml` owns release-branch concurrency for the
+entire run. The workflow-call-only bootstrap declares no second concurrency
+group: reacquiring the caller's group can cancel or block the caller before any
+bootstrap job starts. The central workflow contract preserves that single owner;
+branch leases, required checks and human review remain separate safeguards.

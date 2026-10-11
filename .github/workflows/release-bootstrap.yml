@@ -22,9 +22,8 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release-qualification-${{ github.ref }}
-  cancel-in-progress: true
+# The caller owns release-branch serialization for this workflow_call-only path.
+# Reacquiring its group here cancels or blocks the caller before bootstrap jobs start.
 
 jobs:
   prepare:
