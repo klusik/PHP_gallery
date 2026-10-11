@@ -133,13 +133,13 @@ namespace {
             $cursor = $position + strlen($marker);
         }
     };
-    $makeWidget = static fn (string $id, string $title, string $body, int $sortOrder): array => [
+    $makeWidget = static fn (string $id, string $title, string $body, int $sortOrder, string $placementMode = 'flow'): array => [
         'widget_id' => $id,
         'title' => $title,
         'body_html' => '<p>' . $body . '</p>',
         'appearance' => 'card',
         'source_language' => 'en',
-        'placement_mode' => 'flow',
+        'placement_mode' => $placementMode,
         'floating_anchor' => 'bottom-right',
         'x_permille' => 900,
         'y_permille' => 900,
@@ -167,22 +167,47 @@ namespace {
     };
 
     $homeWithWidgets = $renderHome([
-        'home_before_grid' => [$makeWidget(str_repeat('a', 32), 'Before grid', 'Before-grid widget', 10)],
+        'home_before_grid' => [
+            $makeWidget(str_repeat('a', 32), 'Before grid', 'Before-grid widget', 10),
+            $makeWidget(str_repeat('2', 32), 'Second before grid', 'Second before-grid widget', 15),
+        ],
         'home_after_grid' => [$makeWidget(str_repeat('b', 32), 'After grid', 'After-grid widget', 20)],
-        'footer' => [$makeWidget(str_repeat('c', 32), 'Footer widget', 'Footer widget content', 30)],
+        'floating' => [
+            $makeWidget(str_repeat('c', 32), 'First floating widget', 'First floating content', 30, 'floating'),
+            $makeWidget(str_repeat('7', 32), 'Second floating widget', 'Second floating content', 40, 'floating'),
+        ],
+        'footer' => [$makeWidget(str_repeat('8', 32), 'Footer widget', 'Footer widget content', 50)],
     ]);
     $assertOrdered($homeWithWidgets, [
         'data-existing-header',
         'data-existing-navigation',
         'data-existing-search',
         'data-public-widget-zone="home_before_grid"',
+        'data-public-widget-id="' . str_repeat('a', 32) . '"',
+        'Before grid',
+        'data-public-widget-id="' . str_repeat('2', 32) . '"',
+        'Second before grid',
         'data-existing-pagination',
         'data-public-gallery-index-grid',
         'data-existing-gallery-card',
         'data-existing-pagination',
         'data-public-widget-zone="home_after_grid"',
         'data-existing-back-to-top',
+        'data-public-widget-zone="floating"',
+        'data-public-widget-id="' . str_repeat('c', 32) . '"',
+        'data-public-widget-anchor="bottom-right"',
+        'data-public-widget-id="' . str_repeat('7', 32) . '"',
+        'data-public-widget-anchor="bottom-right"',
     ], 'Home view with widgets');
+    $check(substr_count($homeWithWidgets, 'data-public-widget-zone="home_before_grid"') === 1
+        && substr_count($homeWithWidgets, 'data-public-widget-zone="floating"') === 1,
+        'Multiple widgets in one Home slot or floating anchor share one region instance.');
+    $check(substr_count($homeWithWidgets, 'data-public-widget-anchor="bottom-right"') === 2,
+        'Multiple floating widgets at the same anchor remain distinct in the server-rendered flow fallback.');
+    $check(str_contains($homeWithWidgets, '<article class="public-content-widget public-content-widget--card" data-public-widget-id="' . str_repeat('c', 32) . '"')
+        && str_contains($homeWithWidgets, '<article class="public-content-widget public-content-widget--card" data-public-widget-id="' . str_repeat('7', 32) . '"')
+        && substr_count($homeWithWidgets, 'data-public-widget-floating="1"') === 2,
+        'Both floating-placement widgets remain separate server-rendered articles eligible for progressive enhancement.');
     $homeFooter = strpos($homeWithWidgets, '<footer class="site-footer">');
     $homeFooterWidget = strpos($homeWithWidgets, 'data-public-widget-zone="footer"');
     $homeFooterCredit = strpos($homeWithWidgets, 'data-existing-footer-credit');
@@ -250,6 +275,7 @@ namespace {
 
     $galleryWithWidgets = $renderGallery([
         'content_top' => [$makeWidget(str_repeat('d', 32), 'Gallery top', 'Gallery top widget', 10)],
+        'left_rail' => [$makeWidget(str_repeat('9', 32), 'Gallery left rail', 'Gallery left widget', 15)],
         'right_rail' => [$makeWidget(str_repeat('e', 32), 'Gallery rail', 'Gallery rail widget', 20)],
         'content_bottom' => [$makeWidget(str_repeat('f', 32), 'Gallery bottom', 'Gallery bottom widget', 30)],
         'footer' => [$makeWidget(str_repeat('1', 32), 'Gallery footer', 'Gallery footer widget', 40)],
@@ -258,7 +284,8 @@ namespace {
         'data-existing-header',
         'data-existing-navigation',
         'data-public-widget-zone="content_top"',
-        'public-widget-content-layout--right',
+        'public-widget-rails-container',
+        'public-widget-content-layout--both',
         'class="hero" data-public-gallery-id="17"',
         'data-existing-gallery-heading',
         'data-existing-breadcrumbs',
@@ -274,6 +301,7 @@ namespace {
         'data-existing-gallery-pagination',
         'data-existing-bottom-smart-gallery',
         'data-existing-gallery-back-to-top',
+        'data-public-widget-zone="left_rail"',
         'data-public-widget-zone="right_rail"',
         'data-public-widget-zone="content_bottom"',
         'data-existing-lightbox',

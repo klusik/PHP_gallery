@@ -6,6 +6,7 @@
  * Purpose: Shared public in-flow zones and no-JS-safe widget presentation.
  * Responsibilities:
  *   - Keep side rails in document flow with a narrow viewport stack.
+ *   - Stack side rails when Theme page-width caps narrow the actual content container.
  *   - Reuse theme colors and page-width rules without modifying empty pages.
  *   - Bound link, heading and floating fallback dimensions at every zoom level.
  * Author: Rudolf Klusal
@@ -48,6 +49,7 @@
 .public-page .public-content-widget-body a { color: var(--accent, #0867ac); text-decoration: underline; }
 .public-page .public-content-widget-body a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .public-page .public-widget-content-layout { display: grid; gap: clamp(.75rem, 1.5vw, 1.5rem); min-width: 0; align-items: start; }
+.public-page .public-widget-rails-container { container-name: public-widget-rails; container-type: inline-size; }
 .public-page .public-widget-content-layout--left { grid-template-areas: "rail-left primary"; grid-template-columns: minmax(180px, min(24%, 240px)) minmax(0, 1fr); }
 .public-page .public-widget-content-layout--right { grid-template-areas: "primary rail-right"; grid-template-columns: minmax(0, 1fr) minmax(180px, min(24%, 240px)); }
 .public-page .public-widget-content-layout--both { grid-template-areas: "rail-left primary rail-right"; grid-template-columns: minmax(180px, 21%) minmax(0, 1fr) minmax(180px, 21%); }
@@ -70,6 +72,16 @@
 }
 @media (max-width: 680px) {
     .public-page .public-content-widget { width: 100%; max-width: 100%; }
+}
+/* Theme page-width caps can make a wide viewport's rail layout too narrow for gallery content. */
+@container public-widget-rails (max-width: 960px) {
+    .public-page .public-widget-content-layout--left,
+    .public-page .public-widget-content-layout--right,
+    .public-page .public-widget-content-layout--both { display: flex; flex-direction: column; align-items: stretch; }
+    .public-page .public-widget-content-layout > .public-widget-primary { order: 0; }
+    .public-page .public-widget-content-layout > .public-widget-region--left_rail { order: 1; }
+    .public-page .public-widget-content-layout > .public-widget-region--right_rail { order: 2; }
+    .public-page .public-widget-content-layout > .public-widget-region { width: 100%; }
 }
 
 /* Progressive enhancement only. Server HTML stays in flow until this class is set. */

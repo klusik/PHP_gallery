@@ -165,7 +165,7 @@ namespace {
         }
 
         foreach ($optionKeys as $field => $options) {
-            $selectPattern = '/<select id="public-widget-' . preg_quote($field, '/') . '">(.*?)<\/select>/s';
+            $selectPattern = '/<select id="public-widget-' . preg_quote($field, '/') . '"(?:\s+[^>]*)?>(.*?)<\/select>/s';
             if (preg_match($selectPattern, $html, $selectMatch) !== 1) {
                 throw new \RuntimeException('Widget editor select is missing for ' . $language . ': ' . $field);
             }

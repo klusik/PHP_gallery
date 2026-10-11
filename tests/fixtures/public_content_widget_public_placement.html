@@ -9,6 +9,7 @@ Responsibilities:
   - Verify that server-rendered content is accessible before browser enhancement.
   - Exercise fixed positioning, same-anchor collisions, scrolling and visitor dismissal.
   - Verify a narrow viewport keeps every published widget in ordinary document flow.
+  - Verify Theme-capped content widths stack side rails before narrowing gallery content.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
@@ -27,7 +28,7 @@ main { min-height: 2400px; padding: 1rem; box-sizing: border-box; }
 </head>
 <body class="public-page">
 <header class="site-header"><nav><a href="#site-main">Public navigation</a></nav></header>
-<main id="site-main">
+<main id="site-main" class="site-main" style="width:720px; max-width:100%; margin-inline:auto">
 <h1>Published gallery page</h1>
 <section class="public-widget-region public-widget-region--floating" data-public-widget-zone="floating">
 <article id="widget-one" class="public-content-widget public-content-widget--card" lang="en"
@@ -56,6 +57,13 @@ main { min-height: 2400px; padding: 1rem; box-sizing: border-box; }
 </article>
 </section>
 <p>Other gallery content remains in normal page layout.</p>
+<div class="public-widget-rails-container">
+  <section id="theme-capped-rails" class="public-widget-content-layout public-widget-content-layout--both">
+    <aside class="public-widget-region public-widget-region--left_rail"><article>Left rail</article></aside>
+    <div class="public-widget-primary"><div class="grid" id="theme-capped-gallery-grid"><article>Gallery content</article></div></div>
+    <aside class="public-widget-region public-widget-region--right_rail"><article>Right rail</article></aside>
+  </section>
+</div>
 </main>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
@@ -104,6 +112,12 @@ try {
         check(floating().length === 2 && floating().every(node => node !== first),
             'A remaining published article can fill an available floating slot');
         check(document.cookie === '', 'Visitor dismiss must not set cookies');
+        const themeCappedRails = document.getElementById('theme-capped-rails');
+        check(getComputedStyle(themeCappedRails).display === 'flex'
+            && getComputedStyle(themeCappedRails).flexDirection === 'column',
+        'Theme-capped page width stacks side rails even when the browser viewport is wide');
+        check(themeCappedRails.scrollWidth <= themeCappedRails.clientWidth + 1,
+            'Theme-capped side rails cannot create horizontal overflow');
     } else {
         check(floating().length === 0, 'Narrow viewport must keep all published panels in-flow');
         check(articles.every(node => !node.hidden && getComputedStyle(node).position !== 'fixed'),

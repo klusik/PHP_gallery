@@ -59,7 +59,7 @@ function view_render_public_gallery_home(array $viewModel): void
     if ($hasRails) {
         $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
             : (!empty($widgets['left_rail']) ? 'left' : 'right');
-        echo '<div class="public-widget-content-layout public-widget-content-layout--' . $railMode
+        echo '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--' . $railMode
             . '"><div class="public-widget-primary">';
     }
 
@@ -101,7 +101,7 @@ function view_render_public_gallery_home(array $viewModel): void
         echo '</div>';
         view_render_public_widget_region($widgets, 'left_rail');
         view_render_public_widget_region($widgets, 'right_rail');
-        echo '</div>';
+        echo '</div></div>';
     }
     view_render_public_widget_region($widgets, 'content_bottom');
     view_render_public_widget_region($widgets, 'floating');
@@ -327,7 +327,7 @@ function view_render_public_gallery_detail(array $viewModel): void
     if ($hasRails) {
         $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
             : (!empty($widgets['left_rail']) ? 'left' : 'right');
-        echo '<div class="public-widget-content-layout public-widget-content-layout--' . $railMode
+        echo '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--' . $railMode
             . '"><div class="public-widget-primary">';
     }
     view_render_public_gallery_hero((array) ($viewModel['hero'] ?? []));
@@ -354,7 +354,7 @@ function view_render_public_gallery_detail(array $viewModel): void
         echo '</div>';
         view_render_public_widget_region($widgets, 'left_rail');
         view_render_public_widget_region($widgets, 'right_rail');
-        echo '</div>';
+        echo '</div></div>';
     }
     view_render_public_widget_region($widgets, 'content_bottom');
     view_render_public_widget_region($widgets, 'floating');
