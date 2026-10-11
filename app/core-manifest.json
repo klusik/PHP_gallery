@@ -1,6 +1,6 @@
 {
     "version": "0.127",
-    "generated_at": "2026-10-11T11:23:29+00:00",
+    "generated_at": "2026-10-11T16:39:46+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -572,7 +572,7 @@
         "app/views/public_gallery_cards.php": "sha256:b64e597a945c15e964bedb5c9425fd16ba3d05e9b45a7e98c1690e459c40fb7c",
         "app/views/public_gallery_controls.php": "sha256:fa33b342adb946df9ddbb3dfc7304ac48dd38f800ccb91a33298aea5415b8765",
         "app/views/public_gallery_lightbox.php": "sha256:1192de8d64b28fdfb0e75b4af6b740ed28c6a857fb13e62f9c103c234cc089cf",
-        "app/views/public_gallery_pages.php": "sha256:e54da1e0f95f101d11777e599a5e3a0adf081477baba1ade8d9b4404b7417e29",
+        "app/views/public_gallery_pages.php": "sha256:f85d86c068a64bc84de51b433a222acb57bc890345118aca21a00d6ddade1412",
         "app/views/public_render_profiler.php": "sha256:b4833462a841385dd40dde7c1485886fd36f8b208b6db750743e4c2c2f1eb72e",
         "app/views/public_search.php": "sha256:6624f4ee7cf498cce2db3d93ef2baf175de541b0cadd27415a2efd37cb934fa1",
         "app/views/public_tags.php": "sha256:fffe792ecd32319007663b26d6d2b0ce279e800647117dc09492010004f40f5a",
@@ -827,7 +827,7 @@
         "public/assets/styles/public-shared.css": "sha256:68057978c0734f2bcd4caff044721b904a45a6f320b30a9adfd8ebec5ffab7c7",
         "public/assets/styles/public.css": "sha256:330ebe7856038faf4f7a88cb036a20da52259f8b1a83da738c88c008b1f21230",
         "public/assets/styles/side-panel.css": "sha256:093b3261210e04d38690e452c7d0ae62244ff9e9486913496a4f7562cbd786f7",
-        "public/assets/styles/utilities.css": "sha256:3a3ca587f90e192c340394382466793c4b381efeab59c98ce30f6b5587cb4976",
+        "public/assets/styles/utilities.css": "sha256:dcd853c9f22e8ebc451b3d4c032c81a58081b8e6ca0cf583cddd4fedad55d2fd",
         "public/assets/telemetry.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/usage.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/vendor/pdfjs/pdf.min.js": "sha256:7662af706ecbf4ae9ba0f4f4ea50636617646c31d6c67aeca2338b1805a11c07",

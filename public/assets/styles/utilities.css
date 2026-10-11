@@ -233,20 +233,20 @@ body.public-reorder-active {
     }
 }
 
-/* Compacts public gallery listing panels and subgallery cards without changing the configured theme palette. */
-.public-page .panel[data-public-subgallery-section] {
-    padding: clamp(0.85rem, 2vw, 1.25rem);
+/* Spaces public subgallery sections and compacts their cards without adding generic panel chrome. */
+.public-page .public-subgallery-panel {
+    padding: 0;
     margin-bottom: 0.85rem;
 }
 
-.public-page .panel[data-public-subgallery-section] > h2 {
+.public-page .public-subgallery-panel > h2 {
     margin: 0 0 0.85rem;
     font-size: clamp(1.25rem, 2.2vw, 1.6rem);
     line-height: var(--type-heading-line-height, 1.12);
     letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 
-.public-page .panel[data-public-subgallery-section] .grid {
+.public-page .public-subgallery-panel .grid {
     gap: clamp(0.7rem, 1.4vw, 1rem);
 }
 
@@ -391,10 +391,6 @@ body.public-reorder-active {
 }
 
 /* Compact public subgallery section and collection badge */
-.public-page .public-subgallery-panel {
-    padding-top: clamp(0.75rem, 1.3vw, 1rem);
-}
-
 .public-page .public-subgallery-panel > h2 {
     display: none;
 }

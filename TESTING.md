@@ -1438,6 +1438,10 @@ The central audit discovers `tests/site_url_config_test.php` for URL validation,
 
 For browser acceptance, use an isolated installation with a writable configuration and directory. Open **Settings > Website address**, save a loopback HTTP/HTTPS URL with a real installation path where applicable, and confirm the redirect uses the new address and returns to the `site` section. Compare configuration bytes and database settings before and after: only the top-level `base_url` literal should change, with no database setting update. Repeat without JavaScript. Submit an empty address, credentials, query, fragment, and malformed URL; verify field errors and unchanged configuration. Repeat with an unwritable file/directory and a computed `base_url` expression; verify refusal preserves the original file.
 
+### Parent gallery listing presentation
+
+On desktop and mobile, open a parent gallery with child galleries and compare its listing with the public Home grid and a leaf gallery's photo grid. The child cards and their controls should sit directly on the site background without an outer panel background, border, shadow, or padding. Confirm the gallery content aligns with the page width, the listing retains its bottom spacing, and sorting, reorder controls, and pagination remain usable for an administrator.
+
 ### Public Thumbnail Rendering Smoke Test
 
 Use a gallery with enough photos to create several viewport lengths. Test with browser DevTools, an empty cache, and a simulated slow connection. Perform the checks both anonymously and while logged in.
