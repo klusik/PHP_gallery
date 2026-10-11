@@ -190,9 +190,9 @@ function view_render_public_gallery_hero(array $viewModel): void
 }
 
 /**
- * Render the physical child-gallery section.
- *
- * @param array<string,mixed> $viewModel Controller-prepared subgallery state.
+ * Render the transparent child-gallery listing from controller-prepared state.
+ * @param array{visible?:bool,gallery_id?:int,total_count?:int,revision?:string,current_page?:int,total_pages?:int,sort_toolbar_html?:string,reorder_toolbar_html?:string,pagination_html?:string,grid_class?:string,cards_html?:string} $viewModel Prepared visibility, gallery identity and revision, pagination metadata, toolbar markup, grid class, and rendered child cards.
+ * @return void Emit the listing and its controls, or no markup when the section is hidden.
  */
 function view_render_public_subgallery_section(array $viewModel): void
 {
@@ -205,7 +205,7 @@ function view_render_public_subgallery_section(array $viewModel): void
     $currentPage = max(1, (int) ($viewModel['current_page'] ?? 1));
     $totalPages = max(1, (int) ($viewModel['total_pages'] ?? 1));
 
-    echo '<section class="panel public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="' . $galleryId . '" data-public-subgallery-total-count="' . $totalCount . '" data-public-subgallery-revision="' . e($revision) . '" data-public-gallery-page="' . $currentPage . '" data-public-gallery-total-pages="' . $totalPages . '" aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
+    echo '<section class="public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="' . $galleryId . '" data-public-subgallery-total-count="' . $totalCount . '" data-public-subgallery-revision="' . e($revision) . '" data-public-gallery-page="' . $currentPage . '" data-public-gallery-total-pages="' . $totalPages . '" aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
     echo (string) ($viewModel['sort_toolbar_html'] ?? '');
     echo (string) ($viewModel['reorder_toolbar_html'] ?? '');
     echo (string) ($viewModel['pagination_html'] ?? '');
