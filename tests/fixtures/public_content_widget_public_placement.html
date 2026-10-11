@@ -19,6 +19,7 @@ License: MIT License (see LICENSE file in repository)
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Public content widget placement fixture</title>
 <link rel="stylesheet" href="/public-widgets.css">
+<link rel="stylesheet" href="/lightbox.css">
 <style>
 body { margin: 0; font: 16px/1.5 sans-serif; }
 .site-header { position: sticky; top: 0; height: 76px; box-sizing: border-box; padding: 1rem; background: #eee; z-index: 100; }
@@ -65,6 +66,7 @@ main { min-height: 2400px; padding: 1rem; box-sizing: border-box; }
   </section>
 </div>
 </main>
+<div id="test-lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo viewer"></div>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupPublicContentWidgets} from '/public-widgets.js';
@@ -98,6 +100,18 @@ try {
         check(floating().every(node => !intersect(rectangle(node), rectangle(header))),
             'Floating widgets must not block navigation');
         const first = floating()[0];
+        const lightbox = document.getElementById('test-lightbox');
+        lightbox.hidden = false;
+        await frame();
+        const panelBounds = rectangle(first);
+        const lightboxHit = document.elementFromPoint(
+            panelBounds.left + panelBounds.width / 2, panelBounds.top + panelBounds.height / 2);
+        check(Number.parseInt(getComputedStyle(first).zIndex, 10)
+                < Number.parseInt(getComputedStyle(lightbox).zIndex, 10)
+            && lightbox.contains(lightboxHit),
+        'Open standard lightbox must paint and receive pointer input above floating widgets');
+        lightbox.hidden = true;
+        await frame();
         const before = rectangle(first).top;
         window.scrollTo(0, 1000);
         await frame();

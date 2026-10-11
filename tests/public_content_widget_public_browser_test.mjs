@@ -29,6 +29,7 @@ const routes = new Map([
     ['/nojs', 'tests/fixtures/public_content_widget_public_placement.html'],
     ['/public-widgets.js', 'public/assets/gallery-modules/public-content-widgets.js'],
     ['/public-widgets.css', 'public/assets/styles/public-content-widgets.css'],
+    ['/lightbox.css', 'public/assets/styles/lightbox.css'],
 ]);
 const server = createServer(async (request, response) => {
     const relative = routes.get(new URL(request.url, 'http://localhost').pathname);
