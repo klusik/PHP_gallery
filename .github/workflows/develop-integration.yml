@@ -1,0 +1,284 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/develop-integration.yml
+# Module Type: Protected Develop Integration Workflow
+# Purpose: Integrate one BASIC-qualified feature squash through generated-only preparation and one exact full matrix.
+# Responsibilities:
+#   - Select a single source commit directly above observed develop and resolve its latest BASIC evidence
+#   - Prepare generated files without write credentials and publish them as data through main-owned API code
+#   - Run the complete reusable matrix on the final candidate before a normal develop fast-forward
+# Author: Rudolf Klusal
+name: Integrate into develop
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: Feature branch containing the completed one-commit squash to integrate.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: develop-integration
+  cancel-in-progress: false
+
+jobs:
+  select:
+    name: Select squashed source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    outputs:
+      branch: ${{ steps.select.outputs.branch }}
+      source_sha: ${{ steps.select.outputs.source_sha }}
+      develop_sha: ${{ steps.select.outputs.develop_sha }}
+      source_base: ${{ steps.select.outputs.source_base }}
+      basic_run_id: ${{ steps.select.outputs.basic_run_id }}
+      basic_run_attempt: ${{ steps.select.outputs.basic_run_attempt }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: select
+        name: Resolve exact source and latest BASIC evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_GIT_REF: ${{ github.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          import {selectDevelopIntegration} from './.github/scripts/develop-integration.mjs';
+          const api=(path,method='GET',payload=null)=>{
+            const args=['api',path];
+            if(method!=='GET') args.push('--method',method,'--input','-');
+            const result=spawnSync('gh',args,{encoding:'utf8',input:payload===null?undefined:JSON.stringify(payload),
+              timeout:30000,maxBuffer:8*1024*1024,shell:false});
+            if(result.error||result.status!==0) throw new Error('GitHub API request failed: '+String(result.stderr||result.error));
+            return JSON.parse(result.stdout);
+          };
+          const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
+            workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
+            runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA};
+          const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api);
+          for(const [name,value] of Object.entries({branch:selected.branch,source_sha:selected.sourceSha,
+            develop_sha:selected.expectedDevelopSha,source_base:selected.sourceBase,basic_run_id:selected.basicRunId,
+            basic_run_attempt:selected.basicRunAttempt})) appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
+          NODE
+
+  prepare:
+    name: Prepare integration artifacts
+    needs: select
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.select.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip, mbstring
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Recheck selected one-commit source and current branch lease
+        env:
+          SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          test "$(git rev-list --parents -n 1 "${SOURCE_SHA}")" = "${SOURCE_SHA} ${DEVELOP_SHA}"
+          remote_sha="$(git ls-remote --heads origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
+          if [[ "${remote_sha}" != "${SOURCE_SHA}" ]]; then
+            echo '::error::Selected source branch moved before preparation.' >&2
+            exit 1
+          fi
+      - name: Generate and verify candidate-owned artifacts
+        env:
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${SOURCE_SHA}")"
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+          test ! -L app/runtime/modules.php
+          test ! -L app/production-files.json
+          test ! -L app/core-manifest.json
+          mkdir -p "${RUNNER_TEMP}/develop-integration-prepared-state"
+          cp app/runtime/modules.php "${RUNNER_TEMP}/develop-integration-prepared-state/modules.php"
+          cp app/production-files.json "${RUNNER_TEMP}/develop-integration-prepared-state/production-files.json"
+          cp app/core-manifest.json "${RUNNER_TEMP}/develop-integration-prepared-state/core-manifest.json"
+      - id: upload
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: develop-integration-prepared-state
+          path: ${{ runner.temp }}/develop-integration-prepared-state/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-candidate:
+    name: Publish prepared integration candidate
+    needs: [select, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      candidate_sha: ${{ steps.publish.outputs.candidate_sha }}
+      candidate_tree: ${{ steps.publish.outputs.candidate_tree }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: publish
+        name: Publish verified generated data through the main-owned API helper
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+          ARTIFACT_ID: ${{ needs.prepare.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_GIT_REF: ${{ github.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          import {publishPreparedCandidate} from './.github/scripts/develop-integration.mjs';
+          const api=(path,method='GET',payload=null)=>{
+            const args=['api',path];
+            if(method!=='GET') args.push('--method',method,'--input','-');
+            const result=spawnSync('gh',args,{encoding:'utf8',input:payload===null?undefined:JSON.stringify(payload),
+              timeout:30000,maxBuffer:8*1024*1024,shell:false});
+            if(result.error||result.status!==0) throw new Error('GitHub API request failed: '+String(result.stderr||result.error));
+            return JSON.parse(result.stdout);
+          };
+          const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
+            workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
+            runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA};
+          const published=publishPreparedCandidate({repository:process.env.REPOSITORY,branch:process.env.SOURCE_BRANCH,
+            sourceSha:process.env.SOURCE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
+            artifactId:Number(process.env.ARTIFACT_ID),artifactDigest:process.env.ARTIFACT_DIGEST,
+            runId:process.env.WORKFLOW_RUN_ID},context,api);
+          appendFileSync(process.env.GITHUB_OUTPUT,`candidate_sha=${published.candidateSha}\ncandidate_tree=${published.candidateTree}\n`);
+          NODE
+
+  full:
+    name: Develop integration
+    needs: [select, publish-candidate]
+    uses: ./.github/workflows/gallery-workflows.yml
+    with:
+      audit_profile: full
+      checkout_ref: ${{ needs.publish-candidate.outputs.candidate_sha }}
+      source_base: ${{ needs.select.outputs.develop_sha }}
+
+  publish-develop:
+    name: Publish develop integration
+    needs: [select, prepare, publish-candidate, full]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify native owner evidence and fast-forward develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          CANDIDATE_SHA: ${{ needs.publish-candidate.outputs.candidate_sha }}
+          DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+          BASIC_RUN_ID: ${{ needs.select.outputs.basic_run_id }}
+          BASIC_RUN_ATTEMPT: ${{ needs.select.outputs.basic_run_attempt }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_GIT_REF: ${{ github.ref }}
+          RECORD_PATH: ${{ runner.temp }}/develop-integration.json
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync,writeFileSync} from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          import {integrateDevelop} from './.github/scripts/develop-integration.mjs';
+          const api=(path,method='GET',payload=null)=>{
+            const args=['api',path];
+            if(method!=='GET') args.push('--method',method,'--input','-');
+            const result=spawnSync('gh',args,{encoding:'utf8',input:payload===null?undefined:JSON.stringify(payload),
+              timeout:30000,maxBuffer:8*1024*1024,shell:false});
+            if(result.error||result.status!==0) throw new Error('GitHub API request failed: '+String(result.stderr||result.error));
+            return JSON.parse(result.stdout);
+          };
+          const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
+            workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
+            runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA};
+          const request={branch:process.env.SOURCE_BRANCH,sourceSha:process.env.SOURCE_SHA,
+            candidateSha:process.env.CANDIDATE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
+            sourceBase:process.env.DEVELOP_SHA,basicRunId:process.env.BASIC_RUN_ID,
+            basicRunAttempt:process.env.BASIC_RUN_ATTEMPT};
+          const result=integrateDevelop(request,context,process.env.REPOSITORY,api);
+          writeFileSync(process.env.RECORD_PATH,JSON.stringify(result.record,null,2)+'\n');
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,`Integrated exact candidate ${result.sha} into develop.\n`);
+          NODE
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: develop-integration-record
+          path: ${{ runner.temp }}/develop-integration.json
+          if-no-files-found: error
+          retention-days: 90

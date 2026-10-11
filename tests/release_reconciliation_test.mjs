@@ -48,6 +48,108 @@ assert.equal(hasEffectiveSyncApproval([{id:72,state:'APPROVED',user:{login:'fixt
         'Historical source coverage distinguishes exact programmatic checks and unrelated duplicate contexts.');
     assert.throws(()=>qualifiedLinearCandidate(path=>/\/check-runs\/80[12]$/.test(path)?{...call(path),id:1}:call(path),f.repository,sha),/identity/);
 }
+// Retained qualification checks must not select an older green run or attempt.
+{
+    const f=linearFixture(),sha=f.reconciliation.result_sha;
+    const base=f.api('repos/'+f.repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all');
+    const newer=base.check_runs.map((check,index)=>({...check,id:901+index,external_id:'candidate:2000:1:'+sha}));
+    for (const [status,conclusion] of [['completed','failure'],['completed','cancelled'],['completed','skipped'],['in_progress',null],['queued',null]]) {
+        const call=path=>path.includes('/check-runs?')
+            ? {total_count:4,check_runs:[...base.check_runs,...newer.map(check=>({...check,status,conclusion}))]}:f.api(path);
+        assert.equal(qualifiedLinearCandidate(call,f.repository,sha),null,'Newer '+status+'/'+conclusion+' cannot fall back to older green.');
+    }
+    const newerCall=path=>{
+        if (path.includes('/check-runs?')) return {total_count:4,check_runs:[...newer,...base.check_runs]};
+        if (path.endsWith('/actions/runs/2000')) return {...f.api('repos/'+f.repository+'/actions/runs/1234'),id:2000};
+        if (path.includes('/actions/runs/2000/attempts/1/jobs?')) return f.api('repos/'+f.repository+'/actions/runs/1234/attempts/1/jobs?per_page=100');
+        return f.api(path);
+    };
+    assert.equal(qualifiedLinearCandidate(newerCall,f.repository,sha),'https://github.com/'+f.repository+'/actions/runs/2000');
+    const noAggregate=path=>path.includes('/check-runs?')
+        ? {total_count:3,check_runs:[...base.check_runs,newer[0]]}:newerCall(path);
+    assert.equal(qualifiedLinearCandidate(noAggregate,f.repository,sha),null,'Latest missing aggregate cannot use the old aggregate.');
+    const attemptChecks=base.check_runs.map((check,index)=>({...check,id:901+index,external_id:'candidate:1234:2:'+sha}));
+    const nextAttempt=path=>{
+        if (path.includes('/check-runs?')) return {total_count:4,check_runs:[...base.check_runs,...attemptChecks]};
+        if (path.endsWith('/actions/runs/1234')) return {...f.api(path),run_attempt:2};
+        if (path.includes('/attempts/2/jobs?')) return f.api(path.replace('/attempts/2/','/attempts/1/'));
+        return f.api(path);
+    };
+    assert.equal(qualifiedLinearCandidate(nextAttempt,f.repository,sha),'https://github.com/'+f.repository+'/actions/runs/1234');
+    assert.equal(qualifiedLinearCandidate(path=>path.includes('/check-runs?')
+        ? {...nextAttempt(path),check_runs:[...base.check_runs,...attemptChecks.map(check=>({...check,conclusion:'failure'}))]}:nextAttempt(path),f.repository,sha),null);
+    assert.equal(qualifiedLinearCandidate(path=>path.endsWith('/actions/runs/1234')
+        ? {...nextAttempt(path),run_attempt:3}:nextAttempt(path),f.repository,sha),null,'Native highest attempt must equal the retained binding.');
+    assert.equal(qualifiedLinearCandidate(path=>path.includes('/check-runs?')
+        ? {total_count:3,check_runs:[...base.check_runs,{...newer[0],external_id:''}]}:f.api(path),f.repository,sha),null);
+    assert.throws(()=>qualifiedLinearCandidate(path=>path.includes('/check-runs?')
+        ? {total_count:3,check_runs:[...base.check_runs,{...base.check_runs[0],id:901}]}:f.api(path),f.repository,sha),/ambiguous/);
+    const foreign=path=>path.includes('/check-runs?') ? {total_count:4,check_runs:[...base.check_runs,
+        {...newer[0],app:{id:34598}},{...newer[1],head_sha:'0'.repeat(40)}]}:f.api(path);
+    assert.equal(qualifiedLinearCandidate(foreign,f.repository,sha),'https://github.com/'+f.repository+'/actions/runs/1234');
+    assert.equal(f.state.writes.length,0);
+}
+// Complete provider collections accept exact boundaries and reject truncation or conflicts.
+{
+    const f=linearFixture(),sha=f.reconciliation.result_sha;
+    const checkPath='repos/'+f.repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all';
+    const jobPath='repos/'+f.repository+'/actions/runs/1234/attempts/1/jobs?per_page=100';
+    const checks=f.api(checkPath).check_runs,jobs=f.api(jobPath).jobs;
+    const allChecks=[...checks,...Array.from({length:498},(_,index)=>({id:5001+index,name:'Unrelated check '+index,status:'completed',conclusion:'success'}))];
+    const allJobs=[...jobs,...Array.from({length:90},(_,index)=>({id:6001+index,name:'Unrelated job '+index,status:'completed',conclusion:'success'}))];
+    const pages=path=>{
+        if (path.includes('/check-runs?') || path.includes('/jobs?')) {
+            const key=path.includes('/check-runs?')?'check_runs':'jobs';
+            const rows=key==='check_runs'?allChecks:allJobs;
+            const page=Number(/&page=(\d+)/.exec(path)?.[1]??1);
+            return {total_count:rows.length,[key]:rows.slice((page-1)*100,page*100)};
+        }
+        return f.api(path);
+    };
+    assert.equal(qualifiedLinearCandidate(pages,f.repository,sha),'https://github.com/'+f.repository+'/actions/runs/1234');
+    assert.equal(qualifiedLinearCandidate(path=>path.includes('/check-runs?')
+        ? {total_count:100,check_runs:allChecks.slice(0,100)}:f.api(path),f.repository,sha),'https://github.com/'+f.repository+'/actions/runs/1234');
+    for (const corrupt of [
+        response=>({...response,total_count:501}),
+        response=>({...response,total_count:-1}),
+        response=>({...response,total_count:'2'}),
+        response=>({...response,check_runs:response.check_runs.slice(0,-1)}),
+        response=>({...response,check_runs:[response.check_runs[0],response.check_runs[0]]}),
+        response=>({...response,check_runs:response.check_runs.map(check=>({...check,id:0}))}),
+    ]) {
+        assert.throws(()=>qualifiedLinearCandidate(path=>path.includes('/check-runs?')?corrupt(f.api(path)):f.api(path),f.repository,sha),/BLOCKED/);
+    }
+    assert.throws(()=>qualifiedLinearCandidate(path=>path.includes('/check-runs?')&&path.endsWith('&page=2')
+        ? {...pages(path),total_count:499}:pages(path),f.repository,sha),/BLOCKED/);
+    assert.throws(()=>qualifiedLinearCandidate(path=>path.includes('/check-runs?')&&path.endsWith('&page=2')
+        ? {...pages(path),check_runs:[...pages(path).check_runs.slice(0,-1),allChecks[0]]}:pages(path),f.repository,sha),/duplicate/);
+    assert.throws(()=>qualifiedLinearCandidate(path=>path.includes('/jobs?')
+        ? {...f.api(path),jobs:f.api(path).jobs.slice(0,-1)}:f.api(path),f.repository,sha),/BLOCKED/);
+    const duplicateOwner=path=>{
+        if (!path.includes('/jobs?')) return f.api(path);
+        const response=f.api(path);
+        return {total_count:response.total_count+1,jobs:[...response.jobs,{...response.jobs[0],id:7001,conclusion:'failure'}]};
+    };
+    assert.equal(qualifiedLinearCandidate(duplicateOwner,f.repository,sha),null,'Duplicate red owner is not hidden by its green row.');
+    let checkReads=0;
+    assert.throws(()=>qualifiedLinearCandidate(path=>{
+        const response=f.api(path);
+        if (path.includes('/check-runs?') && ++checkReads===2) return {...response,check_runs:response.check_runs.map(check=>({...check,conclusion:'failure'}))};
+        return response;
+    },f.repository,sha),/raced/);
+    let runReads=0;
+    assert.throws(()=>qualifiedLinearCandidate(path=>{
+        const response=f.api(path);
+        return path.endsWith('/actions/runs/1234') && ++runReads===2?{...response,run_attempt:2}:response;
+    },f.repository,sha),/raced/);
+    let jobReads=0;
+    assert.throws(()=>qualifiedLinearCandidate(path=>{
+        const response=f.api(path);
+        return path.includes('/jobs?') && ++jobReads===2?{...response,jobs:response.jobs.map(job=>({...job,conclusion:'failure'}))}:response;
+    },f.repository,sha),/raced/);
+    assert.throws(()=>qualifiedLinearCandidate(f.api,f.repository,'HEAD'),/identity/);
+    assert.equal(f.state.writes.length,0);
+}
 {
     const f=linearFixture();
     f.state.developSha=f.reconciliation.result_sha;

@@ -72,6 +72,39 @@ Use a disposable, migrated installation with two administrator accounts and a ga
 The relevant automated owners are `tests/gallery_creation_preferences_test.php`, `tests/gallery_editor_creation_defaults_save_test.php`, `tests/public_gallery_create_entrypoint_test.php`, `tests/simbrief_create_draft_test.php`, `tests/gallery_display_editor_layout_test.php`, the gallery edit concurrency contract, and the registered panel lifecycle/browser fixtures. Their presence is not a substitute for the migrated database and actual browser review above.
 
 
+## Qualification lifecycle target and activation status (issue #185)
+
+The latest #185 target supersedes the earlier per-child release coverage
+inheritance proposal. Feature pushes and the final squash use BASIC: PHP and
+JavaScript syntax plus complete documentation for named declarations only. BASIC
+does not run regression suites, Node runtime tests, browser tests, database/HTTP
+fixtures, WinApp, package qualification, debt inventories or functional checks.
+
+After feature work is reduced to one authored commit S on top of develop P, the
+maintainer selects the feature branch with the Actions **Integrate into develop**
+button. The action must reject unsquashed feature history. It runs the central
+FULL profile once on final candidate A; only a passing exact-A matrix allows its
+automatic fast-forward to develop. Agents do not write protected branches.
+
+Release preparation starts from A and produces B with notes, all four
+locked-toolchain manuals and PDFs, inventory and manifest. BASIC `--changed`
+checks only A..B PHP/JavaScript syntax and changed named-declaration docs, while
+release-owned-input proof accepts only approved release changes. It does not
+rerun browser, database/HTTP, functional, Node runtime, WinApp or packaging
+regressions on B. Release packages and a conditional WinApp installer may still
+be generated; production is not regression qualification. Human release-PR
+approval, protected main merge M, tag, draft and publication ownership remain
+unchanged. A pure post-release fast-forward to Q adds no source and needs no
+second FULL run because the lifecycle record binds FULL on A to the approved
+BASIC A..B release delta; parallel develop work still blocks it.
+
+This target is **inactive** until its implementation is installed on main and
+verified by real hosted CI. Until then, follow the currently installed required
+workflows; source changes and local fixtures do not activate reduced execution.
+The earlier independently authenticated per-child coverage inheritance proposal
+is superseded. See [the concrete review contract](docs/CI_COVERAGE_REUSE_CONTRACT.md)
+for evidence and activation gates.
+
 ## Central Audit Runner
 
 ### Agent execution rule
@@ -114,6 +147,14 @@ php scripts/audit.php --profile=release
 ```
 
 `quick` runs `php-fast`: the explicit `quick_tests` subset in `scripts/audit_php_registry.php`, selected for audit infrastructure, core/bootstrap/routing, security, and mutation contracts. It also runs MVC boundaries, the whole-tree Python import policy, strict changed-source documentation/policy checks, fast Node fixtures, mutation/version contracts, clean-child runtime performance probes, and changed PHP/JavaScript syntax checks. It excludes the complete PHP regression tree, whole-tree source inventory and debt budgets, WinApp tests, slow Node work, and Chromium. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. A quick PASS does not replace full handoff verification.
+
+`basic` is a deliberately narrower source-only profile: PHP/JavaScript syntax
+and complete named-declaration documentation checks. With `--changed`, it
+requires and records an immutable comparison base and checks only the changed
+source. It does not run functional/regression tests, runtime Node fixtures,
+Python imports, browser/database workflows, WinApp, packaging qualification or
+whole-tree debt inventories. These semantics alone do not activate a workflow
+policy; see the #185 lifecycle target above.
 
 `full` retains the complete PHP regression tree, whole-tree source inventory and debt budgets, WinApp tests, all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures. It also records runtime performance probes. `release` retains all full coverage and adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is Chromium browser integration. `php tests/run.php` still delegates to `--suite=php-regression --no-report` and always means the complete PHP suite.
 
@@ -301,7 +342,30 @@ The registered `lightbox_dev_dashboard_browser_test.mjs` runs the actual viewer 
 
 Python discovery is execution-based rather than filesystem-only. The runner probes `python3 --version`, `python --version`, and `py -3 --version` in order and accepts only a successful Python 3 response. This is intentional on Windows: App Execution Aliases and launchers can be runnable from `PATH` even when PHP does not expose the alias as an ordinary file to `is_file()`. `PHP_GALLERY_PYTHON` remains available as an explicit executable-name/path override and is validated by the same Python 3 probe before WinApp tests start.
 
-WinApp tests that exercise optional host integrations must remain isolated from the developer workstation. In particular, SimConnect tests must not assume that a deliberately invalid manual override means no usable SimConnect DLL exists: the runtime intentionally falls back to automatic DLL discovery. The regression fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL branch. The audit also parses Python `unittest` trailers so the compact console/report summary distinguishes passed tests, assertion failures, errors, and skips without dumping the full Python log.
+WinApp tests that exercise optional host integrations must remain isolated from the developer workstation. In particular, SimConnect tests must not assume that a deliberately invalid manual override means no usable SimConnect DLL exists: the runtime intentionally falls back to automatic DLL discovery. The regression fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL branch.
+
+The central audit uses a reporting adapter around the same standard Python
+`unittest` discovery (`winapp/tests`, `test_*.py`); it owns the process and the
+existing 90-second deadline. The adapter records actual named test callbacks,
+durations, skip reasons, subtest events and fixture errors/skips in structured JSON. The central
+consumer validates complete, unique identities, outcome/count consistency and
+the real process exit/timeout before accepting coverage. Missing, malformed or
+incomplete evidence cannot become PASS from a successful process or aggregate
+trailer alone. Expected failures remain explicit non-PASS outcomes; unexpected
+success and failing subtests remain failures. The compact console retains the
+suite totals, while audit JSON retains individual outcomes and the original
+structured report. No Python test list is copied into YAML and no new audit
+entry point is introduced. Top-level test counts, nested subtest counts and
+class/module fixture counts remain separate; a parent with a skipped subtest
+does not become individual PASS coverage. Repeated subtest labels retain their
+observed event order instead of losing events through identity deduplication.
+
+The native Windows update smoke remains optional and its actual skip reason is
+reported by name. Linux Python fixtures do not establish installed-Windows,
+UAC/restart, installer or live simulator acceptance. These records improve
+origin evidence; they do not authenticate workflow source or enable inherited
+coverage. Protected-main verifier policy and real consumer proof remain the
+separate #142/#185 activation prerequisites.
 
 `winapp/tests/test_simconnect.py` uses fake native DLL calls and real packed
 ctypes packets to cover MSFS 2020 aircraft position, MSFS 2024 camera/fallback,
@@ -2599,7 +2663,12 @@ The gallery-description layout compatibility fixture injects a first rename refu
 The gallery-tag fixture observes Escape dismissal during the trusted key event itself, after the production handler. This checks immediate closing state, collapsed ARIA state and summary focus without depending on a protocol response arriving before the animation finishes; final close and geometry assertions remain separate.
 
 
-### Hosted release pre-generation tiers (#101, #139, #140)
+### Currently installed release pre-generation tiers (#101, #139, #140)
+
+Until the #185 replacement is installed on main and verified by real hosted CI,
+the current release workflow and its required checks remain authoritative. The
+Stage A/B description below records that installed behavior. The target described
+above removes those source-preflight tiers and the full matrix on prepared B.
 
 `Release qualification` runs Stage A (`release-preflight`, source/syntax/policy/debt
 contracts) and Stage B (`release-stage-b`, centrally owned MVC and mutation
@@ -2638,6 +2707,15 @@ without rewriting the origin. These tests do not certify that any
 GitHub environment or ruleset is installed, that a human approved an actual
 PR, or that a real release was published/reconciled. CI-first hosted qualification
 and exact source SHA remain authoritative; no new local handoff gate is implied.
+
+The registered `release_reconciliation_test.mjs` also exercises the actual retained
+historical qualification consumer: newest published binding/highest attempt,
+newer red/pending/cancelled/skipped checks, missing aggregates, ambiguous bindings,
+foreign check isolation, exact 100/500-row boundaries, short/conflicting pages,
+duplicate IDs/mandatory owners and run/check/job collection races. These inert
+fixtures do not qualify a live develop origin or approve W/input policy. The
+reader cannot discover newer workflow runs without published qualification checks;
+all full matrices and the separate independent-verifier requirement remain.
 
 `tests/release_completion_handoff_test.mjs` is registered centrally and covers
 limited/redacted API fields on both branches, exposed bypass and effective-policy

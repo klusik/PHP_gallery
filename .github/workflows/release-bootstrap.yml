@@ -1,0 +1,704 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/release-bootstrap.yml
+# Module Type: Release Qualification Workflow
+# Purpose: Prepare and qualify a release branch entirely on GitHub-hosted runners.
+# Responsibilities:
+#   - Validate mutable release branch identity before repository writes
+#   - Apply deterministic release preparation and commit it back only to the same release branch
+#   - Generate missing release-note prose through tightly scoped GitHub Copilot CLI
+#   - Preserve completed maintainer-authored release notes without invoking AI
+#   - Reuse the existing central CI workflow against the exact prepared candidate SHA
+#   - Expose one aggregate release qualification gate
+# Author: Rudolf Klusal
+name: Release qualification
+
+on:
+  workflow_call:
+    secrets:
+      COPILOT_GITHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Prepare release candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      version: ${{ steps.final.outputs.version }}
+      candidate_sha: ${{ steps.final.outputs.candidate_sha }}
+      source_base: ${{ steps.origin.outputs.source_base }}
+      base_tag: ${{ steps.origin.outputs.base_tag }}
+      provenance_json: ${{ steps.origin.outputs.provenance_json }}
+      origin_commit_sha: ${{ steps.origin.outputs.origin_commit_sha }}
+      selected_develop_sha: ${{ steps.origin.outputs.selected_develop_sha }}
+      initial_main_sha: ${{ steps.origin.outputs.initial_main_sha }}
+      previous_stable_tag: ${{ steps.origin.outputs.previous_stable_tag }}
+      previous_stable_sha: ${{ steps.origin.outputs.previous_stable_sha }}
+      ready: ${{ steps.final.outputs.ready }}
+      preparation_changed: ${{ steps.commit.outputs.changed }}
+      winapp_changed: ${{ steps.final.outputs.winapp_changed }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: release
+        name: Validate release branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v_((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.((0|[1-9][0-9]*)))?)$ ]]; then
+            echo "::error::Expected canonical release/v_X.Y[.Z] branch." >&2
+            exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#release/v_}" >> "${GITHUB_OUTPUT}"
+      - id: initialize
+        name: Initialize or reuse immutable origin after release push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/start-new-release.mjs
+      - id: origin
+        name: Verify immutable release develop origin and prior main tag
+        env:
+          ORIGIN_CHECKOUT_SHA: ${{ steps.initialize.outputs.candidate_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/release-origin.mjs
+      - name: Cheap release source preflight
+        shell: bash
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --profile=release-preflight
+      - name: Medium-cost release source preflight
+        timeout-minutes: 6
+        shell: bash
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --profile=release-stage-b
+      - name: Show actionable source-stage failures
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cache/test-audit/latest.md ]]; then
+            sed -n '1,160p' cache/test-audit/latest.md
+          fi
+      - name: Retain bounded source-stage failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-source-preflight
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/*/report.json
+            cache/test-audit/*/report.md
+            cache/test-audit/*/source-failures.md
+            cache/test-audit/*/source-documentation-changed.json
+            cache/test-audit/*/source-policy-changed.json
+            cache/test-audit/*/source-debt-ratchet.json
+            cache/test-audit/*/mvc-architecture.json
+            cache/test-audit/*/source-documentation-changed.log
+            cache/test-audit/*/source-policy-changed.log
+            cache/test-audit/*/source-contract-inventory.log
+            cache/test-audit/*/php-lint.log
+            cache/test-audit/*/js-lint.log
+            cache/test-audit/*/ci-workflow-contract.log
+            cache/test-audit/*/mvc-boundaries.log
+            cache/test-audit/*/mutation-contracts.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Apply deterministic release preparation
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # New releases bind to the immutable event commit; completed metadata
+          # retains its original date on retries, including the bot-prepared head.
+          export RELEASE_INITIAL_EPOCH="$(git show -s --format=%ct "${GITHUB_SHA}")"
+          php .github/scripts/prepare_release_candidate.php "${RELEASE_VERSION}"
+          # Share one release timestamp between manifest generation and PDF compilation.
+          export SOURCE_DATE_EPOCH="$(php -r '
+            $metadata = json_decode(file_get_contents("release-metadata.json"), true, 512, JSON_THROW_ON_ERROR);
+            $moment = new DateTimeImmutable($metadata[$argv[1]]["released_at"], new DateTimeZone("Europe/Prague"));
+            echo $moment->getTimestamp();
+          ' "${RELEASE_VERSION}")"
+          echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" >> "${GITHUB_ENV}"
+          php scripts/generate_production_files.php
+          if ! php scripts/generate_manifest.php --check; then
+            php scripts/generate_manifest.php
+          fi
+      - id: notes-before
+        name: Check existing editorial release notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if php -r '
+            require "scripts/release_lib.php";
+            $section = \PhpGallery\Release\patch_notes_section(getcwd(), $argv[1]);
+            exit($section !== null
+              && !str_contains($section, "RELEASE_NOTES_TODO")
+              && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
+          ' "${RELEASE_VERSION}"; then
+            echo "complete=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "complete=false" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Set up Node.js for AI release notes
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install GitHub Copilot CLI
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        run: npm install -g @github/copilot
+      - name: Build complete release-note evidence prompt
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        # Bound the whole local evidence step independently of Copilot and TeX.
+        timeout-minutes: 2
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          BASE_TAG: ${{ steps.origin.outputs.base_tag }}
+          PHP_GALLERY_RELEASE_BASE: ${{ steps.origin.outputs.source_base }}
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai.php prompt \
+            "${RELEASE_VERSION}" "${BASE_TAG}" "${GITHUB_REPOSITORY}" \
+            "${RUNNER_TEMP}/release-notes-prompt.txt"
+      - name: Prepare bounded Copilot evidence slices
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai_chunks.php prepare \
+            "${RUNNER_TEMP}/release-notes-prompt.txt" \
+            "${RUNNER_TEMP}/release-notes-evidence"
+      - name: Generate release notes with Copilot from every diff slice
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        timeout-minutes: 90
+        shell: bash
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_AUTO_UPDATE: 'false'
+          GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS: 'false'
+        run: |
+          set -euo pipefail
+          if [[ -z "${COPILOT_GITHUB_TOKEN:-}" ]]; then
+            echo "::error::COPILOT_GITHUB_TOKEN is required for GitHub release-note generation." >&2
+            exit 1
+          fi
+
+          evidence_dir="${RUNNER_TEMP}/release-notes-evidence"
+          error_log="${RUNNER_TEMP}/copilot-release-notes.err"
+          selected_model='gpt-6-luna'
+          run_copilot() {
+            local prompt_path="$1" response_path="$2" label="$3"
+            if timeout --kill-after=10s 240s \
+              copilot -s --model "${selected_model}" --no-ask-user \
+              < "${prompt_path}" > "${response_path}" 2> "${error_log}"; then
+              return 0
+            fi
+            if [[ "${selected_model}" == 'gpt-6-luna' ]] &&
+              grep -Fq 'Model "gpt-6-luna" from --model flag is not available.' "${error_log}"; then
+              selected_model='auto'
+              echo "::warning::gpt-6-luna is unavailable; using Copilot auto for all remaining evidence passes."
+              if timeout --kill-after=10s 240s \
+                copilot -s --model auto --no-ask-user \
+                < "${prompt_path}" > "${response_path}" 2> "${error_log}"; then
+                return 0
+              fi
+            fi
+            if grep -Fq "Request exceeds the model's prompt budget" "${error_log}"; then
+              echo "::error::Copilot prompt budget exceeded at ${label}; no diff bytes have been discarded." >&2
+            else
+              echo "::error::Copilot failed or timed out at ${label}; original diff and intermediate evidence remain unchanged." >&2
+            fi
+            return 1
+          }
+
+          # Each diff and reduction part must succeed; none may be skipped.
+          # Digest hierarchy reduces context without trimming any source slice.
+          shopt -s nullglob
+          completed=false
+          for ((level=0; level<12; level++)); do
+            printf -v stage '%02d' "${level}"
+            inputs=("${evidence_dir}/level-${stage}-"*.prompt)
+            if (( ${#inputs[@]} == 0 )); then
+              echo "::error::Missing Copilot evidence requests for level ${stage}." >&2
+              exit 1
+            fi
+            echo "Processing ${#inputs[@]} bounded Copilot evidence requests in level ${stage}."
+            for input_path in "${inputs[@]}"; do
+              output_path="${input_path%.prompt}.md"
+              label="$(basename "${input_path}")"
+              echo "Copilot evidence request: ${label}"
+              run_copilot "${input_path}" "${output_path}" "${label}"
+              php .github/scripts/patch_notes_ai_chunks.php validate-summary "${output_path}"
+            done
+            php .github/scripts/patch_notes_ai_chunks.php advance "${evidence_dir}"
+            if [[ -f "${evidence_dir}/final.prompt" ]]; then
+              completed=true
+              break
+            fi
+          done
+          if [[ "${completed}" != true ]]; then
+            echo "::error::Bounded Copilot evidence reduction did not finish." >&2
+            exit 1
+          fi
+
+          echo "Generating final editorial release notes from fully processed evidence."
+          run_copilot "${evidence_dir}/final.prompt" \
+            "${RUNNER_TEMP}/release-notes-response.md" 'final release-note synthesis'
+      - name: Validate and apply generated release notes
+        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          php .github/scripts/patch_notes_ai.php apply \
+            "${RELEASE_VERSION}" "${RUNNER_TEMP}/release-notes-response.md"
+      - name: Upload rejected AI release-note response
+        if: ${{ failure() && steps.notes-before.outputs.complete == 'false' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-notes-rejected-response
+          path: ${{ runner.temp }}/release-notes-response.md
+          if-no-files-found: ignore
+          retention-days: 7
+      - id: notes
+        name: Verify editorial release notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          php -r '
+            require "scripts/release_lib.php";
+            $section = \PhpGallery\Release\patch_notes_section(getcwd(), $argv[1]);
+            exit($section !== null
+              && !str_contains($section, "RELEASE_NOTES_TODO")
+              && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
+          ' "${RELEASE_VERSION}"
+          echo "complete=true" >> "${GITHUB_OUTPUT}"
+      - id: tinytex-cache
+        name: Restore cached TinyTeX
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        uses: actions/cache/restore@v6.1.0
+        timeout-minutes: 3
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '2'
+        with:
+          path: ~/.TinyTeX
+          key: tinytex-v2-ubuntu24.04-x86_64-${{ hashFiles('.github/texlive-lock.json', '.github/texlive-packages.txt', '.github/scripts/provision_tinytex.sh') }}
+      - name: Install locked TinyTeX bundle on cache miss
+        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        timeout-minutes: 6
+        run: timeout --kill-after=15s 300 bash .github/scripts/provision_tinytex.sh install
+      - name: Provision frozen TeX Live packages on cache miss
+        if: ${{ steps.notes.outputs.complete == 'true' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        timeout-minutes: 11
+        run: timeout --kill-after=15s 600 bash .github/scripts/provision_tinytex.sh provision
+      - name: Activate and verify locked TinyTeX
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: bash .github/scripts/provision_tinytex.sh verify
+      - id: manuals
+        name: Build all maintained manuals
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        timeout-minutes: 3
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # SOURCE_DATE_EPOCH is fixed by deterministic release preparation.
+          export FORCE_SOURCE_DATE=1
+          cd docs
+          for base in PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV; do
+            echo "Manual ${base}: START"
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            makeindex "${base}.idx"
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            pdflatex -interaction=nonstopmode -halt-on-error "${base}.tex"
+            echo "Manual ${base}: COMPLETE"
+          done
+      - name: Save TinyTeX cache after successful manual build
+        if: ${{ success() && steps.manuals.outcome == 'success' && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6.1.0
+        timeout-minutes: 3
+        with:
+          path: ~/.TinyTeX
+          key: ${{ steps.tinytex-cache.outputs.cache-primary-key }}
+      - name: Refresh final integrity data after manual build
+        if: ${{ steps.notes.outputs.complete == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          php scripts/generate_production_files.php
+          if ! php scripts/generate_manifest.php --check; then
+            php scripts/generate_manifest.php
+          fi
+      - id: commit
+        name: Commit deterministic preparation to the release branch
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          ORIGINAL_SHA: ${{ steps.initialize.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          allowed='^(app/bootstrap\.php|app/core-manifest\.json|app/production-files\.json|README\.md|TESTING\.md|DATABASE\.md|ARCHITECTURE\.md|PATCH_NOTES\.md|release-metadata\.json|docs/PHP_Gallery_Manual(_CZ|_DE|_SV)?\.(tex|pdf))$'
+          unexpected="$(
+            git status --porcelain=v1 --untracked-files=all |
+              sed -E 's/^.. //' |
+              grep -Ev "${allowed}" || true
+          )"
+          if [[ -n "${unexpected}" ]]; then
+            echo "Release preparation produced unexpected workspace paths:" >&2
+            printf '%s\n' "${unexpected}" >&2
+            exit 1
+          fi
+
+          git add -- \
+            app/bootstrap.php app/core-manifest.json app/production-files.json \
+            README.md TESTING.md DATABASE.md ARCHITECTURE.md PATCH_NOTES.md release-metadata.json \
+            docs/PHP_Gallery_Manual.tex docs/PHP_Gallery_Manual.pdf \
+            docs/PHP_Gallery_Manual_CZ.tex docs/PHP_Gallery_Manual_CZ.pdf \
+            docs/PHP_Gallery_Manual_DE.tex docs/PHP_Gallery_Manual_DE.pdf \
+            docs/PHP_Gallery_Manual_SV.tex docs/PHP_Gallery_Manual_SV.pdf
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "chore(release): prepare v_${RELEASE_VERSION}"
+
+          git fetch origin "${GITHUB_REF_NAME}"
+          remote_sha="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
+          if [[ "${remote_sha}" != "${ORIGINAL_SHA}" ]]; then
+            # A rerun may rebuild the identical tree already committed by this workflow.
+            # Reuse that current SHA without writing; any differing tree still fails the lease.
+            if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "origin/${GITHUB_REF_NAME}^{tree}")" ]]; then
+              echo "Prepared tree already exists at current release head; reusing exact SHA."
+              echo "changed=false" >> "${GITHUB_OUTPUT}"
+              echo "candidate_sha=${remote_sha}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "Release branch changed during preparation; refusing stale write-back." >&2
+            exit 1
+          fi
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
+
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+      - id: final
+        name: Verify prepared candidate state
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          NOTES_COMPLETE: ${{ steps.notes.outputs.complete }}
+          PREPARED_SHA: ${{ steps.commit.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=${PREPARED_SHA}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${NOTES_COMPLETE}" != "true" ]]; then
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+            {
+              echo "### Release preparation"
+              echo ""
+              echo "- Version: \`${RELEASE_VERSION}\`"
+              echo "- Candidate SHA: \`${PREPARED_SHA}\`"
+              echo "- Deterministic preparation: committed"
+              echo "- Editorial patch notes: **pending**"
+              echo "- Qualification matrix: not started"
+              echo ""
+              echo "Complete the \`PATCH_NOTES.md\` section for Version ${RELEASE_VERSION} and push it to this release branch."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          php scripts/generate_production_files.php --check
+          php scripts/generate_manifest.php --check
+          php scripts/check_release.php "${RELEASE_VERSION}"
+          paths="$(git diff --name-only "${{ steps.origin.outputs.source_base }}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          if [[ -n "${paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
+          echo "ready=true" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Release preparation"
+            echo ""
+            echo "- Version: \`${RELEASE_VERSION}\`"
+            echo "- Candidate SHA: \`${PREPARED_SHA}\`"
+            echo "- Production inventory: current"
+            echo "- Integrity manifest: current"
+            echo "- Release consistency: passed"
+            echo "- Editorial patch notes: complete"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  qualification:
+    name: Complete release matrix
+    needs: prepare
+    if: ${{ needs.prepare.outputs.ready == 'true' }}
+    uses: ./.github/workflows/gallery-workflows.yml
+    with:
+      audit_profile: release
+      checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
+      source_base: ${{ needs.prepare.outputs.source_base }}
+
+  release-gate:
+    name: Release qualification gate
+    if: ${{ always() }}
+    needs:
+      - prepare
+      - qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    steps:
+      - id: gate
+        name: Summarize aggregate qualification
+        shell: bash
+        env:
+          PREPARATION_RESULT: ${{ needs.prepare.result }}
+          READY: ${{ needs.prepare.outputs.ready }}
+          MATRIX_RESULT: ${{ needs.qualification.result }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Release qualification gate"
+            echo ""
+            echo "- Version: \`${RELEASE_VERSION:-unresolved}\`"
+            echo "- Candidate SHA: \`${CANDIDATE_SHA:-unresolved}\`"
+            echo "- Preparation: **${PREPARATION_RESULT}**"
+            echo "- Release inputs ready: **${READY:-false}**"
+            echo "- Full release matrix: **${MATRIX_RESULT}**"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${PREPARATION_RESULT}" != "success" ]]; then
+            echo "Release preparation failed." >&2
+            exit 1
+          fi
+          if [[ "${READY}" != "true" ]]; then
+            echo "Release preparation is committed, but editorial release notes are still pending." >&2
+            exit 1
+          fi
+          if [[ "${MATRIX_RESULT}" != "success" ]]; then
+            echo "Release qualification matrix did not pass." >&2
+            exit 1
+          fi
+
+          current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ "${current_sha}" != "${CANDIDATE_SHA}" ]]; then
+            echo "Release branch changed after preparation; this qualification is stale." >&2
+            exit 1
+          fi
+          echo "Release candidate is eligible for the next promotion stage."
+      - name: Bind the result and retained record to the prepared SHA
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          BASE_TAG: ${{ needs.prepare.outputs.base_tag }}
+          ORIGIN_COMMIT_SHA: ${{ needs.prepare.outputs.origin_commit_sha }}
+          SELECTED_DEVELOP_SHA: ${{ needs.prepare.outputs.selected_develop_sha }}
+          INITIAL_MAIN_SHA: ${{ needs.prepare.outputs.initial_main_sha }}
+          PREVIOUS_STABLE_TAG: ${{ needs.prepare.outputs.previous_stable_tag }}
+          PREVIOUS_STABLE_SHA: ${{ needs.prepare.outputs.previous_stable_sha }}
+          PROVENANCE_JSON: ${{ needs.prepare.outputs.provenance_json }}
+          READY: ${{ needs.prepare.outputs.ready }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          WINAPP_CHANGED: ${{ needs.prepare.outputs.winapp_changed }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {writeFileSync} from 'node:fs';
+          const e = process.env;
+          const record = {...JSON.parse(e.PROVENANCE_JSON),repository:e.GITHUB_REPOSITORY, branch:e.GITHUB_REF_NAME,
+            candidate_sha:e.CANDIDATE_SHA, source_base:e.SOURCE_BASE, version:e.RELEASE_VERSION,
+            origin_commit_sha:e.ORIGIN_COMMIT_SHA,selected_develop_sha:e.SELECTED_DEVELOP_SHA,
+            initial_main_sha:e.INITIAL_MAIN_SHA,previous_stable_tag:e.PREVIOUS_STABLE_TAG,
+            previous_stable_sha:e.PREVIOUS_STABLE_SHA,run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
+            ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
+            lifecycle_schema:2,winapp_changed:e.WINAPP_CHANGED==='true',manual_review:'PENDING',promotion:'AUTOMATIC_AFTER_REVIEW',override:false};
+          writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');
+          writeFileSync(e.RUNNER_TEMP + '/release-check.json', JSON.stringify({name:'Release qualification',
+            external_id:`release:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.CANDIDATE_SHA}`,
+            head_sha:e.CANDIDATE_SHA, status:'completed', conclusion:e.GATE_OUTCOME === 'success' ? 'success' : 'failure',
+            details_url:`https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
+            output:{title:'Exact prepared release candidate', summary:JSON.stringify(record,null,2)}}));
+          NODE
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/release-check.json"
+          # Reusable job names may carry caller prefixes; expose the exact required context on Q.
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          const file = process.env.RUNNER_TEMP + '/release-check.json';
+          const check = JSON.parse(readFileSync(file,'utf8'));
+          check.name = 'Complete required CI matrix';
+          writeFileSync(process.env.RUNNER_TEMP + '/prepared-matrix-check.json',JSON.stringify(check));
+          NODE
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/prepared-matrix-check.json"
+      - name: Retain prepared candidate identity even when qualification is red
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-qualification-record
+          overwrite: true
+          path: ${{ runner.temp }}/release-candidate.json
+          if-no-files-found: error
+          retention-days: 90
+
+  assets:
+    name: Prepare manual release assets
+    needs: [prepare, qualification, release-gate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          path: ${{ runner.temp }}/qualification-evidence
+      - name: Build deterministic production package and checksums
+        env:
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+          SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          CANDIDATE_WORKSPACE: ${{ github.workspace }}
+          RELEASE_ASSETS: ${{ runner.temp }}/release-assets
+          QUALIFICATION_EVIDENCE: ${{ runner.temp }}/qualification-evidence
+        run: node .github/scripts/release-assets.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: manual-release-assets
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 90
+
+  installer:
+    name: Prepare Windows companion installer
+    if: ${{ needs.prepare.outputs.winapp_changed == 'true' }}
+    needs: [prepare, qualification, release-gate]
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          persist-credentials: false
+      - name: Build canonical installer with hosted Inno Setup
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path -LiteralPath $compiler)) { throw 'BLOCKED hosted Inno Setup 6 is unavailable.' }
+          python winapp/build_installer.py --iscc $compiler
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installers = @(Get-ChildItem -LiteralPath winapp/dist -Filter '*.exe' -File -Recurse)
+          $metadata = @(Get-ChildItem -LiteralPath winapp/dist -Filter 'winapp-update.json' -File -Recurse)
+          if ($installers.Count -ne 1 -or $metadata.Count -ne 1) { throw 'BLOCKED ambiguous installer output.' }
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP 'winapp-release'
+          New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $artifactDirectory
+          Copy-Item -LiteralPath $metadata[0].FullName -Destination $artifactDirectory
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: manual-winapp-installer
+          path: ${{ runner.temp }}/winapp-release/*
+          if-no-files-found: error
+          retention-days: 90
+
+  propose:
+    name: Open qualified release PR
+    if: ${{ always() && needs.prepare.result == 'success' && needs.release-gate.result == 'success' && needs.assets.result == 'success' && (needs.installer.result == 'success' || needs.installer.result == 'skipped' && needs.prepare.outputs.winapp_changed == 'false') }}
+    needs: [prepare, release-gate, assets, installer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      # Dispatch the existing completion filename at Q; GITHUB_TOKEN-created
+      # PR/merge events are not the first-release bootstrap mechanism.
+      actions: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-qualification-record
+          path: ${{ runner.temp }}/release-record
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: manual-release-assets
+          path: ${{ runner.temp }}/release-assets
+      - name: Open or reuse exact-Q PR awaiting one human approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ACTION: open
+          RELEASE_RECORD: ${{ runner.temp }}/release-record/release-candidate.json
+          RELEASE_NOTES: ${{ runner.temp }}/release-assets/release-notes.md
+          RELEASE_ASSETS: ${{ runner.temp }}/release-assets
+        run: node .github/scripts/release-completion.mjs

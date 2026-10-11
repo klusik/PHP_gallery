@@ -38,10 +38,13 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/scripts/audit_lib.php';
+require_once dirname(__DIR__) . '/scripts/audit_winapp.php';
 $registry = require dirname(__DIR__) . '/scripts/audit_registry.php';
 
 use function PhpGallery\Audit\output_is_skip;
 use function PhpGallery\Audit\parse_python_unittest_summary;
+use function PhpGallery\Audit\audit_validate_winapp_report;
+use function PhpGallery\Audit\audit_evaluate_winapp_report;
 use function PhpGallery\Audit\parse_options;
 use function PhpGallery\Audit\performance_metric_problems;
 use function PhpGallery\Audit\python_command_is_usable;
@@ -54,6 +57,10 @@ use function PhpGallery\Audit\run_process_pool;
 use function PhpGallery\Audit\run_file_checks;
 use function PhpGallery\Audit\worker_count;
 use function PhpGallery\Audit\node_failure_detail;
+use function PhpGallery\Audit\missing_required_php_test_passes;
+use function PhpGallery\Audit\audit_hosted_full_suite_ownership;
+use function PhpGallery\Audit\audit_required_suite_pass;
+use function PhpGallery\Audit\audit_delegated_checkout_integrity;
 use function PhpGallery\Audit\render_console_problems;
 
 /**
@@ -78,6 +85,18 @@ sort($registeredNodeNames, SORT_STRING);
 audit_test_assert($actualNodeNames === $registeredNodeNames, 'Every tests/*_test.mjs file must have exactly one explicit audit registry entry.');
 
 $profiles = $registry['profiles'] ?? [];
+audit_test_assert(($profiles['basic'] ?? null) === [
+    'php-lint', 'js-lint', 'source-documentation-changed',
+], 'Basic must run only PHP/JavaScript syntax and changed named-declaration documentation.');
+audit_test_assert(count(array_intersect($profiles['basic'], [
+    'php-regression', 'node-fast', 'node-full', 'winapp', 'browser-map', 'manifest',
+    'source-contract-inventory', 'source-policy-changed', 'python-import-policy',
+])) === 0, 'Basic must not run regression, runtime, inventory, policy, browser, WinApp, or manifest suites.');
+audit_test_assert(in_array('php-regression', $profiles['full'], true)
+    && in_array('browser-map', $profiles['full'], true)
+    && in_array('php-regression', $profiles['release'], true)
+    && in_array('browser-map', $profiles['release'], true),
+    'Adding Basic must preserve full and release functional coverage.');
 audit_test_assert(($profiles['release-preflight'] ?? []) === [
     'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
     'source-contract-inventory', 'python-import-policy', 'ci-workflow-contract',
@@ -98,6 +117,121 @@ audit_test_assert(in_array('manifest', $profiles['full'], true),
 audit_test_assert(str_contains((string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'),
     "'scripts/prepare_candidate.php', ['--check']"),
     'Central manifest suite must use the common read-only candidate preparation contract.');
+// Source spelling contracts use canonical newlines across Windows and hosted checkouts.
+$runnerSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'));
+$supportSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit_lib.php'));
+audit_test_assert(str_contains($runnerSource, "'php-lint-changed' => audit_run_php_lint(true, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
+    && str_contains($runnerSource, "'js-lint-changed' => audit_run_js_lint(true, \$node, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
+    && str_contains($runnerSource, "\$python = \$isBasicProfile ? null : resolve_python_command()")
+    && str_contains($runnerSource, "\$browser = \$isBasicProfile ? null : resolve_browser_executable()")
+    && str_contains($runnerSource, "\$environment = \$isBasicProfile\n    ? [")
+    && str_contains($runnerSource, "'component' => 'PHP GD'")
+    && str_contains($runnerSource, "if (\$suiteId === 'source-documentation-changed' && \$basicChangedLintRequiresBase && \$basicChangedLintBase === null)")
+    && str_contains($supportSource, "'--no-renames', \$baseSha, 'HEAD', '--'")
+    && str_contains($supportSource, "'merge-base', '--is-ancestor', \$baseSha, 'HEAD'")
+    && str_contains($runnerSource, "if (\$requireGitEvidence)"),
+    'Basic --changed syntax checks must cover the immutable comparison-base delta and block if its Git evidence is unavailable.');
+
+$hostedDatabase = [
+    'GITHUB_ACTIONS' => 'true',
+    'GITHUB_REPOSITORY' => 'klusik/PHP_gallery',
+    'GALLERY_WORKFLOW_ENABLE' => 'disposable-only',
+    'GALLERY_WORKFLOW_REQUIRED' => '1',
+    'GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1',
+    'GALLERY_WORKFLOW_DB_PORT' => '13316',
+    'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner',
+    'GALLERY_RUNTIME_NORMALIZATION' => 'unicode',
+    'GALLERY_SESSION_REQUIRED' => '1',
+];
+$delegated = audit_hosted_full_suite_ownership($profiles, 'full', $hostedDatabase);
+audit_test_assert($delegated['delegated_to_preflight'] === ['manifest']
+    && !in_array('manifest', $delegated['suites'], true)
+    && count($delegated['suites']) === count($profiles['full']) - 1
+    && in_array('php-regression', $delegated['suites'], true)
+    && in_array('node-full', $delegated['suites'], true)
+    && in_array('winapp', $delegated['suites'], true),
+    'Only repeated manifest execution may move from a hosted disposable database job to required preflight.');
+foreach (['quick', 'release', 'candidate-preflight'] as $retainedProfile) {
+    $retained = audit_hosted_full_suite_ownership($profiles, $retainedProfile, $hostedDatabase);
+    audit_test_assert($retained['suites'] === $profiles[$retainedProfile]
+        && $retained['delegated_to_preflight'] === [],
+        'Mandatory non-full profiles must not delegate their manifest owner: ' . $retainedProfile);
+}
+$invalidContexts = [
+    ['GITHUB_ACTIONS' => 'false'],
+    ['GITHUB_REPOSITORY' => 'untrusted/fork'],
+    ['GALLERY_WORKFLOW_ENABLE' => ''],
+    ['GALLERY_WORKFLOW_REQUIRED' => '0'],
+    ['GALLERY_WORKFLOW_DB_HOST' => 'localhost'],
+    ['GALLERY_WORKFLOW_DB_PORT' => '3306'],
+    ['GALLERY_WORKFLOW_DB_USER' => 'root'],
+    ['GALLERY_RUNTIME_NORMALIZATION' => 'ascii'],
+    ['GALLERY_SESSION_REQUIRED' => '0'],
+];
+foreach ($invalidContexts as $override) {
+    $retained = audit_hosted_full_suite_ownership($profiles, 'full', array_replace($hostedDatabase, $override));
+    audit_test_assert($retained['suites'] === $profiles['full'] && $retained['delegated_to_preflight'] === [],
+        'Unknown or invalid hosted environment must retain complete full manifest coverage.');
+}
+$unownedProfiles = $profiles;
+$unownedProfiles['candidate-preflight'] = array_values(array_diff($profiles['candidate-preflight'], ['manifest']));
+audit_test_assert(audit_hosted_full_suite_ownership($unownedProfiles, 'full', $hostedDatabase)['delegated_to_preflight'] === [],
+    'A missing mandatory preflight manifest owner must prohibit delegation.');
+$unownedProfiles = $profiles;
+$unownedProfiles['release'] = array_values(array_diff($profiles['release'], ['manifest']));
+audit_test_assert(audit_hosted_full_suite_ownership($unownedProfiles, 'full', $hostedDatabase)['delegated_to_preflight'] === [],
+    'Release manifest ownership must not disappear during hosted consolidation.');
+$manifestPass = [['id' => 'manifest', 'status' => 'PASS']];
+audit_test_assert(audit_required_suite_pass($manifestPass, 'manifest'),
+    'One real central manifest PASS is the only accepted preflight owner evidence.');
+foreach (['SKIP', 'BLOCKED', 'FAIL'] as $forbiddenStatus) {
+    audit_test_assert(!audit_required_suite_pass([['id' => 'manifest', 'status' => $forbiddenStatus]], 'manifest'),
+        'Required preflight manifest owner must reject ' . $forbiddenStatus . '.');
+}
+audit_test_assert(!audit_required_suite_pass([], 'manifest')
+    && !audit_required_suite_pass([['id' => 'manifest', 'status' => 'PASS'], ['id' => 'manifest', 'status' => 'PASS']], 'manifest')
+    && !audit_required_suite_pass([['id' => 'other', 'status' => 'PASS']], 'manifest'),
+    'Missing, duplicated or unrelated successes cannot replace required manifest PASS.');
+
+
+$cleanIdentity = [
+    'head_sha' => str_repeat('a', 40),
+    'comparison_base' => str_repeat('b', 40),
+    'requested_base' => str_repeat('b', 40),
+    'worktree_dirty' => false,
+];
+$cleanIntegrity = audit_delegated_checkout_integrity($cleanIdentity, $cleanIdentity);
+audit_test_assert($cleanIntegrity === ['status' => 'PASS', 'reason' => 'unchanged-clean-checkout'],
+    'Post-test delegated manifest integrity must accept an unchanged clean exact checkout.');
+
+$integrityFailures = [
+    ['start' => ['worktree_dirty' => true], 'end' => [], 'status' => 'FAIL', 'reason' => 'checkout-dirty-at-start'],
+    ['start' => [], 'end' => ['worktree_dirty' => true], 'status' => 'FAIL', 'reason' => 'checkout-dirty-after-tests'],
+    ['start' => [], 'end' => ['head_sha' => str_repeat('c', 40)], 'status' => 'FAIL', 'reason' => 'checkout-identity-changed-during-tests'],
+    ['start' => [], 'end' => ['comparison_base' => str_repeat('c', 40)], 'status' => 'FAIL', 'reason' => 'checkout-identity-changed-during-tests'],
+    ['start' => [], 'end' => ['requested_base' => str_repeat('c', 40)], 'status' => 'FAIL', 'reason' => 'checkout-identity-changed-during-tests'],
+    ['start' => ['head_sha' => null], 'end' => [], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+    ['start' => [], 'end' => ['head_sha' => null], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+    ['start' => [], 'end' => ['head_sha' => 'not-a-sha'], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+    ['start' => [], 'end' => ['comparison_base' => null], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+    ['start' => [], 'end' => ['requested_base' => ''], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+    ['start' => [], 'end' => ['worktree_dirty' => null], 'status' => 'BLOCKED', 'reason' => 'git-identity-unavailable'],
+];
+foreach ($integrityFailures as $case) {
+    $result = audit_delegated_checkout_integrity(
+        array_replace($cleanIdentity, $case['start']),
+        array_replace($cleanIdentity, $case['end'])
+    );
+    audit_test_assert($result === ['status' => $case['status'], 'reason' => $case['reason']],
+        'Post-test delegated manifest integrity must reject invalid or mutated Git identity: ' . $case['reason']);
+}
+$centralRunner = (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php');
+$integrityInvocation = strpos($centralRunner, 'audit_delegated_checkout_integrity($sourceIdentity, $finalSourceIdentity)');
+$overallInvocation = strpos($centralRunner, '$status = overall_status($tasks)');
+audit_test_assert($integrityInvocation !== false && $overallInvocation !== false
+    && $integrityInvocation < $overallInvocation
+    && str_contains($centralRunner, 'if ($delegatedToPreflight !== [])'),
+    'Only delegated central audits may evaluate the mandatory post-test checkout guard before overall qualification.');
 
 audit_test_assert(in_array('php-fast', $profiles['quick'], true) && !in_array('php-regression', $profiles['quick'], true), 'Quick must use curated PHP feedback instead of the complete regression tree.');
 foreach (['full', 'release'] as $profile) {
@@ -172,6 +306,101 @@ audit_test_assert(!empty($registry['node_tests']['gallery_picker_parent_integrat
 audit_test_assert(($registry['node_tests']['gallery_download_zip_test.mjs']['temporary_output'] ?? '') !== '', 'ZIP writer regression must receive a temporary output path.');
 audit_test_assert(($registry['php_test_requirements']['gallery_workflow_integration_test.php']['timeout'] ?? 0) >= 120, 'The opt-in migrated HTTP workflow needs a bounded setup-aware timeout.');
 
+
+$mandatoryFixture = [
+    'id' => 'php-regression',
+    'status' => 'PASS',
+    'counts' => ['passed' => 2, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => 2],
+    'details' => ['tests' => [
+        ['name' => 'database_engine_contract_test.php', 'status' => 'PASS', 'exit_code' => 0, 'timed_out' => false],
+        ['name' => 'gallery_workflow_integration_test.php', 'status' => 'PASS', 'exit_code' => 0, 'timed_out' => false],
+    ]],
+];
+$mandatoryNames = ['database_engine_contract_test.php', 'gallery_workflow_integration_test.php'];
+audit_test_assert(missing_required_php_test_passes($mandatoryFixture, $mandatoryNames) === [],
+    'Complete structured PHP PASS results must satisfy the mandatory disposable DB owner.');
+
+$generalRequired = $registry['hosted_full_required_php_tests'] ?? null;
+audit_test_assert($generalRequired === ['deploy_app_packaging_test.php', 'runtime_module_plan_test.php'],
+    'Hosted complete audits must retain exact mandatory packaging and PHP-specific module test owners.');
+$generalFixture = $mandatoryFixture;
+$generalFixture['details']['tests'][0]['name'] = $generalRequired[0];
+$generalFixture['details']['tests'][1]['name'] = $generalRequired[1];
+audit_test_assert(missing_required_php_test_passes($generalFixture, $generalRequired) === [],
+    'Both required hosted general regressions must qualify with an individual structured PASS.');
+foreach (['SKIP' => 'skipped', 'BLOCKED' => 'blocked', 'FAIL' => 'failed'] as $status => $counter) {
+    $generalFailure = $generalFixture;
+    $generalFailure['details']['tests'][0]['status'] = $status;
+    $generalFailure['counts']['passed'] = 1;
+    $generalFailure['counts'][$counter] = 1;
+    audit_test_assert(missing_required_php_test_passes($generalFailure, $generalRequired) === [$generalRequired[0]],
+        'Hosted negative packaging coverage must reject ' . $status . ' instead of hiding it within full PASS.');
+}
+$missingModule = $generalFixture;
+array_pop($missingModule['details']['tests']);
+$missingModule['counts']['passed'] = 1;
+$missingModule['counts']['total'] = 1;
+audit_test_assert(missing_required_php_test_passes($missingModule, $generalRequired) === [$generalRequired[1]],
+    'A missing PHP-specific module plan child must not qualify the hosted full suite.');
+$zeroExitLie = $generalFixture;
+$zeroExitLie['details']['tests'][1]['exit_code'] = 1;
+audit_test_assert(missing_required_php_test_passes($zeroExitLie, $generalRequired) === [$generalRequired[1]],
+    'A misleading module-plan PASS with nonzero exit must be rejected.');
+$runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php');
+audit_test_assert(str_contains($runnerSource, "getenv('GITHUB_ACTIONS') === 'true'")
+    && str_contains($runnerSource, "'hosted_full_required_php_tests'")
+    && str_contains($runnerSource, 'missing_required_php_test_passes($task, $required)'),
+    'The existing central hosted full PHP runner must enforce structured required general child PASS.');
+
+$nonrequiredSkip = $mandatoryFixture;
+$nonrequiredSkip['details']['tests'][] = [
+    'name' => 'optional_fixture_test.php', 'status' => 'SKIP', 'exit_code' => 0, 'timed_out' => false,
+];
+$nonrequiredSkip['counts'] = ['passed' => 2, 'failed' => 0, 'skipped' => 1, 'blocked' => 0, 'total' => 3];
+audit_test_assert(missing_required_php_test_passes($nonrequiredSkip, $mandatoryNames) === [],
+    'An unrelated optional SKIP must not invalidate independently required PASS evidence.');
+
+$missingChild = $mandatoryFixture;
+array_pop($missingChild['details']['tests']);
+$missingChild['counts'] = ['passed' => 1, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => 1];
+audit_test_assert(missing_required_php_test_passes($missingChild, $mandatoryNames)
+    === ['gallery_workflow_integration_test.php'], 'Missing required child must be rejected.');
+
+foreach (['SKIP' => 'skipped', 'BLOCKED' => 'blocked', 'FAIL' => 'failed'] as $status => $counter) {
+    $badChild = $mandatoryFixture;
+    $badChild['details']['tests'][1]['status'] = $status;
+    $badChild['counts']['passed'] = 1;
+    $badChild['counts'][$counter] = 1;
+    audit_test_assert(missing_required_php_test_passes($badChild, $mandatoryNames)
+        === ['gallery_workflow_integration_test.php'], 'Required PHP child ' . $status . ' must not qualify.');
+}
+foreach (['exit_code' => 1, 'timed_out' => true] as $field => $value) {
+    $badChild = $mandatoryFixture;
+    $badChild['details']['tests'][1][$field] = $value;
+    audit_test_assert(missing_required_php_test_passes($badChild, $mandatoryNames)
+        === ['gallery_workflow_integration_test.php'], 'Misleading PASS with bad ' . $field . ' must be refused.');
+}
+$duplicateChild = $mandatoryFixture;
+$duplicateChild['details']['tests'][] = $duplicateChild['details']['tests'][1];
+$duplicateChild['counts']['passed'] = 3;
+$duplicateChild['counts']['total'] = 3;
+audit_test_assert(missing_required_php_test_passes($duplicateChild, $mandatoryNames) === $mandatoryNames,
+    'Duplicate PHP child evidence must invalidate the complete owner.');
+foreach (['id', 'status', 'counts', 'details'] as $field) {
+    $badReport = $mandatoryFixture;
+    if ($field === 'id') {
+        $badReport['id'] = 'node-full';
+    } elseif ($field === 'status') {
+        $badReport['status'] = 'SKIP';
+    } elseif ($field === 'counts') {
+        $badReport['counts']['passed'] = 1;
+    } else {
+        unset($badReport['details']['tests']);
+    }
+    audit_test_assert(missing_required_php_test_passes($badReport, $mandatoryNames) === $mandatoryNames,
+        'Missing or conflicting PHP report ' . $field . ' must invalidate its required PASS owner.');
+}
+
 $options = parse_options(['audit.php', '--profile', 'quick', '--changed', '--report=cache/custom.md']);
 audit_test_assert($options['profile'] === 'quick', 'Profile parser must accept separated option values.');
 audit_test_assert($options['changed'] === true, 'Changed-file flag must be retained.');
@@ -228,6 +457,232 @@ audit_test_assert($unittestFailure['skipped'] === 3, 'Python unittest parser mus
 
 $unittestSuccess = parse_python_unittest_summary("Ran 36 tests in 0.200s\n\nOK\n");
 audit_test_assert($unittestSuccess['passed'] === 36, 'Successful Python unittest output must classify all non-skipped tests as passed.');
+
+$winappReport = [
+    'schema_version' => 1,
+    'successful' => true,
+    'runtime' => [
+        'python_version' => '3.12.11',
+        'python_implementation' => 'CPython',
+        'platform' => 'Linux-6.8.0-x86_64',
+        'executable' => '/usr/bin/python3',
+        'suite_settings' => [
+            'start_directory' => 'winapp/tests',
+            'pattern' => 'test_*.py',
+            'runner' => 'unittest.TextTestRunner',
+            'verbosity' => 1,
+        ],
+    ],
+    'counts' => [
+        'total' => 3,
+        'passed' => 1,
+        'failed' => 0,
+        'errors' => 0,
+        'skipped' => 1,
+        'expected_failures' => 1,
+        'unexpected_successes' => 0,
+        'subtest_failures' => 0,
+        'subtest_errors' => 0,
+        'subtest_skips' => 0,
+        'fixture_errors' => 0,
+        'fixture_skips' => 0,
+    ],
+    'tests' => [
+        ['id' => 'suite.TestWidget.test_ready', 'status' => 'PASS', 'duration_seconds' => 0.004, 'reason' => null, 'subtests' => []],
+        ['id' => 'suite.TestWidget.test_platform', 'status' => 'SKIP', 'duration_seconds' => 0.001, 'reason' => 'Requires a Windows-only API.', 'subtests' => []],
+        ['id' => 'suite.TestWidget.test_known_issue', 'status' => 'EXPECTED_FAILURE', 'duration_seconds' => 0.003, 'reason' => 'Known upstream limitation.', 'subtests' => []],
+    ],
+    'fixture_errors' => [],
+    'fixture_skips' => [],
+];
+$validatedWinapp = audit_validate_winapp_report($winappReport);
+audit_test_assert($validatedWinapp['valid'] && $validatedWinapp['successful'] === true
+    && $validatedWinapp['counts']['passed'] === 1
+    && $validatedWinapp['counts']['skipped'] === 1
+    && $validatedWinapp['counts']['expected_failures'] === 1
+    && $validatedWinapp['tests'][1]['status'] === 'SKIP'
+    && count($validatedWinapp['gaps']) === 2,
+    'WinApp evidence must preserve factual pass, named host-dependent skip, and expected-failure outcomes separately.');
+$winappSuccess = audit_evaluate_winapp_report(json_encode($winappReport), [
+    'exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1,
+]);
+audit_test_assert($winappSuccess['status'] === 'PASS' && $winappSuccess['tests'] === $validatedWinapp['tests'],
+    'Only a complete valid successful report plus a clean process result may pass WinApp coverage.');
+
+$invalidWinappCases = [];
+$badWinapp = $winappReport;
+$badWinapp['tests'] = [];
+$badWinapp['counts']['total'] = 0;
+$badWinapp['counts']['passed'] = 0;
+$badWinapp['counts']['skipped'] = 0;
+$badWinapp['counts']['expected_failures'] = 0;
+$invalidWinappCases['empty suite'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['tests'][2]['id'] = $badWinapp['tests'][1]['id'];
+$invalidWinappCases['duplicate test identity'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['tests'][0]['status'] = 'MAYBE';
+$invalidWinappCases['unknown outcome'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['tests'][0]['duration_seconds'] = -0.01;
+$invalidWinappCases['negative duration'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['tests'][0]['duration_seconds'] = INF;
+$invalidWinappCases['non-finite duration'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['counts']['passed'] = 2;
+$invalidWinappCases['count mismatch'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['successful'] = false;
+$invalidWinappCases['success flag mismatch'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['schema_version'] = 2;
+$invalidWinappCases['unsupported schema'] = $badWinapp;
+$badWinapp = $winappReport;
+$badWinapp['tests'][0]['subtests'] = [
+    ['id' => 'case-1', 'status' => 'SKIP', 'reason' => 'Expected condition.'],
+    ['id' => 'case-1', 'status' => 'SKIP', 'reason' => 'Duplicate identity.'],
+];
+$invalidWinappCases['duplicate subtest identity'] = $badWinapp;
+foreach ($invalidWinappCases as $label => $invalidWinapp) {
+    audit_test_assert(!audit_validate_winapp_report($invalidWinapp)['valid'],
+        'WinApp report validator must reject ' . $label . '.');
+}
+
+$winappFailureReport = $winappReport;
+$winappFailureReport['successful'] = false;
+$winappFailureReport['counts']['failed'] = 1;
+$winappFailureReport['counts']['passed'] = 0;
+$winappFailureReport['counts']['subtest_failures'] = 1;
+$winappFailureReport['tests'][0]['status'] = 'FAIL';
+$winappFailureReport['tests'][0]['reason'] = 'Assertion failed.';
+$winappFailureReport['tests'][0]['subtests'] = [
+    ['id' => 'case-1', 'status' => 'FAIL', 'reason' => 'Subtest assertion failed.'],
+];
+$validatedWinappFailure = audit_validate_winapp_report($winappFailureReport);
+audit_test_assert($validatedWinappFailure['valid'] && !$validatedWinappFailure['successful']
+    && $validatedWinappFailure['counts']['subtest_failures'] === 1,
+    'WinApp report must retain parent and subtest failure evidence without deriving invented child exit codes.');
+$winappFailingChildWithPassParent = $winappReport;
+$winappFailingChildWithPassParent['counts']['subtest_failures'] = 1;
+$winappFailingChildWithPassParent['tests'][0]['subtests'] = [[
+    'id' => 'suite.TestWidget.test_ready subTest#1',
+    'status' => 'FAIL',
+    'reason' => 'Child assertion failed.',
+]];
+$invalidWinappCases['passing parent with failing child'] = $winappFailingChildWithPassParent;
+$winappSkippedChildWithPassParent = $winappReport;
+$winappSkippedChildWithPassParent['counts']['subtest_skips'] = 1;
+$winappSkippedChildWithPassParent['tests'][0]['subtests'] = [[
+    'id' => 'suite.TestWidget.test_ready subTest#1',
+    'status' => 'SKIP',
+    'reason' => 'Child requires a Windows-only API.',
+]];
+$invalidWinappCases['passing parent with skipped child'] = $winappSkippedChildWithPassParent;
+$invalidWinappCases['duplicate fixture identity'] = array_replace($winappReport, [
+    'fixture_errors' => [
+        ['phase' => 'setUpModule', 'id' => 'suite', 'reason' => 'First fixture error.'],
+        ['phase' => 'setUpModule', 'id' => 'suite', 'reason' => 'Duplicate fixture error.'],
+    ],
+]);
+foreach (['passing parent with failing child', 'passing parent with skipped child', 'duplicate fixture identity'] as $label) {
+    audit_test_assert(!audit_validate_winapp_report($invalidWinappCases[$label])['valid'],
+        'WinApp report validator must reject ' . $label . '.');
+}
+$invalidFixtureSkipPhase = array_replace($winappReport, [
+    'fixture_skips' => [[
+        'phase' => 'unknownFixturePhase',
+        'id' => 'unknown fixture owner',
+        'reason' => 'Unsupported phase.',
+    ]],
+    'counts' => array_replace($winappReport['counts'], ['fixture_skips' => 1]),
+]);
+audit_test_assert(!audit_validate_winapp_report($invalidFixtureSkipPhase)['valid'],
+    'WinApp fixture skips must use an actual class or module fixture phase.');
+
+$winappFixtureFailureReport = $winappReport;
+$winappFixtureFailureReport['successful'] = false;
+$winappFixtureFailureReport['counts']['errors'] = 2;
+$winappFixtureFailureReport['counts']['passed'] = 0;
+$winappFixtureFailureReport['counts']['fixture_errors'] = 1;
+$winappFixtureFailureReport['tests'][0]['status'] = 'ERROR';
+$winappFixtureFailureReport['tests'][0]['reason'] = 'setUpModule failed.';
+$winappFixtureFailureReport['fixture_errors'] = [[
+    'phase' => 'setUpModule', 'id' => 'suite', 'reason' => 'Fixture initialization failed.',
+]];
+$validatedWinappFixtureFailure = audit_validate_winapp_report($winappFixtureFailureReport);
+audit_test_assert($validatedWinappFixtureFailure['valid'] && !$validatedWinappFixtureFailure['successful']
+    && $validatedWinappFixtureFailure['counts']['fixture_errors'] === 1
+    && $validatedWinappFixtureFailure['counts']['errors'] === 2,
+    'WinApp fixture errors must remain separately named and counted alongside unittest error records.');
+$winappFixtureOnlyReport = $winappReport;
+$winappFixtureOnlyReport['successful'] = false;
+$winappFixtureOnlyReport['tests'] = [];
+$winappFixtureOnlyReport['counts'] = array_fill_keys(array_keys($winappReport['counts']), 0);
+$winappFixtureOnlyReport['counts']['errors'] = 1;
+$winappFixtureOnlyReport['counts']['fixture_errors'] = 1;
+$winappFixtureOnlyReport['fixture_errors'] = [[
+    'phase' => 'setUpModule', 'id' => 'setUpModule (suite)', 'reason' => 'Module fixture failed.',
+]];
+$validatedWinappFixtureOnly = audit_validate_winapp_report($winappFixtureOnlyReport);
+audit_test_assert($validatedWinappFixtureOnly['valid'] && !$validatedWinappFixtureOnly['successful']
+    && $validatedWinappFixtureOnly['counts']['total'] === 0
+    && $validatedWinappFixtureOnly['counts']['fixture_errors'] === 1
+    && count($validatedWinappFixtureOnly['fixture_errors']) === 1,
+    'A named unittest fixture failure with no started test cases must remain valid failure evidence.');
+$winappFixtureSkipReport = $winappReport;
+$winappFixtureSkipReport['tests'] = [];
+$winappFixtureSkipReport['counts'] = array_fill_keys(array_keys($winappReport['counts']), 0);
+$winappFixtureSkipReport['fixture_skips'] = [[
+    'phase' => 'setUpClass', 'id' => 'setUpClass (suite.TestWidget)', 'reason' => 'Windows-only host API.',
+]];
+$winappFixtureSkipReport['counts']['fixture_skips'] = 1;
+$validatedWinappFixtureSkip = audit_validate_winapp_report($winappFixtureSkipReport);
+audit_test_assert($validatedWinappFixtureSkip['valid'] && $validatedWinappFixtureSkip['successful']
+    && $validatedWinappFixtureSkip['counts']['total'] === 0
+    && $validatedWinappFixtureSkip['counts']['fixture_skips'] === 1
+    && count($validatedWinappFixtureSkip['gaps']) === 1,
+    'A named fixture skip without started cases must remain explicit successful skip evidence.');
+$winappSubtestSkipReport = $winappReport;
+$winappSubtestSkipReport['counts']['passed'] = 0;
+$winappSubtestSkipReport['counts']['skipped'] = 2;
+$winappSubtestSkipReport['counts']['subtest_skips'] = 1;
+$winappSubtestSkipReport['tests'][0]['status'] = 'SKIP';
+$winappSubtestSkipReport['tests'][0]['reason'] = 'unittest did not report parent success after subtest skip.';
+$winappSubtestSkipReport['tests'][0]['subtests'] = [[
+    'id' => 'suite.TestWidget.test_ready subTest#1',
+    'status' => 'SKIP',
+    'reason' => 'Requires a Windows-only API.',
+]];
+$validatedWinappSubtestSkip = audit_validate_winapp_report($winappSubtestSkipReport);
+audit_test_assert($validatedWinappSubtestSkip['valid'] && $validatedWinappSubtestSkip['successful']
+    && $validatedWinappSubtestSkip['tests'][0]['status'] === 'SKIP'
+    && count($validatedWinappSubtestSkip['gaps']) === 4,
+    'Subtest skip must remain a named child gap and must not inherit a parent PASS.');
+
+foreach ([
+    ['label' => 'missing output', 'contents' => null, 'process' => ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1], 'status' => 'BLOCKED'],
+    ['label' => 'truncated JSON', 'contents' => '{"schema_version":1', 'process' => ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1], 'status' => 'BLOCKED'],
+    ['label' => 'malformed JSON', 'contents' => 'not JSON', 'process' => ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1], 'status' => 'BLOCKED'],
+    ['label' => 'nonzero process despite valid report', 'contents' => json_encode($winappReport), 'process' => ['exit_code' => 2, 'timed_out' => false, 'duration_seconds' => 0.1], 'status' => 'FAIL'],
+    ['label' => 'timeout despite valid report', 'contents' => json_encode($winappReport), 'process' => ['exit_code' => 0, 'timed_out' => true, 'duration_seconds' => 90.0], 'status' => 'FAIL'],
+    ['label' => 'unittest failure with zero exit', 'contents' => json_encode($winappFailureReport), 'process' => ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1], 'status' => 'FAIL'],
+] as $case) {
+    $evaluatedWinapp = audit_evaluate_winapp_report($case['contents'], $case['process']);
+    audit_test_assert($evaluatedWinapp['status'] === $case['status'],
+        'WinApp report/process evaluator must reject ' . $case['label'] . '.');
+}
+$winappRunner = (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php');
+$winappRunnerStart = strpos($winappRunner, 'function audit_run_winapp(');
+$winappRunnerEnd = strpos($winappRunner, '/**', $winappRunnerStart + 1);
+$winappRunnerBody = $winappRunnerStart === false || $winappRunnerEnd === false
+    ? '' : substr($winappRunner, $winappRunnerStart, $winappRunnerEnd - $winappRunnerStart);
+audit_test_assert(str_contains($winappRunnerBody, "'scripts.audit_winapp_report'")
+    && str_contains($winappRunnerBody, 'audit_evaluate_winapp_report(')
+    && str_contains($winappRunnerBody, '\'report_file\' => $adapterReportPath')
+    && !str_contains($winappRunnerBody, 'parse_python_unittest_summary($output)')
+    && str_contains($winappRunnerBody, 'run_process($command, $root, 90)'),
+    'Central WinApp audit must preserve the existing 90-second discovery owner and consume only its saved structured report.');
 
 $python3Runner = static fn(array $command): array => [
     'exit_code' => 0,

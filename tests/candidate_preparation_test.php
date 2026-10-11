@@ -115,7 +115,15 @@ try {
         && str_contains($workflow, 'git push origin')
         && !str_contains($workflow, 'git push --force')
         && !str_contains($workflow, 'gh pr merge'),
-        'Hosted preparation must be stable, serialized by branch, SHA-bound and non-merging.');
+        'Explicit maintenance preparation must remain serialized, SHA-bound and non-merging.');
+    $assert(str_contains($workflow, 'name: Basic source checks')
+        && str_contains($workflow, 'php scripts/audit.php --profile=basic')
+        && str_contains($workflow, 'Basic source qualification')
+        && str_contains($workflow, "inputs.maintenance_full")
+        && !str_contains($workflow, 'if: ${{ !inputs.maintenance_full }}')
+        && preg_match('/  prepare:\r?\n    needs: basic\r?\n/', $workflow) === 1
+        && str_contains($workflow, "github.event_name == 'workflow_dispatch' && inputs.maintenance_full"),
+        'Ordinary feature pushes must run BASIC; explicit full dispatch retains successful BASIC before generated publication.');
 
     $ci = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml');
     $assert(str_contains($ci, 'php scripts/audit.php --profile=candidate-preflight')

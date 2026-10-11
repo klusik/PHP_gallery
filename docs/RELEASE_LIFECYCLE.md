@@ -12,7 +12,8 @@ No normal step asks for a SHA, run ID, operation mode or deployment approval.
 
 - D0 is the exact develop commit pushed as the new release branch.
 - O introduces the origin and predecessor pin in one single-parent commit after D0.
-- Q is the final prepared and fully qualified release head.
+- Q is the final prepared release head B, with BASIC changed-source and
+  release-owned-input evidence bound to FULL-qualified develop A.
 - P is the previous immutable tagged main release merge.
 - M is the new main merge, with `parents(M)=[P,Q]` and `tree(M)=tree(Q)`.
 - Develop can advance to Q through a true non-force fast-forward. It never advances
@@ -22,8 +23,14 @@ Feature agents write only their explicitly authorized working branches. This
 future maintainer-triggered release workflow is the sole automatic protected
 operation in this contract; implementing it grants no permission to execute a
 production release or change Rulesets, Environments, historical tags or releases.
-Feature integration still requires one logical squash, exact-SHA hosted CI and
-a maintainer-performed non-force FF to develop. Published history stays intact.
+The #185 target uses BASIC on feature pushes and the final squash. The feature
+must be one authored commit S on top of develop P before the maintainer selects
+it with the Actions **Integrate into develop** button. That action refuses
+unsquashed history, runs the complete FULL matrix exactly once on final candidate
+A, and fast-forwards develop only after exact-A FULL passes. Agents never perform
+that protected write. This target is not active until installed on main and
+verified by real hosted CI; until then the currently installed required workflow
+remains authoritative. Published history stays intact.
 
 The active main policy requires one human approval, stale-review dismissal,
 merge commits only, no force/deletion and the Actions `Release qualification`
@@ -47,15 +54,22 @@ and target-tag absence. Existing immutable origins, including v_0.126, are reuse
 without rewriting. An interrupted first run may reuse its original O or prepared Q;
 a different event or divergent writer fails the branch lease.
 
-Initialization, preparation and qualification continue in the same run. Bot
-pushes do not need another push event. Source Stage A/B remains before metadata,
-AI notes, locked TinyTeX/manuals and manifest generation. The existing complete
-PHP/Node/WinApp/Chromium/MySQL/MariaDB and positive-package matrix qualifies exact Q.
-The gate emits checks whose external IDs bind kind/run/attempt/Q, plus the complete
-provenance record. Manual-publication packages, four PDFs, notes, SHA256SUMS and
-integrity metadata are independently rehashed before the bot creates or reuses one exact-Q PR.
-The independent WinApp version is preserved; its installer is built only for
-shipped WinApp changes. WinApp regression coverage remains mandatory in CI.
+Initialization and preparation continue in the same run. Bot pushes do not need
+another push event. Under the #185 target, release preparation starts from
+FULL-qualified A and produces B with release notes, four locked-toolchain
+manuals/PDFs, inventory and manifest. It runs BASIC `--changed` against
+immutable A..B plus release-owned-input proof. It does not rerun browser,
+database/HTTP, functional, Node runtime, WinApp or packaging regression suites on
+B. Package and conditional installer generation remain production outputs, not
+regression evidence. The gate binds the check and retained record to B and its
+exact release evidence. The independent WinApp version is preserved, and the
+installer is built when required by the release/package contract.
+
+The human-approved release PR, protected main merge M, tag and draft behavior
+remain unchanged. Once release completion has produced Q, a pure develop
+fast-forward to Q needs no second FULL run because the FULL-qualified A is its
+source ancestor and release preparation adds only approved release-owned inputs.
+Parallel develop work still blocks synchronization.
 
 Qualification opens/reuses the full-detail bot PR and automatically dispatches
 `release-promotion.yml` at the exact release branch Q. The filename already exists
@@ -75,9 +89,10 @@ its first merge. Token-created closed/push events are not completion triggers.
 
 Inline bootstrap verifies the complete same-repository bot PR and latest Actions
 check binding, then the successful run/path/event/attempt and retained record,
-before checking out exact Q. The helper validates full qualification, immutable
-origin/predecessor, actual required checks, effective policies and final owner
-approval of Q. It observes reviews in one-minute intervals for up to four hours.
+before checking out exact Q. Under the #185 target the helper validates the
+record binding FULL coverage at A to the BASIC delta and release-owned inputs at
+B/Q, immutable origin/predecessor, actual required checks, effective policies
+and final owner approval of Q. It observes reviews in one-minute intervals for up to four hours.
 A still-pending review automatically dispatches another exact-Q observer below
 the five-hour job limit. Observable active workers are reused; per-PR concurrency
 serializes possible overlapping dispatches. Drift or a closed unmerged PR stops
@@ -139,12 +154,20 @@ inherits that exception. Never change the immutable v_0.126 record or publicatio
 
 ## Develop synchronization
 
-After tag creation, automation independently verifies develop policy and exact Q
-CI. If current develop equals Q, it reports RECONCILED_FF. If current develop is
+After tag creation, automation independently verifies develop policy and the
+release record binding FULL coverage on A to the BASIC release delta on B. If
+current develop equals Q, it reports RECONCILED_FF. If current develop is
 an ancestor of Q, it proves selected ancestry and no new merge commits, rechecks
 the remote head, and uses a normal Git push to Q. The server enforces protection
 and rejects non-fast-forward races. It verifies the resulting exact remote SHA
-and retains Q's hosted qualification rather than fabricating a new green check.
+and retains the exact-Q release check and its authenticated A/B evidence rather
+than fabricating a new green check.
+
+This post-release FF introduces no source changes and requires no new integration
+matrix: the release record already binds FULL A and approved release-only changes
+through B/Q. The last full develop integration belongs
+before release preparation, when new feature work enters develop. Do not confuse
+that integration requirement with synchronization after the completed release.
 
 If develop advanced in parallel, completion keeps the correct tag and reports
 BLOCKED_DEVELOP_ADVANCED with the actual develop SHA. It never rebases, merges,
@@ -180,6 +203,15 @@ bindings; mandatory workflow owners and independent qualification-check validati
 remain required. Historical candidate/release proof uses the same coverage projection
 and binds the aggregate check to the selected run/attempt/SHA. Foreign or unbound job
 rows, malformed identities and incomplete inventories are not hidden.
+The retained historical candidate reader selects the newest published bound
+qualification and highest attempt before considering success. A newer red/pending
+check or missing aggregate cannot fall back to older green evidence. Complete
+check/job pagination is bounded to five pages of 100 rows; short/conflicting pages,
+duplicate identities or mandatory owners, and changing run/inventory snapshots
+refuse qualification. This protects historical inspection and predecessor lineage;
+it does not authenticate cross-stage per-child coverage or discover newer workflow
+runs before their qualification checks are published. The proposed independent
+develop verifier remains separate and unimplemented.
 The v_0.126 recovery identity, attestation comments, one-off environment and special
 recovery dispatch are not adopted. Its branch cleanup remains PENDING until final
 CI, complete transfer review and durable feature preservation/integration are proven.

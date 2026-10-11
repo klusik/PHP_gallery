@@ -17,11 +17,12 @@ import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {api,command,output,validateRequest,verifyQualification,fetchJobs,fetchReleases,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
+import {api,command,output,validateRequest,verifyQualification,verifyIntegrationEvidence,verifyBasicDeltaEvidence,fetchJobs,fetchReleases,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
 import {originPath,verifyReleaseOrigin,peelReleaseTag} from './release-origin.mjs';
 import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,qualificationCheckBinding} from './release-owner-authorization.mjs';
 import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs';
 import {verifyPreparedAssets} from './release-asset-integrity.mjs';
+import {loadReleaseCoverage} from './coverage-artifacts.mjs';
 
 /** Exact qualification, provenance, lifecycle and installer-impact fields owned by the gate.
  * @typedef {import('./release-promotion.mjs').ReleaseRecord} CompletionRecord
@@ -34,6 +35,9 @@ import {verifyPreparedAssets} from './release-asset-integrity.mjs';
  */
 /** Literal bounded Git and gh command transport with optional UTF-8 stdin.
  * @typedef {function(string,string[],(string|null)=):string} CompletionCommand
+ */
+/** Authenticated integration and delta artifact transports supplied to isolated completion readers.
+ * @typedef {{integrationEvidence?:import('./coverage-artifacts.mjs').ArtifactEvidence,deltaEvidence?:import('./coverage-artifacts.mjs').ArtifactEvidence}} CompletionCoverage
  */
 /** Permanent merge/approval/tag evidence uploaded alongside manual publication assets.
  * @typedef {CompletionRecord & {schema_version:number,final_main_sha:string,final_tree:string,tag:string,
@@ -97,7 +101,7 @@ export function loadQualification(repository,sha,call=api,execute=command) {
 /** Verify complete successful hosted qualification, exact release head and immutable origin.
  * @param {CompletionRecord} record Retained candidate and predecessor identities.
  * @param {string} repository Expected repository.
- * @param {{api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,publishedMainSha?:string,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers and exact predecessor evidence.
+ * @param {CompletionCoverage & {api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,publishedMainSha?:string,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers, authenticated coverage and exact predecessor evidence.
  * @returns {void} Throws for any stale source, red coverage, moved predecessor or changed origin.
  */
 export function verifyCandidate(record,repository,adapters={}) {
@@ -106,7 +110,10 @@ export function verifyCandidate(record,repository,adapters={}) {
     const request=qualificationRequest(record);
     const run=call('repos/'+repository+'/actions/runs/'+record.run_id);
     const head=call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha;
-    verifyQualification(request,run,adapters.jobs ?? fetchJobs(repository,record.run_id,run.run_attempt,record.candidate_sha),record,repository,head);
+    const coverage=record.lifecycle_schema===3 && (!adapters.integrationEvidence || !adapters.deltaEvidence)
+        ? loadReleaseCoverage(record,{api:call}) : {};
+    verifyQualification(request,run,adapters.jobs ?? fetchJobs(repository,record.run_id,run.run_attempt,record.candidate_sha),
+        record,repository,head,{...coverage,...adapters,api:call});
     requireQualificationChecks(call,repository,request,record.run_attempt);
     const origin=JSON.parse(git('git',['show',record.candidate_sha+':'+originPath(record.version)]));
     const checked=verifyReleaseOrigin(origin,record.version,record.candidate_sha,repository,adapters);
@@ -129,6 +136,11 @@ export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     const request=qualificationRequest(record);
     if (validateRequest(request)!==record.version) throw new Error('BLOCKED record version differs from release branch.');
     requireQualificationChecks(call,repository,request,record.run_attempt);
+    if (record.lifecycle_schema===3) {
+        const coverage=loadReleaseCoverage(record,{api:call});
+        const integrated=verifyIntegrationEvidence(record,repository,{...coverage,api:call});
+        verifyBasicDeltaEvidence(record,record.version,integrated,{...coverage,api:call});
+    }
     if (call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {
         throw new Error('BLOCKED stale Q before PR creation.');
     }
@@ -190,7 +202,7 @@ export async function waitForMergeability(repository,number,candidate,previousMa
  * @param {CompletionRecord} record Fully qualified exact-Q identities.
  * @param {string} repository Expected repository.
  * @param {number} number Server PR number derived from the review event.
- * @param {{api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated server, Git and bound predecessor readers.
+ * @param {CompletionCoverage & {api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated server, Git, authenticated coverage and bound predecessor readers.
  * @returns {CompletionResult} Completion with independently reported develop synchronization and immutable manual-publication evidence.
  */
 export function completeRelease(record,repository,number,adapters={}) {

@@ -1,14 +1,13 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/candidate-preparation.yml
-# Module Type: Source Candidate Preparation Workflow
-# Purpose: Commit deterministic generated state and qualify the exact prepared feature/fix SHA.
+# Module Type: Basic Source Workflow
+# Purpose: Run syntax and declaration documentation only on feature source pushes.
 # Responsibilities:
-#   - Serialize source-batch preparation per branch and cancel superseded runs
-#   - Reject stale branch writers without force pushes or history rewrites
-#   - Delegate generated-state checks and full qualification to the central audit and CI
+#   - Bind BASIC source evidence to the exact unsuperseded feature/squash SHA
+#   - Leave preparation and full execution to the requested develop integration
 # Author: Rudolf Klusal
-name: Candidate preparation
+name: Basic source checks
 
 on:
   push:
@@ -19,16 +18,102 @@ on:
       - 'hotfix/**'
       - 'codex/**'
   workflow_dispatch:
+    inputs:
+      maintenance_full:
+        description: Explicit full hosted verification of CI infrastructure; ordinary pushes remain BASIC.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: candidate-preparation-${{ github.ref }}
+  group: basic-source-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  basic:
+    name: Basic source checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: write
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - id: identity
+        name: Bind the source comparison base
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            feature/*|fix/*|bugfix/*|hotfix/*|codex/*) ;;
+            *) echo '::error::BASIC source checks require an ordinary working branch.' >&2; exit 1 ;;
+          esac
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
+          echo "PHP_GALLERY_SOURCE_BASE=$(git merge-base "${GITHUB_SHA}" origin/main)" >> "${GITHUB_ENV}"
+      - id: audit
+        name: Central BASIC syntax and declaration checks
+        run: php scripts/audit.php --profile=basic
+      - id: current
+        if: ${{ always() }}
+        name: Reject superseded BASIC source evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
+      - if: ${{ always() }}
+        name: Publish BASIC source identity without a FULL context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          CURRENT_OUTCOME: ${{ steps.current.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {writeFileSync} from 'node:fs';
+          const e=process.env;
+          const check={name:'Basic source qualification',head_sha:e.GITHUB_SHA,status:'completed',
+            conclusion:e.AUDIT_OUTCOME==='success'&&e.CURRENT_OUTCOME==='success'?'success':'failure',
+            external_id:`basic:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.GITHUB_SHA}`,
+            details_url:`https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
+            output:{title:'BASIC source checks',summary:'PHP/JavaScript syntax and named declaration documentation only; no FULL integration or generated preparation.'}};
+          writeFileSync(e.RUNNER_TEMP+'/basic-source-check.json',JSON.stringify(check));
+          NODE
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/basic-source-check.json"
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: basic-source-evidence
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/source-documentation-changed.json
+            cache/test-audit/**/source-failures.md
+          if-no-files-found: error
+          retention-days: 90
+
   prepare:
+    needs: basic
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.maintenance_full }}
     name: Prepare source candidate at event SHA
     runs-on: ubuntu-24.04
     timeout-minutes: 15

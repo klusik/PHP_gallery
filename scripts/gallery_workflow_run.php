@@ -26,9 +26,11 @@ if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_fixture.php')) {
     exit(1);
 }
 require_once __DIR__ . '/../tests/support/gallery_workflow_fixture.php';
+require_once __DIR__ . '/audit_lib.php';
 
 use GalleryWorkflow\Fixture;
 use function GalleryWorkflow\check;
+use function PhpGallery\Audit\missing_required_php_test_passes;
 
 $fixture = null;
 $exit = 0;
@@ -82,24 +84,39 @@ try {
             'The disposable central audit must qualify both include phases and all nine actual route lifecycles.');
         $regressionId = $profile === 'quick' ? 'php-fast' : 'php-regression';
         $regression = array_values(array_filter($report['tasks'] ?? [], static fn (array $task): bool => $task['id'] === $regressionId))[0] ?? [];
+
         $logPath = (string) ($regression['log'] ?? '');
-        check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..'), 'Central regression evidence missing.');
-        $evidence = (string) file_get_contents(dirname(__DIR__) . '/' . $logPath);
+        check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..')
+            && is_file(dirname(__DIR__) . '/' . $logPath), 'Central regression evidence missing.');
         $requiredTests = ['database_engine_contract_test.php'];
         if ($profile !== 'quick') {
-            // Only explicit Chromium disablement omits browser evidence. Every real
-            // database/HTTP and race PASS remains mandatory in both qualification profiles.
-            $requiredTests = array_merge($requiredTests, ['installer_first_install_test.php', 'gallery_workflow_integration_test.php',
-                'public_visual_preview_workflow_test.php', 'theme_visual_background_workflow_test.php',
-                'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php']);
+            // These fourteen PHP fixtures returned PASS in all three real DB jobs
+            // of the exact-SHA hosted baseline 38143567033. A report-level PASS
+            // can otherwise conceal a required per-file SKIP.
+            $requiredTests = array_merge($requiredTests, [
+                'installer_first_install_test.php',
+                'gallery_workflow_integration_test.php',
+                'public_visual_preview_workflow_test.php',
+                'theme_visual_background_workflow_test.php',
+                'gallery_image_move_crash_test.php',
+                'viewer_phase07_mysql_concurrency_test.php',
+                'gallery_edit_concurrency_mysql_test.php',
+                'admin_operation_keys_http_test.php',
+                'public_content_widget_db_workflow_test.php',
+                'public_content_widget_admin_http_workflow_test.php',
+                'breadcrumb_workflow_integration_test.php',
+                'content_language_workflow_integration_test.php',
+                'session_route_contention_test.php',
+            ]);
             if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
                 $requiredTests[] = 'gallery_workflow_browser_test.php';
                 $requiredTests[] = 'public_widget_persistence_browser_test.php';
             }
         }
-        foreach ($requiredTests as $test) {
-            check(preg_match('/^\[PASS\] ' . preg_quote($test, '/') . ' /m', $evidence) === 1, 'Mandatory integration coverage was skipped or unregistered.');
-        }
+        $missingRequired = missing_required_php_test_passes($regression, $requiredTests);
+        check($missingRequired === [],
+            'Mandatory integration regression did not produce an unambiguous PASS: '
+                . implode(', ', $missingRequired));
         if ($profile === 'quick') {
             echo "PASS gallery workflow central quick audit completed with all nine route lifecycles and database engine contracts\n";
         } else {

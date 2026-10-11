@@ -2305,7 +2305,7 @@ Při vývoji lze vytvářet malé samostatné commity, ale ověření se~musí v
   \item Předání uvádí URL GitHub Actions, ověřenou pracovní větev, přesné připravené SHA, neměnný základ porovnání, povinné joby a~ruční či chybějící pokrytí. Zastaralý, chybějící, přeskočený, zrušený, neúspěšný nebo blokovaný povinný job není zelená kvalifikace. Opravte zdroj a~pushněte stejnou větev pro nové CI.
 \end{enumerate}
 
-Stabilní GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} může připravit větve pro funkce a~opravy a~otestovat přesné SHA publikovaného kandidáta. Kontroluje identitu větve, odmítá zápis ze~zastaralé revize a~neprovádí merge, squash ani vynucený push. Centrální kontrola \codeword{--profile=candidate-preflight} pouze čte aktuální stav a~odmítá zastaralý manifest, běhový plán, inventář nebo porušení pravidel zdrojů ještě před nákladnou maticí CI. Testovací běh nesmí chybějící artefakty sám potichu opravovat. Až příprava vydání sjednotí verze a~data příruček a~přeloží existující TeX do~PDF; chybějící odborný text nevytváří.
+Aktuálně nasazený GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} připravuje větve funkcí a~oprav a~kvalifikuje jejich publikované SHA. Cíl #185 mění push funkcí a~závěrečný squash na BASIC kontroly syntaxe a~dokumentace; FULL se přesune na tlačítko integrace Actions, které nejprve ověří jediný autorský commit a~pak jej jednou spustí na konečném A. Centrální kontrola \codeword{--profile=candidate-preflight} a~stávající povinná matice zůstávají závazné, dokud cíl není instalován na main a~ověřen reálným hostovaným CI. Testovací běh nesmí chybějící artefakty sám potichu opravovat. Příprava vydání později sjednotí verze a~data příruček a~přeloží existující TeX do~PDF; chybějící odborný text nevytváří.
 
 \section{Kontrola galerie před zveřejněním}
 \label{sec:testing}
@@ -2352,7 +2352,7 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
-Hostovaný postup vydání nejprve spouští zvláštní kontrolu pravidel \codeword{--profile=release-preflight} před nákladnými kroky s~AI nebo TeX. Tato předběžná kontrola nenahrazuje úplnou matici testů přesného kandidáta.
+Aktuálně nasazený postup vydání spouští kontrolu \codeword{--profile=release-preflight} před nákladnými kroky s~AI nebo TeX a~úplnou matici přesného kandidáta. Cíl #185 tyto kontroly pro B nahrazuje BASIC delta A..B, ale zůstává neaktivní do instalace na main a~ověření reálným CI.
 
 Registrovaný test nastavení drobečkové navigace porovnává seznamy stylů Vzhledu a~fyzických galerií v~\filepath{docs/ADMIN_SETTINGS_INVENTORY.md} s~\codeword{breadcrumb_style_registry()}. Hlídá také náhradní styl \codeword{chevron} a~hodnotu \codeword{inherit} určenou pouze pro dědičnost galerie. Při přidání stylu aktualizujte oba dokumentované seznamy; \codeword{inherit} není vizuální styl Vzhledu.
 
@@ -2370,13 +2370,13 @@ U~veřejného vykreslování náhledů prozkoumejte panely Prvky a~Síť. Respon
 
 Příkazy v této části popisují hostovanou přípravu vydání a zachovaný lokální postup obnovy pro správce. Běžná příprava a kvalifikace běží na GitHubu; agenti tyto příkazy běžně lokálně nespouštějí. Lokální obnova vyžaduje výslovný požadavek nebo skutečně nedostupné CI a zůstává BLOCKED bez hostovaných důkazů. Níže popsaný postup po schválení PR provede chráněný merge a tagování; GitHub Release se zveřejňuje ručně.
 
-Po posledních úpravách vygenerujte manifest, proveďte předběžné kontroly vydání, manifestu a~bílých znaků, inicializujte kvalifikační otisk a~zmrazte vstupy. Spusťte právě jeden centrální audit \codeword{--profile=release}, přímo nebo prostřednictvím nakonfigurované izolované testovací instalace. Audit vlastní syntaxi, regrese, kontrakty, prohlížečové testy a~konzistenci vydání; nepřidávejte další ruční průchod stromem testů. Připojte jeho zprávu k~nezměněnému otisku a~oddělte mezery pokrytí od čekajících provozních kontrol.
+Aktuálně nasazené workflow vydání může stále vyžadovat jeden centrální audit \codeword{--profile=release} a~úplnou matici. Cíl #185 nahrazuje tuto kontrolu B: po přípravě poznámek, čtyř příruček/PDF, soupisu a~manifestu z~A spustí BASIC \codeword{--changed} pro přesný zdrojový rozdíl A..B a~ověří, že každá změněná cesta patří mezi povolené vstupy vydání. Na B se neopakují browser, databázové/HTTP, funkční, Node runtime, WinApp ani regresní testy balení. Dokud náhrada není instalována na main a~ověřena reálným hostovaným CI, zůstává závazné aktuálně nasazené workflow; cíl není aktivní a~lokální důkazy jej nenahrazují.
 
 Nasazovací složku nebo ZIP vytvořte pouze na výslovnou žádost. Nástroje vyžadují aktuální integritní data a~ověřují kanonický produkční seznam; požadovaný artefakt před použitím zkontrolujte. Vydání samotného CMS nevyžaduje nový instalátor WinApp. Commit, tag, zveřejnění, nahrání a~nasazení provádějte pouze s~výslovným oprávněním. Po zveřejnění ověřte objevení aktualizace, migrace, přihlášení, veřejné galerie, chráněná média a~integritu či stav na zveřejněné instalaci.
 
 Při běžném vývoji současně upravujte a~kontrolujte obsah všech čtyř zdrojů \codeword{.tex}; po každé změně nesestavujte evidované soubory PDF. PDF mohou za zdroji zaostávat až do závěrečné přípravy vydání. Automatická změna verze a~data není generováním věcné dokumentace: správci softwaru musí nové funkce, zabezpečení, kompatibilitu a~provozní postupy sami doplnit do anglické, české, německé a~švédské příručky.
 
-Pro přípravu hostovanou na GitHubu vytvořte a~odešlete větev \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}. Postup připraví a~uloží schváleného deterministického kandidáta zpět do téže větve, sestaví společně všechna čtyři PDF a~ověří přesný výsledný commit. Neslučuje větev do \codeword{main}, nevytváří tag ani nezveřejňuje vydání.
+Pro hostovanou přípravu na GitHubu odešlete větev \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z} z~FULL-kvalifikovaného A. Workflow připraví B ve stejné větvi, společně sestaví všechna čtyři PDF a~podle cíle #185 spustí pouze BASIC changed-source a~kontrolu povolených vstupů vydání pro A..B. Aktuálně nasazené workflow platí, dokud cíl není instalován na main a~hostovaně kvalifikován. Příprava neslučuje větev do \codeword{main}, nevytváří tag ani nezveřejňuje vydání.
 
 \section{Jak zajistit svižný dojem galerie}
 \label{sec:performance}
@@ -2477,7 +2477,36 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 \index{k00072@kvalifikace vydání}
 \index{t00234@testování!d00031@dočasné postupy}
 
+Centrální audit uchovává v~JSON jednotlivé pojmenované výsledky unittest testů
+WinApp, doby běhu a~důvody přeskočení spolu se~skutečným výsledkem procesu.
+Chybějící, neúplné nebo nekonzistentní záznamy nemohou doložit PASS.
+Nativní kontrola Windows může zůstat výslovně přeskočena; testovací podklady
+Pythonu nenahrazují přejímku nainstalované aplikace ve~Windows. Tyto záznamy
+samostatně neověřují autoritu zdroje workflow ani nepovolují převzetí pokrytí.
+
+Historická kvalifikace používá nejnovější zveřejněný navázaný check a~jeho
+nejvyšší pokus. Novější selhání nebo čekající check nesmí použít starší zelený
+výsledek. Neúplné nebo duplicitní stránky API a~změny během sběru kvalifikaci
+odmítnou. Jde o~ochranu historického čtení; neodhaluje novější běhy bez zveřejněného
+kvalifikačního checku ani nepovoluje nezávislé převzetí pokrytí develop/release.
+
+Push funkcí a~jejich závěrečný squash používají pouze BASIC: syntaxi PHP/JavaScriptu
+a~úplnou dokumentaci pojmenovaných deklarací. Jakmile je funkce jediným autorským
+commitem S nad develop P, správce vybere její větev tlačítkem Actions
+\ui{Integrate into develop}. Tlačítko odmítne nesquashovanou historii, spustí
+úplnou centrální matici právě jednou na konečném kandidátu A a~teprve po jejím
+PASS provede fast-forward develop. Příprava vydání z~A vytvoří B a~spustí BASIC
+changed-source plus důkaz, že změny A..B patří mezi povolené vstupy vydání; na B
+se neopakují browser, databázové, funkční, Node runtime, WinApp ani regresní testy
+balení. PDF/balíček/instalátor jsou výstupy, nikoli regresní kvalifikace.
+Čistý fast-forward po vydání na Q nepotřebuje druhé FULL, protože záznam vydání
+váže FULL A a~schválený BASIC rozdíl A..B.
+Tato omezená politika není aktivní, dokud není nasazena na main a~ověřena reálným
+hostovaným CI; do té doby platí aktuálně nasazené povinné workflow.
+
 Centrální vstup \filepath{scripts/audit.php} nabízí tři regresní a~kvalifikační profily a~zdrojové předběžné kontroly. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, celkový inventář a~rozpočty kategorií, testy WinApp, pomalé testy Node a~Chromium. Povinná hostovaná kvalifikace spouští \codeword{--profile=full} pro přesné připravené SHA a~vydání hostovaně používá \codeword{--profile=release}; rychlý ani~lokální PASS povinné joby nenahrazuje.
+
+Zdrojový profil \codeword{--profile=basic} kontroluje pouze syntaxi PHP/JavaScriptu a~úplnou dokumentaci pojmenovaných deklarací; s~\codeword{--changed} je~rozsah svázán s~neměnným základem. Funkční/regresní testy, runtime Node, Python, browser, databáze, WinApp ani balení nespouští. Cíl #185 používá tento profil pro push/squash a~delta A..B, ale není aktivní, dokud není instalován na main a~ověřen hostovaným CI.
 
 Sady PHP standardně používají čtyři pracovní procesy. \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} nastavte na celé číslo od 1 do 8; neplatná hodnota běh blokuje. Registrované výhradní testy běží samostatně po dokončení aktivních procesů. Každý podproces uchovává vlastní diagnostiku a~časový limit měřený od skutečného spuštění; výsledky zachovávají stabilní vstupní pořadí. Každý profil také měří fáze zahrnutí souborů v~čerstvém procesu před \codeword{cms\_run()}: časné běhové prostředí dovoluje jeden soubor PHP a~16~MiB špičkové paměti, aplikační bootstrap 40 souborů a~16~MiB. Uplynulý čas je pouze pozorování; sondy nepracují s~databází, relací ani směrováním.
 
@@ -2491,7 +2520,7 @@ Při selhání prohlížeče konzole i~zpráva auditu přímo zobrazí název te
 
 Automatická regrese a~provozní přejímka odpovídají na odlišné otázky. Centrální audit kontroluje kód, kontrakty, syntaxi, dostupné testovací podklady prohlížeče a~konzistenci vydání. Izolované testovací prostředí přidává skutečné průchody databází, HTTP a~Chromium s~generovanými fotografiemi a~účty. Vyžaduje výslovnou konfiguraci určenou pouze pro dočasné testování a~nikdy nesmí používat databázi ani média instalace. Předpoklady najdete v~\filepath{docs/GALLERY_WORKFLOWS.md}; chybějící prostředí je mezerou pokrytí, nikoli důkazem fungující funkce.
 
-Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~všechny čtyři texty příručky. GitHub Actions sestaví čtyři PDF najednou, zkontroluje diagnostiku překladače, obnoví manifest a~provede jeden centrální audit vydání přesného připraveného SHA. Příkaz \filepath{scripts/gallery_workflow_mysql.php} s~volbou \codeword{--release} zůstává pouze pro výslovně vyžádanou lokální obnovu či diagnostiku.
+Při přípravě vydání postupujte podle \filepath{RELEASE.md}: dokončete zdroje a~všechny čtyři texty příručky. GitHub Actions sestaví čtyři PDF najednou, zkontroluje diagnostiku překladače a~obnoví manifest. Podle cíle #185 hostovaná kvalifikace kontroluje pouze BASIC změněné zdroje a~povolené vstupy vydání od A do B; aktuálně nasazený úplný audit vydání zůstává povinný, dokud cíl není instalován na main a~ověřen reálným CI. Příkaz \filepath{scripts/gallery_workflow_mysql.php} s~volbou \codeword{--release} zůstává pouze pro výslovně vyžádanou lokální obnovu či diagnostiku.
 
 Kvalifikační nástroj \filepath{scripts/release_qualification.php} zaznamenává přesný otisk zdroje a~PDF. Jeho příkaz \codeword{render} vytváří omezené náhledy stránek; samotné vykreslení neschvaluje jejich vzhled. Příkaz \codeword{record-audit} přijímá pouze odpovídající centrální zprávu vydání, nikoli starší úplný audit. Změněný zdrojový soubor nebo znovu sestavené PDF vybírají nové čekající podklady místo tichého opětovného použití dřívějšího souhlasu.
 
@@ -2539,7 +2568,7 @@ zablokují dokončení. Izolované ověření skutečného chování GitHubu pop
 \filepath{docs/RELEASE_LIFECYCLE.md}; testovací CI nenahrazuje živou akceptaci.
 Agenti při implementaci neprovádějí chráněnou integraci ani produkční vydání.
 
-Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Pořadí jeho kroků je následující:
+Pracovní postup \filepath{.github/workflows/release-qualification.yml} připravuje kandidáta na serverech GitHubu. Nejde o~zveřejnění vydání. Podrobné kroky níže popisují aktuálně nasazené workflow, dokud zůstává náhrada #185 neaktivní; po instalaci na main cíl BASIC A..B výše nahradí předběžné fáze a~úplnou matici pro B. Pořadí nynějších kroků je následující:
 
 \begin{enumerate}
   \item \textbf{Větev a~předběžná kontrola.} Odeslání změn do \codeword{release/v_X.Y} nebo \codeword{release/v_X.Y.Z}, zahájí přípravu. Příprava odmítne již existující tag \codeword{v_X.Y[.Z]}, určí předchozí tag vydání jako základ porovnání a~před AI nebo TeX spustí \codeword{release-preflight}, který ověřuje syntaxi, dokumentaci deklarací, soupis zdrojů, pravidla importu Pythonu a~kontrakty pracovních postupů.

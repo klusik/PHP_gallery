@@ -24,6 +24,16 @@ export function qualificationCheckBinding(externalId) {
     return {kind:match[1],runId:match[2],attempt:Number(match[3]),sha:match[4]};
 }
 
+/** Decode the exact-A integration check binding emitted by the main-owned workflow.
+ * @param {string|null|undefined} externalId Server-retained external_id from the Actions check.
+ * @returns {{kind:'integration',runId:string,attempt:number,sha:string}|null} Complete integration identity, or null for absent/malformed binding.
+ */
+export function integrationCheckBinding(externalId) {
+    const match=/^integration:([1-9]\d*):([1-9]\d*):([a-f0-9]{40})$/.exec(externalId ?? '');
+    if (!match || !Number.isSafeInteger(Number(match[2]))) return null;
+    return {kind:'integration',runId:match[1],attempt:Number(match[2]),sha:match[3]};
+}
+
 /** Authorize only an explicit workflow dispatch by the actual repository owner.
  * @param {string} repository Expected owner/name.
  * @param {function(string):object} call GitHub API reader.

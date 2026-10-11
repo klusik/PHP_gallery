@@ -341,46 +341,108 @@ export function verifyLinearContent(selected,develop,candidate,result,git=undefi
         regenerated_paths:changed.filter(path=>regenerated.includes(path))};
 }
 
-/** Find a genuine SHA-bound successful central candidate/release check and complete matrix.
+/** Retained provider row fields used by qualification inventories; extra provider fields remain intact.
+ * @typedef {{id:number,name:string,status:string,conclusion:string|null,head_sha?:string,app?:{id:number},external_id?:string,html_url?:string}} QualificationRow
+ */
+
+/** Read a complete bounded check or job collection without accepting short pages or duplicate identities.
+ * @param {GithubReader} call Read-only provider adapter.
+ * @param {string} path Exact collection endpoint including its query and per_page=100.
+ * @param {'check_runs'|'jobs'} key Provider collection field.
+ * @returns {QualificationRow[]} All retained rows; malformed, conflicting or over-bound evidence throws.
+ */
+function completeQualificationRows(call,path,key) {
+    // Bound retained evidence reads to the same five-page ceiling as the source-evidence contract.
+    // Type: number. Units: provider pages. Scope: one historical qualification collection.
+    // Consumers: the check and attempt-job readers below.
+    // Rationale: admit complete inventories up to 500 rows and refuse overflow rather than truncate proof.
+    const pageLimit=5;
+    const rows=[],ids=new Set();
+    let total=null;
+    for (let page=1;page<=pageLimit;page++) {
+        const response=call(path+(page===1?'':'&page='+page));
+        const entries=response?.[key];
+        if (!Number.isSafeInteger(response?.total_count) || response.total_count<0
+            || response.total_count>100*pageLimit || !Array.isArray(entries)
+            || (total!==null && response.total_count!==total)) {
+            throw new Error('BLOCKED incomplete qualification '+key+' inventory.');
+        }
+        total=response.total_count;
+        if (entries.length!==Math.min(100,total-rows.length)) {
+            throw new Error('BLOCKED short or conflicting qualification '+key+' page.');
+        }
+        for (const row of entries) {
+            if (!row || !Number.isSafeInteger(row.id) || row.id<1 || ids.has(row.id)
+                || typeof row.name!=='string' || typeof row.status!=='string') {
+                throw new Error('BLOCKED malformed or duplicate qualification '+key+' identity.');
+            }
+            ids.add(row.id);rows.push(row);
+        }
+        if (rows.length===total) return rows;
+    }
+    throw new Error('BLOCKED qualification collection exceeds its page bound.');
+}
+
+/** Require the newest retained SHA-bound qualification and its complete native matrix.
  * @param {GithubReader} call GitHub read-only API.
  * @param {string} repository Exact repository.
  * @param {string} sha Result SHA that must be green before a protected FF.
- * @returns {string|null} Exact completed run URL or null for red/unqualified CI; unreadable or incomplete server evidence throws.
+ * @returns {string|null} Exact completed run URL, or null for absent/red/pending/stale qualification; unreadable, ambiguous or raced server evidence throws. This historical check reader does not authenticate per-child reuse or discover unpublished newer workflow runs.
  */
 export function qualifiedLinearCandidate(call,repository,sha) {
-    const checks = call('repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all');
-    if (!Array.isArray(checks?.check_runs) || checks.total_count >= 100
-        || checks.total_count!==checks.check_runs.length) throw new Error('BLOCKED exact check inventory incomplete.');
-    const candidates = checks.check_runs.filter(check=>['Candidate qualification','Release qualification'].includes(check.name)
-        && check.head_sha===sha && check.app?.id===15368);
-    for (const check of candidates) {
-        const binding=qualificationCheckBinding(check.external_id);
-        if (!binding || binding.sha!==sha || (binding.kind==='release')!==(check.name==='Release qualification')
-            || check.status!=='completed' || check.conclusion!=='success') continue;
-        const required=checks.check_runs.filter(value=>value.name==='Complete required CI matrix' && value.external_id===check.external_id);
-        if (required.length!==1 || required[0].app?.id!==15368 || required[0].head_sha!==sha
-            || required[0].status!=='completed' || required[0].conclusion!=='success') continue;
-        const run = call('repos/'+repository+'/actions/runs/'+binding.runId);
-        if (!['.github/workflows/candidate-preparation.yml','.github/workflows/release-qualification.yml',
-            '.github/workflows/gallery-workflows.yml'].includes(run.path)
-            || !['push','workflow_dispatch'].includes(run.event) || run.status !== 'completed'
-            || run.conclusion !== 'success' || run.run_attempt!==binding.attempt
-            || String(run.id)!==binding.runId
-            || run.path!==(binding.kind==='release' ? '.github/workflows/release-qualification.yml' : '.github/workflows/candidate-preparation.yml')) continue;
-        const listing = call('repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100');
-        if (!Array.isArray(listing.jobs) || listing.total_count>=100 || listing.total_count!==listing.jobs.length) {
-            throw new Error('BLOCKED historical job inventory incomplete.');
-        }
-        const coverage=workflowCoverageJobs(listing.jobs,repository,binding.runId,binding.attempt,sha,binding.kind,call);
-        const requiredNames = ['Read-only generated-state and source preflight',
-            'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-            'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
-            'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
-            'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
-        if (requiredNames.every(name=>coverage.filter(job=>(job.name===name || job.name.endsWith(' / '+name))
-                && job.status==='completed' && job.conclusion==='success').length===1)) return 'https://github.com/'+repository+'/actions/runs/'+binding.runId;
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(sha)) {
+        throw new Error('BLOCKED invalid historical qualification identity.');
     }
-    return null;
+    const checkPath='repos/'+repository+'/commits/'+sha+'/check-runs?per_page=100&filter=all';
+    const checks=completeQualificationRows(call,checkPath,'check_runs');
+    const candidates=[];
+    for (const check of checks) {
+        if (!['Candidate qualification','Release qualification'].includes(check.name)
+            || check.head_sha!==sha || check.app?.id!==15368) continue;
+        const binding=qualificationCheckBinding(check.external_id);
+        // A malformed newer owner cannot disappear behind an older successful binding.
+        if (!binding || binding.sha!==sha || (binding.kind==='release')!==(check.name==='Release qualification')) return null;
+        candidates.push({check,binding});
+    }
+    candidates.sort((left,right)=>BigInt(left.binding.runId)===BigInt(right.binding.runId)
+        ? right.binding.attempt-left.binding.attempt
+        : BigInt(left.binding.runId)>BigInt(right.binding.runId)?-1:1);
+    if (!candidates.length) return null;
+    const {check,binding}=candidates[0];
+    if (candidates.filter(item=>item.binding.runId===binding.runId && item.binding.attempt===binding.attempt).length!==1) {
+        throw new Error('BLOCKED ambiguous latest historical qualification.');
+    }
+    if (check.status!=='completed' || check.conclusion!=='success') return null;
+    const required=checks.filter(value=>value.name==='Complete required CI matrix' && value.external_id===check.external_id);
+    if (required.length!==1 || required[0].app?.id!==15368 || required[0].head_sha!==sha
+        || required[0].status!=='completed' || required[0].conclusion!=='success') return null;
+    const runPath='repos/'+repository+'/actions/runs/'+binding.runId;
+    const run=call(runPath);
+    if (!['push','workflow_dispatch'].includes(run.event) || run.status!=='completed'
+        || run.conclusion!=='success' || run.run_attempt!==binding.attempt
+        || String(run.id)!==binding.runId
+        || run.path!==(binding.kind==='release'?'.github/workflows/release-qualification.yml':'.github/workflows/candidate-preparation.yml')) return null;
+    const jobPath='repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100';
+    const jobs=completeQualificationRows(call,jobPath,'jobs');
+    const coverage=workflowCoverageJobs(jobs,repository,binding.runId,binding.attempt,sha,binding.kind,call);
+    const requiredNames = ['Read-only generated-state and source preflight',
+        'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
+        'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
+        'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+        'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+    if (!requiredNames.every(name=>{
+        const owners=coverage.filter(job=>job.name===name || job.name.endsWith(' / '+name));
+        return owners.length===1 && owners[0].status==='completed' && owners[0].conclusion==='success';
+    })) return null;
+    const finalChecks=completeQualificationRows(call,checkPath,'check_runs');
+    const finalJobs=completeQualificationRows(call,jobPath,'jobs');
+    const finalRun=call(runPath);
+    if (['id','path','event','head_sha','head_branch','run_attempt','status','conclusion'].some(key=>run[key]!==finalRun[key])
+        || JSON.stringify(checks)!==JSON.stringify(finalChecks)
+        || JSON.stringify(jobs)!==JSON.stringify(finalJobs)) {
+        throw new Error('BLOCKED historical qualification raced during collection.');
+    }
+    return 'https://github.com/'+repository+'/actions/runs/'+binding.runId;
 }
 
 /** Obtain a read-only, fail-closed reconciliation snapshot.
