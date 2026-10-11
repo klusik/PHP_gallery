@@ -2502,28 +2502,31 @@ Vizuálně kontrolujte PDF pouze na výslovnou žádost nebo při diagnostice ko
 
 \subsubsection{Automatické vydání po schválení PR}
 
-Vytvořte z~aktuálního develop větev \codeword{release/v_X.Y[.Z]} a~pushněte ji.
-Workflow přidá neměnný origin přímo za vybraný commit a~spustí Stage~A/B,
-stávající AI poznámky, uzamčený TinyTeX, všechny čtyři manuály, manifesty
- a~úplnou hostovanou kvalifikaci přesného Q. Historické originy a~již vydané
+Vytvořte z~aktuální větve \codeword{develop} novou větev
+\codeword{release/v_X.Y[.Z]} a~odešlete ji do vzdáleného repozitáře.
+Pracovní postup přidá neměnný výchozí bod přímo za vybraný commit
+ a~spustí Stage~A/B,
+stávající poznámky AI, uzamčený TinyTeX, všechny čtyři příručky, manifesty
+ a~úplnou kvalifikaci přesného Q na~serverech GitHubu. Dřívější výchozí body a~již vydané
 \codeword{v\_0.126} zůstávají beze změny.
 
 Po kvalifikaci a~přípravě artefaktů bot vytvoří jediný PR do main.
-Workflow automaticky spustí dokončení na Q pomocí souboru již registrovaného
-na main. Správce jednou schválí přesnou hlavu Q. Worker znovu ověří P/Q
-a~požádá server o~chráněný standardní merge bez formuláře workflow a~schválení deploymentu. Výsledný M
-musí mít rodiče [P,Q] v~tomto pořadí a~úplný Git tree shodný s~Q. Stejná úloha
+Pracovní postup automaticky spustí dokončení na Q pomocí souboru již registrovaného
+na main. Správce jednou schválí přesnou hlavu Q. Vykonávací proces znovu ověří P/Q
+a~požádá server o~chráněné standardní sloučení bez formuláře pracovního postupu
+ani dalšího schválení nasazení. Výsledný M
+musí mít rodiče [P,Q] v~tomto pořadí a~úplný strom Gitu shodný s~Q. Stejná úloha
 vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
 jen chybějící tag; konfliktní tag způsobí chybu.
 
-Po ověření merge a~tagu workflow připraví jeden nezveřejněný koncept
+Po ověření sloučení a~tagu pracovní postup připraví jeden nezveřejněný koncept
 GitHub Release s~již vytvořenými poznámkami přesného Q. Existující koncepty
 ani zveřejněná vydání nemění. Chyba přípravy zachová tag a~ohlásí
 \codeword{TAGGED / DRAFT\_PENDING}. Otevřete koncept, podle potřeby
 přiložte \codeword{manual-release-assets} (produkční ZIP, čtyři PDF,
 poznámky, archiv kvalifikace a~SHA-256 součty) a~ručně zvolte
-\ui{Publish release}. Přílohy se automaticky nenahrávají. Windows installer
-vzniká pouze při změně dodávaného obsahu WinApp; jeho verze se zachovává.
+\ui{Publish release}. Přílohy se automaticky nenahrávají. Instalátor pro Windows se sestavuje pouze při změně dodávaného obsahu WinApp;
+jeho samostatná verze se zachovává.
 
 Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
 s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou
@@ -2531,7 +2534,7 @@ synchronizaci a~zachová dokončený tag. Na develop nevzniká merge, rebase ani
 replay commit. Předchozí M nemusí být předkem dalšího Q. Vynechaný seznam bypass
 se výslovně zaznamená a~zůstává pod serverovou ochranou; viditelný bypass nebo
 nečitelná efektivní pravidla dokončení odmítnou. Nedostupné důkazy, staré
-schválení, červené CI nebo odlišní rodiče/tree
+schválení, neúspěšné CI nebo odlišní rodiče či Git strom
 zablokují dokončení. Izolované ověření skutečného chování GitHubu popisuje
 \filepath{docs/RELEASE_LIFECYCLE.md}; testovací CI nenahrazuje živou akceptaci.
 Agenti při implementaci neprovádějí chráněnou integraci ani produkční vydání.

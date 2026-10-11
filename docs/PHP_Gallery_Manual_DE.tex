@@ -2508,16 +2508,16 @@ Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose ein
 
 \subsubsection{Automatische Freigabe nach PR-Genehmigung}
 
-Erstellen Sie vom aktuellen develop den Zweig \codeword{release/v_X.Y[.Z]}
-und pushen Sie ihn. Der Workflow ergänzt direkt nach dem gewählten Commit einen
-unveränderlichen Ursprung und führt Stage~A/B, vorhandene KI-Notizen, gesperrtes
+Erstellen Sie aus dem aktuellen \codeword{develop} den Zweig \codeword{release/v_X.Y[.Z]}
+und übertragen Sie ihn in das Remote-Repository. Der Arbeitsablauf legt direkt
+nach dem gewählten Commit einen unveränderlichen Ausgangspunkt an und führt Stage~A/B, vorhandene KI-Notizen, gesperrtes
 TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q aus.
-Historische Ursprünge und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
+Frühere Ausgangspunkte und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
 
 Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
 nach main und startet den Abschluss automatisch auf Q über die auf main bereits
 registrierte Workflow-Datei. Der Maintainer genehmigt den exakten Q-Stand einmal.
-Der Worker prüft P/Q erneut und fordert den geschützten Standard-Merge an ohne Workflow-Formular oder zusätzliche
+Der ausführende Prozess prüft P/Q erneut und fordert den geschützten Standard-Merge an ohne Workflow-Formular oder zusätzliche
 Deployment-Genehmigung. M muss die geordneten Eltern [P,Q] und denselben vollständigen
 Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
 Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
@@ -2542,7 +2542,7 @@ muss kein Vorfahr des nächsten Q sein. Ausgelassene Bypass-Daten werden ausdrü
 protokolliert und bleiben serverseitig geschützt; sichtbarer Bypass oder unlesbare
 effektive Regeln blockieren. Fehlende Nachweise, veraltete Genehmigung, rotes CI und andere Eltern/Bäume blockieren
 den Abschluss. Isolierte Abnahme des echten GitHub-Verhaltens beschreibt
-\filepath{docs/RELEASE_LIFECYCLE.md}; Fixture-CI ersetzt keine Live-Abnahme.
+\filepath{docs/RELEASE_LIFECYCLE.md}; CI mit Testumgebungen ersetzt keine Abnahme des tatsächlichen GitHub-Ablaufs.
 Agenten führen während der Implementierung keine geschützte Integration
 oder Produktionsveröffentlichung aus.
 

@@ -2500,18 +2500,19 @@ Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera
 \subsection{Utgåveförberedelse och~kvalificering på~GitHub}
 
 
-\subsubsection{Automatisk release efter PR-godkännande}
+\subsubsection{Automatisk utgivning efter PR-godkännande}
 
-Skapa grenen \codeword{release/v_X.Y[.Z]} från aktuell develop och pusha den.
-Arbetsflödet lägger till ett oföränderligt ursprung direkt efter vald commit
+Skapa grenen \codeword{release/v_X.Y[.Z]} från den aktuella
+\codeword{develop}-grenen och skicka den till fjärrarkivet.
+Arbetsflödet lägger till en oföränderlig utgångspunkt direkt efter vald commit
  och kör Stage~A/B, befintliga AI-anteckningar, låst TinyTeX, alla fyra manualer,
-manifest och fullständig kvalificering av exakt Q. Historiska ursprung och den
+manifest och fullständig kvalificering av exakt Q. Tidigare utgångspunkter och den
 publicerade \codeword{v\_0.126} förblir oförändrade.
 
 Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
 Arbetsflödet startar avslutet automatiskt på Q genom filen som redan är registrerad
 på main. Underhållaren godkänner exakt Q en gång. Observatören kontrollerar P/Q
-igen och begär skyddad standardmerge utan formulär eller extra deployment-godkännande. M måste
+igen och begär skyddad standardmerge utan formulär eller ytterligare godkännande för driftsättning. M måste
 ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
 Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
 hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
@@ -2523,7 +2524,7 @@ taggen och statusen blir \codeword{TAGGED / DRAFT\_PENDING}.
 Öppna utkastet, bifoga vid behov \codeword{manual-release-assets}
 (produktions-ZIP, fyra PDF-filer, anteckningar, kvalificeringsarkiv och
 SHA-256-kontrollsummor), och välj \ui{Publish release} manuellt.
-Inga filer laddas upp automatiskt. Windows-installern byggs endast när
+Inga filer laddas upp automatiskt. Installationsprogrammet för Windows byggs endast när
 levererat WinApp-innehåll ändras; dess separata version bevaras.
 
 Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
@@ -2533,9 +2534,9 @@ eller replay-commit skapas på develop. Föregående M behöver inte vara förfa
 till nästa Q. Utelämnade bypass-data redovisas och förblir serverstyrda; synlig
 bypass eller oläsbara effektiva regler stoppar avslutet. Saknad evidens, gammalt godkännande, rött CI
  och andra föräldrar/träd blockerar avslut. Isolerad acceptans av verkligt
-GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; fixture-CI
-ersätter inte live-acceptans. Agenter utför inte skyddad integration eller
-produktionsrelease under implementeringen.
+GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; CI med testfixturer
+ersätter inte godkännandeprov i den verkliga GitHub-miljön. Agenter utför inte skyddad integration eller
+publicering av en produktionsversion under implementeringen.
 
 Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Arbetsordningen är:
 

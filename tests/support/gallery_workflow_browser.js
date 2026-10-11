@@ -78,7 +78,7 @@ async () => {
         const safeRoute = value => {
             try {
                 const route = new URL(value, location.href).searchParams.get('page') || 'home';
-                return ['admin_login', 'admin_logout', 'admin_theme', 'home'].includes(route) ? route : 'other';
+                return ['admin', 'admin_login', 'admin_logout', 'admin_theme', 'admin_new_gallery', 'home'].includes(route) ? route : 'other';
             } catch {
                 return 'unknown';
             }
@@ -97,49 +97,62 @@ async () => {
             }
         };
         const credentials = JSON.parse(document.querySelector('#credentials').textContent);
-        const loginResponse = await fetch('/index.php?page=admin_login', {credentials: 'same-origin', cache: 'no-store'});
-        const login = new DOMParser().parseFromString(await loginResponse.text(), 'text/html');
-        const csrfField = login.querySelector('[name="csrf_token"]');
-        stage = 'login GET status ' + loginResponse.status + ' route ' + safeRoute(loginResponse.url) + ' csrf ' + Boolean(csrfField);
-        expect(loginResponse.ok && csrfField instanceof HTMLInputElement);
-        const csrf = csrfField.value;
-        stage = 'verify nonempty CSRF extracted before login POST';
-        expect(csrf.length > 0);
-        const result = await fetch('/index.php?page=admin_login', {method: 'POST', credentials: 'same-origin', cache: 'no-store', body: new URLSearchParams({
-            identifier: credentials.username, password: credentials.password, csrf_token: csrf,
-        })});
-        const loginFailureBody = result.status === 400 ? await result.text() : '';
-        const loginInvalidCsrf = loginFailureBody.trim() === 'Invalid CSRF token.';
-        let loginSessionContinued = 'not-checked';
-        if (loginInvalidCsrf) {
-            const continuityResponse = await fetch('/index.php?page=admin_login', {credentials: 'same-origin', cache: 'no-store'});
-            const continuityDocument = new DOMParser().parseFromString(await continuityResponse.text(), 'text/html');
-            const continuityCsrf = continuityDocument.querySelector('[name="csrf_token"]')?.value || '';
-            loginSessionContinued = continuityResponse.ok && continuityCsrf === csrf ? 'same' : 'changed';
-        }
-        stage = 'login POST status ' + result.status + ' route ' + safeRoute(result.url)
-            + ' csrf ' + Boolean(csrf) + ' invalid ' + loginInvalidCsrf
-            + ' session ' + loginSessionContinued + ' ok ' + result.ok;
-        expect(result.ok);
         const frame = document.querySelector('#application');
-        stage = 'open admin home after login';
+        expect(frame instanceof HTMLIFrameElement);
+        // Use the real login form in the application's own browsing context.
+        // Fetch follows redirects and can report HTTP 200 for a failed login form;
+        // only navigation to the authenticated Admin route proves sign-in.
+        stage = 'open native admin login form';
+        frame.src = '/index.php?page=admin_login';
+        const loginDocument = await until(() => {
+            const current = frame.contentDocument;
+            if (current?.readyState !== 'complete') return null;
+            const form = current.querySelector('form[method="post"]');
+            return form?.querySelector('[name="csrf_token"]')?.value ? current : null;
+        });
+        const loginForm = loginDocument.querySelector('form[method="post"]');
+        const loginIdentifier = loginForm.querySelector('input[name="identifier"]');
+        const loginPassword = loginForm.querySelector('input[name="password"]');
+        expect(loginIdentifier instanceof frame.contentWindow.HTMLInputElement
+            && loginPassword instanceof frame.contentWindow.HTMLInputElement);
+        loginIdentifier.value = credentials.username;
+        loginPassword.value = credentials.password;
+        stage = 'submit native admin login form';
+        loginForm.requestSubmit();
+        const afterLoginDocument = await until(() => {
+            const current = frame.contentDocument;
+            return current && current !== loginDocument && current.readyState === 'complete' ? current : null;
+        });
+        stage = 'native login destination ' + safeRoute(frame.contentWindow.location.href)
+            + ' login-form ' + Boolean(afterLoginDocument.querySelector('input[name="password"]'));
+        expect(new URL(frame.contentWindow.location.href).searchParams.get('page') === 'admin'
+            && !afterLoginDocument.querySelector('input[name="password"]'));
+        stage = 'open authenticated admin home';
         frame.src = '/index.php?page=home';
+        let actualCreateLink;
         try {
-            await until(() => frame.contentDocument?.body?.dataset.adminGallerySidePanelBound === '1');
+            actualCreateLink = await until(() => {
+                const current = frame.contentDocument;
+                if (current?.readyState !== 'complete'
+                    || current.body?.dataset.adminGallerySidePanelBound !== '1') return null;
+                return current.querySelector('[data-gallery-side-panel-link][data-admin-side-panel-workflow="create"]');
+            });
         } catch {
-            const frameDocument = frame.contentDocument;
-            const body = frameDocument?.body;
+            const current = frame.contentDocument;
             stage = 'admin home route ' + safeRoute(frame.contentWindow?.location.href || '')
-                + ' document ' + Boolean(frameDocument)
-                + ' login-form ' + Boolean(frameDocument?.querySelector('input[type="password"]'))
-                + ' panel-bound ' + (body?.dataset.adminGallerySidePanelBound === '1');
-            throw new Error('Authenticated Admin page did not publish its side-panel binding marker.');
+                + ' panel-bound ' + Boolean(current?.body?.dataset.adminGallerySidePanelBound === '1')
+                + ' admin-create ' + Boolean(current?.querySelector('[data-admin-side-panel-workflow="create"]'))
+                + ' login-form ' + Boolean(current?.querySelector('input[name="password"]'));
+            throw new Error('Authenticated Home did not expose its real create-gallery entry point.');
         }
         const win = frame.contentWindow;
         const doc = frame.contentDocument;
         const initialUrl = win.location.href;
         const initialDocument = doc;
         let posts = 0;
+        let createPanelResponseStatus = 0;
+        let createPanelResponseRoute = 'none';
+        let createPanelRedirected = false;
         let lastMutationStatus = 0;
         const imageMutationResponses = [];
         let holdNextEditorRefresh = false;
@@ -155,6 +168,11 @@ async () => {
             if (isMutation) posts++;
             const response = await fetchWithDeadline(originalFetch, ...args);
             if (isMutation) lastMutationStatus = response.status;
+            if (route === 'admin_new_gallery' && !isMutation) {
+                createPanelResponseStatus = response.status;
+                createPanelResponseRoute = safeRoute(response.url);
+                createPanelRedirected = response.redirected;
+            }
             if (isImageMutation) {
                 const payload = await response.clone().json();
                 imageMutationResponses.push(payload);
@@ -174,15 +192,25 @@ async () => {
             return response;
         };
         stage = 'open actual create panel';
-        // Exercise the installed delegated handler with a dynamically inserted normal create link.
-        const link = doc.createElement('a');
-        link.href = '/index.php?page=admin_new_gallery';
-        link.dataset.gallerySidePanelLink = '';
-        link.dataset.adminSidePanelWorkflow = 'create';
-        link.textContent = 'Create fixture gallery';
+        // Keep the dynamic-link delegation test, but use a real authorized
+        // production link including its server-generated panel destination.
+        const link = actualCreateLink.cloneNode(true);
+        expect(link instanceof win.HTMLAnchorElement);
         doc.body.append(link);
         link.click();
-        const form = await until(() => doc.querySelector('[data-gallery-panel-create-form]'));
+        let form;
+        try {
+            form = await until(() => doc.querySelector('[data-gallery-panel-create-form]'));
+        } catch {
+            const panelElement = doc.querySelector('[data-admin-side-panel]');
+            const panelBody = panelElement?.querySelector('[data-admin-side-panel-body]');
+            stage = 'create panel status ' + createPanelResponseStatus
+                + ' route ' + createPanelResponseRoute
+                + ' redirected ' + Number(createPanelRedirected)
+                + ' panel ' + Number(Boolean(panelElement))
+                + ' loading ' + Number(Boolean(panelBody?.querySelector('.admin-side-panel-loading')));
+            throw new Error('Real create-gallery panel did not contain the expected form.');
+        }
         const panel = form.closest('[data-admin-side-panel]');
         expect(form.querySelector('[name="title"]').getAttribute('aria-label') === 'Gallery name');
         form.querySelector('[name="title"]').value = 'Browser workflow';
