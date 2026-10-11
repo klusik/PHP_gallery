@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.127
+
+Version 0.127 added configurable public content widgets for Home and Gallery pages, with independent administration, safe previews, responsive placement, and server-rendered output. It also expanded persistence, localization, browser, and workflow regression coverage.
+
+### Highlights
+
+#### Public content widgets [#126](https://github.com/klusik/PHP_gallery/issues/126)
+- Added independently managed widgets with draft, published, and disabled states; Home and Gallery scopes; ordering; and seven in-flow placements or bounded floating placement.
+- Added safe Markdown content and curated links. Published widgets appeared on eligible public pages only after an administrator published them; existing installations remained unchanged until then.
+- Added floating-widget placement with safe-area and control-collision handling, responsive in-flow fallback, visitor dismissal, and keyboard focus preservation.
+- Added unsaved content and placement previews in the real Home and Gallery Themes, with desktop, tablet, and mobile layouts.
+
+### Technical Details
+
+#### Backend
+- Added `app/models/public_content_widgets.php` and `app/services/public_content_widgets.php` for widget persistence, validation, and rendering.
+- Added `app/controllers/admin_public_widgets.php` for authenticated, CSRF-protected management and preview workflows.
+- Added revision checks for saves, deletes, and reordering to reject stale edits; added duplication as a new draft.
+- Kept public widget reads behind existing Gallery access checks. Missing widget storage produced an empty public plan without exposing database diagnostics.
+
+#### Database
+- Added migration `202610100001_public_content_widgets.php` for durable widget content, placement, ordering, and revision data.
+- Added migration recovery coverage for cases where table creation succeeded but the migration-ledger write did not.
+
+#### Frontend
+- Added `public/assets/gallery-modules/admin-public-widgets.js` and `public/assets/gallery-modules/public-content-widgets.js`, plus dedicated Admin and public widget stylesheets.
+- Rendered widgets in ordered Home and Gallery content regions, responsive rails, and footer placements. Server-rendered content remained available without JavaScript.
+- Added protected, scriptless Theme previews that displayed unsaved drafts without saving or publishing them.
+- Updated lightbox image handling to reject failed decodes and zero-dimension images.
+
+#### Tests
+- Added regression coverage for persistence, stale revisions, atomic ordering, migration recovery, missing-schema behavior, safe Markdown, localization, and Admin authorization and CSRF checks.
+- Added browser coverage for public layouts, floating placement, collisions, safe areas, dismissal, protected previews, mobile fallback, and no-script output.
+- Expanded disposable database and live Admin workflow coverage, including Gallery access gates and preservation of widget data during Theme settings saves.
+
+#### Documentation
+- Added `docs/PUBLIC_CONTENT_WIDGETS.md` and updated the architecture, database, compatibility, workflow, testing, and all four maintained administrator manual sources.
+
+#### Release metadata
+- Added immutable origin and predecessor records for `v_0.127`.
+
+### User Impact
+
+#### For visitors
+- Visitors could see published widgets on eligible Home and Gallery pages. Floating widgets remained reachable through in-flow fallback where placement was unsupported or constrained, and visitors could dismiss a floating panel for the current page view.
+- Unpublished, disabled, or out-of-scope widgets did not appear. Existing Gallery access gates continued to apply.
+
+#### For administrators
+- Administrators could create, edit, preview, reorder, publish, disable, duplicate, and delete widgets independently of Theme settings.
+- Administrators could preview unsaved drafts in protected Home and Gallery Theme layouts and adjust floating placement without saving the draft.
+- The editor and validation messages were available in English, Czech, German, and Swedish.
+
+#### For maintainers
+- Expanded regression coverage exercised widget storage, migration recovery, rendering, Admin workflows, and browser behavior.
+
 ## Version 0.126.3
 
 Version 0.126.3 restored access to the Live Visual CSS Editor while keeping it safely unavailable until its protected preview was validated. It also made the editor’s optional setup failures less disruptive to manual theme editing.
