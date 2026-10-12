@@ -123,7 +123,7 @@ function view_render_admin_upload_browser_checkbox(array $viewModel): void
 }
 
 /**
- * Render an existing-gallery upload form from prepared URLs, markup and replay identity.
+ * Render an existing-gallery upload form with attachment-only PDF defaults and collapsed opt-in conversion controls.
  *
  * @param array{panel_mode?:bool,action_url?:string,pdf_attachment_url?:string,csrf_html?:string,operation_key?:string,gallery_id?:int,target_title?:string,gallery_options_html?:string,accept_value?:string,pdf_render_dpi?:int,browser_checkbox_html?:string} $viewModel Controller-prepared target context and presentation fragments.
  * @return void Emit the native/AJAX-compatible form without resolving domain policy.
@@ -149,13 +149,16 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     echo '<label tabindex="0" data-gallery-upload-drop-zone' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e($existingGalleryAccept) . '" multiple><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
     echo '<fieldset class="gallery-upload-pdf-options" data-gallery-upload-pdf-options><legend>' . e(t('pdf.documents', 'Documents / PDFs')) . '</legend>';
     echo '<label><span>' . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)')) . '</span><input name="pdf_files[]" type="file" accept=".pdf,application/pdf" multiple data-gallery-upload-pdf-input></label>';
+    echo '<p class="muted">' . e(t('pdf.upload.attach_help', 'PDFs are attached as original documents. No gallery or page images are created unless you enable conversion in Advanced.')) . '</p>';
+    echo '<details data-gallery-upload-pdf-advanced><summary>' . e(t('pdf.upload.advanced', 'Advanced')) . '</summary>';
+    echo '<label><input type="checkbox" name="pdf_convert_pages" value="1" data-gallery-upload-pdf-convert> <span>' . e(t('pdf.upload.convert_pages', 'Also convert PDF pages to PNG')) . '</span></label>';
     echo '<p class="muted">' . e(t('pdf.convert_help', 'Render pages in this browser; choose a private subgallery or append them at the end of this gallery. The original PDF remains unchanged.')) . '</p>';
     echo '<label>' . e(t('pdf.destination', 'PNG page destination')) . '<select name="pdf_target_mode" data-gallery-upload-pdf-target><option value="child">' . e(t('pdf.private_child', 'Create private subgallery')) . '</option><option value="append">' . e(t('pdf.append', 'Append after the last photo in this gallery')) . '</option></select></label>';
     echo '<label>' . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)')) . '<select name="pdf_dpi" data-gallery-upload-pdf-dpi>';
     foreach ([96, 150, 200, 300, 600, 1200, 2400] as $dpi) {
         echo '<option value="' . $dpi . '"' . ($dpi === (int) ($viewModel['pdf_render_dpi'] ?? 150) ? ' selected' : '') . '>' . $dpi . ' DPI</option>';
     }
-    echo '</select><span class="muted">' . e(t('pdf.dpi_help', 'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.')) . '</span></label></fieldset>';
+    echo '</select><span class="muted">' . e(t('pdf.dpi_help', 'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.')) . '</span></label></details></fieldset>';
     view_render_admin_upload_clipboard_hint($panelMode);
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');

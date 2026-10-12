@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.128}
-\newcommand{\manualdate}{12 October 2026}
+\newcommand{\version}{0.128.1}
+\newcommand{\manualdate}{13 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -496,7 +496,7 @@ Expanded conversion controls keep the document column bounded. If the previous t
 
 The gallery shows PDFs in a compact table with size, page count and small action icons. Click a title or the eye to view it. With a description, text appears on the left and documents on the right; without text the table stays left-aligned. Administrators can expand conversion settings, hide or show a PDF, and confirm deletion. Hidden documents are denied to visitors even through direct links; generated photos remain after deletion.
 
-The existing-gallery Upload photos chooser and drop queue also accept PDFs. Select a private child gallery or append pages, and choose the DPI before uploading. Mixed selections upload photos first, then PDF pages. The panel stays open with progress and cancellation controls. Retrying unchanged inputs automatically recreates a missing empty child only when no page was acknowledged.
+The~existing-gallery Upload photos chooser and~drop queue also accept PDFs. By~default, an~upload attaches only the~original document; it~does not~create a~subgallery or~PNG pages. To~convert during upload, open \ui{Advanced} and~explicitly check \ui{Also convert PDF pages to~PNG}, then select a~private child gallery or~append pages and~choose the~DPI. Opening Advanced alone does not~enable conversion. Mixed selections upload photos first, then attach PDFs and~perform only the~selected conversions. The~panel stays open with progress and~cancellation controls. Retries retain the~original conversion choice; for~an~enabled conversion, unchanged inputs automatically recreate a~missing empty child only when no~page was acknowledged.
 
 \index{PDF!gallery documents}
 

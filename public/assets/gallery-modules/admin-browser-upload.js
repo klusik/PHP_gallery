@@ -892,7 +892,7 @@ function isBrowserUploadPdfFile(file) {
 }
 
 /**
- * Delegate selected PDFs to the shared attachment and conversion workflow.
+ * Attach selected PDFs and pass only an explicitly checked conversion choice to the shared workflow.
  * The ordinary image queue has already completed when a base result is supplied,
  * so append mode places all converted pages after the newly uploaded photos.
  * @param {HTMLFormElement} form Existing-gallery upload form and CSRF source.
@@ -903,17 +903,19 @@ function isBrowserUploadPdfFile(file) {
  * @returns {Promise<Record<string, *>>} Canonical aggregate after the shared workflow acknowledges every PDF; clears its separate picker only after success.
  */
 async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
-    const helper = await import('./admin-pdf-documents.js?v=20261012-dpi-warning-v4');
+    const helper = await import('./admin-pdf-documents.js?v=20261013-pdf-upload-optin-v1');
     if (typeof helper.uploadGalleryPdfFiles !== 'function') {
         throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
     }
     const target = form.querySelector('[name="pdf_target_mode"]');
     const dpi = form.querySelector('[name="pdf_dpi"]');
+    const convertPages = form.querySelector('[name="pdf_convert_pages"][data-gallery-upload-pdf-convert]');
     const galleryId = selectedBrowserGalleryId(form);
     const result = await helper.uploadGalleryPdfFiles(form, progress, files, {
         galleryId,
         targetMode: target instanceof HTMLSelectElement ? target.value : 'child',
         dpi: dpi instanceof HTMLSelectElement ? Number(dpi.value || 150) : 150,
+        convertPages: convertPages instanceof HTMLInputElement && convertPages.checked === true,
         operation,
         baseResult,
         onProgress: (state) => {

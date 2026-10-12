@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.128}
-\newcommand{\manualdate}{12.~Oktober~2026}
+\newcommand{\version}{0.128.1}
+\newcommand{\manualdate}{13.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -497,7 +497,7 @@ Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt d
 
 Die Galerie zeigt PDFs in einer kompakten Tabelle mit Größe, Seitenzahl und kleinen Aktionssymbolen. Titel und Auge öffnen den Betrachter. Mit Beschreibung steht der Text links und die Tabelle rechts; ohne Text bleibt die Tabelle links. Administratoren können die Konvertierung aufklappen, PDFs verbergen oder anzeigen und die Löschung bestätigen. Verborgene PDFs sind für Besucher auch über direkte Links gesperrt; erzeugte Fotos bleiben nach der Löschung erhalten.
 
-Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzeptieren auch PDFs. Wählen Sie vor dem Upload eine private Untergalerie oder das Anhängen der Seiten sowie die DPI. Bei gemischter Auswahl werden zuerst Fotos und danach PDF-Seiten hochgeladen. Das Panel bleibt mit Fortschritt und Abbruch geöffnet. Ein erneuter Versuch mit unveränderten Eingaben stellt ein fehlendes leeres Untergalerieziel nur wieder her, wenn noch keine Seite bestätigt wurde.
+Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzeptieren auch PDFs. Standardmäßig wird nur das Originaldokument angehängt; es entstehen weder Untergalerien noch PNG-Seiten. Öffnen Sie für eine Konvertierung beim Upload \ui{Erweitert} und aktivieren Sie ausdrücklich \ui{PDF-Seiten zusätzlich in PNG umwandeln}; wählen Sie danach eine private Untergalerie oder das Anhängen der Seiten sowie die DPI. Das Öffnen allein aktiviert keine Konvertierung. Gemischte Auswahlen laden zuerst Fotos hoch, hängen dann PDFs an und führen nur gewählte Konvertierungen aus. Das Panel bleibt mit Fortschritt und Abbruch geöffnet. Wiederholungen behalten die ursprüngliche Konvertierungswahl; bei aktivierter Konvertierung wird ein fehlendes leeres Untergalerieziel nur wiederhergestellt, wenn noch keine Seite bestätigt wurde.
 
 \index{PDF!Galeriedokumente}
 
