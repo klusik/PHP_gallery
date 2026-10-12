@@ -8,6 +8,24 @@ existing product metric actually observes adoption.
 
 ## Policy
 
+### CI recovery — retained integration artifact protocol
+
+- **Reason / protected behavior:** Existing immutable release origins may select a
+  FULL-qualified develop SHA advanced outside the integration action. A main-owned,
+  owner-dispatched recovery qualifies that same SHA without changing any ref.
+- **Owner:** `develop-integration.yml` and `develop-integration.mjs`; release consumers
+  continue using the existing `coverage-artifacts.mjs` and schema-1 integration proof.
+- **Permanent support rationale:** Keep retained origins and their selected commits
+  usable. Recovery records preserve real historical ancestry and fresh same-run native
+  FULL owners, with explicit no-ref-write metadata. There is no red override or forged
+  replacement of historical checks, and ordinary integration guards remain strict.
+  Recovery does not relax main/predecessor pins; an origin frozen before installing
+  this authority cannot be moved to the newer main and remains historical evidence.
+- **Evidence / usage:** `tests/develop_integration_test.mjs` covers owner/attempt/ref
+  rejection, old and fresh FULL owners, metadata races and unchanged release-consumer
+  verification. Live recovery usage is **unknown** until a reviewed installation on
+  main and successful owner recovery are recorded.
+
 ### CI-1 — Local maintainer recovery after CI-first migration
 
 - **Reason / protected environment:** Maintainers may need existing local
@@ -782,3 +800,25 @@ token permission scope and live/negative regression evidence proves that contrac
 - **Usage / introduction:** Production incidence and direct-export usage are
   unknown. This availability contract is authored for #182; the actual original
   production trigger remains unverified until deployment is checked.
+# Known integration digest installation recovery
+
+The owner-only integration bootstrap protects the release path while the exact
+installed main `7dcfadf153b1c941fd81edee43272f8accb475a1` rejects bare upload-action
+digests (observed run 38218271690). Its owner is the release lifecycle, not the
+normal integration selector. It accepts a narrowly scoped repair feature and
+uses actual develop -> immutable origin -> exact source overlay ancestry. For
+unpublished `0.127.3` it retains the exact original `d4f9abd7` origin and metadata
+bytes, with independently checked unchanged main/predecessor pins; it never
+reinitializes that version after a branch deletion.
+Existing schema-2 release qualification consumers retain their native job names,
+require fresh complete FULL/release owners and ignore only the additive recovery
+provenance field. No schema-3 inherited integration coverage is claimed.
+
+Regression evidence: `develop_integration_test.mjs` verifies real Git ancestry,
+tree preservation, absence of ref/index/worktree writes, changed marker and wrong
+authority/scope refusal; `hosted_release_policy_test.mjs` verifies old FULL-owner
+requirements including rejection of skipped Chromium. Live usage is **unknown**;
+feature fixtures and maintenance FULL do not prove production recovery acceptance.
+After a new main installation the exact-authority guard makes this path unusable.
+Retire executable preparation only after no pending recovery origin uses it;
+retain or migrate immutable marker/qualification readers before removing parsing.

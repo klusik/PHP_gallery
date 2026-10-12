@@ -102,6 +102,9 @@ function trustedWorkflowRef(repository,workflowRef) {
 /** Integration request bound to the user-selected feature source and observed develop lease.
  * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number}} IntegrationRequest
  */
+/** Retained protocol shared by normal integration and no-ref-write owner recovery.
+ * @typedef {{schema_version:1,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false}} IntegrationEvidenceRecord
+ */
 /** Protected workflow identity taken from the current GitHub Actions environment.
  * @typedef {{repository:string,workflowPath:string,workflowRef:string,eventName:string,ref:string,runId:number|string,runAttempt:number|string,headSha:string}} WorkflowContext
  */
@@ -212,9 +215,10 @@ function completeRows(call,path,key) {
  * @param {string} sourceSha Original feature source S.
  * @param {string} candidateSha Prepared candidate A.
  * @param {string} developSha Observed develop P.
+ * @param {boolean} recovery Whether the source is already the exact protected develop candidate; its own authority is then retained.
  * @returns {{tree:string}} Candidate tree SHA.
  */
-function verifyAncestry(call,repository,sourceSha,candidateSha,developSha) {
+function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recovery=false) {
     const source=call('repos/'+repository+'/commits/'+sourceSha);
     if (source?.sha!==sourceSha || source.commit?.tree?.sha===undefined
         || source.parents?.length!==1 || source.parents[0]?.sha!==developSha) {
@@ -222,7 +226,8 @@ function verifyAncestry(call,repository,sourceSha,candidateSha,developSha) {
     }
     const base=call('repos/'+repository+'/commits/'+developSha);
     if (base?.sha!==developSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED develop P tree is unavailable.');
-    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,base.commit.tree.sha);
+    // Recovery trusts only the exact already-protected candidate, not a new feature's authority edits.
+    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha);
     if (candidateSha!==sourceSha) {
         const candidate=call('repos/'+repository+'/commits/'+candidateSha);
         if (candidate?.sha!==candidateSha || candidate.parents?.length!==1 || candidate.parents[0]?.sha!==sourceSha) {
@@ -309,8 +314,10 @@ function validateBasicEvidence(call,repository,branch,sourceSha,runId,attempt) {
  * @param {string} repository Configured owner/repository.
  * @param {GithubApi} call Authenticated GitHub API adapter.
  * @returns {{branch:string,sourceSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:string,basicRunAttempt:string}} Exact selected source and evidence inputs for preparation.
+ * @param {boolean} recovery Whether to authenticate owner recovery of an already-qualified, unchanged develop head.
  */
-export function selectDevelopIntegration(branch,context,repository,call) {
+export function selectDevelopIntegration(branch,context,repository,call,recovery=false) {
+    if (typeof recovery!=='boolean') throw new Error('BLOCKED recovery mode must be boolean.');
     if (!validBranchName(branch) || !branch.startsWith('feature/') || context?.repository!==repository
         || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(repository,context.workflowRef)
         || context.eventName!=='workflow_dispatch' || context.ref!=='refs/heads/main'
@@ -321,7 +328,10 @@ export function selectDevelopIntegration(branch,context,repository,call) {
         || active?.head_sha!==context.headSha || active?.event!=='workflow_dispatch' || active?.status!=='in_progress'
         || String(active?.run_attempt)!==String(context.runAttempt)) throw new Error('BLOCKED source selection workflow run is not current and active.');
     const sourceSha=call('repos/'+repository+'/git/ref/heads/'+encodedBranch(branch))?.object?.sha;
-    const expectedDevelopSha=call('repos/'+repository+'/git/ref/heads/develop')?.object?.sha;
+    const observedDevelopSha=call('repos/'+repository+'/git/ref/heads/develop')?.object?.sha;
+    if (recovery) requireRecoveryOwner(call,repository,active,sourceSha,observedDevelopSha);
+    const candidate=call('repos/'+repository+'/commits/'+sourceSha);
+    const expectedDevelopSha=recovery ? candidate?.parents?.[0]?.sha : observedDevelopSha;
     if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '') || !/^[a-f0-9]{40}$/.test(expectedDevelopSha ?? '')) {
         throw new Error('BLOCKED selected source or develop ref is unavailable.');
     }
@@ -331,7 +341,7 @@ export function selectDevelopIntegration(branch,context,repository,call) {
     }
     const base=call('repos/'+repository+'/commits/'+expectedDevelopSha);
     if (base?.sha!==expectedDevelopSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED current develop P tree is unavailable.');
-    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,base.commit.tree.sha);
+    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha);
     const runs=completeRows(call,'repos/'+repository+'/actions/workflows/candidate-preparation.yml/runs?branch='
         +encodeURIComponent(branch)+'&head_sha='+sourceSha,'workflow_runs');
     const exact=runs.filter(run=>run.head_branch===branch && run.head_sha===sourceSha
@@ -341,6 +351,7 @@ export function selectDevelopIntegration(branch,context,repository,call) {
         throw new Error('BLOCKED selected source has no latest completed successful BASIC workflow run.');
     }
     validateBasicEvidence(call,repository,branch,sourceSha,latest.id,latest.run_attempt);
+    if (recovery) requirePreviousFull(call,repository,sourceSha,latest);
     return {branch,sourceSha,expectedDevelopSha,sourceBase:expectedDevelopSha,
         basicRunId:String(latest.id),basicRunAttempt:String(latest.run_attempt)};
 }
@@ -350,9 +361,11 @@ export function selectDevelopIntegration(branch,context,repository,call) {
  * @param {WorkflowContext} context Current GitHub Actions identity.
  * @param {string} repository Configured repository identity.
  * @param {GithubApi} call Authenticated GitHub API adapter.
- * @returns {{plan:{branch:string,oldSha:string,newSha:string},record:Record<string,unknown>}} Validated plan and immutable evidence record.
+ * @returns {{plan:{branch:string,oldSha:string,newSha:string},record:IntegrationEvidenceRecord}} Validated plan and immutable evidence record.
+ * @param {boolean} recovery Whether to validate fresh FULL evidence for existing develop without planning a ref change.
  */
-export function validateDevelopIntegration(request,context,repository,call) {
+export function validateDevelopIntegration(request,context,repository,call,recovery=false) {
+    if (typeof recovery!=='boolean') throw new Error('BLOCKED recovery mode must be boolean.');
     if (!request || !validBranchName(request.branch) || !/^feature\//.test(request.branch)
         || ![request.sourceSha,request.candidateSha,request.expectedDevelopSha,request.sourceBase].every(value=>/^[a-f0-9]{40}$/.test(value))
         || request.sourceBase!==request.expectedDevelopSha || context?.repository!==repository
@@ -368,8 +381,12 @@ export function validateDevelopIntegration(request,context,repository,call) {
         || currentRun?.status!=='in_progress' || String(currentRun?.run_attempt)!==attempt) {
         throw new Error('BLOCKED current publisher is not the exact active main-owned workflow attempt.');
     }
-    const heads=readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
-    const ancestry=verifyAncestry(call,repository,request.sourceSha,request.candidateSha,request.expectedDevelopSha);
+    if (recovery) {
+        requireRecoveryOwner(call,repository,currentRun,request.sourceSha,request.candidateSha);
+        if (request.sourceSha!==request.candidateSha) throw new Error('BLOCKED recovery cannot create a generated candidate child.');
+    }
+    const heads=readHeads(call,repository,request.branch,request.candidateSha,recovery ? request.candidateSha : request.expectedDevelopSha);
+    const ancestry=verifyAncestry(call,repository,request.sourceSha,request.candidateSha,request.expectedDevelopSha,recovery);
     const basicRuns=completeRows(call,'repos/'+repository+'/actions/workflows/candidate-preparation.yml/runs?branch='
         +encodeURIComponent(request.branch)+'&head_sha='+request.sourceSha,'workflow_runs');
     const matchingBasicRuns=basicRuns.filter(run=>run.head_branch===request.branch && run.head_sha===request.sourceSha
@@ -379,6 +396,7 @@ export function validateDevelopIntegration(request,context,repository,call) {
         throw new Error('BLOCKED BASIC evidence is not from the newest retained run for this branch and S.');
     }
     validateBasicEvidence(call,repository,request.branch,request.sourceSha,request.basicRunId,request.basicRunAttempt);
+    if (recovery) requirePreviousFull(call,repository,request.sourceSha,newestBasicRun);
     const jobs=completeRows(call,'repos/'+repository+'/actions/runs/'+runId+'/attempts/'+attempt+'/jobs','jobs');
     const owners=[];
     const auxiliaryNames=['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate'];
@@ -420,7 +438,77 @@ export function validateDevelopIntegration(request,context,repository,call) {
         candidate_sha:request.candidateSha,candidate_tree:ancestry.tree,expected_develop_sha:request.expectedDevelopSha,
         source_base:request.sourceBase,workflow_sha:context.headSha,workflow_path:WORKFLOW_PATH,
         run_id:runId,run_attempt:attempt,basic_profile:BASIC_PROFILE,native_owners:owners};
+    if (recovery) Object.assign(record,{recovery_mode:'existing-develop',observed_develop_sha:heads.develop,ref_write:false});
     return {plan:{branch:'develop',oldSha:heads.develop,newSha:request.candidateSha},record};
+}
+
+/** Require explicit repository-owner recovery of the exact already-protected source candidate.
+ * @param {GithubApi} call Authenticated GitHub API adapter.
+ * @param {string} repository Exact owner/repository.
+ * @param {{actor?:{login?:string},triggering_actor?:{login?:string}}} run Current server-owned workflow actor and triggering actor identities.
+ * @param {string} source Exact retained source branch candidate.
+ * @param {string} develop Current protected develop candidate.
+ * @returns {void} Throws for unauthorized dispatch or any source/develop divergence.
+ */
+function requireRecoveryOwner(call,repository,run,source,develop) {
+    const owner=repository.split('/')[0];
+    if (source!==develop || run.actor?.login?.toLowerCase()!==owner.toLowerCase()
+        || run.triggering_actor?.login?.toLowerCase()!==owner.toLowerCase()) {
+        throw new Error('BLOCKED recovery requires owner dispatch and source exactly equal to existing develop.');
+    }
+    const permission=call('repos/'+repository+'/collaborators/'+encodeURIComponent(owner)+'/permission');
+    if (!['admin','maintain'].includes(permission?.permission)) throw new Error('BLOCKED recovery owner permission is unavailable.');
+}
+
+/** Authenticate all mandatory native owners of the newest exact-source maintenance FULL run.
+ * @param {GithubApi} call Authenticated GitHub API adapter.
+ * @param {string} repository Exact owner/repository.
+ * @param {string} candidate Existing protected candidate, also the original source event SHA.
+ * @param {{id:number,run_attempt:number,head_branch:string}} retained Newest successful source workflow identity, independently reread by attempt.
+ * @returns {void} Throws when the full source workflow, native owners or retained attempt is incomplete or red.
+ */
+function requirePreviousFull(call,repository,candidate,retained) {
+    const run=call(`repos/${repository}/actions/runs/${retained.id}/attempts/${retained.run_attempt}`);
+    if (run.id!==retained.id || run.run_attempt!==retained.run_attempt || run.head_sha!==candidate
+        || run.head_branch!==retained.head_branch || run.path!=='.github/workflows/candidate-preparation.yml'
+        || run.event!=='workflow_dispatch' || run.status!=='completed' || run.conclusion!=='success') {
+        throw new Error('BLOCKED recovery needs the newest exact-candidate successful maintenance FULL attempt.');
+    }
+    const jobs=completeRows(call,`repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,'jobs');
+    for (const name of [...FULL_OWNERS.map(label=>'Full CI for the published prepared SHA / '+label),
+        'Basic source checks','Prepare source candidate at event SHA','Reject superseded qualification']) {
+        const matches=jobs.filter(job=>job.name===name);
+        if (matches.length!==1 || matches[0].run_id!==run.id || matches[0].run_attempt!==run.run_attempt
+            || matches[0].status!=='completed' || matches[0].conclusion!=='success') {
+            throw new Error('BLOCKED recovery maintenance FULL owner is missing, duplicate or red: '+name);
+        }
+    }
+    for (const name of ['Candidate qualification','Complete required CI matrix']) {
+        exactCheck(call,repository,candidate,name,`candidate:${run.id}:${run.run_attempt}:${candidate}`);
+    }
+}
+
+/** Publish freshly qualified integration metadata for existing develop without writing any Git ref.
+ * @param {IntegrationRequest} request Exact existing source candidate and recorded historical parent.
+ * @param {WorkflowContext} context Current main-owned workflow identity.
+ * @param {string} repository Exact owner/repository.
+ * @param {GithubApi} call Authenticated GitHub API adapter permitting check metadata, never ref mutation.
+ * @returns {{branch:string,sha:string,record:IntegrationEvidenceRecord}} Fresh exact-candidate checks and backward-compatible retained evidence.
+ */
+export function recoverDevelop(request,context,repository,call) {
+    const checked=validateDevelopIntegration(request,context,repository,call,true);
+    const externalId=`integration:${context.runId}:${context.runAttempt}:${request.candidateSha}`;
+    const ids=[];
+    for (const name of ['Develop integration qualification','Complete required CI matrix']) {
+        readHeads(call,repository,request.branch,request.candidateSha,request.candidateSha);
+        const check=call(`repos/${repository}/check-runs`,'POST',{name,head_sha:request.candidateSha,
+            external_id:externalId,status:'completed',conclusion:'success',output:{title:name,
+                summary:'Owner recovery: existing develop independently qualified by fresh main-owned FULL; no Git ref was written.'}});
+        if (!Number.isSafeInteger(check?.id) || check.id<1) throw new Error('BLOCKED recovery check publication was not confirmed.');
+        ids.push(check.id);
+    }
+    readHeads(call,repository,request.branch,request.candidateSha,request.candidateSha);
+    return {branch:'develop',sha:request.candidateSha,record:{...checked.record,check_run_id:ids[0],matrix_check_run_id:ids[1]}};
 }
 
 /** Create exact-candidate required checks, reread the develop lease, and attempt one normal fast-forward.

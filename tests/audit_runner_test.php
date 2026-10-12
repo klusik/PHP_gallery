@@ -32,7 +32,7 @@
  *   - This test intentionally validates registry coverage without executing the child suites recursively.
  *
  * Last Updated:
- *   2026-10-05
+ *   2026-10-12
  */
 
 declare(strict_types=1);
@@ -80,9 +80,20 @@ function audit_test_assert(bool $condition, string $message): void
 $actualNodeFiles = glob(__DIR__ . '/*_test.mjs') ?: [];
 $actualNodeNames = array_map('basename', $actualNodeFiles);
 sort($actualNodeNames, SORT_STRING);
-$registeredNodeNames = array_keys($registry['node_tests'] ?? []);
+$applicationNodeNames = array_keys($registry['node_tests'] ?? []);
+$websiteNodeNames = array_keys($registry['website_tests'] ?? []);
+$registeredNodeNames = array_merge($applicationNodeNames, $websiteNodeNames);
 sort($registeredNodeNames, SORT_STRING);
 audit_test_assert($actualNodeNames === $registeredNodeNames, 'Every tests/*_test.mjs file must have exactly one explicit audit registry entry.');
+audit_test_assert(count($registeredNodeNames) === count(array_unique($registeredNodeNames)),
+    'A Node test must have exactly one owner across application and website suites.');
+audit_test_assert($websiteNodeNames !== [] && in_array('project_website_test.mjs', $websiteNodeNames, true)
+    && !in_array('project_website_test.mjs', $applicationNodeNames, true),
+    'Website artifact fixtures must be registered centrally without entering CMS regressions.');
+foreach ($registry['website_tests'] as $websiteDefinition) {
+    audit_test_assert(($websiteDefinition['browser'] ?? false) === true,
+        'The isolated website suite must require actual Chromium coverage.');
+}
 
 $profiles = $registry['profiles'] ?? [];
 audit_test_assert(($profiles['basic'] ?? null) === [
@@ -119,6 +130,13 @@ audit_test_assert(str_contains((string) file_get_contents(dirname(__DIR__) . '/s
     'Central manifest suite must use the common read-only candidate preparation contract.');
 // Source spelling contracts use canonical newlines across Windows and hosted checkouts.
 $runnerSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'));
+audit_test_assert(str_contains($runnerSource,
+    "'website' => audit_run_node_suite('website', 'Static project website', \$registry['website_tests'], \$node, \$browser)"),
+    'The central website suite must execute only its explicitly owned registry.');
+foreach (['basic', 'quick', 'full', 'release'] as $applicationProfile) {
+    audit_test_assert(!in_array('website', $profiles[$applicationProfile], true),
+        'CMS source and regression profiles must not duplicate website artifact qualification.');
+}
 $supportSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit_lib.php'));
 audit_test_assert(str_contains($runnerSource, "'php-lint-changed' => audit_run_php_lint(true, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
     && str_contains($runnerSource, "'js-lint-changed' => audit_run_js_lint(true, \$node, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
@@ -960,6 +978,15 @@ try {
         && str_contains($requiredBrowserAudit['stdout'], $requiredBrowserCount . ' blocked')
         && !str_contains($requiredBrowserAudit['stdout'], $requiredBrowserCount . ' skip'),
         'Required browser CLI must exit 2 with every registered unavailable fixture BLOCKED, never silently SKIP.');
+    $requiredWebsiteAudit = \PhpGallery\Audit\run_process(
+        [PHP_BINARY, $root . '/scripts/audit.php', '--suite=website', '--no-report'], $root, 20
+    );
+    $requiredWebsiteCount = count($registry['website_tests']);
+    audit_test_assert($requiredWebsiteAudit['exit_code'] === 2
+        && str_contains($requiredWebsiteAudit['stdout'], 'Result: BLOCKED')
+        && str_contains($requiredWebsiteAudit['stdout'], $requiredWebsiteCount . ' blocked')
+        && !str_contains($requiredWebsiteAudit['stdout'], $requiredWebsiteCount . ' skip'),
+        'Website qualification must block unavailable Chromium rather than silently skipping its artifact fixtures.');
 } finally {
     putenv($previousBrowserRequired === false ? 'PHP_GALLERY_BROWSER_REQUIRED' : 'PHP_GALLERY_BROWSER_REQUIRED=' . $previousBrowserRequired);
     putenv($previousBrowser === false ? 'PHP_GALLERY_BROWSER' : 'PHP_GALLERY_BROWSER=' . $previousBrowser);

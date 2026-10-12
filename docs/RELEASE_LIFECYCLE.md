@@ -47,6 +47,125 @@ to both main and develop; it changes no server protection or credential.
 
 ## Ownership and event handoff
 
+### Bootstrap the known broken integration installation
+
+The integration run [38218271690](https://github.com/klusik/PHP_gallery/actions/runs/38218271690)
+failed before FULL because upload-action hexadecimal output did not match the
+algorithm-qualified digest required by the main-owned publisher. A feature fix
+cannot update that publisher's workflow. The owner can install the repair through
+a **new, genuinely FULL-qualified release**, using the retained schema-2 release
+bootstrap and the ordinary protected PR approval, merge, tag and draft lifecycle.
+No server rule, red override, fabricated qualification check or protected ref
+write is needed from the preparation tool.
+
+From a clean checkout containing the reviewed repair, inspect the unpublished
+`0.127.3` plan, only while its branch, tag and draft are absent:
+
+```powershell
+node .github/scripts/integration-bootstrap.mjs --version 0.127.3 --source feature/190-build-a-dedicated-php-gallery-website-on-github-pages
+```
+
+The source must be pushed and reduced to one authored commit over the actual
+remote develop. The tool checks the owner's identity, installed/effective main
+and develop protections, unchanged predecessor, fresh target and source scope.
+It accepts only `klusik/PHP_gallery`, defective main
+`7dcfadf153b1c941fd81edee43272f8accb475a1` and the independently observed integration
+workflow blob `749a48265f07a10de636ff07bfeacc6c1d9d1cb4`. Missing integration proof
+alone never enables recovery. Only repair workflow/helpers, their tests and
+permanent documentation may differ from develop; product and runtime changes,
+existing origin markers, rulesets and environment changes are rejected.
+
+After reviewing the plan, repeat the command with `--prepare`. It creates local
+unattached Git objects and prints `candidate_sha` and `push_command`. It does not
+switch/create/update a branch, alter the index/worktree, push, tag or publish.
+The origin O has the actual develop A as its sole parent. The repair C has O as
+its sole parent and preserves the exact source tree, adding only immutable origin,
+independently checked predecessor and recovery marker files. For `0.127.3` it
+**reuses the original O** `d4f9abd78bebb11a691793b6b1f9815188b21b0e` and both original
+metadata blobs byte for byte. Deleting the failed release branch did not retire
+that identity. The tool verifies its introduction, ancestry, current main and
+predecessor pins before reuse; any mismatch blocks rather than regenerating it.
+Only genuinely unused versions create a new O. No origin is edited or replaced.
+
+The maintainer executes the printed push command to create the new release branch.
+Its **empty expected ref lease** requires the branch still to be absent: despite
+Git's `--force-with-lease` option name it cannot overwrite any existing ref. If any
+pin changes, rerun the plan and preparation rather than editing the record.
+The push runs `Release qualification`; the selector verifies the complete O/C
+chain and exact source-tree overlay, then runs the existing full release bootstrap.
+It rebuilds notes and all four manuals, prepares generated state, executes the
+whole central release matrix including required Chromium/database/WinApp/package
+owners and the authoritative release audit, and retains schema-2 evidence with
+explicit `integration_recovery` provenance. There is **zero inherited integration
+coverage**. Existing native job labels are preserved for older schema-2 consumers.
+
+Wait for the complete workflow and bot-created release PR. Review/approve that PR
+once; normal server-enforced promotion performs the protected merge, immutable tag
+and unpublished draft. The owner uploads assets and publishes the draft normally.
+Develop synchronization remains conditional on its current ancestry and protection
+checks; report a blocked reconciliation separately. No integration action is needed
+before this exceptional release. Once the repair reaches main, later feature work
+returns to BASIC -> Integrate into develop -> FULL -> normal release-delta coverage.
+After successful installation this exact-main recovery is unavailable; its parser
+is retained only as immutable history and can be retired after all recovery evidence
+consumers are migrated. Production publication and live recovery are not authorized
+by implementing or testing this tooling.
+
+Prepared integration archives and release-delta archives use algorithm-qualified
+`sha256:<64 lowercase hexadecimal characters>` identities. The upload action's
+`artifact-digest` output is bare hexadecimal; each producer adds `sha256:` before
+passing it to the authenticated reader. The reader still requires exact equality
+with independent GitHub artifact metadata and verifies the complete ZIP bytes.
+Run `38218271690` exposed the missing producer prefix before FULL started; the
+workflow-to-publisher regression fixture covers both producers. Since integration
+runs code from `main`, a feature-only correction does not repair the installed
+dispatcher. It must first reach `main` through an authorized maintainer installation;
+rerunning the old main workflow cannot consume the feature's corrected YAML.
+
+### Recover an already-qualified develop head
+
+After the recovery implementation is reviewed and installed on `main`, the
+repository owner can use **Integrate into develop → Run workflow → main**, select
+the original feature branch and enable **recover_existing**. This is an exceptional
+qualification recovery, not the normal integration route. The feature head must
+equal the current protected develop head exactly and retain one parent. Its newest
+candidate workflow must be a successful maintenance FULL dispatch with all native
+matrix owners and exact-SHA qualification checks. If the newest evidence is missing,
+red or BASIC-only, obtain a fresh maintenance FULL on that same feature SHA first.
+
+Recovery selects the existing candidate and its actual historical parent, requires
+both the original actor and rerun actor to be the repository owner with maintain/admin
+permission, and repeats the main-owned FULL matrix on the exact candidate. Preparation
+is read-only `prepare_candidate.php --check`; no generated child is created. The
+publisher rechecks source/develop leases and writes only Actions check metadata and
+the retained artifact. It never writes a Git ref, merge, tag or release. Missing,
+duplicate, red, skipped or racing evidence blocks recovery.
+
+The artifact retains schema 1, the original eleven native owner names and all true
+source/parent/run identities. Additional `recovery_mode`, `observed_develop_sha` and
+`ref_write:false` fields explicitly distinguish recovery from a fast-forward.
+Existing schema-3 release consumers can authenticate it without rewriting their
+immutable origins or changing the selected SHA, provided the original main and
+predecessor pins still match. After the recovery run completes successfully, rerun
+the failed release qualification workflow. Human review,
+protected main promotion and manual GitHub Release publication remain unchanged.
+
+A feature-branch implementation or green fixture run does not install this authority.
+Dispatch recovery only after the reviewed workflow/helper has reached `main` through
+an authorized maintainer installation. Agents do not perform that protected write.
+
+**Bootstrap limit:** installing recovery advances main. A release origin frozen
+before that installation cannot be rebased onto the newer main: its original main
+and predecessor identities are immutable. This applies to the interrupted
+`v_0.127.3` origin if main advances before its recovery. The known-defect FULL
+bootstrap above avoids that advance: it installs the repair as the still-unpublished
+`0.127.3` release itself and retains the original origin, while all pins still
+match. If they stop matching, keep the old origin as historical evidence and use
+a genuinely new release origin. Do not reset protected refs, edit old pins, forge artifacts or
+claim that recovery retroactively authorizes an advanced-main release. Recovery is
+usable for later interrupted releases whose origins already selected main with
+this implementation installed.
+
 `release-qualification.yml` reacts to a normal push. `start-new-release.mjs`
 initializes the existing release ref after verifying maintainer permission,
 selected develop ancestry, current tagged main, previous Q/tree, version ordering

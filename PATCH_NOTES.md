@@ -1,5 +1,44 @@
 # Patch notes
 
+## Version 0.127.3
+
+Version 0.127.3 added a multilingual PHP Gallery project website and strengthened hosted integration and release recovery workflows. Website publishing remained maintainer-controlled, and the integration repair required full release qualification.
+
+### Highlights
+
+#### Multilingual project website [#190](https://github.com/klusik/PHP_gallery/issues/190)
+- Added English, Czech, German, and Swedish overview and documentation pages with responsive layouts, native language navigation, keyboard focus, and readable contrast.
+- Added release-pinned links for the README, patch notes, and manuals; the website build rejected invalid or unpublished release metadata.
+
+#### Integration and release recovery [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+- Added owner-only recovery for an already-qualified `develop` head, requiring matching source and retained successful maintenance FULL evidence without changing Git refs.
+- Added a narrowly scoped integration bootstrap that validated repair scope and ancestry and required full release qualification.
+
+### Technical Details
+
+#### Website and publishing
+- Added `website/build.mjs`, localized content, reviewed assets, and `website/README.md` covering preview, translations, release ownership, privacy review, artifact contents, and Pages activation.
+- Added `.github/workflows/project-website.yml` to build and publish a website-only artifact for reviewed `main` or release content; feature-branch events verified without deployment.
+- Registered an isolated website audit suite with required Chromium coverage.
+
+#### Integration and release workflows
+- Updated `.github/scripts/develop-integration.mjs` and added `.github/scripts/integration-bootstrap.mjs` for authenticated recovery and bootstrap checks.
+- Updated develop-integration, release-bootstrap, and release-qualification workflows, including artifact digest formatting for authenticated metadata checks.
+- Added immutable origin, predecessor, and recovery records for `v_0.127.3`.
+
+#### Tests and documentation
+- Added `tests/project_website_test.mjs` and expanded audit-runner, develop-integration, and hosted-release-policy regression coverage.
+- Updated `README.md`, `RELEASE.md`, `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, and `docs/RELEASE_LIFECYCLE.md`.
+
+### User Impact
+
+#### For visitors and administrators
+- Public CMS visitor and administrator behavior did not change. The project website content and publishing workflow were added, but public Pages activation remained maintainer-controlled.
+
+#### For maintainers
+- Website builds and publishing gained isolated checks for localized routes, responsive layouts, accessibility, release metadata, and website-only artifact contents.
+- Integration recovery gained constrained authorization and qualification checks; recovery did not write Git refs or create a generated candidate.
+
 ## Version 0.127.2
 
 Version 0.127.2 updated CI qualification and release workflows, added structured audit evidence, and corrected issue references in all four maintained manuals.

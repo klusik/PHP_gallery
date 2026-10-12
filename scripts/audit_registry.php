@@ -237,6 +237,10 @@ $registry = [
     ],
 
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
+    // Website publication qualifies its own artifact without duplicating CMS regressions.
+    'website_tests' => [
+        'project_website_test.mjs' => ['browser' => true, 'timeout' => 180],
+    ],
     'node_tests' => [
         'develop_integration_test.mjs' => [],
         'release_delta_test.mjs' => [],
