@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.127.4}
+\newcommand{\version}{0.127.5}
 \newcommand{\manualdate}{12.~října~2026}
 
 \hypersetup{
@@ -2548,14 +2548,19 @@ musí mít rodiče [P,Q] v~tomto pořadí a~úplný strom Gitu shodný s~Q. Stej
 vytvoří neměnný tag na M. Opakování po merge ověří úplný detail PR a~vytvoří
 jen chybějící tag; konfliktní tag způsobí chybu.
 
-Po ověření sloučení a~tagu pracovní postup připraví jeden nezveřejněný koncept
-GitHub Release s~již vytvořenými poznámkami přesného Q. Existující koncepty
-ani zveřejněná vydání nemění. Chyba přípravy zachová tag a~ohlásí
-\codeword{TAGGED / DRAFT\_PENDING}. Otevřete koncept, podle potřeby
-přiložte \codeword{manual-release-assets} (produkční ZIP, čtyři PDF,
-poznámky, archiv kvalifikace a~SHA-256 součty) a~ručně zvolte
-\ui{Publish release}. Přílohy se automaticky nenahrávají. Instalátor pro Windows se sestavuje pouze při změně dodávaného obsahu WinApp;
-jeho samostatná verze se zachovává.
+Po ověření sloučení a~tagu automatika naplní nezveřejněný GitHub Release
+původními poznámkami přesného Q, produkčním ZIPem, metadaty, všemi čtyřmi
+manuály, archivem kvalifikace, kontrolními součty a~oběma doklady dokončení.
+Počkejte na~\codeword{DRAFT\_READY}, zkontrolujte kompletní koncept a~ručně
+zvolte \ui{Publish release}. Není nutné stahovat artefakty ani ručně přikládat
+soubory. Shodné existující přílohy zůstávají; konflikty skončí chybou bez
+přepsání. Zveřejněná vydání se nemění. Chyba ohlásí
+\codeword{TAGGED / DRAFT\_PENDING}; opakování doplní chybějící soubory,
+aniž by vracelo zpět ověřené sloučení nebo tag.
+Instalátor WinAppu a~metadata aktualizací pocházejí z~přesného kvalifikačního
+pokusu, případně z~připnutého předchozího zveřejněného vydání po~ověření
+nezměněných dodávaných zdrojů, samostatné verze a~integrity.
+Nezměněný instalátor se znovu nesestavuje.
 
 Develop se posouvá pouze skutečným non-force fast-forwardem na kvalifikované Q
 s~aktivní ochranou lineární historie a~CI. Paralelní vývoj zastaví samostatnou

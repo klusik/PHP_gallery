@@ -25,7 +25,7 @@ Strict MVC is part of release qualification. The release audit invokes `scripts/
 ## GitHub-hosted release qualification
 
 Use the [maintainer feature-to-release checklist](docs/MAINTAINER_RELEASE_CHECKLIST.md)
-for exact Actions names, selected refs/inputs, PR approval, manual asset attachment,
+for exact Actions names, selected refs/inputs, PR approval, automatic verified draft filling,
 Pages activation and separately approved retirement. Permanent `release-evidence.json`
 is required for publication history/cleanup. Normal automatic develop FF is
 validated directly from qualified Q and owner approval without the removed
@@ -115,14 +115,14 @@ The final gate checks that the release branch still points to the qualified cand
    automatically created release PR to `main` once.
 3. Automation performs the protected standard merge, immutable tag and safe
    develop fast-forward, then creates one unpublished GitHub Release draft with
-   the exact qualified notes. Open the draft, optionally attach the workflow's
-   `manual-release-assets`, completion `release-evidence.json`/SHA-256 and any
-   required `manual-winapp-installer`, then manually click **Publish release**.
-   No assets are uploaded or published automatically.
+   the exact qualified notes and all verified original publication assets.
+   Wait for **DRAFT_READY**, review the completed draft and outstanding manual
+   checks, then click **Publish release**. Automation uploads assets; publication
+   remains manual. No artifact download, extraction or manual attachment is needed.
 
 No normal step requests SHA/run IDs, a workflow dispatch or deployment approval.
 A changed head needs fresh qualification. Missing/red mandatory checks or unreadable effective
-policy are BLOCKED. Existing drafts and published releases are never modified;
+policy are BLOCKED. Existing draft descriptions and conflicting assets are preserved; published releases are never modified;
 completed merge/tag stays valid if draft staging fails (TAGGED / DRAFT_PENDING).
 Omitted bypass membership is explicitly recorded and remains
 server enforced; it is never replaced with a fabricated empty list. GitHub Release publication is never automatic.

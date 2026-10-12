@@ -850,3 +850,16 @@ feature fixtures and maintenance FULL do not prove production recovery acceptanc
 After a new main installation the exact-authority guard makes this path unusable.
 Retire executable preparation only after no pending recovery origin uses it;
 retain or migrate immutable marker/qualification readers before removing parsing.
+
+## Unchanged WinApp release attachments
+
+Owner: `.github/scripts/release-draft-assets.mjs`. CMS-only releases retain the
+original installer/update-metadata pair from the pinned published predecessor
+when shipped WinApp inputs and the independent version are unchanged. Provider
+SHA-256, byte size, metadata installer hash and the already authenticated
+predecessor receipt/tag protect this download/update compatibility. Missing proof
+fails closed. Usage is unknown until a future approved production release.
+`tests/support/release_draft_assets_scenarios.mjs` covers fresh artifacts, reuse, changed-source
+refusal, version mismatch and corruption. Permanent support is required while
+clients discover the companion through each release's assets; retirement requires
+migration of that discovery contract and supported-client acceptance evidence.

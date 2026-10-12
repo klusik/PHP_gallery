@@ -1,5 +1,36 @@
 # Patch notes
 
+## Version 0.127.5
+
+Release completion automatically filled unpublished GitHub Release drafts with verified qualification assets and completion receipts while preserving human review and publication. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Highlights
+
+#### Verified release drafts
+- Added automatic draft uploads for original qualification assets and completion receipts tied to the exact successful workflow run and attempt.
+- Preserved existing identical assets, refused conflicting assets without replacing them, and supported retrying interrupted uploads.
+- Kept draft review and publication manual; published releases remained unchanged.
+
+### Technical Details
+
+#### Release automation
+- Added `.github/scripts/release-draft-assets.mjs` to download, verify, and upload required release assets, including production packages, integrity metadata, release notes, manual PDFs, qualification evidence, and completion receipts.
+- Updated `.github/scripts/release-assets.mjs`, `.github/scripts/release-completion.mjs`, and `.github/workflows/release-promotion.yml` to integrate draft asset verification and completion.
+- Reused the pinned published predecessor’s Windows installer and update metadata when WinApp inputs and version were unchanged, after integrity checks; unchanged installers were not rebuilt.
+- Added immutable origin and predecessor records for `v_0.127.5`.
+
+#### Tests and documentation
+- Expanded `tests/release_draft_test.mjs` and added `tests/support/release_draft_assets_scenarios.mjs` to cover asset provenance and integrity, installer reuse, interruption and retry, conflicts, concurrent uploads, and published-release safety.
+- Updated release lifecycle guidance, the maintainer checklist, compatibility documentation, `AGENTS.md`, `RELEASE.md`, and all four maintained manual editions.
+
+### User Impact
+
+#### For visitors and administrators
+- Public visitor and administrator behavior did not change.
+
+#### For maintainers
+- Unpublished GitHub Release drafts were automatically populated with verified assets and could resume filling missing assets after an interruption. Maintainers retained control of draft review and publication.
+
 ## Version 0.127.4
 
 Version 0.127.4 strengthened maintainer workflows for project website publishing, release reconciliation, and release-branch retirement. Website deployment was routed through a reviewed build on `main`, and automatic release completion gained stricter evidence checks. [#190](https://github.com/klusik/PHP_gallery/issues/190) [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)

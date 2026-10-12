@@ -23,6 +23,7 @@ import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,qualifica
 import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs';
 import {verifyPreparedAssets} from './release-asset-integrity.mjs';
 import {loadReleaseCoverage} from './coverage-artifacts.mjs';
+import {loadDraftAssets,fillDraftAssets} from './release-draft-assets.mjs';
 
 /** Exact qualification, provenance, lifecycle and installer-impact fields owned by the gate.
  * @typedef {import('./release-promotion.mjs').ReleaseRecord} CompletionRecord
@@ -434,6 +435,13 @@ export async function main() {
         result.draft_status=draft.status;
         result.draft_url=draft.url;
         result.draft_release_id=draft.release_id;
+        if (draft.status!=='ALREADY_PUBLISHED') {
+            const files=loadDraftAssets(record);
+            const proof=Buffer.from(JSON.stringify(result.evidence,null,2)+'\n');
+            files.set('release-evidence.json',proof);
+            files.set('release-evidence.sha256',Buffer.from(createHash('sha256').update(proof).digest('hex')+'  release-evidence.json\n'));
+            result.draft_status=fillDraftAssets(record,result,draft.release_id,files).status;
+        }
     } catch (error) {
         draftError=error;
         result.draft_status='DRAFT_PENDING';

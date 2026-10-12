@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.127.4}
+\newcommand{\version}{0.127.5}
 \newcommand{\manualdate}{12~oktober~2026}
 
 \hypersetup{
@@ -2549,15 +2549,19 @@ ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
 Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
 hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
 
-Efter verifierad merge och tagg förbereder arbetsflödet ett opublicerat
-GitHub Release-utkast med de befintliga anteckningarna från exakt Q.
-Befintliga utkast och publicerade utgåvor ändras inte. Vid fel bevaras
-taggen och statusen blir \codeword{TAGGED / DRAFT\_PENDING}.
-Öppna utkastet, bifoga vid behov \codeword{manual-release-assets}
-(produktions-ZIP, fyra PDF-filer, anteckningar, kvalificeringsarkiv och
-SHA-256-kontrollsummor), och välj \ui{Publish release} manuellt.
-Inga filer laddas upp automatiskt. Installationsprogrammet för Windows byggs endast när
-levererat WinApp-innehåll ändras; dess separata version bevaras.
+Efter verifierad merge och tagg fyller automatiken den opublicerade
+GitHub-utgåvan med de ursprungliga anteckningarna från exakt Q, produktions-ZIP,
+metadata, alla fyra handböcker, kvalificeringsarkiv, kontrollsummor och båda
+slutbevisen. Vänta på \codeword{DRAFT\_READY}, granska det kompletta utkastet
+och välj \ui{Publish release} manuellt. Du behöver inte hämta artefakter
+eller bifoga filer manuellt. Identiska befintliga bilagor bevaras; konflikter
+orsakar ett fel utan överskrivning. Publicerade utgåvor förblir oförändrade.
+Vid fel visas \codeword{TAGGED / DRAFT\_PENDING}; en ny körning kompletterar
+saknade filer utan att återställa verifierad merge eller tagg.
+WinApp-installationsprogrammet och uppdateringsmetadata kommer från det exakta
+kvalificeringsförsöket eller från den fastställda föregående publicerade utgåvan
+efter verifiering av oförändrade levererade källor, den oberoende versionen
+och integriteten. Ett oförändrat installationsprogram byggs inte på nytt.
 
 Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
 med aktivt skydd för linjär historik och CI. Parallell utveckling stoppar den

@@ -70,5 +70,7 @@ for (const name of readdirSync(assets).sort()) hashes[name] = createHash('sha256
 writeFileSync(resolve(assets,'SHA256SUMS'),Object.entries(hashes).map(([name,digest]) => `${digest}  ${name}`).join('\n') + '\n');
 hashes.SHA256SUMS = createHash('sha256').update(readFileSync(resolve(assets,'SHA256SUMS'))).digest('hex');
 writeFileSync(resolve(assets,'final-integrity.json'),JSON.stringify({candidate_sha:process.env.CANDIDATE_SHA,
-    source_base:process.env.SOURCE_BASE,result:'PASS',hashes},null,2) + '\n');
+    source_base:process.env.SOURCE_BASE,repository:process.env.GITHUB_REPOSITORY,
+    version:process.env.RELEASE_VERSION,run_id:process.env.GITHUB_RUN_ID,
+    run_attempt:process.env.GITHUB_RUN_ATTEMPT,result:'PASS',hashes},null,2) + '\n');
 verifyPreparedAssets(assets,process.env.CANDIDATE_SHA,process.env.SOURCE_BASE);

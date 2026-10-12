@@ -138,9 +138,10 @@ not rerun the functional integration owners on B.
 The resulting bot PR requires one human owner approval; qualification-dispatched automation
 uses a standard protected merge M with parents [P,Q] and tree(Q), then creates an
 immutable tag on M, then idempotently stages one unpublished GitHub Release draft
-with existing exact-Q release notes. The maintainer alone uploads any assets and
-clicks Publish release. Existing drafts, published releases, tags and manually
-edited descriptions are immutable to the automation; draft failure never rolls
+with existing exact-Q release notes and automatically verified original assets.
+The maintainer reviews the complete draft and clicks Publish release. Automation
+only adds missing verified assets to unpublished drafts; existing descriptions,
+published releases, tags and conflicting assets remain immutable; draft failure never rolls
 back the verified M/tag. No deployment approval, manual dispatch input, extra
 main commit, red override or privileged bypass is allowed.
 Machine-populated completion dispatch selects qualified Q before its workflow reaches
