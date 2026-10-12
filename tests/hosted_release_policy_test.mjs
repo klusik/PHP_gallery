@@ -15,7 +15,46 @@ import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {validateRequest,verifyQualification,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
 import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,integrationCheckBinding} from '../.github/scripts/release-owner-authorization.mjs';
+import {dispatchPublishedWebsite} from '../.github/scripts/project-website-dispatch.mjs';
+import {verifyAutomaticCompletion} from '../.github/scripts/release-reconciliation.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+{
+    const publication={repository:'owner/gallery',tag:'v_1.2.3'};
+    const context={repository:publication.repository,eventName:'release',ref:'refs/tags/v_1.2.3'};
+    const writes=[];
+    const published={id:10,tag_name:publication.tag,draft:false,prerelease:false};
+    const provider=(path,method='GET',payload=null)=>{
+        if (method!=='GET') {writes.push({path,method,payload});return null;}
+        if (path.endsWith('/releases/latest')) return published;
+        if (path.endsWith('/pages')) return {build_type:'workflow'};
+        if (path.endsWith('/git/ref/heads/main')) return {ref:'refs/heads/main',object:{type:'commit',sha:'a'.repeat(40)}};
+        if (path.includes('/contents/.github/workflows/project-website.yml?ref=')) return {
+            type:'file',path:'.github/workflows/project-website.yml',sha:'b'.repeat(40)};
+        throw new Error('Unexpected website handoff endpoint '+path);
+    };
+    assert.equal(dispatchPublishedWebsite(publication,context,provider).state,'DISPATCHED');
+    assert.deepEqual(writes,[{path:'repos/owner/gallery/actions/workflows/project-website.yml/dispatches',method:'POST',payload:{ref:'main'}}]);
+    writes.length=0;
+    for (const invalid of [{ref:'refs/heads/main'},{eventName:'workflow_dispatch'},{repository:'fork/gallery'}]) {
+        assert.throws(()=>dispatchPublishedWebsite(publication,{...context,...invalid},provider),/BLOCKED/);
+    }
+    assert.equal(dispatchPublishedWebsite(publication,context,path=>path.endsWith('/releases/latest')
+        ? {...published,tag_name:'v_1.2.4'} : provider(path)).state,'SUPERSEDED');
+    assert.throws(()=>dispatchPublishedWebsite(publication,context,path=>path.endsWith('/pages')
+        ? {build_type:'legacy'} : provider(path)),/Source to GitHub Actions/);
+    for (const patch of [{draft:true},{prerelease:true},{id:0}]) {
+        assert.throws(()=>dispatchPublishedWebsite(publication,context,path=>path.endsWith('/releases/latest')
+            ? {...published,...patch} : provider(path)),/BLOCKED/);
+    }
+    assert.equal(writes.length,0,'invalid, legacy-configured and superseded publications cannot dispatch or deploy');
+    const yaml=read('.github/workflows/project-website.yml');
+    assert.match(yaml,/name: Deploy reviewed website to Pages[\s\S]*if: \$\{\{ github\.ref == 'refs\/heads\/main' \}\}/);
+    assert.match(yaml,/name: Build and verify website\s+if: \$\{\{ github\.event_name != 'release' \}\}/);
+    const handoff=yaml.slice(yaml.indexOf('  refresh-main:'),yaml.indexOf('  build:'));
+    assert.match(handoff,/actions: write/);
+    assert.doesNotMatch(handoff,/pages: write|id-token: write|deploy-pages/);
+    assert.ok(handoff.includes('project-website-dispatch.mjs'));
+}
 const candidate = 'a'.repeat(40);
 const request = {runId:'123',candidate,branch:'release/v_1.2.3',mode:'plan',override:false,reason:'',acceptedFailures:[],manualReview:''};
 const run = {path:'.github/workflows/release-qualification.yml',event:'push',head_branch:request.branch,status:'completed',conclusion:'success',run_attempt:1};
@@ -384,4 +423,28 @@ assert.doesNotMatch(completion,/environment:|gh release create|gh release edit|m
 assert.match(qualification,/manual-release-assets/);
 assert.match(read('.github/scripts/release-completion.mjs'),/merge_method:'merge'/);
 assert.doesNotMatch(read('.github/scripts/release-completion.mjs'),/release','create|release','edit|force-with-lease/);
+{
+    const approved={id:44,reviewer:'owner',commit_sha:candidate,submitted_at:'2026-10-02T00:00:00Z',url:null};
+    const receipt={...schema3Record,final_main_sha:'9'.repeat(40),promotion_pr:{number:99,reviewed_sha:candidate,
+        merge_commit_sha:'9'.repeat(40),merged_at:'2026-10-03T00:00:00Z',approval:approved}};
+    const provider=path=>{
+        if (path.endsWith('/actions/runs/123')) return {...run,id:123};
+        if (path.endsWith('/commits/'+candidate+'/check-runs?per_page=100&filter=all')) return {total_count:2,
+            check_runs:['Release qualification','Complete required CI matrix'].map((name,index)=>({id:index+10,
+                name,app:{id:15368},head_sha:candidate,status:'completed',conclusion:'success',
+                external_id:'release:123:1:'+candidate}))};
+        if (path.endsWith('/pulls/99/reviews?per_page=100')) return [{id:approved.id,user:{login:'owner'},
+            state:'APPROVED',commit_id:candidate,submitted_at:approved.submitted_at}];
+        if (path.endsWith('/pulls/99')) return {number:99,user:{login:'github-actions[bot]'},state:'closed',merged:true,
+            head:{sha:candidate,ref:request.branch,repo:{full_name:ownerRepo}},base:{ref:'main',repo:{full_name:ownerRepo}},
+            merge_commit_sha:receipt.final_main_sha,merged_at:receipt.promotion_pr.merged_at,created_at:'2026-10-01T00:00:00Z',
+            merged_by:{login:'github-actions[bot]'}};
+        if (path.includes('/rulesets') || path.endsWith('/rules/branches/main')) return ownerCall(path);
+        return schema3Call(path);
+    };
+    const adapters={...schema3Adapters,qualificationRecord:schema3Record,jobs:basicJobs};
+    assert.equal(verifyAutomaticCompletion(receipt,ownerRepo,provider,adapters),'https://github.com/owner/gallery/actions/runs/123');
+    assert.throws(()=>verifyAutomaticCompletion(receipt,ownerRepo,provider,{...adapters,
+        deltaEvidence:{...adapters.deltaEvidence,payload:{...deltaPayload,profile:'full'}}}),/BLOCKED/);
+}
 process.stdout.write('PASS exact qualification identities, complete coverage, no overrides, active policy and manual publication contracts\n');

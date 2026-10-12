@@ -13,6 +13,7 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/project-website.yml'
+      - '.github/scripts/project-website-dispatch.mjs'
       - 'tests/project_website_test.mjs'
       - 'tests/support/headless_browser_fixture.mjs'
       - 'scripts/audit.php'
@@ -28,8 +29,30 @@ concurrency:
   group: project-website-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  refresh-main:
+    name: Refresh published website through reviewed main
+    if: ${{ github.event_name == 'release' && !github.event.release.draft && !github.event.release.prerelease }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Validate stable publication and dispatch a fresh main-owned build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/project-website-dispatch.mjs
   build:
     name: Build and verify website
+    if: ${{ github.event_name != 'release' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -37,8 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          # Publication events otherwise select the release tag, not the website owner.
-          ref: ${{ github.event_name == 'release' && 'main' || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - id: identity
@@ -108,7 +130,7 @@ jobs:
   deploy:
     name: Deploy reviewed website to Pages
     needs: build
-    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:

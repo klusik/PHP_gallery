@@ -1,5 +1,33 @@
 # Compatibility lifecycle and retirement register
 
+## Publication refresh and normal automatic release retirement
+
+Pages handoff protects the main-only `github-pages` environment. A main checkout
+cannot change a release run's tag ref (observed run 38225431172).
+`project-website-dispatch.mjs` validates latest stable publication and Actions-based
+Pages, then dispatches the same workflow only on main. The handoff has no Pages
+write or OIDC token. Legacy Pages setup requires explicit owner configuration.
+`hosted_release_policy_test.mjs` covers wrong contexts, superseded/draft releases,
+legacy configuration and the exact allowed dispatch.
+Website evidence uses the existing owned DevTools browser session after fonts,
+images and layout assertions, replacing the CLI screenshot startup that timed
+out in run 38230411649. PNG format, viewport width and all six evidence files are
+required; native route, keyboard, contrast and overflow checks remain enforced.
+
+The reconciliation owner recognizes automatic completion when protected linear
+develop retains qualified Q. It checks durable published bytes, original native
+qualification (schema-3 integration/delta transports included), immutable tag
+object/tree/parents and live effective owner approval of the exact bot PR. This
+removes dependence on the retired reconciliation workflow for automatic FF;
+legacy equivalent-replay receipts keep their path. Missing permanent evidence
+stays BLOCKED with instructions to attach the original completion artifact.
+Cleanup never generates/uploads a replacement receipt. Tests in
+`release_retirement_test.mjs` cover isolated real merge/tag/FF, red qualification,
+absent/altered approval, forged receipt fields and missing evidence/Q ancestry.
+Expired native qualification artifacts remain a blocker. Live deployment/retirement
+acceptance is unknown until maintainer execution. Keep legacy parsing until all
+published receipt consumers are migrated.
+
 Reviewed 2026-10-06 for Issue #73. This is an evidence-backed inventory, not a
 guarantee that every path is exercised in production. Approximate eras mean
 “visible in current code/evidence by this time”; they do not claim the first

@@ -94,27 +94,12 @@ const server = createServer((request,response) => {
 });
 await new Promise(done => server.listen(0,'127.0.0.1',done));
 try {
-    if (process.env.PHP_GALLERY_WEBSITE_SCREENSHOTS) {
-        const screenshots = resolve(root,process.env.PHP_GALLERY_WEBSITE_SCREENSHOTS);
+    const screenshots = process.env.PHP_GALLERY_WEBSITE_SCREENSHOTS
+        ? resolve(root,process.env.PHP_GALLERY_WEBSITE_SCREENSHOTS) : null;
+    const screenshotFiles = [];
+    if (screenshots) {
         assert.ok(screenshots.startsWith(resolve(root,'cache') + sep),'Screenshot evidence must stay in ignored cache.');
         await mkdir(screenshots,{recursive:true});
-        for (const width of [1280,390,320]) {
-            for (const page of width === 320 ? ['de/','de/docs/'] : ['','docs/']) {
-                const profile = await mkdtemp(resolve(root,'cache/website-screenshot-'));
-                const name = page.startsWith('de/') ? (page.endsWith('docs/') ? 'de-docs' : 'de-home') : (page ? 'docs' : 'home');
-                try {
-                    await execute(executable,['--headless','--disable-gpu','--no-first-run',
-                        '--disable-background-networking','--hide-scrollbars','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
-                        '--user-data-dir='+profile,`--window-size=${width},${width === 1280 ? 2200 : 3600}`,
-                        '--screenshot='+resolve(screenshots,`${name}-${width}.png`),
-                        `http://127.0.0.1:${server.address().port}/PHP_gallery/${page}`],{timeout:15000,windowsHide:true});
-                } finally {
-                    if (dirname(profile) === resolve(root,'cache') && profile.startsWith(resolve(root,'cache/website-screenshot-'))) {
-                        await rm(profile,{recursive:true,force:true});
-                    }
-                }
-            }
-        }
     }
     for (const width of [1280,390,320]) {
         for (const page of pages) {
@@ -122,7 +107,7 @@ try {
             const url = `http://127.0.0.1:${server.address().port}/PHP_gallery/${page.replace('index.html','')}`;
             const result = await runHeadlessBrowserFixture(executable,url,'website-fixture-',{
                 viewport:{width,height:900}, readResult:async () => marker,
-                interact:async ({evaluate,key}) => {
+                interact:async ({evaluate,key,captureScreenshot}) => {
                     // The shared fixture admits interactive documents before stylesheet/image
                     // completion. Measure only the fully loaded website, not its initial paint.
                     await evaluate(`document.readyState === 'complete' ? document.fonts.ready : new Promise(resolve => addEventListener('load', () => document.fonts.ready.then(resolve), {once:true}))`);
@@ -148,6 +133,20 @@ try {
                         });
                     })()`);
                     assert.equal(readable,true,'Primary copy, captions and buttons must meet 4.5:1 contrast.');
+                    const screenshotPages = width === 320 ? ['de/index.html','de/docs/index.html'] : ['index.html','docs/index.html'];
+                    if (screenshots && screenshotPages.includes(page)) {
+                        // Use the loaded, asserted document instead of the CLI startup that
+                        // stalled in hosted run 38230411649. Capture before keyboard disclosure.
+                        const png = Buffer.from(await captureScreenshot(),'base64');
+                        assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a','Screenshot evidence must be PNG.');
+                        assert.equal(png.readUInt32BE(16),width,'PNG width must match the tested CSS viewport.');
+                        assert.ok(png.readUInt32BE(20)>=900,'Screenshot must cover the full document, including the viewport.');
+                        const name = page.startsWith('de/') ? (page.includes('docs/') ? 'de-docs' : 'de-home')
+                            : (page.includes('docs/') ? 'docs' : 'home');
+                        const filename = `${name}-${width}.png`;
+                        await writeFile(resolve(screenshots,filename),png);
+                        screenshotFiles.push(filename);
+                    }
                     await key('keyDown','Tab'); await key('keyUp','Tab');
                     assert.equal(await evaluate(`document.activeElement.className`),'skip');
                     assert.equal(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'solid');
@@ -163,6 +162,9 @@ try {
             assert.equal(result.result,marker);
         }
     }
+    if (screenshots) assert.deepEqual(screenshotFiles.sort(),[
+        'home-1280.png','docs-1280.png','home-390.png','docs-390.png','de-home-320.png','de-docs-320.png',
+    ].sort(),'Every requested desktop/mobile screenshot must be retained.');
     console.log('PASS website-only artifact; release-bound README, patch notes and four PDFs; eight project routes; desktop/390px/320px layouts; native keyboard language disclosure and focus.');
 } finally {
     await new Promise(done => server.close(done));

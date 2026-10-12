@@ -7,6 +7,7 @@
  *   - Confine headless browser access to loopback fixtures and disposable profiles.
  *   - Expose native mouse button and modifier input through the shared fixture API.
  *   - Apply deterministic CSS viewport orientation and visual viewport scale changes.
+ *   - Capture the loaded owned page as a full-document PNG without a second browser startup.
  * File: tests/support/headless_browser_fixture.mjs
  * Author: Rudolf Klusal
  */
@@ -61,7 +62,7 @@ const protocolFailureContextLength = 120;
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
- * @param {{readResult?:function():Promise<string>,timeoutExpression?:string,timeoutMs?:number,viewport?:{width:number,height:number},safeAreaInsets?:{top:number,right:number,bottom:number,left:number},touchEmulation?:boolean,interact?:function({evaluate:function(string):Promise<BrowserJsonValue|undefined>,mouse:function('mouseMoved'|'mousePressed'|'mouseReleased',number,number,number,number=,BrowserMouseInputOptions=):Promise<void>,wheel:function(number,number,number,number):Promise<void>,key:function('keyDown'|'keyUp',string):Promise<void>,touch?:function('touchStart'|'touchMove'|'touchEnd'|'touchCancel',number,number,number,number=):Promise<void>,setViewport:function(BrowserViewport):Promise<void>,setVisualViewportScale:function(number):Promise<void>}):Promise<void>}} options Optional owned result reader, bounded timeout-diagnostic expression, workflow deadline, explicit CSS-pixel viewport, CSS safe-area override, optional touch emulation, and native input interaction. When supplied, safeAreaInsets must give integer CSS-pixel values from 0 through 3840 for every side; the experimental override is applied before navigation and unsupported Chromium builds fail clearly. touchEmulation enables one emulated contact before navigation. Interaction callbacks start after the owned loopback document reaches its interactive state. The evaluator returns a JSON-compatible protocol value or undefined when DevTools omits one. Mouse, wheel and touch helpers dispatch native DevTools input using viewport CSS pixels. The mouse helper accepts optional inputOptions: button defaults to left for press/release and is ignored for movement; modifiers are an optional non-negative DevTools keyboard-modifier bit mask. setViewport updates the emulated CSS viewport and optional screen orientation without claiming a physical device; setVisualViewportScale emulates page scale for the visual viewport, not browser UI zoom.
+ * @param {{readResult?:function():Promise<string>,timeoutExpression?:string,timeoutMs?:number,viewport?:{width:number,height:number},safeAreaInsets?:{top:number,right:number,bottom:number,left:number},touchEmulation?:boolean,interact?:function({evaluate:function(string):Promise<BrowserJsonValue|undefined>,captureScreenshot:function():Promise<string>,mouse:function('mouseMoved'|'mousePressed'|'mouseReleased',number,number,number,number=,BrowserMouseInputOptions=):Promise<void>,wheel:function(number,number,number,number):Promise<void>,key:function('keyDown'|'keyUp',string):Promise<void>,touch?:function('touchStart'|'touchMove'|'touchEnd'|'touchCancel',number,number,number,number=):Promise<void>,setViewport:function(BrowserViewport):Promise<void>,setVisualViewportScale:function(number):Promise<void>}):Promise<void>}} options Optional owned result reader, bounded timeout-diagnostic expression, workflow deadline, explicit CSS-pixel viewport, CSS safe-area override, optional touch emulation, and native input interaction. When supplied, safeAreaInsets must give integer CSS-pixel values from 0 through 3840 for every side; the experimental override is applied before navigation and unsupported Chromium builds fail clearly. touchEmulation enables one emulated contact before navigation. Interaction callbacks start after the owned loopback document reaches its interactive state. The evaluator returns a JSON-compatible protocol value or undefined when DevTools omits one. captureScreenshot returns base64 PNG bytes for the current full document at its existing CSS viewport, without navigating or starting another browser. Mouse, wheel and touch helpers dispatch native DevTools input using viewport CSS pixels. The mouse helper accepts optional inputOptions: button defaults to left for press/release and is ignored for movement; modifiers are an optional non-negative DevTools keyboard-modifier bit mask. setViewport updates the emulated CSS viewport and optional screen orientation without claiming a physical device; setVisualViewportScale emulates page scale for the visual viewport, not browser UI zoom.
  * @param {string} [options.timeoutExpression] Bounded page expression evaluated once after the result deadline to return optional diagnostics capped at 500 characters.
  * @return {Promise<{result:string, exitCode:number|null, timeoutDetail:string}>} Fixture marker, owned process exit code and optional bounded timeout diagnostic.
  */
@@ -224,6 +225,33 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
             }
 
             /**
+             * Capture the owned full document at its current CSS viewport through the existing DevTools session.
+             * @returns {Promise<string>} Base64 PNG image bytes; missing CSS layout metrics or image data rejects instead of returning incomplete evidence.
+             */
+            async function captureScreenshot() {
+                const metrics = await command('Page.getLayoutMetrics', {}, sessionId);
+                const bounds = metrics.cssContentSize;
+                const viewport = await evaluate('({width:innerWidth,height:innerHeight})');
+                if (!bounds || !['x', 'y', 'width', 'height'].every(key => Number.isFinite(bounds[key]))
+                    || bounds.width <= 0 || bounds.height <= 0 || !viewport
+                    || !Number.isFinite(viewport.width) || viewport.width <= 0
+                    || !Number.isFinite(viewport.height) || viewport.height <= 0) {
+                    throw new Error('Owned Chromium screenshot requires valid CSS content bounds');
+                }
+                // Scrollable content excludes a classic scrollbar. Include the existing
+                // window dimensions so screenshot width still matches the tested viewport.
+                const captured = await command('Page.captureScreenshot', {
+                    format: 'png', fromSurface: true, captureBeyondViewport: true,
+                    clip: {x: bounds.x, y: bounds.y, width: Math.ceil(Math.max(bounds.width, viewport.width)),
+                        height: Math.ceil(Math.max(bounds.height, viewport.height)), scale: 1},
+                }, sessionId);
+                if (typeof captured.data !== 'string' || captured.data.length === 0) {
+                    throw new Error('Owned Chromium returned no PNG screenshot evidence');
+                }
+                return captured.data;
+            }
+
+            /**
              * Dispatch one native mouse input event in viewport CSS pixels, using the left button by default for press/release and an optional click count.
              * @param {'mouseMoved'|'mousePressed'|'mouseReleased'} type DevTools mouse event phase.
              * @param {number} x Horizontal viewport coordinate in CSS pixels.
@@ -346,7 +374,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 return command('Emulation.setPageScaleFactor', {pageScaleFactor: scale}, sessionId).then(() => {});
             }
 
-            await options.interact({evaluate, mouse, wheel, key, setViewport, setVisualViewportScale,
+            await options.interact({evaluate, captureScreenshot, mouse, wheel, key, setViewport, setVisualViewportScale,
                 ...(options.touchEmulation ? {touch} : {})});
         }
         // Bound fixture completion independently from browser startup and protocol request deadlines.
