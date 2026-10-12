@@ -7241,5 +7241,9 @@
     "pdf.unresolved": "En tidigare PDF-konvertering är inte löst. Återställ det ursprungliga dokumentet, DPI och målet och försök igen innan du börjar med ett annat arbete.",
     "pdf.upload.attachment_unknown": "Svaret för PDF-bilagan är inte bekräftat. Granska galleriets dokument innan du börjar en ny uppladdning.",
     "pdf.upload.helper_unavailable": "PDF-uppladdningen är inte tillgänglig. Ingen PDF bifogades.",
-    "pdf.upload.progress": "PDF-konvertering: {phase}, sida {page} av {pages}."
+    "pdf.upload.progress": "PDF-konvertering: {phase}, sida {page} av {pages}.",
+    "pdf.upload.attach_help": "PDF bifogas som originaldokument. Gallerier och sidbilder skapas bara om du aktiverar konvertering under Avancerat.",
+    "pdf.upload.advanced": "Avancerat",
+    "pdf.upload.convert_pages": "Konvertera även PDF-sidor till PNG",
+    "pdf.upload.retry_choice": "Behåll det ursprungliga PDF-urvalet och konverteringsvalet när du försöker ladda upp igen."
 }

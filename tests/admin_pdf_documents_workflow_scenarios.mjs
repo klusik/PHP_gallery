@@ -3,7 +3,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/admin_pdf_documents_workflow_scenarios.mjs
  * Module Type: Regression Test
- * Purpose: Verify delegated PDF conversion admission, lifecycle requests and cancellation.
+ * Purpose: Verify attachment-only uploads, delegated conversion admission, lifecycle requests and cancellation.
  * Responsibilities: Exercise the Admin workflow with deterministic DOM, lifecycle and stream adapters.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -17,7 +17,7 @@ import vm from 'node:vm';
  * Describe one recorded request sent by the PDF workflow.
  * @typedef {Object} PdfWorkflowRequest
  * @property {string} url Form action URL passed to fetch.
- * @property {Map<string, string>} body Request fields, including fresh CSRF and lifecycle action.
+ * @property {Map<string, string|{name: string, type: string}>} body Request fields, including the original file adapter, fresh CSRF and lifecycle action.
  * @property {AbortSignal|null|undefined} signal Optional cancellation signal sent with the request.
  */
 
@@ -26,6 +26,7 @@ import vm from 'node:vm';
  * @typedef {Object} PdfWorkflowHarness
  * @property {PdfWorkflowSubmitHandler} submit Dispatch the delegated submit listener for a dynamically supplied form and return its status text.
  * @property {PdfWorkflowCancelHandler} cancel Dispatch the delegated cancel click for a form.
+ * @property {(operation: {running: boolean, unresolved?: boolean}, file: {name: string, type: string}, convertPages?: boolean) => Promise<Record<string, unknown>>} attachOnly Submit an original PDF adapter under an active operation with an optional explicit conversion choice.
  * @property {PdfWorkflowRequest[]} requests Requests received by the mocked server.
  * @property {Array<{url: string, options: Record<string, unknown>}>} fetchCalls Full request call details.
  * @property {Array<{url: string, options: Record<string, unknown>}>} streamCalls Protected PDF source and renderer options.
@@ -79,7 +80,7 @@ import vm from 'node:vm';
  * @property {boolean} unresolved Whether the server outcome may still be pending.
  * @property {boolean} running Whether this form currently owns a submission.
  * @property {unknown|null} prepared Retained prepared upload retry state, or null before upload preparation.
- * @property {{documentId: string, dpi: number, targetMode: string}|undefined} pdfSource Frozen source identity and semantic conversion settings.
+ * @property {{documentId: string, dpi: number, targetMode: string, convertPages?: boolean}|undefined} pdfSource Frozen source identity and semantic conversion settings.
  */
 
 /**
@@ -144,6 +145,7 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
     });
     const document = {
         body: {dataset: {}},
+        documentElement: {lang: 'en'},
         matches: () => false,
         querySelectorAll: () => [],
         addEventListener: (type, callback, capture) => {
@@ -151,7 +153,7 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
             existing.push({callback, capture});
             listeners.set(type, existing);
         },
-        createElement: () => ({href: '', textContent: '', append: () => {}}),
+        createElement: tag => ({tagName: tag, href: '', textContent: '', dataset: {}, append: () => {}}),
     };
     const fetch = async (url, options) => {
         const body = options.body;
@@ -203,6 +205,9 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         operation.running = false;
         if (completed) intents.delete(operation.form);
     };
+    const assertAdminOperationCurrent = operation => {
+        if (!operation?.running) throw new Error('The parent upload operation is no longer current.');
+    };
     const completeAdminMutation = async () => {};
     const i18nForElement = (_element, _key, fallback) => fallback;
     const context = vm.createContext({
@@ -211,7 +216,7 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         HTMLFormElement: Object,
         HTMLButtonElement: function () {},
         MutationObserver: function () { this.observe = () => {}; },
-        FormData: function (form) { return new Map(form.formDataEntries); },
+        FormData: function (form) { return new Map(form?.formDataEntries || []); },
         URL,
         window: {location},
         document,
@@ -220,6 +225,7 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         uploadBrowserFileStream,
         beginAdminOperation,
         finishAdminOperation,
+        assertAdminOperationCurrent,
         completeAdminMutation,
         i18nForElement,
         appendUploadProgressLog: () => {},
@@ -229,7 +235,7 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         .replace(/^import .*;\s*$/gm, '')
         .replace(/^export (?=(?:async )?function )/gm, '')
         .replaceAll('globalThis.setupGalleryPdfDocuments = setupGalleryPdfDocuments;', '');
-    vm.runInContext(`${transformed}\nglobalThis.__setupGalleryPdfDocuments = setupGalleryPdfDocuments;`, context);
+    vm.runInContext(`${transformed}\nglobalThis.__setupGalleryPdfDocuments = setupGalleryPdfDocuments; globalThis.__uploadGalleryPdfFiles = uploadGalleryPdfFiles;`, context);
     context.__setupGalleryPdfDocuments();
 
     /**
@@ -263,7 +269,16 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         listener(event);
     };
 
-    return {submit, cancel, requests, fetchCalls, streamCalls, streams, uploads, operations,
+    const attachOnly = async (operation, file, convertPages = false) => {
+        const form = {dataset: {pdfAttachmentUrl: '/admin.php?tab=edit'}, action: '/admin.php?tab=edit',
+            closest: () => null,
+            querySelector: selector => selector === '[name="csrf_token"]' ? {value: 'csrf-fresh'} : null,
+            insertAdjacentElement: () => {}};
+        const progress = {querySelector: () => null};
+        return context.__uploadGalleryPdfFiles(form, progress, [file], {galleryId: 17, targetMode: 'child', dpi: 150,
+            convertPages, operation, baseResult: null});
+    };
+    return {submit, cancel, attachOnly, requests, fetchCalls, streamCalls, streams, uploads, operations,
         initialUrl, location,
         submitListenerCount: (listeners.get('submit') || []).length, uploadStarted};
 }
@@ -357,6 +372,26 @@ unresolvedForm.formDataEntries = unresolvedForm.formDataEntries.map(([name, valu
 assert.match(await unresolvedHarness.submit(unresolvedForm), /unresolved/i, 'Changed conversion inputs must be refused before a new begin.');
 assert.equal(unresolvedHarness.requests.length, 1, 'The changed retry must not make another lifecycle request.');
 assert.equal(unresolvedHarness.streamCalls.length, 1, 'The changed retry must be refused before reopening the PDF.');
+
+const attachmentOnlyHarness = await makeWorkflowHarness(() => ({ok: true, payload: {
+    ok: true, message: 'PDF attached', document_id: 'doc-attachment', contexts: [], image_ids: [],
+    mutation: {entity: 'pdf_document', entity_ids: ['doc-attachment']}, panel: {},
+}}));
+const attachmentOperation = {running: true};
+const originalPdf = {name: 'flight.pdf', type: 'application/pdf'};
+const attached = await attachmentOnlyHarness.attachOnly(attachmentOperation, originalPdf);
+assert.equal(attachmentOnlyHarness.requests.length, 1, 'Default PDF upload sends only one original attachment request.');
+assert.equal(attachmentOnlyHarness.requests[0].body.get('pdf_action'), 'upload');
+assert.equal(attachmentOnlyHarness.requests[0].body.get('pdf_file'), originalPdf, 'Attachment keeps the original selected File identity.');
+assert.equal(attachmentOnlyHarness.streamCalls.length, 0, 'Attachment-only upload never opens a PDF conversion stream.');
+assert.equal(attachmentOnlyHarness.requests.some(request => request.body.get('pdf_action') === 'begin'), false,
+    'Attachment-only upload never starts a page conversion lifecycle.');
+assert.equal(attached.pdf_documents_uploaded, 1);
+await attachmentOnlyHarness.attachOnly(attachmentOperation, originalPdf);
+assert.equal(attachmentOnlyHarness.requests.length, 1, 'Retry after acknowledged attachment does not attach a duplicate document.');
+await assert.rejects(attachmentOnlyHarness.attachOnly(attachmentOperation, originalPdf, true), /conversion choice/i,
+    'Retry must preserve the originally frozen conversion choice.');
+assert.equal(attachmentOnlyHarness.requests.length, 1, 'Changing conversion intent is rejected before another attachment.');
 
 const failedFinalizeHarness = await makeWorkflowHarness((request, index) => {
     if (request.body.get('pdf_action') === 'begin') return successfulResponses(request, index);

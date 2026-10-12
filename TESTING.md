@@ -2782,3 +2782,10 @@ CI do not prove protected release operations. No local manual PDF build is part
 of feature verification.
 
 PDF scenarios execute through the existing registered `tests/simbrief_ofp_lightbox_browser_test.mjs` entrypoint. It runs converter, upload-stream and delegated workflow scenarios before the viewer journey, then actual PDF.js page rendering. The central registry and inherited 60-second child timeout stay unchanged; scenario modules are not standalone audit children. Any timeout or failed assertion fails that registered child. These cases now belong to browser qualification; BASIC source checks and non-browser Node jobs do not execute them.
+
+The delegated PDF workflow scenarios also verify that ordinary uploads attach the
+exact selected original without opening a renderer or starting a conversion
+lifecycle. An acknowledged attachment retry makes no duplicate request, and a
+changed conversion choice is refused on the same retry owner. Conversion remains
+an explicit upload choice inside the initially collapsed Advanced disclosure;
+existing child and append conversion scenarios retain their assertions.

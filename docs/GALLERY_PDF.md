@@ -67,9 +67,14 @@ session receives a fresh token. Conversions with progress are preserved for revi
 
 The existing-gallery **Upload photos** chooser and drop queue also accept PDF
 originals. PDFs show a document tile rather than an unsupported-image warning.
-The form offers a private child destination or append mode, plus the same DPI
-choices. Mixed selections upload ordinary photos first, then attach and convert
-PDFs sequentially; appended PNG pages therefore follow the final uploaded photo.
+By default, selecting a PDF in either picker only attaches the original document:
+it does not start rendering, create a child gallery or append any page images.
+The collapsed **Advanced** disclosure contains an unchecked **Also convert PDF
+pages to PNG** option, private child/append destinations and DPI choices.
+Opening Advanced or changing a destination alone does not enable conversion.
+Mixed selections upload ordinary photos first, then attach PDFs sequentially.
+Only an explicitly enabled conversion renders pages; appended PNG pages therefore
+follow the final uploaded photo. A retry retains the original conversion choice.
 Originals remain gallery documents. The panel stays open through attachment,
 page upload and final registration. Acknowledged stages are retained for retry;
 an uncertain attachment response requires review rather than a blind duplicate.

@@ -7241,5 +7241,9 @@
     "pdf.unresolved": "An earlier PDF conversion is unresolved. Restore its original document, DPI and destination and retry before starting different work.",
     "pdf.upload.attachment_unknown": "The PDF attachment response is unknown. Review this gallery's documents before starting another upload.",
     "pdf.upload.helper_unavailable": "The PDF upload workflow is unavailable. No PDF was attached.",
-    "pdf.upload.progress": "PDF conversion: {phase}, page {page} of {pages}."
+    "pdf.upload.progress": "PDF conversion: {phase}, page {page} of {pages}.",
+    "pdf.upload.attach_help": "PDFs are attached as original documents. No gallery or page images are created unless you enable conversion in Advanced.",
+    "pdf.upload.advanced": "Advanced",
+    "pdf.upload.convert_pages": "Also convert PDF pages to PNG",
+    "pdf.upload.retry_choice": "Keep the original PDF selection and conversion choice while retrying this upload."
 }

@@ -6,6 +6,7 @@
  * Purpose: Qualify public-widget persistence, publication, and anonymous route navigation in Chromium.
  * Responsibilities:
  *   - Save a draft through the real Admin editor and verify it after reload.
+ *   - Report login HTTP status and CSRF presence without exposing credentials or token values.
  *   - Preserve toolbar-authored Markdown across all maintained Admin locales and a localized validation failure.
  *   - Discard unsaved browser edits, publish the saved widget, verify anonymous no-script rendering and responsive enhancement, and remove fixture data.
  *   - Navigate the actual anonymous Home and Gallery routes, check one published widget on each, and inspect dynamic HTML cache headers.
@@ -42,11 +43,17 @@ async () => {
             const loginResponse = await fetch('/index.php?page=admin_login', {credentials: 'same-origin', cache: 'no-store'});
             const loginDocument = new DOMParser().parseFromString(await loginResponse.text(), 'text/html');
             const csrfToken = loginDocument.querySelector('[name="csrf_token"]')?.value || '';
+            stage = 'Admin login GET status ' + loginResponse.status + ' csrf-present ' + Boolean(csrfToken);
             expect(loginResponse.ok && csrfToken !== '');
             const loginResult = await fetch('/index.php?page=admin_login', {
                 method: 'POST', credentials: 'same-origin', cache: 'no-store',
                 body: new URLSearchParams({identifier: credentials.username, password: credentials.password, csrf_token: csrfToken}),
             });
+            const failureBody = loginResult.status === 400 ? await loginResult.text() : '';
+            const loginRoute = new URL(loginResult.url, location.href).searchParams.get('page') || 'home';
+            stage = 'Admin login POST status ' + loginResult.status
+                + ' route ' + (['admin_login', 'admin', 'home'].includes(loginRoute) ? loginRoute : 'other')
+                + ' invalid-csrf ' + (failureBody.trim() === 'Invalid CSRF token.');
             expect(loginResult.ok);
             adminAuthenticated = true;
         };

@@ -615,6 +615,12 @@ not a source parser or a commitment to remove anything on a calendar date.
   `simbrief_action=convert_pdf_pages` browser request returns HTTP 409 with a
   reload prompt; the server-rasterizer helper remains only for CLI/test
   compatibility consumers and is not called by browser actions.
+- **Ordinary upload default:** The browser document workflow attaches only the
+  original PDF unless the administrator explicitly checks the Advanced conversion
+  option. Missing controls also mean attachment only, so an older form cannot
+  silently create a private child. The operation retains that choice across
+  retries; acknowledged originals are not attached again. This opt-in policy is
+  permanent, and existing separately launched document conversion remains supported.
 - **Evidence:** The document service fixture covers exact bytes, stable identity,
   explicit replacement/deletion confirmation and digest changes. Hosted
   qualification, browser device coverage, and live deployment authorization

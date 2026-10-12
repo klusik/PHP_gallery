@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {createPdfPngUploadStream} from './admin-pdf-conversion.js?v=20261012-pdf-dpi-warning-v3';
-import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261012-dpi-warning-v4';
+import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261013-pdf-upload-optin-v1';
 import {beginAdminOperation, finishAdminOperation, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261012-pdf-documents-v2';
 import {i18nForElement, appendUploadProgressLog} from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
@@ -46,18 +46,19 @@ let pageCountQueueRunning = false;
  * Configure original attachment and page conversion from the ordinary upload form.
  * @typedef {Object} GalleryPdfUploadOptions
  * @property {number} galleryId Existing physical source gallery.
- * @property {'child'|'append'} targetMode Selected PNG destination.
- * @property {number} dpi Selected dots per inch.
+ * @property {'child'|'append'} targetMode PNG destination used only for an opted-in conversion.
+ * @property {number} dpi Dots per inch used only for an opted-in conversion.
+ * @property {boolean} [convertPages=false] Whether the administrator explicitly opted into PNG conversion.
  * @property {import('./admin-operation-keys.js').AdminOperationIntent} operation Parent intent owning the exact file selection.
  * @property {Record<string, unknown>|null} [baseResult] Already acknowledged photo envelope, preserved during aggregation.
  * @property {PdfUploadObserver} [onProgress] Optional caller progress observer.
  */
 
-/** @type {WeakMap<object, {records: PdfUploadRecord[], container: HTMLElement}>} Document-local acknowledged PDF upload stages. */
+/** @type {WeakMap<object, {records: PdfUploadRecord[], container: HTMLElement|null, convertPages: boolean}>} Document-local acknowledged stages, optional page-progress surface and frozen conversion choice. */
 const pdfUploadAttempts = new WeakMap();
 
 /**
- * Attach selected PDFs and sequentially convert their pages through the existing uploader.
+ * Attach selected PDFs and convert pages only when the administrator opted in.
  *
  * Child forms live beside the parent form so their transport fields cannot alter
  * the parent's frozen upload identity. Every server envelope remains available.
@@ -65,7 +66,7 @@ const pdfUploadAttempts = new WeakMap();
  * @param {HTMLFormElement} form Original upload form and current CSRF source.
  * @param {HTMLElement} progress Parent upload progress surface.
  * @param {File[]} files Original PDFs in selection order.
- * @param {GalleryPdfUploadOptions} options Source, destination and parent retry ownership.
+ * @param {GalleryPdfUploadOptions} options Source, destination, explicit conversion choice and parent retry ownership.
  * @returns {Promise<Record<string, unknown>>} Canonical aggregate with all acknowledged envelopes, image IDs and affected contexts.
  */
 export async function uploadGalleryPdfFiles(form, progress, files, options) {
@@ -78,12 +79,18 @@ export async function uploadGalleryPdfFiles(form, progress, files, options) {
     endpoint.searchParams.set('id', String(options.galleryId));
     let attempt = pdfUploadAttempts.get(options.operation);
     if (!attempt) {
-        const container = document.createElement('section');
-        container.className = 'gallery-pdf-upload-workflow';
-        container.dataset.pdfUploadWorkflow = 'true';
-        form.insertAdjacentElement('afterend', container);
-        attempt = {container, records: files.map(file => ({file, attachment: null, conversionForm: null, result: null, attachmentPending: false}))};
+        let container = null;
+        if (options.convertPages === true) {
+            container = document.createElement('section');
+            container.className = 'gallery-pdf-upload-workflow';
+            container.dataset.pdfUploadWorkflow = 'true';
+            form.insertAdjacentElement('afterend', container);
+        }
+        attempt = {container, records: files.map(file => ({file, attachment: null, conversionForm: null, result: null, attachmentPending: false})), convertPages: options.convertPages === true};
         pdfUploadAttempts.set(options.operation, attempt);
+    }
+    if (attempt.convertPages !== (options.convertPages === true)) {
+        throw new Error(i18nForElement(form, 'pdf.upload.retry_choice', 'Keep the original PDF selection and conversion choice while retrying this upload.'));
     }
     if (attempt.records.length !== files.length || attempt.records.some((record, index) => record.file !== files[index])) {
         throw new Error(i18nForElement(form, 'pdf.unresolved', 'Keep the original PDF selection while retrying this upload.'));
@@ -118,7 +125,7 @@ export async function uploadGalleryPdfFiles(form, progress, files, options) {
             }
         }
         envelopes.push(record.attachment);
-        if (!record.result) {
+        if (attempt.convertPages && !record.result) {
             if (!record.conversionForm) {
                 const template = document.createElement('template');
                 template.innerHTML = String(record.attachment.panel_html || '');
@@ -151,7 +158,7 @@ export async function uploadGalleryPdfFiles(form, progress, files, options) {
                 submitButtons.forEach(button => { button.disabled = false; });
             }
         }
-        envelopes.push(record.result);
+        if (record.result) envelopes.push(record.result);
     }
     const last = envelopes[envelopes.length - 1];
     const contexts = new Map();

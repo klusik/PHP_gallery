@@ -7241,5 +7241,9 @@
     "pdf.unresolved": "Předchozí převod PDF není vyřešen. Obnovte původní dokument, DPI a cíl a zopakujte jej před zahájením jiné operace.",
     "pdf.upload.attachment_unknown": "Výsledek uložení PDF není potvrzený. Před dalším nahráváním zkontrolujte dokumenty této galerie.",
     "pdf.upload.helper_unavailable": "Nahrávání PDF není dostupné. Žádné PDF nebylo připojeno.",
-    "pdf.upload.progress": "Převod PDF: {phase}, stránka {page} z {pages}."
+    "pdf.upload.progress": "Převod PDF: {phase}, stránka {page} z {pages}.",
+    "pdf.upload.attach_help": "PDF se připojí jako originální dokumenty. Galerie ani obrázky stránek nevzniknou, dokud nezapnete převod v Pokročilých.",
+    "pdf.upload.advanced": "Pokročilé",
+    "pdf.upload.convert_pages": "Také převést stránky PDF na PNG",
+    "pdf.upload.retry_choice": "Při opakování nahrávání zachovejte původní výběr PDF i volbu převodu."
 }
