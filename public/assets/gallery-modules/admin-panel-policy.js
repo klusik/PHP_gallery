@@ -86,12 +86,12 @@ export const OPERATION_KEY_BYTES = 32;
 export const OPERATION_KEY_PATTERN = Object.freeze(/^[a-f0-9]{64}$/);
 
 /**
- * Explicit non-credential scalar inputs compared before retrying an unresolved intent.
- * @var {readonly string[]} Units: form-control names. Scope: document-local create/upload comparison, never draft restoration.
+ * Explicit non-credential scalar inputs compared before retrying an unresolved intent, including PDF destination settings.
+ * @var {readonly string[]} Units: form-control names. Scope: document-local create/upload and PDF conversion comparison, never draft restoration.
  * Consumers: admin-operation-keys.js.
- * Rationale: detect semantic input changes while excluding CSRF, passwords, URLs and arbitrary hidden fields.
+ * Rationale: detect semantic input changes while excluding CSRF, passwords, URLs and arbitrary hidden fields; changing PDF target or resolution changes persisted output.
  */
-export const OPERATION_FIELDS = Object.freeze(['title', 'folder_name', 'description', 'gallery_date', 'gallery_date_end', 'visibility', 'count_badge_visibility', 'parent_id', 'voting_enabled', 'show_filenames', 'sort_order', 'upload_mode', 'gallery_id', 'create_thumbnails']);
+export const OPERATION_FIELDS = Object.freeze(['title', 'folder_name', 'description', 'gallery_date', 'gallery_date_end', 'visibility', 'count_badge_visibility', 'parent_id', 'voting_enabled', 'show_filenames', 'sort_order', 'upload_mode', 'gallery_id', 'create_thumbnails', 'pdf_target_mode', 'pdf_dpi']);
 
 /**
  * Maximum retained scalar comparison representation; oversized input stays in the original form.

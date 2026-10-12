@@ -10,7 +10,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {i18n} from './admin-core.js?v=20260614-upload-order-v2';
-import {OPERATION_KEY_BYTES, OPERATION_KEY_PATTERN, OPERATION_FIELDS, OPERATION_SCALAR_LIMIT} from './admin-panel-policy.js?v=20260920-operation-keys-v1';
+import {OPERATION_KEY_BYTES, OPERATION_KEY_PATTERN, OPERATION_FIELDS, OPERATION_SCALAR_LIMIT} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
 /** @type {WeakMap<HTMLFormElement, AdminOperationIntent>} Original form owns uncertain work; replacement forms never inherit it. */
 const intents = new WeakMap();
 
@@ -26,6 +26,7 @@ const intents = new WeakMap();
  * @property {boolean} running Whether an explicit submission is active.
  * @property {boolean} unresolved Whether a request may have reached the server.
  * @property {import('./admin-browser-upload.js').PreparedUploadAttempt|null} prepared Existing prepared uploader's session/batches, never new ledger keys; null before preparation.
+ * @property {{documentId: string, dpi: number, targetMode: string}|undefined} [pdfSource] Optional non-credential PDF inputs frozen by the conversion owner across an uncertain retry.
  */
 
 /**
@@ -116,12 +117,32 @@ export function adminOperationBody(intent, index, body) {
  * @return {void} Throws a generic message without exposing field values or keys.
  */
 export function assertAdminOperationCurrent(intent) {
-    const selected = Array.from(intent?.form.querySelector('input[type="file"][name="images[]"]')?.files || []);
+    const imageInputFiles = Array.from(intent?.form.querySelector('input[type="file"][name="images[]"]')?.files || []);
+    const selectedPhotos = imageInputFiles.filter((file) => !isOperationPdfFile(file));
+    const selectedPdfs = [
+        ...imageInputFiles.filter((file) => isOperationPdfFile(file)),
+        ...Array.from(intent?.form.querySelector('input[type="file"][name="pdf_files[]"][data-gallery-upload-pdf-input]')?.files || []).filter((file) => isOperationPdfFile(file)),
+    ];
+    const initialPhotos = intent?.files.slice(0, selectedPhotos.length) || [];
+    const initialPdfs = intent?.files.slice(selectedPhotos.length) || [];
+    const photoSelectionMatches = intent?.form.querySelector('[data-gallery-upload-preview]')
+        ? selectedPhotos.length === initialPhotos.length && selectedPhotos.every((file, index) => file === initialPhotos[index])
+        : selectedPhotos.length === initialPhotos.length && selectedPhotos.every((file) => initialPhotos.includes(file));
+    const pdfSelectionMatches = selectedPdfs.length === initialPdfs.length && selectedPdfs.every((file, index) => file === initialPdfs[index]);
     if (!intent?.running || intents.get(intent.form) !== intent || intent.field.value !== intent.key
-        || operationSignature(intent.form) !== intent.signature || selected.length !== intent.files.length
-        || selected.some(/** Reject a newly selected file before another request starts. @param {File} file Current selected file. @return {boolean} Whether it is outside the original selection. */ file => !intent.files.includes(file))) {
+        || operationSignature(intent.form) !== intent.signature || !photoSelectionMatches || !pdfSelectionMatches
+        || selectedPhotos.length + selectedPdfs.length !== intent.files.length) {
         throw new Error(i18n('admin.operation.client_changed', 'The create/upload input changed. Restore the original fields/files before retrying unresolved work.'));
     }
+}
+
+/**
+ * Recognize document sources before comparing image and PDF retry selections.
+ * @param {File} file Current file input entry.
+ * @returns {boolean} True for an application/pdf MIME or .pdf filename.
+ */
+function isOperationPdfFile(file) {
+    return String(file?.type || '').toLowerCase() === 'application/pdf' || /\.pdf$/i.test(String(file?.name || ''));
 }
 
 /**

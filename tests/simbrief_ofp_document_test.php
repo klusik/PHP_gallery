@@ -254,7 +254,7 @@ namespace {
 
         // UI/gesture policy is also a security and accessibility boundary:
         // photo navigation and page/browser zoom must not hijack this PDF.
-        $publicView = (string) file_get_contents(dirname(__DIR__) . '/app/views/public_gallery_controls.php');
+        $pdfView = (string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php');
         $viewerCss = (string) file_get_contents(dirname(__DIR__) . '/public/assets/styles/lightbox.css');
         ofp_document_assert(
             str_contains($viewer, "|| !event.ctrlKey")
@@ -266,12 +266,13 @@ namespace {
             'OFP wheel must scroll natively; Ctrl+wheel, Safari trackpad pinch and mobile handoff must remain distinct.'
         );
         ofp_document_assert(
-            str_contains($publicView, 'simbrief-ofp-primary-actions')
-                && str_contains($publicView, 'simbrief-ofp-secondary-actions')
-                && str_contains($publicView, 'data-ofp-info-toggle')
-                && str_contains($publicView, 'simbrief.ofp.convert_help')
+            str_contains((string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php'), 'data-pdf-convert-form')
+                && str_contains((string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php'), 'pdf.convert_help')
+                && str_contains((string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php'), 'data-pdf-toggle')
+                && str_contains((string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php'), 'pdf.view')
+                && str_contains((string) file_get_contents(dirname(__DIR__) . '/app/views/gallery_pdf_documents.php'), 'pdf.download')
                 && str_contains($viewer, "event.key !== 'Escape'"),
-            'Conversion must keep a localized dismissible question-mark help apart from public OFP actions.'
+            'PDF conversion must retain localized help beside its controls without coupling them to public OFP actions.'
         );
         ofp_document_assert(
             str_contains($viewerCss, 'dialog.lightbox.simbrief-ofp-dialog')

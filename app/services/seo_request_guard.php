@@ -222,7 +222,7 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'gallery_access' => ['id', 'token', 'share', 'return'],
         'share' => ['token', 'id', 'view_as'],
         'media' => ['id', 'v', 'ofp', 'download', 'share', 'token'],
-        'gallery_ofp_pdf' => ['id', 'download', 'share', 'token'],
+        'gallery_ofp_pdf' => ['id', 'document', 'download', 'share', 'token'],
         'thumb' => ['id', 'size', 'format', 'v'],
         'public_media' => ['public_path', 'v'],
         'public_thumb' => ['public_path', 'size', 'format', 'v'],

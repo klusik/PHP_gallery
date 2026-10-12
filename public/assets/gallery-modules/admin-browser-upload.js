@@ -33,7 +33,7 @@
  */
 
 import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
-import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261008-issue118-v3';
+import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 
 /**
  * Prepared uploader's existing session retained only for the current document's explicit retries.
@@ -45,6 +45,7 @@ import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation
  * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original package owner and acknowledged-cleanup callbacks.
  * @property {Array<{index: number, blob: Blob, itemCount: number, cleanup: function(): Promise<void>}>} batches Original indexed ZIP blobs and their existing cleanup callbacks.
  * @property {boolean} serverSideStarted Whether server work may have started and automatic package abandonment is unsafe.
+ * @property {Record<string, unknown>} [acknowledgedPhotoResult] Canonical photo aggregate retained after package cleanup while subsequent PDFs are unresolved.
  */
 
 const workerScriptUrl = new URL('./browser-image-worker.js?v=20260815-upload-zip-import-v1', import.meta.url);
@@ -52,14 +53,416 @@ const tempDatabaseName = 'php_gallery_browser_uploads';
 const tempStoreName = 'prepared_batches';
 
 /**
+ * Bound temporary buffers used to verify that image-worker output retains a page PNG unchanged.
+ * Type: number.
+ * Units: bytes per comparison slice.
+ * Scope: one input/output PNG pair in the browser uploader.
+ * Consumers: filesHaveSameBytes.
+ * Rationale: compare every source byte without duplicating a large page into full-size buffers.
+ */
+const maximumPngCompareChunkBytes = 1024 * 1024;
+
+/**
+ * Describe a pull-driven source of generated PDF page PNG files.
+ * @typedef {Object} PdfUploadFileStream
+ * @property {number|undefined} pageCount Total source PDF page count when known.
+ * @property {number|undefined} dpi Output resolution in dots per inch when known.
+ * @property {string|undefined} sourceId Caller-owned source document identity.
+ * @property {() => AsyncIterator<File>} [Symbol.asyncIterator] Create the ordered page iterator.
+ * @property {(() => Promise<void>)|undefined} cancel Cancel current PDF work when supported.
+ * @property {(() => Promise<void>)|undefined} dispose Release renderer resources when supported.
+ */
+
+/**
+ * Describe incremental stream upload settings and progress callbacks.
+ * @typedef {Object} PdfUploadStreamOptions
+ * @property {AbortSignal|null} [signal] Cancellation signal for rendering and requests.
+ * @property {string} [endpoint] Protected same-origin prepared-upload endpoint.
+ * @property {string} [uploadSessionId] Server replay identity for prepared ZIP batches.
+ * @property {number} [galleryId] Existing destination gallery identifier.
+ * @property {string} [conversionToken] Opaque server-issued PDF conversion session token.
+ * @property {number} [sourceGalleryId] Gallery that owns the source PDF document.
+ * @property {number} [startPage] One-based first source page to upload.
+ * @property {number} [startBatchIndex] First batch index for resumed upload.
+ * @property {PdfUploadProgressHandler} [onProgress] Observe render, packaging and upload progress.
+ * @property {PdfUploadAcknowledgmentHandler} [onBatchAcknowledged] Observe durable batch acknowledgment.
+ */
+
+/**
+ * Describe progress emitted while pages are rendered or uploaded.
+ * @typedef {Object} PdfUploadProgress
+ * @property {string} phase Current lifecycle phase such as prepared, packaging, uploading or acknowledged.
+ * @property {number} page One-based source page associated with the update.
+ * @property {number} pages Total source PDF page count.
+ * @property {number} dpi Output resolution in dots per inch.
+ * @property {number|undefined} [batch] One-based ZIP batch number.
+ * @property {number|undefined} [bytes] Current batch size in bytes.
+ * @property {number|undefined} [uploadedBytes] Bytes acknowledged in the current batch.
+ */
+
+/** @typedef {(progress: PdfUploadProgress) => void} PdfUploadProgressHandler */
+
+/**
+ * Describe a durable server acknowledgment for one prepared page batch.
+ * @typedef {Object} PdfUploadBatchAcknowledgment
+ * @property {number} batchIndex Zero-based batch index.
+ * @property {number} itemCount Number of page PNG files in the batch.
+ * @property {Record<string, unknown>} result Server acknowledgment fields.
+ */
+
+/** @typedef {(acknowledgment: PdfUploadBatchAcknowledgment) => Promise<void>|void} PdfUploadAcknowledgmentHandler */
+
+/**
+ * Describe a prepared ZIP batch owned by the existing browser upload batcher.
+ * @typedef {Object} PdfUploadBatch
+ * @property {string} id Stable batch storage identifier.
+ * @property {number} index Zero-based batch index.
+ * @property {Blob} blob Store-only ZIP bytes retained until acknowledgment.
+ * @property {number} itemCount Number of PNG pages in the batch.
+ * @property {number|undefined} [firstSourceIndex] Zero-based first source page index.
+ * @property {number|undefined} [lastSourceIndex] Zero-based final source page index.
+ * @property {() => Promise<void>} cleanup Remove the batch's temporary store data.
+ */
+
+/**
+ * Describe one XMLHttpRequest byte progress event.
+ * @typedef {Object} PdfUploadXhrProgress
+ * @property {boolean} lengthComputable Whether the browser reports a complete request length.
+ * @property {number} total Total request bytes when computable.
+ * @property {number} loaded Request bytes sent so far.
+ */
+
+/** @typedef {(event: PdfUploadXhrProgress) => void} PdfUploadXhrProgressHandler */
+
+/**
  * Return whether the browser-side upload path is enabled for this form submission.
  *
  * @param {HTMLFormElement} form Upload form.
- * @return {boolean} True when the browser-side preparation checkbox is checked.
+ * @return {boolean} True when the browser-side preparation checkbox is checked or a PDF needs browser conversion.
  */
 export function browserUploadRequested(form) {
+    if (selectedBrowserUploadPdfFiles(form).length > 0) return true;
     const toggle = form.querySelector('[data-browser-upload-toggle]');
     return toggle instanceof HTMLInputElement && toggle.checked && !toggle.disabled;
+}
+
+/**
+ * Package and upload an ordered File stream through the existing prepared-image path.
+ *
+ * Files are consumed serially, stored by the existing IndexedDB batcher, and packaged
+ * with its store-only ZIP worker. The stream is never expanded into a document-wide
+ * File array. An uncertain upload retains the original ZIP batches on the operation
+ * for an exact retry, while each acknowledged batch is reported before local cleanup.
+ *
+ * @param {HTMLFormElement} form Existing Admin upload or create-gallery form.
+ * @param {HTMLElement} progress Existing upload progress container.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Active form intent that owns retry identity.
+ * @param {PdfUploadFileStream} fileStream Ordered File stream, including optional PDF metadata and cleanup methods.
+ * @param {PdfUploadStreamOptions} options Stream transport and acknowledgment options.
+ * @returns {Promise<Record<string, unknown>>} Canonical merged server acknowledgment fields and accumulated upload counters.
+ */
+export async function uploadBrowserFileStream(form, progress, operation, fileStream, options = {}) {
+    if (!fileStream || typeof fileStream[Symbol.asyncIterator] !== 'function') {
+        throw new Error(i18n('pdf.upload.stream_unavailable', 'The browser upload stream is unavailable.'));
+    }
+    const config = browserUploadConfig(form);
+    const endpoint = String(options.endpoint || config.endpoint || '');
+    const endpointUrl = new URL(endpoint, window.location.href);
+    if (!config.enabled || !endpoint || endpointUrl.origin !== window.location.origin) {
+        throw new Error(i18n('pdf.upload.endpoint_unavailable', 'The protected browser upload endpoint is unavailable. No pages were uploaded.'));
+    }
+    const signal = options.signal || null;
+    const startPage = Math.max(1, Math.floor(Number(options.startPage || 1)));
+    const pageCount = Math.max(0, Math.floor(Number(fileStream.pageCount || 0)));
+    const totalFiles = pageCount > 0 ? Math.max(0, pageCount - startPage + 1) : 0;
+    let prepared = operation.prepared;
+    const isResume = Boolean(prepared);
+    let batcher = null;
+    let serverSideStarted = Boolean(prepared?.serverSideStarted);
+    let processingConfig;
+    let uploadSessionId;
+    let progressState;
+    const prepareThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
+
+    if (prepared) {
+        if (prepared.kind !== 'pdf-file-stream') {
+            throw new Error(i18n('pdf.upload.retry_pending', 'Another prepared upload is awaiting an exact retry. Keep the original upload form open.'));
+        }
+        if (startPage !== Number(prepared.nextSourceIndex || 0) + 1) {
+            throw new Error(i18n('pdf.upload.resume_page', 'Resume this PDF conversion at page {page}.', {page: Number(prepared.nextSourceIndex || 0) + 1}));
+        }
+        ({processingConfig, uploadSessionId, progressState, batcher} = prepared);
+    } else {
+        processingConfig = {
+            ...config,
+            thumbnailSizes: prepareThumbnails ? config.thumbnailSizes : [],
+            thumbnailFormats: prepareThumbnails ? config.thumbnailFormats : [],
+            workerCount: 1,
+        };
+        uploadSessionId = String(options.uploadSessionId || browserUploadSessionId());
+        progressState = {
+            totalFiles: pageCount,
+            totalOriginalBytes: 0,
+            preparedFiles: startPage - 1,
+            preparedOriginalBytes: 0,
+            preparedPackageBytes: 0,
+            exifFiles: 0,
+            gpsFiles: 0,
+            totalBatches: 0,
+            totalZipBytes: 0,
+            uploadedBatches: 0,
+            uploadedFiles: startPage - 1,
+            uploadedZipBytes: 0,
+            currentBatchIndex: 0,
+            currentBatchBytes: 0,
+            currentBatchUploadedBytes: 0,
+        };
+    }
+
+    try {
+        if (!prepared) {
+            batcher = await createBrowserBatcher({...processingConfig, expectedItemCount: pageCount, startBatchIndex: options.startBatchIndex}, uploadSessionId, {
+                onBatchPackaging: (batchIndex, itemCount, byteCount) => {
+                    appendUploadProgressLog(progress, i18n('pdf.upload.packaging', 'Packaging PDF pages ZIP {batch}: {count} page(s), estimated {bytes}.', {batch: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
+                    if (typeof options.onProgress === 'function') options.onProgress({phase: 'packaging', page: Number(prepared?.nextSourceIndex || 0), pages: pageCount, dpi: Number(fileStream.dpi || 150), batch: batchIndex + 1, bytes: byteCount, uploadedBytes: 0});
+                },
+                onBatchReady: async (batch) => {
+                    appendUploadProgressLog(progress, i18n('pdf.upload.batch_ready', 'PDF pages ZIP {batch} ready: {count} page(s), {bytes}.', {batch: batch.index + 1, count: batch.itemCount, bytes: formatFileSize(batch.blob.size)}));
+                    await acknowledgePdfUploadBatch(form, progress, operation, batch, prepared.transportOptions);
+                },
+            });
+            updateBasicProgress(progress, 1, i18n('pdf.upload.preparing', 'Preparing {count} PDF page image(s) in the browser...', {count: totalFiles || 'PDF'}));
+            let sourceIndex = startPage - 1;
+            const existingGalleryId = Number(options.galleryId || selectedBrowserGalleryId(form) || 0);
+            if (!existingGalleryId) throw new Error(i18n('pdf.upload.destination_required', 'Select the destination gallery before starting PDF page upload.'));
+            prepared = {
+                kind: 'pdf-file-stream',
+                processingConfig,
+                uploadSessionId,
+                progressState,
+                batcher,
+                batches: batcher.batches,
+                acknowledgedBatches: new Set(),
+                serverSideStarted: false,
+                gallerySeed: null,
+                galleryId: existingGalleryId,
+                endpoint: endpointUrl.href,
+                conversionToken: String(options.conversionToken || ''),
+                sourceGalleryId: Number(options.sourceGalleryId || 0),
+                startPage,
+                nextSourceIndex: sourceIndex,
+                aggregate: emptyBrowserAggregate(null, existingGalleryId, 0),
+                transportOptions: null,
+            };
+            operation.prepared = prepared;
+        }
+        progressState = prepared.progressState;
+        prepared.transportOptions = {
+            endpoint: prepared.endpoint || endpointUrl.href,
+            uploadSessionId: prepared.uploadSessionId || uploadSessionId,
+            galleryId: Number(prepared.galleryId || options.galleryId || selectedBrowserGalleryId(form) || 0),
+            conversionToken: prepared.conversionToken || String(options.conversionToken || ''),
+            sourceGalleryId: Number(prepared.sourceGalleryId || options.sourceGalleryId || 0),
+            preparedThumbnailsRequired: prepareThumbnails,
+            signal,
+            onBatchAcknowledged: options.onBatchAcknowledged,
+            onProgress: options.onProgress,
+            processingConfig: prepared.processingConfig,
+            progressState,
+            pageCount,
+            dpi: Number(fileStream.dpi || 150),
+        };
+        updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
+        if (isResume) {
+            for (const batch of prepared.batches) {
+                if (batch.blob && !prepared.acknowledgedBatches.has(batch.index)) {
+                    await acknowledgePdfUploadBatch(form, progress, operation, batch, prepared.transportOptions);
+                }
+            }
+        }
+        await consumePdfPageStream(fileStream, startPage, pageCount, progress, batcher, prepared, prepared.transportOptions, options.onProgress);
+        if (prepared.nextSourceIndex < pageCount) {
+            throw new Error(i18n('pdf.upload.stream_ended_early', 'PDF conversion ended before page {page}.', {page: prepared.nextSourceIndex + 1}));
+        }
+        await batcher.finish();
+        if (!prepared.batches.length) throw new Error(i18n('pdf.upload.no_batches', 'The PDF conversion produced no upload batches.'));
+        for (const batch of prepared.batches) {
+            if (batch.blob && !prepared.acknowledgedBatches.has(batch.index)) {
+                await acknowledgePdfUploadBatch(form, progress, operation, batch, {
+                    ...prepared.transportOptions,
+                });
+            }
+        }
+        await batcher.cleanupPrepared();
+        updateBasicProgress(progress, 98, i18n('pdf.upload.finishing', 'Finishing PDF page upload...'));
+        const aggregate = prepared.aggregate;
+        aggregate.total_files = progressState.totalFiles;
+        aggregate.redirect_url = appendUploadResultParams(aggregate.redirect_url || window.location.href, aggregate.uploaded, aggregate.scanned, aggregate.thumbnails, aggregate.thumbnail_failed);
+        aggregate.fallback = {...(aggregate.fallback || {}), redirect_url: aggregate.redirect_url};
+        if (aggregate.created_gallery && aggregate.gallery_id > 0) {
+            aggregate.mutation = {type: 'gallery.create_with_upload', entity: 'gallery', action: 'create', entity_ids: [aggregate.gallery_id]};
+        } else if (aggregate.mutation && typeof aggregate.mutation === 'object') {
+            aggregate.mutation = {...aggregate.mutation, entity_ids: aggregate.image_ids.slice()};
+        }
+        return aggregate;
+    } catch (error) {
+        if (fileStream && typeof fileStream.cancel === 'function' && signal?.aborted) await fileStream.cancel();
+        if (batcher && !serverSideStarted && !prepared?.serverSideStarted) {
+            await batcher.abort();
+            operation.prepared = null;
+        }
+        throw error;
+    } finally {
+        if (fileStream && typeof fileStream.dispose === 'function') await fileStream.dispose();
+    }
+}
+
+/**
+ * Consume generated page Files one at a time and upload each bounded batch before pulling again.
+ * @param {PdfUploadFileStream} fileStream Pull-driven PDF page stream.
+ * @param {number} startPage One-based first source page in this stream.
+ * @param {number} pageCount Total source PDF pages.
+ * @param {HTMLElement} progress Existing upload progress surface.
+ * @param {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Existing ZIP batcher.
+ * @param {{processingConfig: Record<string, unknown>, progressState: Record<string, number>, nextSourceIndex: number}} prepared Retained stream preparation state.
+ * @param {PdfUploadStreamOptions & {endpoint: string, uploadSessionId: string, galleryId: number, conversionToken: string, sourceGalleryId: number, preparedThumbnailsRequired: boolean, dpi: number, pageCount: number, processingConfig: Record<string, unknown>, progressState: Record<string, number>}} transportOptions Current batch transport, progress counters and callbacks.
+ * @param {PdfUploadProgressHandler|undefined} onProgress Optional conversion and upload progress callback.
+ * @returns {Promise<void>} Resolves after each page has been staged and eligible batches acknowledged.
+ */
+async function consumePdfPageStream(fileStream, startPage, pageCount, progress, batcher, prepared, transportOptions, onProgress) {
+    let sourceIndex = startPage - 1;
+    const totalPagesRemaining = Math.max(0, pageCount - startPage + 1);
+    const iterator = fileStream[Symbol.asyncIterator]();
+    let exhausted = false;
+    try {
+        while (true) {
+            throwIfUploadStreamAborted(transportOptions.signal);
+            const next = await iterator.next();
+            if (next.done) {
+                exhausted = true;
+                break;
+            }
+            const file = next.value;
+            throwIfUploadStreamAborted(transportOptions.signal);
+            if (!(file instanceof File) || file.type !== 'image/png' || !/\.png$/i.test(file.name)) {
+                throw new Error(i18n('pdf.upload.invalid_page_file', 'The PDF converter must provide genuine PNG Files in page order.'));
+            }
+            const item = await prepareStreamPngFile(file, prepared.processingConfig, sourceIndex);
+            throwIfUploadStreamAborted(transportOptions.signal);
+            if (batcher.shouldFlushBefore(item)) await batcher.flush();
+            const added = await batcher.addItem(item);
+            prepared.progressState.preparedFiles++;
+            prepared.progressState.totalOriginalBytes += file.size;
+            prepared.progressState.preparedOriginalBytes += file.size;
+            prepared.progressState.preparedPackageBytes += added.itemBytes;
+            sourceIndex++;
+            prepared.nextSourceIndex = sourceIndex;
+            updateBasicProgress(progress, Math.max(2, totalPagesRemaining ? Math.round(prepared.progressState.preparedFiles / prepared.progressState.totalFiles * 45) : 2), i18n('pdf.upload.prepared_page', 'Prepared PDF page {page} in the browser.', {page: sourceIndex}));
+            updateUploadProgressMetrics(progress, browserProgressMetrics(prepared.progressState));
+            if (typeof onProgress === 'function') {
+                onProgress({phase: 'prepared', page: sourceIndex, pages: pageCount, dpi: Number(fileStream.dpi || 150)});
+            }
+            if (added.flushRequired) await batcher.flush();
+        }
+    } finally {
+        if (!exhausted && typeof iterator.return === 'function') await iterator.return();
+    }
+}
+
+/**
+ * Upload one newly packaged PDF page batch and release its bytes only after acknowledgment.
+ * @param {HTMLFormElement} form Original upload form with current CSRF fields.
+ * @param {HTMLElement} progress Upload progress surface.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Active upload intent.
+ * @param {PdfUploadBatch} batch One prepared page ZIP batch.
+ * @param {PdfUploadStreamOptions & {endpoint: string, uploadSessionId: string, galleryId: number, conversionToken: string, sourceGalleryId: number, preparedThumbnailsRequired: boolean, processingConfig: Record<string, unknown>, progressState: Record<string, number>, pageCount: number, dpi?: number}} options Batch transport and progress state.
+ * @returns {Promise<void>} Resolves after durable acknowledgment and local batch cleanup.
+ */
+async function acknowledgePdfUploadBatch(form, progress, operation, batch, options) {
+    throwIfUploadStreamAborted(options.signal);
+    assertAdminOperationCurrent(operation);
+    operation.unresolved = true;
+    operation.prepared.serverSideStarted = true;
+    const progressState = options.progressState;
+    const uploadedBeforeBatch = progressState.uploadedZipBytes;
+    progressState.currentBatchIndex = batch.index + 1;
+    progressState.currentBatchBytes = Number(batch.blob.size || 0);
+    progressState.currentBatchUploadedBytes = 0;
+    const batchPage = Math.max(0, Number(batch.lastSourceIndex ?? operation.prepared.nextSourceIndex - 1) + 1);
+    if (typeof options.onProgress === 'function') options.onProgress({phase: 'uploading', page: batchPage, pages: options.pageCount, dpi: Number(options.dpi || 150), batch: batch.index + 1, bytes: progressState.currentBatchBytes, uploadedBytes: 0});
+    const transport = {endpoint: options.endpoint, conversionToken: options.conversionToken, sourceGalleryId: options.sourceGalleryId, signal: options.signal};
+    const result = await uploadPreparedBatchWithRetry(form, options.processingConfig, options.galleryId, options.uploadSessionId, batch, batch.index, 0, options.preparedThumbnailsRequired, (event) => {
+        if (event.lengthComputable && event.total > 0) {
+            progressState.currentBatchUploadedBytes = Math.round(Number(batch.blob.size || 0) * Math.max(0, Math.min(1, event.loaded / event.total)));
+        }
+        progressState.uploadedZipBytes = uploadedBeforeBatch + progressState.currentBatchUploadedBytes;
+        updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
+        if (typeof options.onProgress === 'function') options.onProgress({phase: 'uploading', page: batchPage, pages: options.pageCount, dpi: Number(options.dpi || 150), batch: batch.index + 1, bytes: progressState.currentBatchBytes, uploadedBytes: progressState.currentBatchUploadedBytes});
+    }, transport);
+    progressState.uploadedBatches++;
+    progressState.uploadedFiles += Number(batch.itemCount || 0);
+    progressState.uploadedZipBytes = uploadedBeforeBatch + Number(batch.blob.size || 0);
+    progressState.currentBatchUploadedBytes = Number(batch.blob.size || 0);
+    updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
+    if (typeof options.onProgress === 'function') options.onProgress({phase: 'acknowledged', page: batchPage, pages: options.pageCount, dpi: Number(options.dpi || 150), batch: batch.index + 1, bytes: progressState.currentBatchBytes, uploadedBytes: progressState.currentBatchBytes});
+    appendServerUploadEvents(progress, result.upload_events || []);
+    mergeBrowserResult(operation.prepared.aggregate, result);
+    if (typeof options.onBatchAcknowledged === 'function') {
+        await options.onBatchAcknowledged({batchIndex: batch.index, itemCount: Number(batch.itemCount || 0), result});
+    }
+    operation.prepared.acknowledgedBatches.add(batch.index);
+    await batch.cleanup();
+    batch.blob = null;
+}
+
+/**
+ * Throw when an upload stream has been cancelled by its owning form workflow.
+ * @param {AbortSignal|null} signal Optional upload cancellation signal.
+ * @returns {void} No value when the operation remains active.
+ */
+function throwIfUploadStreamAborted(signal) {
+    if (signal && signal.aborted) throw new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+}
+
+/**
+ * Prepare one rendered PNG with the existing image worker while preserving its original bytes.
+ * @param {File} file Rendered PNG page from the PDF converter.
+ * @param {Record<string, unknown>} config Existing thumbnail preparation settings.
+ * @param {number} sourceIndex Stable zero-based page order for ZIP manifests.
+ * @returns {Promise<{originalFile: File, originalDetectedFormat: string, originalPath: string, originalName: string, originalSize: number, variants: Array<{path: string, blob: Blob}>, sourceIndex: number}>} Prepared image metadata with the exact input PNG as originalFile.
+ */
+async function prepareStreamPngFile(file, config, sourceIndex) {
+    let prepared = null;
+    await processFilesWithWorkerPool([file], {...config, workerCount: 1, workerItemIdOffset: sourceIndex}, async (item) => {
+        prepared = {...item, sourceIndex};
+    });
+    if (!prepared || prepared.originalDetectedFormat !== 'png' || !(await filesHaveSameBytes(prepared.originalFile, file))) {
+        throw new Error(i18n('pdf.upload.page_prepare_failed', 'Rendered PDF page {page} failed PNG preparation.', {page: sourceIndex + 1}));
+    }
+    return prepared;
+}
+
+/**
+ * Compare a worker-returned original with its input without retaining whole-document data.
+ * @param {File} preparedFile Original File returned by the image worker.
+ * @param {File} inputFile Exact rendered PNG supplied to the worker.
+ * @returns {Promise<boolean>} True only when MIME, size and every byte match.
+ */
+async function filesHaveSameBytes(preparedFile, inputFile) {
+    if (!(preparedFile instanceof File) || preparedFile.type !== inputFile.type || preparedFile.size !== inputFile.size) return false;
+    for (let offset = 0; offset < inputFile.size; offset += maximumPngCompareChunkBytes) {
+        const end = Math.min(inputFile.size, offset + maximumPngCompareChunkBytes);
+        const [left, right] = await Promise.all([
+            preparedFile.slice(offset, end).arrayBuffer(),
+            inputFile.slice(offset, end).arrayBuffer(),
+        ]);
+        const first = new Uint8Array(left);
+        const second = new Uint8Array(right);
+        for (let index = 0; index < first.length; index++) {
+            if (first[index] !== second[index]) return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -73,18 +476,36 @@ export function browserUploadRequested(form) {
 export async function runBrowserGalleryUpload(form, progress, operation) {
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
+    const pdfFiles = selectedBrowserUploadPdfFiles(form);
     const archiveSelected = selectedFiles.some(isBrowserUploadZipFile);
     const prepareThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
-    if (selectedFiles.length === 0) {
+    if (pdfFiles.length > 0) {
+        if (!Object.prototype.hasOwnProperty.call(form.dataset, 'pdfOriginalCloseOnSuccess')) {
+            form.dataset.pdfOriginalCloseOnSuccess = form.hasAttribute('data-gallery-panel-close-on-success')
+                ? form.getAttribute('data-gallery-panel-close-on-success') || ''
+                : '__absent__';
+        }
+        form.setAttribute('data-gallery-panel-close-on-success', '0');
+    } else if (Object.prototype.hasOwnProperty.call(form.dataset, 'pdfOriginalCloseOnSuccess')) {
+        const originalValue = form.dataset.pdfOriginalCloseOnSuccess;
+        if (originalValue === '__absent__') form.removeAttribute('data-gallery-panel-close-on-success');
+        else form.setAttribute('data-gallery-panel-close-on-success', originalValue);
+        delete form.dataset.pdfOriginalCloseOnSuccess;
+    }
+    if (selectedFiles.length === 0 && pdfFiles.length === 0) {
         return {fallback: true, reason: 'no_files'};
     }
     if (!config.enabled) {
         throw new Error(i18n('admin.browser_upload.strict_unavailable', 'Browser-side processing is enabled for this upload, but it is unavailable. No files were uploaded. Uncheck browser-side processing to use the server path instead.'));
     }
-    const capability = browserUploadCapability(config, selectedFiles);
+    const capability = selectedFiles.length ? browserUploadCapability(config, selectedFiles) : {ok: true};
     if (!capability.ok) {
         if (archiveSelected) throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         throw new Error(browserUploadStrictCapabilityMessage(capability.reason));
+    }
+    if (pdfFiles.length > 0 && operation.prepared?.acknowledgedPhotoResult) {
+        assertAdminOperationCurrent(operation);
+        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, operation.prepared.acknowledgedPhotoResult);
     }
 
     const processingConfig = operation.prepared?.processingConfig || {
@@ -93,9 +514,16 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
         thumbnailFormats: prepareThumbnails ? config.thumbnailFormats : [],
     };
 
+    if (selectedFiles.length === 0) {
+        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
+    }
+
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
     const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
     const files = expanded.files;
+    if (files.length === 0 && pdfFiles.length > 0) {
+        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
+    }
     if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
     const progressState = operation.prepared ? {...operation.prepared.progressState} : createBrowserProgressState(files);
     updateBasicProgress(progress, 1, i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
@@ -213,6 +641,13 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
                 ...aggregate.mutation,
                 entity_ids: aggregate.image_ids.slice(),
             };
+        }
+        if (pdfFiles.length > 0) {
+            // Photo batches have already been acknowledged and their temporary
+            // packages cleaned. A PDF retry must reuse that response, not replay
+            // the retired photo packages or create another photo upload.
+            operation.prepared.acknowledgedPhotoResult = aggregate;
+            return await uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, aggregate);
         }
         return aggregate;
     } catch (error) {
@@ -413,21 +848,84 @@ function appendServerUploadEvents(progress, events) {
 }
 
 /**
- * Return selected files from the upload form.
+ * Return selected non-PDF photo files from the shared upload picker.
  *
  * @param {HTMLFormElement} form Upload form.
- * @return {File[]} Selected files.
+ * @return {File[]} Selected photo sources in upload order.
  */
 function selectedBrowserUploadFiles(form) {
     const input = form.querySelector('input[type="file"][name="images[]"]');
     if (!(input instanceof HTMLInputElement) || !input.files) {
         return [];
     }
-    const files = Array.from(input.files).filter((file) => file instanceof File);
+    const files = Array.from(input.files).filter((file) => file instanceof File && !isBrowserUploadPdfFile(file));
     // Only the #118 drawer exposes explicit move controls. Honour their native
     // FileList order without changing the historical folder-order upload pages.
     return form.querySelector('[data-gallery-upload-preview]')
         ? files : files.sort(compareUploadFilesByDefaultFolderOrder);
+}
+
+/**
+ * Return PDF documents from the shared chooser and dedicated existing-gallery picker.
+ * @param {HTMLFormElement} form Existing-gallery upload form.
+ * @returns {File[]} PDF originals in shared-queue order followed by dedicated-picker order.
+ */
+function selectedBrowserUploadPdfFiles(form) {
+    const imageInput = form.querySelector('input[type="file"][name="images[]"]');
+    const pdfInput = form.querySelector('input[type="file"][name="pdf_files[]"][data-gallery-upload-pdf-input]');
+    const fromImageQueue = imageInput instanceof HTMLInputElement && imageInput.files
+        ? Array.from(imageInput.files).filter((file) => file instanceof File && isBrowserUploadPdfFile(file))
+        : [];
+    const fromDedicatedPicker = pdfInput instanceof HTMLInputElement && pdfInput.files
+        ? Array.from(pdfInput.files).filter((file) => file instanceof File && isBrowserUploadPdfFile(file))
+        : [];
+    return [...fromImageQueue, ...fromDedicatedPicker];
+}
+
+/**
+ * Recognize PDF originals without treating them as image-worker inputs.
+ * @param {File} file Original selected source.
+ * @returns {boolean} True for a PDF MIME or filename.
+ */
+function isBrowserUploadPdfFile(file) {
+    return String(file?.type || '').toLowerCase() === 'application/pdf' || /\.pdf$/i.test(String(file?.name || ''));
+}
+
+/**
+ * Delegate selected PDFs to the shared attachment and conversion workflow.
+ * The ordinary image queue has already completed when a base result is supplied,
+ * so append mode places all converted pages after the newly uploaded photos.
+ * @param {HTMLFormElement} form Existing-gallery upload form and CSRF source.
+ * @param {HTMLElement} progress Existing gallery upload progress surface.
+ * @param {File[]} files Selected PDF originals in picker order.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Existing upload operation owning retries.
+ * @param {Record<string, *> | null} baseResult Acknowledged photo aggregate or null for PDF-only submissions.
+ * @returns {Promise<Record<string, *>>} Canonical aggregate after the shared workflow acknowledges every PDF; clears its separate picker only after success.
+ */
+async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
+    const helper = await import('./admin-pdf-documents.js?v=20261012-dpi-warning-v4');
+    if (typeof helper.uploadGalleryPdfFiles !== 'function') {
+        throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
+    }
+    const target = form.querySelector('[name="pdf_target_mode"]');
+    const dpi = form.querySelector('[name="pdf_dpi"]');
+    const galleryId = selectedBrowserGalleryId(form);
+    const result = await helper.uploadGalleryPdfFiles(form, progress, files, {
+        galleryId,
+        targetMode: target instanceof HTMLSelectElement ? target.value : 'child',
+        dpi: dpi instanceof HTMLSelectElement ? Number(dpi.value || 150) : 150,
+        operation,
+        baseResult,
+        onProgress: (state) => {
+            const pages = Math.max(0, Number(state.pages || 0));
+            const page = Math.max(0, Number(state.page || 0));
+            const percent = pages ? Math.min(97, Math.max(1, Math.round(page / pages * 95))) : 1;
+            updateBasicProgress(progress, percent, i18n('pdf.upload.progress', 'PDF conversion: {phase}, page {page} of {pages}.', {phase: String(state.phase || 'working'), page, pages}));
+        },
+    });
+    const pdfInput = form.querySelector('input[type="file"][name="pdf_files[]"][data-gallery-upload-pdf-input]');
+    if (Number(result.pdf_documents_uploaded || 0) > 0 && pdfInput instanceof HTMLInputElement) pdfInput.value = '';
+    return result;
 }
 
 /** Return whether the current selection contains a user ZIP archive. */
@@ -562,7 +1060,7 @@ function uploadFileNameCollator() {
 /**
  * Verify whether the browser and selected files can use the browser path.
  *
- * @param {Record<string, *>} config Browser configuration.
+ * @param {Record<string, unknown>} config Browser capability settings, including endpoint, supported MIME types and upload byte limit.
  * @param {File[]} files Selected files.
  * @return {{ok: boolean, reason: string} } Capability result.
  */
@@ -604,11 +1102,40 @@ function browserUploadSessionId() {
 }
 
 /**
+ * Describe the original and derivative files returned by the image worker.
+ * @typedef {Object} PreparedWorkerImage
+ * @property {number} sourceIndex Zero-based worker item identity.
+ * @property {string} originalName Selected original filename.
+ * @property {string} preparedName Safe output filename.
+ * @property {string} originalPath Unique ZIP path of the original.
+ * @property {number} originalWidth Decoded width in pixels.
+ * @property {number} originalHeight Decoded height in pixels.
+ * @property {number} originalDisplayWidth Display width in pixels after decoding orientation.
+ * @property {number} originalDisplayHeight Display height in pixels after decoding orientation.
+ * @property {number} originalExifOrientation Original EXIF orientation, defaulting to one.
+ * @property {string} originalMime Selected MIME type or filename-derived fallback.
+ * @property {string} originalDetectedFormat Byte-detected original format.
+ * @property {number} originalSize Original byte length.
+ * @property {File} originalFile Unmodified selected file reference.
+ * @property {{exif_taken_at:string|null,exif_camera_make:string|null,exif_camera_model:string|null,exif_lens_model:string|null,exif_focal_length:string|null,exif_aperture:string|null,exif_exposure_time:string|null,exif_iso:number|null,gps_lat:number|null,gps_lng:number|null,gps_altitude:number|null,exif_orientation:number}|null} clientExif Compact JPEG metadata, or null for unsupported or unreadable metadata.
+ * @property {Array<{size:number,format:string,width:number,height:number,path:string,blob:Blob}>} variants Encoded thumbnail variants with pixel dimensions and unique ZIP paths.
+ */
+
+/**
+ * Persist a prepared worker result before resolving the pool.
+ * @callback PreparedWorkerImageCallback
+ * @param {PreparedWorkerImage} item Original file, decoded metadata and thumbnail variants.
+ * @param {number} completed Number of source files decoded so far.
+ * @param {number} total Number of selected source files.
+ * @returns {Promise<void>} Resolve after the caller has stored the result.
+ */
+
+/**
  * Run files through a bounded worker pool.
  *
  * @param {File[]} files Selected files.
- * @param {Record<string, *>} config Browser configuration.
- * @param {(item: Record<string, *>, completed: number, total: number) => Promise<void>} onItem Prepared item callback.
+ * @param {{workerCount?:number,workerItemIdOffset?:number,thumbnailSizes:number[],thumbnailFormats:string[],jpegQuality:number,webpQuality:number}} config Decoder settings; the item offset defaults to zero and keeps streamed PDF thumbnail paths unique.
+ * @param {PreparedWorkerImageCallback} onItem Persist each original and derivative result with decoded-file counts.
  * @return {Promise<void>} Result value for the caller.
  */
 function processFilesWithWorkerPool(files, config, onItem) {
@@ -691,7 +1218,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
             const index = nextIndex;
             nextIndex++;
             worker.postMessage({
-                id: index,
+                id: Math.max(0, Number(config.workerItemIdOffset || 0)) + index,
                 file: files[index],
                 sizes: config.thumbnailSizes,
                 formats: config.thumbnailFormats,
@@ -744,9 +1271,11 @@ async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
     // ceiling. Multi-image batches still split at targetBytes below.
     const maxBytes = Math.max(targetBytes, Number(config.uploadLimitBytes || targetBytes));
     const maxItemsPerBatch = Math.max(1, Math.min(Number(config.maxItemsPerBatch || 8), 64));
-    let nextBatchIndex = 0;
-    const preparedItems = [];
+    let nextBatchIndex = Math.max(0, Math.floor(Number(config.startBatchIndex || 0)));
+    const pendingItems = [];
     const batches = [];
+    let preparedItemCount = 0;
+    let pendingBytes = 0;
 
     /**
      * Return the IndexedDB key for one prepared image package.
@@ -763,7 +1292,7 @@ async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
      * @return {Promise<void>} Cleanup promise.
      */
     const cleanupTemporaryFiles = async (includeBatches) => {
-        const keys = preparedItems.map((item) => item.id);
+        const keys = pendingItems.map((item) => item.id);
         if (includeBatches) {
             keys.push(...batches.map((batch) => batch.id));
         }
@@ -779,55 +1308,71 @@ async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
         if (!current.length) {
             return;
         }
+        let batchPersisted = false;
         const currentItems = [];
         const currentEntries = [];
         const currentBytes = current.reduce((sum, reference) => sum + Number(reference.itemBytes || 0), 0);
-        if (typeof hooks.onBatchPackaging === 'function') {
-            hooks.onBatchPackaging(nextBatchIndex, current.length, currentBytes);
-        }
-        for (const reference of current) {
-            const item = await tempStore.get(reference.id);
-            if (!item || typeof item !== 'object') {
-                throw new Error(i18n('admin.browser_upload.prepared_item_missing', 'A prepared image package is missing from browser temporary storage.'));
+        try {
+            if (typeof hooks.onBatchPackaging === 'function') {
+                hooks.onBatchPackaging(nextBatchIndex, current.length, currentBytes);
             }
-            currentItems.push(manifestItemForPreparedItem(item));
-            currentEntries.push(...entriesForPreparedItem(item));
+            for (const reference of current) {
+                const item = await tempStore.get(reference.id);
+                if (!item || typeof item !== 'object') {
+                    throw new Error(i18n('admin.browser_upload.prepared_item_missing', 'A prepared image package is missing from browser temporary storage.'));
+                }
+                currentItems.push(manifestItemForPreparedItem(item));
+                currentEntries.push(...entriesForPreparedItem(item));
+            }
+            const manifest = {
+                version: 2,
+                upload_session_id: uploadSessionId,
+                batch_index: nextBatchIndex,
+                total_prepared_items: Math.max(preparedItemCount, Number(config.expectedItemCount || 0)),
+                items: currentItems,
+            };
+            const zipBlob = await createStoreOnlyZipInWorker([
+                {path: 'manifest.json', blob: new Blob([JSON.stringify(manifest)], {type: 'application/json'})},
+                ...currentEntries,
+            ]);
+            if (zipBlob.size > maxBytes) {
+                throw new Error(i18n('admin.browser_upload.batch_too_large', 'A prepared ZIP batch is larger than the server upload limit. Use the standard server-side fallback for these files.'));
+            }
+            const tempId = `${uploadSessionId}-batch-${nextBatchIndex}`;
+            await tempStore.put(tempId, zipBlob);
+            const batch = {
+                id: tempId,
+                index: nextBatchIndex,
+                blob: zipBlob,
+                itemCount: current.length,
+                firstSourceIndex: Math.min(...current.map((reference) => Number(reference.sourceIndex))),
+                lastSourceIndex: Math.max(...current.map((reference) => Number(reference.sourceIndex))),
+                originalBytes: current.reduce((sum, reference) => sum + Number(reference.originalBytes || 0), 0),
+                preparedBytes: currentBytes,
+                cleanup: () => tempStore.delete(tempId),
+            };
+            batches.push(batch);
+            batchPersisted = true;
+            await Promise.allSettled(current.map((reference) => tempStore.delete(reference.id)));
+            nextBatchIndex++;
+            if (typeof hooks.onBatchReady === 'function') {
+                await hooks.onBatchReady(batch);
+            }
+        } catch (error) {
+            // A persisted ZIP owns the items after an upload callback fails; restore
+            // references only when packaging failed before a durable batch existed.
+            if (!batchPersisted) {
+                pendingItems.unshift(...current);
+                pendingBytes += currentBytes;
+            }
+            throw error;
         }
-        const manifest = {
-            version: 2,
-            upload_session_id: uploadSessionId,
-            batch_index: nextBatchIndex,
-            total_prepared_items: preparedItems.length,
-            items: currentItems,
-        };
-        const zipBlob = await createStoreOnlyZipInWorker([
-            {path: 'manifest.json', blob: new Blob([JSON.stringify(manifest)], {type: 'application/json'})},
-            ...currentEntries,
-        ]);
-        if (zipBlob.size > maxBytes) {
-            throw new Error(i18n('admin.browser_upload.batch_too_large', 'A prepared ZIP batch is larger than the server upload limit. Use the standard server-side fallback for these files.'));
-        }
-        const tempId = `${uploadSessionId}-batch-${nextBatchIndex}`;
-        await tempStore.put(tempId, zipBlob);
-        const batch = {
-            id: tempId,
-            index: nextBatchIndex,
-            blob: zipBlob,
-            itemCount: current.length,
-            originalBytes: current.reduce((sum, reference) => sum + Number(reference.originalBytes || 0), 0),
-            preparedBytes: currentBytes,
-            cleanup: () => tempStore.delete(tempId),
-        };
-        batches.push(batch);
-        if (typeof hooks.onBatchReady === 'function') {
-            hooks.onBatchReady(batch);
-        }
-        nextBatchIndex++;
     };
 
     return {
+        batches,
         addItem: async (item) => {
-            const sourceIndex = Number.isInteger(Number(item.sourceIndex)) ? Number(item.sourceIndex) : preparedItems.length;
+            const sourceIndex = Number.isInteger(Number(item.sourceIndex)) ? Number(item.sourceIndex) : preparedItemCount;
             const itemBytes = preparedItemByteSize(item);
             if (itemBytes > maxBytes) {
                 throw new Error(i18n('admin.browser_upload.item_too_large', 'One prepared image package is larger than the server upload limit. Use the standard server-side fallback for that image.'));
@@ -835,28 +1380,57 @@ async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
             const id = preparedItemId(sourceIndex);
             await tempStore.put(id, {...item, sourceIndex, itemBytes});
             const originalBytes = Number(item.originalSize || 0);
-            preparedItems.push({id, sourceIndex, itemBytes, originalBytes});
-            return {id, sourceIndex, itemBytes, originalBytes};
+            const reference = {id, sourceIndex, itemBytes, originalBytes};
+            preparedItemCount++;
+            pendingItems.push(reference);
+            pendingBytes += itemBytes;
+            return {
+                id,
+                sourceIndex,
+                itemBytes,
+                originalBytes,
+                flushRequired: pendingBytes >= targetBytes || pendingItems.length >= maxItemsPerBatch,
+            };
+        },
+        shouldFlushBefore: (item) => {
+            const itemBytes = preparedItemByteSize(item);
+            return pendingItems.length > 0 && (pendingBytes + itemBytes > targetBytes || pendingItems.length >= maxItemsPerBatch);
+        },
+        flush: async () => {
+            if (!pendingItems.length) return;
+            const current = pendingItems.splice(0, pendingItems.length);
+            pendingBytes = 0;
+            await finalizeBatch(current);
         },
         finish: async () => {
-            preparedItems.sort((left, right) => Number(left.sourceIndex || 0) - Number(right.sourceIndex || 0));
+            pendingItems.sort((left, right) => Number(left.sourceIndex || 0) - Number(right.sourceIndex || 0));
+            const remainingItems = pendingItems.splice(0, pendingItems.length);
+            pendingBytes = 0;
             let current = [];
             let currentBytes = 0;
-            for (const reference of preparedItems) {
-                const itemBytes = Number(reference.itemBytes || 0);
-                // Keep ordinary batches near the configured target. If one prepared
-                // image is itself larger than that target, finalize the previous batch
-                // first and let the oversized image stand alone. finalizeBatch() still
-                // enforces the real PHP upload ceiling through maxBytes.
-                if (current.length > 0 && (currentBytes + itemBytes > targetBytes || current.length >= maxItemsPerBatch)) {
-                    await finalizeBatch(current);
-                    current = [];
-                    currentBytes = 0;
+            let nextReferenceIndex = 0;
+            try {
+                for (; nextReferenceIndex < remainingItems.length; nextReferenceIndex++) {
+                    const reference = remainingItems[nextReferenceIndex];
+                    const itemBytes = Number(reference.itemBytes || 0);
+                    // Keep ordinary batches near the configured target. If one prepared
+                    // image is itself larger than that target, finalize the previous batch
+                    // first and let the oversized image stand alone. finalizeBatch() still
+                    // enforces the real PHP upload ceiling through maxBytes.
+                    if (current.length > 0 && (currentBytes + itemBytes > targetBytes || current.length >= maxItemsPerBatch)) {
+                        await finalizeBatch(current);
+                        current = [];
+                        currentBytes = 0;
+                    }
+                    current.push(reference);
+                    currentBytes += itemBytes;
                 }
-                current.push(reference);
-                currentBytes += itemBytes;
+                await finalizeBatch(current);
+            } catch (error) {
+                pendingItems.push(...remainingItems.slice(nextReferenceIndex));
+                pendingBytes += remainingItems.slice(nextReferenceIndex).reduce((sum, reference) => sum + Number(reference.itemBytes || 0), 0);
+                throw error;
             }
-            await finalizeBatch(current);
             return batches;
         },
         cleanupPrepared: async () => {
@@ -1009,25 +1583,28 @@ async function createGalleryForBrowserUpload(form, operation) {
  * @param {Record<string, *>} config Browser configuration.
  * @param {number} galleryId Target gallery id.
  * @param {string} uploadSessionId Upload session id.
- * @param {Record<string, *>} batch Prepared batch.
+ * @param {{id: string, index: number, blob: Blob, itemCount: number}} batch Prepared ZIP batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
  * @param {boolean} preparedThumbnailsRequired Whether every configured thumbnail must be browser-prepared.
- * @param {Function} progressHandler Browser upload progress handler.
- * @return {Promise<Record<string, *>>} Server response.
+ * @param {PdfUploadXhrProgressHandler} [progressHandler=()=>{}] Browser upload progress handler.
+ * @param {{endpoint?: string, conversionToken?: string, sourceGalleryId?: number, signal?: AbortSignal|null}} [options={}] Optional conversion endpoint, token, source gallery and cancellation metadata.
+ * @returns {Promise<Record<string, unknown>>} Server JSON acknowledgment.
  */
-async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}) {
+async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}, options = {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
+        throwIfUploadStreamAborted(options.signal || null);
         try {
-            return await uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler);
+            return await uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler, options);
         } catch (error) {
             lastError = error;
+            if (options.signal?.aborted) throw error;
             if (!isRetryablePreparedUploadError(error)) {
                 throw error;
             }
             if (attempt < 3) {
-                await delay(750 * attempt);
+                await delay(750 * attempt, options.signal || null);
             }
         }
     }
@@ -1038,17 +1615,18 @@ async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessi
  * Upload one prepared batch once.
  *
  * @param {HTMLFormElement} form Upload form.
- * @param {Record<string, *>} config Browser configuration.
+ * @param {Record<string, unknown>} config Browser configuration.
  * @param {number} galleryId Target gallery id.
  * @param {string} uploadSessionId Upload session id.
- * @param {Record<string, *>} batch Prepared batch.
+ * @param {{id: string, index: number, blob: Blob, itemCount: number}} batch Prepared ZIP batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
  * @param {boolean} preparedThumbnailsRequired Whether every configured thumbnail must be browser-prepared.
- * @param {Function} progressHandler Browser upload progress handler.
- * @return {Promise<Record<string, *>>} Server response.
+ * @param {PdfUploadXhrProgressHandler} [progressHandler=()=>{}] Browser upload progress handler.
+ * @param {{endpoint?: string, conversionToken?: string, sourceGalleryId?: number, signal?: AbortSignal|null}} [options={}] Optional conversion endpoint, token, source gallery and cancellation metadata.
+ * @returns {Promise<Record<string, unknown>>} Server JSON acknowledgment.
  */
-function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}) {
+function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}, options = {}) {
     const body = new FormData();
     body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
     body.set('ajax', '1');
@@ -1057,6 +1635,8 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
     body.set('batch_index', String(batchIndex));
     body.set('total_batches', String(totalBatches));
     body.set('prepared_thumbnails_required', preparedThumbnailsRequired ? '1' : '0');
+    if (options.conversionToken) body.set('pdf_conversion_token', String(options.conversionToken));
+    if (Number(options.sourceGalleryId || 0) > 0) body.set('pdf_source_gallery_id', String(Number(options.sourceGalleryId)));
     const sourceUrl = form.querySelector('input[name="source_url"]')?.value || '';
     if (sourceUrl) {
         body.set('source_url', sourceUrl);
@@ -1064,11 +1644,20 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
     body.append('zip_batch', batch.blob, `browser-upload-${uploadSessionId}-${batch.index}.zip`);
     return new Promise(/** Send one prepared batch and preserve its existing retry classification. @param {function(Record<string, unknown>): void} resolve Accept the canonical server acknowledgment. @param {function(Error): void} reject Report transport, parser or server refusal. @return {void} Installs request-local handlers and starts this XHR only. */ (resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', String(config.endpoint));
+        xhr.open('POST', String(options.endpoint || config.endpoint));
         xhr.withCredentials = true;
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.upload.addEventListener('progress', progressHandler);
+        const abortRequest = () => xhr.abort();
+        if (options.signal) {
+            if (options.signal.aborted) {
+                reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+                return;
+            }
+            options.signal.addEventListener('abort', abortRequest, {once: true});
+            xhr.addEventListener('loadend', () => options.signal.removeEventListener('abort', abortRequest), {once: true});
+        }
         xhr.addEventListener('load', /** Validate one prepared acknowledgment before allowing cleanup or key rotation. @return {Promise<void>} Resolves the request promise or rejects with the existing retry classification. */ async () => {
             try {
                 const response = new Response(xhr.responseText || '', {
@@ -1094,6 +1683,11 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
             failure.retryable = true;
             reject(failure);
         });
+        xhr.addEventListener('abort', () => {
+            const failure = new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+            failure.retryable = false;
+            reject(failure);
+        }, {once: true});
         xhr.send(body);
     });
 }
@@ -1315,10 +1909,28 @@ function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumb
  * Delay execution for retry backoff.
  *
  * @param {number} milliseconds Delay length.
+ * @param {AbortSignal|null} signal Optional cancellation signal that interrupts the backoff.
  * @return {Promise<void>} Delay promise.
  */
-function delay(milliseconds) {
-    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+function delay(milliseconds, signal = null) {
+    return new Promise((resolve, reject) => {
+        let timer = null;
+        const finish = () => {
+            if (signal) signal.removeEventListener('abort', abort);
+            resolve();
+        };
+        const abort = () => {
+            if (timer !== null) window.clearTimeout(timer);
+            if (signal) signal.removeEventListener('abort', abort);
+            reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+        };
+        if (signal?.aborted) {
+            abort();
+            return;
+        }
+        if (signal) signal.addEventListener('abort', abort, {once: true});
+        timer = window.setTimeout(finish, milliseconds);
+    });
 }
 
 /**

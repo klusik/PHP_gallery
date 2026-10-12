@@ -448,7 +448,7 @@ function cms_gallery(): void
         : 0;
 
     ob_start();
-    render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    $descriptionDocumentsHtml = render_public_gallery_branding_header($gallery, $seo, $publicOnly);
     $brandingHeaderHtml = (string) ob_get_clean();
     ob_start();
     render_breadcrumbs($gallery);
@@ -480,6 +480,7 @@ function cms_gallery(): void
         'smart_gallery_count' => count($topSmartChildren) + count($bottomSmartChildren),
         'canonical_url' => gallery_public_url($gallery),
         'branding_header_html' => $brandingHeaderHtml,
+        'description_documents_html' => $descriptionDocumentsHtml,
         'breadcrumbs_html' => $breadcrumbsHtml,
         'show_count_badge' => $showHeroCountBadge,
         'branch_image_count' => $heroBranchImageCount,

@@ -43,16 +43,16 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026100
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261008-issue118-v3';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261012-dpi-warning-v4';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
-import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
+import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
-import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261008-issue118-v3';
-import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning, adminOperationOwnsInput} from './admin-operation-keys.js?v=20261008-issue118-v3';
+import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261012-pdf-files-v1';
+import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning, adminOperationOwnsInput} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
 import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261008-issue118-v3';
-import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261008-issue118-v5';
+import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261012-pdf-queue-v1';
 
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.
@@ -273,6 +273,12 @@ async function runGalleryUpload(form) {
         } else {
             updateBasicProgress(progress, 100, i18n('admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.', {count: result.uploaded || 0}));
         }
+        // PDF-only attachment completion also belongs to its mounted upload drawer.
+        if (isPanelPdfUploadCompletion(form, result)) {
+            rememberAdminPanelMutation(result, owner);
+            dispatchAdminSidePanelSuccess(form, result);
+            return;
+        }
         if (galleryUploadCompletesInSidePanel(form)) {
             rememberAdminPanelMutation(result, owner);
             dispatchAdminSidePanelSuccess(form, result);
@@ -334,7 +340,23 @@ function revealPanelUploadProgress(form, progress) {
  * @return {boolean} True when the mounted side panel owns the completion behavior.
  */
 function galleryUploadCompletesInSidePanel(form) {
-    return form.dataset.galleryPanelCloseOnSuccess === '1' && Boolean(form.closest('[data-admin-side-panel]'));
+    return Boolean(form.closest('[data-admin-side-panel]'))
+        && form.dataset.galleryPanelCloseOnSuccess === '1';
+}
+
+/**
+ * Return whether an acknowledged PDF attachment belongs to the open upload drawer.
+ *
+ * PDF uploads can complete as a separate attachment phase after image upload, so
+ * their server result establishes panel completion ownership when the form is in
+ * the drawer even if that form does not close the drawer for ordinary uploads.
+ * @param {HTMLFormElement} form Upload form submitted by the admin.
+ * @param {{pdf_documents_uploaded?: number}} result Canonical result with an optional acknowledged attachment count.
+ * @return {boolean} True when this PDF completion should refresh its mounted drawer.
+ */
+function isPanelPdfUploadCompletion(form, result) {
+    return Boolean(form.closest('[data-admin-side-panel]'))
+        && Number(result?.pdf_documents_uploaded || 0) > 0;
 }
 
 /**
@@ -2847,18 +2869,32 @@ function appendServerUploadEvents(progress, events) {
  * The explicit right-drawer preview queue determines its submitted FileList order.
  * Standalone forms retain the established natural filename/folder ordering.
  * Neither path copies source bytes or persists them in browser storage.
- * @param {HTMLFormElement} form Original upload form containing images[].
- * @return {File[]} Source references in drawer order, or default folder/name order on standalone forms.
+ * @param {HTMLFormElement} form Original upload form containing image and optional PDF inputs.
+ * @return {File[]} Photo references in established order followed by PDF references in picker order.
  */
 function selectedGalleryUploadFiles(form) {
     // fileInput stores state or configuration for the gallery front-end flow.
     const fileInput = form.querySelector('input[type="file"][name="images[]"]');
-    if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
-        return [];
-    }
-    const files = Array.from(fileInput.files)
-        .filter(/** Retain only actual browser File references for upload ordering. @param {File} file FileList entry. @return {boolean} Whether the source has the required File identity. */ (file) => file instanceof File);
-    return form.querySelector('[data-gallery-upload-preview]') ? files : files.sort(compareGalleryUploadFilesByDefaultFolderOrder);
+    const inputFiles = fileInput instanceof HTMLInputElement && fileInput.files
+        ? Array.from(fileInput.files).filter(/** Retain only actual browser File references for upload ordering. @param {File} file FileList entry. @return {boolean} Whether the source has the required File identity. */ (file) => file instanceof File)
+        : [];
+    const photos = inputFiles.filter((file) => !isGalleryUploadPdfFile(file));
+    const orderedPhotos = form.querySelector('[data-gallery-upload-preview]') ? photos : photos.sort(compareGalleryUploadFilesByDefaultFolderOrder);
+    const queuedPdfs = inputFiles.filter((file) => isGalleryUploadPdfFile(file));
+    const pdfInput = form.querySelector('input[type="file"][name="pdf_files[]"][data-gallery-upload-pdf-input]');
+    const pdfs = pdfInput instanceof HTMLInputElement && pdfInput.files
+        ? Array.from(pdfInput.files).filter(/** Retain original PDF File references for exact operation retries. @param {File} file FileList entry. @return {boolean} Whether the source is a PDF browser File. */ (file) => file instanceof File && isGalleryUploadPdfFile(file))
+        : [];
+    return [...orderedPhotos, ...queuedPdfs, ...pdfs];
+}
+
+/**
+ * Classify PDF originals before assigning files to the image or document workflow.
+ * @param {File} file Selected native source.
+ * @returns {boolean} True for an application/pdf MIME or .pdf filename.
+ */
+function isGalleryUploadPdfFile(file) {
+    return String(file?.type || '').toLowerCase() === 'application/pdf' || /\.pdf$/i.test(String(file?.name || ''));
 }
 
 /**

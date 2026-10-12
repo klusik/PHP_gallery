@@ -93,6 +93,7 @@ function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEdi
 function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
     ob_start();
+    echo admin_gallery_pdf_documents_html($gallery);
     echo admin_edit_gallery_simbrief_legacy_panel_html($gallery);
     if ($capabilities['upload_api_feature_enabled']) {
         render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');

@@ -17,6 +17,15 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 /**
+ * Bound one PDF conversion lifecycle sidecar before decoding its acknowledgment map.
+ * @var int
+ * Units: bytes. Scope: one source-side conversion marker.
+ * Consumers: gallery_pdf_conversion_marker_read and gallery_pdf_publication_forces_private.
+ * Rationale: allow large page maps while refusing a corrupted unbounded JSON read; this byte bound does not limit PDF page count.
+ */
+const GALLERY_PDF_CONVERSION_MAX_MARKER_BYTES = 67108864;
+
+/**
  * Fixed prefixes for request-owned migration transfer files.
  * @var array<string,string>
  * Units: filename prefixes. Scope: temporary migration transfers.

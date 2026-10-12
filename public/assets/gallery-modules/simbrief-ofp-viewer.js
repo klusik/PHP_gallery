@@ -61,7 +61,7 @@ let activeViewer = null;
  * @returns {void} Install the delegated listener when there is an OFP link.
  */
 export function setupSimbriefOfpViewer() {
-    if (!document.querySelector('[data-simbrief-ofp-open]') || document.body?.dataset.ofpViewerBound === '1') return;
+    if (document.body?.dataset.ofpViewerBound === '1') return;
     document.body.dataset.ofpViewerBound = '1';
     // Only the pinned tooltip needs scripting: keyboard focus and hover use CSS.
     document.addEventListener('click', (event) => {

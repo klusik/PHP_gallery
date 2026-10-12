@@ -177,13 +177,13 @@ function view_render_public_gallery_preview_toolbar(array $viewModel): void
 /**
  * Render the public gallery title and optional branding assets.
  *
- * @param array<string,mixed> $viewModel Controller-prepared branding, description and OFP attachment state.
+ * @param array{title?:string,description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>,banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string} $viewModel Controller-prepared branding, description links and protected PDF table markup; omitted presentation fields use their existing empty defaults.
+ * @param bool $includeContent Whether to append description and documents; defaults to true for direct view consumers.
  * @return void Emits public gallery branding and conditional flight-plan controls.
  */
-function view_render_public_gallery_branding_header(array $viewModel): void
+function view_render_public_gallery_branding_header(array $viewModel, bool $includeContent = true): void
 {
     $title = (string) ($viewModel['title'] ?? 'Gallery');
-    $description = (string) ($viewModel['description'] ?? '');
     $bannerUrl = (string) ($viewModel['banner_url'] ?? '');
     $logoUrl = (string) ($viewModel['logo_url'] ?? '');
     $titleBarClasses = 'gallery-title-bar' . ($bannerUrl !== '' ? ' has-gallery-banner' : '') . ($logoUrl !== '' ? ' has-gallery-logo' : '');
@@ -199,38 +199,33 @@ function view_render_public_gallery_branding_header(array $viewModel): void
     }
     echo '</div>';
     echo (string) ($viewModel['date_html'] ?? '');
-    $ofpUrl = (string) ($viewModel['ofp_pdf_url'] ?? '');
-    if (trim($description) !== '' || $ofpUrl !== '') {
+    if ($includeContent) {
+        view_render_public_gallery_description_documents($viewModel);
+    }
+}
+
+/**
+ * Render only description text and the document table in the full-width hero content row.
+ * @param array{description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>,pdf_html?:string} $viewModel Prepared description, link metadata and protected document markup; absent fields render no content.
+ * @return void Emit the text/document row, or the standalone text or left-aligned document table.
+ */
+function view_render_public_gallery_description_documents(array $viewModel): void
+{
+    $description = (string) ($viewModel['description'] ?? '');
+    $pdfHtml = (string) ($viewModel['pdf_html'] ?? '');
+    $hasDescription = trim($description) !== '';
+    if ($hasDescription && $pdfHtml !== '') {
+        echo '<div class="gallery-description-documents">';
+    }
+    if (trim($description) !== '') {
         echo '<div class="hero-description gallery-description-rich">';
         if (trim($description) !== '') {
             echo view_gallery_description_markdown_html($description, (array) ($viewModel['description_links'] ?? []));
         }
-        if ($ofpUrl !== '') {
-            echo '<div class="simbrief-ofp-actions">';
-            echo '<div class="simbrief-ofp-primary-actions">';
-            echo '<a class="button simbrief-ofp-open" href="' . e($ofpUrl) . '" data-simbrief-ofp-open data-ofp-url="' . e($ofpUrl) . '">' . e(t('simbrief.ofp.view', 'View flight plan (OFP)')) . '</a>';
-            echo '<a class="button secondary" href="' . e((string) ($viewModel['ofp_pdf_download_url'] ?? $ofpUrl)) . '" download="simbrief-ofp.pdf">' . e(t('simbrief.ofp.download', 'Download OFP PDF')) . '</a>';
-            echo '</div>';
-            if (!empty($viewModel['ofp_can_convert'])) {
-                echo '<div class="simbrief-ofp-secondary-actions">';
-                if (!empty($viewModel['ofp_conversion_supported'])) {
-                    echo '<form class="simbrief-ofp-convert-form" method="post" action="' . e((string) ($viewModel['ofp_conversion_url'] ?? '')) . '" data-ofp-convert-form>';
-                    echo (string) ($viewModel['ofp_conversion_csrf'] ?? '');
-                    echo '<input type="hidden" name="gallery_id" value="' . (int) ($viewModel['ofp_gallery_id'] ?? 0) . '">';
-                    echo '<input type="hidden" name="simbrief_action" value="convert_pdf_pages">';
-                    echo '<button type="submit" class="button secondary">' . e(t('simbrief.ofp.convert', 'Create private OFP subgallery')) . '</button>';
-                    echo '<span class="simbrief-ofp-info">';
-                    echo '<button type="button" class="simbrief-ofp-info-toggle" data-ofp-info-toggle aria-expanded="false" aria-controls="simbrief-ofp-convert-help" aria-label="' . e(t('simbrief.ofp.convert_help', 'Optional. Convert PDF pages to images in a private subgallery that you can publish manually.')) . '">?</button>';
-                    echo '<span class="simbrief-ofp-info-text" id="simbrief-ofp-convert-help" role="tooltip">' . e(t('simbrief.ofp.convert_help', 'Optional. Convert PDF pages to images in a private subgallery that you can publish manually.')) . '</span>';
-                    echo '</span>';
-                    echo '<output class="simbrief-ofp-convert-result" data-ofp-convert-result aria-live="polite"></output></form>';
-                } else {
-                    echo '<span class="muted simbrief-ofp-convert-note">' . e(t('simbrief.ofp.convert_unavailable', 'PDF page conversion requires Imagick with PDF support on this server.')) . '</span>';
-                }
-                echo '</div>';
-            }
-            echo '</div>';
-        }
+        echo '</div>';
+    }
+    echo $pdfHtml;
+    if ($hasDescription && $pdfHtml !== '') {
         echo '</div>';
     }
 }

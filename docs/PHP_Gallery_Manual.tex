@@ -491,6 +491,21 @@ The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, 
 
 \ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds are~under \ui{Advanced display settings}; flight-route text is~available beside SimBrief under \ui{Identity}.
 
+\subsubsection{Attach and~convert a~PDF document}
+Expanded conversion controls keep the document column bounded. If the previous target is missing or changed, confirm a new private result; earlier files and galleries are preserved.
+
+The gallery shows PDFs in a compact table with size, page count and small action icons. Click a title or the eye to view it. With a description, text appears on the left and documents on the right; without text the table stays left-aligned. Administrators can expand conversion settings, hide or show a PDF, and confirm deletion. Hidden documents are denied to visitors even through direct links; generated photos remain after deletion.
+
+The existing-gallery Upload photos chooser and drop queue also accept PDFs. Select a private child gallery or append pages, and choose the DPI before uploading. Mixed selections upload photos first, then PDF pages. The panel stays open with progress and cancellation controls. Retrying unchanged inputs automatically recreates a missing empty child only when no page was acknowledged.
+
+\index{PDF!gallery documents}
+
+An~administrator can~attach a~general PDF to~a~physical gallery even when it~has no~SimBrief data. The~gallery keeps the~original file and~a~small index with its stable document ID, filename, title, provenance, exact size and~SHA-256 digest. The~protected same-origin viewer and~download link follows the~gallery's visibility, password, share-link and~NSFW access rules. SimBrief OFPs keep their existing manifest and~links.
+
+Choose \ui{Convert PDF pages} to~render the~document in~the~browser. PDF.js creates PNG pages sequentially and~the~existing upload process reports progress, acknowledges batches, resumes interrupted work and~can~be cancelled. New conversions use 150~DPI by~default; choose 96, 150, 200, 300, 600, 1200 or~2400~DPI. There is~no~page-count limit. A~page above the~conservative 16,384-pixel edge or~32-million-pixel advisory threshold shows a~warning but does not block rendering or~silently downscale the~page. Its memory estimate covers only the~canvas RGBA buffer at four bytes per pixel, not total browser memory. Actual browser canvas allocation and~upload limits can still make rendering or~upload fail.
+
+Choose either a~reserved private child gallery or~append after the~source gallery's last photograph. A~child stays private until you~change its visibility explicitly; publication is blocked while its PDF conversion is incomplete or~cancelled, so finish or~safely reconcile the conversion first. Appending keeps the~source gallery's visibility and~existing photographs, then places converted pages at~the~end. Conversion never replaces the~original PDF. Progress markers live in~the~source gallery's hidden conversion sidecar for~both destinations and~record the~target gallery ID. Photo ZIP exports and~gallery migration do~not~transfer these general PDF originals. A~full filesystem backup must include hidden sidecar folders. Existing JPG page galleries remain separate. The~former server-side OFP conversion request now returns HTTP 409 and~directs you~to~reload; its rasterizer helper is~for~CLI and~test compatibility only and~is~not~called by~browser actions. See \codeword{docs/GALLERY\_PDF.md} for~the~storage and~conversion contract.
+
 \subsection{Edit identity and~context}
 \index{gallery metadata}
 \index{date range}

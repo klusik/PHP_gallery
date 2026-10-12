@@ -1,5 +1,31 @@
 # Compatibility lifecycle and retirement register
 
+## PDF conversion generations after target loss
+
+Owner: `app/services/gallery_pdf_conversion.php`. Existing v1 markers omit
+`render_key` and `generation`; their conversion identity remains the render key
+and they remain generation zero. Confirmed replacement of a missing or changed
+child creates a new identity while preserving prior markers and their publication
+guards. Empty newer generations advance rather than replacing generation zero.
+Legacy-marker usage is **unknown**; preserve this interpretation until supported
+installations have an accepted migration. The lifecycle fixture contains
+generation-selection, old-marker preservation and empty-orphan assertions;
+functional execution remains deferred during BASIC-only implementation.
+
+## Gallery PDF index visibility defaults
+
+Owner: `app/services/gallery_pdf_documents.php` and protected PDF delivery in
+`app/controllers/public_media.php`. Existing v1 attachment indexes omit the manual
+`hidden` flag and legacy `ofp_hidden` envelope value; both default to visible to
+preserve previously shared documents. New hidden state is enforced for visitors,
+including share tokens and anonymous Admin preview. Replacement and index rewrites
+retain those values. Usage of legacy indexes is **unknown**; keep this fallback
+while supported installations can contain v1 records without visibility fields.
+Retirement requires a verified migration and supported-installation acceptance.
+Regression assertions are authored in `gallery_pdf_documents_service_test.php`
+and `simbrief_ofp_public_http_test.php`; execution is deferred during BASIC-only
+implementation and must not be claimed as verified functional coverage.
+
 ## Publication refresh and normal automatic release retirement
 
 Pages handoff protects the main-only `github-pages` environment. A main checkout
@@ -573,6 +599,37 @@ not a source parser or a commitment to remove anything on a calendar date.
   links can be migrated or a versioned retirement with real hosted evidence
   is approved. Both routes must remain equally protected; the compatibility
   route must never become a public static-file bypass.
+
+### MEDIA-5 — Original gallery PDFs and converted page destinations
+
+- **Reason / protected scenario:** General PDF attachments use a gallery-local
+  stable document ID and same-origin protected route while retaining original
+  PDF bytes. Their index is separate from the SimBrief OFP manifest so manual
+  documents and OFP imports do not overwrite one another. Conversion supports
+  either a reserved private child or PNG pages appended after existing photos. A source-bound reserved PDF child cannot be made public or unpublished until its conversion is complete; incomplete or cancelled work must first be finished or safely reconciled. This guard applies only to the reserved PDF child and leaves append targets and existing JPG page galleries unchanged.
+- **Owner:** `app/services/gallery_pdf_documents.php` owns original documents;
+  `app/services/gallery_pdf_conversion.php` owns resumable conversion state;
+  source-gallery `.gallery-pdf-conversions/` sidecars hold markers for both
+  private-child and append targets. `app/controllers/public_media.php` retains
+  gallery access checks and the legacy OFP PDF-delivery route. The former
+  `simbrief_action=convert_pdf_pages` browser request returns HTTP 409 with a
+  reload prompt; the server-rasterizer helper remains only for CLI/test
+  compatibility consumers and is not called by browser actions.
+- **Evidence:** The document service fixture covers exact bytes, stable identity,
+  explicit replacement/deletion confirmation and digest changes. Hosted
+  qualification, browser device coverage, and live deployment authorization
+  remain pending for the exact candidate.
+- **Usage:** Per-document route and conversion-destination usage is unknown; no
+  usage measurement is collected.
+- **Support rationale / retirement:** Keep the existing OFP manifest and
+  `media&ofp=1` resolver for stored OFP files and historical links. Keep the
+  original PDF alongside generated PNGs in both destination modes. Photo ZIP
+  exports and gallery-migration transfers do not enumerate manual-document
+  sidecars; full filesystem backups must include the hidden document and
+  conversion directories. No document-specific import/restore workflow exists.
+  Revisit
+  these contracts only after stored IDs/markers and historical links have a
+  measured migration path and replacement hosted evidence.
 
 ### ROUTE-1 — Query routes and clean URL aliases
 

@@ -69,10 +69,23 @@ function gallery_editor_unique_slug(string $value, int $excludeGalleryId = 0, ?c
  *
  * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $fields Editable gallery column-value map.
+ * @return void Persist the guarded field update and release its writer lease.
  */
 function gallery_editor_update_fields(int $galleryId, array $fields): void
 {
-    gallery_model_update_fields($galleryId, $fields, now_sql());
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        if (array_key_exists('visibility', $fields)) {
+            $gallery = find_gallery($galleryId, true);
+            if (is_array($gallery)) {
+                require_once __DIR__ . '/gallery_pdf_publication.php';
+                gallery_pdf_publication_assert_visibility_change($gallery, (string) $fields['visibility']);
+            }
+        }
+        gallery_model_update_fields($galleryId, $fields, now_sql());
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
 }
 
 /**

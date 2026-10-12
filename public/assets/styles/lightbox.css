@@ -1482,6 +1482,41 @@
 }
 
 
+/* General PDF attachments retain native links and wrap compactly in gallery headers and Admin drawers. */
+.gallery-pdf-documents { min-width: 0; width: min(36rem, 100%); max-width: 100%; margin-block: 0.5rem; overflow-x: auto; }
+.gallery-pdf-documents h3 { font-size: 0.9rem; margin: 0 0 0.25rem; }
+.gallery-pdf-table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.85rem; }
+.gallery-pdf-size-column { width: 5.5rem; }
+.gallery-pdf-pages-column { width: 3rem; }
+.gallery-pdf-actions-column { width: 4rem; }
+.gallery-pdf-table.is-admin .gallery-pdf-actions-column { width: 9.6rem; }
+.gallery-pdf-table.is-admin { min-width: 22rem; }
+.gallery-pdf-table :is(th, td) { padding: 0.25rem 0.4rem; vertical-align: middle; border-bottom: 1px solid var(--color-border); text-align: left; }
+.gallery-pdf-table thead th { font-size: 0.75rem; font-weight: 500; color: var(--color-muted); white-space: nowrap; }
+.gallery-pdf-name { font-weight: 500; }
+.gallery-pdf-name > a { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gallery-pdf-number { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gallery-pdf-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 0.15rem; width: max-content; white-space: nowrap; }
+.gallery-pdf-documents .gallery-pdf-actions form { display: contents; margin: 0; }
+.gallery-pdf-documents .gallery-pdf-icon { display: inline-flex; flex: 0 0 1.65em; align-items: center; justify-content: center; padding: 0.2em; width: 1.65em; height: 1.65em; min-width: 0; min-height: 0; border: 0; border-radius: 0.2em; background: transparent; color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.gallery-pdf-icon svg { width: 1em; height: 1em; }
+.gallery-pdf-icon:is(:hover, :focus-visible) { background: var(--color-border); outline: 1px solid currentColor; }
+.gallery-pdf-table [data-pdf-controls] > td { padding: 0.5rem; }
+.gallery-description-documents { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, min(50%, 36rem)); align-items: start; gap: 1.25rem; margin-block: 0.65rem; }
+.gallery-description-documents > .gallery-pdf-documents { justify-self: end; margin-top: 0; }
+.gallery-description-documents .gallery-description-rich { min-width: 0; margin-top: 0; }
+@media (max-width: 760px) {
+    .gallery-description-documents { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+    .gallery-pdf-table :is(th, td) { padding-inline: 0.2rem; }
+}
+.gallery-pdf-documents form { display: grid; gap: 0.5rem; margin-block: 0.5rem; }
+.gallery-pdf-table [data-pdf-controls] :is(form, label, p, output) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.gallery-pdf-table [data-pdf-controls] :is(input, select) { min-width: 0; width: 100%; box-sizing: border-box; }
+.gallery-pdf-table [data-pdf-controls] input[type="checkbox"] { width: auto; }
+.gallery-pdf-documents :is(input, select, progress) { max-width: 100%; }
+.gallery-pdf-documents output { overflow-wrap: anywhere; }
+.gallery-pdf-documents [data-upload-progress-log] { max-height: 10rem; overflow: auto; }
+.gallery-pdf-documents summary { cursor: pointer; padding-block: 0.4rem; }
 /* SimBrief OFP is a separate document sequence; it never participates in photo navigation. */
 .simbrief-ofp-actions {
     display: flex;

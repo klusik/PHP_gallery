@@ -229,7 +229,7 @@ function admin_upload_settings_normalize_tab(string $tab): string
  *
  * @param string $activeTab Active tab value.
  * @param string $notice Notice value.
- * @return array<string mixed>.
+ * @return array{active_tab:string,notices:list<array{kind:string,message:string}>,support:array{heic:bool,raw:bool},client_format_mode:string,auto_rename_enabled:bool,pdf_render_dpi:int,browser_settings:array<string,int|float|bool|string>,central_settings_url:string} Resolved preferences and navigation for the dedicated upload settings page.
  */
 function admin_upload_settings_view_model(string $activeTab, string $notice = ''): array
 {
@@ -247,6 +247,7 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'support' => admin_upload_support_model(),
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
+        'pdf_render_dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
         'browser_settings' => function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [],
         'central_settings_url' => admin_settings_url('uploads'),
     ];
@@ -268,10 +269,13 @@ function admin_upload_support_model(): array
 /**
  * Persist general upload preferences from the dedicated Admin settings page.
  *
- * @param array $input Input value.
+ * @param array{gallery_pdf_render_dpi?:string|int,admin_upload_client_format_mode?:string,admin_upload_auto_rename_enabled?:string} $input Submitted general upload preferences.
+ * @return void Persist validated preferences through their service owners.
  */
 function admin_upload_save_general_settings(array $input): void
 {
+    $dpi = \Gallery\Services\gallery_pdf_render_dpi_validate((string) ($input['gallery_pdf_render_dpi'] ?? \Gallery\Services\gallery_pdf_render_dpi()));
+    \Gallery\Services\set_app_setting('gallery_pdf_render_dpi', (string) $dpi);
     $clientFormatMode = save_admin_upload_client_format_mode(
         admin_upload_client_format_mode_normalize($input['admin_upload_client_format_mode'] ?? 'server_supported')
     );
@@ -323,6 +327,7 @@ function cms_admin_upload_settings(): void
 
 /**
  * Accept one browser-prepared upload batch.
+ * @return void Emit the canonical authenticated upload result or a JSON refusal.
  */
 function cms_admin_upload_browser_batch(): void
 {
@@ -360,7 +365,28 @@ function cms_admin_upload_browser_batch(): void
         }
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
         $preparedThumbnailsRequired = (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1';
-        $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex, $preparedThumbnailsRequired);
+        $pdfToken = (string) ($_POST['pdf_conversion_token'] ?? '');
+        $pdfParent = null;
+        $pdfWriter = $pdfToken !== '' ? \Gallery\Services\gallery_edit_writer_begin() : null;
+        try {
+            if ($pdfToken !== '') {
+                require_once __DIR__ . '/../services/gallery_pdf_conversion.php';
+                $pdfParent = find_gallery((int) ($_POST['pdf_source_gallery_id'] ?? 0));
+                if (!is_array($pdfParent)) {
+                    throw new RuntimeException('The source PDF gallery is unavailable.');
+                }
+                $pdfValidation = \Gallery\Services\gallery_pdf_conversion_validate_batch($pdfParent, $pdfToken, $galleryId,
+                    $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+            }
+            $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex, $preparedThumbnailsRequired, $pdfParent !== null);
+            if ($pdfParent !== null) {
+                \Gallery\Services\gallery_pdf_conversion_acknowledge_batch($pdfParent, $pdfToken, $galleryId, $response, $batchIndex, $pdfValidation['page_numbers']);
+            }
+        } finally {
+            if ($pdfWriter !== null) {
+                \Gallery\Services\gallery_edit_writer_end($pdfWriter);
+            }
+        }
         $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
         if ($callerRefreshUrl !== '') {
             $response['refresh_url'] = $callerRefreshUrl;
@@ -469,6 +495,12 @@ function cms_admin_upload(): void
                 flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
                 redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
             }
+            $pdfAttachments = $_FILES['pdf_files'] ?? null;
+            foreach ((array) ($pdfAttachments['error'] ?? []) as $pdfUploadError) {
+                if ((int) $pdfUploadError !== UPLOAD_ERR_NO_FILE) {
+                    throw new RuntimeException(t('pdf.error.browser', 'PDF originals from Upload photos require the browser workflow. Reload the gallery and submit the PDF through its document controls.'));
+                }
+            }
             // $mode stores an intermediate value used by the surrounding gallery workflow.
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
             $operationKey = admin_operation_require_key($_POST['operation_key'] ?? null);
@@ -477,6 +509,12 @@ function cms_admin_upload(): void
             }
             // $entries stores an intermediate value used by the surrounding gallery workflow.
             $entries = $mode === 'new' ? gallery_upload_entries_or_empty($_FILES['images'] ?? null) : gallery_upload_entries($_FILES['images'] ?? null);
+            foreach ($entries as $entry) {
+                if (strtolower(pathinfo((string) ($entry['name'] ?? ''), PATHINFO_EXTENSION)) === 'pdf'
+                    || strtolower((string) ($entry['type'] ?? '')) === 'application/pdf') {
+                    throw new RuntimeException(t('pdf.error.browser', 'PDF page conversion requires the browser-assisted upload workflow.'));
+                }
+            }
             if ($mode !== 'new') {
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
@@ -870,12 +908,14 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
     \Gallery\Views\view_render_admin_upload_existing_gallery_form([
         'panel_mode' => $panelMode,
         'action_url' => url_for('admin_upload'),
+        'pdf_attachment_url' => url_for('admin_edit_gallery'),
         'csrf_html' => csrf_field(),
         'operation_key' => admin_operation_form_key($_POST['operation_key'] ?? null),
         'gallery_id' => $panelMode ? $prefillGalleryId : 0,
         'target_title' => is_array($targetGallery) ? (string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId)) : '',
         'gallery_options_html' => $panelMode && $prefillGalleryId > 0 ? '' : gallery_options_for_select($prefillGalleryId),
         'accept_value' => admin_browser_upload_accept_value(),
+        'pdf_render_dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
         'browser_checkbox_html' => admin_upload_capture_html(static function () use ($panelMode): void {
             render_admin_upload_browser_checkbox($panelMode);
         }),

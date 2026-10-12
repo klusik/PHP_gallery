@@ -613,7 +613,7 @@ function cms_gallery_ofp_pdf_not_found(bool $head = false): void
 }
 
 /**
- * Stream one saved SimBrief PDF via an explicit gallery-scoped route.
+ * Stream one saved gallery PDF via the protected gallery-scoped route.
  *
  * Public requests use the original parent gallery's access policy, never an
  * administrator-only endpoint or the visibility of a generated child. Retain
@@ -631,17 +631,36 @@ function cms_gallery_ofp_pdf(): void
     }
 
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
-    $isAdmin = current_user() !== null
+    $user = current_user();
+    $isAdmin = is_array($user) && ($user['role'] ?? '') === 'admin'
         && !\Gallery\Core\admin_anonymous_preview_active()
         && !current_user_is_known_under_18();
     require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
-
+    require_once __DIR__ . '/../services/gallery_pdf_documents.php';
     if (!$gallery || !\Gallery\Services\simbrief_ofp_visitor_access_allowed($gallery, $isAdmin)) {
         cms_gallery_ofp_pdf_not_found($method === 'HEAD');
         return;
     }
 
-    $path = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    $documentId = (string) ($_GET['document'] ?? '');
+    $filename = 'simbrief-ofp.pdf';
+    if ($documentId !== '') {
+        try {
+            $document = \Gallery\Services\gallery_pdf_documents_read($gallery, $documentId);
+        } catch (\Throwable) {
+            $document = null;
+        }
+        $path = $document['path'] ?? null;
+        $filename = (string) ($document['metadata']['filename'] ?? 'document.pdf');
+        if (!empty($document['metadata']['hidden']) && !$isAdmin) {
+            $path = null;
+        }
+    } else {
+        $path = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+        if (\Gallery\Services\gallery_pdf_documents_hidden($gallery, 'ofp') && !$isAdmin) {
+            $path = null;
+        }
+    }
     if ($path === null) {
         cms_gallery_ofp_pdf_not_found($method === 'HEAD');
         return;
@@ -655,7 +674,7 @@ function cms_gallery_ofp_pdf(): void
     header('X-Robots-Tag: noindex, nofollow');
     header('Referrer-Policy: same-origin');
     header('Cache-Control: private, no-store, max-age=0');
-    header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="simbrief-ofp.pdf"');
+    header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="document.pdf"; filename*=UTF-8\'\'' . rawurlencode($filename));
     header('Content-Length: ' . (int) filesize($path));
     cms_release_public_media_session_lock();
     if ($method === 'GET') {
@@ -671,6 +690,11 @@ function cms_gallery_ofp_pdf(): void
 function cms_media(): void
 {
     if ((string) ($_GET['ofp'] ?? '') === '1') {
+        // Keep historical OFP links while ordinary photo requests load only their
+        // own module. Isolated legacy CLI fixtures supply their dependencies directly.
+        if (function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+            \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        }
         cms_gallery_ofp_pdf();
         return;
     }

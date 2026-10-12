@@ -430,9 +430,9 @@ function public_gallery_ofp_document_url(int $galleryId, bool $download = false)
  * @param array<string,mixed> $gallery Source gallery record and branding configuration.
  * @param array<string,mixed> $seo SEO metadata for the public gallery title.
  * @param bool $publicOnly Whether only visitor-visible assets should be used.
- * @return void Emits the accessible gallery heading, description and OFP actions.
+ * @return string Prepared description/document HTML for the full-width content row; emits title and date markup separately.
  */
-function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
+function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): string
 {
     // $brandingSchemaReady avoids repeated schema-policy inspection for the optional assets.
     $brandingSchemaReady = gallery_branding_schema_ready();
@@ -441,24 +441,28 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     view_render_gallery_date(gallery_date_view_model($gallery), 'hero-gallery-date');
     $dateHtml = (string) ob_get_clean();
 
-    require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
-    $ofpPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
-    $conversionSupported = $ofpPath !== null && \Gallery\Services\simbrief_ofp_conversion_supported();
-    \Gallery\Views\view_render_public_gallery_branding_header([
+    $pdfHtml = '';
+    // Only attachment galleries load document presentation; the prepared HTML
+    // joins the description in the view without moving unrelated hero controls.
+    if (\Gallery\Services\gallery_pdf_documents_present($gallery)) {
+        \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        ob_start();
+        \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery));
+        $pdfHtml = (string) ob_get_clean();
+    }
+    $viewModel = [
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
-        'ofp_pdf_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id']) : '',
-        'ofp_pdf_download_url' => $ofpPath !== null ? public_gallery_ofp_document_url((int) $gallery['id'], true) : '',
-        'ofp_can_convert' => $ofpPath !== null && \Gallery\Core\current_user() !== null && !\Gallery\Core\admin_anonymous_preview_active(),
-        'ofp_conversion_supported' => $conversionSupported,
-        'ofp_conversion_url' => $ofpPath !== null ? url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]) : '',
-        'ofp_conversion_csrf' => $ofpPath !== null && \Gallery\Core\current_user() !== null ? \Gallery\Core\csrf_field() : '',
-        'ofp_gallery_id' => (int) $gallery['id'],
         'banner_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '',
         'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
         'date_html' => $dateHtml,
-    ]);
+        'pdf_html' => $pdfHtml,
+    ];
+    \Gallery\Views\view_render_public_gallery_branding_header($viewModel, false);
+    ob_start();
+    \Gallery\Views\view_render_public_gallery_description_documents($viewModel);
+    return (string) ob_get_clean();
 }
 
 /**

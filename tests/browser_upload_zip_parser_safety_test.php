@@ -224,5 +224,43 @@ namespace {
         'Valid archive with a directory and complete central index was rejected.'
     );
 
-    echo "Store-only ZIP parser path, CRC and directory integrity passed.\n";
+    $pageOne = "\x89PNG\r\n\x1a\npage-one";
+    $pageTwo = "\x89PNG\r\n\x1a\npage-two";
+    $firstBatchManifest = ['items' => [[
+        'source_index' => 0,
+        'prepared_name' => 'pdf-source-page-0001.png',
+        'original_path' => 'originals/page-0001.png',
+    ]]];
+    $firstBatchEntries = [
+        'manifest.json' => json_encode($firstBatchManifest, JSON_UNESCAPED_SLASHES),
+        'originals/page-0001.png' => $pageOne,
+    ];
+    $firstReceipt = \Gallery\Services\browser_upload_conversion_receipt($firstBatchManifest, $firstBatchEntries);
+    browser_zip_parser_assert(
+        \Gallery\Services\browser_upload_conversion_receipt_matches($firstReceipt, $firstReceipt),
+        'An exact replay must match its prepared manifest and PNG receipt.'
+    );
+    $changedLayoutManifest = ['items' => [
+        $firstBatchManifest['items'][0],
+        ['source_index' => 1, 'prepared_name' => 'pdf-source-page-0002.png', 'original_path' => 'originals/page-0002.png'],
+    ]];
+    $changedLayoutEntries = [
+        'manifest.json' => json_encode($changedLayoutManifest, JSON_UNESCAPED_SLASHES),
+        'originals/page-0001.png' => $pageOne,
+        'originals/page-0002.png' => $pageTwo,
+    ];
+    $changedLayoutReceipt = \Gallery\Services\browser_upload_conversion_receipt($changedLayoutManifest, $changedLayoutEntries);
+    browser_zip_parser_assert(
+        !\Gallery\Services\browser_upload_conversion_receipt_matches($firstReceipt, $changedLayoutReceipt),
+        'A cached response must not be reused when reload changes batch layout or manifest.'
+    );
+    $changedPayloadEntries = $firstBatchEntries;
+    $changedPayloadEntries['originals/page-0001.png'] = "\x89PNG\r\n\x1a\nchanged-page";
+    $changedPayloadReceipt = \Gallery\Services\browser_upload_conversion_receipt($firstBatchManifest, $changedPayloadEntries);
+    browser_zip_parser_assert(
+        !\Gallery\Services\browser_upload_conversion_receipt_matches($firstReceipt, $changedPayloadReceipt),
+        'A cached response must not accept changed PNG bytes under the same manifest.'
+    );
+
+    echo "Store-only ZIP parser, conversion receipt replay and directory integrity passed.\n";
 }
