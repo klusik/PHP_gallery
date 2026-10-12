@@ -17,6 +17,11 @@ on:
         description: Feature branch containing the completed one-commit squash to integrate.
         required: true
         type: string
+      recover_existing:
+        description: Owner recovery only. Source must equal current develop and already have a retained exact-candidate successful maintenance FULL; refs remain unchanged.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,6 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_BRANCH: ${{ inputs.source_branch }}
+          RECOVERY_MODE: ${{ inputs.recover_existing }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.sha }}
@@ -78,7 +84,7 @@ jobs:
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA};
-          const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api);
+          const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,process.env.RECOVERY_MODE==='true');
           for(const [name,value] of Object.entries({branch:selected.branch,source_sha:selected.sourceSha,
             develop_sha:selected.expectedDevelopSha,source_base:selected.sourceBase,basic_run_id:selected.basicRunId,
             basic_run_attempt:selected.basicRunAttempt})) appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
@@ -94,7 +100,8 @@ jobs:
       actions: write
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
-      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      # upload-artifact emits bare hex; authenticated provider metadata uses sha256:<hex>.
+      artifact_digest: sha256:${{ steps.upload.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -115,6 +122,7 @@ jobs:
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+          RECOVERY_MODE: ${{ inputs.recover_existing }}
         shell: bash
         run: |
           set -euo pipefail
@@ -125,14 +133,19 @@ jobs:
             echo '::error::Selected source branch moved before preparation.' >&2
             exit 1
           fi
+          observed_develop="$(git ls-remote --heads origin refs/heads/develop | cut -f1)"
+          expected_develop="${DEVELOP_SHA}"
+          if [[ "${RECOVERY_MODE}" == 'true' ]]; then expected_develop="${SOURCE_SHA}"; fi
+          test "${observed_develop}" = "${expected_develop}"
       - name: Generate and verify candidate-owned artifacts
         env:
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          RECOVERY_MODE: ${{ inputs.recover_existing }}
         shell: bash
         run: |
           set -euo pipefail
           export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${SOURCE_SHA}")"
-          php scripts/prepare_candidate.php
+          if [[ "${RECOVERY_MODE}" != 'true' ]]; then php scripts/prepare_candidate.php; fi
           php scripts/prepare_candidate.php --check
           test ! -L app/runtime/modules.php
           test ! -L app/production-files.json
@@ -175,6 +188,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          RECOVERY_MODE: ${{ inputs.recover_existing }}
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
           ARTIFACT_ID: ${{ needs.prepare.outputs.artifact_id }}
@@ -189,7 +203,7 @@ jobs:
           node --input-type=module <<'NODE'
           import {appendFileSync} from 'node:fs';
           import {spawnSync} from 'node:child_process';
-          import {publishPreparedCandidate} from './.github/scripts/develop-integration.mjs';
+          import {publishPreparedCandidate,selectDevelopIntegration} from './.github/scripts/develop-integration.mjs';
           const api=(path,method='GET',payload=null)=>{
             const args=['api',path];
             if(method!=='GET') args.push('--method',method,'--input','-');
@@ -201,7 +215,15 @@ jobs:
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA};
-          const published=publishPreparedCandidate({repository:process.env.REPOSITORY,branch:process.env.SOURCE_BRANCH,
+          let published;
+          if(process.env.RECOVERY_MODE==='true') {
+            const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,true);
+            if(selected.sourceSha!==process.env.SOURCE_SHA || selected.expectedDevelopSha!==process.env.DEVELOP_SHA) {
+              throw new Error('BLOCKED recovery candidate changed before read-only publication.');
+            }
+            const candidate=api('repos/'+process.env.REPOSITORY+'/commits/'+selected.sourceSha);
+            published={candidateSha:selected.sourceSha,candidateTree:candidate.commit.tree.sha};
+          } else published=publishPreparedCandidate({repository:process.env.REPOSITORY,branch:process.env.SOURCE_BRANCH,
             sourceSha:process.env.SOURCE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
             artifactId:Number(process.env.ARTIFACT_ID),artifactDigest:process.env.ARTIFACT_DIGEST,
             runId:process.env.WORKFLOW_RUN_ID},context,api);
@@ -240,6 +262,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          RECOVERY_MODE: ${{ inputs.recover_existing }}
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           CANDIDATE_SHA: ${{ needs.publish-candidate.outputs.candidate_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
@@ -256,7 +279,7 @@ jobs:
           node --input-type=module <<'NODE'
           import {appendFileSync,writeFileSync} from 'node:fs';
           import {spawnSync} from 'node:child_process';
-          import {integrateDevelop} from './.github/scripts/develop-integration.mjs';
+          import {integrateDevelop,recoverDevelop} from './.github/scripts/develop-integration.mjs';
           const api=(path,method='GET',payload=null)=>{
             const args=['api',path];
             if(method!=='GET') args.push('--method',method,'--input','-');
@@ -272,9 +295,9 @@ jobs:
             candidateSha:process.env.CANDIDATE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
             sourceBase:process.env.DEVELOP_SHA,basicRunId:process.env.BASIC_RUN_ID,
             basicRunAttempt:process.env.BASIC_RUN_ATTEMPT};
-          const result=integrateDevelop(request,context,process.env.REPOSITORY,api);
+          const result=(process.env.RECOVERY_MODE==='true' ? recoverDevelop : integrateDevelop)(request,context,process.env.REPOSITORY,api);
           writeFileSync(process.env.RECORD_PATH,JSON.stringify(result.record,null,2)+'\n');
-          appendFileSync(process.env.GITHUB_STEP_SUMMARY,`Integrated exact candidate ${result.sha} into develop.\n`);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,`${process.env.RECOVERY_MODE==='true' ? 'Recovered qualification for existing develop without a ref write' : 'Integrated exact candidate into develop'}: ${result.sha}.\n`);
           NODE
       - uses: actions/upload-artifact@v7.0.1
         with:

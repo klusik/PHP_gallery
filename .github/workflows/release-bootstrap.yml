@@ -15,6 +15,12 @@ name: Release qualification
 
 on:
   workflow_call:
+    inputs:
+      integration_recovery:
+        description: Verified immutable known-defect provenance from the release coverage selector.
+        required: false
+        type: string
+        default: 'null'
     secrets:
       COPILOT_GITHUB_TOKEN:
         required: false
@@ -543,6 +549,7 @@ jobs:
           ORIGIN_COMMIT_SHA: ${{ needs.prepare.outputs.origin_commit_sha }}
           SELECTED_DEVELOP_SHA: ${{ needs.prepare.outputs.selected_develop_sha }}
           INITIAL_MAIN_SHA: ${{ needs.prepare.outputs.initial_main_sha }}
+          INTEGRATION_RECOVERY: ${{ inputs.integration_recovery }}
           PREVIOUS_STABLE_TAG: ${{ needs.prepare.outputs.previous_stable_tag }}
           PREVIOUS_STABLE_SHA: ${{ needs.prepare.outputs.previous_stable_sha }}
           PROVENANCE_JSON: ${{ needs.prepare.outputs.provenance_json }}
@@ -560,7 +567,8 @@ jobs:
             initial_main_sha:e.INITIAL_MAIN_SHA,previous_stable_tag:e.PREVIOUS_STABLE_TAG,
             previous_stable_sha:e.PREVIOUS_STABLE_SHA,run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
             ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
-            lifecycle_schema:2,winapp_changed:e.WINAPP_CHANGED==='true',manual_review:'PENDING',promotion:'AUTOMATIC_AFTER_REVIEW',override:false};
+            lifecycle_schema:2,winapp_changed:e.WINAPP_CHANGED==='true',manual_review:'PENDING',promotion:'AUTOMATIC_AFTER_REVIEW',override:false,
+            integration_recovery:JSON.parse(e.INTEGRATION_RECOVERY || 'null')};
           writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');
           writeFileSync(e.RUNNER_TEMP + '/release-check.json', JSON.stringify({name:'Release qualification',
             external_id:`release:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.CANDIDATE_SHA}`,

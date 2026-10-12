@@ -24,6 +24,17 @@ Strict MVC is part of release qualification. The release audit invokes `scripts/
 
 ## GitHub-hosted release qualification
 
+For an existing develop head with successful maintenance FULL but no integration
+artifact, use the owner-only `recover_existing` mode of **Integrate into develop**
+after its implementation is installed on main. It requalifies the same SHA without
+changing any ref, then allows retrying the existing release workflow only while
+its original main/predecessor pins still match. Installing this code on a newer
+main does not unlock an origin frozen before installation; a new reviewed release
+origin is required after that main advance. The known-defect FULL bootstrap below
+can instead install the repair as unpublished `0.127.3` before any advance,
+preserving its original origin. See the
+[exact prerequisites and recovery sequence](docs/RELEASE_LIFECYCLE.md#recover-an-already-qualified-develop-head).
+
 GitHub-hosted preparation and exact-candidate qualification feed the automatic
 reviewed merge/tag lifecycle. One human PR approval is the only normal manual
 step after the maintainer pushes the release branch. GitHub Release publication
@@ -132,6 +143,17 @@ Normal release preparation does not create a deployment folder, ZIP, packaging s
 Rebuild the Windows installer in `winapp/dist/` only when shipped companion code, assets, dependencies, runtime binaries or build/installer behavior changed since its previous build. CMS metadata, documentation and test-only fixes do not trigger an installer rebuild. Keep its independent version unless the user requests a change; otherwise leave `winapp/dist/` untouched.
 
 ## Local fallback/recovery phases
+
+For the known integration publisher defect on main `7dcfadf1`, use the
+[owner-only FULL release bootstrap](docs/RELEASE_LIFECYCLE.md#bootstrap-the-known-broken-integration-installation).
+Its default command plans the repair; `--prepare` builds local unattached origin
+and repair objects and prints a create-only leased push for a fresh release branch.
+The maintainer alone executes that push, reviews the resulting genuinely qualified
+release PR and publishes the eventual draft. This does not unlock or edit the old
+`v_0.127.3` origin after a main advance, bypass branch protections or qualify an
+unexecuted matrix. While its original pins still match and its branch/tag/draft
+are absent, it preserves the original `d4f9abd7` origin and prepares version
+`0.127.3`; it does not consume a new version number.
 
 The commands below document the retained maintainer recovery path. They are used
 only for an explicitly requested local operation or genuinely unavailable hosted

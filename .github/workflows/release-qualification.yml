@@ -36,7 +36,12 @@ jobs:
     outputs:
       bootstrap: ${{ steps.owner.outputs.bootstrap }}
       main_sha: ${{ steps.owner.outputs.main_sha }}
+      integration_recovery: ${{ steps.owner.outputs.integration_recovery }}
     steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - id: owner
         name: Resolve immutable main workflow installation state
         shell: bash
@@ -47,6 +52,8 @@ jobs:
           node --input-type=module <<'NODE'
           import {appendFileSync} from 'node:fs';
           import {spawnSync} from 'node:child_process';
+          import {resolveIntegrationBootstrap} from './.github/scripts/integration-bootstrap.mjs';
+          import {command} from './.github/scripts/release-promotion.mjs';
           const repository=process.env.GITHUB_REPOSITORY;
           if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) {
             throw new Error('BLOCKED repository identity is malformed.');
@@ -66,13 +73,16 @@ jobs:
             throw new Error('BLOCKED immutable main workflow authority SHA is unavailable.');
           }
           const workflow=read(`repos/${repository}/contents/.github/workflows/develop-integration.yml?ref=${mainSha}`,true);
-          const bootstrap=workflow===null;
+          const recovery=workflow===null?null:resolveIntegrationBootstrap(repository,process.env.GITHUB_SHA,
+            process.env.GITHUB_REF_NAME.slice('release/v_'.length),read,command);
+          const bootstrap=workflow===null || recovery!==null;
           if(!bootstrap && (workflow?.path!=='.github/workflows/develop-integration.yml'
               || workflow.type!=='file' || !/^[a-f0-9]{40}$/.test(workflow.sha ?? ''))) {
             throw new Error('BLOCKED integration workflow installation evidence is malformed.');
           }
           appendFileSync(process.env.GITHUB_OUTPUT,`bootstrap=${bootstrap}\nmain_sha=${mainSha}\n`);
-          console.log(`Coverage owner selected at main ${mainSha}: ${bootstrap?'legacy first-install bootstrap':'strict develop integration proof'}.`);
+          appendFileSync(process.env.GITHUB_OUTPUT,`integration_recovery=${JSON.stringify(recovery)}\n`);
+          console.log(`Coverage owner selected at main ${mainSha}: ${recovery?'known-defect recovery with fresh complete FULL release':bootstrap?'legacy first-install bootstrap':'strict develop integration proof'}.`);
           NODE
 
   bootstrap:
@@ -80,6 +90,8 @@ jobs:
     needs: coverage-owner
     if: ${{ needs.coverage-owner.outputs.bootstrap == 'true' }}
     uses: ./.github/workflows/release-bootstrap.yml
+    with:
+      integration_recovery: ${{ needs.coverage-owner.outputs.integration_recovery }}
     permissions:
       contents: write
       actions: write
@@ -520,7 +532,8 @@ jobs:
       contents: read
     outputs:
       delta_artifact_id: ${{ steps.upload-delta.outputs.artifact-id }}
-      delta_artifact_sha256: ${{ steps.upload-delta.outputs.artifact-digest }}
+      # Keep the upload output in the same algorithm-qualified format as provider metadata.
+      delta_artifact_sha256: sha256:${{ steps.upload-delta.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:

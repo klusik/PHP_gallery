@@ -348,6 +348,14 @@ assert.equal(fetchReleases('owner/gallery',()=>JSON.stringify([[release],[{...re
 assert.throws(()=>fetchReleases('owner/gallery',()=>JSON.stringify([{releases:[]}])) ,/malformed/);
 const qualification=read('.github/workflows/release-qualification.yml');
 const bootstrapWorkflow=read('.github/workflows/release-bootstrap.yml');
+assert.match(qualification,/resolveIntegrationBootstrap\(repository,process\.env\.GITHUB_SHA/);
+assert.match(qualification,/const bootstrap=workflow===null \|\| recovery!==null/);
+assert.match(bootstrapWorkflow,/integration_recovery:JSON\.parse\(e\.INTEGRATION_RECOVERY \|\| 'null'\)/);
+// Existing schema-2 consumers still require every native FULL/release owner for a repair release.
+const recoveryRecord={...schema2Record,integration_recovery:{reason:'upload-artifact-digest-prefix'}};
+assert.deepEqual(verifyQualification(request,run,schema2Jobs,recoveryRecord,record.repository,candidate),[]);
+assert.throws(()=>verifyQualification(request,run,schema2Jobs.map(job=>job.name==='Required Chromium fixtures'
+    ? {...job,conclusion:'skipped'} : job),recoveryRecord,record.repository,candidate),/BLOCKED/);
 const completion=read('.github/workflows/release-promotion.yml');
 assert.match(qualification,/Initialize or reuse immutable origin after release push/);
 assert.doesNotMatch(qualification,/workflow_dispatch:|initialization_run:/);

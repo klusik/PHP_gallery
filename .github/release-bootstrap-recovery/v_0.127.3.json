@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "repository": "klusik/PHP_gallery",
+  "version": "0.127.3",
+  "main_sha": "7dcfadf153b1c941fd81edee43272f8accb475a1",
+  "develop_sha": "1cf8b10897cf152d9f313c090d61d7cf40835ecc",
+  "source_sha": "a6d66ecb154cde74ecbb51c5f5dd895e92211db3",
+  "source_tree": "103895e34eaef3322eaaf0f8a17eca0927d1fbae",
+  "source_branch": "feature/190-build-a-dedicated-php-gallery-website-on-github-pages",
+  "retained_origin_sha": "d4f9abd78bebb11a691793b6b1f9815188b21b0e",
+  "reason": "upload-artifact-digest-prefix"
+}
