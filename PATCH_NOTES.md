@@ -1,5 +1,35 @@
 # Patch notes
 
+## Version 0.128.1
+
+Changed existing-gallery PDF uploads to attach the original document by default, with page conversion available only as an explicit option. [#195](https://github.com/klusik/PHP_gallery/issues/195)
+
+### Highlights
+
+#### Existing-gallery PDF uploads
+- Made attaching the original PDF the default. Uploads no longer render pages, append PNGs, or create a child gallery unless conversion is explicitly enabled.
+- Placed the unchecked conversion option and its destination and DPI settings in a collapsed **Advanced** section.
+- Preserved the selected PDFs and conversion choice during retries, prevented acknowledged attachments from being sent again, and rejected retries with a changed conversion choice.
+- Kept separately launched PDF conversion supported.
+
+### Technical Details
+
+#### Frontend
+- Updated the existing-gallery upload controls and PDF workflow in `app/views/admin_uploads.php` and `public/assets/gallery-modules/`.
+- Updated PDF upload messages in English, Czech, German, and Swedish.
+
+#### Tests and documentation
+- Expanded PDF workflow scenarios to cover attachment-only uploads, retry deduplication, and rejection of changed retry intent.
+- Updated browser qualification scenarios and PDF upload guidance in `TESTING.md`, `docs/GALLERY_PDF.md`, and all four maintained administrator manual editions.
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change.
+
+#### For administrators
+- Administrators could attach original PDFs without triggering page conversion. They could still opt into conversion and choose its destination and DPI under **Advanced**.
+
 ## Version 0.128
 
 Added gallery-scoped PDF attachments and browser-based PDF-to-PNG conversion, with protected document access, resumable uploads, and private child-gallery handling. [#195](https://github.com/klusik/PHP_gallery/issues/195)
