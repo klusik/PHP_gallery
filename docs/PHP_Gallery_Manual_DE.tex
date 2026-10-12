@@ -2556,16 +2556,21 @@ Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
 Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
 fehlenden Tag; widersprüchliche Tags führen zum Fehler.
 
-Nach geprüftem Merge und~Tag erstellt der Workflow genau einen
-unveröffentlichten GitHub-Release-Entwurf mit den vorhandenen Notizen des
-exakten Q. Bestehende Entwürfe und veröffentlichte Releases bleiben unverändert.
-Bei Fehlern bleibt der Tag erhalten; der Status lautet
-\codeword{TAGGED / DRAFT\_PENDING}. Öffnen Sie den Entwurf, fügen Sie
-optional \codeword{manual-release-assets} (Produktions-ZIP, vier PDFs,
-Notizen, Prüfarchiv und SHA-256-Prüfsummen) hinzu und wählen Sie manuell
-\ui{Publish release}. Es werden keine Dateien automatisch hochgeladen.
-Der Windows-Installer wird nur bei Änderungen am ausgelieferten WinApp-Inhalt
-gebaut; seine eigenständige Version bleibt erhalten.
+Nach verifiziertem Merge und Tag füllt die Automatik den unveröffentlichten
+GitHub Release mit den ursprünglichen Notizen des exakten Q, Produktions-ZIP,
+Metadaten, allen vier Handbüchern, Prüfarchiv, Prüfsummen und beiden
+Abschlussnachweisen. Warten Sie auf \codeword{DRAFT\_READY}, prüfen Sie den
+vollständigen Entwurf und wählen Sie manuell \ui{Publish release}.
+Das Herunterladen von Artefakten oder manuelle Anhängen von Dateien entfällt.
+Identische vorhandene Anhänge bleiben erhalten; Konflikte führen zu einem
+Fehler ohne Überschreiben. Veröffentlichte Releases bleiben unverändert.
+Bei Fehlern lautet der Status \codeword{TAGGED / DRAFT\_PENDING}; eine
+Wiederholung ergänzt fehlende Dateien, ohne den verifizierten Merge oder Tag
+zurückzunehmen. WinApp-Installer und Aktualisierungsmetadaten stammen aus dem
+exakten Qualifizierungsversuch oder aus dem festgelegten vorherigen
+veröffentlichten Release nach Prüfung unveränderter ausgelieferter Quellen,
+der unabhängigen Version und der Integrität. Ein unveränderter Installer
+wird nicht erneut erstellt.
 
 Develop wird nur durch echtes nicht erzwungenes Fast-forward auf geprüftes Q
 mit aktivem Schutz für lineare Historie und CI aktualisiert. Parallele Entwicklung

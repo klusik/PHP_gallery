@@ -1,6 +1,6 @@
 {
     "version": "0.127.4",
-    "generated_at": "2026-10-12T09:39:59+00:00",
+    "generated_at": "2026-10-12T11:53:56+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -233,7 +233,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:45918e455ccdb64652a91c0dc7f2e60c88ca86271be81e9010fc2bd71aa02389",
-        "app/production-files.json": "sha256:85e069d6495dbf2d026f63fce0d72dd0651794caf9a933b27abe7a58467a57ff",
+        "app/production-files.json": "sha256:7f8889609c15d3e4b4bfc306c378abd5894f822c30965142e8e3c9b6247bedb2",
         "app/release_file_policy.php": "sha256:fa464740e3b559dfd056d9cc28ff73328b430dffe33b2b1e74767f76e5fbcde5",
         "app/request_data.php": "sha256:b0236b57a40dfab623932c2fb945e3d784b603e5cf67d87199f1c534e124acff",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",

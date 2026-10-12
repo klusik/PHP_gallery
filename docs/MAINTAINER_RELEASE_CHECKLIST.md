@@ -5,90 +5,37 @@ the protected integration, release, publication and separately approved cleanup
 below. BASIC alone is not FULL qualification; `plan` authorizes nothing unless
 its summary explicitly says `ELIGIBLE`.
 
-## Restore v_0.127.3's missing permanent receipt first
+## Create the release branch
 
-- [ ] Download **release-completion-record** from successful
-  [Release completion 38225091065](https://github.com/klusik/PHP_gallery/actions/runs/38225091065).
-  Preserve original `release-evidence.json` and `release-evidence.sha256`.
-- [ ] Verify their checksum and version `0.127.3`, PR #191, final tagged main
-  `30561293711f3b0f4000bce893611e2d70751c7c` and qualified Q
-  `bb4b826c667c8b79bd7edc742b948d4254184646`.
-- [ ] In **Releases -> v_0.127.3 -> Edit**, manually attach those two original
-  files and save. Keep existing assets, tag, version and description. Automation
-  does not edit published releases/assets. The missing receipt also blocks
-  authenticating this release as the next predecessor.
-- [ ] Review/download **manual-release-assets** from
-  [Release qualification 38223985994](https://github.com/klusik/PHP_gallery/actions/runs/38223985994)
-  if CMS package/manual publication files below still need attaching.
-- [ ] Keep `release/v_0.127.3` until the retirement fix reaches main. Its old
-  reader still expects the removed historical reconciliation path.
+- [ ] Start from current FULL-qualified develop A. Create and push
+  `release/v_X.Y[.Z]` for the intended next version.
+- [ ] Wait for automatic preparation, notes, all four manuals/PDFs, exact-Q BASIC
+  release delta checks and release-owned-input proof. The release delta does not
+  repeat A's functional FULL matrix.
 
-## Integrate the repair feature
+## Review and approve the release PR
 
-- [ ] Use **feature/fix-pages-release-deployment**. Its final remote head must be
-  the one-commit squash directly over current remote develop.
-- [ ] Wait for automatic **Basic source checks** and feature **Project website**
-  verification on that exact SHA. A feature website build produces review
-  artifacts; optional maintenance FULL is extra diagnostic evidence.
-- [ ] Open **Actions -> Integrate into develop -> Run workflow**:
+- [ ] Review the bot-created PR to main: exact Q, notes, manuals and outstanding
+  manual coverage. Submit **Review changes -> Approve** once.
+- [ ] Automatic completion performs protected merge, immutable tag and safe
+  develop synchronization. Parallel develop work may block synchronization
+  independently; it never authorizes a merge, reset or rebase of develop.
 
-| Field | Value |
-| --- | --- |
-| Use workflow from | `main` |
-| source_branch / Feature branch | `feature/fix-pages-release-deployment` |
-| recover_existing | unchecked / `false` |
+## Review and publish the completed draft
 
-- [ ] Click **Run workflow** once. Wait for preparation, every required FULL job
-  and **Publish develop integration**. Require exact-candidate qualification and
-  the whole workflow to succeed. It automatically fast-forwards develop.
-- [ ] Verify remote develop equals final candidate A. Generated preparation may
-  append a generated-only commit: select final A, not an earlier source SHA.
-  Concurrent develop changes require replanning, never a protected reset.
-
-## Create the next release and approve its PR
-
-- [ ] From updated qualified develop, after published v_0.127.3:
-
-```powershell
-git switch develop
-git pull --ff-only origin develop
-git switch -c release/v_0.127.4
-git push origin HEAD:refs/heads/release/v_0.127.4
-```
-
-- [ ] The push automatically starts **Release qualification**. Do not manually
-  dispatch completion or repeat the one-off integration bootstrap.
-- [ ] Wait for immutable origin/predecessor validation, FULL evidence for A,
-  notes, all four locked-toolchain manuals/PDFs, generated integrity state,
-  BASIC changed-source/release-owned delta checks and publication assets.
-  The ordinary release delta does not rerun A's functional matrix.
-- [ ] Open the **bot-created release PR to main**. Review exact head Q, notes and
-  all four PDF editions; complete reported manual coverage checks.
-- [ ] Submit **Review changes -> Approve** once. Automation performs the protected
-  standard merge, immutable tag, conditional develop FF and GitHub Release draft.
-- [ ] Wait for **Release completion** to report merge/tag verified and develop
-  reconciliation complete. Wait for other dependent completion runs too.
-
-## Attach the original assets, then publish
-
-- [ ] Download/extract **manual-release-assets** from the completed qualifier;
-  attach its original files to the release draft:
-
-| Files | Role |
-| --- | --- |
-| `production.zip` | CMS deployment distribution |
-| `core-manifest.json`, `production-files.json`, `release-metadata.json` | Package/integrity/version metadata |
-| `PHP_Gallery_Manual.pdf`, `PHP_Gallery_Manual_CZ.pdf`, `PHP_Gallery_Manual_DE.pdf`, `PHP_Gallery_Manual_SV.pdf` | Four manuals |
-| `qualification-evidence.zip`, `SHA256SUMS`, `final-integrity.json` | Original qualification/package proof |
-| `release-notes.md` | Original notes; retain the existing exact-Q draft description |
-
-- [ ] Download/extract **release-completion-record** from the successful completion
-  run. Attach **`release-evidence.json` and `release-evidence.sha256`** permanently.
-  `release-completion.json` is additional diagnostic context.
-- [ ] If produced, attach the matched installer and `winapp-update.json` from
-  **manual-winapp-installer**. Generation is conditional; do not mix versions.
-- [ ] Verify package checksums, PDFs and outstanding browser/manual checks.
-  Click **Publish release** yourself.
+- [ ] Wait for completion to report **DRAFT_READY**. Review the linked draft with
+  the original production ZIP, integrity/version metadata, all four manuals,
+  qualification archive, checksums, notes and both completion receipts.
+- [ ] Verify the installer and `winapp-update.json` pair is present. Automation
+  uses the exact qualification artifact when built, or verifies and preserves
+  the pinned predecessor's pair when shipped WinApp source is unchanged.
+- [ ] Review outstanding browser/PDF/manual checks, then click **Publish release**.
+  There is no normal download, ZIP extraction, manual asset attachment or extra
+  upload workflow. Actions artifacts remain available for diagnostics.
+- [ ] On **TAGGED / DRAFT_PENDING**, read the concrete asset/provenance error and
+  rerun the same completion after correcting its prerequisite. It keeps existing
+  identical assets and adds missing files without changing merge/tag. Conflicts
+  fail closed; published releases are never modified automatically.
 
 ## Verify Pages deployment
 

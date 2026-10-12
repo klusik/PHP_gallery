@@ -3,11 +3,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/release_draft_test.mjs
  * Module Type: Regression Test
- * Purpose: Verify create-only draft staging after qualified merge/tag without production writes.
+ * Purpose: Verify create-only draft staging and authenticated filling without production writes.
  * Responsibilities:
  *   - Reuse the exact Q patch notes and all existing completion security guards
  *   - Cover paginated drafts, published releases, conflicts and interruption recovery
- *   - Refuse publication, asset uploads and changes to manual draft edits
+ *   - Keep staging free of uploads and run the isolated verified asset-filling scenarios
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -15,6 +15,9 @@ import assert from 'node:assert/strict';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {openQualifiedPullRequest,completeRelease,prepareDraftRelease} from '../.github/scripts/release-completion.mjs';
 import {lifecycleFixture} from './support/release_lifecycle_fixture.mjs';
+// The existing central audit entry owns both staging and filling regressions;
+// adding scenarios must not change BASIC evaluator authority inherited from develop.
+import './support/release_draft_assets_scenarios.mjs';
 
 const fixture=lifecycleFixture();
 try {

@@ -1,9 +1,9 @@
 # Automatic reviewed release lifecycle
 
 The [manual maintainer checklist](MAINTAINER_RELEASE_CHECKLIST.md) gives the exact
-feature/integration/release/publication/Pages/retirement sequence. Upload original
-completion `release-evidence.json` and `release-evidence.sha256` alongside assets;
-publication alone does not attach them (observed block in run 38225908973).
+feature/integration/release/publication/Pages/retirement sequence. Completion
+automatically attaches original qualification assets and both permanent receipts
+before reporting **DRAFT_READY**. Historical published releases remain immutable.
 Automatic completion receipts are revalidated against the retained qualifier,
 immutable tag/Q/tree, live bot PR and exact effective owner approval. If protected
 linear develop retains Q, retirement inspection recognizes the normal automatic
@@ -15,7 +15,7 @@ from current `develop` and pushing that branch. After preparation succeeds,
 approve the bot-created PR to `main` once. Automation performs the protected
 standard merge, creates the immutable tag, attempts safe develop synchronization
 and stages one unpublished GitHub Release draft with the existing qualified notes.
-Open the draft, add optional artifacts and manually choose Publish release.
+Review the complete **DRAFT_READY** draft and manually choose Publish release.
 No normal step asks for a SHA, run ID, operation mode or deployment approval.
 
 ## Git and authorization contract
@@ -111,7 +111,7 @@ coverage**. Existing native job labels are preserved for older schema-2 consumer
 
 Wait for the complete workflow and bot-created release PR. Review/approve that PR
 once; normal server-enforced promotion performs the protected merge, immutable tag
-and unpublished draft. The owner uploads assets and publishes the draft normally.
+and unpublished draft. Automation fills the draft; the owner reviews it and publishes it.
 Develop synchronization remains conditional on its current ancestry and protection
 checks; report a blocked reconciliation separately. No integration action is needed
 before this exceptional release. Once the repair reaches main, later feature work
@@ -255,12 +255,12 @@ reported rather than bypassed. After verified M/tag, the same completion job
 reads unchanged PATCH_NOTES.md from the exact Q checkout and selects the same
 version section previously saved as release-notes.md. It uses the existing complete,
 paginated GitHub Releases inventory, including drafts, before any create-only POST.
-DRAFT_CREATED means a single unpublished, empty-asset draft was verified by ID;
+DRAFT_CREATED is only an intermediate staging result, not a ready draft;
 DRAFT_ALREADY_EXISTS preserves existing manual edits/assets and ALREADY_PUBLISHED
 does not modify the public release. Version/tag conflicts fail closed. Draft API
 failure reports TAGGED / DRAFT_PENDING without undoing M/tag or requiring another
 merge; a retry inventories all drafts before deciding whether to create.
-Only the human maintainer uploads optional packages and clicks Publish release. The generic PR matrix excludes main to avoid redundant token-created
+Only the human maintainer clicks Publish release. The generic PR matrix excludes main to avoid redundant token-created
 PR workflow approvals; exact-Q release qualification owns the required context.
 
 ## Previous release and immutable evidence
@@ -274,10 +274,10 @@ Audits and AI/WinApp comparison scope use Qprev and endpoint tree comparisons.
 Published predecessor assets retain their original SHA-256 validation. A newer
 tagged predecessor may have no GitHub Release yet: resolve its two-parent merge,
 exact successful hosted Q qualification and complete bot PR/human review instead.
-Unavailable/expired evidence fails closed. Upload the retained qualification archive
-with the manual publication for durable evidence. The completion run retains
-`release-evidence.json` and its SHA-256 beside `release-completion.json`; upload
-that permanent proof as well as the preparation assets when publishing manually. The explicitly pinned v_0.125
+Unavailable/expired evidence fails closed. Completion automatically attaches the
+qualification archive, `release-evidence.json` and its SHA-256 to the draft for
+durable publication evidence. Actions retains `release-completion.json` and the
+original diagnostic artifacts as well. The explicitly pinned v_0.125
 UNKNOWN_LEGACY bootstrap remains historical support; no other missing evidence
 inherits that exception. Never change the immutable v_0.126 record or publication.
 
@@ -407,3 +407,54 @@ The owner declined a disposable test repository for this task. Full live
 approval/merge/tag/FF and the next release are therefore NOT RUN, pending the
 maintainer's subsequent acceptance. Feature CI and real-Git fixtures must not be
 presented as proof that a production release has completed.
+
+## Automatically verified draft assets
+
+The completion job loads `manual-release-assets` from the exact successful
+qualification run and attempt bound to Q. It inventories provider artifacts,
+requires one successful producing job in that attempt and checks creation time
+within that job, complete archive size and provider SHA-256. The existing bounded
+ZIP parser rejects traversal, links, duplicates, unlisted bytes and corrupt CRCs;
+entries are read as data without filesystem extraction or execution. The original
+`final-integrity.json` and `SHA256SUMS` bind every prepared file to Q/base. Version
+notes and package metadata are checked against Q before upload.
+
+Required original files are `production.zip`, `core-manifest.json`,
+`production-files.json`, `release-metadata.json`, all four `PHP_Gallery_Manual*.pdf`
+editions, `qualification-evidence.zip`, `SHA256SUMS`, `final-integrity.json` and
+`release-notes.md`. Verified merge/tag completion adds `release-evidence.json`
+and `release-evidence.sha256`. The original notes and file bytes are preserved.
+
+A required installer comes from the same run/attempt's `manual-winapp-installer`.
+When installer generation is expectedly skipped, the filler reads the original
+installer and `winapp-update.json` from the immutable pinned published predecessor.
+The existing candidate gate authenticates predecessor qualification and receipt;
+the filler additionally verifies the predecessor tag, unchanged shipped WinApp
+source, Q's independent `winapp/VERSION`, provider digests, sizes and metadata's
+installer SHA-256. Missing proof or assets blocks filling rather than rebuilding
+an unchanged installer or borrowing an unrelated latest release. This permanent
+compatibility path preserves downloads and updates across CMS-only releases.
+
+Uploads use create-only asset names and target the verified unpublished draft ID
+and immutable tag. Complete paginated inventories detect duplicate names. Every
+existing required asset is downloaded and compared with original bytes before
+uploads begin. Identical files remain; conflicting files are never deleted or
+replaced. The workflow serializes completion by PR; independent concurrent
+create-only uploads and lost responses are reconciled by downloading the observed
+asset. A partial, missing or conflicting upload reports TAGGED / DRAFT_PENDING
+with its filename. Rerunning completion revalidates the same Q/run/attempt/M/tag
+and fills missing files. No extra manually dispatched upload action is introduced.
+The immutable merge/tag is never rolled back. Published releases, including
+v_0.127.4 and all older releases, are read-only.
+
+**DRAFT_READY** means every required asset exists and its complete downloaded
+content has been verified. PR approval and Publish release remain manual;
+branch protections, release-only delta evidence and optional separately approved
+retirement retain their existing gates. Production acceptance requires a real
+maintainer-approved future release; hermetic regression fixtures cannot prove
+GitHub's upload transport in production.
+
+The existing central `release_draft_test.mjs` entry imports the isolated asset
+scenarios in `tests/support/release_draft_assets_scenarios.mjs`. This extends release regression
+coverage without changing `scripts/audit_registry.php`, which the protected
+integration selector requires to match inherited develop BASIC authority.

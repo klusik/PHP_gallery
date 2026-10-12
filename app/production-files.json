@@ -2386,6 +2386,7 @@
         "tests/support/public_card_layout_fixture.php",
         "tests/support/public_theme_width_composition_fixture.php",
         "tests/support/public_widget_persistence_browser.js",
+        "tests/support/release_draft_assets_scenarios.mjs",
         "tests/support/release_lifecycle_fixture.mjs",
         "tests/support/runtime_module_fixture.php",
         "tests/support/security_schema_policy_dispatch_fixture.php",
