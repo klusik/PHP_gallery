@@ -24,6 +24,13 @@ Strict MVC is part of release qualification. The release audit invokes `scripts/
 
 ## GitHub-hosted release qualification
 
+Use the [maintainer feature-to-release checklist](docs/MAINTAINER_RELEASE_CHECKLIST.md)
+for exact Actions names, selected refs/inputs, PR approval, manual asset attachment,
+Pages activation and separately approved retirement. Permanent `release-evidence.json`
+is required for publication history/cleanup. Normal automatic develop FF is
+validated directly from qualified Q and owner approval without the removed
+historical reconciliation workflow.
+
 For an existing develop head with successful maintenance FULL but no integration
 artifact, use the owner-only `recover_existing` mode of **Integrate into develop**
 after its implementation is installed on main. It requalifies the same SHA without

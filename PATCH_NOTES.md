@@ -1,5 +1,39 @@
 # Patch notes
 
+## Version 0.127.4
+
+Version 0.127.4 strengthened maintainer workflows for project website publishing, release reconciliation, and release-branch retirement. Website deployment was routed through a reviewed build on `main`, and automatic release completion gained stricter evidence checks. [#190](https://github.com/klusik/PHP_gallery/issues/190) [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Highlights
+
+#### Website publishing
+- Updated stable-release publication to verify that the event referred to the latest published stable release and that GitHub Pages used Actions, then dispatch a fresh website build on `main`.
+- Kept release-tag runs from deploying directly and preserved feature-only website previews.
+
+#### Release reconciliation
+- Added verification for the normal automatic `develop` fast-forward using retained completion, qualification, tag, candidate, and live owner-approval evidence.
+- Preserved historical equivalent-replay verification; missing or altered evidence remained blocked rather than recreating receipts.
+
+### Technical Details
+
+#### Website and release workflows
+- Added `.github/scripts/project-website-dispatch.mjs` and updated `.github/workflows/project-website.yml` to validate and dispatch website builds.
+- Updated `.github/scripts/release-reconciliation.mjs` and `.github/scripts/release-retirement.mjs` for completion verification and retirement blockers.
+- Added immutable origin and predecessor records for `v_0.127.4`.
+
+#### Tests and documentation
+- Expanded `tests/hosted_release_policy_test.mjs`, `tests/project_website_test.mjs`, and `tests/release_retirement_test.mjs` for dispatch restrictions, completion verification, retirement blockers, and website screenshot evidence.
+- Updated `RELEASE.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `docs/RELEASE_LIFECYCLE.md`, and `website/README.md`; added `docs/MAINTAINER_RELEASE_CHECKLIST.md`.
+
+### User Impact
+
+#### For visitors and administrators
+- Public gallery visitor and administrator behavior did not change. Website publishing workflow changes did not add or alter CMS features.
+
+#### For maintainers
+- Website publishing used a fresh reviewed build on `main`, while release reconciliation required retained qualification and approval evidence for automatic completion.
+- The new checklist documented release qualification and approval, attaching original release assets and completion evidence, Pages activation and verification, and separately approved release-branch retirement.
+
 ## Version 0.127.3
 
 Version 0.127.3 added a multilingual PHP Gallery project website and strengthened hosted integration and release recovery workflows. Website publishing remained maintainer-controlled, and the integration repair required full release qualification.

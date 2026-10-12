@@ -160,5 +160,8 @@ export function main() {
     process.stdout.write(JSON.stringify(outcome,null,2)+'\n');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-    try {main();} catch (error) {process.stderr.write(error.message+'\n');process.exitCode=1;}
+    try {main();} catch (error) {
+        output('GITHUB_STEP_SUMMARY','Release branch retirement: BLOCKED\n\n'+error.message);
+        process.stderr.write(error.message+'\n');process.exitCode=1;
+    }
 }

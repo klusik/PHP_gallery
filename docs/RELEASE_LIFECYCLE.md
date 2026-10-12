@@ -1,5 +1,15 @@
 # Automatic reviewed release lifecycle
 
+The [manual maintainer checklist](MAINTAINER_RELEASE_CHECKLIST.md) gives the exact
+feature/integration/release/publication/Pages/retirement sequence. Upload original
+completion `release-evidence.json` and `release-evidence.sha256` alongside assets;
+publication alone does not attach them (observed block in run 38225908973).
+Automatic completion receipts are revalidated against the retained qualifier,
+immutable tag/Q/tree, live bot PR and exact effective owner approval. If protected
+linear develop retains Q, retirement inspection recognizes the normal automatic
+FF without a historical `release-reconciliation.yml` run. Legacy equivalent-replay
+receipts retain their existing verification path.
+
 The maintainer starts a release by creating `release/v_X.Y` or `release/v_X.Y.Z`
 from current `develop` and pushing that branch. After preparation succeeds,
 approve the bot-created PR to `main` once. Automation performs the protected

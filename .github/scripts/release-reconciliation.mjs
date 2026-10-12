@@ -17,7 +17,9 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {peelReleaseTag} from './release-origin.mjs';
-import {api,command,workflowCoverageJobs} from './release-promotion.mjs';
+import {api,command,workflowCoverageJobs,verifyQualification,requireQualificationChecks,fetchJobs} from './release-promotion.mjs';
+import {loadQualification,qualificationRequest} from './release-completion.mjs';
+import {loadReleaseCoverage} from './coverage-artifacts.mjs';
 import {requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive GitHub JSON transport value consumed by read-only reconciliation validators.
@@ -30,6 +32,9 @@ import {requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,qualifica
 /** @typedef {function(string,string[]):string} GitReader */
 /** @typedef {{path:string,base:string,develop:string,release:string,result:string,decision:string,review:string}} Resolution */
 /** @typedef {{tagSha:string,candidateSha:string,branch:string,state:string,detail:string,developSha:string,mainSha:string,syncBranch:string,pr:number|null,qualificationRun:string|null,selectedDevelopSha:string,expectedTree?:string,conflicts?:string[],resultSha?:string}} SyncPlan */
+/** Isolated automatic receipt/coverage readers; production authenticates original records and transports.
+ * @typedef {{execute?:import('./release-completion.mjs').CompletionCommand,qualificationRecord?:import('./release-completion.mjs').CompletionRecord,jobs?:import('./release-promotion.mjs').ReleaseJob[],integrationJobs?:import('./release-promotion.mjs').ReleaseJob[],integrationEvidence?:import('./coverage-artifacts.mjs').ArtifactEvidence,deltaEvidence?:import('./coverage-artifacts.mjs').ArtifactEvidence}} AutomaticCompletionReaders
+ */
 
 /** Validate an exact release identity for read-only historical inspection.
  * @param {SyncRequest} request Exact release branch and read-only plan mode; manualReview is retained historical request metadata.
@@ -445,10 +450,52 @@ export function qualifiedLinearCandidate(call,repository,sha) {
     return 'https://github.com/'+repository+'/actions/runs/'+binding.runId;
 }
 
+/** Authenticate normal automatic release completion against its original qualifier and live human review.
+ * @param {import('./release-completion.mjs').CompletionEvidence} evidence Published permanent completion receipt, already bound to the immutable tag and Q/tree by inspectSync.
+ * @param {string} repository Exact published repository identity.
+ * @param {GithubReader} call Independent read-only GitHub provider.
+ * @param {AutomaticCompletionReaders} adapters Optional isolated qualified-record/native-job and schema-3 transport fixtures; production loads the authenticated retained qualifier.
+ * @returns {string} Exact successful qualifier workflow URL; altered receipt, red coverage or missing effective owner review throws.
+ */
+export function verifyAutomaticCompletion(evidence,repository,call,adapters={}) {
+    const record=adapters.qualificationRecord ?? loadQualification(repository,evidence.candidate_sha,call,adapters.execute ?? command);
+    if (Object.keys(record).some(key=>JSON.stringify(record[key])!==JSON.stringify(evidence[key]))) {
+        throw new Error('BLOCKED permanent completion receipt differs from authenticated release qualification.');
+    }
+    const request=qualificationRequest(record);
+    const run=call('repos/'+repository+'/actions/runs/'+record.run_id);
+    const coverage=record.lifecycle_schema===3 && (!adapters.integrationEvidence || !adapters.deltaEvidence)
+        ?loadReleaseCoverage(record,{api:call}):{};
+    // Q is independently fixed as the immutable tag merge's second parent, not a mutable branch claim.
+    verifyQualification(request,run,adapters.jobs ?? fetchJobs(repository,record.run_id,run.run_attempt,record.candidate_sha,adapters.execute ?? command,call),
+        record,repository,evidence.candidate_sha,{...coverage,...adapters,api:call});
+    requireQualificationChecks(call,repository,request,record.run_attempt);
+    requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
+    const receipt=evidence.promotion_pr;
+    if (!receipt || !Number.isSafeInteger(receipt.number) || receipt.number<1
+        || receipt.reviewed_sha!==evidence.candidate_sha || receipt.merge_commit_sha!==evidence.final_main_sha) {
+        throw new Error('BLOCKED permanent completion is not bound to the reviewed release PR.');
+    }
+    const pr=call('repos/'+repository+'/pulls/'+receipt.number);
+    requireBotPullRequest(pr,repository,evidence.candidate_sha,'main');
+    if (pr.state!=='closed' || pr.merged!==true || pr.head.ref!==evidence.branch
+        || pr.base.repo?.full_name!==repository || pr.merge_commit_sha!==evidence.final_main_sha
+        || pr.merged_at!==receipt.merged_at
+        || ![repository.split('/')[0].toLowerCase(),'github-actions[bot]'].includes(pr.merged_by?.login?.toLowerCase())) {
+        throw new Error('BLOCKED live release PR differs from the permanent completion receipt.');
+    }
+    const review=effectiveOwnerReview(call('repos/'+repository+'/pulls/'+receipt.number+'/reviews?per_page=100'),
+        pr,repository.split('/')[0],evidence.candidate_sha);
+    if (!review || ['id','reviewer','commit_sha','submitted_at','url'].some(key=>review[key]!==receipt.approval?.[key])) {
+        throw new Error('BLOCKED exact effective human release approval is missing or differs.');
+    }
+    return 'https://github.com/'+repository+'/actions/runs/'+record.run_id;
+}
+
 /** Obtain a read-only, fail-closed reconciliation snapshot.
  * @param {SyncRequest} request Validated workflow request.
  * @param {string} repository Owner/repository.
- * @param {{api?:GithubReader,evidence?:Record<string,unknown>,reconciliation?:Record<string,unknown>,git?:GitReader}} adapters Optional hermetic fixture readers.
+ * @param {AutomaticCompletionReaders & {api?:GithubReader,evidence?:Record<string,unknown>,reconciliation?:Record<string,unknown>,git?:GitReader}} adapters Optional hermetic fixture readers, including authenticated automatic-completion qualification and schema-3 transport fixtures.
  * @returns {SyncPlan} Release state, SHA/tree identity and content/CI evidence.
  */
 export function inspectSync(request, repository, adapters = {}) {
@@ -460,7 +507,7 @@ export function inspectSync(request, repository, adapters = {}) {
         throw new Error('BLOCKED release is not published at the exact immutable tag.');
     }
     const asset = published.assets?.find(item=>item.name==='release-evidence.json');
-    if (!asset) throw new Error('BLOCKED permanent release evidence missing.');
+    if (!asset) throw new Error('BLOCKED permanent release evidence missing: upload the original release-evidence.json and release-evidence.sha256 from the successful Release completion / release-completion-record artifact, then retry plan. Do not regenerate the receipt or remove existing assets.');
     const evidence = adapters.evidence ?? downloadReleaseEvidence(repository,'v_'+version,asset);
     const commit = call('repos/'+repository+'/commits/'+identity.commit_sha);
     const candidate = call('repos/'+repository+'/commits/'+evidence.candidate_sha);
@@ -479,6 +526,25 @@ export function inspectSync(request, repository, adapters = {}) {
         developSha,mainSha,syncBranch:syncBranchName(version,developSha),pr:null,qualificationRun:null,
         selectedDevelopSha:evidence.selected_develop_sha,state:'SYNC_PENDING',detail:'Owner-approved SHA-preserving FF remains pending.'};
     if (!developProtected(call,repository)) return {...plan,state:'SYNC_BLOCKED',detail:'Develop requires active linear non-force full-CI protection without mandatory PR.'};
+    if (evidence.schema_version===1 && evidence.promotion_pr) {
+        if (evidence.tag!=='v_'+version || evidence.tag_object_sha!==identity.tag_object_sha
+            || evidence.tag_object_type!==identity.tag_object_type) {
+            throw new Error('BLOCKED permanent completion tag object differs from the published immutable tag.');
+        }
+        const qualified=verifyAutomaticCompletion(evidence,repository,call,adapters);
+        if (!isAncestor(call,repository,evidence.candidate_sha,developSha)) {
+            return {...plan,state:'SYNC_PENDING',detail:'Automatically qualified Q is not retained in current develop; no cleanup is authorized.'};
+        }
+        verifyFastForwardHistory(evidence.selected_develop_sha,evidence.candidate_sha,developSha,adapters.git);
+        const finalTag=peelReleaseTag(call,repository,'v_'+version);
+        if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==developSha
+            || call('repos/'+repository+'/git/ref/heads/main').object?.sha!==mainSha
+            || finalTag.commit_sha!==identity.commit_sha || finalTag.tag_object_sha!==identity.tag_object_sha) {
+            throw new Error('BLOCKED automatic completion ancestry or tag raced during inspection.');
+        }
+        return {...plan,state:'RECONCILED_FF',resultSha:evidence.candidate_sha,qualificationRun:qualified,
+            detail:'Normal automatic release Q is retained in protected linear develop; exact qualifier and live owner review verified. No historical reconciliation workflow is required.'};
+    }
     const auditAsset = published.assets.find(item=>item.name==='release-reconciliation.json');
     const proof = adapters.reconciliation ?? (auditAsset ? downloadReleaseEvidence(repository,'v_'+version,auditAsset) : null);
     if (!proof) {

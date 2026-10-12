@@ -78,7 +78,19 @@ Source → GitHub Actions** once. The current legacy root-of-main source must no
 remain active. This feature branch does not change the server setting, publish
 the site, mutate protected branches or dispatch release promotion. Main pushes,
 published releases, daily refresh and manual main dispatch can then deploy through
-the `github-pages` environment. A dispatch from a feature branch only verifies.
+the `github-pages` environment. A publication event retains the tag ref even when
+checkout selects main: run 38225431172 was rejected by the main-only environment.
+Stable publication now validates the latest published release and Actions-based
+Pages configuration, then dispatches a fresh **Project website** run on `main`.
+Only that new main-context build may deploy. The release-context handoff has
+Actions write and Pages read permission, with no Pages write or OIDC token.
+Feature dispatches only verify, and the main dispatch cannot recurse into another
+publication handoff. Keep the environment restricted to the `main` branch; tags
+do not need deployment access.
+Screenshot evidence is captured from the same fully loaded DevTools session that
+asserts each route. The suite retains six full-document desktop/mobile PNGs and
+checks their viewport width and format; it does not start a second CLI browser
+whose navigation can stall before producing an image.
 Do not enable bypass or change branch protections. The public project URL stays
 unchanged. Inspect the website build summary, audit evidence and Pages deployment
 URL, then review desktop/mobile presentation at that URL after first activation.
