@@ -144,6 +144,11 @@ only adds missing verified assets to unpublished drafts; existing descriptions,
 published releases, tags and conflicting assets remain immutable; draft failure never rolls
 back the verified M/tag. No deployment approval, manual dispatch input, extra
 main commit, red override or privileged bypass is allowed.
+Draft creation reconciles a lost response with a complete read-only inventory
+before any later replay. Binary transport distinguishes Actions ZIP endpoints
+from release-asset downloads; create-only uploads use the absolute upload URL
+and original content length. Transient transfers retry at most three times;
+authorization, integrity, conflict and published-release failures never retry writes.
 Machine-populated completion dispatch selects qualified Q before its workflow reaches
 main. Both branches verify installed/effective policy and record omitted bypass
 inventory honestly while relying on server enforcement; never fabricate that field.

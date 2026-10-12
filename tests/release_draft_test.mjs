@@ -32,11 +32,14 @@ try {
     const releases=[];
     let writes=0;
     let loseResponse=false;
+    let rejectCreate=false;
+    let publishAfterLoss=false;
     let hashMismatch=false;
     let pagesRead=0;
     const server=(path,method='GET',payload=null)=>{
         if (path===endpoint && method==='POST') {
             writes++;
+            if (rejectCreate) throw new Error('Simulated HTTP 403 before draft creation');
             assert.equal(payload.tag_name,'v_1.2.1');
             assert.equal(payload.target_commitish,tagged.main_sha);
             assert.equal(payload.name,'Version 1.2.1');
@@ -47,7 +50,7 @@ try {
             const release={id:900+writes,tag_name:payload.tag_name,name:payload.name,body:payload.body,
                 draft:true,prerelease:false,assets:[],html_url:'https://github.com/'+repository+'/releases/tag/untagged-abc'+writes};
             releases.push(release);
-            if (loseResponse) {loseResponse=false;throw new Error('Simulated HTTP response loss after draft creation');}
+            if (loseResponse) {loseResponse=false;release.draft=!publishAfterLoss;throw new Error('Simulated HTTP response loss after draft creation');}
             return structuredClone(release);
         }
         if (method==='GET' && path.startsWith(endpoint+'/') && /^[1-9]\d*$/.test(path.slice(endpoint.length+1))) {
@@ -118,13 +121,22 @@ try {
     assert.throws(()=>prepareDraftRelease(record,repository,tagged,adapters),/conflicting release version/);
     releases[0].name='Version 0.99';
 
-    // Interrupted between the immutable tag and returned draft response: retry finds the draft.
+    // A lost creation response is reconciled immediately with reads and no second POST.
     releases.splice(0);
     loseResponse=true;
-    assert.throws(()=>prepareDraftRelease(record,repository,tagged,adapters),/Simulated HTTP response loss/);
+    assert.equal(prepareDraftRelease(record,repository,tagged,adapters).status,'DRAFT_ALREADY_EXISTS');
     assert.equal(writes,2);
     assert.equal(prepareDraftRelease(record,repository,tagged,adapters).status,'DRAFT_ALREADY_EXISTS');
     assert.equal(writes,2,'Replaying after a lost response cannot create duplicate drafts.');
+
+    releases.splice(0);rejectCreate=true;
+    assert.throws(()=>prepareDraftRelease(record,repository,tagged,adapters),/HTTP 403/);
+    assert.equal(writes,3,'A rejected POST is never blindly repeated.');
+    assert.equal(releases.length,0);rejectCreate=false;
+    loseResponse=true;publishAfterLoss=true;
+    assert.equal(prepareDraftRelease(record,repository,tagged,adapters).status,'ALREADY_PUBLISHED');
+    assert.equal(writes,4,'A release published during response recovery is preserved.');
+    releases[0].draft=true;publishAfterLoss=false;
 
     // An advanced develop status is independent of already valid M/tag and may stage a draft.
     assert.equal(prepareDraftRelease(record,repository,{...tagged,synchronization:'BLOCKED_DEVELOP_ADVANCED'},adapters).status,'DRAFT_ALREADY_EXISTS');

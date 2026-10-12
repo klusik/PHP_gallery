@@ -2634,6 +2634,10 @@ manually. No artifact download or manual attachment is required. Existing
 identical assets remain; conflicts fail without replacement. Published releases
 remain immutable. Failure reports \codeword{TAGGED / DRAFT\_PENDING}; retrying
 completion fills missing files without undoing the verified merge or tag.
+Temporary transfer interruptions receive up to three attempts, and a lost draft
+creation response is checked against existing releases automatically. Keep the
+draft unpublished until \codeword{DRAFT\_READY}; permission, integrity or conflicting
+file errors require correction before another completion run.
 The independent WinApp installer and update metadata come from the exact
 qualification attempt, or from the pinned published predecessor after verifying
 unchanged shipped source, version and integrity. An unchanged installer is not rebuilt.

@@ -124,6 +124,10 @@ No normal step requests SHA/run IDs, a workflow dispatch or deployment approval.
 A changed head needs fresh qualification. Missing/red mandatory checks or unreadable effective
 policy are BLOCKED. Existing draft descriptions and conflicting assets are preserved; published releases are never modified;
 completed merge/tag stays valid if draft staging fails (TAGGED / DRAFT_PENDING).
+Lost draft-creation responses are reconciled by reading the complete inventory
+without repeating the POST. Temporary binary download/upload interruptions receive
+at most three attempts, with existing asset bytes checked before another upload.
+Permission, integrity and conflict failures stop; publish only after DRAFT_READY.
 Omitted bypass membership is explicitly recorded and remains
 server enforced; it is never replaced with a fabricated empty list. GitHub Release publication is never automatic.
 

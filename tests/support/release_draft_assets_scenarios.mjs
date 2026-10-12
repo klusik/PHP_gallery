@@ -11,7 +11,63 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import assert from 'node:assert/strict';
-import {assetHash,qualificationAssets,loadDraftAssets,fillDraftAssets,verifyInstallerPair} from '../../.github/scripts/release-draft-assets.mjs';
+import {existsSync,readFileSync} from 'node:fs';
+import {assetHash,downloadBytes,uploadBytes,qualificationAssets,loadDraftAssets,fillDraftAssets,verifyInstallerPair} from '../../.github/scripts/release-draft-assets.mjs';
+
+// Exercise the real CLI boundary with inert binary outcomes, including headers,
+// original input files, bounded retries and sanitized diagnostic categories.
+const artifactPath='repos/fixture/gallery/actions/artifacts/1/zip';
+const assetPath='repos/fixture/gallery/releases/assets/2';
+const completeBytes=Buffer.from([0,255,128,10,13,0]);
+const binarySuccess={status:0,stdout:completeBytes,stderr:Buffer.alloc(0)};
+const delays=[];
+let binaryCalls=0;
+const binaryAdapters={pause:milliseconds=>delays.push(milliseconds),spawn:(program,args,options)=>{
+    binaryCalls++;assert.equal(program,'gh');assert.equal(options.encoding,null);assert.equal(options.shell,false);
+    assert.equal(options.timeout,60000);assert.equal(options.maxBuffer,512*1024*1024);
+    assert.deepEqual(args,['api',artifactPath]);return binarySuccess;
+}};
+assert.ok(downloadBytes(artifactPath,binaryAdapters).equals(completeBytes));
+assert.equal(binaryCalls,1);
+assert.ok(downloadBytes(assetPath,{spawn:(program,args)=>{
+    assert.equal(program,'gh');assert.deepEqual(args,['api',assetPath,'-H','Accept: application/octet-stream']);return binarySuccess;
+}}).equals(completeBytes));
+for (const status of [401,403,415]) {
+    binaryCalls=0;delays.length=0;
+    assert.throws(()=>downloadBytes(artifactPath,{...binaryAdapters,spawn:()=>{
+        binaryCalls++;return {status:1,stdout:Buffer.from('partial'),stderr:Buffer.from('secret signed URL (HTTP '+status+')')};
+    }}),error=>error.message.endsWith('HTTP '+status) && !error.message.includes('secret') && error.retryable===false);
+    assert.equal(binaryCalls,1);assert.equal(delays.length,0);
+}
+for (const failure of [
+    {status:1,stdout:Buffer.from('partial'),stderr:Buffer.from('gh: gateway failed (HTTP 502)')},
+    {status:1,stdout:Buffer.from('partial'),stderr:Buffer.from('stream error: stream ID 1; CANCEL; received from peer')},
+    {status:null,stdout:Buffer.from('partial'),stderr:Buffer.alloc(0),error:Object.assign(new Error('timeout'),{code:'ETIMEDOUT'})}
+]) {
+    binaryCalls=0;delays.length=0;
+    assert.ok(downloadBytes(artifactPath,{...binaryAdapters,spawn:()=>++binaryCalls<3?failure:binarySuccess}).equals(completeBytes));
+    assert.equal(binaryCalls,3);assert.deepEqual(delays,[1000,1000]);
+    binaryCalls=0;delays.length=0;
+    assert.throws(()=>downloadBytes(artifactPath,{...binaryAdapters,spawn:()=>{binaryCalls++;return failure;}}),/BLOCKED/);
+    assert.equal(binaryCalls,3);assert.deepEqual(delays,[1000,1000]);
+}
+assert.throws(()=>downloadBytes('https://untrusted.example/archive',binaryAdapters),/unsupported/);
+let inputFile='';
+const uploadSpawn=(program,args,options)=>{
+    assert.equal(program,'gh');assert.equal(args[1],'https://uploads.github.com/repos/fixture/gallery/releases/7/assets?name=original.bin');
+    assert.ok(!args.includes('--hostname'));assert.ok(args.includes('Content-Length: '+completeBytes.length));
+    assert.ok(args.includes('Content-Type: application/octet-stream'));assert.equal(options.shell,false);assert.equal(options.encoding,null);
+    inputFile=args[args.indexOf('--input')+1];assert.ok(readFileSync(inputFile).equals(completeBytes));return binarySuccess;
+};
+uploadBytes('fixture/gallery',7,'original.bin',completeBytes,{spawn:uploadSpawn});
+assert.equal(existsSync(inputFile),false,'The original byte input is removed after a successful request.');
+for (const status of [403,422,502]) {
+    assert.throws(()=>uploadBytes('fixture/gallery',7,'original.bin',completeBytes,{spawn:(...args)=>{
+        uploadSpawn(...args);return {status:1,stdout:Buffer.alloc(0),stderr:Buffer.from('secret token (HTTP '+status+')')};
+    }}),error=>error.message.endsWith('HTTP '+status) && !error.message.includes('secret') && error.retryable===(status===502));
+    assert.equal(existsSync(inputFile),false,'The original byte input is removed after a failed request.');
+}
+assert.throws(()=>uploadBytes('fixture/gallery',7,'../unsafe',completeBytes,{spawn:uploadSpawn}),/invalid/);
 /** Calculate the ZIP checksum used by the inert stored-entry archive.
  * @param {Buffer} bytes Complete uncompressed file bytes.
  * @returns {number} Unsigned ZIP CRC-32.
@@ -117,7 +173,10 @@ run.repository.full_name='foreign/gallery';assert.throws(()=>loadDraftAssets(rec
 assert.throws(()=>loadDraftAssets({...record,candidate_sha:'d'.repeat(40)},adapters),/exact Q/);
 assert.throws(()=>loadDraftAssets({...record,version:'9.9.9'},adapters),/version/);
 corruptDownload=true;assert.throws(()=>loadDraftAssets(record,adapters),/size/);corruptDownload=false;
-const digest=artifacts[0].digest;artifacts[0].digest='sha256:'+'0'.repeat(64);assert.throws(()=>loadDraftAssets(record,adapters),/digest/);artifacts[0].digest=digest;
+const digest=artifacts[0].digest;artifacts[0].digest='sha256:'+'0'.repeat(64);
+let archiveReads=0;
+assert.throws(()=>loadDraftAssets(record,{...adapters,download:path=>{archiveReads++;return download(path);}}),/digest/);
+assert.equal(archiveReads,1,'A complete response with invalid integrity is refused without transport retries.');artifacts[0].digest=digest;
 const receipt=Buffer.from(JSON.stringify({...record,final_main_sha:main,tag:completion.tag}));
 loaded.set('release-evidence.json',receipt);
 loaded.set('release-evidence.sha256',Buffer.from(assetHash(receipt)+'  release-evidence.json\n'));
@@ -134,4 +193,27 @@ uploaded.clear();mode='concurrent';assert.equal(fillDraftAssets(record,completio
 published=true;const before=uploadCount;assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/published/);assert.equal(uploadCount,before);published=false;
 uploaded.clear();add('production.zip',Buffer.from('conflicting original'));assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/conflicting/);assert.equal(uploadCount,before);
 uploaded.clear();add('production.zip',loaded.get('production.zip'));add('production.zip',loaded.get('production.zip'));assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/duplicate/);
-process.stdout.write('PASS exact run/attempt/Q/version assets, complete filling, interruption, conflict, published safety, concurrency and both companion paths\n');
+
+uploaded.clear();let transientCalls=0;delays.length=0;
+const retryAdapters={...adapters,pause:milliseconds=>delays.push(milliseconds),upload:(repo,id,name,bytes)=>{
+    transientCalls++;
+    if (transientCalls<3) throw Object.assign(new Error('HTTP 502'),{retryable:true});
+    upload(repo,id,name,bytes);
+}};
+assert.equal(fillDraftAssets(record,completion,7,loaded,retryAdapters).status,'DRAFT_READY');
+assert.equal(transientCalls,18);assert.deepEqual(delays,[1000,1000]);assert.equal(uploaded.size,16);
+uploaded.clear();transientCalls=0;delays.length=0;
+assert.throws(()=>fillDraftAssets(record,completion,7,loaded,{...retryAdapters,upload:()=>{
+    transientCalls++;throw Object.assign(new Error('HTTP 502'),{retryable:true});
+}}),/missing release asset/);
+assert.equal(transientCalls,3);assert.deepEqual(delays,[1000,1000]);assert.equal(uploaded.size,0);
+uploaded.clear();transientCalls=0;delays.length=0;
+assert.throws(()=>fillDraftAssets(record,completion,7,loaded,{...retryAdapters,upload:()=>{
+    transientCalls++;published=true;throw Object.assign(new Error('HTTP 502'),{retryable:true});
+}}),/published/);
+assert.equal(transientCalls,1);assert.equal(delays.length,0);published=false;
+assert.throws(()=>fillDraftAssets(record,completion,7,loaded,{...retryAdapters,upload:(repo,id,name)=>{
+    transientCalls++;add(name,Buffer.from('conflicting concurrent bytes'));throw Object.assign(new Error('HTTP 502'),{retryable:true});
+}}),/conflicting/);
+assert.equal(transientCalls,2);assert.equal(delays.length,0);
+process.stdout.write('PASS exact run/attempt/Q/version assets, CLI byte transport, bounded recovery, conflicts, publish safety, concurrency and both companion paths\n');

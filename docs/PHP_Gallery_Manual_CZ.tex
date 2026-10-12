@@ -2557,6 +2557,10 @@ soubory. Shodné existující přílohy zůstávají; konflikty skončí chybou 
 přepsání. Zveřejněná vydání se nemění. Chyba ohlásí
 \codeword{TAGGED / DRAFT\_PENDING}; opakování doplní chybějící soubory,
 aniž by vracelo zpět ověřené sloučení nebo tag.
+Dočasně přerušený přenos se zopakuje nejvýše třikrát a~ztracená odpověď při
+vytvoření konceptu se automaticky ověří podle existujících vydání. Koncept
+ponechte nezveřejněný až do~\codeword{DRAFT\_READY}; chyby oprávnění, integrity
+nebo konfliktní soubory vyžadují nápravu před opakováním dokončení.
 Instalátor WinAppu a~metadata aktualizací pocházejí z~přesného kvalifikačního
 pokusu, případně z~připnutého předchozího zveřejněného vydání po~ověření
 nezměněných dodávaných zdrojů, samostatné verze a~integrity.
