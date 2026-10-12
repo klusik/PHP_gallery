@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.128
+
+Added gallery-scoped PDF attachments and browser-based PDF-to-PNG conversion, with protected document access, resumable uploads, and private child-gallery handling. [#195](https://github.com/klusik/PHP_gallery/issues/195)
+
+### Highlights
+
+#### Gallery PDF documents and conversion
+- Added independent PDF attachments that administrators could upload, replace, hide, show, or delete with confirmation.
+- Added browser conversion of PDF pages to PNG, with options to append pages to the source gallery or create a private child gallery.
+- Preserved original PDFs and existing photos during conversion; incomplete or cancelled child conversions remained private.
+- Added rendering choices from 96 to 2400 DPI, with 150 DPI as the default. Large canvas requests displayed warnings rather than silently reducing resolution.
+
+### Technical Details
+
+#### Backend
+- Added gallery-scoped PDF document storage, conversion lifecycle, publication rules, settings, and protected delivery in `app/services/gallery_pdf_documents.php`, `app/services/gallery_pdf_conversion.php`, `app/services/gallery_pdf_publication.php`, `app/services/gallery_pdf_settings.php`, and `app/controllers/gallery_pdf_documents.php`.
+- Stored document originals and conversion state separately from SimBrief OFP metadata. Photo ZIP exports and gallery migration did not include general PDF sidecars; full filesystem backups needed to retain the hidden sidecar directories.
+- Updated upload validation to reconcile conversion receipts against manifest hashes, page order, and PNG hashes, and to preserve conversion-owned filenames.
+- Changed the legacy SimBrief server-rasterized browser conversion request to return HTTP 409 with reload guidance; retained its helper for CLI and test compatibility.
+
+#### Frontend
+- Added Admin PDF document and conversion workflows using local PDF.js and the existing bounded, resumable upload pipeline.
+- Supported mixed photo/PDF selections, sequential page rendering, acknowledged-batch retries, cancellation, progress reporting, and recovery of eligible incomplete conversions.
+- Added protected same-origin PDF view and download links, compact document tables, and in-place Admin panel interactions.
+
+#### Tests and documentation
+- Added service, conversion lifecycle, upload-stream, Admin workflow, and browser scenario coverage, and expanded HTTP tests for PDF and OFP access behavior.
+- Updated `TESTING.md`, `docs/GALLERY_PDF.md`, `docs/SIMBRIEF_OFP.md`, compatibility guidance, and all four maintained manual editions.
+
+### User Impact
+
+#### For visitors
+- Visitors could view or download visible PDF documents through protected gallery-scoped links, subject to the gallery’s access policy.
+
+#### For administrators
+- Administrators could manage gallery PDF attachments and convert them into PNG pages appended to a gallery or placed in a private child gallery. Existing photos and PDF originals were preserved.
+
+#### For maintainers
+- Full filesystem backups needed to include hidden PDF document and conversion sidecars. Photo ZIP exports and gallery migration did not transfer general PDF originals.
+
 ## Version 0.127.6
 
 Release automation improved binary asset transfers and recovery from interrupted draft creation while preserving verified asset bytes and keeping publication under human control.
