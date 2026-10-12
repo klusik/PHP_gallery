@@ -1,5 +1,10 @@
 # PHP Gallery CMS
 
+[Project website](https://klusik.github.io/PHP_gallery/) ·
+[Documentation and published-release references](https://klusik.github.io/PHP_gallery/docs/)
+— presentation in English, Czech, German and Swedish. Website source, preview,
+release-link ownership and Pages activation are documented in [website/README.md](website/README.md).
+
 Coding agents use [CI-first, working-branch-only verification](AGENTS.md#mandatory-agent-verification-contract):
 commit and push the explicitly authorized feature/fix/codex branch, then inspect
 hosted candidate preparation and full qualification for the exact prepared SHA.

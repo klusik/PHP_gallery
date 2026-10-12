@@ -181,6 +181,7 @@ $knownSuites = [
     'js-lint',
     'js-lint-changed',
     'browser-map',
+    'website',
     'release-consistency',
     'manifest',
     'git-diff-check',
@@ -623,7 +624,7 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
     $problems = [];
     $gaps = [];
     $log = [$label . '; worker limit=' . $workers];
-    $requiredBrowser = $suiteId === 'browser-map' && browser_required();
+    $requiredBrowser = $suiteId === 'website' || ($suiteId === 'browser-map' && browser_required());
     $jobs = [];
     $outputs = [];
 
@@ -1220,6 +1221,7 @@ function audit_suite_console_label(string $suiteId): string
         'node-fast' => 'Node regression (fast)',
         'node-full' => 'Node regression',
         'browser-map' => 'Chromium browser integration',
+        'website' => 'Static project website',
         'winapp' => 'WinApp regression',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -1276,6 +1278,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),
+        'website' => audit_run_node_suite('website', 'Static project website', $registry['website_tests'], $node, $browser),
         'ci-workflow-contract' => audit_run_php_command('ci-workflow-contract', 'CI workflow contracts', 'tests/gallery_workflow_ci_trigger_policy_test.php'),
         'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
         'winapp' => audit_run_winapp($python),

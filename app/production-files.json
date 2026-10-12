@@ -2232,6 +2232,7 @@
         "tests/presentation_schema_policy_test.php",
         "tests/production_file_policy_test.php",
         "tests/progressive_thumbnail_renderer_test.mjs",
+        "tests/project_website_test.mjs",
         "tests/public_asset_loading_model_test.php",
         "tests/public_card_visibility_eye_test.php",
         "tests/public_content_localization_test.php",

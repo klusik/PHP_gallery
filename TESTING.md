@@ -1,5 +1,13 @@
 # Testing Guide
 
+The project website has an isolated hosted suite: `php scripts/audit.php --suite=website`.
+It checks the explicit website-only artifact, all eight localized project routes,
+release-bound references and required Chromium at desktop, 390px and 320px widths,
+including native keyboard disclosure and focus. Missing Chromium is BLOCKED.
+`.github/workflows/project-website.yml` owns this suite without duplicating CMS
+regressions. Feature builds produce previews; reviewed main alone can deploy Pages.
+See [website maintenance and activation](website/README.md).
+
 `installer_first_install_test.php` belongs to the central full/release PHP suite
 and runs exclusively when the disposable MySQL workflow fixture is supplied.
 It copies application/migration sources without configuration or runtime data,

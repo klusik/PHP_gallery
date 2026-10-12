@@ -1,0 +1,131 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/project-website.yml
+# Module Type: Website Build and Pages Deployment
+# Purpose: Verify a website-only artifact and deploy reviewed main content to Pages.
+# Responsibilities: Bind links to published releases, use the central website suite and isolate Pages permissions.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Project website
+on:
+  push:
+    branches: [main, 'feature/**', 'fix/**', 'bugfix/**', 'hotfix/**', 'codex/**']
+    paths:
+      - 'website/**'
+      - '.github/workflows/project-website.yml'
+      - 'tests/project_website_test.mjs'
+      - 'tests/support/headless_browser_fixture.mjs'
+      - 'scripts/audit.php'
+      - 'scripts/audit_registry.php'
+  release:
+    types: [published]
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: project-website-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build and verify website
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Publication events otherwise select the release tag, not the website owner.
+          ref: ${{ github.event_name == 'release' && 'main' || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: identity
+        name: Bind website source identity
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "PHP_GALLERY_SOURCE_BASE=$(git merge-base HEAD origin/main)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Select a published release and build only website content
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PHP_GALLERY_WEBSITE_RELEASE: ${{ runner.temp }}/website-release.json
+        run: |
+          gh api repos/klusik/PHP_gallery/releases/latest > "$PHP_GALLERY_WEBSITE_RELEASE"
+          node website/build.mjs
+          echo "Website source: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          cat cache/website-output/release.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Require hosted Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              echo "PHP_GALLERY_BROWSER=$(command -v "$candidate")" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo '::error::Required website Chromium runtime is unavailable.'
+          exit 1
+      - name: Central website qualification
+        env:
+          PHP_GALLERY_WEBSITE_SCREENSHOTS: cache/website-visual
+        run: php scripts/audit.php --suite=website
+      - name: Record audit summary
+        if: always()
+        run: |
+          if test -f cache/test-audit/latest.md; then
+            cat cache/test-audit/latest.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: project-website-evidence
+          path: |
+            cache/test-audit/latest.md
+            cache/test-audit/latest.json
+            cache/test-audit/**/website.log
+            cache/website-output/release.json
+            cache/website-visual/*.png
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: project-website-preview
+          path: cache/website-output/
+          include-hidden-files: true
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: cache/website-output/
+  deploy:
+    name: Deploy reviewed website to Pages
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: project-website-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Refuse superseded main website sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEBSITE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: test "$(gh api repos/klusik/PHP_gallery/git/ref/heads/main --jq '.object.sha')" = "$WEBSITE_SOURCE_SHA"
+      - id: deployment
+        uses: actions/deploy-pages@v4
