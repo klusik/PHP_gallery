@@ -11,9 +11,10 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {validateRequest,verifyQualification,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
-import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview} from '../.github/scripts/release-owner-authorization.mjs';
+import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,integrationCheckBinding} from '../.github/scripts/release-owner-authorization.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const candidate = 'a'.repeat(40);
 const request = {runId:'123',candidate,branch:'release/v_1.2.3',mode:'plan',override:false,reason:'',acceptedFailures:[],manualReview:''};
@@ -58,6 +59,161 @@ for (const conclusion of ['failure','skipped','cancelled',null]) {
     const redJobs = jobs.map(job => job.name === 'Required Chromium fixtures' ? {...job,conclusion} : job);
     assert.throws(() => verifyQualification(request,run,redJobs,record,record.repository,candidate),/red/);
 }
+const schema2Record={...record,lifecycle_schema:2,winapp_changed:false};
+const schema2Jobs=[...jobs,...['Prepare manual release assets','Open qualified release PR']
+    .map(name=>({name,status:'completed',conclusion:'success',html_url:'https://github.com/owner/gallery/actions/runs/123'}))];
+assert.deepEqual(verifyQualification(request,run,schema2Jobs,schema2Record,record.repository,candidate),[]);
+assert.throws(()=>verifyQualification(request,run,schema2Jobs.slice(0,-1),schema2Record,record.repository,candidate),/missing/);
+assert.deepEqual(verifyQualification(request,run,[...schema2Jobs,{name:'Prepare Windows companion installer',status:'completed',
+    conclusion:'skipped',html_url:'https://github.com/owner/gallery/actions/runs/123'}],schema2Record,record.repository,candidate),[]);
+const bootstrapPrefix='Run first-install full release lifecycle / ';
+const workflowJob=(name,id,status='completed',conclusion='success')=>({id,name,status,conclusion,
+    workflow_name:'Release qualification',run_id:123,run_attempt:1,html_url:'https://github.com/owner/gallery/actions/runs/123'});
+const schema2BootstrapJobs=[workflowJob('Select release coverage owner',150),
+    ...schema2Jobs.map((job,index)=>workflowJob(bootstrapPrefix+job.name,200+index)),
+    workflowJob(bootstrapPrefix+'Prepare Windows companion installer',250,'completed','skipped'),
+    ...['Prepare release candidate','Basic release delta checks','Release qualification gate','Prepare manual release assets',
+        'Prepare Windows companion installer','Open qualified release PR'].map((name,index)=>workflowJob(name,300+index,'completed','skipped'))];
+assert.deepEqual(verifyQualification(request,run,schema2BootstrapJobs,schema2Record,record.repository,candidate),[]);
+assert.throws(()=>verifyQualification(request,run,schema2BootstrapJobs.filter(job=>job.name!=='Select release coverage owner'),
+    schema2Record,record.repository,candidate),/first-install bootstrap selection/);
+assert.throws(()=>verifyQualification(request,run,[...schema2BootstrapJobs,
+    workflowJob(bootstrapPrefix+'Unexpected extra job',400)],schema2Record,record.repository,candidate),/unknown or foreign nested job/);
+assert.throws(()=>verifyQualification(request,run,schema2BootstrapJobs.map(job=>job.name==='Basic release delta checks'
+    ? {...job,conclusion:'success'} : job),schema2Record,record.repository,candidate),/skipped strict-path inventory/);
+// Schema 3 binds BASIC-only release coverage to one authenticated full-A integration proof.
+const releaseA=record.selected_develop_sha;
+const schema3Record={...record,lifecycle_schema:3,coverage_schema:1,winapp_changed:false,installer_required:false,
+    integration:{candidate_sha:releaseA,candidate_tree:'4'.repeat(40),run_id:'456',run_attempt:'1',
+        workflow_sha:'5'.repeat(40),workflow_path:'.github/workflows/develop-integration.yml',check_run_id:401,
+        artifact_id:501,artifact_sha256:'sha256:'+'a'.repeat(64)},
+    delta:{base_sha:releaseA,candidate_sha:candidate,profile:'basic',artifact_id:502,
+        artifact_sha256:'sha256:'+'b'.repeat(64)}};
+const fullOwnerNames=['Read-only generated-state and source preflight',
+    'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
+    'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
+    'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+    'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+const manualDeltaPaths=['docs/PHP_Gallery_Manual.tex','docs/PHP_Gallery_Manual.pdf',
+    'docs/PHP_Gallery_Manual_CZ.tex','docs/PHP_Gallery_Manual_CZ.pdf',
+    'docs/PHP_Gallery_Manual_DE.tex','docs/PHP_Gallery_Manual_DE.pdf',
+    'docs/PHP_Gallery_Manual_SV.tex','docs/PHP_Gallery_Manual_SV.pdf'];
+const deltaPaths=['app/bootstrap.php','app/core-manifest.json','PATCH_NOTES.md','release-metadata.json',
+    ...manualDeltaPaths,'.github/release-origins/v_1.2.3.json',
+    '.github/release-predecessors/v_1.2.3.json'].sort();
+const oldBootstrap=Buffer.from("<?php\nconst CMS_VERSION = '1.2.2';\nreturn true;\n");
+const newBootstrap=Buffer.from("<?php\nconst CMS_VERSION = '1.2.3';\nreturn true;\n");
+const gitBlobSha=bytes=>createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`),bytes])).digest('hex');
+const deltaChanges=deltaPaths.map((path,index)=>({path,status:path.includes('/v_1.2.3.json')?'A':'M',
+    old_blob:path==='app/bootstrap.php'?gitBlobSha(oldBootstrap):path.includes('/v_1.2.3.json')?'0'.repeat(40):String(index+10).repeat(40).slice(0,40),
+    new_blob:path==='app/bootstrap.php'?gitBlobSha(newBootstrap):String(index+20).repeat(40).slice(0,40),
+    old_mode:path.includes('/v_1.2.3.json')?'000000':'100644',new_mode:'100644'}));
+schema3Record.delta.changed_paths=deltaPaths;
+const integrationParent='8'.repeat(40),integrationSource='6'.repeat(40);
+const integrationPayload={schema_version:1,repository:record.repository,source_branch:'feature/integration-fixture',
+    source_sha:integrationSource,candidate_sha:releaseA,candidate_tree:'4'.repeat(40),expected_develop_sha:integrationParent,
+    source_base:integrationParent,basic_profile:['php-lint','js-lint','source-documentation-changed'],workflow_sha:'5'.repeat(40),
+    workflow_path:'.github/workflows/develop-integration.yml',run_id:'456',run_attempt:'1',
+    native_owners:fullOwnerNames.map((name,index)=>({id:600+index,
+        name:'Develop integration / '+name,status:'completed',conclusion:'success'}))};
+const deltaPayload={schema_version:1,base_sha:releaseA,base_tree:'4'.repeat(40),candidate_sha:candidate,
+    candidate_tree:'3'.repeat(40),version:'1.2.3',profile:'basic',successful:true,
+    basic_report_sha256:'sha256:'+'c'.repeat(64),changes:deltaChanges};
+const integrationBinding=`integration:456:1:${releaseA}`;
+const integrationChecks=['Develop integration qualification','Complete required CI matrix'].map((name,index)=>({
+    id:index===0?401:402,name,external_id:integrationBinding,app:{id:15368},head_sha:releaseA,status:'completed',conclusion:'success'}));
+const schema3Call=path=>{
+    if (path.endsWith('/actions/runs/456/attempts/1')) return {id:456,run_attempt:1,name:'Integrate into develop',
+        path:'.github/workflows/develop-integration.yml',event:'workflow_dispatch',head_branch:'main',
+        head_sha:'5'.repeat(40),status:'completed',conclusion:'success'};
+    if (path.endsWith(`/commits/${releaseA}/check-runs?per_page=100&filter=all`))
+        return {total_count:integrationChecks.length,check_runs:integrationChecks};
+    if (path.endsWith(`/compare/${'5'.repeat(40)}...${'7'.repeat(40)}`))
+        return {status:'ahead',merge_base_commit:{sha:'5'.repeat(40)}};
+    if (path.endsWith(`/compare/${integrationSource}...${releaseA}`))
+        return {base_commit:{sha:integrationSource},merge_base_commit:{sha:integrationSource},status:'ahead',ahead_by:1,behind_by:0,
+            files:[{filename:'app/runtime/modules.php',status:'modified'}]};
+    if (path.endsWith(`/git/ref/heads/main`)) return {ref:'refs/heads/main',object:{type:'commit',sha:'7'.repeat(40)}};
+    if (path.endsWith(`/commits/${'5'.repeat(40)}`)) return {sha:'5'.repeat(40)};
+    if (path.endsWith(`/commits/${integrationSource}`)) return {sha:integrationSource,parents:[{sha:integrationParent}]};
+    if (path.endsWith(`/commits/${releaseA}`)) return {sha:releaseA,parents:[{sha:integrationSource}],commit:{tree:{sha:'4'.repeat(40)}}};
+    if (path.endsWith(`/commits/${candidate}`)) return {sha:candidate,commit:{tree:{sha:'3'.repeat(40)}}};
+    if (path.endsWith(`/git/trees/${'4'.repeat(40)}?recursive=1`)) return {sha:'4'.repeat(40),truncated:false,
+        tree:deltaChanges.filter(change=>change.status!=='A').map(change=>({path:change.path,type:'blob',
+            mode:change.old_mode,sha:change.old_blob}))};
+    if (path.endsWith(`/git/trees/${'3'.repeat(40)}?recursive=1`)) return {sha:'3'.repeat(40),truncated:false,
+        tree:deltaChanges.map(change=>({path:change.path,type:'blob',mode:change.new_mode,sha:change.new_blob}))};
+    if (path.endsWith(`/git/blobs/${gitBlobSha(oldBootstrap)}`)) return {sha:gitBlobSha(oldBootstrap),encoding:'base64',
+        size:oldBootstrap.length,content:oldBootstrap.toString('base64')};
+    if (path.endsWith(`/git/blobs/${gitBlobSha(newBootstrap)}`)) return {sha:gitBlobSha(newBootstrap),encoding:'base64',
+        size:newBootstrap.length,content:newBootstrap.toString('base64')};
+    assert.fail('Unexpected schema 3 fixture GET '+path);
+};
+const schema3Adapters={api:schema3Call,
+    integrationEvidence:{payload:integrationPayload,provider:{artifact_id:501,artifact_digest:schema3Record.integration.artifact_sha256,run_id:'456'}},
+    deltaEvidence:{payload:deltaPayload,provider:{artifact_id:502,artifact_digest:schema3Record.delta.artifact_sha256,run_id:'123'}},
+    integrationJobs:[...integrationPayload.native_owners,
+        ...['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate','Publish develop integration']
+            .map((name,index)=>({id:700+index,name,status:'completed',conclusion:'success'})),
+        {id:710,name:'Develop integration / Authoritative release audit',status:'completed',conclusion:'skipped'}]
+        .map(job=>({...job,workflow_name:'Integrate into develop',run_id:456,run_attempt:1,
+            html_url:'https://github.com/owner/gallery/actions/runs/456'}))};
+const basicJobs=[workflowJob('Select release coverage owner',800),
+    ...['Prepare release candidate','Basic release delta checks','Release qualification gate',
+        'Prepare manual release assets','Open qualified release PR']
+        .map((name,index)=>workflowJob(name,801+index)),
+    workflowJob('Prepare Windows companion installer',806,'completed','skipped'),
+    workflowJob('Run first-install full release lifecycle',807,'completed','skipped'),
+    ...['Prepare release candidate','Release qualification gate','Prepare manual release assets',
+        'Prepare Windows companion installer','Open qualified release PR',
+        'Complete release matrix / Complete required CI matrix']
+        .map((name,index)=>workflowJob(bootstrapPrefix+name,900+index,'completed','skipped'))];
+assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,schema3Adapters),[]);
+assert.throws(()=>verifyQualification(request,run,basicJobs,schema2Record,record.repository,candidate),
+    /first-install bootstrap selection or skipped strict-path inventory is incomplete/);
+assert.throws(()=>verifyQualification(request,run,basicJobs,{...schema3Record,installer_required:true},record.repository,candidate,schema3Adapters),
+    /Windows companion installer outcome differs from the strict release policy/);
+assert.deepEqual(verifyQualification(request,run,basicJobs.map(job=>job.name==='Prepare Windows companion installer'
+    ? {...job,conclusion:'success'} : job),
+    {...schema3Record,installer_required:true},record.repository,candidate,schema3Adapters),[]);
+assert.deepEqual(integrationCheckBinding(integrationBinding),{kind:'integration',runId:'456',attempt:1,sha:releaseA});
+assert.equal(integrationCheckBinding('release:456:1:'+releaseA),null);
+assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate),/artifact|BLOCKED/);
+for (const adverse of [
+    {...schema3Adapters,integrationEvidence:{...schema3Adapters.integrationEvidence,provider:{...schema3Adapters.integrationEvidence.provider,artifact_digest:'sha256:'+'d'.repeat(64)}}},
+    {...schema3Adapters,deltaEvidence:{...schema3Adapters.deltaEvidence,payload:{...deltaPayload,profile:'full'}}},
+    {...schema3Adapters,deltaEvidence:{...schema3Adapters.deltaEvidence,payload:{...deltaPayload,changes:[...deltaChanges,{...deltaChanges[0],path:'tests/unauthorized.php'}]}}},
+    {...schema3Adapters,integrationJobs:[...schema3Adapters.integrationJobs,
+        {id:711,name:'Unrecognized successful job',workflow_name:'Integrate into develop',run_id:456,run_attempt:1,
+            status:'completed',conclusion:'success'}]},
+    {...schema3Adapters,integrationJobs:schema3Adapters.integrationJobs.filter(job=>job.name!=='Prepare integration artifacts')},
+]) assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,adverse),/BLOCKED/);
+assert.throws(()=>verifyQualification(request,run,basicJobs,{...schema3Record,coverage_schema:2},record.repository,candidate,schema3Adapters),/unsupported release coverage schema/);
+const alteredBootstrap=Buffer.from("<?php\nconst CMS_VERSION = '1.2.3';\nreturn false;\n");
+const alteredBootstrapSha=gitBlobSha(alteredBootstrap);
+const alteredPayload={...deltaPayload,changes:deltaChanges.map(change=>change.path==='app/bootstrap.php'
+    ? {...change,new_blob:alteredBootstrapSha} : change)};
+assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,{
+    ...schema3Adapters,deltaEvidence:{...schema3Adapters.deltaEvidence,payload:alteredPayload},
+    api:path=>path.endsWith(`/git/blobs/${alteredBootstrapSha}`)
+        ? {sha:alteredBootstrapSha,encoding:'base64',size:alteredBootstrap.length,content:alteredBootstrap.toString('base64')}
+        : path.endsWith(`/git/trees/${'3'.repeat(40)}?recursive=1`)
+            ? {sha:'3'.repeat(40),truncated:false,tree:alteredPayload.changes.map(change=>({path:change.path,
+                type:'blob',mode:change.new_mode,sha:change.new_blob}))}
+        : schema3Call(path),
+}),/CMS_VERSION literal projection/);
+assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,{
+    ...schema3Adapters,api:path=>path.endsWith(`/git/trees/${'3'.repeat(40)}?recursive=1`)
+        ? {...schema3Call(path),tree:[...schema3Call(path).tree,{path:'app/services/hidden-change.php',
+            type:'blob',mode:'100644',sha:'2'.repeat(40)}]} : schema3Call(path),
+}),/omits or invents/);
+assert.throws(()=>verifyQualification(request,run,[...basicJobs,workflowJob('PHP 8.1 source (unicode)',1300)],
+    schema3Record,record.repository,candidate,schema3Adapters),/full functional/);
+assert.throws(()=>verifyQualification(request,run,basicJobs.map(job=>job.name==='Basic release delta checks'
+    ? {...job,workflow_name:'Foreign workflow'} : job),schema3Record,record.repository,candidate,schema3Adapters),
+    /missing\/ambiguous required BASIC release job/);
+assert.throws(()=>verifyQualification(request,run,[...basicJobs,workflowJob('Unrecognized successful job',1400)],
+    schema3Record,record.repository,candidate,schema3Adapters),/unknown strict release qualification job/);
 // Owner-only authorization: real REST shapes, no network and no GitHub writes.
 const ownerRepo='owner/gallery';
 const ownerRule=Object.assign(JSON.parse(read('.github/release-ruleset.example.json')),
@@ -191,9 +347,23 @@ const release={id:1,tag_name:'v_1.2',draft:false,prerelease:false,html_url:'http
 assert.equal(fetchReleases('owner/gallery',()=>JSON.stringify([[release],[{...release,id:2}]])).length,2);
 assert.throws(()=>fetchReleases('owner/gallery',()=>JSON.stringify([{releases:[]}])) ,/malformed/);
 const qualification=read('.github/workflows/release-qualification.yml');
+const bootstrapWorkflow=read('.github/workflows/release-bootstrap.yml');
 const completion=read('.github/workflows/release-promotion.yml');
 assert.match(qualification,/Initialize or reuse immutable origin after release push/);
 assert.doesNotMatch(qualification,/workflow_dispatch:|initialization_run:/);
+assert.match(qualification,/name: Select release coverage owner[\s\S]*contents\/.github\/workflows\/develop-integration\.yml\?ref=\$\{mainSha\}/);
+assert.match(qualification,/HTTP 404/);
+assert.match(qualification,/name: Run first-install full release lifecycle[\s\S]*uses: \.\/\.github\/workflows\/release-bootstrap\.yml[\s\S]*secrets: inherit/);
+assert.match(qualification,/name: Prepare release candidate\s+needs: coverage-owner\s+if: \$\{\{ needs\.coverage-owner\.outputs\.bootstrap == 'false' \}\}/);
+assert.match(bootstrapWorkflow,/^on:\s+workflow_call:/m);
+assert.doesNotMatch(bootstrapWorkflow,/^  push:/m);
+assert.match(bootstrapWorkflow,/audit_profile: release/);
+assert.match(bootstrapWorkflow,/lifecycle_schema:2/);
+for (const manual of ['PHP_Gallery_Manual.tex','PHP_Gallery_Manual_CZ.tex','PHP_Gallery_Manual_DE.tex','PHP_Gallery_Manual_SV.tex']) {
+    assert.ok(bootstrapWorkflow.includes(manual),`Bootstrap preserves full legacy manual generation: ${manual}`);
+}
+assert.match(bootstrapWorkflow,/name: Prepare Windows companion installer/);
+assert.match(bootstrapWorkflow,/name: Open qualified release PR/);
 assert.match(completion,/pull_request_review:/);
 assert.match(completion,/types: \[submitted\]/);
 assert.match(completion,/Bind successful server run and retained Q record before checkout/);

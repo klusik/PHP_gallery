@@ -10,10 +10,6 @@
 name: Isolated gallery workflows
 
 on:
-  pull_request:
-    branches-ignore: [main]
-  push:
-    branches: [main, master, develop]
   workflow_dispatch:
   workflow_call:
     inputs:

@@ -14,8 +14,21 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
-/** Build a complete independently mutable linear-release server and Git fixture.
- * @returns {{repository:string,record:Record<string,string|boolean>,state:Record<string,unknown>,evidence:Record<string,string|boolean>,reconciliation:Record<string,unknown>,api:function(string,string=,object=):object,git:function(string,string[]):string,context:Record<string,string>}} Isolated source and server records.
+/** Recursive inert API payload and response values; no transport accesses GitHub.
+ * @typedef {null|boolean|number|string|FixtureJson[]|{[key:string]:FixtureJson}} FixtureJson
+ */
+/** Mutable isolated transport outcomes and Git content used by the linear-release scenarios.
+ * @typedef {{developSha:string,mainSha:string,resultSha:string,releaseSha:string,protected:boolean,published:boolean,changed:string[],conflicts:string[],parents:string[],expectedTree:string,resultTree:string,ci:boolean,redJob:string|null,ownerRun:boolean,movedTag:boolean,openPr:boolean,openBasePr:boolean,active:boolean,writes:Array<{path:string,method:string,payload:FixtureJson}>,gitWrites:Array<{executable:string,args:string[]}>,leaseFails:boolean,lostHistory:boolean,newMerges:boolean,race:boolean,proposal:string|null}} LinearFixtureState
+ */
+/** Retained immutable linear reconciliation content and owner acceptance.
+ * @typedef {{schema_version:number,repository:string,state:string,candidate_sha:string,published_main_sha:string,selected_develop_sha:string,develop_base_sha:string,result_sha:string,expected_tree:string,result_tree:string,resolutions:Array<{path:string,base:string,develop:string,release:string,result:string,decision:string,review:string}>,owner_run_id:string,owner_run_attempt:string,regenerated_paths:string[],qualification_url:string,release_patch_sha256:string,reconciliation_patch_sha256:string}} LinearFixtureProof
+ */
+/** Historical publication identity extends the existing exact release record.
+ * @typedef {import('../../.github/scripts/release-promotion.mjs').ReleaseRecord & {final_main_sha:string,final_tree:string}} LinearFixtureRecord
+ */
+
+/** Build mutable inert linear-release records with native IDs for complete check/job pagination.
+ * @returns {{repository:string,record:LinearFixtureRecord,state:LinearFixtureState,evidence:LinearFixtureRecord,reconciliation:LinearFixtureProof,api:function(string,string=,(FixtureJson|null)=):FixtureJson,git:function(string,string[]):string,context:{GITHUB_EVENT_NAME:string,GITHUB_REF:string,GITHUB_ACTOR:string}}} Isolated source, provider rows and server state; the API records attempted writes rather than performing them.
  */
 export function linearFixture() {
     const repository='fixture/gallery';
@@ -70,8 +83,8 @@ export function linearFixture() {
         if (path.endsWith('/rulesets?per_page=100')) return [{id:24808873,name:ruleset.name,enforcement:state.protected?'active':'disabled'}];
         if (path.endsWith('/rulesets/24808873')) return {...ruleset,enforcement:state.protected?'active':'disabled'};
         if (path.endsWith('/rules/branches/develop')) return ruleset.rules;
-        if (path.includes('/check-runs?')) return {total_count:2,check_runs:['Candidate qualification','Complete required CI matrix'].map(name=>({
-            name,head_sha:path.split('/commits/')[1].split('/')[0],app:{id:15368},status:'completed',
+        if (path.includes('/check-runs?')) return {total_count:2,check_runs:['Candidate qualification','Complete required CI matrix'].map((name,index)=>({
+            id:101+index,name,head_sha:path.split('/commits/')[1].split('/')[0],app:{id:15368},status:'completed',
             external_id:'candidate:1234:1:'+path.split('/commits/')[1].split('/')[0],
             conclusion:state.ci?'success':'failure',details_url:'https://github.com/'+repository+'/runs/114046888632'}))};
         if (path.endsWith('/actions/runs/900/attempts/1')) return {path:'.github/workflows/release-reconciliation.yml',
@@ -80,7 +93,7 @@ export function linearFixture() {
         if (path.endsWith('/actions/runs/1234')) return {id:1234,path:'.github/workflows/candidate-preparation.yml',
             event:'push',head_branch:'feature/reconcile',status:'completed',conclusion:state.ci?'success':'failure',run_attempt:1};
         if (path.includes('/actions/runs/1234/attempts/1/jobs?')) return {total_count:mandatory.length,
-            jobs:mandatory.map(name=>({name:'Full CI / '+name,status:'completed',conclusion:state.redJob===name?'failure':'success'}))};
+            jobs:mandatory.map((name,index)=>({id:1001+index,name:'Full CI / '+name,status:'completed',conclusion:state.redJob===name?'failure':'success'}))};
         if (path.includes('/pulls?state=open&head=')) return state.openPr?[{number:7}]:[];
         if (path.includes('/pulls?state=open&base=')) return state.openBasePr?[{number:8}]:[];
         if (path.includes('/actions/workflows/') && path.includes('/runs?')) return {total_count:state.active?1:0,

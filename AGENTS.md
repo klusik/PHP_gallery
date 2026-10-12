@@ -41,11 +41,13 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
 - `php scripts/audit.php --profile=release-preflight` - cheap source-only feedback before release preparation; checks syntax, documentation, policy, and debt budgets without preparing a release.
 - `php scripts/audit.php --profile=release-stage-b` - hosted release-only medium-cost MVC and Admin mutation contracts before generation; the final matrix still qualifies the prepared SHA.
+- `php scripts/audit.php --profile=basic` - source-only PHP/JavaScript syntax and named-declaration documentation checks; no runtime/regression execution.
+- `php scripts/audit.php --profile=basic --changed` - the same narrow checks for an immutable comparison base's source delta.
 - `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
 - `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
 - `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
 
-These commands describe the available runner interfaces. Agent handoff is CI-first through hosted candidate preparation; local audit invocations are reserved for explicit diagnosis/recovery, not the normal edit-to-handoff sequence.
+These commands describe runner interfaces, not by themselves an active branch policy. The intended feature-to-develop sequence is hosted BASIC on feature pushes and the final squash, followed by the approved Actions **Integrate into develop** button; it must refuse unsquashed history. That action runs the complete central FULL matrix exactly once on final candidate A before automatic develop fast-forward. Release preparation from A creates B and runs BASIC `--changed` against A plus release-owned-input checks, without repeating browser, database, functional, Node runtime, WinApp or packaging regressions. Generated release assets and the conditional installer remain production outputs. This reduced-execution policy is inactive until installed on main and verified by real hosted CI; until then use the currently installed required workflows. Local audits are reserved for explicit diagnosis/recovery, not routine handoff.
 
 ## Coding Style & Naming Conventions
 Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space indentation style. Keep functions small and explicit. New or materially refactored features should follow the project MVC boundary: models own SQL/data access, services own reusable domain orchestration and policy, controllers own HTTP/request-response flow, and views own HTML presentation. Do not move SQL into controllers/views merely for convenience, and do not let model modules read request globals or render output. Name controller files by feature area, for example `admin_galleries_edit.php` or `public_media.php`.
@@ -129,8 +131,10 @@ duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md
 ### Automatic reviewed release lifecycle (#101)
 
 Follow `docs/RELEASE_LIFECYCLE.md` for future maintainer-pushed releases. A normal
-push of `release/v_X.Y[.Z]` initializes immutable origin and runs Stage A/B,
-preparation, four locked-toolchain manuals and full exact-Q hosted qualification.
+push of `release/v_X.Y[.Z]` initializes immutable origin A, prepares release
+notes, four locked-toolchain manuals, inventory and manifest into B, and runs
+BASIC changed-source checks plus release-owned-input proof against A..B. It does
+not rerun the functional integration owners on B.
 The resulting bot PR requires one human owner approval; qualification-dispatched automation
 uses a standard protected merge M with parents [P,Q] and tree(Q), then creates an
 immutable tag on M, then idempotently stages one unpublished GitHub Release draft
@@ -144,13 +148,45 @@ main. Both branches verify installed/effective policy and record omitted bypass
 inventory honestly while relying on server enforcement; never fabricate that field.
 
 After tagging, the release workflow may attempt a true non-force develop FF to Q
-only with complete active policy and exact-Q CI proof. Parallel develop work blocks
+only with the complete installed qualification policy and a record binding FULL
+evidence for A to BASIC release-delta evidence for B. Parallel develop work blocks
 reconciliation without modifying the completed tag; no automatic replay/merge/rebase.
 This implemented future workflow does not authorize agents to execute protected
 writes, create production release branches, publish releases or modify server rules.
 Feature agents still write only their explicitly authorized working branch.
 Existing origins, published tags/assets and historical evidence stay immutable.
 Cleanup remains optional and separately leased; never routinely prune refs.
+
+### Qualification lifecycle target and activation status (#185)
+
+The latest #185 target replaces the earlier per-child coverage-inheritance
+proposal. Feature pushes and the final squash receive BASIC checks for PHP and
+JavaScript syntax plus complete named-declaration documentation only. After the
+feature history has been reduced to one authored commit S on top of develop P,
+the maintainer uses the Actions **Integrate into develop** button to select the
+feature branch. The action refuses an unsquashed branch, runs the complete
+central FULL matrix exactly once on final candidate A, then fast-forwards develop
+only after FULL succeeds. Agents never mutate `develop` directly.
+
+A release branch starts at qualified A. Release preparation creates B with
+notes, all four locked-toolchain manuals/PDFs, inventory and manifest. It runs
+BASIC changed-source checks against immutable A plus proof that every change is
+release-owned. It does not rerun browser, database, functional, Node runtime,
+WinApp or packaging regression suites on B. Package and installer generation
+remain release outputs; generation is not regression qualification.
+
+Human approval of the release PR, protected main merge M, tag and draft behavior
+remain unchanged. After the release, a pure fast-forward of `develop` to Q needs
+no second FULL run: the lifecycle record carries FULL for A and BASIC for the
+approved release-only A..B delta. Parallel develop work still blocks that
+synchronization.
+
+This target is **not active** until its implementation is installed on main and
+verified by real hosted CI. Until then, follow the currently installed required
+workflows; source changes and local fixtures do not activate reduced execution.
+See `docs/CI_COVERAGE_REUSE_CONTRACT.md` for evidence and activation gates. The
+older proposal to authenticate and inherit per-child develop coverage on release
+Q is superseded and remains only as historical context there.
 
 ### Mandatory Agent Verification Contract
 
@@ -171,17 +207,20 @@ test orchestrator inside CI; no YAML-maintained parallel test registry is allowe
    release operations, squash, tags and publication require separate explicit
    authorization. Maintainer-dispatched protected release workflows are the
    documented release path; ordinary implementation does not invoke them.
-3. Finish source, tests and permanent documentation; commit focused batches and
-   push only the authorized branch with an exact ref, for example
+3. Finish source, tests and permanent documentation; use hosted BASIC for feature
+   pushes and the final squash, then commit focused batches and push only the
+   authorized branch with an exact ref, for example
    `git push origin HEAD:refs/heads/feature/example`. Check the remote head before
    each write, use non-forced pushes, and integrate concurrent candidate-bot
    commits before adding fixes. Never overwrite another writer.
-4. Use **Candidate preparation -> central GitHub CI qualification**. Hosted
-   preparation owns generated artifacts and qualifies its emitted candidate SHA.
-   Inspect the run summary, required jobs and actionable failure artifacts; fix
-   the complete source batch, commit and push the same branch until fresh CI is
-   green. CI freezes `PHP_GALLERY_SOURCE_BASE` to the merge-base with `origin/main`;
-   release CI uses the previous stable tag. Missing history/base is BLOCKED.
+4. Use the hosted sequence above: BASIC feature/squash checks, the approved
+   **Integrate into develop** Actions button, then FULL on exact A before its
+   automatic fast-forward. Release B receives only BASIC changed-source and
+   release-owned-input checks. Hosted preparation owns generated artifacts and
+   exact candidate identities. Inspect summaries and failure artifacts; fix the
+   complete batch and obtain fresh hosted evidence. CI freezes
+   `PHP_GALLERY_SOURCE_BASE` to the merge-base with `origin/main`; release delta
+   checks use selected develop A. Missing history/base is BLOCKED.
 5. **Do not run local audits, test loops or duplicate syntax checks by default**,
    including `quick`, `full`, `release-preflight` and `release`. A focused local
    diagnostic is exceptional: an observed CI failure needs environment-specific

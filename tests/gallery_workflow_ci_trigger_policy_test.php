@@ -237,6 +237,22 @@ namespace {
     foreach ($jobMatches as $jobMatch) {
         $jobBlocks[$jobMatch[1]] = $jobMatch[2];
     }
+    // The hosted DB manifest delegation relies on the required native same-SHA
+    // preflight. A standalone environment flag is never sufficient qualification.
+    $preflightOwner = $jobBlocks['preflight'] ?? '';
+    $databaseOwner = $jobBlocks['real-database-browser'] ?? '';
+    $sourceOwner = $jobBlocks['runtime-compatibility'] ?? '';
+    $nativeGate = $jobBlocks['ci-gate'] ?? '';
+    check(str_contains($preflightOwner, 'Verify exact candidate checkout')
+        && str_contains($preflightOwner, 'git rev-parse HEAD')
+        && str_contains($preflightOwner, 'php scripts/audit.php --profile=candidate-preflight')
+        && str_contains($preflightOwner, 'checkout_ref || github.sha')
+        && str_contains($databaseOwner, 'needs: preflight')
+        && str_contains($databaseOwner, 'checkout_ref || github.sha')
+        && str_contains($sourceOwner, 'needs: preflight')
+        && str_contains($sourceOwner, 'checkout_ref || github.sha')
+        && str_contains($nativeGate, "const required = ['preflight'"),
+        'Manifest delegation requires required same-candidate preflight and the unchanged native aggregate gate.');
     foreach (['real-database-browser', 'runtime-compatibility'] as $jobName) {
         $job = $jobBlocks[$jobName] ?? '';
         check(preg_match('/^    env:\s*\n(?:(?:      #[^\n]*|      [^\n]+)\n)*?      PHP_GALLERY_BROWSER: disabled\s*\n      GALLERY_WORKFLOW_BROWSER: disabled/m', $job) === 1,
@@ -285,6 +301,8 @@ namespace {
         'Reusable release qualification must own exactly one explicit release-profile audit and retain its evidence.');
 
     $releaseWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-qualification.yml'));
+    // The selector reads immutable main identity; release execution still owns no main mutation.
+    $releaseExecutionWorkflow = strstr($releaseWorkflow, "\n  prepare:") ?: '';
     check(str_contains($releaseWorkflow, "      - 'release/v_*'")
         && !str_contains($releaseWorkflow, 'workflow_dispatch:')
         && str_contains($releaseWorkflow, 'Initialize or reuse immutable origin after release push')
@@ -308,25 +326,42 @@ namespace {
         && !str_contains($releaseWorkflow, '--allow-all')
         && !str_contains($releaseWorkflow, '--allow-tool')
         && str_contains($releaseWorkflow, 'Release branch changed during preparation; refusing stale write-back.')
-        && str_contains($releaseWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
-        && str_contains($releaseWorkflow, 'audit_profile: release')
-        && str_contains($releaseWorkflow, 'checkout_ref:')
-        && str_contains($releaseWorkflow, 'source_base:')
+        && str_contains($releaseWorkflow, 'uses: ./.github/workflows/release-bootstrap.yml')
+        && str_contains($releaseWorkflow, 'name: Basic release delta checks')
+        && str_contains($releaseWorkflow, 'php scripts/audit.php --profile=basic --changed')
+        && str_contains($releaseWorkflow, 'loadIntegrationQualification')
+        && str_contains($releaseWorkflow, 'release-delta.mjs')
+        && !str_contains($releaseWorkflow, 'audit_profile: release')
         && str_contains($releaseWorkflow, 'name: Release qualification gate')
-        && !str_contains($releaseWorkflow, 'refs/heads/main')
+        && $releaseExecutionWorkflow !== ''
+        && !str_contains($releaseExecutionWorkflow, 'refs/heads/main')
         && !str_contains($releaseWorkflow, 'gh release create')
         && !str_contains($releaseWorkflow, 'git tag '),
-        'Release workflow must write back only deterministic preparation to its release branch, preserve the editorial gate, reuse central CI and avoid main/tag/publication actions.');
+        'Release workflow must preserve deterministic editorial/manual preparation and protected completion while qualifying only its authenticated A..B BASIC delta.');
 
-    $preflightPosition = strpos($releaseWorkflow, 'php scripts/audit.php --profile=release-preflight');
+    $integrationPosition = strpos($releaseWorkflow, 'name: Authenticate exact selected-develop integration qualification');
     $preparationPosition = strpos($releaseWorkflow, 'name: Apply deterministic release preparation');
     $buildPosition = strpos($releaseWorkflow, 'name: Build all maintained manuals');
     $savePosition = strpos($releaseWorkflow, 'name: Save TinyTeX cache');
-    check($preflightPosition !== false && $preparationPosition !== false && $preflightPosition < $preparationPosition
-        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}')
+    check($integrationPosition !== false && $preparationPosition !== false && $integrationPosition < $preparationPosition
+        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ needs.prepare.outputs.selected_develop_sha }}')
         && str_contains($releaseWorkflow, 'name: Verify immutable release develop origin and prior main tag')
         && !str_contains($releaseWorkflow, 'git describe --tags'),
-        'Cheap blocking source checks must run through the central audit before preparation, AI and TeX.');
+        'Strict release preparation must authenticate integrated develop A before generation and freeze BASIC delta checks to A.');
+    $bootstrapWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-bootstrap.yml'));
+    $releaseHeader = strstr($releaseWorkflow, "\njobs:", true) ?: '';
+    check(preg_match('/^[ \t]*concurrency:/m', $bootstrapWorkflow) === 0
+        && str_contains($releaseHeader, 'group: release-qualification-${{ github.ref }}')
+        && str_contains($releaseHeader, 'cancel-in-progress: true'),
+        'The calling release workflow must retain branch serialization; the reusable bootstrap must not reacquire a concurrency group and cancel or block its caller.');
+    check(str_contains($bootstrapWorkflow, 'workflow_call:')
+        && !str_contains(strstr($bootstrapWorkflow, "\njobs:", true) ?: '', 'push:')
+        && str_contains($bootstrapWorkflow, 'php scripts/audit.php --profile=release-preflight')
+        && str_contains($bootstrapWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
+        && str_contains($bootstrapWorkflow, 'audit_profile: release')
+        && str_contains($releaseWorkflow, "needs.coverage-owner.outputs.bootstrap == 'true'")
+        && str_contains($releaseWorkflow, "needs.coverage-owner.outputs.bootstrap == 'false'"),
+        'Only first installation may call the retained legacy full release lifecycle; the installed strict owner cannot fall back after red integration.');
     check($buildPosition !== false && $savePosition !== false && $buildPosition < $savePosition
         && str_contains($releaseWorkflow, "steps.manuals.outcome == 'success'")
         && str_contains($releaseWorkflow, "steps.tinytex-cache.outputs.cache-hit != 'true'")
@@ -414,15 +449,23 @@ namespace {
             'Quick workflow convenience must delegate before disposable provisioning.');
     }
     $selectionStart = strpos($runner, '$requiredTests =');
-    $selectionEnd = strpos($runner, 'foreach ($requiredTests as $test)', $selectionStart);
+    $selectionEnd = strpos($runner, '$missingRequired = missing_required_php_test_passes(', $selectionStart);
     check($selectionStart !== false && $selectionEnd !== false, 'Mandatory central workflow evidence selector missing.');
     $selectionBody = substr($runner, $selectionStart, $selectionEnd - $selectionStart);
+    check(str_contains($runner, 'missing_required_php_test_passes($regression, $requiredTests)')
+        && str_contains($runner, 'check($missingRequired === []')
+        && !str_contains($runner, "preg_match('/^\\[PASS\\] "),
+        'Disposable runner must enforce structured per-test PASS results rather than trusting text logs.');
     $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (string $profile): array {' . $selectionBody . 'return $requiredTests;};');
     check($selection instanceof Closure, 'Actual central evidence selector did not compile.');
     $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = 'disabled';
     $requiredDatabaseTests = ['installer_first_install_test.php', 'gallery_workflow_integration_test.php',
         'public_visual_preview_workflow_test.php', 'theme_visual_background_workflow_test.php',
-        'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
+        'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php',
+        'gallery_edit_concurrency_mysql_test.php', 'admin_operation_keys_http_test.php',
+        'public_content_widget_db_workflow_test.php', 'public_content_widget_admin_http_workflow_test.php',
+        'breadcrumb_workflow_integration_test.php', 'content_language_workflow_integration_test.php',
+        'session_route_contention_test.php'];
     check($selection('full') === ['database_engine_contract_test.php', ...$requiredDatabaseTests],
         'Explicit browser disablement changed database/HTTP or race PASS requirements.');
     check($selection('quick') === ['database_engine_contract_test.php'],

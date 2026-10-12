@@ -1,5 +1,39 @@
 # Patch notes
 
+## Version 0.127.2
+
+Version 0.127.2 updated CI qualification and release workflows, added structured audit evidence, and corrected issue references in all four maintained manuals.
+
+### Highlights
+
+#### CI qualification and release workflows [#185](https://github.com/klusik/PHP_gallery/issues/185)
+- Added BASIC source checks for syntax and named-declaration documentation, a FULL qualification workflow before develop integration, and BASIC checks for release-owned changes.
+- Added authenticated evidence checks that rejected stale, incomplete, conflicting, or unexpected qualification results.
+- Preserved the existing full release bootstrap for first installation. The proposed reduced qualification cadence remained inactive until installed on `main` and verified by hosted CI.
+
+### Technical Details
+
+#### Backend and audit
+- Added `scripts/audit_source_evidence.php`, `scripts/audit_winapp.php`, and `scripts/audit_winapp_report.py` for bounded Git evidence and structured WinApp test reporting.
+- Added checks for candidate identity, change scope, hosted check ownership, exact release deltas, and individual required test results.
+- Added `.github/workflows/develop-integration.yml` and `.github/workflows/release-bootstrap.yml`; updated candidate preparation, release qualification, and reusable gallery workflows.
+
+#### Tests and documentation
+- Added regression coverage for change evidence, develop integration, release deltas, coverage artifacts, qualification records, and structured WinApp reports.
+- Updated `TESTING.md`, `AGENTS.md`, release lifecycle documentation, and the CI coverage references.
+- Escaped issue references in all four maintained TeX manuals so they could be processed by TeX.
+
+#### Release metadata
+- Added immutable origin and predecessor records for `v_0.127.2`, identifying `v_0.127.1` as the previous stable release.
+
+### User Impact
+
+#### For visitors and administrators
+- Public visitor and administrator behavior did not change.
+
+#### For maintainers
+- CI and release workflows gained more specific qualification and evidence checks. The documented reduced-execution cadence was not active until its required main-branch installation and hosted verification.
+
 ## Version 0.127.1
 
 Version 0.127.1 restored transparent child-gallery listings so their cards aligned with the public page while preserving the existing compact home and leaf presentations.

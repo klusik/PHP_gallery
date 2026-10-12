@@ -2,13 +2,14 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/release-qualification.yml
 # Module Type: Release Qualification Workflow
-# Purpose: Prepare and qualify a release branch entirely on GitHub-hosted runners.
+# Purpose: Prepare a release branch and qualify only its exact selected-develop delta on GitHub-hosted runners.
 # Responsibilities:
 #   - Validate mutable release branch identity before repository writes
 #   - Apply deterministic release preparation and commit it back only to the same release branch
 #   - Generate missing release-note prose through tightly scoped GitHub Copilot CLI
 #   - Preserve completed maintainer-authored release notes without invoking AI
-#   - Reuse the existing central CI workflow against the exact prepared candidate SHA
+#   - Authenticate full selected-develop integration evidence before release preparation
+#   - Run central BASIC checks and bind their report to the exact prepared-candidate delta
 #   - Expose one aggregate release qualification gate
 # Author: Rudolf Klusal
 name: Release qualification
@@ -26,8 +27,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  coverage-owner:
+    name: Select release coverage owner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      bootstrap: ${{ steps.owner.outputs.bootstrap }}
+      main_sha: ${{ steps.owner.outputs.main_sha }}
+    steps:
+      - id: owner
+        name: Resolve immutable main workflow installation state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          const repository=process.env.GITHUB_REPOSITORY;
+          if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) {
+            throw new Error('BLOCKED repository identity is malformed.');
+          }
+          function read(path,allow404=false) {
+            const result=spawnSync('gh',['api',path],{encoding:'utf8',timeout:30000,maxBuffer:2*1024*1024});
+            if(result.error || result.status!==0) {
+              if(allow404 && /HTTP 404\b/.test(result.stderr ?? '')) return null;
+              throw new Error('BLOCKED GitHub API request failed: '+path+' ('+(result.status ?? 'unavailable')+').');
+            }
+            try { return JSON.parse(result.stdout); }
+            catch { throw new Error('BLOCKED GitHub API returned malformed JSON: '+path+'.'); }
+          }
+          const main=read(`repos/${repository}/git/ref/heads/main`);
+          const mainSha=main?.object?.sha;
+          if(main?.ref!=='refs/heads/main' || main.object?.type!=='commit' || !/^[a-f0-9]{40}$/.test(mainSha ?? '')) {
+            throw new Error('BLOCKED immutable main workflow authority SHA is unavailable.');
+          }
+          const workflow=read(`repos/${repository}/contents/.github/workflows/develop-integration.yml?ref=${mainSha}`,true);
+          const bootstrap=workflow===null;
+          if(!bootstrap && (workflow?.path!=='.github/workflows/develop-integration.yml'
+              || workflow.type!=='file' || !/^[a-f0-9]{40}$/.test(workflow.sha ?? ''))) {
+            throw new Error('BLOCKED integration workflow installation evidence is malformed.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT,`bootstrap=${bootstrap}\nmain_sha=${mainSha}\n`);
+          console.log(`Coverage owner selected at main ${mainSha}: ${bootstrap?'legacy first-install bootstrap':'strict develop integration proof'}.`);
+          NODE
+
+  bootstrap:
+    name: Run first-install full release lifecycle
+    needs: coverage-owner
+    if: ${{ needs.coverage-owner.outputs.bootstrap == 'true' }}
+    uses: ./.github/workflows/release-bootstrap.yml
+    permissions:
+      contents: write
+      actions: write
+      checks: write
+      pull-requests: write
+    secrets: inherit
+
   prepare:
     name: Prepare release candidate
+    needs: coverage-owner
+    if: ${{ needs.coverage-owner.outputs.bootstrap == 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     permissions:
@@ -41,12 +104,14 @@ jobs:
       provenance_json: ${{ steps.origin.outputs.provenance_json }}
       origin_commit_sha: ${{ steps.origin.outputs.origin_commit_sha }}
       selected_develop_sha: ${{ steps.origin.outputs.selected_develop_sha }}
+      integration_identity_json: ${{ steps.integration.outputs.identity_json }}
       initial_main_sha: ${{ steps.origin.outputs.initial_main_sha }}
       previous_stable_tag: ${{ steps.origin.outputs.previous_stable_tag }}
       previous_stable_sha: ${{ steps.origin.outputs.previous_stable_sha }}
       ready: ${{ steps.final.outputs.ready }}
       preparation_changed: ${{ steps.commit.outputs.changed }}
       winapp_changed: ${{ steps.final.outputs.winapp_changed }}
+      installer_required: ${{ steps.final.outputs.installer_required }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -81,51 +146,23 @@ jobs:
           ORIGIN_CHECKOUT_SHA: ${{ steps.initialize.outputs.candidate_sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/release-origin.mjs
-      - name: Cheap release source preflight
-        shell: bash
+      - id: integration
+        name: Authenticate exact selected-develop integration qualification
         env:
-          PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
-          PHP_GALLERY_BROWSER: disabled
-        run: php scripts/audit.php --profile=release-preflight
-      - name: Medium-cost release source preflight
-        timeout-minutes: 6
-        shell: bash
-        env:
-          PHP_GALLERY_SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
-          PHP_GALLERY_BROWSER: disabled
-        run: php scripts/audit.php --profile=release-stage-b
-      - name: Show actionable source-stage failures
-        if: failure()
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELECTED_DEVELOP_SHA: ${{ steps.origin.outputs.selected_develop_sha }}
         shell: bash
         run: |
-          if [[ -f cache/test-audit/latest.md ]]; then
-            sed -n '1,160p' cache/test-audit/latest.md
-          fi
-      - name: Retain bounded source-stage failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: release-source-preflight
-          path: |
-            cache/test-audit/latest.json
-            cache/test-audit/latest.md
-            cache/test-audit/*/report.json
-            cache/test-audit/*/report.md
-            cache/test-audit/*/source-failures.md
-            cache/test-audit/*/source-documentation-changed.json
-            cache/test-audit/*/source-policy-changed.json
-            cache/test-audit/*/source-debt-ratchet.json
-            cache/test-audit/*/mvc-architecture.json
-            cache/test-audit/*/source-documentation-changed.log
-            cache/test-audit/*/source-policy-changed.log
-            cache/test-audit/*/source-contract-inventory.log
-            cache/test-audit/*/php-lint.log
-            cache/test-audit/*/js-lint.log
-            cache/test-audit/*/ci-workflow-contract.log
-            cache/test-audit/*/mvc-boundaries.log
-            cache/test-audit/*/mutation-contracts.log
-          if-no-files-found: ignore
-          retention-days: 7
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {appendFileSync} from 'node:fs';
+          import {loadIntegrationQualification} from './.github/scripts/coverage-artifacts.mjs';
+          const result=await loadIntegrationQualification(process.env.GITHUB_REPOSITORY,process.env.SELECTED_DEVELOP_SHA);
+          if(!result?.identity || result.identity.candidate_sha!==process.env.SELECTED_DEVELOP_SHA) {
+            throw new Error('BLOCKED exact selected-develop integration identity is unavailable.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT,`identity_json=${JSON.stringify(result.identity)}\n`);
+          NODE
       - name: Apply deterministic release preparation
         shell: bash
         env:
@@ -429,6 +466,8 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           NOTES_COMPLETE: ${{ steps.notes.outputs.complete }}
           PREPARED_SHA: ${{ steps.commit.outputs.candidate_sha }}
+          SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
+          SELECTED_DEVELOP_SHA: ${{ steps.origin.outputs.selected_develop_sha }}
         run: |
           set -euo pipefail
           echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
@@ -436,6 +475,8 @@ jobs:
 
           if [[ "${NOTES_COMPLETE}" != "true" ]]; then
             echo "ready=false" >> "${GITHUB_OUTPUT}"
+            echo "winapp_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "installer_required=false" >> "${GITHUB_OUTPUT}"
             {
               echo "### Release preparation"
               echo ""
@@ -443,7 +484,7 @@ jobs:
               echo "- Candidate SHA: \`${PREPARED_SHA}\`"
               echo "- Deterministic preparation: committed"
               echo "- Editorial patch notes: **pending**"
-              echo "- Qualification matrix: not started"
+              echo "- BASIC release delta checks: not started"
               echo ""
               echo "Complete the \`PATCH_NOTES.md\` section for Version ${RELEASE_VERSION} and push it to this release branch."
             } >> "${GITHUB_STEP_SUMMARY}"
@@ -453,8 +494,10 @@ jobs:
           php scripts/generate_production_files.php --check
           php scripts/generate_manifest.php --check
           php scripts/check_release.php "${RELEASE_VERSION}"
-          paths="$(git diff --name-only "${{ steps.origin.outputs.source_base }}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
-          if [[ -n "${paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
+          integration_paths="$(git diff --name-only "${SELECTED_DEVELOP_SHA}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          if [[ -n "${integration_paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
+          installer_paths="$(git diff --name-only "${SOURCE_BASE}" "${SELECTED_DEVELOP_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          if [[ -n "${installer_paths}" ]]; then echo 'installer_required=true' >> "${GITHUB_OUTPUT}"; else echo 'installer_required=false' >> "${GITHUB_OUTPUT}"; fi
           echo "ready=true" >> "${GITHUB_OUTPUT}"
           {
             echo "### Release preparation"
@@ -468,19 +511,96 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   qualification:
-    name: Complete release matrix
+    name: Basic release delta checks
     needs: prepare
     if: ${{ needs.prepare.outputs.ready == 'true' }}
-    uses: ./.github/workflows/gallery-workflows.yml
-    with:
-      audit_profile: release
-      checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
-      source_base: ${{ needs.prepare.outputs.source_base }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    outputs:
+      delta_artifact_id: ${{ steps.upload-delta.outputs.artifact-id }}
+      delta_artifact_sha256: ${{ steps.upload-delta.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Run BASIC checks for the exact A-to-B source delta
+        shell: bash
+        env:
+          PHP_GALLERY_SOURCE_BASE: ${{ needs.prepare.outputs.selected_develop_sha }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${CANDIDATE_SHA}" ]]; then
+            echo "Checked-out release candidate does not match prepared B." >&2
+            exit 1
+          fi
+          php scripts/audit.php --profile=basic --changed
+      - name: Show BASIC source failures
+        if: failure()
+        shell: bash
+        run: |
+          if [[ -f cache/test-audit/latest.md ]]; then
+            sed -n '1,180p' cache/test-audit/latest.md
+          fi
+      - name: Retain BASIC failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-basic-failure
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/*/report.json
+            cache/test-audit/*/report.md
+            cache/test-audit/*/source-failures.md
+            cache/test-audit/*/source-documentation-changed.json
+            cache/test-audit/*/php-lint-changed.log
+            cache/test-audit/*/js-lint-changed.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Bind the BASIC report to the exact A-to-B release delta
+        shell: bash
+        env:
+          RELEASE_BASE: ${{ needs.prepare.outputs.selected_develop_sha }}
+          RELEASE_CANDIDATE: ${{ needs.prepare.outputs.candidate_sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/release-delta.mjs "${RELEASE_BASE}" "${RELEASE_CANDIDATE}" "${RELEASE_VERSION}"
+      - name: Stage the original BASIC report and qualified delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP}/release-delta-artifact"
+          mkdir -p "${evidence_dir}"
+          cp cache/test-audit/latest.json "${evidence_dir}/basic-report.json"
+          cp "${RUNNER_TEMP}/release-delta.json" "${evidence_dir}/release-delta.json"
+      - id: upload-delta
+        name: Retain original BASIC report and qualified delta evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-delta-evidence
+          path: ${{ runner.temp }}/release-delta-artifact/*
+          if-no-files-found: error
+          retention-days: 90
 
   release-gate:
     name: Release qualification gate
-    if: ${{ always() }}
+    if: ${{ always() && needs.coverage-owner.outputs.bootstrap == 'false' }}
     needs:
+      - coverage-owner
       - prepare
       - qualification
     runs-on: ubuntu-24.04
@@ -496,7 +616,7 @@ jobs:
         env:
           PREPARATION_RESULT: ${{ needs.prepare.result }}
           READY: ${{ needs.prepare.outputs.ready }}
-          MATRIX_RESULT: ${{ needs.qualification.result }}
+          BASIC_RESULT: ${{ needs.qualification.result }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -509,7 +629,8 @@ jobs:
             echo "- Candidate SHA: \`${CANDIDATE_SHA:-unresolved}\`"
             echo "- Preparation: **${PREPARATION_RESULT}**"
             echo "- Release inputs ready: **${READY:-false}**"
-            echo "- Full release matrix: **${MATRIX_RESULT}**"
+            echo "- Selected-develop A: \`${{ needs.prepare.outputs.selected_develop_sha }}\`"
+            echo "- Prepared release B BASIC delta: **${BASIC_RESULT}**"
           } >> "${GITHUB_STEP_SUMMARY}"
 
           if [[ "${PREPARATION_RESULT}" != "success" ]]; then
@@ -520,8 +641,8 @@ jobs:
             echo "Release preparation is committed, but editorial release notes are still pending." >&2
             exit 1
           fi
-          if [[ "${MATRIX_RESULT}" != "success" ]]; then
-            echo "Release qualification matrix did not pass." >&2
+          if [[ "${BASIC_RESULT}" != "success" ]]; then
+            echo "BASIC release delta qualification did not pass." >&2
             exit 1
           fi
 
@@ -530,7 +651,24 @@ jobs:
             echo "Release branch changed after preparation; this qualification is stale." >&2
             exit 1
           fi
-          echo "Release candidate is eligible for the next promotion stage."
+          echo "Release candidate passed BASIC qualification for the exact selected-develop delta."
+      - name: Download the exact BASIC delta evidence
+        if: ${{ always() && needs.qualification.result == 'success' && needs.qualification.outputs.delta_artifact_id != '' }}
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-delta-evidence
+          path: ${{ runner.temp }}/release-delta-evidence
+      - uses: actions/checkout@v7.0.1
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        with:
+          ref: ${{ needs.prepare.outputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        with:
+          node-version: '22'
+          package-manager-cache: false
       - name: Bind the result and retained record to the prepared SHA
         if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
         shell: bash
@@ -548,35 +686,24 @@ jobs:
           PROVENANCE_JSON: ${{ needs.prepare.outputs.provenance_json }}
           READY: ${{ needs.prepare.outputs.ready }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
+          INTEGRATION_IDENTITY_JSON: ${{ needs.prepare.outputs.integration_identity_json }}
           WINAPP_CHANGED: ${{ needs.prepare.outputs.winapp_changed }}
+          INSTALLER_REQUIRED: ${{ needs.prepare.outputs.installer_required }}
+          DELTA_ARTIFACT_ID: ${{ needs.qualification.outputs.delta_artifact_id }}
+          DELTA_ARTIFACT_SHA256: ${{ needs.qualification.outputs.delta_artifact_sha256 }}
+          DELTA_EVIDENCE_PATH: ${{ runner.temp }}/release-delta-evidence/release-delta.json
+          OUTPUT_RECORD: ${{ runner.temp }}/release-candidate.json
+          OUTPUT_CHECK: ${{ runner.temp }}/release-check.json
+          OUTPUT_MATRIX_CHECK: ${{ runner.temp }}/prepared-matrix-check.json
+        run: node .github/scripts/release-qualification-record.mjs
+      - name: Publish exact release qualification checks
+        if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          node --input-type=module <<'NODE'
-          import {writeFileSync} from 'node:fs';
-          const e = process.env;
-          const record = {...JSON.parse(e.PROVENANCE_JSON),repository:e.GITHUB_REPOSITORY, branch:e.GITHUB_REF_NAME,
-            candidate_sha:e.CANDIDATE_SHA, source_base:e.SOURCE_BASE, version:e.RELEASE_VERSION,
-            origin_commit_sha:e.ORIGIN_COMMIT_SHA,selected_develop_sha:e.SELECTED_DEVELOP_SHA,
-            initial_main_sha:e.INITIAL_MAIN_SHA,previous_stable_tag:e.PREVIOUS_STABLE_TAG,
-            previous_stable_sha:e.PREVIOUS_STABLE_SHA,run_id:e.GITHUB_RUN_ID, run_attempt:e.GITHUB_RUN_ATTEMPT,
-            ready:e.READY === 'true', automated_result:e.GATE_OUTCOME,
-            lifecycle_schema:2,winapp_changed:e.WINAPP_CHANGED==='true',manual_review:'PENDING',promotion:'AUTOMATIC_AFTER_REVIEW',override:false};
-          writeFileSync(e.RUNNER_TEMP + '/release-candidate.json', JSON.stringify(record,null,2) + '\n');
-          writeFileSync(e.RUNNER_TEMP + '/release-check.json', JSON.stringify({name:'Release qualification',
-            external_id:`release:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.CANDIDATE_SHA}`,
-            head_sha:e.CANDIDATE_SHA, status:'completed', conclusion:e.GATE_OUTCOME === 'success' ? 'success' : 'failure',
-            details_url:`https://github.com/${e.GITHUB_REPOSITORY}/actions/runs/${e.GITHUB_RUN_ID}`,
-            output:{title:'Exact prepared release candidate', summary:JSON.stringify(record,null,2)}}));
-          NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/release-check.json"
-          # Reusable job names may carry caller prefixes; expose the exact required context on Q.
-          node --input-type=module <<'NODE'
-          import {readFileSync,writeFileSync} from 'node:fs';
-          const file = process.env.RUNNER_TEMP + '/release-check.json';
-          const check = JSON.parse(readFileSync(file,'utf8'));
-          check.name = 'Complete required CI matrix';
-          writeFileSync(process.env.RUNNER_TEMP + '/prepared-matrix-check.json',JSON.stringify(check));
-          NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/prepared-matrix-check.json"
       - name: Retain prepared candidate identity even when qualification is red
         if: ${{ always() && needs.prepare.outputs.candidate_sha != '' }}
@@ -632,7 +759,7 @@ jobs:
 
   installer:
     name: Prepare Windows companion installer
-    if: ${{ needs.prepare.outputs.winapp_changed == 'true' }}
+    if: ${{ needs.prepare.outputs.installer_required == 'true' }}
     needs: [prepare, qualification, release-gate]
     runs-on: windows-2025
     timeout-minutes: 25
@@ -666,7 +793,7 @@ jobs:
 
   propose:
     name: Open qualified release PR
-    if: ${{ always() && needs.prepare.result == 'success' && needs.release-gate.result == 'success' && needs.assets.result == 'success' && (needs.installer.result == 'success' || needs.installer.result == 'skipped' && needs.prepare.outputs.winapp_changed == 'false') }}
+    if: ${{ always() && needs.prepare.result == 'success' && needs.release-gate.result == 'success' && needs.assets.result == 'success' && (needs.installer.result == 'success' || needs.installer.result == 'skipped' && needs.prepare.outputs.installer_required == 'false') }}
     needs: [prepare, release-gate, assets, installer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

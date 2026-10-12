@@ -542,26 +542,47 @@ function discover_files(string $rootPath, array $extensions, array $excludedDire
 }
 
 /**
- * Return changed paths reported by Git, or null when Git metadata is unavailable.
+ * Return changed paths reported by Git, optionally from an immutable base commit.
  *
  * @param string $rootPath Repository root.
- * @return ?array Repository-relative paths.
+ * @param ?string $baseSha Full commit SHA whose committed tree is the comparison base; null compares the worktree with HEAD.
+ * @return list<string>|null Repository-relative paths, or null when Git evidence is unavailable or incomplete.
  */
-function git_changed_paths(string $rootPath): ?array
+function git_changed_paths(string $rootPath, ?string $baseSha = null): ?array
 {
     $git = resolve_executable('PHP_GALLERY_GIT', ['git']);
     if ($git === null || !is_dir($rootPath . '/.git')) {
         return null;
     }
 
-    $tracked = run_process([$git, 'diff', '--name-only', '-z', 'HEAD'], $rootPath, 15);
+    if ($baseSha !== null) {
+        if (preg_match('/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/D', $baseSha) !== 1) {
+            return null;
+        }
+        $resolvedBase = run_process([$git, 'rev-parse', '--verify', $baseSha . '^{commit}'], $rootPath, 15);
+        if ($resolvedBase['exit_code'] !== 0 || trim($resolvedBase['stdout']) !== $baseSha) {
+            return null;
+        }
+        $ancestry = run_process([$git, 'merge-base', '--is-ancestor', $baseSha, 'HEAD'], $rootPath, 15);
+        if ($ancestry['exit_code'] !== 0) {
+            return null;
+        }
+        $committed = run_process([$git, 'diff', '--name-only', '-z', '--no-renames', $baseSha, 'HEAD', '--'], $rootPath, 15);
+        $tracked = run_process([$git, 'diff', '--name-only', '-z', 'HEAD', '--'], $rootPath, 15);
+        if ($committed['exit_code'] !== 0) {
+            return null;
+        }
+    } else {
+        $committed = ['stdout' => ''];
+        $tracked = run_process([$git, 'diff', '--name-only', '-z', 'HEAD'], $rootPath, 15);
+    }
     $untracked = run_process([$git, 'ls-files', '--others', '--exclude-standard', '-z'], $rootPath, 15);
     if ($tracked['exit_code'] !== 0 || $untracked['exit_code'] !== 0) {
         return null;
     }
 
     $paths = [];
-    foreach ([$tracked['stdout'], $untracked['stdout']] as $output) {
+    foreach ([$committed['stdout'], $tracked['stdout'], $untracked['stdout']] as $output) {
         foreach (explode("\0", $output) as $path) {
             $path = str_replace('\\', '/', trim($path));
             if ($path !== '') {
@@ -606,6 +627,187 @@ function task_result(
         'log' => $logPath,
         'details' => $details,
     ];
+}
+
+
+/**
+ * Identify mandatory PHP regression children without an unambiguous successful result.
+ *
+ * The central audit may report PASS while unrelated optional children SKIP.
+ * Required disposable-database coverage must instead have an individual PASS,
+ * a zero child exit code, and no timeout in the structured report.
+ *
+ * @param array<string,mixed> $regression Normalized php-fast or php-regression task.
+ * @param list<string> $requiredTests Mandatory standalone PHP test basenames.
+ * @return list<string> Names without verified PASS, or all required names for malformed evidence.
+ */
+function missing_required_php_test_passes(array $regression, array $requiredTests): array
+{
+    $tests = $regression['details']['tests'] ?? null;
+    $reportedCounts = $regression['counts'] ?? null;
+    if (!in_array($regression['id'] ?? null, ['php-fast', 'php-regression'], true)
+        || ($regression['status'] ?? null) !== STATUS_PASS
+        || !is_array($tests) || !array_is_list($tests)
+        || !is_array($reportedCounts)
+        || ($reportedCounts['total'] ?? null) !== count($tests)) {
+        return $requiredTests;
+    }
+
+    $observed = [];
+    $counts = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'blocked' => 0];
+    foreach ($tests as $test) {
+        if (!is_array($test)
+            || !is_string($test['name'] ?? null)
+            || basename($test['name']) !== $test['name']
+            || !str_ends_with($test['name'], '_test.php')
+            || array_key_exists($test['name'], $observed)
+            || !is_int($test['exit_code'] ?? null)
+            || !is_bool($test['timed_out'] ?? null)) {
+            return $requiredTests;
+        }
+        $counter = match ($test['status'] ?? null) {
+            STATUS_PASS => 'passed',
+            STATUS_FAIL => 'failed',
+            STATUS_SKIP => 'skipped',
+            STATUS_BLOCKED => 'blocked',
+            default => null,
+        };
+        if ($counter === null) {
+            return $requiredTests;
+        }
+        $counts[$counter]++;
+        $observed[$test['name']] = $counter === 'passed'
+            && $test['exit_code'] === 0 && !$test['timed_out'];
+    }
+    foreach ($counts as $counter => $value) {
+        if (($reportedCounts[$counter] ?? null) !== $value) {
+            return $requiredTests;
+        }
+    }
+
+    $missing = [];
+    foreach ($requiredTests as $testName) {
+        if (($observed[$testName] ?? false) !== true) {
+            $missing[] = $testName;
+        }
+    }
+    return $missing;
+}
+
+/**
+ * Delegate only the repeated generated-artifact freshness suite in an identified
+ * hosted disposable database audit. The preflight is an existing required native
+ * job on the same prepared candidate SHA, and full PHP 8.1/8.5 and release audits
+ * continue to run the suite. Delegation is not a local PASS.
+ *
+ * @param array<string,list<string>> $profiles Central audit profile definitions.
+ * @param string $profile Selected audit profile.
+ * @param array<string,string> $environment Current process environment.
+ * @return array{suites:list<string>,delegated_to_preflight:list<string>} Executed suites and delegation labels.
+ */
+function audit_hosted_full_suite_ownership(array $profiles, string $profile, array $environment): array
+{
+    $suites = $profiles[$profile] ?? [];
+    $result = ['suites' => $suites, 'delegated_to_preflight' => []];
+    $requiredEnvironment = [
+        'GITHUB_ACTIONS' => 'true',
+        'GITHUB_REPOSITORY' => 'klusik/PHP_gallery',
+        'GALLERY_WORKFLOW_ENABLE' => 'disposable-only',
+        'GALLERY_WORKFLOW_REQUIRED' => '1',
+        'GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1',
+        'GALLERY_WORKFLOW_DB_PORT' => '13316',
+        'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner',
+        'GALLERY_RUNTIME_NORMALIZATION' => 'unicode',
+        'GALLERY_SESSION_REQUIRED' => '1',
+    ];
+    if ($profile !== 'full') {
+        return $result;
+    }
+    foreach ($requiredEnvironment as $name => $value) {
+        if (($environment[$name] ?? null) !== $value) {
+            return $result;
+        }
+    }
+    // Every retained mandatory owner must still contain exactly one manifest.
+    foreach (['candidate-preflight', 'full', 'release'] as $owner) {
+        $ownedSuites = $profiles[$owner] ?? null;
+        if (!is_array($ownedSuites) || count(array_keys($ownedSuites, 'manifest', true)) !== 1) {
+            return $result;
+        }
+    }
+    $result['suites'] = array_values(array_diff($suites, ['manifest']));
+    $result['delegated_to_preflight'] = ['manifest'];
+    return $result;
+}
+
+/**
+ * Require exactly one successful native central-audit suite result.
+ *
+ * An aggregate PASS must not conceal a skipped, missing, failed or duplicated
+ * generated-artifact freshness check in the required candidate preflight.
+ *
+ * @param list<array<string,mixed>> $tasks Executed central audit tasks.
+ * @param string $suiteId Required suite ID.
+ * @return bool Whether the suite was observed exactly once with an individual PASS.
+ */
+function audit_required_suite_pass(array $tasks, string $suiteId): bool
+{
+    $observed = 0;
+    foreach ($tasks as $task) {
+        if (!is_array($task)) {
+            return false;
+        }
+        if (($task['id'] ?? null) !== $suiteId) {
+            continue;
+        }
+        $observed++;
+        if (($task['status'] ?? null) !== STATUS_PASS) {
+            return false;
+        }
+    }
+    return $observed === 1;
+}
+
+/**
+ * Verify that a hosted database audit which delegated manifest freshness has
+ * not changed its checked-out candidate or comparison ref while tests ran.
+ *
+ * The required candidate preflight owns generator freshness before DB tests.
+ * This separate end-of-audit proof protects tracked and non-ignored workspace
+ * integrity after those tests without running the generators a second time.
+ * It does not authenticate the mutable GitHub Actions workflow publisher.
+ *
+ * @param array<string,mixed> $before Git source identity captured before suites.
+ * @param array<string,mixed> $after Git source identity captured after suites.
+ * @return array{status:string,reason:string} Fail-closed integrity result.
+ */
+function audit_delegated_checkout_integrity(array $before, array $after): array
+{
+    foreach ([$before, $after] as $identity) {
+        $head = $identity['head_sha'] ?? null;
+        $base = $identity['comparison_base'] ?? null;
+        $requestedBase = $identity['requested_base'] ?? null;
+        if (!is_string($head) || preg_match('/^[a-f0-9]{40,64}$/D', $head) !== 1
+            || !is_string($base) || preg_match('/^[a-f0-9]{40,64}$/D', $base) !== 1
+            || !is_string($requestedBase) || $requestedBase === ''
+            || !is_bool($identity['worktree_dirty'] ?? null)) {
+            return ['status' => STATUS_BLOCKED, 'reason' => 'git-identity-unavailable'];
+        }
+    }
+
+    if ($before['worktree_dirty']) {
+        return ['status' => STATUS_FAIL, 'reason' => 'checkout-dirty-at-start'];
+    }
+    if ($before['head_sha'] !== $after['head_sha']
+        || $before['comparison_base'] !== $after['comparison_base']
+        || $before['requested_base'] !== $after['requested_base']) {
+        return ['status' => STATUS_FAIL, 'reason' => 'checkout-identity-changed-during-tests'];
+    }
+    if ($after['worktree_dirty']) {
+        return ['status' => STATUS_FAIL, 'reason' => 'checkout-dirty-after-tests'];
+    }
+
+    return ['status' => STATUS_PASS, 'reason' => 'unchanged-clean-checkout'];
 }
 
 /**
@@ -815,4 +1017,46 @@ function render_markdown_report(array $report): string
 function markdown_cell(string $value): string
 {
     return str_replace(["\r", "\n", '|'], [' ', ' ', '\\|'], $value);
+}
+
+/**
+ * Classify source changes conservatively without selecting or skipping audit suites.
+ *
+ * Only modifications to the four maintained manual TeX sources can be marked
+ * as a candidate for a future source-only documentation gate. The caller must
+ * independently verify the authored-source SHA and its comparison baseline.
+ * Renames, additions, deletions, mixed changes and uncertain history remain full.
+ *
+ * @param list<array{status:string,path:string}> $changes Git diff name-status entries with repository-relative paths.
+ * @param bool $baselineVerified Whether the authored SHA and its correct comparison baseline were independently verified.
+ * @return array{scope:string,reason:string} Advisory scope and stable rationale; never a qualification result.
+ */
+function classify_source_change_scope(array $changes, bool $baselineVerified): array
+{
+    if (!$baselineVerified) {
+        return ['scope' => 'full', 'reason' => 'unverified-baseline'];
+    }
+    if ($changes === []) {
+        return ['scope' => 'full', 'reason' => 'empty-diff'];
+    }
+
+    // Only maintained manual-source modifications are eligible. This is not
+    // evidence that the TeX is prose-only or that its structural checks passed.
+    $maintainedManuals = [
+        'docs/PHP_Gallery_Manual.tex' => true,
+        'docs/PHP_Gallery_Manual_CZ.tex' => true,
+        'docs/PHP_Gallery_Manual_DE.tex' => true,
+        'docs/PHP_Gallery_Manual_SV.tex' => true,
+    ];
+    foreach ($changes as $change) {
+        if (($change['status'] ?? null) !== 'M') {
+            return ['scope' => 'full', 'reason' => 'non-modification-status'];
+        }
+        $path = $change['path'] ?? null;
+        if (!is_string($path) || !isset($maintainedManuals[$path])) {
+            return ['scope' => 'full', 'reason' => 'path-out-of-scope'];
+        }
+    }
+
+    return ['scope' => 'manual-source', 'reason' => 'maintained-manual-modifications-only'];
 }

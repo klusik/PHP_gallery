@@ -39,6 +39,12 @@ $phpRegistry = require __DIR__ . '/audit_php_registry.php';
 
 $registry = [
     'profiles' => [
+        // Minimal source gate for feature pushes and prepared release deltas.
+        'basic' => [
+            'php-lint',
+            'js-lint',
+            'source-documentation-changed',
+        ],
         // Source-only authoring and preparation feedback; no release actions or heavy regressions.
         'release-preflight' => [
             'php-lint',
@@ -122,6 +128,13 @@ $registry = [
         ],
     ],
 
+    // Mandatory individual PASS in GitHub-hosted full/release PHP regressions.
+    // These are coverage requirements, not an alternate selector or extra execution.
+    'hosted_full_required_php_tests' => [
+        'deploy_app_packaging_test.php',
+        'runtime_module_plan_test.php',
+    ],
+
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
         'runtime_module_plan_test.php' => [
@@ -198,9 +211,6 @@ $registry = [
         'breadcrumb_workflow_integration_test.php' => [
             'timeout' => 180,
         ],
-        'breadcrumb_workflow_integration_test.php' => [
-            'timeout' => 180,
-        ],
         // Purpose: Bound the existing full-stack Chromium workflow below the overall audit budget.
         // Type: integer.
         // Units: seconds.
@@ -228,6 +238,10 @@ $registry = [
 
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
+        'develop_integration_test.mjs' => [],
+        'release_delta_test.mjs' => [],
+        'coverage_artifacts_test.mjs' => [],
+        'release_qualification_record_test.mjs' => [],
         'hosted_release_policy_test.mjs' => [],
         'release_reconciliation_test.mjs' => [],
         'release_origin_test.mjs' => [],

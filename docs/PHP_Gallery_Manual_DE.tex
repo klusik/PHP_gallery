@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.127.1}
-\newcommand{\manualdate}{11.~Oktober~2026}
+\newcommand{\version}{0.127.2}
+\newcommand{\manualdate}{12.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2311,7 +2311,7 @@ Während der Entwicklung sind kleine, getrennte Commits erlaubt. Die Qualifikati
   \item Die Übergabe nennt GitHub-Actions-URL, Arbeitszweig, genaues vorbereitetes SHA, unveränderliche Vergleichsbasis, Pflichtjobs und manuelle/fehlende Abdeckung. Veraltete, fehlende, übersprungene, abgebrochene, rote oder blockierte Pflichtprüfungen sind keine grüne Qualifikation. Quellen korrigieren und denselben Zweig für neues CI pushen.
 \end{enumerate}
 
-Der~stabile GitHub-Workflow \filepath{.github/workflows/candidate-preparation.yml} kann Feature- und~Fix-Branches vorbereiten und~die exakte SHA des~veröffentlichten Kandidaten qualifizieren. Er~prüft die~Branchidentität, verweigert veraltete Schreibvorgänge und~führt weder Merge noch Squash oder erzwungene Pushes aus. Das~zentrale schreibgeschützte Gate \codeword{--profile=candidate-preflight} erkennt veraltete Manifeste, Laufzeitpläne, Inventare und~Quellrichtlinienverstöße vor der~aufwendigen CI-Matrix. Prüfungsrunner dürfen fehlende Artefakte nicht stillschweigend reparieren. Die~spätere Release-Vorbereitung aktualisiert nur Handbuchversionen und~Datumsangaben und~kompiliert die~vorhandenen TeX-Quellen zu~PDF; fehlende Fachtexte erstellt sie nicht.
+Derzeit bereitet der installierte GitHub-Workflow \filepath{.github/workflows/candidate-preparation.yml} Feature- und~Fix-Branches vor und~qualifiziert deren veröffentlichte SHA. Das \#185-Ziel ändert Feature-Pushes und~den~abschließenden Squash zu BASIC-Syntax- und~Dokumentationsprüfungen; FULL wechselt zur Actions-Integrationsschaltfläche, die zunächst einen einzelnen Autoren-Commit bestätigt und~FULL einmal auf~finalem A ausführt. Das~zentrale schreibgeschützte Gate \codeword{--profile=candidate-preflight} und~die~bestehende Pflichtmatrix bleiben maßgeblich, bis das~Ziel auf main installiert und~durch reale gehostete CI geprüft ist. Prüfungsrunner dürfen fehlende Artefakte nicht stillschweigend reparieren. Die~spätere Release-Vorbereitung aktualisiert Handbuchversionen und~Datumsangaben und~kompiliert die~vorhandenen TeX-Quellen zu~PDF; fehlende Fachtexte erstellt sie nicht.
 
 \section{Ihre Galerie vor der Veröffentlichung prüfen}
 \label{sec:testing}
@@ -2358,7 +2358,7 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
-Der~gehostete Veröffentlichungsablauf führt vor aufwendigen AI- oder~TeX-Schritten zunächst das~besondere Richtlinien-Gate \codeword{--profile=release-preflight} aus. Diese Vorprüfung ersetzt nicht die~vollständige Release-Matrix für~den~exakten Kandidaten.
+Derzeit führt der installierte Release-Ablauf vor aufwendigen AI- oder~TeX-Schritten das Richtlinien-Gate \codeword{--profile=release-preflight} und die vollständige Matrix für den exakten Kandidaten aus. Das \#185-Ziel ersetzt diese B-Prüfungen durch BASIC A..B, bleibt aber bis zur Installation auf main und realer CI-Verifikation inaktiv.
 
 Der registrierte Breadcrumb-Designtest vergleicht die Stillisten für Design und physische Galerien in \filepath{docs/ADMIN_SETTINGS_INVENTORY.md} mit \codeword{breadcrumb_style_registry()}. Er schützt außerdem den Fallback \codeword{chevron} und den nur für Galerievererbung vorgesehenen Wert \codeword{inherit}. Ergänzen Sie bei einem neuen Stil beide dokumentierten Listen; \codeword{inherit} ist kein visueller Designstil.
 
@@ -2376,13 +2376,13 @@ Der vollständige Release-Ablauf steht in \filepath{RELEASE.md}. Vergleichen Sie
 
 Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen lokalen Wiederherstellungspfad für Maintainer. Normale Vorbereitung und Qualifikation laufen auf GitHub; Agenten führen diese Befehle standardmäßig nicht lokal aus. Lokale Wiederherstellung setzt eine ausdrückliche Anforderung oder tatsächlich unerreichbares CI voraus und bleibt ohne gehostete Nachweise BLOCKED. Der später beschriebene Review-Workflow führt geschützten Merge und Tag-Erstellung aus; die GitHub-Release-Veröffentlichung bleibt manuell.
 
-Erzeugen Sie nach den letzten Änderungen das Manifest, bestehen Sie Release-, Manifest- und Whitespace-Vorprüfungen, initialisieren Sie den Qualifizierungsfingerabdruck und frieren Sie die Eingaben ein. Führen Sie genau ein zentrales Audit \codeword{--profile=release} aus, direkt oder über die konfigurierte isolierte Testinstallation. Das Audit besitzt Syntax-, Regressions-, Vertrags-, Browser- und Release-Prüfungen; ergänzen Sie keinen zweiten manuellen Testbaumdurchlauf. Binden Sie seinen Bericht an den unveränderten Fingerabdruck und melden Sie Abdeckungslücken getrennt von ausstehenden Betriebsprüfungen.
+Derzeit kann der installierte Release-Workflow weiterhin ein zentrales Audit \codeword{--profile=release} mit vollständiger Matrix verlangen. Das \#185-Ziel ersetzt diese B-Prüfung: Nach Vorbereitung von Notizen, vier Handbüchern/PDFs, Inventar und Manifest ab A führt es BASIC \codeword{--changed} für den exakten A..B-Quelldelta aus und weist nach, dass jeder geänderte Pfad zu den zugelassenen Release-Eingaben gehört. Browser-, Datenbank/HTTP-, Funktions-, Node-Laufzeit-, WinApp- und Paketregressionen werden auf B nicht wiederholt. Bis der Ersatz auf main installiert und durch reale gehostete CI geprüft ist, bleibt der installierte Workflow verbindlich; das Ziel ist inaktiv und lokale Nachweise aktivieren es nicht.
 
 Erstellen Sie Bereitstellungsordner oder ZIP nur auf ausdrückliche Anforderung. Die Werkzeuge verlangen aktuelle Integritätsdaten und prüfen das kanonische Produktionsinventar; kontrollieren Sie das angeforderte Artefakt vor Gebrauch. Ein reines CMS-Release benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung erfordern ausdrückliche Genehmigung. Prüfen Sie nach Veröffentlichung Update-Erkennung, Migrationen, Anmeldung, öffentliche Galerien, geschützte Medien und Integrität/Status auf der veröffentlichten Installation.
 
 Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
 
-Für~die~Vorbereitung auf~GitHub erstellen und~pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z}. Der~Ablauf erstellt und~committet einen geprüften deterministischen Kandidaten zurück in~denselben Zweig, baut alle vier PDFs gemeinsam und~qualifiziert genau diesen Commit. Er~führt weder einen Merge nach~\codeword{main} aus, noch erstellt er~einen Tag oder~veröffentlicht ein~Release.
+Für~die~gehostete GitHub-Vorbereitung pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} ab FULL-qualifiziertem A. Der~Workflow erstellt B im selben Zweig, baut alle vier PDFs gemeinsam und~führt nach dem \#185-Ziel nur BASIC changed-source und~den~Nachweis erlaubter Release-Eingaben für A..B aus. Der~installierte Workflow bleibt maßgeblich, bis das~Ziel auf main installiert und~gehostet qualifiziert ist. Die~Vorbereitung führt keinen Merge nach~\codeword{main} aus, erstellt keinen Tag und~veröffentlicht kein Release.
 
 \section{Die Galerie schnell wirken lassen}
 \label{sec:performance}
@@ -2483,7 +2483,40 @@ Isolieren Sie vor Öffnen einer wiederhergestellten Installation E-Mail, geplant
 \index{v00254@Veröffentlichungsqualifikation}
 \index{t00241@Tests!v00258@verwerfbare Abläufe}
 
+Das~zentrale Audit bewahrt benannte WinApp-unittest-Ergebnisse, Laufzeiten und
+Überspringgründe zusammen mit~dem~tatsächlichen Prozessergebnis in~JSON.
+Fehlende, unvollständige oder~widersprüchliche Datensätze belegen kein PASS.
+Der~native Windows-Smoke-Test darf ausdrücklich übersprungen bleiben;
+Python-Fixtures ersetzen keine Abnahme der~installierten Windows-Anwendung.
+Diese Datensätze bestätigen weder unabhängig die~Workflow-Quellautorität
+noch erlauben sie~die~Wiederverwendung von~Testabdeckung.
+
+Historische Qualifikation verwendet den~neuesten veröffentlichten gebundenen
+Check und~dessen höchsten Versuch. Neuere rote oder~ausstehende Checks dürfen
+nicht auf~ältere grüne Nachweise zurückfallen. Unvollständige oder~doppelte
+API-Seiten und~Änderungen während der~Erfassung verweigern die~Qualifikation.
+Dies schützt historische Prüfung; neuere Läufe ohne veröffentlichten
+Qualifikationscheck und~unabhängige develop/release-Abdeckungsübernahme bleiben
+außerhalb dieses Lesers.
+
+Feature-Pushes und~der~abschließende Squash verwenden nur BASIC: PHP-/JavaScript-
+Syntax und~vollständige Dokumentation benannter Deklarationen. Sobald das~Feature
+ein einzelner Autoren-Commit S auf~develop P ist, wählt der~Maintainer den~Branch
+mit der~Actions-Schaltfläche \ui{Integrate into develop} aus. Sie~verweigert
+ungesquashte Historie, führt die~vollständige zentrale Matrix genau einmal für
+den~finalen Kandidaten A aus und~führt develop erst nach erfolgreichem FULL
+fast-forward. Release-Vorbereitung ab A erzeugt B und~führt BASIC changed-source
+sowie den~Nachweis zulässiger A..B-Releaseeingaben aus; Browser-, Datenbank-,
+Funktions-, Node-Laufzeit-, WinApp- und~Paketregressionen laufen auf B nicht erneut.
+PDF-, Paket- und~Installererzeugung ist Ausgabe, keine Regressionsqualifikation.
+Ein reiner Fast-forward nach dem Release auf Q braucht kein zweites FULL, weil
+der Datensatz FULL A und~das genehmigte BASIC-Delta A..B bindet. Diese reduzierte Policy ist~inaktiv, bis sie auf main installiert
+und~durch reale gehostete CI geprüft ist; bis dahin gelten die~aktuell installierten
+Pflichtworkflows.
+
 Der zentrale Einstieg \filepath{scripts/audit.php} bietet drei Regressions-/Qualifikationsprofile sowie Quellvorprüfungen. \codeword{--profile=quick} verwendet eine ausdrückliche PHP-Testteilmenge, strenge Quell- und MVC-Verträge, die Python-Importrichtlinie, schnelle Node-Fixtures und Syntaxprüfung geänderter Dateien. Es lässt die vollständige PHP-Suite, Gesamtinventar und~Kategorienbudgets, WinApp-Tests, langsame Node-Fixtures und Chromium aus. Die~verbindliche gehostete Kandidatenqualifikation führt \codeword{--profile=full} für~das~exakte vorbereitete SHA aus; die~gehostete Release-Qualifikation verwendet \codeword{--profile=release}. Ein schneller oder~lokaler PASS ersetzt kein erforderliches Job-Gate.
+
+Das Quellprofil \codeword{--profile=basic} prüft nur PHP-/JavaScript-Syntax und~vollständige Dokumentation benannter Deklarationen; mit~\codeword{--changed} ist der Umfang an~eine unveränderliche Basis gebunden. Es~führt keine Funktions-/Regressionstests, Node-Laufzeittests, Python-, Browser-, Datenbank-, WinApp- oder Paketprüfungen aus. Das \#185-Ziel nutzt dieses Profil für Push/Squash und~den A..B-Delta, bleibt aber inaktiv, bis es auf main installiert und~durch gehostete CI verifiziert ist.
 
 PHP-Suiten verwenden standardmäßig vier Arbeitsprozesse. Setzen Sie \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} auf eine ganze Zahl von 1 bis 8; ungültige Werte blockieren die Ausführung. Registrierte exklusive Tests laufen allein, nachdem aktive Prozesse beendet sind. Jeder Kindprozess behält getrennte Diagnosen und eine ab seinem tatsächlichen Start gemessene Zeitgrenze; Ergebnisse bleiben in stabiler Eingabereihenfolge. Jedes Profil misst außerdem Include-Phasen in frischen Prozessen vor \codeword{cms\_run()}: die frühe Laufzeit erlaubt eine PHP-Datei und 16~MiB Spitzenverbrauch, der Anwendungsbootstrap 40 Dateien und 16~MiB. Die Laufzeit ist nur eine Beobachtung; diese Sonden führen keine Datenbank-, Sitzungs- oder Routingarbeit aus.
 
@@ -2497,7 +2530,7 @@ Bei Browserfehlern zeigen Audit-Konsole und~Bericht den~Fixture-Namen und~die~ko
 
 Automatisierte Regression und betriebliche Abnahme beantworten unterschiedliche Fragen. Das zentrale Audit prüft Code, Verträge, Syntax, verfügbare Browserfixtures und Veröffentlichungskonsistenz. Die isolierte Ablauffixture ergänzt echte Datenbank-, HTTP- und Chromium-Abläufe mit erzeugten Fotos und Konten. Sie benötigt eine ausdrücklich ausschließlich verwerfbare Konfiguration und darf niemals Datenbank oder Medien der Installation verwenden. Folgen Sie \filepath{docs/GALLERY_WORKFLOWS.md} für Voraussetzungen; eine fehlende Umgebung ist eine Abdeckungslücke, kein Beweis einer funktionierenden Funktion.
 
-Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen Sie Quellcode und alle vier Handbuchquellen ab. GitHub Actions erstellt alle vier PDFs gemeinsam, prüft Compilerdiagnosen, aktualisiert das Manifest und qualifiziert das exakte vorbereitete SHA mit einem zentralen Release-Audit. \filepath{scripts/gallery_workflow_mysql.php} mit \codeword{--release} bleibt nur für ausdrücklich angeforderte lokale Wiederherstellung oder Diagnose verfügbar.
+Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen Sie Quellcode und alle vier Handbuchquellen ab. GitHub Actions erstellt alle vier PDFs gemeinsam, prüft Compilerdiagnosen und aktualisiert das Manifest. Nach dem \#185-Ziel qualifiziert der gehostete Ablauf nur geänderte Quellen mit BASIC und zugelassene Release-Eingaben von A bis B; das derzeit installierte vollständige Release-Audit bleibt verpflichtend, bis das Ziel auf main installiert und durch reale CI geprüft ist. \filepath{scripts/gallery_workflow_mysql.php} mit \codeword{--release} bleibt nur für ausdrücklich angeforderte lokale Wiederherstellung oder Diagnose verfügbar.
 
 Das Qualifikationswerkzeug \filepath{scripts/release_qualification.php} vermerkt den genauen Quellcode- und PDF-Fingerabdruck. Sein Befehl \codeword{render} erzeugt begrenzte Seitenvorschauen; Darstellung allein genehmigt deren Erscheinungsbild nicht. Der Befehl \codeword{record-audit} akzeptiert nur den passenden zentralen Veröffentlichungsbericht, kein älteres vollständiges Audit. Eine geänderte Quelldatei oder ein neu erstelltes PDF wählt neue ausstehende Nachweise, statt frühere Zustimmung still wiederzuverwenden.
 
@@ -2546,7 +2579,7 @@ den Abschluss. Isolierte Abnahme des echten GitHub-Verhaltens beschreibt
 Agenten führen während der Implementierung keine geschützte Integration
 oder Produktionsveröffentlichung aus.
 
-Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Seine Schritte folgen diesem Vertrag:
+Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Die~folgenden Details beschreiben den~aktuell installierten Workflow, solange der~\#185-Ersatz inaktiv ist; nach Installation auf~main ersetzt das~BASIC A..B-Ziel oben dessen Vorprüfungen und~vollständige B-Matrix. Die~derzeitigen Schritte sind:
 
 \begin{enumerate}
   \item \textbf{Zweig und~Vorprüfung.} Ein~Push nach~\codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z}  löst die~Vorbereitung aus. Eine~optional angegebene Version muss zum Zweignamen passen. Ein~bereits vorhandener Tag \codeword{v_X.Y[.Z]} führt zur Ablehnung. Der~vorige Release-Tag liefert die~Vergleichsbasis. Vor AI oder~TeX prüft \codeword{release-preflight} Quellsyntax, Deklarationsdokumentation, Dateiinventar, Python-Importrichtlinie und~Workflow-Verträge.

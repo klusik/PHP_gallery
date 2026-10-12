@@ -42,6 +42,11 @@ use function PhpGallery\Audit\exit_code_for_status;
 use function PhpGallery\Audit\find_executable;
 use function PhpGallery\Audit\format_duration;
 use function PhpGallery\Audit\git_changed_paths;
+use function PhpGallery\Audit\missing_required_php_test_passes;
+use function PhpGallery\Audit\audit_hosted_full_suite_ownership;
+use function PhpGallery\Audit\audit_required_suite_pass;
+use function PhpGallery\Audit\audit_delegated_checkout_integrity;
+use function PhpGallery\Audit\audit_evaluate_winapp_report;
 use function PhpGallery\Audit\output_is_skip;
 use function PhpGallery\Audit\parse_python_unittest_summary;
 use function PhpGallery\Audit\overall_status;
@@ -72,6 +77,7 @@ gallery_require_cli_sapi();
 require_once __DIR__ . '/audit_lib.php';
 require_once __DIR__ . '/audit_source_evidence.php';
 require_once __DIR__ . '/audit_route_performance.php';
+require_once __DIR__ . '/audit_winapp.php';
 require_once __DIR__ . '/source_contracts/debt_ratchet.php';
 
 $registryPath = __DIR__ . '/audit_registry.php';
@@ -93,7 +99,7 @@ if ($options['help']) {
 PHP Gallery central audit
 
 Usage:
-  php scripts/audit.php [--profile quick|full|release|release-preflight|release-stage-b|candidate-preflight]
+  php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight]
   php scripts/audit.php --suite <suite-id>
   php scripts/audit.php --profile full --changed
 
@@ -112,12 +118,14 @@ Environment overrides:
   PHP_GALLERY_SOURCE_BASE (immutable branch merge-base or previous release tag SHA)
 
 Profiles:
+  basic    PHP/JavaScript syntax and changed named-declaration documentation only.
   quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
   full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
   release  Full audit plus release consistency, manifest freshness, and Git validation.
   release-preflight  Cheap source-only authoring feedback, including debt budgets; no release actions.
   release-stage-b    Medium-cost source-only MVC and mutation contracts before release generation.
   candidate-preflight  Read-only source, runtime plan, inventory and manifest gate before heavy CI.
+  basic --changed  Restrict syntax checks to source paths changed since PHP_GALLERY_SOURCE_BASE; an unavailable base blocks.
 TEXT
     );
     exit(0);
@@ -136,6 +144,15 @@ if ($options['suite'] !== null) {
     }
     $suiteIds = array_values($profiles[$profile]);
     $profileLabel = $profile;
+}
+
+$delegatedToPreflight = [];
+if ($options['suite'] === null) {
+    // The existing central selector delegates only manifest freshness in the
+    // verified disposable hosted DB context; other full audits stay complete.
+    $ownership = audit_hosted_full_suite_ownership($profiles, $profile, getenv() ?: []);
+    $suiteIds = $ownership['suites'];
+    $delegatedToPreflight = $ownership['delegated_to_preflight'];
 }
 
 if ($options['changed']) {
@@ -188,12 +205,20 @@ if (!is_dir($runDirectory) && !mkdir($runDirectory, 0775, true) && !is_dir($runD
     exit(2);
 }
 
+$isBasicProfile = $profileLabel === 'basic';
 $node = resolve_executable('PHP_GALLERY_NODE', ['node']);
-$python = resolve_python_command();
+$python = $isBasicProfile ? null : resolve_python_command();
 $git = resolve_executable('PHP_GALLERY_GIT', ['git']);
-$browser = resolve_browser_executable();
+$browser = $isBasicProfile ? null : resolve_browser_executable();
+$requestedSourceBase = trim((string) getenv('PHP_GALLERY_SOURCE_BASE'));
 $sourceIdentity = PhpGallery\Audit\audit_source_identity($root, $git,
-    trim((string) getenv('PHP_GALLERY_SOURCE_BASE')) ?: 'HEAD');
+    $requestedSourceBase !== '' ? $requestedSourceBase : 'HEAD');
+$basicChangedLintBase = $profileLabel === 'basic' && $options['changed']
+    && preg_match('/^[a-f0-9]{40}$/D', $requestedSourceBase) === 1
+    && ($sourceIdentity['comparison_base'] ?? null) === $requestedSourceBase
+        ? $requestedSourceBase
+        : null;
+$basicChangedLintRequiresBase = $profileLabel === 'basic' && $options['changed'];
 
 /**
  * Return a concise executable version string without exposing noisy tool output.
@@ -213,15 +238,26 @@ function audit_tool_version(array $command, array $versionArgs): string
     return trim($line);
 }
 
-$environment = [
-    ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
-    ['component' => 'PHP GD', 'status' => extension_loaded('gd') ? STATUS_PASS : STATUS_BLOCKED, 'value' => extension_loaded('gd') ? 'loaded' : 'not loaded'],
-    ['component' => 'pdo_mysql', 'status' => extension_loaded('pdo_mysql') ? STATUS_PASS : STATUS_SKIP, 'value' => extension_loaded('pdo_mysql') ? 'loaded' : 'not loaded'],
-    ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
-    ['component' => 'Python', 'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'],
-    ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
-    ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP), 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
-];
+$environment = $isBasicProfile
+    ? [
+        ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
+        ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
+        ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
+    ]
+    : [
+        ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
+        [
+        'component' => 'PHP GD', 'status' => extension_loaded('gd') ? STATUS_PASS : STATUS_BLOCKED,
+        'value' => extension_loaded('gd') ? 'loaded' : 'not loaded',
+        ], [
+        'component' => 'pdo_mysql', 'status' => extension_loaded('pdo_mysql') ? STATUS_PASS : STATUS_SKIP,
+        'value' => extension_loaded('pdo_mysql') ? 'loaded' : 'not loaded',
+        ],
+        ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
+        ['component' => 'Python', 'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'],
+        ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
+        ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP), 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
+    ];
 
 $tasks = [];
 $slowChecks = [];
@@ -371,8 +407,38 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
     $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
     $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
     $logPath = audit_write_log($suiteId, $log);
-    return task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
+    $task = task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
         ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers, 'serial_tests' => $serialCount, 'tests' => $testResults]);
+
+    // The full hosted suite can be PASS with unrelated optional SKIPs. Expensive
+    // packaging and PHP_BINARY module-loader proofs must never be optional there.
+    if ($suiteId === 'php-regression' && getenv('GITHUB_ACTIONS') === 'true' && $status === STATUS_PASS) {
+        $required = $registry['hosted_full_required_php_tests'] ?? null;
+        $validRequired = is_array($required) && array_is_list($required) && $required !== [];
+        if ($validRequired) {
+            $seenRequired = [];
+            foreach ($required as $testName) {
+                if (!is_string($testName)
+                    || preg_match('/^[a-z0-9_]+_test[.]php$/D', $testName) !== 1
+                    || isset($seenRequired[$testName])) {
+                    $validRequired = false;
+                    break;
+                }
+                $seenRequired[$testName] = true;
+            }
+        }
+        $missing = $validRequired
+            ? missing_required_php_test_passes($task, $required)
+            : ['invalid hosted_full_required_php_tests registry'];
+        if ($missing !== []) {
+            $reason = 'Missing mandatory hosted PHP child PASS: ' . implode(', ', $missing) . '.';
+            $task['status'] = STATUS_BLOCKED;
+            $task['summary'] .= '; ' . $reason;
+            $task['details']['problems'][] = $reason;
+        }
+    }
+
+    return $task;
 }
 
 /**
@@ -663,14 +729,14 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
 }
 
 /**
- * Run the Windows companion application's Python unittest tree.
+ * Run the Windows companion unittest tree and validate its named outcome report.
  *
- * @param ?array $python Python command prefix.
- * @return array Normalized task result.
+ * @param list<string>|null $python Python executable and option prefix, or null when no usable interpreter is configured.
+ * @return array{id:'winapp',label:'WinApp regression',status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Normalized task result; a missing interpreter includes named problems, missing test source produces explicit SKIP, and a completed run includes the validated report and process evidence.
  */
 function audit_run_winapp(?array $python): array
 {
-    global $root;
+    global $root, $runDirectory, $persistReports;
     $started = microtime(true);
     $testDirectory = $root . '/winapp/tests';
     if (!is_dir($testDirectory)) {
@@ -680,22 +746,57 @@ function audit_run_winapp(?array $python): array
         return task_result('winapp', 'WinApp regression', STATUS_BLOCKED, 0.0, [], 'Python executable was not found.', null, ['problems' => ['Set PHP_GALLERY_PYTHON or install Python 3 to execute WinApp regression tests.']]);
     }
 
-    $command = array_merge($python, ['-m', 'unittest', 'discover', '-s', 'winapp/tests', '-p', 'test_*.py']);
+    $reportPath = $runDirectory . '/winapp-report.json';
+    $command = array_merge($python, [
+        '-m',
+        'scripts.audit_winapp_report',
+        $reportPath,
+    ]);
+    $reportExistedBeforeRun = file_exists($reportPath);
     $process = run_process($command, $root, 90);
     audit_record_slow_check('Python WinApp unittest discovery', (float) $process['duration']);
     $output = audit_process_output($process);
     $logPath = audit_write_log('winapp', ['WinApp unittest discovery', $output]);
-    $counts = parse_python_unittest_summary($output);
-    if ($process['timed_out']) {
-        return task_result('winapp', 'WinApp regression', STATUS_FAIL, (float) $process['duration'], $counts, 'Timed out after 90 seconds.', $logPath, ['problems' => ['Python unittest discovery timed out.']]);
+    $reportProduced = !$reportExistedBeforeRun && is_file($reportPath);
+    $reportContents = $reportProduced ? file_get_contents($reportPath) : false;
+    $evaluated = audit_evaluate_winapp_report(
+        is_string($reportContents) ? $reportContents : null,
+        [
+            'exit_code' => is_int($process['exit_code'] ?? null) ? $process['exit_code'] : null,
+            'timed_out' => (bool) ($process['timed_out'] ?? false),
+            'duration_seconds' => (float) ($process['duration'] ?? 0.0),
+        ]
+    );
+    $adapterReportPath = $persistReports && $reportProduced
+        ? relative_path($reportPath, $root)
+        : null;
+    if (!$persistReports && $reportProduced) {
+        @unlink($reportPath);
     }
-    $status = (int) $process['exit_code'] === 0 ? STATUS_PASS : STATUS_FAIL;
-    if ($counts['total'] !== null && $counts['passed'] !== null) {
-        $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['errors'] . ' error / ' . $counts['skipped'] . ' skip';
-    } else {
-        $summary = 'exit code ' . $process['exit_code'];
+    $details = [
+        'report_file' => $adapterReportPath,
+        'report_schema_valid' => $evaluated['valid'],
+        'successful' => $evaluated['successful'],
+        'runtime' => $evaluated['runtime'],
+        'tests' => $evaluated['tests'],
+        'fixture_errors' => $evaluated['fixture_errors'],
+        'fixture_skips' => $evaluated['fixture_skips'],
+        'gaps' => $evaluated['gaps'],
+        'process' => $evaluated['process'],
+        'result_reason' => $evaluated['reason'],
+    ];
+    $status = $evaluated['status'];
+    $counts = $evaluated['counts'];
+    $summary = $counts['total'] . ' tests: ' . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['errors']
+        . ' error (' . $counts['fixture_errors'] . ' fixture) / ' . $counts['skipped'] . ' skip / '
+        . $counts['subtest_skips'] . ' subtest skip / ' . $counts['fixture_skips'] . ' fixture skip / '
+        . $counts['expected_failures']
+        . ' expected failure / ' . $counts['unexpected_successes'] . ' unexpected success';
+    if (!$evaluated['valid']) {
+        $summary = 'Structured WinApp report unavailable or invalid.';
     }
-    return task_result('winapp', 'WinApp regression', $status, microtime(true) - $started, $counts, $summary, $logPath, $status === STATUS_FAIL ? ['problems' => ['WinApp unittest discovery failed.']] : []);
+    return task_result('winapp', 'WinApp regression', $status, microtime(true) - $started,
+        $counts, $summary, $logPath, array_merge($details, ['problems' => $evaluated['problems']]));
 }
 
 /**
@@ -878,8 +979,13 @@ function audit_run_source_contract_inventory(): array
  */
 function audit_run_source_contract(string $suiteId, string $label, string $script, string $artifactKey, bool $changedOnly = true): array
 {
-    global $root, $runDirectory, $sourceIdentity;
+    global $root, $runDirectory, $sourceIdentity, $basicChangedLintBase, $basicChangedLintRequiresBase;
     $started = microtime(true);
+    if ($suiteId === 'source-documentation-changed' && $basicChangedLintRequiresBase && $basicChangedLintBase === null) {
+        return task_result($suiteId, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'Changed declaration documentation requires a full immutable PHP_GALLERY_SOURCE_BASE SHA.', null,
+            ['problems' => ['The requested comparison base is missing, malformed, or unavailable.']]);
+    }
     $command = [PHP_BINARY, $root . '/scripts/' . $script, '--json'];
     if ($changedOnly) {
         $command[] = '--changed';
@@ -933,16 +1039,18 @@ function audit_run_source_contract(string $suiteId, string $label, string $scrip
 /**
  * Return lint targets for full-repository or Git-changed mode.
  *
- * @param array $extensions File extensions without dots.
- * @param bool $changedOnly True to prefer Git-changed files.
- * @return array Array containing files and fallback metadata.
+ * @param list<string> $extensions File extensions without dots.
+ * @param bool $changedOnly True to select Git-changed files.
+ * @param ?string $baseSha Optional immutable commit SHA for committed delta selection.
+ * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
+ * @return array{files:list<string>,fallback:bool,blocked?:bool} Selected files and evidence state.
  */
-function audit_lint_targets(array $extensions, bool $changedOnly): array
+function audit_lint_targets(array $extensions, bool $changedOnly, ?string $baseSha = null, bool $requireGitEvidence = false): array
 {
     global $root;
     $extensionMap = array_fill_keys(array_map('strtolower', $extensions), true);
     if ($changedOnly) {
-        $changed = git_changed_paths($root);
+        $changed = git_changed_paths($root, $baseSha);
         if ($changed !== null) {
             $files = [];
             foreach ($changed as $relative) {
@@ -955,6 +1063,9 @@ function audit_lint_targets(array $extensions, bool $changedOnly): array
             sort($files, SORT_STRING);
             return ['files' => array_values(array_unique($files)), 'fallback' => false];
         }
+        if ($requireGitEvidence) {
+            return ['files' => [], 'fallback' => false, 'blocked' => true];
+        }
     }
 
     return [
@@ -966,10 +1077,12 @@ function audit_lint_targets(array $extensions, bool $changedOnly): array
 /**
  * Run PHP syntax validation over selected source files.
  *
- * @param bool $changedOnly True to prefer Git-changed files.
+ * @param bool $changedOnly True to select Git-changed files.
+ * @param ?string $baseSha Optional immutable commit SHA for committed delta selection.
+ * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
  * @return array<string,mixed> Normalized task result.
  */
-function audit_run_php_lint(bool $changedOnly): array
+function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $requireGitEvidence = false): array
 {
     global $root;
     $id = $changedOnly ? 'php-lint-changed' : 'php-lint';
@@ -980,7 +1093,12 @@ function audit_run_php_lint(bool $changedOnly): array
     } catch (InvalidArgumentException $exception) {
         return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
     }
-    $targets = audit_lint_targets(['php'], $changedOnly);
+    $targets = audit_lint_targets(['php'], $changedOnly, $baseSha, $requireGitEvidence);
+    if (!empty($targets['blocked'])) {
+        return task_result($id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.', null,
+            ['problems' => ['Git history or the requested comparison base is unavailable.']]);
+    }
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
@@ -1007,11 +1125,13 @@ function audit_run_php_lint(bool $changedOnly): array
 /**
  * Run Node syntax validation over selected JavaScript and MJS source files.
  *
- * @param bool $changedOnly True to prefer Git-changed files.
+ * @param bool $changedOnly True to select Git-changed files.
  * @param ?string $node Node executable.
+ * @param ?string $baseSha Optional immutable commit SHA for committed delta selection.
+ * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
  * @return array<string,mixed> Normalized task result.
  */
-function audit_run_js_lint(bool $changedOnly, ?string $node): array
+function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = null, bool $requireGitEvidence = false): array
 {
     global $root;
     $id = $changedOnly ? 'js-lint-changed' : 'js-lint';
@@ -1026,7 +1146,12 @@ function audit_run_js_lint(bool $changedOnly, ?string $node): array
     } catch (InvalidArgumentException $exception) {
         return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
     }
-    $targets = audit_lint_targets(['js', 'mjs'], $changedOnly);
+    $targets = audit_lint_targets(['js', 'mjs'], $changedOnly, $baseSha, $requireGitEvidence);
+    if (!empty($targets['blocked'])) {
+        return task_result($id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.', null,
+            ['problems' => ['Git history or the requested comparison base is unavailable.']]);
+    }
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
@@ -1128,6 +1253,10 @@ $suiteCount = count($suiteIds);
 fwrite(STDOUT, 'PHP Gallery audit | Profile: ' . $profileLabel . ' | Suites: ' . $suiteCount . "\n");
 fwrite(STDOUT, str_repeat('=', 72) . "\n");
 fflush(STDOUT);
+if ($delegatedToPreflight !== []) {
+    fwrite(STDOUT, 'Delegated to required exact-candidate preflight (not a local PASS): '
+        . implode(', ', $delegatedToPreflight) . "\n");
+}
 
 foreach ($suiteIds as $suiteIndex => $suiteId) {
     $position = $suiteIndex + 1;
@@ -1153,9 +1282,9 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),
         'version-audit' => audit_run_php_command('version-audit', 'Runtime hardening audit', 'tests/version_094_audit_hardening.php'),
         'php-lint' => audit_run_php_lint(false),
-        'php-lint-changed' => audit_run_php_lint(true),
+        'php-lint-changed' => audit_run_php_lint(true, $basicChangedLintBase, $basicChangedLintRequiresBase),
         'js-lint' => audit_run_js_lint(false, $node),
-        'js-lint-changed' => audit_run_js_lint(true, $node),
+        'js-lint-changed' => audit_run_js_lint(true, $node, $basicChangedLintBase, $basicChangedLintRequiresBase),
         'manifest' => audit_run_php_command('manifest', 'Generated candidate artifacts', 'scripts/prepare_candidate.php', ['--check'], 180),
         'git-diff-check' => audit_run_git_diff_check($git),
     };
@@ -1169,6 +1298,34 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
     );
     fwrite(STDOUT, \PhpGallery\Audit\render_console_problems($task));
     fflush(STDOUT);
+}
+
+// The delegated preflight ran before disposable DB tests. Guard their final
+// checkout bytes and exact Git identity without repeating expensive codegen.
+if ($delegatedToPreflight !== []) {
+    $integrityStarted = microtime(true);
+    $finalSourceIdentity = \PhpGallery\Audit\audit_source_identity(
+        $root, $git, (string) $sourceIdentity['requested_base']
+    );
+    $integrity = audit_delegated_checkout_integrity($sourceIdentity, $finalSourceIdentity);
+    $integrityPassed = $integrity['status'] === STATUS_PASS;
+    $integritySummary = $integrityPassed
+        ? 'Candidate checkout and comparison base remained clean and unchanged after tests.'
+        : 'Delegated manifest post-test integrity is not qualified: ' . $integrity['reason'];
+    $integrityTask = task_result('delegated-manifest-post-test-integrity',
+        'Delegated manifest post-test checkout integrity', $integrity['status'],
+        microtime(true) - $integrityStarted, [], $integritySummary, null, [
+            'source_after' => $finalSourceIdentity,
+            'problems' => $integrityPassed ? [] : [$integritySummary],
+        ]);
+    $tasks[] = $integrityTask;
+    fwrite(STDOUT, '[post-test] ' . $integrityTask['status'] . ' ' . $integritySummary . "\n");
+}
+
+if ($profileLabel === 'candidate-preflight' && !audit_required_suite_pass($tasks, 'manifest')) {
+    $tasks[] = task_result('candidate-preflight-manifest-owner', 'Mandatory generated-artifact freshness owner',
+        STATUS_BLOCKED, 0.0, [], 'The candidate preflight requires exactly one individual manifest PASS.',
+        null, ['problems' => ['Missing, duplicated, skipped, blocked or failed manifest owner.']]);
 }
 
 if ($profileLabel === 'release') {
@@ -1213,6 +1370,7 @@ $report = [
     'schema_version' => 1,
     'status' => $status,
     'profile' => $profileLabel,
+    'delegated_to_preflight' => $delegatedToPreflight,
     'started_at' => $startedAt->format(DATE_ATOM),
     'duration_seconds' => round($duration, 4),
     'source' => $sourceIdentity,
