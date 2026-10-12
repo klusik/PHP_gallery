@@ -324,11 +324,6 @@ export function prepareDraftRelease(record,repository,result,adapters={}) {
     if (peelReleaseTag(call,repository,tag).commit_sha!==result.main_sha) {
         throw new Error('BLOCKED draft tag is missing or does not resolve to verified M.');
     }
-    const releases=fetchReleases(repository,adapters.execute ?? command);
-    const matches=releases.filter(release=>release.tag_name===tag);
-    if (matches.length>1 || releases.some(release=>release.tag_name!==tag && release.name==='Version '+record.version)) {
-        throw new Error('BLOCKED conflicting release version or duplicate tag identity in complete inventory.');
-    }
     const releaseUrl=release=>{
         const prefix='https://github.com/'+repository+'/releases/';
         if (!Number.isSafeInteger(release.id) || release.id<1
@@ -337,16 +332,25 @@ export function prepareDraftRelease(record,repository,result,adapters={}) {
         }
         return release.draft ? release.html_url.replace('/releases/tag/','/releases/edit/') : release.html_url;
     };
-    if (matches.length===1) {
+    const existingRelease=()=>{
+        const releases=fetchReleases(repository,adapters.execute ?? command);
+        const matches=releases.filter(release=>release.tag_name===tag);
+        if (matches.length>1 || releases.some(release=>release.tag_name!==tag && release.name==='Version '+record.version)) {
+            throw new Error('BLOCKED conflicting release version or duplicate tag identity in complete inventory.');
+        }
+        if (!matches.length) return null;
         const listed=matches[0];
         const existing=call('repos/'+repository+'/releases/'+listed.id);
         if (existing.id!==listed.id || existing.tag_name!==tag || existing.draft!==listed.draft
-            || existing.prerelease!==false || !Array.isArray(existing.assets)) {
+            || existing.prerelease!==false || !Array.isArray(existing.assets)
+            || peelReleaseTag(call,repository,tag).commit_sha!==result.main_sha) {
             throw new Error('BLOCKED existing release identity changed or is a conflicting prerelease.');
         }
         return {status:existing.draft?'DRAFT_ALREADY_EXISTS':'ALREADY_PUBLISHED',
             release_id:existing.id,url:releaseUrl(existing)};
-    }
+    };
+    const existing=existingRelease();
+    if (existing) return existing;
 
     // release-assets.mjs already uses this exact section of PATCH_NOTES.md to write release-notes.md.
     // Read the unchanged checkout of Q rather than regenerating notes or downloading large ZIP/PDF assets.
@@ -370,11 +374,16 @@ export function prepareDraftRelease(record,repository,result,adapters={}) {
         created=call('repos/'+repository+'/releases','POST',{
             tag_name:tag,target_commitish:result.main_sha,name:'Version '+record.version,
             body:notes,draft:true,prerelease:false,generate_release_notes:false});
+        if (!Number.isSafeInteger(created?.id) || created.id<1) {
+            throw new Error('Draft create API did not return a valid release ID for '+tag+'.');
+        }
     } catch (error) {
+        // A failed response does not prove the create-only POST was rejected.
+        // Read the complete inventory again without repeating any write; a verified
+        // matching draft can continue, while a published release stays read-only.
+        const recovered=existingRelease();
+        if (recovered) return recovered;
         throw new Error('Draft create API failed for '+tag+' on verified M '+result.main_sha+': '+error.message,{cause:error});
-    }
-    if (!Number.isSafeInteger(created?.id) || created.id<1) {
-        throw new Error('Draft create API did not return a valid release ID for '+tag+'.');
     }
     const confirmed=call('repos/'+repository+'/releases/'+created.id);
     if (confirmed.id!==created.id || confirmed.tag_name!==tag || confirmed.name!=='Version '+record.version

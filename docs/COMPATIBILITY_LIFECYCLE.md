@@ -863,3 +863,19 @@ fails closed. Usage is unknown until a future approved production release.
 refusal, version mismatch and corruption. Permanent support is required while
 clients discover the companion through each release's assets; retirement requires
 migration of that discovery contract and supported-client acceptance evidence.
+
+## Interrupted GitHub release transfers
+
+Owner: `.github/scripts/release-completion.mjs` and
+`.github/scripts/release-draft-assets.mjs`. A failed create response may follow a
+successful server write. Read-only inventory reconciliation preserves that draft,
+manual edits and any publication without a duplicate POST. Binary transfers retry
+at most three times for the documented temporary HTTP/process categories; uploaded
+bytes and mutable draft/tag identities are checked before every upload retry.
+Permission, integrity and conflict failures remain terminal. The existing central
+`release_draft_test.mjs` exercises CLI headers, absolute upload URL, original input
+bytes, cleanup, bounded recovery and publication/conflict refusal. Production
+complete upload usage is **unknown** after the observed v_0.127.5 transport failure
+and manual publication. Retain recovery while GitHub responses may be interrupted;
+retirement requires an accepted replacement preserving create-only idempotence,
+original bytes and published-release immutability.

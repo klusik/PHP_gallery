@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.127.5}
+\newcommand{\version}{0.127.6}
 \newcommand{\manualdate}{12~oktober~2026}
 
 \hypersetup{
@@ -2558,6 +2558,10 @@ eller bifoga filer manuellt. Identiska befintliga bilagor bevaras; konflikter
 orsakar ett fel utan överskrivning. Publicerade utgåvor förblir oförändrade.
 Vid fel visas \codeword{TAGGED / DRAFT\_PENDING}; en ny körning kompletterar
 saknade filer utan att återställa verifierad merge eller tagg.
+Tillfälliga överföringsfel får högst tre försök, och ett förlorat svar när utkastet
+skapas kontrolleras automatiskt mot befintliga utgåvor. Låt utkastet vara
+opublicerat tills \codeword{DRAFT\_READY}; behörighetsfel, integritetsfel eller
+filkonflikter måste åtgärdas före en ny slutförandekörning.
 WinApp-installationsprogrammet och uppdateringsmetadata kommer från det exakta
 kvalificeringsförsöket eller från den fastställda föregående publicerade utgåvan
 efter verifiering av oförändrade levererade källor, den oberoende versionen

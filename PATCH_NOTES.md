@@ -1,5 +1,35 @@
 # Patch notes
 
+## Version 0.127.6
+
+Release automation improved binary asset transfers and recovery from interrupted draft creation while preserving verified asset bytes and keeping publication under human control.
+
+### Highlights
+
+#### Reliable release draft recovery
+- Reconciled lost draft-creation responses against the complete release inventory without repeating the creation request.
+- Preserved matching drafts and published releases, and stopped when a release was absent or conflicting.
+- Retried transient downloads and uploads at most three times; permission, integrity, conflict, and publication failures stopped without retrying writes.
+
+### Technical Details
+
+#### Release automation
+- Updated `.github/scripts/release-completion.mjs` and `.github/scripts/release-draft-assets.mjs` to use endpoint-specific download headers and the absolute upload URL with original binary bytes and content length.
+- Rechecked release status and asset bytes before retrying uploads.
+- Added immutable origin and predecessor records for `v_0.127.6`.
+
+#### Tests and documentation
+- Expanded `tests/release_draft_test.mjs` and `tests/support/release_draft_assets_scenarios.mjs` to cover lost creation responses, binary transfer behavior, bounded retries, and refusal on integrity or conflict failures.
+- Updated release lifecycle guidance and all four maintained manual editions with the recovery and transfer behavior.
+
+### User Impact
+
+#### For visitors and administrators
+- Public visitor and administrator behavior did not change.
+
+#### For maintainers
+- Interrupted draft creation and transient asset-transfer failures could be reconciled or retried safely. Release drafts remained unpublished for human review.
+
 ## Version 0.127.5
 
 Release completion automatically filled unpublished GitHub Release drafts with verified qualification assets and completion receipts while preserving human review and publication. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)

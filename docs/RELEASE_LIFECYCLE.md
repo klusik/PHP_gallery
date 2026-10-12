@@ -260,6 +260,10 @@ DRAFT_ALREADY_EXISTS preserves existing manual edits/assets and ALREADY_PUBLISHE
 does not modify the public release. Version/tag conflicts fail closed. Draft API
 failure reports TAGGED / DRAFT_PENDING without undoing M/tag or requiring another
 merge; a retry inventories all drafts before deciding whether to create.
+If the create response is lost, the current job immediately reads the complete
+inventory again and rechecks the release identity and tag without repeating POST.
+An observed matching draft continues; publication during recovery stays read-only.
+An absent or conflicting release remains blocked.
 Only the human maintainer clicks Publish release. The generic PR matrix excludes main to avoid redundant token-created
 PR workflow approvals; exact-Q release qualification owns the required context.
 
@@ -403,10 +407,16 @@ reported missing bypass membership honestly and observed current-actor bypass
 settings without assuming new review events exist on main. It does not prove a
 real PR approval, required-check eligibility, merge, tag or develop update.
 
-The owner declined a disposable test repository for this task. Full live
-approval/merge/tag/FF and the next release are therefore NOT RUN, pending the
-maintainer's subsequent acceptance. Feature CI and real-Git fixtures must not be
-presented as proof that a production release has completed.
+The owner declined a disposable test repository for this task. The subsequent
+maintainer-approved production release v_0.127.5 qualified Q
+`09adfb51261cfa8043c8440cad8ec68af1f2c6e1` in run
+[38249536277](https://github.com/klusik/PHP_gallery/actions/runs/38249536277).
+Completion [38250180125](https://github.com/klusik/PHP_gallery/actions/runs/38250180125)
+verified merge/tag M `0346558d7b3ed31cacff761e555ca57075d2ea71` and develop FF,
+but lost the draft-creation response. Follow-up
+[38250393542](https://github.com/klusik/PHP_gallery/actions/runs/38250393542)
+found the draft and failed at the Actions ZIP download. The maintainer manually
+attached files and published; automatic complete asset filling was not accepted.
 
 ## Automatically verified draft assets
 
@@ -446,6 +456,29 @@ with its filename. Rerunning completion revalidates the same Q/run/attempt/M/tag
 and fills missing files. No extra manually dispatched upload action is introduced.
 The immutable merge/tag is never rolled back. Published releases, including
 v_0.127.4 and all older releases, are read-only.
+
+Actions ZIP download endpoints use gh's default API content negotiation; release
+asset downloads use `Accept: application/octet-stream`. Uploads use the absolute
+`https://uploads.github.com/repos/.../releases/.../assets?name=...` endpoint,
+original binary input and explicit Content-Length, avoiding gh's REST hostname
+prefix rewriting. Native processes have a 60-second timeout. Downloads and
+create-only uploads permit at most three attempts separated by one second for
+HTTP 500/502/503/504, timeout or a recognized interrupted connection. Before every
+upload retry the draft/tag and complete asset inventory are rechecked; an observed
+identical asset completes the operation without another upload. Permission,
+integrity, conflict and publication failures stop immediately. Diagnostics expose
+HTTP/process categories without arbitrary stderr, credentials or signed URLs.
+
+Read-only reproduction of the failed v_0.127.5 download confirmed that the old
+octet-stream Actions header returned HTTP 415; removing it downloaded the complete
+archive with provider SHA-256
+`af8c34cc6012f1e0e4ea6cd0b8e47ac7417f26443877adce6b9b5ff9552e3d22`.
+The old upload hostname option also resolved to `api.uploads.github.com`.
+The corrected read-only loader then authenticated all 12 original prepared files
+from that exact run/attempt/Q and the two original predecessor companion files,
+including every size, checksum, source binding and unchanged-installer proof.
+These transport corrections require the next approved production release to
+demonstrate complete automatic upload; v_0.127.5 remains immutable.
 
 **DRAFT_READY** means every required asset exists and its complete downloaded
 content has been verified. PR approval and Publish release remain manual;

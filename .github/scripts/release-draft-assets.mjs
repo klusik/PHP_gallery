@@ -22,8 +22,26 @@ import {verifyPreparedAssets} from './release-asset-integrity.mjs';
 import {peelReleaseTag} from './release-origin.mjs';
 
 /** Isolated provider, byte transport and source readers for draft filling.
- * @typedef {{api?:typeof api,git?:typeof command,download?:function(string):Buffer,upload?:function(string,number,string,Buffer):void}} AssetAdapters
+ * @typedef {{api?:typeof api,git?:typeof command,download?:function(string):Buffer,upload?:function(string,number,string,Buffer):void,pause?:function(number):void}} AssetAdapters
  */
+/** Complete native subprocess outcome consumed without exposing arbitrary stderr.
+ * @typedef {{status:number|null,stdout:Buffer|null,stderr:Buffer|null,error?:Error & {code?:string}}} BinaryResponse
+ */
+/** Isolated native binary process and bounded delay used by transport regressions.
+ * @typedef {{spawn?:function(string,string[],{encoding:null,timeout:number,maxBuffer:number,shell:boolean}):BinaryResponse,pause?:function(number):void}} BinaryAdapters
+ */
+/** Bound transient binary and create-only upload retries within one completion job.
+ * Type: number. Units: attempts. Scope: one asset transfer.
+ * Consumers: downloadBytes and fillDraftAssets.
+ * Rationale: three attempts recover short API interruptions without unbounded requests.
+ */
+const ASSET_TRANSFER_ATTEMPTS=3;
+/** Space transient transfer retries after independently checking existing uploaded bytes.
+ * Type: number. Units: milliseconds. Scope: one asset transfer.
+ * Consumers: downloadBytes and fillDraftAssets.
+ * Rationale: one second separates retries while keeping failure recovery below the job budget.
+ */
+const ASSET_TRANSFER_DELAY_MS=1000;
 
 /** Hash the complete bytes of one original file or archive.
  * @param {Buffer} bytes Complete content.
@@ -31,15 +49,49 @@ import {peelReleaseTag} from './release-origin.mjs';
  */
 export function assetHash(bytes) {return createHash('sha256').update(bytes).digest('hex');}
 
-/** Download bounded complete binary API responses without text conversion.
- * @param {string} path Authenticated repository endpoint.
- * @returns {Buffer} Original bytes, or a transport failure.
+/** Wait between bounded asset transport attempts.
+ * @param {number} milliseconds Positive delay in milliseconds.
+ * @returns {void} Resumes the synchronous completion transport after the delay.
  */
-function downloadBytes(path) {
-    const response=spawnSync('gh',['api',path,'-H','Accept: application/octet-stream'],
-        {encoding:null,timeout:60000,maxBuffer:512*1024*1024,shell:false});
-    if (response.error || response.status!==0 || !Buffer.isBuffer(response.stdout)) throw new Error('BLOCKED binary download failed: '+path);
-    return response.stdout;
+function pauseTransfer(milliseconds) {Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);}
+
+/** Classify a native transport failure without logging credentials or signed URLs.
+ * @param {string} operation Safe operation name and repository endpoint or asset basename.
+ * @param {BinaryResponse} response Failed subprocess result.
+ * @returns {Error & {retryable:boolean}} Diagnostic HTTP/process category and narrowly classified retry permission.
+ */
+function transferError(operation,response) {
+    const stderr=response.stderr?.toString('utf8') ?? '';
+    const http=/\bHTTP (\d{3})\b/.exec(stderr);
+    const code=response.error?.code;
+    const interrupted=/stream error:|connection reset|unexpected EOF|TLS handshake timeout|i\/o timeout|context deadline exceeded/i.test(stderr);
+    const retryable=http ? [500,502,503,504].includes(Number(http[1])) : code==='ETIMEDOUT' || interrupted;
+    const reason=http?'HTTP '+http[1]:code?'process '+code:interrupted?'interrupted connection':'exit '+String(response.status);
+    const error=new Error('BLOCKED '+operation+' failed: '+reason);
+    error.retryable=retryable;
+    return error;
+}
+
+/** Download bounded complete binary API responses with endpoint-specific content negotiation.
+ * @param {string} path Authenticated repository endpoint.
+ * @param {BinaryAdapters} adapters Isolated subprocess and retry delay; defaults use native gh and a one-second wait.
+ * @returns {Buffer} Original complete bytes; transient failures retry up to three times, permanent failures throw.
+ */
+export function downloadBytes(path,adapters={}) {
+    const artifact=/^repos\/[\w.-]+\/[\w.-]+\/actions\/artifacts\/[1-9]\d*\/zip$/.test(path);
+    const asset=/^repos\/[\w.-]+\/[\w.-]+\/releases\/assets\/[1-9]\d*$/.test(path);
+    if (!artifact && !asset) throw new Error('BLOCKED unsupported binary endpoint.');
+    // Actions uses its JSON-negotiated redirect endpoint. Only Release asset
+    // downloads require octet-stream to select file bytes rather than metadata.
+    const args=['api',path,...(asset?['-H','Accept: application/octet-stream']:[])];
+    for (let attempt=0;attempt<ASSET_TRANSFER_ATTEMPTS;attempt++) {
+        const response=(adapters.spawn ?? spawnSync)('gh',args,{encoding:null,timeout:60000,maxBuffer:512*1024*1024,shell:false});
+        if (!response.error && response.status===0 && Buffer.isBuffer(response.stdout)) return response.stdout;
+        const error=transferError('binary download '+path,response);
+        if (!error.retryable || attempt===ASSET_TRANSFER_ATTEMPTS-1) throw error;
+        (adapters.pause ?? pauseTransfer)(ASSET_TRANSFER_DELAY_MS);
+    }
+    throw new Error('BLOCKED binary attempts exhausted.');
 }
 
 /** Upload one original file using a create-only name on GitHub's upload host.
@@ -47,14 +99,21 @@ function downloadBytes(path) {
  * @param {number} releaseId Verified unpublished release ID.
  * @param {string} name Original safe basename.
  * @param {Buffer} bytes Original content.
+ * @param {BinaryAdapters} adapters Isolated native subprocess; defaults to the classified gh transport without internal upload retries.
  * @returns {void} Throws on transport failure; the caller independently inventories possible success.
  */
-function uploadBytes(repository,releaseId,name,bytes) {
+export function uploadBytes(repository,releaseId,name,bytes,adapters={}) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !Number.isSafeInteger(releaseId) || releaseId<1
+        || !/^[A-Za-z0-9_.-]+$/.test(name) || !Buffer.isBuffer(bytes) || !bytes.length) throw new Error('BLOCKED invalid binary upload inputs.');
     const directory=mkdtempSync(join(tmpdir(),'gallery-upload-'));
     try {
         const file=join(directory,name);writeFileSync(file,bytes);
-        command('gh',['api','--hostname','uploads.github.com',`repos/${repository}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
-            '--method','POST','-H','Content-Type: application/octet-stream','--input',file]);
+        // An absolute URL avoids gh rewriting uploads.github.com to api.uploads.github.com.
+        // GitHub requires a known length for the original binary upload body.
+        const args=['api',`https://uploads.github.com/repos/${repository}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
+            '--method','POST','-H','Content-Type: application/octet-stream','-H','Content-Length: '+bytes.length,'--input',file];
+        const response=(adapters.spawn ?? spawnSync)('gh',args,{encoding:null,timeout:60000,maxBuffer:16*1024*1024,shell:false});
+        if (response.error || response.status!==0) throw transferError('asset upload',response);
     } finally {rmSync(directory,{recursive:true,force:true});}
 }
 
@@ -242,11 +301,15 @@ export function fillDraftAssets(record,completion,releaseId,files,adapters={}) {
         verify(initial,name,bytes);
     }
     for (const [name,bytes] of files) {
-        if (verify(inspect(),name,bytes)) continue;
-        let failure;
-        try {(adapters.upload ?? uploadBytes)(repository,releaseId,name,bytes);} catch (error) {failure=error;}
-        // A lost response or concurrent 422 is accepted only after independently downloading identical complete bytes.
-        if (!verify(inspect(),name,bytes)) throw new Error('BLOCKED missing release asset after upload: '+name+(failure?'; '+failure.message:''));
+        for (let attempt=0;attempt<ASSET_TRANSFER_ATTEMPTS;attempt++) {
+            if (verify(inspect(),name,bytes)) break;
+            let failure;
+            try {(adapters.upload ?? uploadBytes)(repository,releaseId,name,bytes);} catch (error) {failure=error;}
+            // Lost responses and concurrent 422s are accepted only after a complete byte comparison.
+            if (verify(inspect(),name,bytes)) break;
+            if (failure?.retryable!==true || attempt===ASSET_TRANSFER_ATTEMPTS-1) throw new Error('BLOCKED missing release asset after upload: '+name+(failure?'; '+failure.message:''));
+            (adapters.pause ?? pauseTransfer)(ASSET_TRANSFER_DELAY_MS);
+        }
     }
     const final=inspect();
     for (const [name,bytes] of files) if (!verify(final,name,bytes)) throw new Error('BLOCKED incomplete draft: '+name);

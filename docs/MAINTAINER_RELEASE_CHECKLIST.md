@@ -36,6 +36,9 @@ its summary explicitly says `ELIGIBLE`.
   rerun the same completion after correcting its prerequisite. It keeps existing
   identical assets and adds missing files without changing merge/tag. Conflicts
   fail closed; published releases are never modified automatically.
+  Transient transfers already receive up to three attempts; a lost draft-creation
+  response is reconciled automatically. Keep the release unpublished until
+  **DRAFT_READY** so completion can safely add the remaining files.
 
 ## Verify Pages deployment
 

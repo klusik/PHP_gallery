@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.127.5}
+\newcommand{\version}{0.127.6}
 \newcommand{\manualdate}{12.~Oktober~2026}
 
 \hypersetup{
@@ -2566,7 +2566,12 @@ Identische vorhandene Anhänge bleiben erhalten; Konflikte führen zu einem
 Fehler ohne Überschreiben. Veröffentlichte Releases bleiben unverändert.
 Bei Fehlern lautet der Status \codeword{TAGGED / DRAFT\_PENDING}; eine
 Wiederholung ergänzt fehlende Dateien, ohne den verifizierten Merge oder Tag
-zurückzunehmen. WinApp-Installer und Aktualisierungsmetadaten stammen aus dem
+zurückzunehmen. Vorübergehende Übertragungsfehler werden höchstens dreimal
+versucht; eine verlorene Antwort beim Erstellen des Entwurfs wird automatisch
+anhand vorhandener Releases geprüft. Lassen Sie den Entwurf bis
+\codeword{DRAFT\_READY} unveröffentlicht. Berechtigungs-, Integritäts- oder
+Dateikonflikte müssen vor einem erneuten Abschlusslauf behoben werden.
+WinApp-Installer und Aktualisierungsmetadaten stammen aus dem
 exakten Qualifizierungsversuch oder aus dem festgelegten vorherigen
 veröffentlichten Release nach Prüfung unveränderter ausgelieferter Quellen,
 der unabhängigen Version und der Integrität. Ein unveränderter Installer
