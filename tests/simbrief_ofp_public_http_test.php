@@ -5,10 +5,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/simbrief_ofp_public_http_test.php
  * Module Type: Standalone HTTP Regression Test
- * Purpose: Prove anonymous saved OFP PDFs work without admin cookies.
+ * Purpose: Prove gallery-scoped PDF routes preserve gallery access and original bytes.
  * Responsibilities:
- *   - Exercise GET, HEAD, attachment and legacy routes through a real PHP HTTP server
- *   - Check public, private, unpublished, password, share, NSFW and missing PDFs
+ *   - Exercise GET, HEAD, attachment and legacy OFP routes through a real PHP HTTP server
+ *   - Check manual documents and OFPs across public, private, password, share and NSFW policy
+ *   - Check hidden direct, download, HEAD, share and anonymous-preview denials
  *   - Test same-origin PDF links in root and non-root installations without URL rewriting
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -133,6 +134,42 @@ function ofp_http_prepare_gallery(string $root, string $folder, ?string $pdf): v
 }
 
 /**
+ * Write one valid manual-document sidecar record beside a fixture gallery.
+ *
+ * @param string $root Fixture gallery storage directory.
+ * @param string $folder Gallery-relative owner directory.
+ * @param string $id Stable 32-character document identifier.
+ * @param string $pdf Exact original PDF bytes.
+ * @param bool $hidden Whether this fixture record should be denied to visitors; defaults to a legacy visible record.
+ * @return void Write the document and matching trusted index.
+ */
+function ofp_http_prepare_general_pdf(string $root, string $folder, string $id, string $pdf, bool $hidden = false): void
+{
+    $directory = $root . '/galleries/' . $folder . '/.gallery-pdf-documents';
+    ofp_http_assert(is_dir($directory) || mkdir($directory, 0700, true), 'Could not create manual PDF storage.');
+    $now = '2026-10-12T00:00:00Z';
+    $metadata = [
+        'id' => $id,
+        'size' => strlen($pdf),
+        'sha256' => hash('sha256', $pdf),
+        'filename' => 'original manual.pdf',
+        'title' => 'Gallery manual',
+        'provenance' => 'fixture upload',
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
+    if ($hidden) {
+        $metadata['hidden'] = true;
+    }
+    ofp_http_assert(file_put_contents($directory . '/' . $id . '.pdf', $pdf) !== false,
+        'Cannot write original manual PDF.');
+    ofp_http_assert(file_put_contents($directory . '/index.json', json_encode([
+        'format' => 'php_gallery_pdf_documents_v1',
+        'documents' => [$id => $metadata],
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)) !== false, 'Cannot write manual PDF index.');
+}
+
+/**
  * Remove only one exact temporary tree owned by the current test.
  *
  * @param string $root Temporary fixture root.
@@ -169,20 +206,42 @@ try {
     ofp_http_assert(file_put_contents($root . '/.ofp-http-owner', $token) !== false,
         'Cannot write OFP fixture ownership marker.');
     $pdf = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n";
+    $manualPdf = "%PDF-1.7\n% exact manual source bytes\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n";
+    $manualId = '19500000000000000000000000000001';
     foreach (['public', 'unpublished', 'private', 'password', 'nsfw', 'parent',
         'parent/ofp-pages', 'share', 'unpublished-password', 'unlisted',
-        'unpublished-nsfw', 'legacy-draft', 'private-share'] as $folder) {
+        'unpublished-nsfw', 'legacy-draft', 'private-share', 'hidden', 'hidden-ofp'] as $folder) {
         ofp_http_prepare_gallery($root, $folder, $pdf);
     }
     ofp_http_prepare_gallery($root, 'missing', null);
     ofp_http_prepare_gallery($root, 'invalid', "NOT_A_PDF\n");
+    foreach ([
+        'public', 'unpublished', 'private', 'password', 'nsfw', 'parent', 'parent/ofp-pages',
+        'share', 'unpublished-password', 'unlisted', 'unpublished-nsfw', 'legacy-draft', 'private-share', 'hidden',
+    ] as $folder) {
+        ofp_http_prepare_general_pdf($root, $folder, $manualId, $manualPdf, in_array($folder, ['private-share', 'hidden'], true));
+    }
+    $hiddenOfpIndex = $root . '/galleries/hidden-ofp/.gallery-pdf-documents';
+    ofp_http_assert(mkdir($hiddenOfpIndex, 0700, true), 'Could not create hidden OFP visibility index.');
+    ofp_http_assert(file_put_contents($hiddenOfpIndex . '/index.json', json_encode([
+        'format' => 'php_gallery_pdf_documents_v1', 'documents' => [], 'ofp_hidden' => true,
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)) !== false, 'Could not write hidden OFP visibility index.');
+    $corruptDirectory = $root . '/galleries/invalid/.gallery-pdf-documents';
+    ofp_http_assert(mkdir($corruptDirectory, 0700), 'Could not create corrupt sidecar fixture.');
+    ofp_http_assert(file_put_contents($corruptDirectory . '/index.json', '{malformed') !== false,
+        'Could not write corrupt sidecar fixture.');
+    $galleryProtection = (string) file_get_contents(dirname(__DIR__) . '/galleries/.htaccess');
+    ofp_http_assert(preg_match('/<FilesMatch "[^"\r\n]*json[^"\r\n]*pdf[^"\r\n]*">\s*Require all denied/s', $galleryProtection) === 1
+        && preg_match('/<FilesMatch "[^"\r\n]*json[^"\r\n]*pdf[^"\r\n]*">\s*Order allow,deny\s*Deny from all/s', $galleryProtection) === 1,
+        'Apache gallery protection must deny direct sidecar JSON and PDF requests in both authz modes.');
+    ofp_http_assert(mkdir($root . '/public', 0700), 'Could not create isolated HTTP document root.');
 
     $port = ofp_http_free_port();
     $router = __DIR__ . '/fixtures/simbrief_ofp_public_http_router.php';
     $environment = array_merge(getenv() ?: [], ['PHP_GALLERY_OFP_HTTP_ROOT' => $root]);
     $process = proc_open([
         PHP_BINARY, '-d', 'display_errors=0',
-        '-S', '127.0.0.1:' . $port, '-t', $root, $router,
+        '-S', '127.0.0.1:' . $port, '-t', $root . '/public', $router,
     ], [
         0 => ['pipe', 'r'],
         1 => ['file', $log, 'ab'],
@@ -213,6 +272,39 @@ try {
         $expected = $base . '/index.php?page=gallery_ofp_pdf&id=1';
         ofp_http_assert($urls['view'] === $expected && $urls['download'] === $expected . '&download=1',
             'OFP links must stay same-origin, preserve the actual mount path and avoid overloaded media IDs.');
+
+        $manualUrl = $origin . $base . '/index.php?page=gallery_ofp_pdf&id=1&document=' . $manualId;
+        $manual = ofp_http_request($manualUrl);
+        ofp_http_assert($manual['status'] === 200 && $manual['body'] === $manualPdf
+            && ofp_http_header_contains($manual, 'Content-Type', 'application/pdf')
+            && ofp_http_header_contains($manual, 'Content-Disposition', 'inline')
+            && ofp_http_header_contains($manual, 'Content-Disposition', 'filename*=UTF-8\'\'original%20manual.pdf'),
+            'Public manual route must return the exact original bytes and stored filename.');
+        $manualDownload = ofp_http_request($manualUrl . '&download=1');
+        $manualHead = ofp_http_request($manualUrl, 'HEAD');
+        ofp_http_assert($manualDownload['status'] === 200 && $manualDownload['body'] === $manualPdf
+            && ofp_http_header_contains($manualDownload, 'Content-Disposition', 'attachment')
+            && $manualHead['status'] === 200 && $manualHead['body'] === ''
+            && ofp_http_header_contains($manualHead, 'Content-Length', (string) strlen($manualPdf)),
+            'Manual attachment and HEAD routes must preserve bytes and correct response metadata.');
+
+        $directPdf = ofp_http_request($origin . $base . '/galleries/public/.gallery-pdf-documents/' . $manualId . '.pdf');
+        $directIndex = ofp_http_request($origin . $base . '/galleries/public/.gallery-pdf-documents/index.json');
+        ofp_http_assert($directPdf['status'] === 404 && $directIndex['status'] === 404,
+            'The built-in HTTP fixture must not expose direct sidecar files.');
+
+        // The same public gallery stores a SimBrief OFP and independent manual
+        // document; a manual index must not rewrite or replace the OFP bytes.
+        $coexistingOfp = ofp_http_request($origin . $urls['view']);
+        ofp_http_assert($coexistingOfp['status'] === 200 && $coexistingOfp['body'] === $pdf,
+            'Adding a manual document must leave the gallery OFP route byte-identical.');
+        $badSidecar = ofp_http_request($origin . $base
+            . '/index.php?page=gallery_ofp_pdf&id=7&document=' . $manualId);
+        $badId = ofp_http_request($origin . $base
+            . '/index.php?page=gallery_ofp_pdf&id=1&document=../simbrief-ofp');
+        ofp_http_assert($badSidecar['status'] === 404 && $badSidecar['body'] === 'Flight plan unavailable.'
+            && $badId['status'] === 404 && $badId['body'] === 'Flight plan unavailable.',
+            'Corrupt sidecars and malformed document ids must produce the opaque PDF 404.');
 
         // This request uses no Cookie header, reproducing a brand new incognito session.
         $public = ofp_http_request($origin . $urls['view']);
@@ -288,6 +380,66 @@ try {
                 && !str_contains($denied['body'], $root),
                 'Unauthorized/missing/invalid PDF must return the identical opaque media 404: ' . $id);
         }
+
+        foreach ([3, 4, 5, 9, 10, 11, 13, 15] as $id) {
+            $manualDenied = ofp_http_request($origin . $base
+                . '/index.php?page=gallery_ofp_pdf&id=' . $id . '&document=' . $manualId);
+            ofp_http_assert($manualDenied['status'] === 404
+                && $manualDenied['body'] === 'Flight plan unavailable.'
+                && ofp_http_header_contains($manualDenied, 'Cache-Control', 'no-store'),
+                'Manual document must inherit private/password/NSFW/share policy without disclosure: ' . $id);
+        }
+        $manualAdmin = ofp_http_request($origin . $base
+            . '/index.php?page=gallery_ofp_pdf&id=3&document=' . $manualId, 'GET', 'ofp_test_admin=1');
+        ofp_http_assert($manualAdmin['status'] === 200 && $manualAdmin['body'] === $manualPdf,
+            'Authenticated administrator should retain private manual-document access.');
+        foreach ([
+            4 => 'ofp_test_password=1',
+            5 => 'ofp_test_adult=1',
+            11 => 'ofp_test_password=1',
+            13 => 'ofp_test_adult=1',
+        ] as $id => $cookie) {
+            $manualAuthorized = ofp_http_request($origin . $base
+                . '/index.php?page=gallery_ofp_pdf&id=' . $id . '&document=' . $manualId, 'GET', $cookie);
+            ofp_http_assert($manualAuthorized['status'] === 200 && $manualAuthorized['body'] === $manualPdf,
+                'Manual document must honor the same password/NSFW grant as its gallery: ' . $id);
+        }
+        $manualShared = ofp_http_request($origin . $base
+            . '/index.php?page=gallery_ofp_pdf&id=10&document=' . $manualId . '&share=fixture-allowed');
+        ofp_http_assert($manualShared['status'] === 200 && $manualShared['body'] === $manualPdf,
+            'Visible manual documents must honor the gallery share grant.');
+        $hiddenShared = ofp_http_request($origin . $base
+            . '/index.php?page=gallery_ofp_pdf&id=15&document=' . $manualId . '&share=fixture-allowed');
+        ofp_http_assert($hiddenShared['status'] === 404 && $hiddenShared['body'] === 'Flight plan unavailable.',
+            'A valid gallery share grant must not expose a hidden manual document.');
+
+        $hiddenManualUrl = $origin . $base . '/index.php?page=gallery_ofp_pdf&id=16&document=' . $manualId;
+        foreach ([$hiddenManualUrl, $hiddenManualUrl . '&download=1'] as $hiddenUrl) {
+            $hiddenVisitor = ofp_http_request($hiddenUrl);
+            ofp_http_assert($hiddenVisitor['status'] === 404 && $hiddenVisitor['body'] === 'Flight plan unavailable.',
+                'Hidden manual view and download URLs must return the opaque media 404.');
+        }
+        $hiddenManualHead = ofp_http_request($hiddenManualUrl, 'HEAD');
+        $hiddenManualAdmin = ofp_http_request($hiddenManualUrl, 'GET', 'ofp_test_admin=1');
+        $hiddenManualPreview = ofp_http_request($hiddenManualUrl . '&anonymous_preview=1', 'GET', 'ofp_test_admin=1');
+        ofp_http_assert($hiddenManualHead['status'] === 404 && $hiddenManualHead['body'] === ''
+            && $hiddenManualAdmin['status'] === 200 && $hiddenManualAdmin['body'] === $manualPdf
+            && $hiddenManualPreview['status'] === 404,
+            'Hidden manual HEAD must be opaque, admins may inspect it, and anonymous Admin preview may not.');
+
+        $hiddenOfpUrl = $origin . $base . '/index.php?page=gallery_ofp_pdf&id=17';
+        $hiddenOfp = ofp_http_request($hiddenOfpUrl);
+        $hiddenOfpDownload = ofp_http_request($hiddenOfpUrl . '&download=1');
+        $hiddenOfpHead = ofp_http_request($hiddenOfpUrl, 'HEAD');
+        $hiddenOfpLegacy = ofp_http_request($origin . $base . '/index.php?page=media&id=17&ofp=1');
+        $hiddenOfpAdmin = ofp_http_request($hiddenOfpUrl, 'GET', 'ofp_test_admin=1');
+        $hiddenOfpPreview = ofp_http_request($hiddenOfpUrl . '&anonymous_preview=1', 'GET', 'ofp_test_admin=1');
+        ofp_http_assert($hiddenOfp['status'] === 404 && $hiddenOfpDownload['status'] === 404
+            && $hiddenOfpHead['status'] === 404 && $hiddenOfpHead['body'] === ''
+            && $hiddenOfpLegacy['status'] === 404
+            && $hiddenOfpAdmin['status'] === 200 && $hiddenOfpAdmin['body'] === $pdf
+            && $hiddenOfpPreview['status'] === 404,
+            'Hidden legacy OFP direct and compatibility routes must enforce visitor visibility and preview policy.');
 
         $headDenied = ofp_http_request($origin . $base . '/index.php?page=gallery_ofp_pdf&id=3', 'HEAD');
         ofp_http_assert($headDenied['status'] === 404 && $headDenied['body'] === '',

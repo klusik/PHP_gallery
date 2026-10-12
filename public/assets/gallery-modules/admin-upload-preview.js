@@ -12,7 +12,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
-import {adminOperationOwnsInput, allowAdminOperationTransition} from './admin-operation-keys.js?v=20261008-issue118-v3';
+import {adminOperationOwnsInput, allowAdminOperationTransition} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {createGalleryUploadQueue} from './admin-upload-queue.js?v=20261008-issue118-v1';
 import {requestGalleryUploadThumbnail, galleryUploadPreviewPolicy} from './admin-upload-thumbnail.js?v=20261008-issue118-v1';
 
@@ -136,6 +136,15 @@ function mayPreview(type) {
 }
 
 /**
+ * Identify PDF originals by MIME or extension before requesting any image decoder.
+ * @param {File} file Selected queue source.
+ * @returns {boolean} True when the source belongs to the document conversion path.
+ */
+function isPdfFile(file) {
+    return String(file?.type || '').toLowerCase() === 'application/pdf' || /\.pdf$/i.test(String(file?.name || ''));
+}
+
+/**
  * Explain provisional client-side problems without rejecting an otherwise valid
  * selection. Server MIME sniffing, PHP limits and the upload owner remain final.
  * @param {UploadPreviewState} state Original form and resolved upload hints.
@@ -151,12 +160,13 @@ function selectionWarnings(state, file, repeatedName) {
     const preparing = Boolean(state.form.querySelector('[data-browser-upload-toggle]')?.checked);
     if (file.size === 0) warnings.push(label(state.view, 'emptyFile'));
     if (repeatedName) warnings.push(label(state.view, 'repeatedName'));
-    if (state.input.accept && !accepted.has(ext) && !accepted.has(String(file.type || '').toLowerCase())) {
+    const pdf = isPdfFile(file);
+    if (!pdf && state.input.accept && !accepted.has(ext) && !accepted.has(String(file.type || '').toLowerCase())) {
         // image/* is a picker convenience, not a claim that arbitrary codecs are supported.
         warnings.push(label(state.view, 'unsupportedFormat'));
     }
     if (isZip && !preparing) warnings.push(label(state.view, 'zipRequiresBrowser'));
-    if (preparing && !isZip && !['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+    if (preparing && !pdf && !isZip && !['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
         warnings.push(label(state.view, 'browserFormat'));
     }
     if (state.uploadLimitBytes && file.size > state.uploadLimitBytes) {
@@ -216,7 +226,7 @@ function previewUnavailable(state, id) {
 function activatePreview(state, id) {
     const item = state.queue.items().find(entry => entry.id === id);
     const image = state.elements.get(id);
-    if (!item || !(image instanceof HTMLImageElement) || state.failedPreviews.has(id)) return;
+    if (!item || isPdfFile(item.file) || !(image instanceof HTMLImageElement) || state.failedPreviews.has(id)) return;
     if (item.file.size > MAX_PREVIEW_SOURCE_BYTES || !mayPreview(item.file.type)) return;
     const existing = state.urls.get(id);
     if (existing) { image.src = existing; return; }
@@ -298,9 +308,16 @@ function renderQueue(state) {
         thumb.className = 'gallery-upload-queue-thumb';
         const fallback = document.createElement('span');
         fallback.className = 'gallery-upload-queue-fallback';
-        fallback.textContent = (item.file.name.split('.').pop() || '?').slice(0, 6).toUpperCase();
+        if (isPdfFile(item.file)) {
+            fallback.classList.add('is-document');
+            fallback.textContent = '▤ PDF';
+            fallback.title = label(view, 'pdfDocument') || 'PDF document';
+            fallback.setAttribute('aria-label', fallback.title);
+        } else {
+            fallback.textContent = (item.file.name.split('.').pop() || '?').slice(0, 6).toUpperCase();
+        }
         thumb.append(fallback);
-        if (mayPreview(item.file.type) && item.file.size <= MAX_PREVIEW_SOURCE_BYTES && item.file.size > 0) {
+        if (!isPdfFile(item.file) && mayPreview(item.file.type) && item.file.size <= MAX_PREVIEW_SOURCE_BYTES && item.file.size > 0) {
             const image = document.createElement('img');
             // Viewport admission belongs to the visible placeholder, not native lazy loading.
             // A hidden image has no intersection box and must still load its admitted PNG.
@@ -342,7 +359,7 @@ function renderQueue(state) {
         note.className = 'gallery-upload-queue-note';
         note.dataset.uploadPreviewNote = '';
         note.hidden = true;
-        if (item.file.size > MAX_PREVIEW_SOURCE_BYTES && mayPreview(item.file.type)) {
+        if (!isPdfFile(item.file) && item.file.size > MAX_PREVIEW_SOURCE_BYTES && mayPreview(item.file.type)) {
             note.textContent = label(view, 'largePreview');
             note.hidden = false;
         } else if (state.failedPreviews.has(item.id)) {

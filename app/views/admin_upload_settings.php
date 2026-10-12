@@ -46,16 +46,17 @@ use function Gallery\Core\url_for;
 use function Gallery\Services\t;
 
 /**
- * Render the reusable upload format support matrix.
+ * Render supported image types and the separate browser-assisted PDF path.
  *
- * @param array $support Support value.
+ * @param array{heic?:bool,raw?:bool} $support Whether server support exists for HEIC and DNG conversion.
+ * @return void Emit the file-format table and PDF handling note.
  */
 function view_render_admin_upload_support_matrix(array $support): void
 {
     $heicSupported = !empty($support['heic']);
     $rawSupported = !empty($support['raw']);
 
-    echo '<table class="support-matrix"><thead><tr><th>' . e(t('admin.upload.type', 'Type')) . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th></tr></thead><tbody><tr>';
+    echo '<table class="support-matrix"><thead><tr><th>' . e(t('admin.upload.type', 'Type')) . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th><th>PDF</th></tr></thead><tbody><tr>';
     echo '<th scope="row">' . e(t('admin.upload.available', 'Available')) . '</th>';
     echo '<td class="support-yes">✓</td>';
     echo '<td class="support-yes">✓</td>';
@@ -63,7 +64,8 @@ function view_render_admin_upload_support_matrix(array $support): void
     echo '<td class="support-yes">✓</td>';
     echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
     echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
-    echo '</tr></tbody></table>';
+    echo '<td class="support-yes">✓</td>';
+    echo '</tr><tr><th scope="row">' . e(t('pdf.documents', 'Documents / PDFs')) . '</th><td colspan="7">' . e(t('pdf.convert_help', 'PDF originals are stored separately; page conversion to PNG runs in the browser.')) . '</td></tr></tbody></table>';
 }
 
 /**
@@ -150,7 +152,8 @@ function view_admin_upload_settings_normalize_tab(string $tab): string
 /**
  * Render the general upload preferences form.
  *
- * @param array $model Model value.
+ * @param array{client_format_mode?:string,auto_rename_enabled?:bool,pdf_render_dpi?:int,media_renamer_default_pattern?:string} $model Controller-prepared upload preferences.
+ * @return void Render the persisted media preferences form.
  */
 function view_render_admin_upload_general_settings_form(array $model): void
 {
@@ -167,6 +170,11 @@ function view_render_admin_upload_general_settings_form(array $model): void
     echo '<input type="hidden" name="update_upload_general_settings" value="1">';
     echo '<label>' . e(t('admin.upload.client_format_mode', 'Phone upload format')) . '<select name="admin_upload_client_format_mode"><option value="server_supported"' . ($clientFormatMode === 'server_supported' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_server_supported', 'Allow all server-supported formats')) . '</option><option value="phone_jpeg"' . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')) . '</option></select><span class="muted">' . e(t('admin.upload.client_format_help', 'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.')) . '</span></label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"' . ($autoRenameEnabled ? ' checked' : '') . '> <span>' . e(t('admin.upload.auto_rename_enabled', 'Rename uploaded photos automatically')) . '</span><span class="muted">' . e(t('admin.upload.auto_rename_help', 'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.', ['pattern' => (string) ($model['media_renamer_default_pattern'] ?? '{gallery_context}_{seq4}')])) . '</span></label>';
+    echo '<label>' . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)')) . '<select name="gallery_pdf_render_dpi">';
+    foreach ([96, 150, 200, 300, 600, 1200, 2400] as $dpi) {
+        echo '<option value="' . $dpi . '"' . ($dpi === (int) ($model['pdf_render_dpi'] ?? 150) ? ' selected' : '') . '>' . $dpi . ' DPI</option>';
+    }
+    echo '</select><span class="muted">' . e(t('pdf.dpi_help', 'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.')) . '</span></label>';
     echo '<button type="submit" class="secondary">' . e(t('admin.upload_settings.save_general', 'Save general upload settings')) . '</button>';
     echo '</form>';
 }

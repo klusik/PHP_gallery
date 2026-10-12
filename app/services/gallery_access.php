@@ -191,11 +191,23 @@ function normalize_gallery_visibility(string $visibility): string
 /**
  * Return the effective visibility for a gallery row, including legacy listing flags.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array<string,mixed> $gallery Persisted or prepared gallery row.
+ * @return string Effective public, private or unpublished visibility; incomplete PDF children are always private.
  */
 function gallery_effective_visibility(array $gallery): string
 {
+    // Ordinary galleries do not load the PDF lifecycle guard. The reserved child
+    // namespace is permanent; isolated CLI consumers keep their direct include contract.
+    if (preg_match('/(?:^|[\\\\\/])pdf-pages-[a-f0-9]{64}$/D', (string) ($gallery['folder_path'] ?? '')) === 1) {
+        if (function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+            \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        } else {
+            require_once __DIR__ . '/gallery_pdf_publication.php';
+        }
+        if (gallery_pdf_publication_forces_private($gallery)) {
+            return 'private';
+        }
+    }
     $visibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
     if ($visibility === 'public' && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted') {
         return 'unpublished';

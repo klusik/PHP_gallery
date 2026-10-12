@@ -39,6 +39,46 @@ Each source gallery folder may contain:
 
 The local PDF is retained as the canonical original. Reimporting flight data does not automatically regenerate an existing OFP page gallery.
 
+## General gallery PDF documents and browser conversion
+
+The gallery editor can also keep ordinary PDF documents that have no SimBrief
+relationship. Each document has an independent stable ID and gallery-local
+metadata index containing its original filename, title, provenance, exact byte
+size and SHA-256 digest, and timestamps. Original files remain unchanged when
+pages are converted. The general-document index does not extend or overwrite
+`simbrief-ofp-manifest.json`; existing OFP routes and its saved original remain
+compatible.
+
+The protected same-origin PDF delivery route accepts both the gallery ID and
+document ID and applies the gallery's normal visitor authorization. PDF.js is
+loaded from the local vendor assets, renders one page at a time into PNG, and
+feeds each completed page through the existing bounded, resumable ZIP upload
+flow. The existing uploader reports progress, acknowledges batches, resumes
+incomplete work, and supports cancellation. Administrators can select 96, 150,
+200, or 300 DPI; new conversions default to 150 DPI. There is no page-count cap,
+although the renderer retains a per-page canvas safety limit.
+
+Choose either a reserved private child or append after the source gallery's last
+ordinary photo. The private child remains inaccessible until an administrator
+explicitly changes its visibility. Appending keeps the source gallery's current
+visibility and all existing photos and adds the PNG pages at the end. Both
+destinations retain the original PDF and bind resumable state to the source
+gallery, document ID and digest, DPI, expected page count, and upload
+acknowledgments. Conversion state is stored in the source gallery's denied
+`.gallery-pdf-conversions/` sidecar for both child and append destinations; the
+marker records the target gallery ID rather than living in the child. Existing
+JPG children and their contents are preserved. The former
+`simbrief_action=convert_pdf_pages` browser request now returns HTTP 409 and asks
+the administrator to reload and use the browser converter. The server-side
+rasterizer helper remains only for CLI and test compatibility consumers; no
+browser action invokes it.
+
+The existing photo ZIP export and gallery-migration transfer enumerate photos
+and supported gallery assets, not the manual-document sidecar, so they do not
+transfer general PDF originals. A full filesystem backup must include hidden
+`.gallery-pdf-documents/` and `.gallery-pdf-conversions/` directories to preserve
+those files and markers; there is no document-specific import/restore workflow.
+
 ## Authorization and PDF serving
 
 The canonical, gallery-scoped PDF delivery endpoint is:
@@ -75,36 +115,20 @@ The viewer's header, toolbar, zoom percentage and fit-mode labels use an isolate
 
 The normal photo lightbox, map and slideshow state are not modified by PDF page navigation.
 
-## Optional server-side PDF page conversion
+## Legacy server-side conversion compatibility
 
-The public description displays compact **View** and **Download PDF** actions together. For administrators, the private-subgallery creation button appears separately below them, beside a localized, keyboard-accessible question-mark control. The help opens on hover, keyboard focus or tap, and closes on click-away or Escape without consuming a permanent description line.
-
-Only an authenticated administrator can manually request **Create private OFP subgallery** through a CSRF-protected action. Nothing is converted automatically. Hosts without Imagick plus working PDF and JPEG delegates show a capability notice and retain normal PDF viewing.
-
-Conversion uses the locally saved PDF, not SimBrief. It stages JPEGs in a private random cache directory, creates a physical child at ofp-pages via existing gallery creation APIs, transfers ordered images, and indexes them with the existing image scanner. It records a generated-pages marker containing the parent gallery ID, source PDF SHA-256 and page count.
-
-**The generated child is private, not unpublished.** PHP Gallery's unpublished state is still directly accessible by URL. A genuinely private child ensures that viewers cannot access the OFP page images before the administrator publishes it manually.
-
-Conversion resource limits:
-
-| Resource | Limit |
-| --- | --- |
-| Original PDF | 25 MiB |
-| Converted pages | 40 |
-| Resolution | 120 DPI |
-| Pixels per page | 9 million |
-| Total JPEG output | 64 MiB |
-| Working-time budget | 60 seconds |
-
-An existing correctly marked OFP child is returned unchanged on repeat conversion. Existing manual edits and publication changes are never overwritten. A conflicting folder/gallery without the expected ownership marker is never reused. Failures clean staged data and attempt to roll back newly created private gallery entries using the existing deletion service.
-
-To deliberately regenerate, inspect/export and remove the old generated child through the standard admin workflow before launching another conversion. The source PDF remains available in the parent gallery.
+The historical `simbrief_action=convert_pdf_pages` browser request no longer
+starts a server rasterizer. It returns HTTP 409 with a reload prompt directing
+the administrator to the browser PDF.js workflow above. The existing PHP
+rasterizer helper remains only for CLI and test compatibility consumers; no
+browser action invokes it. Existing JPG page galleries are retained and are
+independent of the current PNG conversion lifecycle.
 
 ## Regression and maintenance
 
 - tests/simbrief_ofp_lightbox_browser_test.mjs verifies stage-native scrolling versus Ctrl-only PDF zoom, theme-independent HUD contrast, help visibility, portrait A4 and mixed-orientation whole-page geometry on a landscape stage, fit-width and actual-size modes, center/bounds, mode indication, manual resize persistence, simulated rotation/fullscreen changes, translations, download isolation and resource cleanup.
 - tests/simbrief_ofp_document_test.php covers manifest validation, PDF signature and symlink refusal, generated-gallery ownership checks, no-op idempotency, **manual upload/explicit replacement, provenance, local historical prefill and gallery isolation**, and the separate viewer contract.
 - tests/simbrief_ofp_public_http_test.php starts a disposable real PHP HTTP server with isolated gallery fixtures. It checks clean-cookie anonymous GET/HEAD and downloads for public, unpublished, unlisted and legacy draft sources; old links; private/NSFW/password/share gates; invalid/missing PDFs; admin preview isolation; root/subdirectory paths and non-rewrite URLs. tests/public_media_authorization_contract_test.php exercises the same PDF authorization helper against the actual gallery-access policy.
-- Existing gallery import/export, deletion, backup and thumbnail workflows should continue treating the OFP pages as an ordinary physical child gallery.
+- Existing gallery deletion and backup workflows should continue treating legacy OFP page galleries as ordinary physical galleries. General PDF originals are separate hidden sidecars and are not included in photo ZIP export or the existing gallery-migration transfer; full filesystem backups must include hidden sidecar directories.
 - New production assets and PHP services must appear in the checked-in production inventory and core manifest.
 - A complete hosted browser/integration test must also exercise a real multipage SimBrief PDF, restricted galleries, the zoom UI, and optional Imagick on a capable host.

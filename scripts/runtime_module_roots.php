@@ -45,12 +45,18 @@ return [
         // File attachment lookup uses the established routing-paths and DB
         // closure. Share those files through their existing owner, not by
         // directly duplicating bootstrap and filesystem helpers per route.
-        'simbrief-ofp-attachments' => [
+        'gallery-pdf-documents' => [
             'Gallery\\Services\\find_gallery_by_public_path',
             'Gallery\\Services\\resolve_public_gallery_path',
             'Gallery\\Services\\simbrief_ofp_local_pdf_path',
+            'Gallery\\Services\\gallery_pdf_documents_read',
+            'Gallery\\Services\\gallery_pdf_publication_forces_private',
+            'Gallery\\Controllers\\gallery_pdf_documents_view_model',
+            'Gallery\\Views\\view_render_gallery_pdf_documents',
         ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
+        // Authenticated document actions load the uploader only after the public attachment list is prepared.
+        'domain-admin-uploads' => ['Gallery\\Controllers\\gallery_pdf_documents_admin_controls'],
         // Settings-only and rendering callers share each owner independently.
         'breadcrumb-policy' => [
             'Gallery\\Services\\breadcrumb_view_model',
@@ -105,7 +111,7 @@ return [
         'Gallery\\Controllers\\cms_robots_txt' => 'public-robots',
         'Gallery\\Controllers\\cms_sitemap_xml' => 'public-sitemap',
         'Gallery\\Controllers\\cms_media' => 'public-media',
-        'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'public-media',
+        'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'gallery-pdf-documents',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -113,7 +119,7 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'simbrief-ofp-attachments'],
+    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'gallery-pdf-documents'],
     'module_dependencies' => [
         'updater-work' => ['request-maintenance'],
         // Rendering follows view-model preparation and reuses its shared Core dependencies.
@@ -134,6 +140,19 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Historical media&ofp=1 links select the PDF route module before its handler runs.
+        'Gallery\\Controllers\\cms_media' => ['Gallery\\Controllers\\cms_gallery_ofp_pdf'],
+        // Reserved PDF children and attached documents load these modules before use.
+        'Gallery\\Services\\gallery_effective_visibility' => [
+            'Gallery\\Services\\gallery_pdf_publication_forces_private',
+        ],
+        'Gallery\\Controllers\\render_public_gallery_branding_header' => [
+            'Gallery\\Controllers\\gallery_pdf_documents_view_model',
+            'Gallery\\Views\\view_render_gallery_pdf_documents',
+        ],
+        'Gallery\\Controllers\\gallery_pdf_documents_view_model' => [
+            'Gallery\\Controllers\\gallery_pdf_documents_admin_controls',
+        ],
         // Dispatch loads the preview-document module before inspection; shared layout invokes the context function only after inspection passes.
         'Gallery\\Controllers\\shared_layout_header_model' => [
             'Gallery\\Services\\theme_background_visual_editor_context',

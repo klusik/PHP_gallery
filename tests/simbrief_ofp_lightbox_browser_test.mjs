@@ -6,12 +6,14 @@
  * Module Type: Browser Regression Test
  *
  * Purpose:
- *   Exercise OFP page isolation, zoom, keyboard, download and cleanup in Chromium.
+ *   Exercise gallery PDF viewing, PNG conversion, upload ownership and cleanup.
  *
  * Responsibilities:
  *   - Serve the actual PDF document-viewer module from a loopback-only fixture
  *   - Mock PDF decoding without contacting SimBrief or uploading real PDFs
  *   - Ensure OFP navigation cannot enter the parent gallery photo sequence
+ *   - Run the shared PDF conversion, stream-upload and delegated workflow scenarios
+ *   - Qualify actual PDF.js page rendering under this registered PDF browser owner
  *
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -26,6 +28,12 @@ import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.argv[2];
+
+// PDF viewing and conversion share the gallery document domain. Keep its
+// scenarios under this existing central entrypoint and its inherited timeout.
+await import('./admin_pdf_conversion_stream_scenarios.mjs');
+await import('./admin_browser_pdf_upload_stream_scenarios.mjs');
+await import('./admin_pdf_documents_workflow_scenarios.mjs');
 
 if (!executable || executable.startsWith('--')) {
     console.log('SKIP SimBrief OFP lightbox browser test: Chromium executable not supplied.');
@@ -802,3 +810,5 @@ try {
 } finally {
     server.close();
 }
+
+await import('./gallery_pdf_conversion_browser_scenarios.mjs');

@@ -4,10 +4,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/fixtures/simbrief_ofp_public_http_router.php
  * Module Type: Isolated HTTP Fixture
- * Purpose: Exercise the real OFP PDF controller through root/subdirectory URLs.
+ * Purpose: Exercise the real gallery PDF controller through root/subdirectory URLs.
  * Responsibilities:
  *   - Provide deterministic gallery and session/access models without a database
- *   - Serve the repository's actual attachment service and media controller
+ *   - Serve the repository's OFP and gallery-document services through one route
+ *   - Keep manual document lookup namespaced by the existing gallery PDF route
  *   - Refuse all unrelated routes without exposing the fixture's source tree
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -88,6 +89,8 @@ namespace Gallery\Services {
             13 => ['folder_path' => 'unpublished-nsfw', 'visibility' => 'unpublished', 'nsfw_enabled' => 1],
             14 => ['folder_path' => 'legacy-draft', 'visibility' => 'draft'],
             15 => ['folder_path' => 'private-share', 'visibility' => 'private', 'access_mode' => 'password'],
+            16 => ['folder_path' => 'hidden', 'visibility' => 'public'],
+            17 => ['folder_path' => 'hidden-ofp', 'visibility' => 'public'],
         ];
         return isset($galleries[$id]) ? ['id' => $id] + $galleries[$id] : null;
     }
@@ -179,6 +182,7 @@ namespace {
     // The browser-visible route path simulates both deployment layouts, even
     // when PHP's development-server router is implemented by this fixture file.
     $_SERVER['SCRIPT_NAME'] = $routePath;
+    require_once dirname(__DIR__, 2) . '/app/services/gallery_pdf_documents.php';
     require_once dirname(__DIR__, 2) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_media.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_gallery_controls.php';

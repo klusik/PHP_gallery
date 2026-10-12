@@ -492,6 +492,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
         'tag_metadata' => admin_settings_entry('tag_metadata', 'content', 'Tag metadata', 'Rename tags, manage slugs, and edit public tag landing-page text on the dedicated Tags page.', '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), 'admin_tags'),
 
         'public_thumbnail_rendering_mode' => admin_settings_entry('public_thumbnail_rendering_mode', 'media', 'Public thumbnail renderer', 'Permanent rendering pipeline for selected-gallery photo cards.', PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY, 'select', PUBLIC_THUMBNAIL_RENDERING_DEFAULT, public_thumbnail_rendering_mode(), 'admin_theme', [], 'admin-theme-tab-layout', true, 'normal', ['allowed' => public_thumbnail_rendering_modes()]),
+        'gallery_pdf_render_dpi' => admin_settings_entry('gallery_pdf_render_dpi', 'media', 'PDF page rendering resolution (DPI)', 'Lossless PNG dimensions. Higher DPI increases memory, upload size and processing time.', 'gallery_pdf_render_dpi', 'select', '150', (string) gallery_pdf_render_dpi(), 'admin_upload_settings', [], '', true, 'normal', ['allowed' => ['96', '150', '200', '300', '600', '1200', '2400']]),
         'theme_lightbox_browsing_mode' => admin_settings_entry('theme_lightbox_browsing_mode', 'media', 'Lightbox default mode', 'Global fallback for galleries without a lightbox browsing override.', 'theme_lightbox_browsing_mode', 'summary', 'single', theme_lightbox_browsing_mode(), 'admin_theme', [], 'admin-theme-tab-layout'),
         'exif_gps_maps_default_enabled' => admin_settings_entry('exif_gps_maps_default_enabled', 'media', 'EXIF / GPS public display', 'Global fallback used by galleries without an explicit GPS display override.', exif_gps_default_enabled_setting_key(), 'checkbox', '1', exif_gps_default_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', exif_gps_override_schema_ready(), 'normal', [], !exif_gps_override_schema_ready()),
         'thumbnail_background_warmup_enabled' => admin_settings_entry('thumbnail_background_warmup_enabled', 'media', 'Public thumbnail self-healing', 'Allows guarded public requests to request background repair of missing thumbnails. Existing installations retain the historical enabled fallback.', 'thumbnail_background_warmup_enabled', 'summary', '1', function_exists('Gallery\Services\thumbnail_warmup_enabled') && thumbnail_warmup_enabled() ? '1' : '0', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance', false, 'operational'),
@@ -556,6 +557,9 @@ function admin_settings_owner_for_id(string $id): string
     }
     if ($id === 'admin_legacy_upload_navigation_enabled') {
         return 'admin_settings_registry';
+    }
+    if ($id === 'gallery_pdf_render_dpi') {
+        return (string) gallery_pdf_render_dpi_validate((string) $value);
     }
     if ($id === 'base_url') {
         return 'config.php / site_url';
@@ -764,6 +768,7 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
     }
 
     match ($id) {
+        'gallery_pdf_render_dpi' => set_app_setting('gallery_pdf_render_dpi', (string) gallery_pdf_render_dpi_validate((string) $value)),
         'admin_legacy_upload_navigation_enabled' => set_app_setting('admin_legacy_upload_navigation_enabled', (string) $value === '1' ? '1' : '0'),
         'admin_upload_client_format_mode' => save_admin_upload_client_format_mode($value),
         'admin_upload_auto_rename_enabled' => save_admin_upload_auto_rename_setting($value),

@@ -170,17 +170,17 @@ assert.match(
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20261011-widget-geometry-refresh-v1/,
+    /admin-side-panel\.js\?v=20261012-upload-panel-owner-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
     sidePanelSource,
-    /admin-browser-upload\.js\?v=20261008-issue118-v3/,
+    /admin-browser-upload\.js\?v=20261012-dpi-warning-v4/,
     'The side-panel module must cache-bust the changed browser-upload module.'
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20261011-widget-geometry-refresh-v1/,
+    /admin-operations\.js\?v=20261012-upload-panel-owner-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

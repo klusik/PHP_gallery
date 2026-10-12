@@ -43,6 +43,7 @@ use function Gallery\Models\gallery_model_set_show_filenames;
 use function Gallery\Models\gallery_model_set_visibility;
 use function Gallery\Models\gallery_model_set_voting_enabled;
 
+
 /**
  * Normalize gallery identifiers for model operations.
  *
@@ -98,8 +99,20 @@ function gallery_bulk_set_visibility(array $galleryIds, string $visibility): arr
     if ($ids === []) {
         return [];
     }
-    gallery_model_set_visibility($ids, $visibility, now_sql());
-    gallery_bulk_refresh_sidecars($ids);
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        foreach ($ids as $galleryId) {
+            $gallery = find_gallery($galleryId, true);
+            if (is_array($gallery)) {
+                require_once __DIR__ . '/gallery_pdf_publication.php';
+                gallery_pdf_publication_assert_visibility_change($gallery, $visibility);
+            }
+        }
+        gallery_model_set_visibility($ids, $visibility, now_sql());
+        gallery_bulk_refresh_sidecars($ids);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
     return $ids;
 }
 

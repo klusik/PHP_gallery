@@ -142,11 +142,11 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
 function view_render_public_gallery_hero(array $viewModel): void
 {
     echo '<section class="hero" data-public-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-gallery-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($viewModel['cover_image_id'] ?? 0)) . '" data-public-image-count="' . (int) ($viewModel['image_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['image_revision'] ?? '')) . '" data-public-subgallery-count="' . (int) ($viewModel['subgallery_count'] ?? 0) . '" data-public-subgallery-revision="' . e((string) ($viewModel['subgallery_revision'] ?? '')) . '" data-public-smart-gallery-count="' . (int) ($viewModel['smart_gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '">';
-    // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
+    // Title/date and header actions retain their existing columns. Only the
+    // description/document row uses the full available width below them.
     echo '<div class="hero-topbar">';
     echo '<div class="hero-primary">';
     echo (string) ($viewModel['branding_header_html'] ?? '');
-    echo (string) ($viewModel['breadcrumbs_html'] ?? '');
     echo '</div>';
     echo '<div class="hero-meta">';
     echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
@@ -176,7 +176,9 @@ function view_render_public_gallery_hero(array $viewModel): void
         $pictureGameLabel = t('gallery.play_picture_game', 'Play picture game');
         echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e((string) ($viewModel['picture_game_url'] ?? '')) . '" aria-label="' . e($pictureGameLabel) . '" title="' . e($pictureGameLabel) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e($pictureGameLabel) . '</span></a>';
     }
-    echo '</div></div>';
+    echo '</div></div></div>';
+    echo (string) ($viewModel['description_documents_html'] ?? '');
+    echo (string) ($viewModel['breadcrumbs_html'] ?? '');
 
     view_render_public_hero_tags([
         'groups' => (array) ($viewModel['tag_groups'] ?? []),
@@ -186,7 +188,7 @@ function view_render_public_gallery_hero(array $viewModel): void
         'scrollbar_enabled' => !empty($viewModel['tag_scrollbar_enabled']),
         'scrollbar_rows' => (int) ($viewModel['tag_scrollbar_rows'] ?? 5),
     ]);
-    echo '</div></section>';
+    echo '</section>';
 }
 
 /**

@@ -37,6 +37,22 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
+ * Detect gallery-owned document metadata before loading its presentation module.
+ *
+ * This is a discovery hint only; the document reader still validates confinement,
+ * metadata and original bytes before returning any protected attachment URL.
+ *
+ * @param array<string,mixed> $gallery Physical gallery with a relative folder_path.
+ * @return bool True when a manual document index or established OFP PDF exists.
+ */
+function gallery_pdf_documents_present(array $gallery): bool
+{
+    $directory = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+    return is_file($directory . DIRECTORY_SEPARATOR . '.gallery-pdf-documents' . DIRECTORY_SEPARATOR . 'index.json')
+        || simbrief_ofp_local_pdf_path($gallery) !== null;
+}
+
+/**
  * Determine whether a request may read the original gallery-owned OFP PDF.
  *
  * An authenticated administrator may inspect unpublished/private source
@@ -504,6 +520,99 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
         return ['sha256' => (string) hash_file('sha256', $pdf), 'bytes' => $written, 'provenance' => $provenance];
     } finally {
         foreach ([$stagePdf, $stageManifest, $backup] as $temporary) {
+            if ($temporary !== '' && is_file($temporary)) {
+                @unlink($temporary);
+            }
+        }
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+/**
+ * Delete the attached SimBrief OFP PDF while preserving its flight-plan data and generated images.
+ * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param bool $confirmed Whether the caller explicitly confirmed deletion.
+ * @return bool True when the PDF attachment was removed; false when it was already absent.
+ * @throws \RuntimeException When confirmation is missing or safe atomic metadata update fails.
+ */
+function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false): bool
+{
+    if (!$confirmed) {
+        throw new \RuntimeException('Deleting the OFP PDF requires explicit confirmation.');
+    }
+    $root = simbrief_ofp_gallery_directory($gallery);
+    if ($root === null) {
+        throw new \RuntimeException('The selected gallery folder is unavailable.');
+    }
+    $lockPath = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-upload.lock';
+    if (is_link($lockPath)) {
+        throw new \RuntimeException('OFP attachment storage is unsafe.');
+    }
+    $lock = @fopen($lockPath, 'c');
+    if ($lock === false) {
+        throw new \RuntimeException('OFP attachment storage cannot be locked.');
+    }
+    @chmod($lockPath, 0600);
+    $stageManifest = '';
+    $backupPdf = '';
+    $restorePdf = '';
+    try {
+        if (!flock($lock, LOCK_EX)) {
+            throw new \RuntimeException('OFP attachment storage is busy.');
+        }
+        $pdf = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+        $manifestPath = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
+        if (is_link($pdf) || is_link($manifestPath)) {
+            throw new \RuntimeException('OFP attachment storage is unsafe.');
+        }
+        if (!is_file($pdf)) {
+            return false;
+        }
+        if (simbrief_ofp_local_pdf_path($gallery) !== $pdf) {
+            throw new \RuntimeException('The OFP PDF is invalid or outside its registered gallery path.');
+        }
+        $manifest = simbrief_ofp_gallery_manifest($gallery);
+        if ($manifest === []) {
+            throw new \RuntimeException('The existing OFP manifest is invalid and was preserved.');
+        }
+        if (($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf') {
+            throw new \RuntimeException('The PDF attachment is not registered in the OFP manifest.');
+        }
+        unset($manifest['ofp_pdf_file'], $manifest['pdf_provenance'], $manifest['pdf_attached_at']);
+        $manifest['ofp_pdf_url'] = '';
+        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || strlen($json) > 32768) {
+            throw new \RuntimeException('The updated OFP manifest cannot be stored safely.');
+        }
+        $suffix = bin2hex(random_bytes(12));
+        $stageManifest = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-delete-' . $suffix . '.json.tmp';
+        $backupPdf = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-delete-' . $suffix . '.pdf.bak';
+        if (@file_put_contents($stageManifest, $json . "\n", LOCK_EX) !== strlen($json) + 1) {
+            throw new \RuntimeException('The updated OFP manifest could not be staged.');
+        }
+        @chmod($stageManifest, 0600);
+        if (!@rename($pdf, $backupPdf)) {
+            throw new \RuntimeException('The OFP PDF could not be protected for deletion.');
+        }
+        $restorePdf = $pdf;
+        if (!@rename($stageManifest, $manifestPath)) {
+            throw new \RuntimeException('The updated OFP manifest could not be installed.');
+        }
+        $stageManifest = '';
+        @unlink($backupPdf);
+        $backupPdf = '';
+        $restorePdf = '';
+        return true;
+    } finally {
+        if ($backupPdf !== '' && $restorePdf !== '' && is_file($backupPdf)) {
+            if (@rename($backupPdf, $restorePdf)) {
+                $backupPdf = '';
+            }
+        }
+        // A failed rollback must retain the denied backup for administrator
+        // recovery rather than deleting the only remaining original bytes.
+        foreach ([$stageManifest, $restorePdf === '' ? $backupPdf : ''] as $temporary) {
             if ($temporary !== '' && is_file($temporary)) {
                 @unlink($temporary);
             }

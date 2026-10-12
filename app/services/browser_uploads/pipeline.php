@@ -73,6 +73,66 @@ function browser_upload_format_bytes(int $bytes): string
 }
 
 /**
+ * Build a conversion receipt that binds a prepared manifest to its page payloads.
+ *
+ * @param array{items?:list<array{prepared_name?:string,original_path?:string}>} $manifest Parsed manifest for one prepared upload batch.
+ * @param array<string,string> $entries Normalized ZIP entries keyed by archive path.
+ * @return array{manifest_sha256:string,pdf_page_numbers:list<int>,pdf_page_sha256:array<string,string>} Receipt fields persisted with a successful conversion batch response.
+ * @throws RuntimeException When the manifest does not contain unique, readable PDF page PNGs.
+ */
+function browser_upload_conversion_receipt(array $manifest, array $entries): array
+{
+    $manifestBytes = (string) ($entries['manifest.json'] ?? '');
+    $pages = [];
+    $hashes = [];
+    foreach (browser_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? [])) as $item) {
+        $filename = basename((string) ($item['prepared_name'] ?? ''));
+        if (preg_match('/-page-([0-9]+)\.png$/D', $filename, $match) !== 1) {
+            throw new RuntimeException('The PDF conversion receipt contains an invalid page filename.');
+        }
+        $page = (int) $match[1];
+        $path = normalize_relative_path((string) ($item['original_path'] ?? ''));
+        $bytes = $path !== '' ? ($entries[$path] ?? null) : null;
+        if ($page < 1 || in_array($page, $pages, true) || !is_string($bytes) || strlen($bytes) < 8
+            || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n") {
+            throw new RuntimeException('The PDF conversion receipt contains a repeated, missing or invalid PNG page.');
+        }
+        $pages[] = $page;
+        $hashes[(string) $page] = hash('sha256', $bytes);
+    }
+    if ($pages === []) {
+        throw new RuntimeException('The PDF conversion receipt cannot be empty.');
+    }
+    return ['manifest_sha256' => hash('sha256', $manifestBytes), 'pdf_page_numbers' => $pages, 'pdf_page_sha256' => $hashes];
+}
+
+/**
+ * Confirm a cached conversion response belongs to the exact retried manifest and PNG pages.
+ *
+ * @param array<string,mixed> $cached Cached server success response for one batch.
+ * @param array{manifest_sha256:string,pdf_page_numbers:list<int>,pdf_page_sha256:array<string,string>} $current Receipt reconstructed from the retried ZIP.
+ * @return bool True when all manifest, page-order and payload hashes match exactly.
+ */
+function browser_upload_conversion_receipt_matches(array $cached, array $current): bool
+{
+    $cachedPages = array_values(array_map('intval', (array) ($cached['pdf_page_numbers'] ?? [])));
+    $currentPages = array_values(array_map('intval', $current['pdf_page_numbers']));
+    $cachedHashes = (array) ($cached['pdf_page_sha256'] ?? []);
+    if (!is_string($cached['manifest_sha256'] ?? null)
+        || !hash_equals($current['manifest_sha256'], (string) $cached['manifest_sha256'])
+        || $cachedPages !== $currentPages) {
+        return false;
+    }
+    foreach ($currentPages as $page) {
+        $key = (string) $page;
+        if (!is_string($cachedHashes[$key] ?? null) || !hash_equals($current['pdf_page_sha256'][$key], $cachedHashes[$key])) {
+            return false;
+        }
+    }
+    return count($cachedHashes) === count($current['pdf_page_sha256']);
+}
+
+/**
  * Create one upload progress event for the browser mini log.
  *
  * @param float $startedAt Request start timestamp.
@@ -113,13 +173,14 @@ function browser_upload_image_rows_by_ids(array $imageIds): array
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
  * @param bool $preparedThumbnailsRequired Require a complete browser-generated thumbnail matrix.
- * @return array<string,mixed> Batch response with image_ids, uploaded/scanned/thumbnail counters, rename outcomes and upload_events; cached retries add cached=true.
+ * @param bool $preservePreparedNames Preserve conversion-owned filenames after caller validation.
+ * @return array<string,mixed> Batch response with image_ids, filenames, upload counters and events; conversion responses also include manifest_sha256, pdf_page_numbers and per-page pdf_page_sha256; cached retries add cached=true.
  */
-function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false): array
+function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false, bool $preservePreparedNames = false): array
 {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return browser_upload_store_prepared_zip_batch_owned($galleryId, $uploadedZip, $sessionId, $batchIndex, $preparedThumbnailsRequired);
+        return browser_upload_store_prepared_zip_batch_owned($galleryId, $uploadedZip, $sessionId, $batchIndex, $preparedThumbnailsRequired, $preservePreparedNames);
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -136,17 +197,39 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
  * @param string $sessionId Upload session identifier.
  * @param int $batchIndex Zero-based upload batch index.
  * @param bool $preparedThumbnailsRequired Whether complete prepared thumbnail coverage is required.
- * @return array<string,mixed> Registered batch response with image_ids, filenames, upload/scan/thumbnail counters, rename outcomes and upload_events; replay may add cached=true.
+ * @param bool $preservePreparedNames Whether validated conversion page filenames must remain unchanged.
+ * @return array<string,mixed> Registered batch response with image_ids, filenames, upload/scan/thumbnail counters and events; conversion responses also include manifest_sha256, pdf_page_numbers and per-page pdf_page_sha256; replay may add cached=true.
  * @author Rudolf Klusal
  */
-function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false): array
+function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false, bool $preservePreparedNames = false): array
 {
     $startedAt = microtime(true);
     $events = [browser_upload_progress_event($startedAt, 'PHP received prepared ZIP request for batch ' . ($batchIndex + 1) . '.')];
     if ($galleryId <= 0) {
         throw new RuntimeException(t('browser_upload.error_gallery_required', 'Choose an existing gallery before using the browser upload pipeline.'));
     }
+    if ($preservePreparedNames && !$preparedThumbnailsRequired) {
+        throw new RuntimeException('Exact conversion filenames require a complete browser-prepared image package.');
+    }
+    $conversionEntries = null;
+    $conversionManifest = null;
+    $conversionReceipt = null;
+    if ($preservePreparedNames) {
+        $error = (int) ($uploadedZip['error'] ?? UPLOAD_ERR_NO_FILE);
+        $tmpName = (string) ($uploadedZip['tmp_name'] ?? '');
+        if ($error !== UPLOAD_ERR_OK || $tmpName === '' || !is_uploaded_file($tmpName)) {
+            throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
+        }
+        $conversionEntries = browser_upload_parse_store_zip($tmpName, browser_upload_server_upload_limit_bytes());
+        $conversionManifest = browser_upload_manifest_from_entries($conversionEntries);
+        browser_upload_validate_manifest_identity($conversionManifest, $sessionId, $batchIndex);
+        browser_upload_validate_required_thumbnail_manifest($conversionManifest, $conversionEntries);
+        $conversionReceipt = browser_upload_conversion_receipt($conversionManifest, $conversionEntries);
+    }
     if (($cached = browser_upload_cached_batch_response($galleryId, $sessionId, $batchIndex)) !== null) {
+        if ($preservePreparedNames && !browser_upload_conversion_receipt_matches($cached, (array) $conversionReceipt)) {
+            throw new RuntimeException('The cached PDF page batch does not match the retried manifest and page bytes. Restart from the last acknowledged page.');
+        }
         $cached['cached'] = true;
         $cached['upload_events'] = array_merge(
             $events,
@@ -192,9 +275,9 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
     // image plus its thumbnails may legitimately exceed that target because the
     // image package is atomic. PHP's effective request upload limit is therefore
     // the authoritative hard ceiling for an already received browser upload ZIP.
-    $entries = browser_upload_parse_store_zip($tmpName, $uploadLimit);
+    $entries = is_array($conversionEntries) ? $conversionEntries : browser_upload_parse_store_zip($tmpName, $uploadLimit);
     $events[] = browser_upload_progress_event($startedAt, 'Parsed store-only ZIP with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.');
-    $manifest = browser_upload_manifest_from_entries($entries);
+    $manifest = is_array($conversionManifest) ? $conversionManifest : browser_upload_manifest_from_entries($entries);
     browser_upload_validate_manifest_identity($manifest, $sessionId, $batchIndex);
     $events[] = browser_upload_progress_event($startedAt, 'Validated ZIP manifest for batch ' . ($batchIndex + 1) . '.');
     if ($preparedThumbnailsRequired) {
@@ -204,7 +287,7 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
     $events[] = browser_upload_progress_event($startedAt, 'Preserving browser source order for accepted images.');
     $sortBase = browser_upload_session_sort_base($galleryId, $sessionId);
     $events[] = browser_upload_progress_event($startedAt, 'Reserved deterministic upload order base ' . $sortBase . ' for this browser session.');
-    $manifestHash = hash('sha256', (string) ($entries['manifest.json'] ?? ''));
+    $manifestHash = (string) ($conversionReceipt['manifest_sha256'] ?? hash('sha256', (string) ($entries['manifest.json'] ?? '')));
     $batchState = browser_upload_load_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
     $batchStateItems = is_array($batchState['items'] ?? null) ? $batchState['items'] : [];
     $items = browser_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? []));
@@ -347,7 +430,7 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
     browser_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
 
     $renameResult = null;
-    if (admin_upload_auto_rename_enabled() && $imageIds) {
+    if (!$preservePreparedNames && admin_upload_auto_rename_enabled() && $imageIds) {
         $events[] = browser_upload_progress_event($startedAt, 'Auto-renaming uploaded image rows.');
         $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
         $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
@@ -475,6 +558,9 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         'upload_events' => array_values($events),
         'redirect_url' => url_for('admin_edit_gallery', ['id' => $galleryId, 'uploaded' => $uploadedCount, 'scanned' => $changed, 'thumbnails' => $thumbsCreated, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
     ];
+    if ($preservePreparedNames && is_array($conversionReceipt)) {
+        $response += $conversionReceipt;
+    }
 
     browser_upload_store_cached_batch_response($galleryId, $sessionId, $batchIndex, $response);
     admin_log_event('info', 'gallery.browser_upload_batch', 'Admin uploaded a browser-prepared ZIP batch.', [
