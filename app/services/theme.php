@@ -83,6 +83,8 @@ function theme_settings(): array
         'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
         'gallery_description_layout' => function_exists('Gallery\\Services\\theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
         'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
+        'gallery_count_badge_mode' => function_exists('Gallery\\Services\\theme_gallery_count_badge_mode') ? theme_gallery_count_badge_mode() : 'both',
+        'gallery_count_badge_icons_enabled' => function_exists('Gallery\\Services\\theme_gallery_count_badge_icons_enabled') && theme_gallery_count_badge_icons_enabled() ? '1' : '0',
         'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
         'gallery_info_motion_ms' => (string) theme_gallery_info_motion_ms(),
         'admin_side_panel_motion_ms' => (string) theme_admin_side_panel_motion_ms(),

@@ -133,6 +133,18 @@ namespace Gallery\Services {
         return true;
     }
 
+    /** Return the persisted counter mode for the isolated fixture. @return string Safe count mode. */
+    function theme_gallery_count_badge_mode(): string
+    {
+        return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_mode'] ?? 'both');
+    }
+
+    /** Return whether counter icons are enabled in this fixture. @return bool Icon setting. */
+    function theme_gallery_count_badge_icons_enabled(): bool
+    {
+        return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled'] ?? '1') !== '0';
+    }
+
     /** Return the current tag-page gallery-card layout. @return string Fixture tag layout. */
     function tag_page_gallery_description_layout(): string
     {
@@ -240,6 +252,8 @@ namespace Gallery\Tests\ThemeLayoutSettings {
     assert_true($settings['tag_page_gallery_description_layout'] === 'horizontal', 'Tag card layout did not preserve owner value.');
     assert_true($settings['theme_hero_tag_visible_limit'] === '20' && $settings['theme_hero_tag_sort_mode'] === 'usage', 'Hero-tag settings did not preserve owner values.');
     assert_true($settings['theme_breadcrumb_style'] === 'chevron', 'Breadcrumb style did not use its safe Theme default.');
+    assert_true($settings['theme_gallery_count_badge_mode'] === 'both'
+        && $settings['theme_gallery_count_badge_icons_enabled'] === '1', 'Photo counter defaults must be Both with icons ON.');
     assert_true(theme_layout_safe_setting_available('theme_gps_pin_enabled'), 'Enabled GPS capability was treated as unavailable.');
     assert_true(theme_layout_safe_setting_available('theme_lightbox_browsing_mode'), 'Enabled lightbox capability was treated as unavailable.');
 
@@ -252,6 +266,11 @@ namespace Gallery\Tests\ThemeLayoutSettings {
     assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', []) === 'chevron', 'Malformed breadcrumb style did not fall back safely.');
     assert_true(theme_layout_safe_normalize('theme_hero_tag_visible_limit', '200') === '200', 'Maximum hero-tag visible limit was not accepted.');
     assert_true(theme_layout_safe_normalize('theme_hero_tag_sort_mode', 'alphabetical') === 'alphabetical', 'Supported hero-tag sort mode was not accepted.');
+    foreach (['public', 'all', 'both', 'hidden'] as $countMode) {
+        assert_true(theme_layout_safe_normalize('theme_gallery_count_badge_mode', $countMode) === $countMode,
+            'Photo counter mode rejected a supported value: ' . $countMode);
+    }
+    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gallery_count_badge_mode', 'private'));
     expect_invalid(static fn (): string => theme_layout_safe_normalize('pagination_columns', '13'));
     expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gps_pin_size', '49'));
     expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gallery_description_layout', 'diagonal'));
@@ -283,6 +302,25 @@ namespace Gallery\Tests\ThemeLayoutSettings {
     theme_layout_safe_save('theme_breadcrumb_style', 'surface');
     assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_breadcrumb_style', 'surface'], 'Breadcrumb style did not persist through app settings.');
     assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Breadcrumb style change did not bump the public-content revision.');
+
+    $GLOBALS['theme_layout_test_writes'] = [];
+    theme_layout_safe_save('theme_gallery_count_badge_mode', 'hidden');
+    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_gallery_count_badge_mode', 'hidden'],
+        'Count display mode did not persist.');
+    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision',
+        'Count display changes must invalidate visitor-facing content.');
+
+    $GLOBALS['theme_layout_test_writes'] = [];
+    theme_layout_safe_save('theme_gallery_count_badge_icons_enabled', '0');
+    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_gallery_count_badge_icons_enabled', '0'],
+        'Independent icon preference did not persist.');
+    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision',
+        'Icon preference changes must invalidate count presentation.');
+
+    $GLOBALS['theme_layout_test_writes'] = [];
+    theme_layout_safe_save('theme_gallery_count_badge_mode', 'both');
+    assert_true(($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled'] ?? '') === '0',
+        'Changing display mode unexpectedly changed icon preference.');
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('home_gallery_grid_rows', '9');

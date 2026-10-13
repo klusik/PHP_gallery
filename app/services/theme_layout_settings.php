@@ -56,6 +56,8 @@ function theme_layout_safe_settings(): array
         'theme_gallery_description_layout' => theme_gallery_description_layout(),
         'theme_breadcrumb_style' => theme_breadcrumb_style(),
         'theme_gallery_count_badge_enabled' => theme_gallery_count_badge_enabled() ? '1' : '0',
+        'theme_gallery_count_badge_mode' => theme_gallery_count_badge_mode(),
+        'theme_gallery_count_badge_icons_enabled' => theme_gallery_count_badge_icons_enabled() ? '1' : '0',
         'pagination_enabled' => !empty($pagination['enabled']) ? '1' : '0',
         'pagination_columns' => (string) ($pagination['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS),
         'pagination_rows' => (string) ($pagination['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS),
@@ -123,6 +125,7 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
         'theme_gps_pin_enabled',
         'theme_gps_pin_background_enabled',
         'theme_gallery_count_badge_enabled',
+        'theme_gallery_count_badge_icons_enabled',
         'pagination_enabled',
         'theme_hero_tag_display_all',
         'theme_hero_tag_scrollbar_enabled',
@@ -137,6 +140,12 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
     }
 
     $text = trim((string) $value);
+    if ($id === 'theme_gallery_count_badge_mode') {
+        if (!in_array($text, ['public', 'all', 'both', 'hidden'], true)) {
+            throw new InvalidArgumentException('Choose a supported picture-count display mode.');
+        }
+        return $text;
+    }
     if ($id === 'theme_gps_pin_size') {
         if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 14 || (int) $text > 48) {
             throw new InvalidArgumentException('Choose a GPS pin size from 14 to 48 pixels.');
@@ -208,6 +217,23 @@ function theme_layout_safe_save(string $id, mixed $value): void
         throw new InvalidArgumentException('Theme layout setting is unavailable.');
     }
     $normalized = theme_layout_safe_normalize($id, $value);
+
+    // Compatibility for earlier Theme clients. The original checkbox is now
+    // a mode switch and must not reset the independent Show icons preference.
+    if ($id === 'theme_gallery_count_badge_enabled') {
+        theme_layout_safe_save('theme_gallery_count_badge_mode', $normalized === '1' ? 'both' : 'hidden');
+        return;
+    }
+    if (in_array($id, ['theme_gallery_count_badge_mode', 'theme_gallery_count_badge_icons_enabled'], true)) {
+        $previous = $id === 'theme_gallery_count_badge_mode'
+            ? theme_gallery_count_badge_mode()
+            : (theme_gallery_count_badge_icons_enabled() ? '1' : '0');
+        set_app_setting($id, $normalized);
+        if ($previous !== $normalized) {
+            set_app_setting('theme_public_content_revision', (string) time());
+        }
+        return;
+    }
 
     if ($id === 'theme_gallery_description_layout') {
         $previous = theme_gallery_description_layout();

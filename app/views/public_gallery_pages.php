@@ -153,11 +153,18 @@ function view_render_public_gallery_hero(array $viewModel): void
 
     if (!empty($viewModel['show_count_badge'])) {
         $count = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
-        // Keep the branch count in the same responsive action row while its accessible label explains that descendants are included.
-        echo '<div class="gallery-hero-count-badge" aria-label="' . e(t('gallery.hero.branch_image_count_aria', 'Image count for this gallery and its subgalleries: {count}', ['count' => $count])) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
-        echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
-        echo '<span class="gallery-hero-count-value">' . $count . '</span>';
-        echo '</div>';
+        $badge = (array) ($viewModel['count_badge'] ?? []);
+        if (!empty($badge['admin'])) {
+            echo '<div class="gallery-hero-count-badge gallery-count-badge-admin" aria-label="' . e(view_gallery_count_admin_label($badge)) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
+            view_gallery_count_admin_values($badge);
+            echo '</div>';
+        } else {
+            // Retain the pre-existing access-filtered visitor badge exactly.
+            echo '<div class="gallery-hero-count-badge" aria-label="' . e(t('gallery.hero.branch_image_count_aria', 'Image count for this gallery and its subgalleries: {count}', ['count' => $count])) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
+            echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
+            echo '<span class="gallery-hero-count-value">' . $count . '</span>';
+            echo '</div>';
+        }
     }
 
     foreach (($viewModel['cooperative_links'] ?? []) as $link) {

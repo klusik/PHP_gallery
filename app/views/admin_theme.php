@@ -371,7 +371,14 @@ function view_render_admin_theme_layout_tab(array $viewModel): void
     ob_start();
     echo '<div class="theme-layout-grid">';
     echo '<fieldset class="theme-layout-card" id="admin-gallery-count-badge"><legend>' . e((string) ($labels['count_badge_legend'] ?? 'Contained-picture badge')) . '</legend>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (!empty($viewModel['gallery_count_badge_enabled']) ? ' checked' : '') . '> ' . e((string) ($labels['show_count_badge'] ?? '')) . '</label>';
+    $countMode = (string) ($viewModel['gallery_count_badge_mode'] ?? 'both');
+    echo '<div class="theme-count-badge-controls"><label class="theme-count-badge-mode"><span>' . e((string) ($labels['count_badge_mode_label'] ?? 'Display')) . '</span><select name="theme_gallery_count_badge_mode" data-theme-preview-count-badge-mode>';
+    foreach ((array) ($viewModel['gallery_count_badge_modes'] ?? []) as $option) {
+        $value = (string) ($option['value'] ?? '');
+        echo '<option value="' . e($value) . '"' . ($countMode === $value ? ' selected' : '') . '>' . e((string) ($option['label'] ?? $value)) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<label class="checkbox-label theme-count-badge-icons"><input type="checkbox" name="theme_gallery_count_badge_icons_enabled" value="1"' . (!empty($viewModel['gallery_count_badge_icons_enabled']) ? ' checked' : '') . '> ' . e((string) ($labels['count_badge_icons_label'] ?? 'Show icons')) . '</label></div>';
     echo '<p class="theme-layout-hint">' . e((string) ($labels['count_badge_hint'] ?? '')) . '</p>';
     echo '</fieldset>';
     echo '<div class="theme-layout-card" id="admin-theme-breadcrumb-style">';

@@ -19,7 +19,11 @@ function layout_require(bool $condition,string $message): void { if(!$condition)
 function layout_count(DOMXPath $xpath,string $query): int { return $xpath->query($query)->length; }
 $xpath=layout_xpath(theme_fixture_page()); $scope='//*[@id="admin-theme-tab-layout"]';
 foreach(['shortcuts','cards','grids'] as $tab) layout_require(layout_count($xpath,$scope.'//*[@data-admin-subtab-target="admin-theme-layout-subtab-'.$tab.'"]')===1,'retained Layout subsection '.$tab);
-foreach(['pagination_enabled','pagination_columns','pagination_rows','home_gallery_grid_columns','home_gallery_grid_rows','theme_gallery_count_badge_enabled','public_thumbnail_rendering_mode','theme_lightbox_browsing_mode'] as $name) layout_require(layout_count($xpath,$scope.'//*[@name="'.$name.'"]')===1,'exact Layout POST field '.$name);
+foreach(['pagination_enabled','pagination_columns','pagination_rows','home_gallery_grid_columns','home_gallery_grid_rows','theme_gallery_count_badge_mode','theme_gallery_count_badge_icons_enabled','public_thumbnail_rendering_mode','theme_lightbox_browsing_mode'] as $name) layout_require(layout_count($xpath,$scope.'//*[@name="'.$name.'"]')===1,'exact Layout POST field '.$name);
+layout_require(layout_count($xpath,$scope.'//select[@name="theme_gallery_count_badge_mode"]/option')===4
+    && layout_count($xpath,$scope.'//select[@name="theme_gallery_count_badge_mode"]/option[@value="both" and @selected]')===1
+    && layout_count($xpath,$scope.'//input[@name="theme_gallery_count_badge_icons_enabled" and @checked]')===1,
+    'Compact count controls must show the Both + icons ON defaults independently.');
 layout_require(layout_count($xpath,$scope.'//select[@name="theme_favorite_gallery_types[]"]')===3 && layout_count($xpath,$scope.'//*[@data-gallery-search-picker]')===3,'three shortcut slots retain actual searchable gallery picker markup');
 layout_require(layout_count($xpath,$scope.'//input[@data-gallery-search-picker-value and @name="theme_favorite_gallery_ids[]" and @disabled]')===3,'no-JS picker uses existing disabled hidden-field fallback contract');
 layout_require(layout_count($xpath,$scope.'//noscript//input[@name="theme_favorite_gallery_ids[]" and @type="number" and @min="1"]')===3 && layout_count($xpath,$scope.'//input[@data-gallery-search-picker-value and @value=""]')===2,'no-JS numeric fallback preserves empty IDs for Home and empty targets');

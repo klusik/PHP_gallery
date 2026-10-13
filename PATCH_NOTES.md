@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.130
+
+Added configurable gallery photo-count badges for gallery cards and opened-gallery headers, with independent icon controls and localized settings in the Theme page and Setup Wizard. Preserved access-filtered public counts for visitors and Viewer Accounts while making all-photo totals available only to authenticated Admin sessions.
+
+### Highlights
+
+#### Gallery photo-count badges
+- Added **Public only**, **All only**, **Both**, and **Hidden** display modes for gallery cards and opened-gallery headers.
+- Added independent controls for the public-count eye icon and all-count stacked-images icon.
+- Added per-gallery overrides for public, all, and both counts, plus hide and inherit. Legacy `show` and `hide` values continued to mean Both and Hidden, respectively.
+- Kept public counts subject to visitor access rules even in Admin sessions; guests and Viewer Accounts received only public counts. Hidden badges omitted counts. [#205](https://github.com/klusik/PHP_gallery/issues/205)
+
+### Technical Details
+
+#### Backend
+- Updated gallery count selection and lookup to support the configured mode, per-gallery overrides, and Admin-only all-photo totals.
+- Batched descendant-gallery and image aggregation for gallery cards; computed all-visibility totals only when an Admin’s selected mode required them.
+
+#### Database
+- Added migration `202610140001_gallery_count_badge_modes.php` to expand the existing per-gallery count setting while preserving its legacy values and nullable inheritance behavior.
+- Added a global mode defaulting to Both and independent icon settings defaulting to enabled.
+
+#### Frontend
+- Updated Theme settings and the Setup Wizard to expose the four display modes and independent icon control. The Setup Wizard preview defaulted to Both with icons enabled.
+- Updated gallery cards and opened-gallery headers for mode-aware badge presentation and accessible icon labels.
+- Added and updated translations in English, Czech, German, and Swedish.
+
+#### Tests and documentation
+- Added `tests/gallery_count_badge_modes_test.php` for mode validation and persistence, Admin-only dual counts, guest privacy, legacy overrides, equal-count collapse, independent icon preferences, and public-content revision updates.
+- Updated Setup Wizard, theme, gallery hero badge, and public-content workflow tests and fixtures.
+- Added `docs/GALLERY_PHOTO_COUNTS.md` documenting counted images, privacy, and caching constraints; updated `docs/ADMIN_SETTINGS_INVENTORY.md`.
+
+### User Impact
+
+#### For visitors
+- Visitors continued to see only access-filtered public photo counts, regardless of the selected badge mode. Hidden badges displayed no count.
+
+#### For administrators
+- Administrators could choose how gallery photo counts appeared, independently control the two count icons, and set per-gallery overrides.
+- Authenticated Admin sessions could see all-photo totals when the selected mode called for them; public-only counts remained access-filtered.
+
+#### For maintainers
+- The migration preserved existing Show/Hide and inheritance semantics while adding the new count modes.
+
 ## Version 0.129
 
 Added browser-based imports from public iCloud Photos Links and Shared Albums, and made gallery settings available sooner by loading the Images tab in the background. Updated release qualification to retry complete Actions job-inventory reads after classified GitHub server errors.

@@ -112,6 +112,7 @@ use function Gallery\Services\theme_gps_pin_size_value;
 use function Gallery\Services\theme_lightbox_browsing_mode;
 use function Gallery\Services\theme_admin_side_panel_motion_ms_value;
 use function Gallery\Services\theme_layout_safe_save;
+use function Gallery\Services\theme_gallery_count_badge_mode;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_rows;
@@ -561,7 +562,8 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         if (array_key_exists('theme_breadcrumb_style', $_POST)) {
             theme_layout_safe_save('theme_breadcrumb_style', $_POST['theme_breadcrumb_style']);
         }
-        theme_layout_safe_save('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
+        theme_layout_safe_save('theme_gallery_count_badge_mode', $_POST['theme_gallery_count_badge_mode'] ?? theme_gallery_count_badge_mode());
+        theme_layout_safe_save('theme_gallery_count_badge_icons_enabled', !empty($_POST['theme_gallery_count_badge_icons_enabled']) ? '1' : '0');
         // Public thumbnail renderer values and their public-content revision side effect share one service path.
         public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);
         if ($lightboxModesFeatureEnabled) {

@@ -92,6 +92,8 @@ use function Gallery\Services\gallery_cover_collage_images;
 use function Gallery\Services\gallery_cover_image;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
+use function Gallery\Services\gallery_count_badge_needs_total;
+use function Gallery\Services\gallery_count_badge_presentation;
 use function Gallery\Services\gallery_effective_description_layout;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_effective_grid_settings;
@@ -442,10 +444,15 @@ function cms_gallery(): void
     $heroTagCount = count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
     // $showHeroCountBadge keeps the opened-gallery summary aligned with the same Theme/per-gallery visibility policy used by gallery cards.
     $showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);
-    // $heroBranchImageCount deliberately uses the public-only branch view even for signed-in viewers. The matching gallery-card badge is a public-content summary, so using the page's broader admin/viewer visibility here would make the same gallery show two different exact counts.
+    // Never let the administrator bypass inflate the public-facing portion.
+    $isCountAdmin = is_array($viewer) && !$anonymousPreview;
     $heroBranchImageCount = $showHeroCountBadge
-        ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true))
+        ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true, true))
         : 0;
+    $heroAllImageCount = $showHeroCountBadge && gallery_count_badge_needs_total($gallery, $isCountAdmin)
+        ? public_render_profile_span('gallery_hero_branch_all_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], false))
+        : null;
+    $heroCountBadge = gallery_count_badge_presentation($gallery, $isCountAdmin, $heroBranchImageCount, $heroAllImageCount);
 
     ob_start();
     $descriptionDocumentsHtml = render_public_gallery_branding_header($gallery, $seo, $publicOnly);
@@ -484,6 +491,7 @@ function cms_gallery(): void
         'breadcrumbs_html' => $breadcrumbsHtml,
         'show_count_badge' => $showHeroCountBadge,
         'branch_image_count' => $heroBranchImageCount,
+        'count_badge' => $heroCountBadge,
         'admin_actions_html' => $heroAdminActionsHtml,
         'download_enabled' => $downloadsEnabled,
         'download_url' => $downloadsEnabled ? url_for('download_gallery') : '',

@@ -167,6 +167,26 @@ namespace Gallery\Services {
         return true;
     }
 
+    /**
+     * Return the default counter display mode for the isolated breadcrumb fixture.
+     *
+     * @return string Both mode, independent of the legacy checkbox.
+     */
+    function theme_gallery_count_badge_mode(): string
+    {
+        return 'both';
+    }
+
+    /**
+     * Return the independent counter icon preference for this fixture.
+     *
+     * @return bool Enabled by default.
+     */
+    function theme_gallery_count_badge_icons_enabled(): bool
+    {
+        return true;
+    }
+
     /** Return the fixture tag-page card layout.
      *
      * @return string Tag-page card layout.

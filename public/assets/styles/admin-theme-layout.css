@@ -400,3 +400,37 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* Photo-counter settings occupy a single compact row with a natural mobile wrap. */
+.admin-page .theme-count-badge-controls {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    min-width: 0;
+}
+.admin-page .theme-count-badge-mode {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 170px;
+    max-width: 260px;
+    min-width: 0;
+    margin: 0;
+}
+.admin-page .theme-count-badge-mode select {
+    width: 100%;
+    min-height: 34px;
+}
+.admin-page .theme-count-badge-icons {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    flex: 0 0 auto;
+    margin: 0 0 7px;
+    white-space: nowrap;
+}
+@container theme-layout-pane (max-width: 400px) {
+    .admin-page .theme-count-badge-controls { gap: 7px 12px; }
+    .admin-page .theme-count-badge-mode { flex-basis: 155px; }
+}

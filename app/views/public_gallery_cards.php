@@ -101,7 +101,15 @@ function view_render_public_gallery_card(array $viewModel): void
 
     echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('gallery.card.open_gallery', 'Open gallery {title}', ['title' => $title])) . '">';
     if ($showCountBadge) {
-        echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $branchImageCount . '</span></span>';
+        $badge = (array) ($viewModel['count_badge'] ?? []);
+        if (!empty($badge['admin'])) {
+            echo '<span class="subgallery-stack-badge gallery-count-badge-admin" aria-label="' . e(view_gallery_count_admin_label($badge)) . '">';
+            view_gallery_count_admin_values($badge);
+            echo '</span>';
+        } else {
+            // Preserve the exact single public count badge for ordinary visitors.
+            echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $branchImageCount . '</span></span>';
+        }
     }
     if ($isProtected) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">' . e(t('gallery.card.protected', 'Protected')) . '</span>';
@@ -320,4 +328,52 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
         if (!$embedded) echo '</form>';
     }
     echo '</div></details>';
+}
+
+/**
+ * Produce the accessible administrator-only explanation of displayed counts.
+ *
+ * @param array<string,mixed> $badge Privileged server-prepared count model.
+ * @return string Translated description, including descendant gallery scope.
+ */
+function view_gallery_count_admin_label(array $badge): string
+{
+    $mode = (string) ($badge['mode'] ?? 'public');
+    $public = max(0, (int) ($badge['public_count'] ?? 0));
+    $all = max(0, (int) ($badge['all_count'] ?? 0));
+    return match ($mode) {
+        'both' => t('gallery.count_badge.admin_both_aria', 'Public photos: {public}; all photos: {all}. Includes subgalleries.', ['public' => $public, 'all' => $all]),
+        'all' => t('gallery.count_badge.admin_all_aria', 'All photos in this gallery and subgalleries: {count}', ['count' => $all]),
+        default => t('gallery.count_badge.admin_public_aria', 'Public photos in this gallery and subgalleries: {count}', ['count' => $public]),
+    };
+}
+
+/**
+ * Render one compact mode-aware Admin count inside an existing badge wrapper.
+ *
+ * @param array<string,mixed> $badge Privileged controller-prepared count model.
+ * @return void Emits escaped numeric content and decorative local SVG/CSS icons.
+ */
+function view_gallery_count_admin_values(array $badge): void
+{
+    $mode = (string) ($badge['mode'] ?? 'public');
+    $parts = $mode === 'both' ? ['public', 'all'] : [$mode];
+    foreach ($parts as $index => $part) {
+        if (!in_array($part, ['public', 'all'], true)) {
+            continue;
+        }
+        if ($index > 0) {
+            echo '<span class="gallery-count-separator" aria-hidden="true">/</span>';
+        }
+        echo '<span class="gallery-count-segment">';
+        if (!empty($badge['icons'])) {
+            if ($part === 'public') {
+                echo '<svg class="gallery-count-eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.2 12s3.6-7 9.8-7 9.8 7 9.8 7-3.6 7-9.8 7S2.2 12 2.2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+            } else {
+                echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
+            }
+        }
+        $count = $part === 'all' ? (int) ($badge['all_count'] ?? 0) : (int) ($badge['public_count'] ?? 0);
+        echo '<span class="gallery-count-number">' . max(0, $count) . '</span></span>';
+    }
 }
