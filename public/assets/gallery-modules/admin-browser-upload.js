@@ -48,7 +48,7 @@ import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation
  * @property {Record<string, unknown>} [acknowledgedPhotoResult] Canonical photo aggregate retained after package cleanup while subsequent PDFs are unresolved.
  */
 
-const workerScriptUrl = new URL('./browser-image-worker.js?v=20260815-upload-zip-import-v1', import.meta.url);
+const workerScriptUrl = new URL('./browser-image-worker.js?v=20261013-icloud-v1', import.meta.url);
 const tempDatabaseName = 'php_gallery_browser_uploads';
 const tempStoreName = 'prepared_batches';
 
@@ -61,6 +61,16 @@ const tempStoreName = 'prepared_batches';
  * Rationale: compare every source byte without duplicating a large page into full-size buffers.
  */
 const maximumPngCompareChunkBytes = 1024 * 1024;
+
+/**
+ * Bound originals retained by a selection containing archives across worker requests.
+ * Type: number.
+ * Units: bytes. Scope: one upload selection containing at least one ZIP.
+ * Consumers: expandBrowserUploadArchives and extractBrowserUploadZip.
+ * Rationale: carry the worker's 64 MiB retention ceiling across multiple selected
+ * archives instead of allowing each worker to consume a separate full budget.
+ */
+const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
 
 /**
  * Describe a pull-driven source of generated PDF page PNG files.
@@ -417,11 +427,11 @@ async function acknowledgePdfUploadBatch(form, progress, operation, batch, optio
 
 /**
  * Throw when an upload stream has been cancelled by its owning form workflow.
- * @param {AbortSignal|null} signal Optional upload cancellation signal.
+ * @param {AbortSignal|null} signal Optional PDF or assisted archive cancellation signal.
  * @returns {void} No value when the operation remains active.
  */
 function throwIfUploadStreamAborted(signal) {
-    if (signal && signal.aborted) throw new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+    if (signal && signal.aborted) throw new Error(i18n('admin.icloud.cancelled', 'Import cancelled. Keep this form open and retry to reconcile any batch already sent.'));
 }
 
 /**
@@ -471,9 +481,11 @@ async function filesHaveSameBytes(preparedFile, inputFile) {
  * @param {HTMLFormElement} form Upload form.
  * @param {HTMLElement} progress Progress container.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original form intent; retains this uploader's own session/batches after uncertainty.
- * @return {Promise<Record<string, *> | {fallback: true, reason: string} >} Upload result or fallback request.
+ * @param {AbortSignal|null} signal Optional assisted-import cancellation; retains uncertain prepared batches for exact replay.
+ * @return {Promise<import('./admin-side-panel.js').AdminPanelResponse|{fallback:true,reason:string}>} Canonical upload response or no-files fallback request.
  */
-export async function runBrowserGalleryUpload(form, progress, operation) {
+export async function runBrowserGalleryUpload(form, progress, operation, signal = null) {
+    throwIfUploadStreamAborted(signal);
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
     const pdfFiles = selectedBrowserUploadPdfFiles(form);
@@ -519,7 +531,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
     }
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
+    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, {...processingConfig, signal}, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
     const files = expanded.files;
     if (files.length === 0 && pdfFiles.length > 0) {
         return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
@@ -543,7 +555,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
                     appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaged_batch', 'ZIP {index} ready: {count} image(s), {bytes}.', {index: batch.index + 1, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
                 },
             });
-            await processFilesWithWorkerPool(files, processingConfig, async (item, completed, total) => {
+            await processFilesWithWorkerPool(files, {...processingConfig, signal}, async (item, completed, total) => {
                 const prepared = await batcher.addItem(item);
                 progressState.preparedFiles = completed;
                 progressState.preparedOriginalBytes += Number(item.originalSize || 0);
@@ -561,6 +573,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
             updateBasicProgress(progress, 46, i18n('admin.browser_upload.packaging', 'Packaging prepared images into upload ZIP batches...'));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_started', 'All images are prepared. Building upload ZIP files now.'));
             const batches = await batcher.finish();
+            throwIfUploadStreamAborted(signal);
             if (batches.length === 0) {
                 throw new Error(i18n('admin.browser_upload.strict_empty_batches', 'Browser-side processing produced no upload batches. No files were uploaded; the server-side fallback was not started.'));
             }
@@ -576,6 +589,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
 
         let gallerySeed = null;
         let galleryId = selectedBrowserGalleryId(form);
+        throwIfUploadStreamAborted(signal);
         if (!galleryId) {
             updateBasicProgress(progress, 48, i18n('admin.browser_upload.creating_gallery', 'Creating gallery before uploading prepared batches...'));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_creating_gallery', 'Creating target gallery before uploading ZIP files.'));
@@ -592,6 +606,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
 
         const aggregate = emptyBrowserAggregate(gallerySeed, galleryId, batches.length);
         for (let index = 0; index < batches.length; index++) {
+            throwIfUploadStreamAborted(signal);
             const batch = batches[index];
             const uploadedBeforeBatch = progressState.uploadedZipBytes;
             progressState.currentBatchIndex = index + 1;
@@ -611,7 +626,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
                 }
                 progressState.uploadedZipBytes = uploadedBeforeBatch + progressState.currentBatchUploadedBytes;
                 updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
-            });
+            }, {signal});
             progressState.uploadedBatches = index + 1;
             progressState.uploadedFiles += Number(batch.itemCount || 0);
             progressState.uploadedZipBytes = uploadedBeforeBatch + Number(batch.blob?.size || 0);
@@ -654,6 +669,9 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
         if (batcher && !serverSideStarted) {
             await batcher.abort();
             operation.prepared = null;
+        }
+        if (!serverSideStarted && ['QuotaExceededError', 'InvalidStateError', 'SecurityError', 'UnknownError'].includes(error?.name)) {
+            throw new Error(i18n('admin.icloud.storage_failed'));
         }
         if (!serverSideStarted && !archiveSelected) {
             const reason = error instanceof Error ? error.message : String(error || 'preparation_failed');
@@ -945,43 +963,67 @@ function isBrowserUploadZipFile(file) {
  * Replace selected ZIPs with their supported image entries before preparation.
  *
  * @param {File[]} selectedFiles Original browser selection.
- * @param {Record<string, *>} config Browser upload configuration.
+ * @param {{uploadLimitBytes:number,signal?:AbortSignal|null}} config Effective per-file limit and optional cancellation.
  * @param {HTMLElement} progress Progress container.
  * @param {boolean} preserveOrder Honour explicit drawer order, including ZIP positions.
- * @return {Promise<{files: File[], skipped: number}>} Expanded upload selection.
+ * @return {Promise<{files:File[],skipped:number}>} Ordered bounded originals; oversized selections fail before server mutation.
  */
 async function expandBrowserUploadArchives(selectedFiles, config, progress, preserveOrder = false) {
     const files = [];
     let skipped = 0;
+    let retainedBytes = selectedFiles.filter(file => !isBrowserUploadZipFile(file)).reduce((sum, file) => sum + file.size, 0);
+    if (selectedFiles.some(isBrowserUploadZipFile) && retainedBytes > maximumArchiveSelectionBytes) {
+        throw new Error(i18n('admin.icloud.zip_retention'));
+    }
     for (const selectedFile of selectedFiles) {
+        throwIfUploadStreamAborted(config.signal || null);
         if (!isBrowserUploadZipFile(selectedFile)) {
             files.push(selectedFile);
             continue;
         }
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracting_zip', 'Inspecting ZIP: {name} ({bytes}).', {name: selectedFile.name, bytes: formatFileSize(selectedFile.size)}));
-        const result = await extractBrowserUploadZip(selectedFile, config);
+        const result = await extractBrowserUploadZip(selectedFile, {...config, remainingArchiveBytes: maximumArchiveSelectionBytes - retainedBytes});
         skipped += Number(result.skipped || 0);
         const archiveFiles = (result.entries || []).map((entry) => new File([entry.blob], String(entry.name || 'archive-image'), {
             type: browserUploadMimeFromFilename(String(entry.name || '')),
             lastModified: selectedFile.lastModified,
         }));
         files.push(...archiveFiles);
+        retainedBytes += archiveFiles.reduce((sum, file) => sum + file.size, 0);
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracted_zip', 'ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.', {name: selectedFile.name, added: archiveFiles.length, skipped: Number(result.skipped || 0)}));
+        for (const [reason, count] of Object.entries(result.reasons || {})) {
+            appendUploadProgressLog(progress, i18n('admin.icloud.skipped', 'Skipped {count}: {reason}.', {count, reason: i18n('admin.icloud.skip_' + reason)}));
+        }
     }
     return {files: preserveOrder ? files : files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
 }
 
-/** Ask a short-lived worker to safely extract one selected user ZIP. */
+/**
+ * Extract one selected ZIP in a cancellable worker with a shared retention budget.
+ * @param {File} zipFile Disk-backed user selection, never a full archive buffer.
+ * @param {{uploadLimitBytes:number,remainingArchiveBytes:number,signal?:AbortSignal|null}} config Effective per-file/selection limits and cancellation.
+ * @returns {Promise<{entries:Array<{name:string,path:string,blob:Blob}>,skipped:number,totalEntries:number,reasons:Record<string,number>}>} Bounded checked images and categorized skipped entries.
+ */
 function extractBrowserUploadZip(zipFile, config) {
     return new Promise((resolve, reject) => {
         const worker = new Worker(workerScriptUrl);
         /** Release the archive worker after its single extraction request. */
-        const finish = () => worker.terminate();
+        const finish = () => {
+            worker.terminate();
+            config.signal?.removeEventListener('abort', abort);
+        };
+        const abort = () => {
+            finish();
+            reject(new Error(i18n('admin.icloud.cancelled')));
+        };
+        if (config.signal?.aborted) { abort(); return; }
+        config.signal?.addEventListener('abort', abort, {once: true});
         worker.addEventListener('message', (event) => {
             const data = event.data || {};
             finish();
             if (!data.ok) {
-                reject(new Error(data.error || i18n('admin.browser_upload.zip_extract_failed', 'The selected ZIP archive could not be read.')));
+                const code = ['zip64', 'entries', 'directory', 'size', 'retention', 'deflate'].includes(data.code) ? data.code : 'invalid';
+                reject(new Error(i18n('admin.icloud.zip_' + code)));
                 return;
             }
             resolve(data.result || {entries: [], skipped: 0, totalEntries: 0});
@@ -997,13 +1039,18 @@ function extractBrowserUploadZip(zipFile, config) {
             limits: {
                 maximumEntries: 10000,
                 maximumEntryBytes: Number(config.uploadLimitBytes || 8 * 1024 * 1024),
+                maximumRetainedBytes: config.remainingArchiveBytes,
                 maximumTotalBytes: Math.min(2 * 1024 * 1024 * 1024, Math.max(Number(config.uploadLimitBytes || 1), Number(config.uploadLimitBytes || 1) * 1000)),
             },
         });
     });
 }
 
-/** Return the browser MIME hint for one extracted supported filename. */
+/**
+ * Return the existing MIME hint for an extracted supported image name.
+ * @param {string} filename Checked image filename.
+ * @returns {string} JPEG/PNG/WebP/GIF MIME, or the binary fallback.
+ */
 function browserUploadMimeFromFilename(filename) {
     const extension = String(filename || '').split('.').pop()?.toLowerCase() || '';
     return {jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'}[extension] || 'application/octet-stream';
@@ -1136,7 +1183,7 @@ function browserUploadSessionId() {
  * Run files through a bounded worker pool.
  *
  * @param {File[]} files Selected files.
- * @param {{workerCount?:number,workerItemIdOffset?:number,thumbnailSizes:number[],thumbnailFormats:string[],jpegQuality:number,webpQuality:number}} config Decoder settings; the item offset defaults to zero and keeps streamed PDF thumbnail paths unique.
+ * @param {{workerCount?:number,workerItemIdOffset?:number,thumbnailSizes:number[],thumbnailFormats:string[],jpegQuality:number,webpQuality:number,signal?:AbortSignal|null}} config Decoder settings and cancellation; the item offset keeps streamed PDF thumbnail paths unique.
  * @param {PreparedWorkerImageCallback} onItem Persist each original and derivative result with decoded-file counts.
  * @return {Promise<void>} Result value for the caller.
  */
@@ -1157,6 +1204,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
          */
         const stopWorkers = () => {
             workers.forEach((worker) => worker.terminate());
+            config.signal?.removeEventListener('abort', abort);
         };
         /**
          * Handle reject once.
@@ -1171,8 +1219,12 @@ function processFilesWithWorkerPool(files, config, onItem) {
             }
             rejected = true;
             stopWorkers();
-            reject(error instanceof Error ? error : new Error(String(error)));
+            // Let admitted IndexedDB writes settle before abort cleanup deletes them.
+            Promise.allSettled([...pendingItemWrites]).then(() => reject(error instanceof Error ? error : new Error(String(error))));
         };
+        const abort = () => rejectOnce(new Error(i18n('admin.icloud.cancelled')));
+        if (config.signal?.aborted) { abort(); return; }
+        config.signal?.addEventListener('abort', abort, {once: true});
         /**
          * Resolve after every worker result has also reached temporary storage.
          *
@@ -1239,6 +1291,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
             }
             workers.push(worker);
             worker.addEventListener('message', (event) => {
+                if (rejected) return;
                 const data = event.data || {};
                 if (!data.ok) {
                     rejectOnce(new Error(data.error || i18n('admin.browser_upload.worker_failed', 'Browser image preparation worker failed.')));
@@ -1536,19 +1589,25 @@ function openPreparedBatchStore() {
 }
 
 /**
- * Run one IndexedDB object store request.
+ * Describe an IndexedDB operation on one prepared-image/batch store.
+ * @typedef {(store: IDBObjectStore) => IDBRequest<Blob|PreparedWorkerImage|IDBValidKey|undefined>} IndexedDbOperation
+ */
+/**
+ * Run one IndexedDB object store request and wait for its transaction to commit.
  *
  * @param {IDBDatabase} database Database connection.
  * @param {IDBTransactionMode} mode Transaction mode.
- * @param {(store: IDBObjectStore) => IDBRequest} operation Store operation.
- * @return {Promise<*>} Request result.
+ * @param {IndexedDbOperation} operation Prepared-image read/write/delete request factory.
+ * @return {Promise<Blob|PreparedWorkerImage|IDBValidKey|undefined>} Stored image/batch, write key or absent/delete result, only after transaction commit.
  */
 function indexedDbRequest(database, mode, operation) {
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(tempStoreName, mode);
         const store = transaction.objectStore(tempStoreName);
         const request = operation(store);
-        request.addEventListener('success', () => resolve(request.result));
+        transaction.addEventListener('complete', () => resolve(request.result));
+        transaction.addEventListener('abort', () => reject(transaction.error || new Error(i18n('admin.icloud.storage_failed'))));
+        transaction.addEventListener('error', () => reject(transaction.error || new Error(i18n('admin.icloud.storage_failed'))));
         request.addEventListener('error', () => reject(request.error || new Error('IndexedDB request failed.')));
     });
 }
@@ -1654,7 +1713,7 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
         const abortRequest = () => xhr.abort();
         if (options.signal) {
             if (options.signal.aborted) {
-                reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+                reject(new Error(i18n('admin.icloud.cancelled')));
                 return;
             }
             options.signal.addEventListener('abort', abortRequest, {once: true});
@@ -1686,7 +1745,7 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
             reject(failure);
         });
         xhr.addEventListener('abort', () => {
-            const failure = new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+            const failure = new Error(i18n('admin.icloud.cancelled'));
             failure.retryable = false;
             reject(failure);
         }, {once: true});
@@ -1924,7 +1983,7 @@ function delay(milliseconds, signal = null) {
         const abort = () => {
             if (timer !== null) window.clearTimeout(timer);
             if (signal) signal.removeEventListener('abort', abort);
-            reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+            reject(new Error(i18n('admin.icloud.cancelled')));
         };
         if (signal?.aborted) {
             abort();

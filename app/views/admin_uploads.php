@@ -43,6 +43,7 @@ use function Gallery\Services\t;
  */
 function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
 {
+    view_render_admin_icloud_source();
     echo '<p class="muted">' . e(t('admin.upload.clipboard_hint', 'Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.')) . '</p>';
     echo '<p class="muted" role="status" data-gallery-upload-selection-status data-added="' . e(t('admin.upload.clipboard_added', 'Added {count} clipboard image(s). Submit the form to upload.')) . '" data-unavailable="' . e(t('admin.upload.clipboard_unavailable', 'This browser could not add clipboard images. Choose or drop files instead.')) . '"></p>';
     // Only enhanced right-side drawer forms get a local thumbnail queue.
@@ -76,6 +77,31 @@ function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
         }
         echo '></div>';
     }
+}
+
+/**
+ * Render localized assisted Apple export guidance within the existing upload form.
+ * @return void Emit unnamed browser-local URL controls, never bearer transport fields.
+ */
+function view_render_admin_icloud_source(): void
+{
+    $labels = ['album', 'link', 'assisted', 'invalid', 'files-required', 'browser-required', 'private-required'];
+    echo '<details class="admin-side-panel-field-wide" data-icloud-source';
+    foreach ($labels as $label) {
+        echo ' data-' . $label . '="' . e(t('admin.icloud.' . str_replace('-', '_', $label))) . '"';
+    }
+    echo '><summary>' . e(t('admin.icloud.title')) . '</summary>';
+    echo '<label><span>' . e(t('admin.icloud.url')) . '</span><input type="url" maxlength="2048" data-icloud-url autocomplete="off" spellcheck="false"></label>';
+    echo '<button type="button" data-icloud-validate>' . e(t('admin.icloud.validate')) . '</button> ';
+    echo '<button type="button" data-icloud-clear>' . e(t('admin.icloud.clear')) . '</button>';
+    echo '<p role="status" aria-live="polite" data-icloud-status></p>';
+    echo '<div data-icloud-guidance hidden><p data-icloud-product="photos-link">' . e(t('admin.icloud.link_help')) . '</p>';
+    echo '<p data-icloud-product="shared-album">' . e(t('admin.icloud.album_help')) . '</p>';
+    echo '<p>' . e(t('admin.icloud.import_help')) . '</p><p>' . e(t('admin.icloud.unavailable_help')) . '</p><p>' . e(t('admin.icloud.privacy')) . '</p></div>';
+    echo '<button type="button" data-icloud-open hidden>' . e(t('admin.icloud.open')) . '</button> ';
+    echo '<button type="button" data-icloud-cancel hidden>' . e(t('admin.icloud.cancel')) . '</button>';
+    echo '<button type="submit" data-icloud-retry hidden>' . e(t('admin.icloud.retry')) . '</button>';
+    echo '<noscript><p>' . e(t('admin.icloud.no_js')) . '</p></noscript></details>';
 }
 
 /** @param array<string,mixed> $viewModel Controller-prepared full upload page. */

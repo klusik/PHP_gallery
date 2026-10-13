@@ -32,6 +32,24 @@
  *   2026-06-10
  */
 
+/**
+ * Bound retained extracted originals until the existing upload batcher stages them.
+ * Type: number.
+ * Units: bytes. Scope: one selection containing user ZIP archives.
+ * Consumers: extractUploadZipEntries and its coordinator's remaining retention budget.
+ * Rationale: the legacy File-array handoff must reject larger selections before
+ * extraction rather than retain gigabytes; use smaller Apple export selections.
+ */
+const uploadZipRetainedBytes = 64 * 1024 * 1024;
+/**
+ * Bound metadata allocated while reading the classic ZIP central directory.
+ * Type: number.
+ * Units: bytes. Scope: one selected archive.
+ * Consumers: findZipEndRecord.
+ * Rationale: 10,000 entries do not bound arbitrary comments/extra fields by themselves.
+ */
+const uploadZipDirectoryBytes = 4 * 1024 * 1024;
+
 self.addEventListener('message', (event) => {
     const payload = event.data || {};
     const action = String(payload.action || 'prepare');
@@ -67,6 +85,7 @@ self.addEventListener('message', (event) => {
                 ok: false,
                 id: payload.id,
                 error: error instanceof Error ? error.message : String(error),
+                code: String(error.code || 'invalid'),
             });
         });
         return;
@@ -944,29 +963,34 @@ async function parseStoreOnlyZipBlob(zipBlob) {
  * Extract supported images from a standard user-selected ZIP archive.
  *
  * Central-directory sizes are authoritative, so data descriptors do not make
- * entry boundaries ambiguous. Unsupported and unsafe entries are counted and
- * skipped instead of being sent to the server.
+ * entry boundaries ambiguous. Unsupported and unsafe entries have counted reasons.
+ * Retained images and inflated payloads are bounded before allocation.
  *
  * @param {Blob} zipBlob User-selected ZIP payload.
- * @param {Record<string, *>} limits Bounded extraction limits.
- * @return {Promise<{entries: Array<Record<string, *>>, skipped: number, totalEntries: number}>} Extraction result.
+ * @param {{maximumEntries?:number,maximumEntryBytes?:number,maximumTotalBytes?:number,maximumRetainedBytes?:number}} limits Caller limits, clamped by worker safety ceilings.
+ * @return {Promise<{entries:Array<{name:string,path:string,blob:Blob}>,skipped:number,totalEntries:number,reasons:Record<string,number>}>} Ordered valid images and rejection counts; malformed archives reject.
  */
 async function extractUploadZipEntries(zipBlob, limits) {
     if (!(zipBlob instanceof Blob)) throw new Error('ZIP extraction expected a Blob payload.');
     const maximumEntries = Math.max(1, Math.min(Number(limits.maximumEntries || 10000), 10000));
     const maximumEntryBytes = Math.max(1, Number(limits.maximumEntryBytes || 64 * 1024 * 1024));
     const maximumTotalBytes = Math.max(maximumEntryBytes, Math.min(Number(limits.maximumTotalBytes || 2 * 1024 * 1024 * 1024), 2 * 1024 * 1024 * 1024));
+    const maximumRetainedBytes = Math.max(0, Math.min(Number(limits.maximumRetainedBytes ?? uploadZipRetainedBytes), uploadZipRetainedBytes));
     const end = await findZipEndRecord(zipBlob);
-    if (end.entryCount > maximumEntries) throw new Error(`ZIP contains too many entries (${end.entryCount}; maximum ${maximumEntries}).`);
+    if (end.entryCount > maximumEntries) throw uploadZipFailure('entries', 'ZIP contains too many entries.');
     const centralBlob = zipBlob.slice(end.centralOffset, end.centralOffset + end.centralSize);
     const centralBytes = new Uint8Array(await centralBlob.arrayBuffer());
     const centralView = new DataView(centralBytes.buffer);
     const entries = [];
     let skipped = 0;
     let totalUncompressed = 0;
+    let retainedBytes = 0;
+    const seenPaths = new Set();
+    const reasons = {};
+    const skip = reason => { skipped++; reasons[reason] = Number(reasons[reason] || 0) + 1; };
     let offset = 0;
     for (let index = 0; index < end.entryCount; index++) {
-        if (offset + 46 > centralBytes.length || centralView.getUint32(offset, true) !== 0x02014b50) throw new Error('ZIP central directory is truncated or invalid.');
+        if (offset + 46 > centralBytes.length || centralView.getUint32(offset, true) !== 0x02014b50) throw uploadZipFailure('invalid', 'ZIP central directory is truncated or invalid.');
         const flags = centralView.getUint16(offset + 8, true);
         const method = centralView.getUint16(offset + 10, true);
         const expectedCrc = centralView.getUint32(offset + 16, true);
@@ -976,36 +1000,49 @@ async function extractUploadZipEntries(zipBlob, limits) {
         const extraLength = centralView.getUint16(offset + 30, true);
         const commentLength = centralView.getUint16(offset + 32, true);
         const localOffset = centralView.getUint32(offset + 42, true);
+        const disk = centralView.getUint16(offset + 34, true);
+        const unixMode = centralView.getUint32(offset + 38, true) >>> 16;
         const nextOffset = offset + 46 + nameLength + extraLength + commentLength;
-        if (nextOffset > centralBytes.length) throw new Error('ZIP central-directory entry boundary is invalid.');
+        if (nextOffset > centralBytes.length) throw uploadZipFailure('invalid', 'ZIP central-directory entry boundary is invalid.');
         const path = decodeUploadZipName(centralBytes.slice(offset + 46, offset + 46 + nameLength), (flags & 0x0800) !== 0);
         offset = nextOffset;
-        if (!safeUploadZipImagePath(path) || (flags & 0x0001) !== 0 || ![0, 8].includes(method)) {
-            skipped++;
+        if (disk !== 0) throw uploadZipFailure('invalid', 'Multi-disk ZIP entries are not supported.');
+        if ([compressedSize, uncompressedSize, localOffset].includes(0xffffffff)) throw uploadZipFailure('zip64', 'ZIP64 archives are not supported by browser upload yet.');
+        if (!safeUploadZipImagePath(path) || (unixMode & 0xf000) === 0xa000) {
+            const unsupported = /\.(?:heic|heif|dng|raw|cr2|nef|arw)$/i.test(path) ? 'raw'
+                : /\.(?:mp4|mov|m4v)$/i.test(path) ? 'video' : 'other';
+            skip(unsupported);
             continue;
         }
-        if ([compressedSize, uncompressedSize, localOffset].includes(0xffffffff) || uncompressedSize <= 0 || uncompressedSize > maximumEntryBytes) {
-            skipped++;
-            continue;
-        }
+        if (seenPaths.has(path)) { skip('duplicate'); continue; }
+        seenPaths.add(path);
+        if ((flags & 0x0001) !== 0 || ![0, 8].includes(method)) { skip('encoding'); continue; }
+        if (uncompressedSize <= 0 || uncompressedSize > maximumEntryBytes) { skip('size'); continue; }
         if (uncompressedSize > compressedSize * 250 + 1024 * 1024) {
-            skipped++;
+            skip('size');
             continue;
         }
         totalUncompressed += uncompressedSize;
-        if (totalUncompressed > maximumTotalBytes) throw new Error('ZIP expanded data exceeds the browser extraction safety limit.');
+        if (totalUncompressed > maximumTotalBytes) throw uploadZipFailure('size', 'ZIP expanded data exceeds the browser extraction safety limit.');
+        if (retainedBytes + uncompressedSize > maximumRetainedBytes) throw uploadZipFailure('retention', 'ZIP images exceed the bounded extraction budget. Select smaller archives.');
         const payload = await extractUploadZipPayload(zipBlob, localOffset, compressedSize, uncompressedSize, method);
         const payloadBytes = new Uint8Array(await payload.arrayBuffer());
         if (crc32(payloadBytes) !== expectedCrc || !detectImageFormatFromSignature(payloadBytes.slice(0, 16))) {
-            skipped++;
+            skip('integrity');
             continue;
         }
         entries.push({name: uploadZipBasename(path), path, blob: new Blob([payloadBytes])});
+        retainedBytes += uncompressedSize;
     }
-    return {entries, skipped, totalEntries: end.entryCount};
+    if (offset !== centralBytes.length) throw uploadZipFailure('invalid', 'ZIP central-directory size is inconsistent.');
+    return {entries, skipped, totalEntries: end.entryCount, reasons};
 }
 
-/** Locate and validate the classic single-disk ZIP end record. */
+/**
+ * Locate the bounded classic single-disk ZIP end record and reject ZIP64.
+ * @param {Blob} zipBlob User-selected disk-backed archive reference.
+ * @returns {Promise<{entryCount:number,centralSize:number,centralOffset:number}>} Checked directory bounds; rejects malformed or oversized metadata.
+ */
 async function findZipEndRecord(zipBlob) {
     const tailLength = Math.min(zipBlob.size, 65557);
     const tail = new Uint8Array(await zipBlob.slice(zipBlob.size - tailLength).arrayBuffer());
@@ -1018,15 +1055,22 @@ async function findZipEndRecord(zipBlob) {
         const entryCount = view.getUint16(offset + 10, true);
         const centralSize = view.getUint32(offset + 12, true);
         const centralOffset = view.getUint32(offset + 16, true);
-        if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) throw new Error('Multi-disk ZIP archives are not supported.');
-        if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) throw new Error('ZIP64 archives are not supported by browser upload yet.');
-        if (centralOffset + centralSize > zipBlob.size) throw new Error('ZIP central-directory boundary is invalid.');
+        if (offset + 22 + view.getUint16(offset + 20, true) !== tail.length) continue;
+        if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) throw uploadZipFailure('invalid', 'Multi-disk ZIP archives are not supported.');
+        if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) throw uploadZipFailure('zip64', 'ZIP64 archives are not supported by browser upload yet.');
+        if (centralSize > uploadZipDirectoryBytes) throw uploadZipFailure('directory', 'ZIP directory exceeds the browser metadata limit.');
+        if (centralOffset + centralSize !== zipBlob.size - tailLength + offset) throw uploadZipFailure('invalid', 'ZIP central-directory boundary is invalid.');
         return {entryCount, centralSize, centralOffset};
     }
-    throw new Error('ZIP end record was not found. The archive may be damaged.');
+    throw uploadZipFailure('invalid', 'ZIP end record was not found. The archive may be damaged.');
 }
 
-/** Decode a ZIP path using UTF-8 or the browser's legacy Western fallback. */
+/**
+ * Decode a ZIP path using UTF-8 or the existing legacy Western fallback.
+ * @param {Uint8Array} bytes Encoded directory name.
+ * @param {boolean} utf8 Whether the ZIP declares UTF-8.
+ * @returns {string} Slash-normalized name, or empty on decoding failure.
+ */
 function decodeUploadZipName(bytes, utf8) {
     try {
         return new TextDecoder(utf8 ? 'utf-8' : 'windows-1252', {fatal: utf8}).decode(bytes).replace(/\\/g, '/');
@@ -1035,35 +1079,82 @@ function decodeUploadZipName(bytes, utf8) {
     }
 }
 
-/** Return whether an archive path is safe and has a supported image suffix. */
+/**
+ * Reject absolute/traversing/hidden paths and unsupported image suffixes.
+ * @param {string} path Decoded directory path.
+ * @returns {boolean} True only for a relative supported image path.
+ */
 function safeUploadZipImagePath(path) {
-    const normalized = String(path || '').replace(/^\/+/, '');
+    const normalized = String(path || '');
+    if (/^(?:\/|[A-Za-z]:)/.test(normalized)) return false;
     if (normalized === '' || normalized.endsWith('/') || normalized.includes('\0')) return false;
     const segments = normalized.split('/');
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..' || segment.startsWith('.')) || segments[0] === '__MACOSX') return false;
     return /\.(?:jpe?g|png|webp|gif)$/i.test(normalized);
 }
 
-/** Return only the final safe filename component of an archive path. */
+/**
+ * Return the filename component after the caller checks the complete path.
+ * @param {string} path Checked relative archive path.
+ * @returns {string} Basename, or a neutral name when absent.
+ */
 function uploadZipBasename(path) {
     return String(path || '').split('/').pop() || 'archive-image';
 }
 
-/** Extract and optionally inflate one central-directory-described ZIP entry. */
+/**
+ * Extract one ZIP payload, stopping inflation before its declared size is exceeded.
+ * @param {Blob} zipBlob Archive reference; never read as a complete buffer.
+ * @param {number} localOffset Local header byte offset.
+ * @param {number} compressedSize Central-directory compressed byte length.
+ * @param {number} uncompressedSize Preflighted maximum expanded byte length.
+ * @param {number} method Stored (0) or Deflate (8) encoding.
+ * @returns {Promise<Blob>} One bounded payload; rejects corruption or unsupported browser inflation.
+ */
 async function extractUploadZipPayload(zipBlob, localOffset, compressedSize, uncompressedSize, method) {
     const header = new Uint8Array(await zipBlob.slice(localOffset, localOffset + 30).arrayBuffer());
-    if (header.length !== 30 || new DataView(header.buffer).getUint32(0, true) !== 0x04034b50) throw new Error('ZIP local header is invalid.');
+    if (header.length !== 30 || new DataView(header.buffer).getUint32(0, true) !== 0x04034b50) throw uploadZipFailure('invalid', 'ZIP local header is invalid.');
     const view = new DataView(header.buffer);
     const dataStart = localOffset + 30 + view.getUint16(26, true) + view.getUint16(28, true);
-    if (dataStart + compressedSize > zipBlob.size) throw new Error('ZIP entry payload boundary is invalid.');
+    if (view.getUint16(8, true) !== method || (view.getUint16(6, true) & 1) !== 0 || dataStart + compressedSize > zipBlob.size) throw uploadZipFailure('invalid', 'ZIP entry payload boundary or encoding is invalid.');
     const compressed = zipBlob.slice(dataStart, dataStart + compressedSize);
     let payload = compressed;
     if (method === 8) {
-        if (!self.DecompressionStream) throw new Error('This browser cannot decompress Deflate ZIP entries.');
-        payload = await new Response(compressed.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+        if (!self.DecompressionStream) throw uploadZipFailure('deflate', 'This browser cannot decompress Deflate ZIP entries.');
+        let inflater;
+        try { inflater = new DecompressionStream('deflate-raw'); }
+        catch (error) { throw uploadZipFailure('deflate', 'This browser cannot decompress Deflate ZIP entries.'); }
+        const reader = compressed.stream().pipeThrough(inflater).getReader();
+        const chunks = [];
+        let size = 0;
+        try {
+            while (true) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                size += chunk.value.byteLength;
+                if (size > uncompressedSize) throw uploadZipFailure('size', 'ZIP inflation exceeded its declared size.');
+                chunks.push(chunk.value);
+            }
+            payload = new Blob(chunks);
+        } finally {
+            await reader.cancel().catch(() => {});
+            reader.releaseLock();
+        }
     }
-    if (payload.size !== uncompressedSize) throw new Error('ZIP entry expanded to an unexpected size.');
+    if (payload.size !== uncompressedSize) throw uploadZipFailure('invalid', 'ZIP entry expanded to an unexpected size.');
     return payload;
+}
+
+/**
+ * Attach a non-sensitive error category for the coordinator's localized message.
+ * @param {string} code Stable resource/format category, never a filename or URL.
+ * @param {string} detail Technical description for deterministic worker fixtures.
+ * @returns {Error & {code:string}} Classified worker failure without source secrets.
+ */
+function uploadZipFailure(code, detail) {
+    const error = new Error(detail);
+    error.code = code;
+    return error;
 }
 
 /**

@@ -690,6 +690,19 @@ In~the~right-hand Admin \ui{Upload photos} panel, paste successive screenshots w
 
 For~a~large event, upload in~meaningful groups. Smaller groups make errors easier to~identify and~allow titles, ordering, and~visibility to~be~reviewed incrementally.
 
+
+% iCloud assisted import contract
+\subsection{Import photos from iCloud with assistance}
+Open \ui{Import from iCloud (assisted)} in~the~existing upload form, paste a~public sharing URL and~choose \ui{Recognize link}. The~form distinguishes an~iCloud Photos Link at~\url{https://share.icloud.com/photos/} from a~public Shared Album at~\url{https://photos.icloud.com/shared/album/}. Recognition checks the~URL format only: it~does not~verify availability, expiry or~Apple's export format. Photos Links normally expire after 30 days; Shared Albums have an~owner-controlled lifetime, with a~30-day limit only when made temporary.
+
+Choose \ui{Open iCloud}. On~a~Photos Link, download the~photos and~choose \ui{Most Compatible} if~Apple offers it~under \ui{More Download Options}. On~a~public Shared Album, use \ui{Download album} and~\ui{Download Zip} when offered; that product may~omit the~compatibility choice. Check the~received files. JPEG is~compatible output, not~a~preserved RAW original, and~capture/GPS metadata or~Apple edits are~not~guaranteed. Gallery performs no~automatic download or~conversion. An~expired, revoked or~sign-in-only link needs a~new public link from the~owner. If~Apple offers individual downloads instead of~a~ZIP, select the~supported images directly.
+
+Return to~the~same form, select or~drop the~downloaded ZIPs or~JPEG/PNG/WebP/GIF images, choose the~target gallery and~keep browser preparation enabled. Submit explicitly to~start the~existing image preparation, small ZIP batches and~server confirmation. A~new gallery must be~Private or~Unpublished; check the~visibility of~an~existing gallery because its current policy also applies to~partially imported photographs. Unsupported HEIC/HEIF/DNG/RAW, MP4/MOV, Live Photo motion and~sidecar entries are~counted by~reason, not~renamed or~silently converted.
+
+The~operating system stores Apple's download; selecting its File does not~read the~whole archive into JavaScript memory. Gallery reads bounded directory and~entry slices. Stored and~Deflate archives are~supported; ZIP64, multi-disk or~damaged structures fail explicitly. Limits include 10,000 entries, 4~MiB directory metadata, the~effective server per-image limit, a~2~GiB expanded-data ceiling and~64~MiB retained originals across a~selection containing ZIPs. The~64~MiB limit is~not~a~measurement of~total browser memory: decoded images and~thumbnails also consume memory. Export and~import smaller selections when a~limit is~reached. No~OPFS copy is~created: it~cannot capture another origin's download. Existing IndexedDB storage holds prepared upload packages; insufficient quota stops preparation before server upload.
+
+Progress reports archive checks, preparation, actual batch transfers and~finalization, without claiming a~Gallery download percentage. \ui{Cancel import} stops local work and~the~active prepared request; already accepted photographs remain. Keep the~same form open and~choose \ui{Retry the~same import} after an~uncertain response or~cancellation. The~existing session and~batch identities reconcile the~original result without duplicate insertion. Successful acknowledgments remove temporary packages. Closing the~tab loses in-page retry ownership; no~background import or~automatic restart is~promised. The~downloaded file stays on~your device until you~delete it. The~bearer URL is~kept only in~the~form's memory, cleared from its input after recognition and~never sent to~Gallery, persisted in~drafts or~placed in~a~gallery description. Sign in~to~Apple only on~its official page; never provide Apple credentials to~Gallery.
+
 \subsection{Write useful photo titles}
 \index{photo title}
 \index{captions}

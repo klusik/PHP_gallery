@@ -686,6 +686,19 @@ V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat
 
 U~velké akce nahrávejte po smysluplných skupinách. Menší skupiny usnadňují identifikaci chyb a~umožňují průběžnou kontrolu názvů, pořadí a~viditelnosti.
 
+
+% iCloud assisted import contract
+\subsection{Asistovaný import fotografií z~iCloudu}
+Ve~stávajícím formuláři nahrávání otevřete \ui{Import z~iCloudu (s~asistencí)}, vložte veřejný odkaz a~zvolte \ui{Rozpoznat odkaz}. Formulář rozlišuje odkaz na~Fotky na~iCloudu ve~tvaru \url{https://share.icloud.com/photos/} a~veřejné sdílené album \url{https://photos.icloud.com/shared/album/}. Kontroluje pouze formát URL, nikoli dostupnost, expiraci či formát exportu Applu. Odkazy na~fotografie obvykle vyprší po~30 dnech; životnost sdíleného alba určuje vlastník, s~30denním limitem pouze u~dočasného alba.
+
+Zvolte \ui{Otevřít iCloud}. U~odkazu na~fotografie stáhněte snímky a~vyberte \ui{Nejkompatibilnější}, pokud Apple tuto volbu nabízí v~\ui{Dalších možnostech stahování}. U~veřejného sdíleného alba použijte \ui{Stáhnout album} a~\ui{Download Zip}, jsou-li nabízeny; tento typ sdílení nemusí volbu kompatibility obsahovat. Zkontrolujte získané soubory. JPEG je kompatibilní výstup, nikoli zachovaný originál RAW; metadata pořízení/GPS ani úpravy z~Applu nejsou zaručeny. Galerie nestahuje ani nekonvertuje automaticky. Při vypršení, odvolání či požadavku na~přihlášení si~vyžádejte nový veřejný odkaz od~vlastníka. Nabízí-li Apple jednotlivé soubory místo ZIPu, vyberte podporované obrázky přímo.
+
+Vraťte se~do~stejného formuláře, vyberte nebo přetáhněte stažené ZIPy či obrázky JPEG/PNG/WebP/GIF, zvolte cílovou galerii a~ponechte přípravu v~prohlížeči zapnutou. Výslovným odesláním spustíte stávající přípravu obrázků, malé dávky ZIP a~potvrzování serveru. Nová galerie musí být Soukromá nebo Nepublikovaná; u~existující ověřte viditelnost, protože její pravidla platí i~pro částečně importované fotografie. Nepodporované HEIC/HEIF/DNG/RAW, MP4/MOV, pohyblivé součásti Live Photo a~doprovodné soubory se~počítají podle důvodu přeskočení, nepřejmenovávají ani skrytě nekonvertují.
+
+Stažení Applu uloží operační systém; výběr souboru File nenačítá celý archiv do~paměti JavaScriptu. Galerie čte omezené části adresáře a~jednotlivých položek. Podporuje Stored a~Deflate; ZIP64, vícediskové či poškozené struktury výslovně odmítá. Limity zahrnují 10~000 položek, 4~MiB metadat adresáře, účinný serverový limit obrázku, strop 2~GiB rozbalených dat a~64~MiB uchovávaných originálů za~celý výběr obsahující ZIP. Limit 64~MiB není měřením celkové paměti prohlížeče: paměť potřebují také dekódované obrázky a~náhledy. Při překročení limitu exportujte a~importujte menší výběry. Kopie v~OPFS nevzniká, protože OPFS nedokáže zachytit stažení z~jiné domény. Připravené balíčky ukládá stávající IndexedDB; nedostatečná kvóta zastaví přípravu před uploadem na~server.
+
+Průběh ukazuje kontrolu archivů, přípravu, skutečné přenosy dávek a~dokončení, nikoli smyšlené procento stahování Galerií. \ui{Zrušit import} zastaví místní práci a~aktivní požadavek s~dávkou; již přijaté fotografie zůstávají. Po~nejistém výsledku nebo zrušení ponechte stejný formulář otevřený a~zvolte \ui{Opakovat stejný import}. Stávající identita relace a~dávek ověří původní výsledek bez duplicitního vložení. Úspěšně potvrzené balíčky se~z~dočasného úložiště odstraní. Zavření karty ztratí vlastnictví opakování v~dané stránce; import na~pozadí ani automatický restart nejsou slíbeny. Stažený soubor zůstává na~zařízení, dokud jej nesmažete. Odkaz poskytující přístup zůstává pouze v~paměti formuláře, po~rozpoznání se~z~pole vymaže a~neposílá se~Galerii, neukládá do~konceptů ani popisu galerie. K~Applu se~přihlašujte pouze na~jeho oficiální stránce; Galerii nikdy nesdělujte přihlašovací údaje Applu.
+
 \subsection{Psaní užitečných názvů fotografií}
 \index{n00105@název fotografie}
 \index{p00142@popisky}

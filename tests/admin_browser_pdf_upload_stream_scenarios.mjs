@@ -310,7 +310,7 @@ assert.equal(retryBatcherHarness.store.has('retry-session-prepared-000000'), fal
 assert.equal((await retryBatcher.finish()).length, 1, 'Retry completion does not repackage the trailing item from a stale pending reference.');
 
 const uploaderSource = await readFile(new URL('../public/assets/gallery-modules/admin-browser-upload.js', import.meta.url), 'utf8');
-assert.match(uploaderSource, /processFilesWithWorkerPool\(files, processingConfig/, 'Classic FileList browser uploads still use the existing worker path.');
+assert.match(uploaderSource, /processFilesWithWorkerPool\(files, \{\.\.\.processingConfig, signal\}/, 'Classic FileList browser uploads retain the existing worker path with explicit optional cancellation.');
 assert.match(uploaderSource, /const batches = await batcher\.finish\(\)/, 'Classic browser uploads still finish their existing ZIP batcher.');
 assert.match(uploaderSource, /options\.signal\.addEventListener\('abort', abortRequest/, 'Conversion cancellation aborts an in-flight prepared-batch request.');
 

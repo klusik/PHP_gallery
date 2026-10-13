@@ -43,7 +43,8 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026100
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261013-pdf-upload-optin-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261013-icloud-v1';
+import {setupIcloudSources, beginIcloudUpload, endIcloudUpload} from './admin-icloud-source.js?v=20261013-icloud-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
@@ -199,6 +200,7 @@ import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQ
 export function setupGalleryUploadProgress() {
     setupGalleryUploadClipboard();
     setupGalleryUploadPreviews();
+    setupIcloudSources();
     document.querySelectorAll('[data-gallery-upload-form]').forEach(/** Bind each mounted upload form at most once. @param {Element} form Candidate upload form. @return {void} Marks valid forms bound before installing submission handling. */ (form) => {
         if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;
@@ -225,6 +227,7 @@ export function setupGalleryUploadProgress() {
 async function runGalleryUpload(form) {
     if (adminOperationIsRunning(form)) return;
     let operation = null;
+    let completed = false;
     const owner = captureAdminPanelOwner(form.closest('[data-admin-side-panel]'));
     // progress stores state or configuration for the gallery front-end flow.
     const progress = ensureThumbnailProgress(form);
@@ -234,7 +237,7 @@ async function runGalleryUpload(form) {
     // Disable queue actions during transport without rewriting their short labels.
     const queueButtons = Array.from(form.querySelectorAll('[data-upload-queue-action]')).map(button => ({button, disabled: button.disabled}));
     queueButtons.forEach(({button}) => { button.disabled = true; });
-    const buttons = Array.from(form.querySelectorAll('button:not([data-upload-queue-action]), input[type="submit"]'));
+    const buttons = Array.from(form.querySelectorAll('button:not([data-upload-queue-action]):not([data-icloud-cancel]), input[type="submit"]'));
     buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
         if (button instanceof HTMLButtonElement) {
@@ -243,6 +246,7 @@ async function runGalleryUpload(form) {
         }
     });
     try {
+        const cloudSignal = beginIcloudUpload(form);
         // createThumbnails stores state or configuration for the gallery front-end flow.
         const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
         // result stores state or configuration for the gallery front-end flow.
@@ -253,7 +257,7 @@ async function runGalleryUpload(form) {
         }
         operation = beginAdminOperation(form, useBrowserUpload ? 'prepared' : 'classic', selectedGalleryUploadFiles(form));
         if (useBrowserUpload) {
-            result = await runBrowserGalleryUpload(form, progress, operation);
+            result = await runBrowserGalleryUpload(form, progress, operation, cloudSignal);
         }
         // Checked browser preparation is a strict execution choice whenever files
         // are selected. The browser helper may ask for the classic path only for an
@@ -264,6 +268,7 @@ async function runGalleryUpload(form) {
         }
         requireCanonicalUploadMutationResult(result);
         finishAdminOperation(operation, true);
+        completed = true;
         // Only a canonical acknowledged upload may retire in-memory source files.
         clearGalleryUploadQueue(form);
         if (createThumbnails) {
@@ -293,6 +298,7 @@ async function runGalleryUpload(form) {
     } catch (error) {
         updateBasicProgress(progress, 100, error.message || i18n('admin.operations.upload_failed', 'Upload failed.'));
     } finally {
+        endIcloudUpload(form, completed);
         finishAdminOperation(operation);
         form.classList.remove('is-uploading');
         const selectionLocked = adminOperationOwnsInput(form);

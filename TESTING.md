@@ -1,5 +1,21 @@
 # Testing Guide
 
+Assisted iCloud import uses the centrally registered
+`browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the
+synthetic `browser_upload_zip_worker/icloud_source.mjs` and
+`browser_upload_zip_worker/icloud_upload.mjs` scenario modules. Every assertion
+failure propagates to that owner; no scenario is optional or separately selected.
+The central BASIC evaluator/registry stays byte-identical to protected develop,
+as required by the installed integration authority contract.
+They cover strict source recognition, mounted/re-rendered controls, four locale
+catalogs/manual sources, cancellation, quota, transaction durability, uncertain
+ACK replay, classic Stored/Deflate, CRC/paths/duplicates, ZIP64 rejection,
+metadata/retention limits and bounded reads on sparse 100 MiB/1 GiB/3 GiB sources.
+Sparse sources are not real browser heap/storage measurements. Live Apple export,
+metadata fidelity and desktop/mobile acceptance remain manual evidence in
+`docs/ICLOUD_IMPORT.md`. Existing PDF/manual upload regressions remain required;
+BASIC syntax/documentation alone does not execute these functional fixtures.
+
 The project website has an isolated hosted suite: `php scripts/audit.php --suite=website`.
 It checks the explicit website-only artifact, all eight localized project routes,
 release-bound references and required Chromium at desktop, 390px and 320px widths,

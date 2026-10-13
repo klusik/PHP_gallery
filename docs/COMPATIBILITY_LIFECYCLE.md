@@ -1,5 +1,26 @@
 # Compatibility lifecycle and retirement register
 
+## Assisted iCloud export and bounded classic ZIPs
+
+Owner: `admin-icloud-source.js`, the existing browser uploader and image worker.
+Guided Apple download protects public Photos Links and Shared Albums where no
+supported format-selectable CORS-readable export contract has been verified.
+No Apple credentials or token-bearing server calls are introduced. Retain this
+path until both source products have supported export/format/browser evidence;
+manual selection remains a permanent browser security boundary fallback.
+Usage is **unknown**. The historical Photos fragment spelling and the observed
+Shared Album `#/sc,` redirect are parsed separately without API assumptions.
+
+Classic Stored/Deflate ZIP selection now refuses more than 64 MiB retained
+originals across a ZIP-containing selection and 4 MiB directory metadata. This
+protects the legacy File-array seam from unbounded retention; it changes large
+manual ZIP admission deliberately. Smaller exports and direct supported image
+selection remain available. ZIP64 remains explicitly unsupported. Retirement
+requires a bounded iterator extending the existing worker/batcher, real heap/
+quota measurements and cross-browser acceptance, not merely a larger constant.
+Synthetic source/lifecycle, malformed archive, inflation, replay and PDF
+regressions are registered in the central audit; BASIC does not execute them.
+
 ## PDF conversion generations after target loss
 
 Owner: `app/services/gallery_pdf_conversion.php`. Existing v1 markers omit
