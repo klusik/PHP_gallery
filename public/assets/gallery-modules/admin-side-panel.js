@@ -1138,10 +1138,16 @@ function sidePanelContentFromHtml(html, workflow) {
  * @return {Promise<void>} Loads any scoped Admin catalog, binds controls and establishes the ordinary form's text baseline.
  */
 async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
+    const mountedContent = body.firstElementChild;
+    const originatingPanel = body.closest('[data-admin-side-panel]');
+    const contentOwner = captureAdminPanelOwner(originatingPanel);
+    // Awaited catalog/module assets must never bind another gallery's replacement.
+    const contentIsCurrent = () => body.isConnected && body.firstElementChild === mountedContent && contentOwner.isCurrent();
     const workspace = body.querySelector('[data-admin-i18n-scope]');
     if (workspace instanceof HTMLElement) {
         try { await loadAdminI18nScope(workspace); } catch { workspace.dataset.adminI18nFailed = '1'; }
     }
+    if (!contentIsCurrent()) return;
     setupGalleryUploadProgress();
     setupAdminNestedTabs(body);
     setupAdminGalleryGridControls(body);
@@ -1149,6 +1155,7 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupTagSuggestions(body);
     if (workspace instanceof HTMLElement) {
         const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261003-scoped-i18n-v1');
+        if (!contentIsCurrent()) return;
         setupAdminDatePickers(body);
     }
     setupGallerySearchPickers();

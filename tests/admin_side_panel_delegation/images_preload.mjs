@@ -103,3 +103,8 @@ assert.ok(source.includes('owner.isCurrent()') && source.includes('widget.isConn
 assert.ok(source.includes("payload.gallery_id !== Number(widget.dataset.galleryId)") && source.includes('seen.has(id)'));
 assert.ok(source.includes('imagesPanel.replaceChildren') && !source.includes('form.innerHTML'), 'Photo batches cannot overwrite settings drafts.');
 console.log('Images preload queue: PASS; 0/1/50/500/1000/3001 resources, bounded parallelism, decode/error/timeout and cancellation.');
+
+const panelSource = await readFile(new URL('../../public/assets/gallery-modules/admin-side-panel.js', import.meta.url), 'utf8');
+assert.ok(panelSource.includes('body.firstElementChild === mountedContent') && panelSource.includes('contentOwner.isCurrent()'),
+    'Catalog/module initialization must bind only its original mounted gallery, including replacements within one drawer generation.');
+assert.ok(panelSource.includes('if (!contentIsCurrent()) return;'), 'Awaited assets have an explicit stale-fragment boundary.');
