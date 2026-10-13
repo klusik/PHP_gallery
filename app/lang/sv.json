@@ -1,4 +1,10 @@
 {
+    "admin.gallery_editor.images_preparing": "Förbereder fotografier …",
+    "admin.gallery_editor.images_progress": "Behandlade fotografier: {current} / {total}",
+    "admin.gallery_editor.images_ready": "Fotografierna är klara.",
+    "admin.gallery_editor.images_failed": "{count} miniatyrbilder kunde inte läsas in. Försök läsa in bilderna igen.",
+    "admin.gallery_editor.images_load_error": "Fotografierna kunde inte läsas in. Övriga inställningar är tillgängliga.",
+    "admin.gallery_editor.images_retry": "Läs in bilder igen",
     "admin.theme.overrides.clear_required": "Bekräfta rensning av manuella CSS-regler innan åtgärden skickas.",
     "admin.theme.overrides.clear_check": "Jag bekräftar rensning av manuella CSS-regler",
     "admin.theme.advanced.title": "Avancerat utseende",

@@ -110,9 +110,10 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
  * @param int $imageCount Number of images attached to this gallery.
  * @param string $activeEditTab Tab selected by redirect query state.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @param bool $deferredImages Whether Images is unavailable until drawer preload settles.
  * @return void Emits the editor overview and its tab navigation.
  */
-function admin_edit_gallery_render_overview(array $gallery, int $imageCount, string $activeEditTab, array $capabilities): void
+function admin_edit_gallery_render_overview(array $gallery, int $imageCount, string $activeEditTab, array $capabilities, bool $deferredImages = false): void
 {
     // Only the heading receives an overlay; the editor still owns source fields.
     $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
@@ -125,7 +126,7 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
         ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
-        ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
+        ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount, 'disabled' => $deferredImages],
         ['id' => 'admin-edit-documents', 'label' => t('pdf.documents', 'Documents / PDFs')],
     ];
     if (feature_capability_effective_enabled('metadata_organizer')) {

@@ -872,3 +872,35 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
         return null;
     });
 }
+
+/**
+ * Build an authorized exact 300px thumbnail URL without inspecting or generating media.
+ * Missing derivatives fail explicitly rather than downloading original images.
+ * @param array{id:int|string,updated_at?:string,modified_at?:string,thumbnail_derivative_version?:int|string} $image Persisted media identity and existing cache-version metadata.
+ * @return string Existing protected thumbnail route with read-only exact-size semantics.
+ */
+function thumbnail_editor_preload_url(array $image): string
+{
+    return image_public_asset_url_with_version(url_for('thumb', [
+        'id' => (int) $image['id'], 'size' => 300,
+        'format' => thumbnail_preferred_browser_format(), 'existing_only' => 1,
+    ]), $image);
+}
+
+/**
+ * Build the on-demand editor preview URL from configured sizes without reading source files.
+ * The existing bound policy chooses the closest supported size to the editor's
+ * 900px preference. Ordinary thumbnail serving owns any later click response.
+ * @param array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null} $image Persisted media identity, bounds and cache metadata.
+ * @param array{id:int|string,folder_path:string,visibility?:string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Owning gallery and inherited thumbnail bounds.
+ * @return string Authorized on-demand preview URL, or an empty string if no configured size is admitted.
+ */
+function thumbnail_editor_preview_url(array $image, array $gallery): string
+{
+    $sizes = thumbnail_bound_filter_sizes(thumbnail_sizes(), $image, $gallery);
+    if ($sizes === []) {
+        return '';
+    }
+    usort($sizes, static fn (int $left, int $right): int => abs($left - 900) <=> abs($right - 900));
+    return thumbnail_serving_url($image, $gallery, $sizes[0], thumbnail_preferred_browser_format());
+}

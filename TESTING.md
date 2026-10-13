@@ -1,5 +1,12 @@
 # Testing Guide
 
+Gallery editor Images background preparation is covered by the central PHP
+`admin_gallery_images_deferred_test.php` and the existing Node delegation owner,
+which unconditionally awaits `admin_side_panel_delegation/images_preload.mjs`.
+The protected BASIC registry remains unchanged. These fixtures separate source,
+queue and synthetic orchestration evidence from live browser/hosting acceptance;
+see `docs/ADMIN_IMAGES_PRELOAD.md` for the required measurement boundaries.
+
 Automatic browser-local iCloud import uses the centrally registered
 `browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the
 synthetic `browser_upload_zip_worker/icloud_source.mjs` and

@@ -22,7 +22,7 @@ import {fileURLToPath} from 'node:url';
 /** Absolute repository root used only to read first-party browser assets. */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Browser process wall-clock deadline, in milliseconds; separate from virtual fixture time. */
-const browserTimeoutMs = 45000;
+const browserTimeoutMs = (process.argv[3] || 'admin_panel_lifecycle.html') === 'admin_panel_lifecycle.html' ? 90000 : 45000;
 /** Allow cold hosted runners extra time for a disposable Chromium DevTools endpoint. */
 const browserStartupTimeoutMs = 30000;
 /** Chromium executable supplied by the central browser registry. */
@@ -164,6 +164,14 @@ async function attachKeyboard(profilePath) {
     closeOwnedBrowser = () => command('Browser.close');
 }
 
+/** Per-run synthetic thumbnail concurrency; never installation media or session data. */
+const preloadResourceMetrics = new Map();
+// Expose loopback resource overlap without simulating installation latency.
+// Type: number; Units: milliseconds; Scope: one synthetic thumbnail response;
+// Consumers: serveFixture; Rationale: three milliseconds make simultaneous
+// admissions measurable while retaining a fast deterministic fixture.
+const syntheticThumbnailDelayMs = 3;
+
 /**
  * Serve the single synthetic document and confined public JavaScript assets.
  * @param {import('node:http').IncomingMessage} request Loopback request.
@@ -172,6 +180,31 @@ async function attachKeyboard(profilePath) {
  */
 async function serveFixture(request, response) {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (fixtureName === 'admin_panel_lifecycle.html' && ['/__preload_thumb', '/__preload_stats'].includes(pathname)) {
+        const parameters = new URL(request.url, 'http://localhost').searchParams;
+        const run = parameters.get('run') || '0';
+        if (!preloadResourceMetrics.has(run)) preloadResourceMetrics.set(run, {active: 0, peak: 0});
+        const metrics = preloadResourceMetrics.get(run);
+        if (pathname === '/__preload_stats') {
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify(metrics));
+            return;
+        }
+        metrics.active += 1;
+        metrics.peak = Math.max(metrics.peak, metrics.active);
+        // Keep each synthetic thumbnail response pending briefly to measure overlap.
+        // Type: number; Units: milliseconds; Scope: one loopback fixture response;
+        // Consumers: Images worker-bound assertions; Rationale: three milliseconds
+        // make concurrency observable without simulating deployment latency.
+        setTimeout(() => {
+            metrics.active -= 1;
+            if (parameters.get('fail') === '1') { response.writeHead(404).end(); return; }
+            response.setHeader('Content-Type', 'image/png');
+            response.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+            response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jqbkAAAAASUVORK5CYII=', 'base64'));
+        }, syntheticThumbnailDelayMs);
+        return;
+    }
     if (pathname === '/__viewport' && fixtureName === 'gallery_tags.html') {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
         if (width !== 390) { response.writeHead(400).end(); return; }
@@ -217,6 +250,7 @@ async function serveFixture(request, response) {
         return;
     }
     const relative = pathname === '/' ? 'tests/fixtures/' + fixtureName
+        : pathname === '/tests/fixtures/admin_images_preload_scenarios.js' && fixtureName === 'admin_panel_lifecycle.html' ? 'tests/fixtures/admin_images_preload_scenarios.js'
         : /^\/public\/assets\/[a-zA-Z0-9_/-]+\.(?:js|css)$/.test(pathname) ? pathname.slice(1) : '';
     if (!relative || relative.includes('..')) { response.writeHead(404).end(); return; }
     try {
@@ -252,7 +286,8 @@ try {
     const timer = setTimeout(/** Enforce the owned fixture's wall-clock deadline. @return {boolean} Whether the process termination signal was sent. */ () => browser.kill(), browserTimeoutMs);
     try {
         await browserReady;
-        const deadline = Date.now() + 30000;
+        const assertionTimeoutMs = fixtureName === 'admin_panel_lifecycle.html' ? 60000 : 30000;
+        const deadline = Date.now() + assertionTimeoutMs;
         let result = '';
         while (Date.now() < deadline) {
             result = await readFixtureResult();
@@ -261,7 +296,7 @@ try {
             await new Promise(/** Pace bounded assertion-result polling. @param {function(): void} resolve Continue the result loop. @return {NodeJS.Timeout} Timer handle ignored by the promise executor. */ resolve => setTimeout(resolve, 100));
         }
         if (!/^BROWSER (PASS|FAIL)/.test(result)) {
-            result = 'BROWSER FAIL: fixture deadline 30000ms expired; last progress: ' + (result || 'no assertion output');
+            result = 'BROWSER FAIL: fixture deadline ' + assertionTimeoutMs + 'ms expired; last progress: ' + (result || 'no assertion output');
         }
         console.log(result || 'BROWSER FAIL: fixture did not produce a result');
         await closeOwnedBrowser();

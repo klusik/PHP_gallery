@@ -970,3 +970,16 @@ complete upload usage is **unknown** after the observed v_0.127.5 transport fail
 and manual publication. Retain recovery while GitHub responses may be interrupted;
 retirement requires an accepted replacement preserving create-only idempotence,
 original bytes and published-release immutability.
+
+## Admin Images background preparation (#202)
+
+The gallery editor owns the complete ordinary/no-JavaScript table fallback.
+Drawer `panel=1` responses defer Images through the same authenticated route and
+canonical row renderer. Retain the full-page path for supported browsers without
+scripting and direct Admin navigation; usage is unknown. Retirement requires a
+replacement that preserves all row actions, keyboard/accessibility and accepted
+no-JavaScript journeys. `thumbnail_readonly_existing_response_file(..., exactOnly)`
+defaults to false so existing visual-preview nearest-derivative fallback remains
+compatible. The editor's explicit `existing_only=1` opt-in protects read-only
+300px preload; ordinary media loading and generation keep their current owner.
+Evidence owners and live acceptance limits are in [ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).

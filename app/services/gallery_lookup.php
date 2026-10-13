@@ -589,3 +589,28 @@ function gallery_mutation_context_count(int $parentGalleryId): int
         $parentGalleryId <= 0 && gallery_access_schema_ready()
     );
 }
+
+/**
+ * Read direct editor inventory through the image persistence owner.
+ * @param int $galleryId Positive gallery identity.
+ * @return array{total:int,revision:string} Cheap direct count and drift observation.
+ */
+function gallery_editor_image_inventory(int $galleryId): array
+{
+    return \Gallery\Models\image_model_editor_inventory($galleryId);
+}
+
+/**
+ * Read one bounded direct-image page for an already authorized editor.
+ * @param int $galleryId Positive gallery identity.
+ * @param int $offset Nonnegative row offset.
+ * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> Stored image rows consumed by the existing Images presentation adapter.
+ */
+function gallery_editor_image_page(int $galleryId, int $offset): array
+{
+    // Bound server rendering and transport work for each editor batch.
+    // Type: int; Units: rows; Scope: one authorized editor response;
+    // Consumers: image_model_editor_page; Rationale: cap each fragment at 100 rows.
+    $pageSize = 100;
+    return \Gallery\Models\image_model_editor_page($galleryId, $offset, $pageSize);
+}

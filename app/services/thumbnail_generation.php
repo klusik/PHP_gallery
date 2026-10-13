@@ -591,9 +591,10 @@ function thumbnail_response_file_geometry_status(array $image, array $gallery, i
  * @param array<string,mixed> $gallery Owning gallery used to constrain the thumbnail path.
  * @param int $size Requested supported derivative maximum side in pixels.
  * @param string $format Requested supported image format.
+ * @param bool $exactOnly Whether only the requested existing size/format is admitted for editor preload.
  * @return array{path:string,geometry_status:array<string,mixed>}|null Existing valid derivative response, or null when no safe derivative is available.
  */
-function thumbnail_readonly_existing_response_file(array $image, array $gallery, int $size, string $format): ?array
+function thumbnail_readonly_existing_response_file(array $image, array $gallery, int $size, string $format, bool $exactOnly = false): ?array
 {
     if (!thumbnail_legacy_identity_owned($image)) {
         return null;
@@ -606,7 +607,7 @@ function thumbnail_readonly_existing_response_file(array $image, array $gallery,
         : ['jpg', 'webp'];
     $formats = array_values(array_unique(array_merge([$format], $formats)));
     $candidates = [['size' => $size, 'format' => $format]];
-    foreach ($sizes as $candidateSize) {
+    foreach ($exactOnly ? [] : $sizes as $candidateSize) {
         foreach ($formats as $candidateFormat) {
             if (in_array($candidateFormat, ['jpg', 'webp'], true)) {
                 $candidates[] = ['size' => (int) $candidateSize, 'format' => $candidateFormat];
@@ -629,7 +630,9 @@ function thumbnail_readonly_existing_response_file(array $image, array $gallery,
         if (!is_file($path)) {
             continue;
         }
-        $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, (int) $candidate['size'], $path);
+        $geometryStatus = $exactOnly
+            ? thumbnail_editor_existing_file_geometry_status($path, (int) $candidate['size'], (string) $candidate['format'])
+            : thumbnail_response_file_geometry_status($image, $gallery, (int) $candidate['size'], $path);
         if (empty($geometryStatus['valid'])) {
             continue;
         }
@@ -1101,4 +1104,22 @@ function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, 
         }
         return false;
     }
+}
+
+/**
+ * Validate an existing editor derivative without opening its original or rereading EXIF.
+ * The ordinary public resolver retains its stronger source-aspect validation.
+ * This read-only editor path requires a supported format and bounded dimensions.
+ * @param string $path Owned exact derivative filesystem path.
+ * @param int $size Requested maximum side in pixels.
+ * @param string $format Requested jpg or webp encoding.
+ * @return array{valid:bool,reason:string} Existing derivative safety decision; no repair or persistence.
+ */
+function thumbnail_editor_existing_file_geometry_status(string $path, int $size, string $format): array
+{
+    $info = @getimagesize($path);
+    $mime = $format === 'webp' ? 'image/webp' : 'image/jpeg';
+    $valid = is_array($info) && (int) ($info[0] ?? 0) > 0 && (int) ($info[1] ?? 0) > 0
+        && max((int) $info[0], (int) $info[1]) <= $size && (string) ($info['mime'] ?? '') === $mime;
+    return ['valid' => $valid, 'reason' => $valid ? 'editor_existing_bounded_derivative' : 'editor_derivative_unavailable'];
 }

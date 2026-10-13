@@ -33,6 +33,8 @@
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
 
+import {startGalleryImagesPreload} from './admin-gallery-images-preload.js?v=20261013-images-preload-v1';
+
 const adminSidePanelTabObservers = new WeakMap();
 
 /**
@@ -139,8 +141,8 @@ async function loadDeferredAdminPanel(panel) {
     if (!(panel instanceof HTMLElement) || panel.dataset.adminPanelLoaded === '1' || panel.dataset.adminPanelLoading === '1') {
         return;
     }
-    const placeholder = panel.querySelector('[data-admin-dashboard-maintenance-placeholder]');
-    const endpoint = placeholder instanceof HTMLElement ? String(placeholder.dataset.maintenanceEndpoint || '') : '';
+    const placeholder = panel.querySelector('[data-admin-dashboard-maintenance-placeholder], [data-admin-gallery-tool-placeholder]');
+    const endpoint = placeholder instanceof HTMLElement ? String(placeholder.dataset.maintenanceEndpoint || placeholder.dataset.endpoint || '') : '';
     if (!endpoint) {
         return;
     }
@@ -163,10 +165,10 @@ async function loadDeferredAdminPanel(panel) {
         } catch (error) {
             throw new Error(`Invalid JSON response: ${error instanceof Error ? error.message : String(error)}`);
         }
-        if (!payload || payload.ok !== true || typeof payload.html !== 'string') {
+        if (!payload || payload.ok !== true || typeof (payload.html ?? payload.panel_html) !== 'string') {
             throw new Error(`Invalid deferred Admin panel response${payload?.diagnostic_id ? ` (${payload.diagnostic_id})` : ''}`);
         }
-        panel.innerHTML = payload.html;
+        panel.innerHTML = payload.html ?? payload.panel_html;
         panel.dataset.adminPanelLoaded = '1';
         setupAdminTabsInRoot(panel);
         setupAdminNestedTabs(panel);
@@ -186,6 +188,13 @@ async function loadDeferredAdminPanel(panel) {
         }
         placeholder.textContent = i18n('admin.dashboard.maintenance_load_failed', 'Unable to load maintenance tools. Please reload the page.');
         placeholder.classList.add('error');
+        if (placeholder.hasAttribute('data-admin-gallery-tool-placeholder')) {
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.textContent = i18n('admin.gallery_editor.images_retry', 'Retry images');
+            retry.addEventListener('click', () => { void loadDeferredAdminPanel(panel); });
+            placeholder.append(retry);
+        }
     } finally {
         delete panel.dataset.adminPanelLoading;
     }
@@ -302,6 +311,15 @@ export function setupAdminTabsInRoot(root) {
         // urlMode keeps specialized tab groups synchronized with query parameters as well as hashes.
         const urlMode = String(tabsRoot.dataset.adminTabsUrlMode || 'hash');
 
+        const imageWidget = panelScope.querySelector('[data-gallery-images-preload]');
+        const imageTab = tabs.find(tab => tab.dataset.adminTabTarget === 'admin-edit-images');
+        const imagePanel = panels.find(panel => panel.id === 'admin-edit-images');
+        if (imageWidget && imageTab && imagePanel) {
+            imageTab.setAttribute('aria-disabled', 'true');
+            imageTab.setAttribute('tabindex', '-1');
+            imagePanel.inert = true;
+        }
+
         // activateTab stores behavior for selecting one tab and hiding the other panels.
         /**
          * Handle activate tab.
@@ -314,7 +332,7 @@ export function setupAdminTabsInRoot(root) {
         const activateTab = (targetId, options = {}) => {
             // targetPanel stores the panel selected by the current hash or click.
             const targetPanel = panels.find((panel) => panel.id === targetId) || panels[0];
-            if (!targetPanel) {
+            if (!targetPanel || tabs.find(tab => tab.dataset.adminTabTarget === targetPanel.id)?.getAttribute('aria-disabled') === 'true') {
                 return;
             }
             tabs.forEach((tab) => {
@@ -329,7 +347,7 @@ export function setupAdminTabsInRoot(root) {
                 const isSelected = panel.id === targetPanel.id;
                 setAdminPanelVisibility(panel, isSelected);
             });
-            if (targetPanel.id === 'admin-tab-maintenance') {
+            if (targetPanel.id === 'admin-tab-maintenance' || targetPanel.querySelector('[data-admin-gallery-tool-placeholder]')) {
                 void loadDeferredAdminPanel(targetPanel);
             }
             if (options.focusTab) {
@@ -369,7 +387,23 @@ export function setupAdminTabsInRoot(root) {
             window.history.replaceState(null, '', activeHash);
         }
         const initialTargetId = (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
-        activateTab(initialTargetId);
+        if (imageWidget && initialTargetId === 'admin-edit-images') imageWidget.dataset.requested = '1';
+        activateTab(imageTab?.getAttribute('aria-disabled') === 'true' && initialTargetId === 'admin-edit-images' ? panels[0].id : initialTargetId);
+        if (imageWidget && imagePanel) {
+            imageWidget.addEventListener('php-gallery:images-loading', () => {
+                if (imageTab?.getAttribute('aria-selected') === 'true') {
+                    imageWidget.dataset.requested = '1';
+                    activateTab(panels[0].id);
+                }
+            });
+            startGalleryImagesPreload(imageWidget, imagePanel, () => {
+                imagePanel.dispatchEvent(new CustomEvent('php-gallery:images-ready', {bubbles: true}));
+                if (imageWidget.dataset.requested === '1') {
+                    imageWidget.dataset.requested = '0';
+                    activateTab('admin-edit-images');
+                }
+            });
+        }
         if (shouldManageHash && urlMode === 'href') {
             const initialTab = tabs.find((tab) => tab.dataset.adminTabTarget === initialTargetId);
             if (initialTab instanceof HTMLAnchorElement) {
@@ -394,21 +428,26 @@ export function setupAdminTabsInRoot(root) {
                 activateTab(targetId, {updateHash: true});
             });
             tab.addEventListener('keydown', (event) => {
+                if (tab.getAttribute('aria-disabled') === 'true') {
+                    if (['Enter', ' ', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) event.preventDefault();
+                    return;
+                }
                 // currentIndex stores the focused tab position.
-                const currentIndex = tabs.indexOf(tab);
+                const enabledTabs = tabs.filter(candidate => candidate.getAttribute('aria-disabled') !== 'true');
+                const currentIndex = enabledTabs.indexOf(tab);
                 if (currentIndex < 0) {
                     return;
                 }
                 // nextIndex stores the tab position selected by the keyboard.
                 let nextIndex = currentIndex;
                 if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-                    nextIndex = (currentIndex + 1) % tabs.length;
+                    nextIndex = (currentIndex + 1) % enabledTabs.length;
                 } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-                    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                    nextIndex = (currentIndex - 1 + enabledTabs.length) % enabledTabs.length;
                 } else if (event.key === 'Home') {
                     nextIndex = 0;
                 } else if (event.key === 'End') {
-                    nextIndex = tabs.length - 1;
+                    nextIndex = enabledTabs.length - 1;
                 } else if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     activateTab(tab.dataset.adminTabTarget || '', {updateHash: true});
@@ -417,7 +456,7 @@ export function setupAdminTabsInRoot(root) {
                     return;
                 }
                 event.preventDefault();
-                activateTab(tabs[nextIndex].dataset.adminTabTarget || '', {updateHash: true, focusTab: true});
+                activateTab(enabledTabs[nextIndex].dataset.adminTabTarget || '', {updateHash: true, focusTab: true});
             });
         });
 
@@ -450,6 +489,7 @@ export function setupAdminTabsInRoot(root) {
             if (hash !== window.location.hash) {
                 window.history.replaceState(null, '', hash);
             }
+            if (imageWidget && hash === '#admin-edit-images' && imageTab?.getAttribute('aria-disabled') === 'true') imageWidget.dataset.requested = '1';
             activateTab(hash.replace(/^#/, ''));
         };
 
