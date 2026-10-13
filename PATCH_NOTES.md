@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.128.2
+
+Added compound public search, configurable scheduling for automatic stable-update checks, and a dedicated Documents / PDFs tab for gallery documents.
+
+### Highlights
+
+#### Compound public search
+- Added AND terms, OR alternatives, and quoted exact phrases, with bounded query groups and terms. Matching required all terms to apply to the same gallery or photo. [#199](https://github.com/klusik/PHP_gallery/issues/199)
+
+#### Automatic update checks
+- Added administrator-selectable 5-, 15-, 30-, or 60-minute discovery intervals, defaulting to five minutes.
+- Kept the interval independent from the automatic-update setting; changing it did not enable automatic installation. [#198](https://github.com/klusik/PHP_gallery/issues/198)
+
+#### Gallery documents
+- Moved gallery PDF attachments and historical SimBrief OFP controls into a dedicated **Documents / PDFs** tab, separate from API configuration. [#200](https://github.com/klusik/PHP_gallery/issues/200)
+
+### Technical Details
+
+#### Backend
+- Updated public search to match across titles, tags, descriptions, enabled translations, and eligible AI metadata while retaining bounded candidates and existing result hydration.
+- Unified due-time checks and nonblocking discovery locking across eligible GET/HEAD requests, Admin check-due actions, and the updater CLI. Active resumable installations continued without waiting for a new discovery interval.
+- Added bounded exponential delays for GitHub 403/429 responses without explicit retry timing, while preserving conditional ETag/304 handling.
+
+#### Frontend
+- Updated Admin Updates to show the selected interval and next eligible discovery time.
+- Added the Documents / PDFs tab and localized its labels in English, Czech, German, and Swedish. PDF actions and OFP uploads returned to that tab.
+
+#### Tests and documentation
+- Added regression coverage for compound search matching and exclusions, update interval policy and locking, API backoff, and PDF tab ownership.
+- Updated browser lifecycle tests to use an isolated writable font cache and allow for hosted-runner startup time.
+
+### User Impact
+
+#### For visitors
+- Visitors could use compound search queries across supported gallery and photo content. Private and out-of-scope content remained excluded.
+
+#### For administrators
+- Administrators could choose how often stable-update discovery became eligible and see the next eligible check without enabling automatic installation.
+- Administrators could manage gallery PDF attachments and historical OFP controls in the Documents / PDFs tab.
+
+#### For maintainers
+- Regression coverage was expanded for search, update scheduling, PDF tab ownership, and hosted browser startup.
+
 ## Version 0.128.1
 
 Changed existing-gallery PDF uploads to attach the original document by default, with page conversion available only as an explicit option. [#195](https://github.com/klusik/PHP_gallery/issues/195)
