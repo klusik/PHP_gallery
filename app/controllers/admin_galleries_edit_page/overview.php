@@ -126,6 +126,7 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
+        ['id' => 'admin-edit-documents', 'label' => t('pdf.documents', 'Documents / PDFs')],
     ];
     if (feature_capability_effective_enabled('metadata_organizer')) {
         $adminTabs[] = ['id' => 'admin-edit-organizer', 'label' => t('admin.metadata_organizer.tab_label', 'Organizer')];

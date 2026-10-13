@@ -546,7 +546,14 @@ function view_render_admin_update_page(array $viewModel): void
     } elseif (!empty($autoupdateStatus['beta_active'])) {
         echo '<p class="muted">' . e(t('admin.updates.autoupdate_beta_disabled_hint', 'Automatic updates are checked in settings, but ignored while beta code is installed. The setting is not changed.')) . '</p>';
     } else {
-        echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every hour and install it automatically when available. The dry check button forces a fresh metadata-only check immediately.')) . '</p>';
+        echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'Eligible GET/HEAD requests can check for stable updates at the selected interval and start a resumable installation. Request-driven checks need incoming traffic; unattended checks require a separately configured hosting cron. Dry check bypasses the local interval without installing files.')) . '</p>';
+    }
+    $selectedInterval = (int) ($autoupdateStatus['interval_seconds'] ?? 300);
+    $intervalOptions = (array) ($autoupdateStatus['interval_options'] ?? [300 => 5, 900 => 15, 1800 => 30, 3600 => 60]);
+    echo '<p class="muted"><strong>' . e(t('admin.updates.autoupdate_interval_label', 'Check for updates every')) . ':</strong> ' . e(t('admin.updates.autoupdate_interval_option', '{count} minutes', ['count' => (string) intdiv($selectedInterval, 60)])) . '</p>';
+    $nextEligibleAt = (int) ($autoupdateStatus['next_eligible_at'] ?? 0);
+    if ($nextEligibleAt > 0) {
+        echo '<p class="muted"><strong>' . e(t('admin.updates.autoupdate_next_eligible_label', 'Next eligible discovery')) . ':</strong> ' . e(date('Y-m-d H:i:s', $nextEligibleAt)) . '</p>';
     }
     // $autoupdateLastCheckedLabel stores either a formatted timestamp or a localized never-checked fallback.
     $autoupdateLastCheckedLabel = (string) ($autoupdateStatus['last_checked_label'] ?? t('admin.updates.autoupdate_last_check_never', 'never'));
@@ -563,6 +570,11 @@ function view_render_admin_update_page(array $viewModel): void
     echo '<div class="admin-update-automatic-actions"><form method="post" class="admin-update-inline-form">' . $csrfHtml;
     echo '<input type="hidden" name="update_action" value="autoupdate_settings">';
     echo '<label class="checkbox-row"><input type="checkbox" name="application_autoupdate_enabled" value="1"' . (!empty($autoupdateStatus['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.updates.autoupdate_enable_label', 'Enable automatic stable updates')) . '</span></label>';
+    echo '<label><span>' . e(t('admin.updates.autoupdate_interval_label', 'Check for updates every')) . '</span> <select name="application_autoupdate_interval_seconds" required>';
+    foreach ($intervalOptions as $seconds => $minutes) {
+        echo '<option value="' . e((string) $seconds) . '"' . ((int) $seconds === $selectedInterval ? ' selected' : '') . '>' . e(t('admin.updates.autoupdate_interval_option', '{count} minutes', ['count' => (string) $minutes])) . '</option>';
+    }
+    echo '</select></label>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.common.save', 'Save')) . '</button>';
     echo '</form>';
     echo '<form method="post" class="admin-update-inline-form">' . $csrfHtml;

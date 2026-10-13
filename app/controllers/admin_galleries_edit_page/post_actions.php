@@ -217,7 +217,7 @@ function admin_edit_gallery_handle_ofp_upload(array $gallery): void
         }
         flash_message('admin_notice', $publicError);
     }
-    redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-api'));
+    redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-documents'));
 }
 
 /**

@@ -78,6 +78,7 @@ use function Gallery\Services\install_application_beta;
 use function Gallery\Services\install_application_update;
 use function Gallery\Services\restore_application_stable_release;
 use function Gallery\Services\set_application_autoupdate_enabled;
+use function Gallery\Services\set_application_autoupdate_interval_seconds;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Views\view_render_admin_update_page;
@@ -363,6 +364,12 @@ function cms_admin_update(): void
                 throw new RuntimeException(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.'));
             }
             if ($action === 'autoupdate_settings') {
+                $submittedInterval = $_POST['application_autoupdate_interval_seconds'] ?? null;
+                if (!is_string($submittedInterval)) {
+                    throw new RuntimeException('Invalid automatic update check interval.');
+                }
+                // Validate the selector before changing the independent enable flag.
+                set_application_autoupdate_interval_seconds($submittedInterval);
                 set_application_autoupdate_enabled(!empty($_POST['application_autoupdate_enabled']));
                 $_SESSION['admin_update_notice'] = t('admin.updates.autoupdate_settings_saved', 'Automatic update settings were saved.');
             } elseif ($action === 'autoupdate_dry_run') {

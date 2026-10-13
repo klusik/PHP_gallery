@@ -201,11 +201,44 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
 
 
 /**
+ * Try to obtain the existing cross-process discovery lock without waiting.
+ *
+ * All automatic web/CLI and explicit Admin discovery calls share this lock so
+ * their persisted due decisions cannot race across PHP workers.
+ *
+ * @return resource|null Open locked handle, or null when another process owns it.
+ */
+function application_update_discovery_try_lock(): mixed
+{
+    $lock = @fopen(application_update_project_root() . '/cache/update-discovery.lock', 'c');
+    if ($lock === false) {
+        return null;
+    }
+    if (!flock($lock, LOCK_EX | LOCK_NB)) {
+        fclose($lock);
+        return null;
+    }
+    return $lock;
+}
+
+/**
+ * Release the non-blocking filesystem discovery lock.
+ *
+ * @param resource $lock Lock handle previously returned by the acquisition helper.
+ * @return void Closes and unlocks the process-owned discovery handle.
+ */
+function application_update_discovery_unlock(mixed $lock): void
+{
+    flock($lock, LOCK_UN);
+    fclose($lock);
+}
+
+/**
  * Return a cache-aware update status for the admin page.
  *
  * @param bool $force Force value.
  * @param int $ttlSeconds Cache lifetime in seconds.
- * @param bool $onlyIfDue Whether an hourly check should skip a recent concurrent discovery.
+ * @param bool $onlyIfDue Whether a scheduled check should skip a recent concurrent discovery.
  * @return array<string,mixed> Structured result data for the caller.
  */
 function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 3600, bool $onlyIfDue = false): array
@@ -226,39 +259,35 @@ function application_update_status_for_admin(bool $force = false, int $ttlSecond
 
     // Serialize explicit checks across browser tabs without waiting on another
     // network request. Page reloads keep their passive cached presentation.
-    $lock = @fopen(application_update_project_root() . '/cache/update-discovery.lock', 'c');
-    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
-        if (is_resource($lock)) { fclose($lock); }
+    $lock = application_update_discovery_try_lock();
+    if ($lock === null) {
         return application_update_status_for_admin(false, $ttlSeconds);
     }
     try {
-        rewind($lock);
-        if ($onlyIfDue && time() - (int) stream_get_contents($lock) < $ttlSeconds) {
+        // Another PHP worker may have completed a due check before this lock was
+        // acquired. Recheck the durable timestamps while holding it.
+        if ($onlyIfDue && !application_autoupdate_discovery_due(time(), application_update_discovery_last_attempt_at())) {
             return application_update_status_for_admin(false, $ttlSeconds);
         }
         $status = check_application_update($force);
         cache_application_update_check($status);
-        ftruncate($lock, 0);
-        rewind($lock);
-        fwrite($lock, (string) time());
         return $status;
     } finally {
-        flock($lock, LOCK_UN);
-        fclose($lock);
+        application_update_discovery_unlock($lock);
     }
 }
 
 /**
- * Refresh metadata at most hourly when the Updates page opens.
+ * Refresh metadata only if the explicit Admin check-due action is due.
  *
  * @return array<string,mixed> Cached or refreshed release metadata; never installs a package.
  */
 function application_update_check_if_due(): array
 {
-    if (time() - (int) app_setting('application_update_check_cached_at', '0') < 3600) {
+    if (!application_autoupdate_discovery_due(time(), application_update_discovery_last_attempt_at())) {
         return application_update_status_for_admin(false);
     }
-    return application_update_status_for_admin(true, 3600, true);
+    return application_update_status_for_admin(true, application_autoupdate_interval_seconds(), true);
 }
 
 /**

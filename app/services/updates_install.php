@@ -242,7 +242,7 @@ function application_update_beta_commit(): string
 /**
  * Return diagnostic state for the automatic updater card.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Saved enablement, effective interval, attempt times, and status labels.
  */
 function application_autoupdate_status(): array
 {
@@ -259,6 +259,8 @@ function application_autoupdate_status(): array
     $lastCheckedLabel = application_autoupdate_last_checked_label($lastCheckedAt);
     // $lastCheckedRelative stores a concise freshness label such as "2 minutes ago".
     $lastCheckedRelative = application_autoupdate_relative_time_label($lastCheckedAt);
+    $intervalSeconds = application_autoupdate_interval_seconds();
+    $lastDiscoveryAt = application_update_discovery_last_attempt_at();
 
     return [
         'enabled' => $enabled,
@@ -269,6 +271,10 @@ function application_autoupdate_status(): array
         'last_checked_label' => $lastCheckedLabel,
         'last_checked_relative' => $lastCheckedRelative,
         'last_result' => $lastResult,
+        'interval_seconds' => $intervalSeconds,
+        'interval_minutes' => intdiv($intervalSeconds, 60),
+        'interval_options' => APPLICATION_AUTOUPDATE_INTERVAL_OPTIONS,
+        'next_eligible_at' => $lastDiscoveryAt > 0 ? $lastDiscoveryAt + $intervalSeconds : 0,
     ];
 }
 
@@ -332,12 +338,35 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  *
  * @param bool $force Force value.
  * @param ?int $checkedAt Checked at value.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Automatic updater status following a metadata-only attempt or lock skip.
  */
 function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = null): array
 {
+    $lock = application_update_discovery_try_lock();
+    if ($lock === null) {
+        return application_autoupdate_status();
+    }
+    try {
+        return application_autoupdate_dry_run_locked($force, $checkedAt);
+    } finally {
+        application_update_discovery_unlock($lock);
+    }
+}
+
+/**
+ * Execute metadata-only discovery while the cross-process lock is held.
+ *
+ * @param bool $force Bypass only the local due check, not GitHub backoff.
+ * @param int|null $checkedAt Optional timestamp of this attempt.
+ * @return array<string,mixed> Updated automatic check status.
+ */
+function application_autoupdate_dry_run_locked(bool $force = false, ?int $checkedAt = null): array
+{
     // $now stores the timestamp written to the shared automatic update diagnostics.
     $now = $checkedAt ?? time();
+    if (!$force && !application_autoupdate_discovery_due($now, application_update_discovery_last_attempt_at())) {
+        return application_autoupdate_status();
+    }
     // $lockUntil stores a soft process lock so concurrent dry-run checks do not fan out.
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
     if (!$force && $lockUntil > $now) {
@@ -405,14 +434,46 @@ function application_autoupdate_dry_run_result_label(array $status): string
  *
  * @param bool $force Force value.
  * @param ?int $checkedAt Checked at value.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Automatic updater status following a stable discovery or lock skip.
  */
 function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
+{
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('built_in_update_installer')) {
+        return application_autoupdate_status();
+    }
+    $lock = application_update_discovery_try_lock();
+    if ($lock === null) {
+        return application_autoupdate_status();
+    }
+    try {
+        return application_autoupdate_run_installing_check_locked($force, $checkedAt);
+    } finally {
+        application_update_discovery_unlock($lock);
+    }
+}
+
+/**
+ * Reserve a due stable discovery attempt while owning the common lock.
+ *
+ * @param bool $force Bypass only the local interval, never GitHub policy.
+ * @param int|null $checkedAt Optional timestamp of this attempt.
+ * @return array<string,mixed> Updated automatic check status.
+ */
+function application_autoupdate_run_installing_check_locked(bool $force = false, ?int $checkedAt = null): array
 {
     if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
         return application_autoupdate_status();
     }
     $now = $checkedAt ?? time();
+    if (!$force && !application_autoupdate_discovery_due($now, application_update_discovery_last_attempt_at())) {
+        return application_autoupdate_status();
+    }
+    // A manual or concurrent automatic installer can claim the job slot between
+    // the lightweight request/CLI precheck and the serialized discovery.
+    if (application_update_active_job() !== null) {
+        return application_autoupdate_status();
+    }
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
     if (!$force && $lockUntil > $now) {
         return application_autoupdate_status();

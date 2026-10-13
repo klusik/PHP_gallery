@@ -83,18 +83,141 @@ function public_search_normalize_query(string $query): string
 }
 
 /**
+ * Flush the current unquoted token into the Boolean search groups.
+ *
+ * A named call is required here so the selective runtime dependency compiler
+ * can resolve this parser without introducing an unreviewed variable callable.
+ *
+ * @param array<int,array<int,string>> $groups Completed disjunction groups, modified by reference.
+ * @param array<int,string> $current Current conjunction operands, modified by reference.
+ * @param string $token Pending unquoted term, consumed by reference.
+ * @return void
+ */
+function public_search_flush_query_token(array &$groups, array &$current, string &$token): void
+{
+    if ($token === '') {
+        return;
+    }
+    $word = $token;
+    $token = '';
+    if ($word === 'AND') {
+        return;
+    }
+    if ($word === 'OR') {
+        if ($current !== []) {
+            $groups[] = $current;
+            $current = [];
+        }
+        return;
+    }
+    $current[] = $word;
+}
+
+/**
+ * Parse public search into OR groups of AND terms and quoted exact phrases.
+ *
+ * Unquoted spaces, commas, semicolons, slashes and ampersands imply AND.
+ * The explicit uppercase OR keyword or a pipe starts a new alternative.
+ * A matching pair of common straight/typographic quotes preserves internal
+ * whitespace as one ordered substring. Apostrophes within ordinary words
+ * remain literal. Unclosed quotes are treated as separators while typing.
+ *
+ * A bounded number of terms prevents pathological dynamic search expressions.
+ * An over-limit query returns no matches rather than silently dropping terms.
+ *
+ * @param string $query Normalized browser query.
+ * @return array<int,array<int,string>> OR groups containing required terms.
+ */
+function public_search_parse_groups(string $query): array
+{
+    $chars = preg_split('//u', $query, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($chars)) {
+        return [];
+    }
+    $quotes = [
+        '"' => '"', "'" => "'", '„' => '“', '“' => '”', '”' => '“',
+        '«' => '»', '‹' => '›', '‚' => '‘', '‘' => '’',
+        '「' => '」', '『' => '』',
+    ];
+    $groups = [];
+    $current = [];
+    $token = '';
+
+    $count = count($chars);
+    for ($i = 0; $i < $count; $i++) {
+        $char = $chars[$i];
+        if ($token === '' && isset($quotes[$char])) {
+            $closer = $quotes[$char];
+            $closingIndex = -1;
+            for ($j = $i + 1; $j < $count; $j++) {
+                if ($chars[$j] === $closer) {
+                    $closingIndex = $j;
+                    break;
+                }
+            }
+            if ($closingIndex >= 0) {
+                $phrase = trim(implode('', array_slice($chars, $i + 1, $closingIndex - $i - 1)));
+                if ($phrase !== '') {
+                    $current[] = $phrase;
+                }
+                $i = $closingIndex;
+                continue;
+            }
+            // An incomplete opening quote must not block incremental typing.
+            continue;
+        }
+        if ($char === '|') {
+            public_search_flush_query_token($groups, $current, $token);
+            if ($current !== []) {
+                $groups[] = $current;
+                $current = [];
+            }
+            continue;
+        }
+        if (preg_match('/^[\p{Z}\s,;\/&]+$/u', $char) === 1) {
+            public_search_flush_query_token($groups, $current, $token);
+            continue;
+        }
+        $token .= $char;
+    }
+    public_search_flush_query_token($groups, $current, $token);
+    if ($current !== []) {
+        $groups[] = $current;
+    }
+
+    $terms = 0;
+    foreach ($groups as $group) {
+        $terms += count($group);
+    }
+    return count($groups) > 4 || $terms > 12 ? [] : $groups;
+}
+
+/**
  * Return compact public search results for galleries and photos.
  *
  * @param string $query Query value.
  * @param int $limit Maximum number of items.
  * @param ?array $contextGallery Context gallery value.
- * @return array Structured result data for the caller.
+ * @return array<int,array<string,mixed>> Bounded public gallery and photo result models.
  */
 function public_search_results(string $query, int $limit = 12, ?array $contextGallery = null): array
 {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
+    }
+    $groups = public_search_parse_groups($query);
+    if ($groups === []) {
+        return [];
+    }
+    if (count($groups) === 1 && count($groups[0]) === 1) {
+        // Keep the optimized historic path for one word or one exact phrase.
+        $query = $groups[0][0];
+        if (public_search_query_length($query) < 2) {
+            return [];
+        }
+    } else {
+        return public_search_compound_results($groups, $limit, $contextGallery);
     }
 
     $limit = max(1, min(30, $limit));

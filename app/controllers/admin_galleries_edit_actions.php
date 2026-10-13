@@ -271,7 +271,7 @@ function cms_admin_scan_images(): void
 function admin_edit_gallery_tab_id(string $tab): string
 {
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
-    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images', 'admin-edit-organizer', 'admin-edit-renamer'];
+    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images', 'admin-edit-documents', 'admin-edit-organizer', 'admin-edit-renamer'];
     return in_array($tab, $allowedTabs, true) ? $tab : '';
 }
 

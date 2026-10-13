@@ -27,7 +27,7 @@ function admin_edit_gallery_handle_pdf_action(array $gallery): void
     $ajax = admin_wants_json();
     $action = (string) ($_POST['pdf_action'] ?? '');
     $galleryId = (int) $gallery['id'];
-    $editUrl = \Gallery\Core\url_for('admin_edit_gallery', ['id' => $galleryId, 'tab' => 'admin-edit-api']);
+    $editUrl = \Gallery\Core\url_for('admin_edit_gallery', ['id' => $galleryId, 'tab' => 'admin-edit-documents']);
     try {
         if ((int) ($_POST['id'] ?? 0) !== $galleryId) {
             throw new \RuntimeException('The source gallery changed. Reload the editor.');

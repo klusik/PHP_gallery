@@ -41,6 +41,8 @@ $_SERVER['REQUEST_METHOD'] = 'CLI';
 require __DIR__ . '/../app/bootstrap_full.php';
 
 use function Gallery\Services\application_autoupdate_enabled;
+use function Gallery\Services\application_autoupdate_discovery_due;
+use function Gallery\Services\application_update_discovery_last_attempt_at;
 use function Gallery\Services\application_autoupdate_run_installing_check;
 use function Gallery\Services\application_autoupdate_status;
 use function Gallery\Services\application_update_active_job;
@@ -99,8 +101,8 @@ try {
     }
 
     $status = application_autoupdate_status();
-    $lastCheckedAt = (int) ($status['last_checked_at'] ?? 0);
-    if (!$forceCheck && $lastCheckedAt > 0 && time() - $lastCheckedAt < 3600) {
+    $lastCheckedAt = application_update_discovery_last_attempt_at();
+    if (!$forceCheck && !application_autoupdate_discovery_due(time(), $lastCheckedAt)) {
         echo json_encode(['ok' => true, 'skipped' => true, 'reason' => 'check_not_due', 'status' => $status], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }

@@ -200,7 +200,7 @@ function admin_test_run_maintenance_task_active(array $task): bool
  * Inventory every known scheduled/background/maintenance mechanism without executing it.
  *
  * @param array<int,array<string,mixed>> $requests Request records already observed in this run.
- * @return array<string,mixed>
+ * @return array<string,mixed> Observed scheduled-task inventory, status, and diagnostic warnings.
  */
 function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): array
 {
@@ -295,8 +295,9 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         $lastJob = admin_test_run_update_job_pointer_read_only('last-job.json');
         $activePublic = is_array($activeJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($activeJob) : $activeJob;
         $lastPublic = is_array($lastJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($lastJob) : $lastJob;
-        $lastChecked = max(0, (int) ($status['last_checked_at'] ?? 0));
-        $due = !empty($status['effective']) && ($lastChecked <= 0 || $now - $lastChecked >= 3600);
+        $lastChecked = max(0, (int) ($status['last_checked_at'] ?? 0), (int) app_setting('application_update_check_cached_at', '0'));
+        $intervalSeconds = (int) ($status['interval_seconds'] ?? 300);
+        $due = !empty($status['effective']) && ($lastChecked <= 0 || $now - $lastChecked >= $intervalSeconds);
         $jobsRoot = function_exists(__NAMESPACE__ . '\\application_update_jobs_root') ? application_update_jobs_root() : '';
         $startLock = $jobsRoot !== '' ? admin_test_run_lock_snapshot($jobsRoot . DIRECTORY_SEPARATOR . 'start.lock') : [];
         $workerLock = [];
@@ -308,17 +309,17 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
             'subsystem' => 'automatic_updater',
             'enabled' => (bool) ($status['enabled'] ?? false),
             'effective' => (bool) ($status['effective'] ?? false),
-            'configured_schedule_or_cadence' => 'request-time stable update check, minimum 3600 seconds; durable jobs advance in bounded slices',
+            'configured_schedule_or_cadence' => 'request-time/cron stable update check, minimum ' . $intervalSeconds . ' seconds; durable jobs advance in bounded slices',
             'external_cron_or_cli_available' => is_file(dirname(__DIR__, 3) . '/scripts/application_update.php'),
             'external_cron_configured' => 'not_observable_from_php',
-            'next_expected_or_due_time' => $lastChecked > 0 ? gmdate('c', $lastChecked + 3600) : null,
+            'next_expected_or_due_time' => $lastChecked > 0 ? gmdate('c', $lastChecked + $intervalSeconds) : null,
             'last_attempted_time' => $lastChecked > 0 ? gmdate('c', $lastChecked) : null,
             'last_successful_time' => is_array($lastPublic) && (int) ($lastPublic['finished_at'] ?? 0) > 0 ? gmdate('c', (int) $lastPublic['finished_at']) : null,
             'last_failure' => is_array($lastPublic) ? ($lastPublic['error'] ?? null) : null,
             'time_since_last_run_seconds' => $lastChecked > 0 ? max(0, $now - $lastChecked) : null,
             'currently_due' => $due,
-            'overdue' => $due && $lastChecked > 0 && $now - $lastChecked > 6 * 3600,
-            'trigger_sources' => ['normal_GET_or_HEAD_request', 'Admin_update_page', 'CLI_or_cron'],
+            'overdue' => $due && $lastChecked > 0 && $now - $lastChecked > 6 * $intervalSeconds,
+            'trigger_sources' => ['normal_GET_or_HEAD_request', 'explicit_Admin_check_due', 'CLI_or_cron'],
             'active_locks' => ['start' => $startLock, 'worker' => $workerLock],
             'stale_lock_assessment' => $workerAssessment,
             'currently_active_job' => $activePublic,

@@ -88,6 +88,15 @@ trees. A later public route component with one of those words, such as
 `/gallery/travel/tests/`, remains eligible for normal route dispatch. Disabling URL
 rewrites continues to support direct query-string requests through `index.php`.
 
+The updater's standalone CLI entrypoint may be scheduled by an external
+hosting cron at five-minute intervals. It honors the interval persisted in
+Admin > Updates (300 seconds by default; choices: 300/900/1800/3600), skips
+disabled or beta automatic discovery, and continues bounded background work
+without treating every invocation as a new GitHub API check. A sample crontab
+entry is `*/5 * * * * /path/to/php /path/to/gallery/scripts/application_update.php --time-budget=8`.
+The hosting provider must supply the real PHP path and support cron; the CLI
+script is not a public HTTP endpoint.
+
 The production/operator CLI commands include `scripts/application_update.php`,
 `scripts/create_admin.php`, `scripts/generate_manifest.php`,
 `scripts/migrate.php`, `scripts/site_maintenance.php`, and

@@ -55,6 +55,7 @@ require_once __DIR__ . '/admin_galleries_edit_page/tab_display.php';
 require_once __DIR__ . '/admin_galleries_edit_page/tab_media.php';
 // Tab panels that own their own forms and panels outside the editor form.
 require_once __DIR__ . '/admin_galleries_edit_page/tab_images.php';
+require_once __DIR__ . '/admin_galleries_edit_page/tab_documents.php';
 require_once __DIR__ . '/admin_galleries_edit_page/tab_tools.php';
 // Request orchestration for the whole edit page.
 require_once __DIR__ . '/admin_galleries_edit_page/controller.php';
