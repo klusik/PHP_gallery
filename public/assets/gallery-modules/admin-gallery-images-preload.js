@@ -220,6 +220,18 @@ export function startGalleryImagesPreload(widget, imagesPanel, ready) {
                 offset = payload.next_offset;
                 if (payload.done) break;
             }
+            if (!skipBatch && total > 0) {
+                // Seal the same inventory after the final thumbnail wave; a
+                // mutation during resource settlement must not unlock stale rows.
+                const sealUrl = new URL(widget.dataset.endpoint, window.location.href);
+                sealUrl.searchParams.set('offset', String(total));
+                sealUrl.searchParams.set('revision', revision);
+                const seal = await fetchEditorBatch(sealUrl, controller.signal);
+                if (!current()) return;
+                if (seal?.ok !== true || seal.gallery_id !== Number(widget.dataset.galleryId) || seal.offset !== total
+                    || seal.next_offset !== total || seal.total !== total || seal.done !== true
+                    || seal.revision !== revision || seal.rows_html !== '') throw new Error('Changed image inventory.');
+            }
             if (seen.size !== total || settledCount !== total) throw new Error('Incomplete image inventory.');
             if (!current()) return;
             imagesPanel.inert = false;
@@ -244,6 +256,7 @@ export function startGalleryImagesPreload(widget, imagesPanel, ready) {
             status.textContent = widget.dataset.labelError + (error instanceof Error && /^HTTP [0-9]{3}$/.test(error.message) ? ' (' + error.message + ')' : '');
             announcement.textContent = status.textContent;
             retry.hidden = false;
+            bar.hidden = true;
             bar.removeAttribute('aria-valuenow');
             bar.removeAttribute('aria-valuetext');
         } finally {
@@ -259,27 +272,30 @@ export function startGalleryImagesPreload(widget, imagesPanel, ready) {
         status.hidden = false;
         void run();
     };
+    const mutationEvents = ['php-gallery:side-panel-success', 'php-gallery:metadata-organizer-applied', 'php-gallery:auxiliary-mutation-success'];
     const saved = event => {
-        if (!current() || event.detail?.source !== 'gallery-edit' || event.detail?.result?.ok !== true) return;
+        if (!current() || event.detail?.result?.ok !== true || event.detail?.panelOwner?.isCurrent?.() === false) return;
+        if (event.type === 'php-gallery:side-panel-success' && !['gallery-edit', 'gallery-image-bulk'].includes(event.detail.source)) return;
+        if (event.type === 'php-gallery:auxiliary-mutation-success' && !['gallery', 'image'].includes(event.detail.result.mutation?.entity)) return;
         // The existing save acknowledgment may preserve later typing instead of
         // replacing this editor. Restart photo metadata without touching that draft.
         cancel();
         observer.disconnect();
         owner.signal?.removeEventListener('abort', cancel);
         retry.removeEventListener('click', onRetry);
-        widget.parentElement.removeEventListener('php-gallery:side-panel-success', saved);
+        mutationEvents.forEach(name => widget.parentElement.removeEventListener(name, saved));
         widget.dataset.preloadBound = '0';
         bar.hidden = false;
         status.hidden = false;
         startGalleryImagesPreload(widget, imagesPanel, ready);
     };
     retry.addEventListener('click', onRetry);
-    widget.parentElement.addEventListener('php-gallery:side-panel-success', saved);
+    mutationEvents.forEach(name => widget.parentElement.addEventListener(name, saved));
     controller.signal.addEventListener('abort', () => {
         observer.disconnect();
         owner.signal?.removeEventListener('abort', cancel);
         retry.removeEventListener('click', onRetry);
-        widget.parentElement?.removeEventListener('php-gallery:side-panel-success', saved);
+        mutationEvents.forEach(name => widget.parentElement?.removeEventListener(name, saved));
     }, {once: true});
     // One task boundary lets the mounted editor paint before admitting photo work.
     setTimeout(() => { void run(); }, 0);

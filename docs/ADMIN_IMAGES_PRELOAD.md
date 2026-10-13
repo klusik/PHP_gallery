@@ -25,7 +25,8 @@ The empty shell contains the existing toolbar and form rather than a parallel UI
 
 The inventory observation combines count, newest update, identity sum and
 identity-weighted order with the gallery edit revision. It is checked before
-and after each batch; changed observations return 409. This is a drift guard,
+and after each batch and sealed again after the final thumbnail wave; changed
+observations return 409. This is a drift guard,
 not a multi-request database snapshot. Same-second external image-only metadata
 writes can share an aggregate observation. The browser additionally rejects
 wrong galleries, duplicate IDs, inconsistent totals/revisions and incomplete
@@ -71,6 +72,8 @@ settings. An empty initial gallery becomes ready without an image-list request.
 Retry discards only Images content, fetches current metadata and reuses valid
 browser thumbnail cache. Closing, switching gallery or replacing the editor
 aborts its task through the existing drawer owner and fragment connection guard.
+Photo-owned successful local mutation events also restart the preload when
+canonical draft protection keeps the settings fragment mounted.
 Existing image-specific initialization runs on the completed table; the
 side-panel owner marks its bulk form for the existing delegated AJAX pipeline.
 

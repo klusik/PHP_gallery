@@ -255,6 +255,15 @@ namespace {
         try { \Gallery\Controllers\cms_admin_edit_gallery(); return ['body' => (string) ob_get_contents(), 'status' => http_response_code()]; }
         finally { ob_end_clean(); }
     }
+    ob_start();
+    \Gallery\Views\view_render_admin_tabs([
+        ['id' => 'admin-edit-identity', 'label' => 'Identity'],
+        ['id' => 'admin-edit-images', 'label' => 'Images', 'disabled' => true],
+    ], 'admin-edit-images');
+    $tabMarkup = (string) ob_get_clean();
+    preg_match('/<a[^>]+id="admin-edit-images-control"[^>]*>/', $tabMarkup, $disabledControl);
+    deferred_editor_assert(isset($disabledControl[0]) && str_contains($disabledControl[0], 'aria-disabled="true"')
+        && str_contains($disabledControl[0], 'aria-selected="false"') && !str_contains($disabledControl[0], 'href='), 'First paint exposes disabled Images without a navigation target.');
     $insert = $db->prepare("INSERT INTO images VALUES (?, 1, ?, ?, 'private', ?, NULL, '2026-10-13 00:00:00')");
     $measurements = [];
     foreach ([0, 1, 50, 500, 1000, 3001] as $count) {
@@ -295,6 +304,7 @@ namespace {
     $db->exec('UPDATE images SET sort_order = sort_order + 10 WHERE id = 1');
     deferred_editor_assert(deferred_editor_response(['action' => 'images_batch', 'offset' => 100, 'revision' => $revision], true)['status'] === 409, 'Reordering invalidates a running inventory.');
     deferred_editor_assert(deferred_editor_response(['action' => 'images_batch', 'offset' => -1], true)['status'] === 400, 'Malformed paging is refused.');
+    deferred_editor_assert(deferred_editor_response(['action' => 'images_batch', 'revision' => 'malformed'], true)['status'] === 400, 'Malformed revision tokens are refused before rendering.');
     $GLOBALS['editor_authorized'] = false;
     try { deferred_editor_response(['action' => 'images_batch'], true); throw new \RuntimeException('Unauthorized batch was accepted.'); }
     catch (\RuntimeException $error) { deferred_editor_assert($error->getMessage() === 'Unauthorized fixture.', 'Authentication precedes all batch rendering.'); }

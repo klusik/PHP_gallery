@@ -213,11 +213,17 @@ function admin_edit_gallery_images_batch_response(array $gallery): void
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();
     }
+    $expectedRevision = $_GET['revision'] ?? '';
+    if (!is_string($expectedRevision) || ($expectedRevision !== '' && preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+        return;
+    }
     $bufferLevel = ob_get_level();
     try {
         $inventory = gallery_editor_image_inventory((int) $gallery['id']);
         $revision = hash('sha256', gallery_edit_revision($gallery) . $inventory['revision']);
-        $expected = (string) ($_GET['revision'] ?? '');
+        $expected = $expectedRevision;
         if (($offset > 0 && $expected === '') || ($expected !== '' && !hash_equals($revision, $expected)) || $offset > $inventory['total']) {
             http_response_code(409);
             echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);

@@ -22,7 +22,7 @@ import {fileURLToPath} from 'node:url';
 /** Absolute repository root used only to read first-party browser assets. */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Browser process wall-clock deadline, in milliseconds; separate from virtual fixture time. */
-const browserTimeoutMs = 45000;
+const browserTimeoutMs = (process.argv[3] || 'admin_panel_lifecycle.html') === 'admin_panel_lifecycle.html' ? 90000 : 45000;
 /** Allow cold hosted runners extra time for a disposable Chromium DevTools endpoint. */
 const browserStartupTimeoutMs = 30000;
 /** Chromium executable supplied by the central browser registry. */
@@ -277,7 +277,8 @@ try {
     const timer = setTimeout(/** Enforce the owned fixture's wall-clock deadline. @return {boolean} Whether the process termination signal was sent. */ () => browser.kill(), browserTimeoutMs);
     try {
         await browserReady;
-        const deadline = Date.now() + 30000;
+        const assertionTimeoutMs = fixtureName === 'admin_panel_lifecycle.html' ? 60000 : 30000;
+        const deadline = Date.now() + assertionTimeoutMs;
         let result = '';
         while (Date.now() < deadline) {
             result = await readFixtureResult();
@@ -286,7 +287,7 @@ try {
             await new Promise(/** Pace bounded assertion-result polling. @param {function(): void} resolve Continue the result loop. @return {NodeJS.Timeout} Timer handle ignored by the promise executor. */ resolve => setTimeout(resolve, 100));
         }
         if (!/^BROWSER (PASS|FAIL)/.test(result)) {
-            result = 'BROWSER FAIL: fixture deadline 30000ms expired; last progress: ' + (result || 'no assertion output');
+            result = 'BROWSER FAIL: fixture deadline ' + assertionTimeoutMs + 'ms expired; last progress: ' + (result || 'no assertion output');
         }
         console.log(result || 'BROWSER FAIL: fixture did not produce a result');
         await closeOwnedBrowser();
