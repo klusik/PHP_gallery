@@ -103,6 +103,7 @@ function cms_admin_edit_gallery(): void
 
     // The remaining tabs own their own forms and panels outside the editor form.
     admin_edit_gallery_render_images_tab($gallery, $images, $activeEditTab);
+    admin_edit_gallery_render_documents_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_organizer_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_renamer_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_api_tab($gallery, $activeEditTab, $capabilities);

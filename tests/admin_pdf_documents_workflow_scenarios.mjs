@@ -417,4 +417,43 @@ assert.equal(cancelRequest.body.get('csrf_token'), 'csrf-fresh');
 assert.equal(cancelRequest.url, cancelForm.action);
 assert.equal(cancelHarness.location.href, cancelHarness.initialUrl, 'Cancellation must preserve the form URL.');
 
+// Gallery-editor placement regression (#200): document actions are isolated
+// from API configuration and the shared gallery settings form.
+const editorSourcePaths = [
+    'app/controllers/admin_galleries_edit_page/overview.php',
+    'app/controllers/admin_galleries_edit_page/controller.php',
+    'app/controllers/admin_galleries_edit_page/tab_documents.php',
+    'app/controllers/admin_galleries_edit_page/tab_tools.php',
+    'app/controllers/admin_galleries_edit_page.php',
+    'app/controllers/admin_galleries_edit_actions.php',
+    'app/controllers/admin_galleries_edit_page/pdf_documents.php',
+    'app/controllers/admin_galleries_edit_page/post_actions.php',
+];
+const editorSources = await Promise.all(editorSourcePaths.map(path =>
+    readFile(new URL('../' + path, import.meta.url), 'utf8')));
+const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
+    editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
+assert.match(overviewSource, /'id' => 'admin-edit-documents', 'label' => t\('pdf\.documents'/,
+    'A dedicated, already localized Documents / PDFs tab must exist.');
+assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
+    'The gallery editor must load the Documents tab controller.');
+assert.match(editActionsSource, /'admin-edit-documents'/,
+    'The server must recognize Documents as a valid redirect/selected tab.');
+assert.match(documentsSource, /echo admin_gallery_pdf_documents_html\(\$gallery\)/,
+    'The document manager must belong to the Documents tab.');
+assert.match(documentsSource, /echo admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
+    'The historical SimBrief PDF attachment must also belong to Documents.');
+assert.match(documentsSource, /render_admin_tab_panel\('admin-edit-documents'/,
+    'The Documents contents must be enclosed in their own tab panel.');
+assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
+    'The API tab must not render PDF or SimBrief document forms.');
+const closeSettingsFormAt = editorSource.indexOf('    view_render_admin_gallery_editor_form_close([');
+const renderDocumentsAt = editorSource.indexOf('    admin_edit_gallery_render_documents_tab($gallery, $activeEditTab);');
+assert.ok(closeSettingsFormAt >= 0 && renderDocumentsAt > closeSettingsFormAt,
+    'Independent PDF upload/conversion forms must render after the shared settings form closes.');
+assert.match(pdfPostSource, /'tab' => 'admin-edit-documents'/,
+    'PDF mutation redirect/panel metadata must return to the Documents tab.');
+assert.match(ofpPostSource, /redirect_to\(admin_edit_gallery_tab_url\(\$galleryId, 'admin-edit-documents'\)\)/,
+    'Legacy OFP non-JavaScript upload fallback must return to Documents.');
+
 console.log('Admin PDF document workflow tests passed.');

@@ -1,5 +1,12 @@
 # General gallery PDF documents
 
+In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
+upload, the attached-document table, browser PDF-to-PNG conversion, and any
+historical SimBrief OFP PDF/dispatch panel. These forms are independent of the
+shared Identity/Access/Display/Media settings form. The **API** tab contains
+only upload API/automation configuration and its existing advanced tools.
+After a non-JavaScript PDF or OFP upload, the editor returns to Documents / PDFs.
+
 The gallery presents documents in a compact table with title, original byte size,
 actual PDF page count and text-sized icons. The title and eye icon open the same
 protected viewer; the download icon retains the original filename. PDF.js reads
