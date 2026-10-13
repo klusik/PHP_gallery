@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.129
+
+Added browser-based imports from public iCloud Photos Links and Shared Albums, and made gallery settings available sooner by loading the Images tab in the background. Updated release qualification to retry complete Actions job-inventory reads after classified GitHub server errors.
+
+### Highlights
+
+#### iCloud imports
+- Added a direct browser import flow for supported public iCloud Photos Links and Shared Albums through the existing uploader. Manual ZIP and file selection remained available. [#13](https://github.com/klusik/PHP_gallery/issues/13)
+- Added import progress, cancellation, retry, and feedback for unsupported or failed imports. The flow did not add a Gallery server downloader, proxy, database schema, or separate ingestion pipeline.
+
+#### Gallery editor Images tab
+- Kept gallery settings available while image rows and thumbnails loaded in the background, with progress, retry, and cancellation. [#202](https://github.com/klusik/PHP_gallery/issues/202)
+
+### Technical Details
+
+#### Backend
+- Added authenticated, bounded image-row paging for the gallery editor, with inventory-revision checks to reject stale or inconsistent results.
+- Updated release promotion to retry a complete job-inventory read once with one job per page after a classified GitHub HTTP 5xx response. Other failures remained terminal; incomplete coverage was not accepted.
+
+#### Frontend
+- Added browser-local iCloud acquisition and streamed ZIP image extraction through the existing upload and acknowledgment flow. Bounded archive and image admission, cancellation, and retry safeguards were retained.
+- Deferred thumbnail preloads to exact existing 300px derivatives, with up to six concurrent requests. Preloading did not generate or repair thumbnails; larger previews and file-renamer planning remained on demand.
+- Updated the Admin interface and translations in English, Czech, German, and Swedish.
+
+#### Tests and documentation
+- Added regression coverage for deferred image loading, thumbnail preloading, iCloud acquisition and upload scenarios, and release job-inventory fallback behavior.
+- Updated `TESTING.md`, upload and compatibility guidance, and all four maintained manual sources. Synthetic test coverage did not establish live-source, physical resource-use, or all-browser acceptance.
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change.
+
+#### For administrators
+- Administrators could start supported public iCloud imports from the existing upload flow, while retaining manual import options.
+- Administrators could use gallery settings while the Images tab prepared its content; the tab became available after loading completed.
+
+#### For maintainers
+- Release qualification could recover from a classified GitHub server error while still requiring a complete job inventory.
+
 ## Version 0.128.2
 
 Added compound public search, configurable scheduling for automatic stable-update checks, and a dedicated Documents / PDFs tab for gallery documents.
