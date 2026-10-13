@@ -35,10 +35,11 @@
 /**
  * Bound retained extracted originals until the existing upload batcher stages them.
  * Type: number.
- * Units: bytes. Scope: one selection containing user ZIP archives.
- * Consumers: extractUploadZipEntries and its coordinator's remaining retention budget.
+ * Units: bytes. Scope: one eager ZIP selection or one streamed image.
+ * Consumers: extractUploadZipEntries, inspectUploadZipEntries and the coordinator's remaining retention budget.
  * Rationale: the legacy File-array handoff must reject larger selections before
- * extraction rather than retain gigabytes; use smaller Apple export selections.
+ * extraction rather than retain gigabytes; the incremental path applies the
+ * same ceiling to each image before allocating its verified payload.
  */
 const uploadZipRetainedBytes = 64 * 1024 * 1024;
 /**
@@ -49,6 +50,22 @@ const uploadZipRetainedBytes = 64 * 1024 * 1024;
  * Rationale: 10,000 entries do not bound arbitrary comments/extra fields by themselves.
  */
 const uploadZipDirectoryBytes = 4 * 1024 * 1024;
+/** Admit only bounded zero padding after an otherwise complete ZIP end record.
+ * Type: number. Units: bytes. Scope: one source archive's final suffix.
+ * Consumers: findZipEndRecord. Rationale: Apple's observed exports append 205 zero bytes; a 4 KiB cap covers that suffix while refusing nonzero trailers or unbounded padding.
+ */
+const uploadZipZeroPaddingBytes = 4 * 1024;
+/** Bound the end-record read including the maximum classic comment and accepted zero suffix.
+ * Type: number. Units: bytes. Scope: one archive tail read.
+ * Consumers: findZipEndRecord. Rationale: 65,557 standard end/comment bytes plus 4 KiB padding keep large-source inspection bounded.
+ */
+const uploadZipTailBytes = 65557 + uploadZipZeroPaddingBytes;
+
+/** Describe an admitted central-directory entry before reading its image bytes.
+ * @typedef {{name:string,path:string,localOffset:number,compressedSize:number,uncompressedSize:number,method:number,expectedCrc:number}} UploadZipEntry
+ */
+/** @type {{blob:Blob,entries:UploadZipEntry[]}|null} One dedicated reader worker owns an immutable archive session. */
+let uploadZipSession = null;
 
 self.addEventListener('message', (event) => {
     const payload = event.data || {};
@@ -75,6 +92,19 @@ self.addEventListener('message', (event) => {
                 error: error instanceof Error ? error.message : String(error),
             });
         });
+        return;
+    }
+    if (action === 'openUploadZip' || action === 'readUploadZipEntry') {
+        (async () => {
+            if (action === 'openUploadZip') {
+                const inspected = await inspectUploadZipEntries(payload.zipBlob, payload.limits || {});
+                uploadZipSession = {blob: payload.zipBlob, entries: inspected.entries};
+                return {entries: inspected.entries.map((entry, index) => ({index, name: entry.name, path: entry.path, size: entry.uncompressedSize})), skipped: inspected.skipped, reasons: inspected.reasons};
+            }
+            const index = Number(payload.entryIndex);
+            if (!uploadZipSession || !Number.isInteger(index) || index < 0 || index >= uploadZipSession.entries.length) throw uploadZipFailure('invalid', 'Invalid archive reader cursor.');
+            return {entry: await readUploadZipImage(uploadZipSession.blob, uploadZipSession.entries[index])};
+        })().then(result => self.postMessage({ok: true, id: payload.id, result})).catch(error => self.postMessage({ok: false, id: payload.id, code: String(error.code || 'invalid'), error: error instanceof Error ? error.message : 'Archive reader failed.'}));
         return;
     }
     if (action === 'extractUploadZip') {
@@ -971,11 +1001,34 @@ async function parseStoreOnlyZipBlob(zipBlob) {
  * @return {Promise<{entries:Array<{name:string,path:string,blob:Blob}>,skipped:number,totalEntries:number,reasons:Record<string,number>}>} Ordered valid images and rejection counts; malformed archives reject.
  */
 async function extractUploadZipEntries(zipBlob, limits) {
+    const inspected = await inspectUploadZipEntries(zipBlob, limits);
+    const maximumRetainedBytes = Math.max(0, Math.min(Number(limits.maximumRetainedBytes ?? uploadZipRetainedBytes), uploadZipRetainedBytes));
+    const entries = [];
+    let retainedBytes = 0;
+    for (const descriptor of inspected.entries) {
+        if (retainedBytes + descriptor.uncompressedSize > maximumRetainedBytes) throw uploadZipFailure('retention', 'ZIP images exceed the bounded extraction budget. Select smaller archives.');
+        const entry = await readUploadZipImage(zipBlob, descriptor);
+        if (!entry) {
+            inspected.skipped++;
+            inspected.reasons.integrity = Number(inspected.reasons.integrity || 0) + 1;
+            continue;
+        }
+        entries.push(entry);
+        retainedBytes += descriptor.uncompressedSize;
+    }
+    return {...inspected, entries};
+}
+
+/** Inspect bounded ZIP metadata and admit ordered image descriptors without retaining image bytes.
+ * @param {Blob} zipBlob Immutable user-selected or OPFS-backed archive.
+ * @param {{maximumEntries?:number,maximumEntryBytes?:number,maximumTotalBytes?:number,maximumRetainedBytes?:number}} limits Existing per-entry/count/expanded-data limits; retention applies only to the eager wrapper.
+ * @returns {Promise<{entries:UploadZipEntry[],skipped:number,totalEntries:number,reasons:Record<string,number>}>} Admitted descriptors and counted skips; malformed/oversized structures reject before image reads.
+ */
+async function inspectUploadZipEntries(zipBlob, limits) {
     if (!(zipBlob instanceof Blob)) throw new Error('ZIP extraction expected a Blob payload.');
     const maximumEntries = Math.max(1, Math.min(Number(limits.maximumEntries || 10000), 10000));
-    const maximumEntryBytes = Math.max(1, Number(limits.maximumEntryBytes || 64 * 1024 * 1024));
+    const maximumEntryBytes = Math.max(1, Math.min(Number(limits.maximumEntryBytes || uploadZipRetainedBytes), uploadZipRetainedBytes));
     const maximumTotalBytes = Math.max(maximumEntryBytes, Math.min(Number(limits.maximumTotalBytes || 2 * 1024 * 1024 * 1024), 2 * 1024 * 1024 * 1024));
-    const maximumRetainedBytes = Math.max(0, Math.min(Number(limits.maximumRetainedBytes ?? uploadZipRetainedBytes), uploadZipRetainedBytes));
     const end = await findZipEndRecord(zipBlob);
     if (end.entryCount > maximumEntries) throw uploadZipFailure('entries', 'ZIP contains too many entries.');
     const centralBlob = zipBlob.slice(end.centralOffset, end.centralOffset + end.centralSize);
@@ -984,7 +1037,6 @@ async function extractUploadZipEntries(zipBlob, limits) {
     const entries = [];
     let skipped = 0;
     let totalUncompressed = 0;
-    let retainedBytes = 0;
     const seenPaths = new Set();
     const reasons = {};
     const skip = reason => { skipped++; reasons[reason] = Number(reasons[reason] || 0) + 1; };
@@ -1024,27 +1076,31 @@ async function extractUploadZipEntries(zipBlob, limits) {
         }
         totalUncompressed += uncompressedSize;
         if (totalUncompressed > maximumTotalBytes) throw uploadZipFailure('size', 'ZIP expanded data exceeds the browser extraction safety limit.');
-        if (retainedBytes + uncompressedSize > maximumRetainedBytes) throw uploadZipFailure('retention', 'ZIP images exceed the bounded extraction budget. Select smaller archives.');
-        const payload = await extractUploadZipPayload(zipBlob, localOffset, compressedSize, uncompressedSize, method);
-        const payloadBytes = new Uint8Array(await payload.arrayBuffer());
-        if (crc32(payloadBytes) !== expectedCrc || !detectImageFormatFromSignature(payloadBytes.slice(0, 16))) {
-            skip('integrity');
-            continue;
-        }
-        entries.push({name: uploadZipBasename(path), path, blob: new Blob([payloadBytes])});
-        retainedBytes += uncompressedSize;
+        entries.push({name: uploadZipBasename(path), path, localOffset, compressedSize, uncompressedSize, method, expectedCrc});
     }
     if (offset !== centralBytes.length) throw uploadZipFailure('invalid', 'ZIP central-directory size is inconsistent.');
     return {entries, skipped, totalEntries: end.entryCount, reasons};
 }
 
+/** Read and verify one admitted image while leaving every other archive payload on disk.
+ * @param {Blob} zipBlob Immutable archive owned by this reader session.
+ * @param {UploadZipEntry} entry Descriptor produced by the checked central-directory owner.
+ * @returns {Promise<{name:string,path:string,blob:Blob}|null>} Genuine supported image bytes, or null for a CRC/signature skip; malformed extraction rejects.
+ */
+async function readUploadZipImage(zipBlob, entry) {
+    const payload = await extractUploadZipPayload(zipBlob, entry.localOffset, entry.compressedSize, entry.uncompressedSize, entry.method);
+    const bytes = new Uint8Array(await payload.arrayBuffer());
+    if (crc32(bytes) !== entry.expectedCrc || !detectImageFormatFromSignature(bytes.subarray(0, 16))) return null;
+    return {name: entry.name, path: entry.path, blob: new Blob([bytes])};
+}
+
 /**
- * Locate the bounded classic single-disk ZIP end record and reject ZIP64.
+ * Locate the bounded classic single-disk end record, allowing only bounded zero padding and rejecting ZIP64.
  * @param {Blob} zipBlob User-selected disk-backed archive reference.
  * @returns {Promise<{entryCount:number,centralSize:number,centralOffset:number}>} Checked directory bounds; rejects malformed or oversized metadata.
  */
 async function findZipEndRecord(zipBlob) {
-    const tailLength = Math.min(zipBlob.size, 65557);
+    const tailLength = Math.min(zipBlob.size, uploadZipTailBytes);
     const tail = new Uint8Array(await zipBlob.slice(zipBlob.size - tailLength).arrayBuffer());
     const view = new DataView(tail.buffer);
     for (let offset = tail.length - 22; offset >= 0; offset--) {
@@ -1055,7 +1111,9 @@ async function findZipEndRecord(zipBlob) {
         const entryCount = view.getUint16(offset + 10, true);
         const centralSize = view.getUint32(offset + 12, true);
         const centralOffset = view.getUint32(offset + 16, true);
-        if (offset + 22 + view.getUint16(offset + 20, true) !== tail.length) continue;
+        const recordEnd = offset + 22 + view.getUint16(offset + 20, true);
+        const padding = tail.length - recordEnd;
+        if (padding < 0 || padding > uploadZipZeroPaddingBytes || tail.subarray(recordEnd).some(byte => byte !== 0)) continue;
         if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) throw uploadZipFailure('invalid', 'Multi-disk ZIP archives are not supported.');
         if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) throw uploadZipFailure('zip64', 'ZIP64 archives are not supported by browser upload yet.');
         if (centralSize > uploadZipDirectoryBytes) throw uploadZipFailure('directory', 'ZIP directory exceeds the browser metadata limit.');

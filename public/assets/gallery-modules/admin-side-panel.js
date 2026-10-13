@@ -43,8 +43,8 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026100
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261013-icloud-v1';
-import {setupIcloudSources, beginIcloudUpload, endIcloudUpload} from './admin-icloud-source.js?v=20261013-icloud-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261013-icloud-auto-v2';
+import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261013-icloud-ui-v3';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
@@ -251,12 +251,15 @@ async function runGalleryUpload(form) {
         const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
         // result stores state or configuration for the gallery front-end flow.
         let result;
+        const useIcloud = icloudUploadRequested(form);
         const useBrowserUpload = browserUploadRequested(form);
         if (browserUploadZipSelected(form) && !useBrowserUpload) {
             throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         }
         operation = beginAdminOperation(form, useBrowserUpload ? 'prepared' : 'classic', selectedGalleryUploadFiles(form));
-        if (useBrowserUpload) {
+        if (useIcloud) {
+            result = await runIcloudGalleryUpload(form, progress, operation, cloudSignal);
+        } else if (useBrowserUpload) {
             result = await runBrowserGalleryUpload(form, progress, operation, cloudSignal);
         }
         // Checked browser preparation is a strict execution choice whenever files
@@ -298,7 +301,6 @@ async function runGalleryUpload(form) {
     } catch (error) {
         updateBasicProgress(progress, 100, error.message || i18n('admin.operations.upload_failed', 'Upload failed.'));
     } finally {
-        endIcloudUpload(form, completed);
         finishAdminOperation(operation);
         form.classList.remove('is-uploading');
         const selectionLocked = adminOperationOwnsInput(form);
@@ -315,6 +317,7 @@ async function runGalleryUpload(form) {
                 button.textContent = button.dataset.originalText;
             }
         });
+        endIcloudUpload(form, completed);
     }
 }
 

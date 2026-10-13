@@ -3,103 +3,118 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: docs/ICLOUD_IMPORT.md
 Module Type: Upload Contract
-Purpose: Define assisted iCloud acquisition and bounded existing ZIP uploader reuse.
+Purpose: Define direct public iCloud acquisition, disk-backed ZIP iteration and existing upload replay ownership.
 Responsibilities:
-  - Separate verified manual acquisition from unverified automatic Apple exports.
+  - Separate observed anonymous Apple protocol support from its undocumented compatibility boundary.
+  - Document source privacy, resource limits, cleanup, retries and the explicit manual alternative.
 Author: Rudolf Klusal
 -->
 
-# Assisted iCloud photo import
+# Import public iCloud photos
 
-`admin-icloud-source.js` recognizes HTTPS Photos Links at
-`share.icloud.com/photos/{token}` (and `www.icloud.com/photos/#{token}`), and
-public Shared Albums at `photos.icloud.com/shared/album/{token}/` (including
-the observed Apple redirect `www.icloud.com/photos/#/sc,{token}/`). These are
-distinct products. Drive/library URLs, credentials, ports, queries, encoded
-delimiters, backslashes and lookalike hosts are refused. Recognition checks
-syntax only, never live availability, expiry, authentication or CORS.
+Paste a public Photos Link (`share.icloud.com/photos/{token}` or the supported
+`www.icloud.com/photos/#{token}` spelling) or Shared Album
+(`photos.icloud.com/shared/album/{token}/`, including Apple's `#/sc,{token}/`
+redirect spelling). Select the destination and choose **Download and import from
+iCloud** beside the pasted link. This one action recognizes the link and submits
+the existing form; the footer shows the same action for an automatic source.
+Browser preparation stays enabled. Automatic import needs no ZIP file selection.
+Recognition checks syntax; submission checks public availability.
+**Open iCloud for manual export** explicitly selects the existing manual
+alternative under **Manual export and details**. Clear the source for ordinary
+local uploads; the footer and native file requirement return to their original
+state. Simultaneous automatic
+source and local-file selection is refused; native file upload remains available.
 
-The collapsed source controls are in existing upload forms. The unnamed URL
-input is cleared after recognition. A form-owned WeakMap retains the bearer URL
-for explicit opening with `noopener,noreferrer`, never FormData, server requests,
-drafts, diagnostics or persistent storage. Apple credentials are not collected.
-The source adapter creates no route, proxy, ingestion service or new permission.
+## Acquisition and privacy
 
-## Feasibility decision (2026-10-13)
+`admin-icloud-download.js` uses the observed Photos CloudKit `records/resolve`,
+validates the returned Apple partition/database/zone and anonymous public access,
+then pages the product-specific asset/master query. Shared Albums use added-date;
+Photos Links use asset-date. Sign-in-only/foreign/malformed sources, repeated
+continuation markers, empty sources and over-limit inputs fail closed. Requests
+use `text/plain`, CORS, `credentials: omit`, no referrer, no cache and refused
+redirects. No Apple credentials or cookies are acquired.
 
-Anonymous inspection of the owner-provided Shared Album in the Codex internal
-browser showed Download album -> Download Zip, without a Most Compatible control
-in that dialog. One downloaded ZIP contained 11 JPEG entries totaling 28,125,579
-uncompressed bytes. The page displayed expiration on 12 November. No photo bytes,
-filenames, EXIF/GPS or share token are committed or used by CI. This is one album
-observation, not a general export guarantee.
+ZIP preparation uses Apple's observed Most Compatible item-types (JPEG/PNG/GIF
+and compatible video representations) and H.264 codecs, including the resolved
+share name. Actual unsupported media still receive counted outcomes. This is an
+**undocumented client protocol**, not a stable official export API. Changes yield
+localized retry/manual-export guidance. Source URLs, anonymous tokens, signed
+download URLs and metadata remain browser-local. Gallery receives only its normal
+prepared media batches, CSRF, target and replay fields.
 
-[Apple download instructions](https://support.apple.com/en-nz/111762) describe
-Most Compatible in the Photos interface; they do not establish a recipient API
-for both products. [Apple Shared Album instructions](https://support.apple.com/en-gb/guide/icloud/mme985ae44d8/icloud)
-distinguish temporary albums from owner-controlled availability. A Photos Link
-fixture, recipient format controls, metadata/edit fidelity, documented export
-endpoint, redirect/CDN/CORS and Range identity remain unverified.
+Owner-album research on 2026-10-13 reproduced 11 asset/master pairs and a compatible
+ZIP with CORS. A real internal-browser run downloaded 28,131,903 bytes to OPFS,
+incrementally verified 11 JPEGs totaling 28,125,579 bytes and removed the source;
+it performed no Gallery upload. Range returned 400 and is not used. No real media,
+filenames, EXIF/GPS or bearer tokens enter source/CI fixtures. A live ordinary
+Photos Link was unavailable; its separate path has synthetic protocol coverage
+and is not called live-qualified by the Shared Album observation.
 
-**LIMITED GO:** open Apple, choose Most Compatible when actually offered, download
-ZIP(s) or individual compatible images, then select/drop them into the existing
-picker. Expired/revoked/sign-in-only links require owner resolution on Apple.
-Gallery does not silently check or download them and cannot capture another
-origin's OS download with OPFS. No `no-cors`, internal endpoint scraping, PHP
-downloader or OPFS pseudo-staging is introduced. No Gallery download percentage
-is displayed. Live albums are never deterministic test dependencies.
+## Disk staging and bounds
 
-## Resource and integration contract
+Automatic acquisition requires a secure context, OPFS and Web Locks. The response
+stream is read incrementally; at-most-1-MiB writes are awaited before more data is
+consumed. There is no whole-archive `Response.blob()`/`Response.arrayBuffer()`.
+Known length is compared with free quota and the 4-GiB-minus-one source bound.
+Unknown length shows received bytes without a fabricated percentage and retains
+the running cap. Quota failure, abort, idle timeout and early end close handles
+and remove the incomplete owned file. Metadata has a separate 4-MiB response cap,
+200-result pages, 100-page guard and 10,000 selected-asset ceiling.
 
-`expandBrowserUploadArchives()` and the existing image worker read directory and
-entry slices, never the complete selected File into an ArrayBuffer. Stored and
-Deflate work; ZIP64, multi-disk, malformed bounds and missing browser inflation
-fail explicitly. Inflation stops at the admitted declared size, followed by CRC
-and supported image signature validation. Relative safe paths are required;
-traversal, absolute paths, hidden entries and symlinks are skipped. Duplicate
-archive paths are counted; distinct folder paths with the same basename remain
-separate occurrences under the established server filename policy.
+The dedicated `php-gallery-icloud` OPFS directory uses random timestamped filenames
+and a per-file exclusive Web Lock throughout staging and in-page retries. A later
+acquisition removes only matching files older than one day after acquiring their
+lock; active work in another document cannot be removed. Success removes the source
+immediately. Closing a document releases its lock, without promising synchronous
+cleanup; the next acquisition reclaims aged abandoned files. No background or
+cross-session upload/recovery and no persisted bearer URL is introduced.
 
-The 10,000-entry, effective server per-image limit, ratio guard and at-most-2-GiB
-expanded-data ceiling remain. Directory allocation is limited to 4 MiB. Retained
-originals across the whole selection containing ZIPs, including ordinary images,
-are limited to 64 MiB before server persistence. This bounds the existing
-File-array seam; it is not a measurement of total browser heap. Decoding,
-thumbnails and prepared ZIPs consume additional memory. Larger exports must be
-split. Unlimited large-image/ZIP64 streaming remains open; future iteration must
-extend this worker and batcher rather than build another uploader.
+## ZIP and existing upload ownership
 
-Skipped RAW/HEIC/HEIF, video/Live Photo motion, sidecars/unsafe paths, duplicates,
-encoding, size/ratio and integrity failures have counted localized reasons.
-No renaming-as-conversion or RAW/metadata-fidelity promise is made. Drawer order
-retains ZIP position/directory order; standalone uploads retain natural filename
-ordering. Native decoding and existing PHP signature/CSRF/access checks remain.
+`browser-upload-archive-stream.js` opens the existing `browser-image-worker.js`
+ZIP owner once, then pulls one admitted image at a time. Only the archive reference
+and metadata remain between reads. Stored/Deflate, safe paths, symlink/encryption/
+compression refusal, CRC and real image signatures share the ordinary ZIP policy.
+The end record admits only an all-zero suffix of at most 4 KiB, covering Apple's
+observed 205-byte padding; nonzero trailers remain invalid. Tail reads are bounded
+to 69,653 bytes, directory allocation to 4 MiB, entries to 10,000, one image to
+64 MiB and the effective PHP limit, and admitted expanded data to 2 GiB. ZIP64 and
+multi-disk structures still fail explicitly. These are admission bounds, not a
+measurement of total heap/decoder memory.
 
-Prepared items and small upload ZIPs use the existing IndexedDB batcher; writes
-are accepted at transaction commit, including abort/quota handling. Preparation
-failure cleans owned temporary packages before upload. The PDF stream keeps its
-page/token/resume semantics; shared cancellation wording and transaction durability
-are strengthened. Effective PHP request ceilings still bound each batch.
+Manual ZIP selections retain their aggregate 64-MiB original budget. Automatic
+imports retain one original/worker item and bounded packages, not an all-images
+File array. Integrity skips reduce the source count; remaining ZIP directory order
+is preserved. RAW/HEIC/HEIF, video/Live Photo motion and sidecars have localized
+counted skips, with no rename-as-conversion or unrequested local lossy conversion.
 
-## Lifecycle and evidence
+`uploadBrowserFileStream(..., {sourceKind: 'images'})` reuses the existing image
+worker, IndexedDB batcher, ZIP packager, same-origin prepared endpoint, session/
+batch acknowledgments and canonical aggregate. A ready small batch is uploaded
+before more images are requested. A new target is created after the first valid
+prepared batch and must be Private/Unpublished. Existing visibility remains
+authoritative, including partial results. PDF is the default stream kind and
+retains its exact PNG-byte, conversion-token, page/DPI and resume contracts. No
+server route, downloader, proxy, schema, capability or second ingestion engine is added.
 
-`idle -> recognized (syntax only) -> Apple/manual download -> file selection ->
-explicit submit -> ZIP inspection -> preparation -> batches -> canonical completion`,
-with failure/cancellation. Cancel stops ZIP/preparation workers, backoff and XHR;
-admitted temporary writes settle before cleanup. Accepted server photos remain.
-Uncertain results retain the original form and existing session/batch replay
-identities; Retry submits the same intent. Acknowledged packages use existing
-cleanup. Canonical mutations/contexts still pass to the existing completion owner
-and the drawer stays open without URL navigation.
+## Cancel, Retry and completion
 
-New assisted targets require Private/Unpublished (existing legacy Draft vocabulary
-is accepted); creation follows preparation and partial imports stay non-public.
-Existing visibility stays authoritative and must be reviewed by the administrator.
-Closing the tab loses in-page retry ownership; background import, restart and
-age-based orphan cleanup are not promised. OS downloads remain until user deletion.
+The lifecycle is recognition -> availability -> compatible export -> network-to-disk
+download -> ZIP inspection -> incremental image preparation/batches -> canonical
+completion. Progress uses observed phase/byte/item counts.
+The injected Admin language scope owns source, archive and image-stream messages,
+including when the upload panel is opened on a public page in another language.
+Cancel stops fetches and
+disposable workers; admitted temporary writes settle before cleanup. Before server
+work, safe failure abandons packages and the source. After server work, the immutable
+source/cursor and exact pending ZIP/session are retained for Retry in the original
+form. Unacknowledged batches are reconciled before reading the next image. Source
+and target intent remain locked; already accepted photos remain.
 
-Physical heap/storage measurements for 100 MiB/1 GiB/>2 GiB archives, live Photos
-Link export and complete desktop/mobile browser qualification remain open.
-Synthetic fixtures prove deterministic boundaries, not these platform measurements.
-EN/CS/DE/SV catalogs and all four TeX sources describe the implemented scope;
-generated PDFs remain release-owned.
+Panel actions complete in place with unchanged URL and the existing canonical
+mutation completion coordinator. Physical large-source heap/throughput, Safari/
+Firefox/mobile, live Photos Links and authenticated hosted acceptance retain their
+separately recorded evidence boundaries. EN/CS/DE/SV and all four TeX sources
+describe these behaviors; generated PDFs remain release-owned.

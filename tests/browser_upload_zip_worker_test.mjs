@@ -4,7 +4,7 @@
  * Purpose: Exercise stored and Deflate ZIP extraction in the browser worker.
  * Responsibilities:
  *   - Verify extracted bytes and failure handling for synthetic archive inputs.
- *   - Run mandatory assisted-iCloud source and uploader scenarios within this registered owner.
+ *   - Run mandatory automatic iCloud source and uploader scenarios within this registered owner.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/browser_upload_zip_worker_test.mjs
@@ -100,6 +100,18 @@ async function executeWorkerExtraction(zipBlob, limits = {}) {
     vm.runInContext(await readFile(new URL('../public/assets/gallery-modules/browser-image-worker.js', import.meta.url), 'utf8'), context);
     messageHandler({data: {action: 'extractUploadZip', id: 7, zipBlob, limits: {maximumEntries: 100, maximumEntryBytes: 1024 * 1024, maximumTotalBytes: 4 * 1024 * 1024, ...limits}}});
     return resultPromise;
+}
+
+/** Open the real worker's private ZIP session and retain its request/reply boundary.
+ * @returns {Promise<function({action:string,zipBlob?:Blob,entryIndex?:number,limits?:{maximumEntryBytes?:number,maximumRetainedBytes?:number}}):Promise<{ok:boolean,code?:string,result?:{entries?:Array<{index:number,name:string,path:string,size:number}>,entry?:{name:string,path:string,blob:Blob}|null}}>>} Sequential synthetic worker requests without an eager image array.
+ */
+async function workerReaderHarness() {
+    let handler;
+    let finish;
+    let id = 0;
+    const context = vm.createContext({self: {addEventListener: (_type, callback) => { handler = callback; }, postMessage: reply => finish(reply), DecompressionStream}, Blob, Response, DecompressionStream, TextDecoder, TextEncoder, DataView, Uint8Array, ArrayBuffer, File, console});
+    vm.runInContext(await readFile(new URL('../public/assets/gallery-modules/browser-image-worker.js', import.meta.url), 'utf8'), context);
+    return payload => new Promise(resolve => { finish = resolve; handler({data: {id: ++id, ...payload}}); });
 }
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
@@ -210,11 +222,52 @@ for (const length of [100 * 1024 * 1024, 1024 * 1024 * 1024, 3 * 1024 * 1024 * 1
     const extracted = await executeWorkerExtraction(sparse);
     assert.equal(extracted.ok, true, extracted.error);
     assert.equal(extracted.result.entries.length, 1);
-    assert.ok(Math.max(...sparse.reads) <= 65557, 'Sparse large archive reads remain bounded by ZIP tail metadata');
+    assert.ok(Math.max(...sparse.reads) <= 69653, 'Sparse large archive reads remain bounded by end/comment plus admitted zero padding');
 }
+const paddedAppleArchive = new Blob([small, new Uint8Array(205)]);
+const paddedResult = await executeWorkerExtraction(paddedAppleArchive);
+assert.equal(paddedResult.ok, true, 'Observed Apple zero padding must not prevent an otherwise valid import');
+assert.equal(paddedResult.result.entries.length, 1);
+assert.equal((await executeWorkerExtraction(new Blob([small, new Uint8Array(4097)]))).ok, false, 'Oversized zero suffix is refused');
+assert.equal((await executeWorkerExtraction(new Blob([small, new Uint8Array([0, 0, 1])]))).ok, false, 'Nonzero trailing bytes remain invalid');
+const longCommentArchive = Buffer.from(await small.arrayBuffer());
+longCommentArchive.writeUInt16LE(65535, longCommentArchive.length - 2);
+assert.equal((await executeWorkerExtraction(new Blob([longCommentArchive, new Uint8Array(65535), new Uint8Array(205)]))).ok, true, 'Maximum legal comment and bounded padding fit the owned tail read');
+
+const reader = await workerReaderHarness();
+const readerArchive = buildFixtureZip([{name: 'a.png', bytes: png, method: 0}, {name: 'bad.png', bytes: png, method: 8, badCrc: true}, {name: 'b.png', bytes: png, method: 8}]);
+const opened = await reader({action: 'openUploadZip', zipBlob: readerArchive});
+assert.equal(opened.ok, true);
+assert.equal(opened.result.entries.length, 3);
+assert.ok(opened.result.entries.every(entry => !Object.hasOwn(entry, 'blob')), 'Opening a stream retains only directory metadata');
+assert.deepEqual(Buffer.from(await (await reader({action: 'readUploadZipEntry', entryIndex: 0})).result.entry.blob.arrayBuffer()), png);
+assert.equal((await reader({action: 'readUploadZipEntry', entryIndex: 1})).result.entry, null, 'Integrity failure is counted at the current cursor without moving other worker indices');
+assert.deepEqual(Buffer.from(await (await reader({action: 'readUploadZipEntry', entryIndex: 2})).result.entry.blob.arrayBuffer()), png);
+assert.equal((await reader({action: 'readUploadZipEntry', entryIndex: 3})).ok, false);
+
+// Relocate bounded directory metadata into a sparse source and declare two
+// 40 MiB images. Opening must admit their 80 MiB aggregate without reading any
+// image payload; this is a stream admission check, not a real heap measurement.
+const metadata = Buffer.from(await buildFixtureZip([{name: 'a.png', bytes: png, method: 0}, {name: 'b.png', bytes: png, method: 0}]).arrayBuffer());
+let directoryOffset = metadata.readUInt32LE(metadata.length - 6);
+for (let index = 0; index < 2; index++) {
+    metadata.writeUInt32LE(40 * 1024 * 1024, directoryOffset + 20);
+    metadata.writeUInt32LE(40 * 1024 * 1024, directoryOffset + 24);
+    directoryOffset += 46 + metadata.readUInt16LE(directoryOffset + 28);
+}
+const largeMetadata = new SparseArchive(metadata, 100 * 1024 * 1024);
+const largeOpened = await reader({action: 'openUploadZip', zipBlob: largeMetadata, limits: {maximumEntryBytes: 64 * 1024 * 1024}});
+assert.equal(largeOpened.ok, true);
+assert.equal(largeOpened.result.entries.length, 2);
+assert.ok(largeOpened.result.entries.reduce((sum, entry) => sum + entry.size, 0) > 64 * 1024 * 1024);
+assert.ok(Math.max(...largeMetadata.reads) <= 69653);
+const perImageBound = await reader({action: 'openUploadZip', zipBlob: largeMetadata, limits: {maximumEntryBytes: 32 * 1024 * 1024}});
+assert.equal(perImageBound.result.entries.length, 0, 'Streaming does not lift the effective per-image limit');
 // Keep feature scenarios under the inherited central owner: integration pins
 // BASIC evaluator/registry bytes to develop, while awaited imports propagate
 // every scenario failure and preserve their isolated production-code fixtures.
 await import('./browser_upload_zip_worker/icloud_source.mjs');
 await import('./browser_upload_zip_worker/icloud_upload.mjs');
-console.log('Browser upload ZIP worker and assisted iCloud scenarios passed.');
+await import('./browser_upload_zip_worker/icloud_download.mjs');
+await import('./browser_upload_zip_worker/icloud_stream.mjs');
+console.log('Browser upload ZIP worker and automatic iCloud scenarios passed.');

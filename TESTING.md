@@ -1,18 +1,26 @@
 # Testing Guide
 
-Assisted iCloud import uses the centrally registered
+Automatic browser-local iCloud import uses the centrally registered
 `browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the
 synthetic `browser_upload_zip_worker/icloud_source.mjs` and
-`browser_upload_zip_worker/icloud_upload.mjs` scenario modules. Every assertion
+`browser_upload_zip_worker/icloud_upload.mjs`, `icloud_download.mjs` and
+`icloud_stream.mjs` scenario modules. Every assertion
 failure propagates to that owner; no scenario is optional or separately selected.
 The central BASIC evaluator/registry stays byte-identical to protected develop,
 as required by the installed integration authority contract.
-They cover strict source recognition, mounted/re-rendered controls, four locale
-catalogs/manual sources, cancellation, quota, transaction durability, uncertain
-ACK replay, classic Stored/Deflate, CRC/paths/duplicates, ZIP64 rejection,
-metadata/retention limits and bounded reads on sparse 100 MiB/1 GiB/3 GiB sources.
-Sparse sources are not real browser heap/storage measurements. Live Apple export,
-metadata fidelity and desktop/mobile acceptance remain manual evidence in
+They cover strict source recognition, native form validation, mounted/re-rendered
+controls, one-click source/ordinary-form submission, Enter/footer validation,
+label restoration, four locale catalogs/manual sources, injected Admin language ownership,
+anonymous CORS request policy,
+bounded metadata/pagination, refreshed public tokens, streamed OPFS writes,
+cancellation, quota, early EOF, owned orphan cleanup, transaction durability,
+interleaved image preparation/upload and exact batch/create replay after uncertain
+ACKs. ZIP coverage includes classic Stored/Deflate, CRC/paths/duplicates, ZIP64
+rejection, zero-only producer padding bounded to 4 KiB, metadata/retention limits
+and bounded reads on sparse 100 MiB/1 GiB/3 GiB sources.
+Sparse sources are not real browser heap/storage measurements. A real internal
+browser Shared Album download/verification is recorded separately; live gallery
+mutation, Photos Links, metadata fidelity and desktop/mobile acceptance remain in
 `docs/ICLOUD_IMPORT.md`. Existing PDF/manual upload regressions remain required;
 BASIC syntax/documentation alone does not execute these functional fixtures.
 

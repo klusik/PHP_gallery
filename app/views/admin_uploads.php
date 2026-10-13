@@ -80,25 +80,27 @@ function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
 }
 
 /**
- * Render localized assisted Apple export guidance within the existing upload form.
+ * Render localized automatic iCloud import controls and their explicit manual alternative.
  * @return void Emit unnamed browser-local URL controls, never bearer transport fields.
  */
 function view_render_admin_icloud_source(): void
 {
-    $labels = ['album', 'link', 'assisted', 'invalid', 'files-required', 'browser-required', 'private-required'];
+    $labels = ['album', 'link', 'assisted', 'invalid', 'files-required', 'browser-required', 'private-required', 'start'];
     echo '<details class="admin-side-panel-field-wide" data-icloud-source';
     foreach ($labels as $label) {
         echo ' data-' . $label . '="' . e(t('admin.icloud.' . str_replace('-', '_', $label))) . '"';
     }
     echo '><summary>' . e(t('admin.icloud.title')) . '</summary>';
     echo '<label><span>' . e(t('admin.icloud.url')) . '</span><input type="url" maxlength="2048" data-icloud-url autocomplete="off" spellcheck="false"></label>';
-    echo '<button type="button" data-icloud-validate>' . e(t('admin.icloud.validate')) . '</button> ';
-    echo '<button type="button" data-icloud-clear>' . e(t('admin.icloud.clear')) . '</button>';
+    echo '<p class="muted">' . e(t('admin.icloud.import_help')) . '</p>';
+    echo '<button type="button" class="button primary" data-icloud-validate data-icloud-import>' . e(t('admin.icloud.start')) . '</button> ';
+    echo '<button type="button" class="button secondary" data-icloud-clear>' . e(t('admin.icloud.clear')) . '</button>';
     echo '<p role="status" aria-live="polite" data-icloud-status></p>';
     echo '<div data-icloud-guidance hidden><p data-icloud-product="photos-link">' . e(t('admin.icloud.link_help')) . '</p>';
     echo '<p data-icloud-product="shared-album">' . e(t('admin.icloud.album_help')) . '</p>';
-    echo '<p>' . e(t('admin.icloud.import_help')) . '</p><p>' . e(t('admin.icloud.unavailable_help')) . '</p><p>' . e(t('admin.icloud.privacy')) . '</p></div>';
-    echo '<button type="button" data-icloud-open hidden>' . e(t('admin.icloud.open')) . '</button> ';
+    echo '</div><details data-icloud-help><summary>' . e(t('admin.icloud.more_options')) . '</summary>';
+    echo '<p>' . e(t('admin.icloud.unavailable_help')) . '</p><p>' . e(t('admin.icloud.privacy')) . '</p>';
+    echo '<button type="button" class="button secondary" data-icloud-open hidden>' . e(t('admin.icloud.open')) . '</button></details> ';
     echo '<button type="button" data-icloud-cancel hidden>' . e(t('admin.icloud.cancel')) . '</button>';
     echo '<button type="submit" data-icloud-retry hidden>' . e(t('admin.icloud.retry')) . '</button>';
     echo '<noscript><p>' . e(t('admin.icloud.no_js')) . '</p></noscript></details>';
@@ -189,9 +191,9 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     if ($panelMode) {
-        echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.upload.upload_images', 'Upload images')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel', 'Progress appears at the top of this panel.')) . '</p></div>';
+        echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit data-gallery-upload-submit>' . e(t('admin.upload.upload_images', 'Upload images')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel', 'Progress appears at the top of this panel.')) . '</p></div>';
     } else {
-        echo '<button type="submit">' . e(t('admin.upload.upload_images', 'Upload images')) . '</button>';
+        echo '<button type="submit" data-gallery-upload-submit>' . e(t('admin.upload.upload_images', 'Upload images')) . '</button>';
     }
     echo '</form></section>';
 }
@@ -213,7 +215,7 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
         view_render_admin_upload_clipboard_hint();
         echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
         echo (string) ($viewModel['browser_checkbox_html'] ?? '');
-        echo '<button type="submit">' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
+        echo '<button type="submit" data-gallery-upload-submit>' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
         return;
     }
 
@@ -229,6 +231,6 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
     echo '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
     echo '</div>';
-    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.upload.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel_during_upload', 'Progress appears at the top of this panel during upload.')) . '</p></div>';
+    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit data-gallery-upload-submit>' . e(t('admin.upload.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel_during_upload', 'Progress appears at the top of this panel during upload.')) . '</p></div>';
     echo '</form></section>';
 }

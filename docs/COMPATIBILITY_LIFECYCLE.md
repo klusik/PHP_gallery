@@ -1,25 +1,32 @@
 # Compatibility lifecycle and retirement register
 
-## Assisted iCloud export and bounded classic ZIPs
+## Public iCloud exports and bounded ZIP sources
 
-Owner: `admin-icloud-source.js`, the existing browser uploader and image worker.
-Guided Apple download protects public Photos Links and Shared Albums where no
-supported format-selectable CORS-readable export contract has been verified.
-No Apple credentials or token-bearing server calls are introduced. Retain this
-path until both source products have supported export/format/browser evidence;
-manual selection remains a permanent browser security boundary fallback.
-Usage is **unknown**. The historical Photos fragment spelling and the observed
-Shared Album `#/sc,` redirect are parsed separately without API assumptions.
+Owner: `admin-icloud-source.js`, `admin-icloud-download.js`, the existing browser
+uploader and image worker. The observed anonymous Photos sharing protocol can
+produce CORS-readable compatible ZIPs for the owner-provided Shared Album. It is
+undocumented and may change; strict schema/host/availability failures retain the
+explicit manual alternative. No Apple credentials, cookies or Gallery proxy are
+introduced. Historical Photos fragments and Shared Album `#/sc,` redirects remain
+separate source inputs. Usage is **unknown**; live Photos Link, physical large-source
+and Safari/Firefox/mobile qualification remain separate evidence requirements.
+Retirement of the manual alternative requires those supported-source/client
+acceptance proofs; it is not inferred from one successful Shared Album export.
 
-Classic Stored/Deflate ZIP selection now refuses more than 64 MiB retained
-originals across a ZIP-containing selection and 4 MiB directory metadata. This
-protects the legacy File-array seam from unbounded retention; it changes large
-manual ZIP admission deliberately. Smaller exports and direct supported image
-selection remain available. ZIP64 remains explicitly unsupported. Retirement
-requires a bounded iterator extending the existing worker/batcher, real heap/
-quota measurements and cross-browser acceptance, not merely a larger constant.
-Synthetic source/lifecycle, malformed archive, inflation, replay and PDF
-regressions are registered in the central audit; BASIC does not execute them.
+Manual ZIP selections retain the 64 MiB aggregate-original cap. Automatic sources
+use OPFS and the existing pull-driven worker/batcher seam, bounding one original
+to 64 MiB/the effective server limit instead of retaining every image. Both modes
+retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and explicit
+ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes after
+the end record. The shared parser accepts only all-zero suffixes up to 4 KiB,
+with unchanged directory/entry/CRC/signature checks; nonzero trailers remain
+invalid. Permanent compatibility is justified by ordinary ZIP-library acceptance
+and the observed Apple producer; regression fixtures cover both acceptance and
+hostile/nonzero/oversized suffix refusal. Tail allocation is at most 69,653 bytes.
+Disk files are locked across active/retry work, removed on success/safe failure,
+and aged unlocked orphans are reclaimed at the next acquisition. Synthetic
+protocol/storage/incremental/replay and existing PDF scenarios run under the
+inherited central ZIP owner; BASIC alone does not execute them.
 
 ## PDF conversion generations after target loss
 

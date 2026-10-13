@@ -8,10 +8,14 @@ The right-hand existing-gallery and create-with-upload drawers collect paste, pi
 
 ## Preview budget
 
-The optional assisted iCloud source feeds this same picker and submission owner.
-It never stores or submits the bearer URL. See [the acquisition, ZIP limits and
-retry contract](ICLOUD_IMPORT.md). ZIP selections now share a 64 MiB retained
-original budget; this is independent from preview admission and upload batch size.
+The optional iCloud source uses this same submission/batcher/ACK owner. Automatic
+imports stage Apple's public export in OPFS and pull checked images through the
+existing File-stream seam, without filling the picker or an all-images File array.
+The explicit manual alternative feeds this picker. Bearer URLs are never persisted
+or submitted to Gallery. See [the acquisition, ZIP limits and retry contract](ICLOUD_IMPORT.md).
+Manual ZIP selections share a 64 MiB retained-original budget; the disk stream
+bounds each image instead. These bounds are independent from preview admission
+and upload batch size.
 
 | Resource | Bound | Effect outside the bound |
 | --- | --- | --- |
