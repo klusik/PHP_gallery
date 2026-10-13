@@ -82,7 +82,7 @@ media_session_assert(
     'Early media session release must preserve durable admin-login restoration before closing the writable session.'
 );
 $maintenanceSkip = strpos($maintenanceSource, 'cms_route_is_read_only_media_asset($page)');
-$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method(), $kernel');
+$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel');
 media_session_assert(
     $maintenanceSkip !== false && $autoupdate !== false && $maintenanceSkip < $autoupdate,
     'Read-only media requests must skip request-triggered updater/maintenance work before it begins.'

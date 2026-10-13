@@ -1329,6 +1329,42 @@ Failures before `activate` leave active application files untouched. Retry of do
 
 Automatic stable updates also create `trigger=background` jobs. Discovery and package processing are deliberately separate invocations, so a slow metadata probe cannot be followed by a second long package slice in the same request. Safe normal page requests may advance a small slice through `application_autoupdate_maybe_run()`. Caught background failures wait at least 60 seconds, then pass through `application_update_retry_job()` so package-stage failures discard untrusted partial artifacts before another worker attempt. `scripts/application_update.php` provides a bounded CLI cron runner for idle sites. Unattended background runners refuse to advance Admin/manual jobs, including beta installs. A true long-lived background worker is not assumed on shared hosting.
 
+**Automatic discovery cadence (issue #198).** Admin > Updates > Automatic updates
+stores one `application_autoupdate_interval_seconds` preference with the explicit
+allowlist 300/900/1800/3600 (5/15/30/60 minutes). The fallback is 300 seconds
+for new and existing installations with no saved preference, including upgrades.
+Existing saved choices take priority. The enable checkbox is separate, and the
+new interval never turns disabled automatic installation back on. GET/HEAD
+request-triggered discovery, explicit Admin check-due, and the bounded CLI runner
+use the same normalized interval. Every automatic attempt compares the most
+recent automatic or manual discovery timestamp under the existing nonblocking
+`cache/update-discovery.lock`, preventing duplicate probes when multiple PHP
+workers, CLI cron and Admin collide. Manual force/dry checks bypass the local
+interval, not GitHub `Retry-After` or primary-quota reset. An active resumable
+installation advances before fresh metadata throttling and remains on its bounded
+worker budget; passive Admin GET and media/mutation routes never initiate
+network discovery. GitHub 403/429 without explicit backoff now applies bounded
+exponential secondary-limit delays. Conditional ETag/304 reuse and existing
+GitHub API diagnostics remain in the sole `app/services/github.php` gateway.
+
+For an unattended shared-hosting installation where PHP CLI is available, an
+operator can configure an external five-minute cron entry (paths vary by host):
+
+```cron
+*/5 * * * * /path/to/php /path/to/gallery/scripts/application_update.php --time-budget=8
+```
+
+Running this command every five minutes does **not** force five-minute remote
+network traffic: disabled automatic updates, beta installations, outstanding
+resumable jobs, the saved discovery interval and GitHub backoff still govern
+behavior. Without cron, a low-traffic site can be late until an eligible page
+request arrives. A healthy one-API-call five-minute cadence is approximately
+12 unauthenticated requests per hour per installation; the standard anonymous
+GitHub REST limit is 60 requests/hour **per shared egress IP**, so other installs,
+fallback requests, and forced checks matter. Successful authenticated conditional
+304 responses have a documented primary-limit exemption, but unauthenticated
+304 responses must not be assumed free. Authentication is optional and server-side.
+
 The standalone `setup-gallery.php` first-install bootstrap is intentionally outside this engine because the application, authentication layer, and updater services do not exist yet. It still downloads/extracts/copies in one bootstrap request, so a host-level timeout can require retrying the bootstrap or uploading the release manually. This does not endanger an existing installation because the bootstrap refuses to run once `config.php`, `cache/installed.lock`, or `cache/bootstrap-installed.lock` exists, but it remains a shared-hosting limitation distinct from application updates.
 
 Cleanup does not infer that an unknown `app/` entry is invalid. Only known nested project-copy artifacts such as `app/app`, `app/public`, and `app/index.php` are targeted by the dedicated malformed-deployment cleanup, protecting legitimate top-level modules added by later releases.
@@ -2544,7 +2580,7 @@ The visual CSS editor uses closed, context-specific profiles: links and buttons 
 
 ## Bounded updater metadata and navigation imports
 
-Updates summary, selected/installed notes and API diagnostics refresh together. Ordinary notes merge cache/local history with installed notes authoritative. Explicit discovery alone fetches missing pending notes within its deadline, uses preferred-branch fallback, nonblocking cross-tab locking and an hourly due check. Async discovery releases the session; activation reconciles locally without a second HTTP check. Disabled auto updates prevent stale background resumption.
+Updates summary, selected/installed notes and API diagnostics refresh together. Ordinary notes merge cache/local history with installed notes authoritative. Explicit discovery alone fetches missing pending notes within its deadline, uses preferred-branch fallback, nonblocking cross-tab locking and the configurable 5/15/30/60-minute due check. Async discovery releases the session; activation reconciles locally without a second HTTP check. Disabled auto updates prevent stale background resumption.
 
 The internal `flight_maps/navdata_update.php` part owns weekly OurAirports freshness, hourly failure backoff and nonblocking import ownership. The model batches at most 200 rows per statement in its transaction. Dashboard/panel/page share prepared state and AJAX handling. Presentation health contributes to action-required status through the existing lazy named registry.
 

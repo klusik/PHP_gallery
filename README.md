@@ -28,7 +28,7 @@ The Admin gallery workspace shows hierarchy, direct/descendant image counts and 
 
 Card orientation means vertical/photo above text and horizontal/photo beside text. Migration `202610020001_gallery_description_layout_semantics.php` preserves existing appearance across database values, sidecars, Smart Galleries and Trash. Back up those stores together and use the normal migration runner. Search defaults on only without a saved preference and when its capability is available.
 
-Custom CSS remains installation-owned, is preserved by ordinary saves and is excluded from deployment. Updates use bounded hourly discovery; automatic OurAirports imports use weekly freshness and failure backoff. The Windows build writes installer and matching generated JSON together under `winapp/dist/<version>/`, keeping the companion version independent.
+Custom CSS remains installation-owned, is preserved by ordinary saves and is excluded from deployment. Updates use configurable stable-release discovery (five minutes by default); automatic OurAirports imports use weekly freshness and failure backoff. The Windows build writes installer and matching generated JSON together under `winapp/dist/<version>/`, keeping the companion version independent.
 
 Deployment uses the exact reviewed [production file inventory](docs/PRODUCTION_FILES.md). Both helpers require current integrity data and verify staged membership; local agent state, temporary notes and live runtime payloads cannot enter through a directory walk.
 

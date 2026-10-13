@@ -69,6 +69,102 @@ function set_application_autoupdate_enabled(bool $enabled): void
 }
 
 /**
+ * Default stable-release metadata discovery cadence for an installation.
+ *
+ * @var int
+ * Units: seconds between eligible GitHub discovery attempts.
+ * Scope: new and upgraded CMS installations lacking a valid saved preference.
+ * Consumers: automatic updater interval reader and request-time default argument.
+ * Rationale: five-minute discovery is the product default while existing due gates,
+ *   shared locks and GitHub API rate-limit backoff prevent unbounded polling.
+ */
+const APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS = 300;
+
+/**
+ * Exact allowlist for the saved stable-release discovery preference.
+ *
+ * @var array<int,int>
+ * Units: seconds for keys and whole minutes for display values.
+ * Scope: per-installation automatic stable-release discovery scheduling.
+ * Consumers: updater setting validator, request and CLI gates, and Admin selector.
+ * Rationale: prevent unsupported sub-five-minute polling and preserve validated
+ *   5, 15, 30 and 60 minute operator choices without a schema migration.
+ */
+const APPLICATION_AUTOUPDATE_INTERVAL_OPTIONS = [300 => 5, 900 => 15, 1800 => 30, 3600 => 60];
+
+/**
+ * Validate an interval without accepting numeric coercion, whitespace, or extra values.
+ *
+ * @param string $raw Decimal seconds as saved in app_settings or submitted by Admin.
+ * @return int|null Allowed interval or null if not allowed.
+ */
+function application_autoupdate_validate_interval_seconds(string $raw): ?int
+{
+    foreach (APPLICATION_AUTOUPDATE_INTERVAL_OPTIONS as $seconds => $minutes) {
+        if ($raw === (string) $seconds) {
+            return (int) $seconds;
+        }
+    }
+    return null;
+}
+
+/**
+ * Return the effective remote stable-release discovery cadence in seconds.
+ *
+ * Missing, obsolete, and corrupted stored values resolve to five minutes.
+ *
+ * @return int Valid 300, 900, 1800, or 3600 seconds.
+ */
+function application_autoupdate_interval_seconds(): int
+{
+    $stored = (string) app_setting('application_autoupdate_interval_seconds', (string) APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS);
+    return application_autoupdate_validate_interval_seconds($stored) ?? APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS;
+}
+
+/**
+ * Persist an explicitly selected interval without modifying automatic-update enablement.
+ *
+ * @param string $seconds Exact decimal seconds from an authenticated Admin setting.
+ * @throws \InvalidArgumentException For a value outside the allowlist.
+ * @return void Persists one allowlisted interval without changing automatic-update enablement.
+ */
+function set_application_autoupdate_interval_seconds(string $seconds): void
+{
+    if (application_autoupdate_validate_interval_seconds($seconds) === null) {
+        throw new \InvalidArgumentException('Invalid automatic update check interval.');
+    }
+    set_app_setting('application_autoupdate_interval_seconds', $seconds);
+}
+
+/**
+ * Return the newest persisted discovery timestamp across manual and automatic checks.
+ *
+ * @return int Last attempted discovery time, or zero when never checked.
+ */
+function application_update_discovery_last_attempt_at(): int
+{
+    return max(
+        0,
+        (int) app_setting('application_autoupdate_last_checked_at', '0'),
+        (int) app_setting('application_update_check_cached_at', '0')
+    );
+}
+
+/**
+ * Evaluate the elapsed-time discovery gate without using a wall-clock sleep.
+ *
+ * @param int $now Current Unix timestamp (explicit for deterministic tests).
+ * @param int $lastAttemptAt Most recent persisted attempt timestamp.
+ * @param int|null $intervalSeconds Already-normalized interval, or null for saved preference.
+ * @return bool Whether remote discovery is eligible at this instant.
+ */
+function application_autoupdate_discovery_due(int $now, int $lastAttemptAt, ?int $intervalSeconds = null): bool
+{
+    $interval = $intervalSeconds ?? application_autoupdate_interval_seconds();
+    return $lastAttemptAt <= 0 || $now - $lastAttemptAt >= $interval;
+}
+
+/**
  * Check and install a stable release automatically when the request-time timer allows it.
  *
  * This routine is intentionally conservative: it runs only on safe browser reads,
@@ -77,13 +173,13 @@ function set_application_autoupdate_enabled(bool $enabled): void
  * continued before method and preference checks. The optional loader lets the runtime
  * kernel provide the heavy updater module only when an active job or due check needs it.
  *
- * @param int $ttlSeconds Minimum interval in seconds between automatic remote checks.
+ * @param int $ttlSeconds Legacy caller argument kept for compatibility; saved preference is authoritative.
  * @param string $requestMethod HTTP method used to decide whether a new check is safe.
  * @param callable(string):mixed|null $loadDependencies Optional loader for heavy updater dependencies.
  * @return void Runs eligible active-job or automatic-check work.
  */
 function application_autoupdate_maybe_run(
-    int $ttlSeconds = 3600,
+    int $ttlSeconds = APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS,
     string $requestMethod = 'GET',
     ?callable $loadDependencies = null
 ): void {
@@ -108,10 +204,9 @@ function application_autoupdate_maybe_run(
         return;
     }
 
-    // $ttlSeconds stores the minimum remote check interval. One hour is the default
-    // so shared hosting installations do not burn anonymous GitHub API quota on
-    // normal page traffic. Manual dry checks intentionally bypass this throttle.
-    $ttlSeconds = max(3600, $ttlSeconds);
+    // Saved preference overrides legacy caller arguments. Only metadata discovery
+    // is throttled, not active resumable update-job execution.
+    $ttlSeconds = application_autoupdate_interval_seconds();
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
     $method = strtoupper(trim($requestMethod));
     if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {
@@ -119,8 +214,8 @@ function application_autoupdate_maybe_run(
     }
 
     $now = time();
-    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
-    if ($lastCheckedAt > 0 && $now - $lastCheckedAt < $ttlSeconds) {
+    $lastCheckedAt = application_update_discovery_last_attempt_at();
+    if (!application_autoupdate_discovery_due($now, $lastCheckedAt, $ttlSeconds)) {
         return;
     }
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');

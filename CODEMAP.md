@@ -485,10 +485,10 @@ The Maintenance Center is core Admin functionality. Existing optional capabiliti
 
 | Task | Files | Notes |
 | --- | --- | --- |
-| GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport. |
+| GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport, conditional validators, enforced primary/secondary backoff. |
 | Update status/service router | `app/services/updates.php`, `app/services/updates_status.php`, `app/services/updates_remote.php` | Bounded release discovery and updater service composition. |
 | Resumable update state machine | `app/services/updates_jobs.php` (parts in `app/services/updates_jobs/`) | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
-| Update install/background entry points | `app/services/updates_install.php`, `scripts/application_update.php` | Legacy API starters plus request-triggered/cron continuation; discovery and package work are split across invocations. |
+| Update install/background entry points | `app/services/updates_request.php`, `app/services/updates_install.php`, `scripts/application_update.php` | Validated 300/900/1800/3600-second saved interval (default 300), GET/HEAD/CLI parity, shared nonblocking discovery lock and bounded active-job continuation; metadata/package work stay separate. |
 | Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh, passive completion release-summary refresh/retry and non-JavaScript POST fallback. |
 | Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
 | Release metadata | `release-metadata.json` | Version/channel metadata consumed during discovery. |

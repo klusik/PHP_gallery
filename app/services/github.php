@@ -166,8 +166,9 @@ function cms_github_api_wait_state(): array
  *
  * @param string $url URL used by this workflow.
  * @param int $status Status value.
- * @param array $headers Headers value.
+ * @param array<string,string|array<int,string>> $headers HTTP response headers used for quota and retry bookkeeping.
  * @param bool $fromCache From cache value.
+ * @return void Persists policy state and sanitized diagnostics.
  */
 function cms_github_api_record_response(string $url, int $status, array $headers, bool $fromCache = false): void
 {
@@ -203,7 +204,21 @@ function cms_github_api_record_response(string $url, int $status, array $headers
         delete_app_settings(['application_update_github_primary_reset_at']);
     }
 
-    if ($status < 400 && $retryAfter === 0) {
+    // Secondary-limit responses may lack Retry-After/reset headers. Apply a
+    // bounded exponential pause rather than repeatedly probing a blocked API.
+    if (in_array($status, [403, 429], true)) {
+        $failures = min(7, max(0, (int) app_setting('application_update_github_secondary_failures', '0')) + 1);
+        set_app_setting('application_update_github_secondary_failures', (string) $failures);
+        if ($retryAfter === 0 && !($remaining === 0 && $resetAt > time())) {
+            $backoffSeconds = min(3600, 60 * (2 ** ($failures - 1)));
+            $currentPause = (int) app_setting('application_update_github_retry_after_until', '0');
+            set_app_setting('application_update_github_retry_after_until', (string) max($currentPause, time() + $backoffSeconds));
+        }
+    } elseif ($status >= 200 && $status < 400) {
+        delete_app_settings(['application_update_github_secondary_failures']);
+    }
+
+    if ($status >= 200 && $status < 400 && $retryAfter === 0) {
         delete_app_settings(['application_update_github_retry_after_until']);
     }
 }

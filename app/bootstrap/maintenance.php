@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 use function Gallery\Services\application_autoupdate_maybe_run;
+use function Gallery\Services\application_autoupdate_interval_seconds;
 use function Gallery\Services\admin_log_archive_register_request_trigger;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 
@@ -56,14 +57,16 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
         return;
     }
 
+    // Load the lightweight updater policy before inspecting its interval.
+    $kernel?->load('request-maintenance');
+    $intervalSeconds = application_autoupdate_interval_seconds();
     if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
         \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.begin', [
-            'configured_check_ttl_seconds' => 3600,
+            'configured_check_ttl_seconds' => $intervalSeconds,
             'background_continue_budget_seconds' => 3.0,
         ]);
     }
-    $kernel?->load('request-maintenance');
-    application_autoupdate_maybe_run(3600, request_method(), $kernel !== null
+    application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel !== null
         ? static fn(string $module): mixed => $kernel->load($module) : null);
     if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
         \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.end');
