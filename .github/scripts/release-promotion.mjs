@@ -51,7 +51,8 @@ export function command(executable, args, input = null) {
     if (result.error || result.status !== 0) {
         const denied=executable==='gh' && args[0]==='api' && /HTTP (401|403)/.test(result.stderr ?? '');
         const missing=executable==='gh' && args[0]==='api' && /HTTP 404/.test(result.stderr ?? '');
-        throw new Error((denied ? 'BLOCKED_API_PERMISSION: ' : missing ? 'BLOCKED_API_NOT_FOUND: ' : 'BLOCKED_COMMAND: ')+executable+' command failed ('+(result.status ?? 'unavailable')+').');
+        const providerFailure=executable==='gh' && args[0]==='api' && /HTTP 5\d\d\b/.test(result.stderr ?? '');
+        throw new Error((denied ? 'BLOCKED_API_PERMISSION: ' : missing ? 'BLOCKED_API_NOT_FOUND: ' : providerFailure ? 'BLOCKED_API_PROVIDER: ' : 'BLOCKED_COMMAND: ')+executable+' command failed ('+(result.status ?? 'unavailable')+').');
     }
     return executable==='git' && (args.includes('-z') || args[0]==='diff') ? result.stdout : result.stdout.trim();
 }
@@ -614,14 +615,28 @@ export function verifyQualification(request, run, jobs, record, repository, curr
  * @param {function(string,string[],(string|null)=):string} execute Literal paginated transport; optional stdin defaults to null.
  * @param {function(string):JsonValue} call Server check-detail reader used to identify programmatic aggregate rows.
  * @param {'candidate'|'release'|'integration'} kind Qualification workflow owner; defaults to release.
- * @returns {ReleaseJob[]} Complete workflow coverage, excluding only successful exact programmatic checks for the requested kind; foreign/unbound rows remain visible and malformed evidence throws.
+ * @returns {ReleaseJob[]} Complete workflow coverage, excluding only successful exact programmatic checks for the requested kind; foreign/unbound rows remain visible and malformed evidence throws. A provider HTTP 5xx permits one complete one-job-page read of the same attempt; permission, missing-resource and data failures never use that fallback.
  */
 export function fetchJobs(repository, runId, attempt, candidate, execute=command, call=api, kind='release') {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[1-9]\d*$/.test(runId)
         || !Number.isSafeInteger(attempt) || attempt<1 || !/^[a-f0-9]{40}$/.test(candidate)) {
         throw new Error('BLOCKED invalid exact job inventory identity.');
     }
-    const pages=JSON.parse(execute('gh',['api',`repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,'--paginate','--slurp']));
+    const path=`repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs`;
+    let response;
+    try {
+        response=execute('gh',['api',path+'?per_page=100','--paginate','--slurp']);
+    } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith('BLOCKED_API_PROVIDER: ')) throw error;
+        // Retained job collections can return HTTP 502 for a large provider page.
+        // Type: number. Units: job records per page. Scope: one exact attempt read.
+        // Consumers: release/integration evidence verification.
+        // Rationale: one job per page avoids the observed large-page provider failure
+        // while pagination and the unchanged total-count gate still require all jobs.
+        // Read once after HTTP 5xx only; never retry writes or weaken evidence checks.
+        response=execute('gh',['api',path+'?per_page=1','--paginate','--slurp']);
+    }
+    const pages=JSON.parse(response);
     if (!Array.isArray(pages) || !pages.length || pages.some(page=>!page || !Array.isArray(page.jobs))) {
         throw new Error('BLOCKED malformed job inventory pages.');
     }

@@ -1,5 +1,24 @@
 # Compatibility lifecycle and retirement register
 
+## Retained Actions job inventory provider failures
+
+Owner: `.github/scripts/release-promotion.mjs`, `command()` and `fetchJobs()`.
+Release qualification must independently read the complete job inventory of the
+exact retained integration attempt. GitHub returned HTTP 502 for the 100-job
+page of integration run 38465847308 attempt 2; a complete one-job-page read
+returned all 16 jobs. This is a provider read failure, not failed Gallery runtime
+qualification. Usage frequency is **unknown**; the incident is documented in
+issue #202.
+
+Only an explicitly classified HTTP 5xx allows one alternate paginated read with
+one job per page, on the identical run and attempt. Permission, missing-resource,
+malformed/incomplete evidence and unclassified command errors remain terminal.
+The smaller-page read retains total-count completeness, exact check identities
+and all mandatory job gates; it cannot authorize writes or accept partial proof.
+Regression coverage belongs to `tests/hosted_release_policy_test.mjs`.
+Retire the fallback only after supported GitHub retained-job collections have
+reliable large-page reads and exact-coverage regression acceptance remains intact.
+
 ## Public iCloud exports and bounded ZIP sources
 
 Owner: `admin-icloud-source.js`, `admin-icloud-download.js`, the existing browser
