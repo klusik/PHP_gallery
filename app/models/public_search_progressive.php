@@ -344,4 +344,336 @@ function public_search_model_image_tag_name_rows(array $ids): array
     );
 }
 
+// Phase-bounded Boolean query model helpers share this registered runtime module.
+/**
+ * Construct a bound condition for one term against the fields enabled in this phase.
+ *
+ * The optional "new only" mode describes fields introduced in the current deferred
+ * phase. It prevents a late phase from filling its bounded result set with hits
+ * already eligible for a faster phase.
+ *
+ * @param string $kind gallery or photo.
+ * @param string $phase Progressive phase.
+ * @param string $term Unquoted term or quoted exact phrase.
+ * @param bool $translated Whether the matching translation schema is available.
+ * @param string $language Active content language.
+ * @param bool $aiReady Whether image AI metadata may be searched.
+ * @param bool $newOnly Limit matching to attributes introduced in this phase.
+ * @return array{0:string,1:array<int,string>} Bound predicate and parameters.
+ */
+function public_search_model_compound_term_condition(
+    string $kind,
+    string $phase,
+    string $term,
+    bool $translated,
+    string $language,
+    bool $aiReady,
+    bool $newOnly = false
+): array {
+    $like = public_search_model_like_pattern($term);
+    $conditions = [];
+    $params = [];
+
+    if ($kind === 'gallery') {
+        if (!$newOnly) {
+            $conditions[] = 'g.title LIKE ?';
+            $params[] = $like;
+        }
+        if ($phase !== 'primary' && (!$newOnly || $phase === 'descriptive')) {
+            $conditions[] = 'g.description LIKE ?';
+            $params[] = $like;
+        }
+
+        $tagParts = [];
+        if (!$newOnly) {
+            $tagParts[] = 't.name LIKE ?';
+        }
+        if ($phase !== 'primary' && (!$newOnly || $phase === 'descriptive')) {
+            $tagParts[] = 't.description LIKE ?';
+        }
+        if ($tagParts !== []) {
+            $conditions[] = 'EXISTS (SELECT 1 FROM gallery_tags gt '
+                . 'INNER JOIN tags t ON t.id = gt.tag_id '
+                . 'WHERE gt.gallery_id = g.id AND (' . implode(' OR ', $tagParts) . '))';
+            foreach ($tagParts as $_) {
+                $params[] = $like;
+            }
+        }
+
+        if ($translated && $phase !== 'primary') {
+            $translationParts = [];
+            if (!$newOnly || $phase === 'descriptive') {
+                $translationParts[] = 'tr.title LIKE ?';
+            }
+            if ($phase === 'deep') {
+                $translationParts[] = 'tr.description LIKE ?';
+            }
+            if ($translationParts !== []) {
+                $conditions[] = 'EXISTS (SELECT 1 FROM gallery_translations tr '
+                    . 'WHERE tr.gallery_id = g.id AND tr.language_code = ? AND ('
+                    . implode(' OR ', $translationParts) . '))';
+                $params[] = $language;
+                foreach ($translationParts as $_) {
+                    $params[] = $like;
+                }
+            }
+        }
+    } else {
+        if (!$newOnly) {
+            $conditions[] = 'i.filename LIKE ?';
+            $conditions[] = 'i.title LIKE ?';
+            array_push($params, $like, $like);
+        }
+        if ($phase === 'deep') {
+            $conditions[] = 'i.description LIKE ?';
+            $params[] = $like;
+        }
+
+        $tagParts = [];
+        if (!$newOnly) {
+            $tagParts[] = 't.name LIKE ?';
+        }
+        if ($phase === 'deep') {
+            $tagParts[] = 't.description LIKE ?';
+        }
+        if ($tagParts !== []) {
+            $conditions[] = 'EXISTS (SELECT 1 FROM image_tags it '
+                . 'INNER JOIN tags t ON t.id = it.tag_id '
+                . 'WHERE it.image_id = i.id AND (' . implode(' OR ', $tagParts) . '))';
+            foreach ($tagParts as $_) {
+                $params[] = $like;
+            }
+        }
+
+        if ($translated && $phase === 'deep') {
+            $conditions[] = 'EXISTS (SELECT 1 FROM image_translations tr '
+                . 'WHERE tr.image_id = i.id AND tr.language_code = ? '
+                . 'AND (tr.title LIKE ? OR tr.description LIKE ?))';
+            array_push($params, $language, $like, $like);
+        }
+        if ($aiReady && $phase === 'deep') {
+            $conditions[] = 'EXISTS (SELECT 1 FROM image_ai_metadata m '
+                . 'WHERE m.image_id = i.id AND m.searchable_text LIKE ?)';
+            $params[] = $like;
+        }
+    }
+
+    if ($conditions === []) {
+        return ['0 = 1', []];
+    }
+    return ['(' . implode(' OR ', $conditions) . ')', $params];
+}
+
+/**
+ * Build (AND terms) OR (AND terms) without moving term matching across entities.
+ *
+ * @param array<int,array<int,string>> $groups Disjunctive groups of required terms.
+ * @param string $kind gallery or photo.
+ * @param string $phase Progressive phase.
+ * @param bool $translated Availability of active-language entity translations.
+ * @param string $language Active content language.
+ * @param bool $aiReady Whether AI image metadata is enabled.
+ * @return array{0:string,1:array<int,string>} SQL predicate and ordered bindings.
+ */
+function public_search_model_compound_expression(
+    array $groups,
+    string $kind,
+    string $phase,
+    bool $translated,
+    string $language,
+    bool $aiReady
+): array {
+    $alternatives = [];
+    $params = [];
+    foreach ($groups as $group) {
+        $required = [];
+        foreach ($group as $term) {
+            [$condition, $termParams] = public_search_model_compound_term_condition(
+                $kind, $phase, $term, $translated, $language, $aiReady
+            );
+            $required[] = $condition;
+            array_push($params, ...$termParams);
+        }
+        if ($required !== []) {
+            $alternatives[] = '(' . implode(' AND ', $required) . ')';
+        }
+    }
+    return [$alternatives === [] ? '0 = 1' : '(' . implode(' OR ', $alternatives) . ')', $params];
+}
+
+/**
+ * Match a field newly added in a deferred phase for at least one search term.
+ *
+ * @param array<int,array<int,string>> $groups Search groups.
+ * @param string $kind gallery or photo.
+ * @param string $phase Progressive phase.
+ * @param bool $translated Whether translated fields may be searched.
+ * @param string $language Active content language.
+ * @param bool $aiReady Whether AI metadata may be searched.
+ * @return array{0:string,1:array<int,string>} Optional late-phase eligibility predicate.
+ */
+function public_search_model_compound_new_source_condition(
+    array $groups,
+    string $kind,
+    string $phase,
+    bool $translated,
+    string $language,
+    bool $aiReady
+): array {
+    if ($phase === 'primary' || $phase === 'media') {
+        return ['1 = 1', []];
+    }
+    $conditions = [];
+    $params = [];
+    foreach ($groups as $group) {
+        foreach ($group as $term) {
+            [$condition, $termParams] = public_search_model_compound_term_condition(
+                $kind, $phase, $term, $translated, $language, $aiReady, true
+            );
+            $conditions[] = $condition;
+            array_push($params, ...$termParams);
+        }
+    }
+    return [$conditions === [] ? '0 = 1' : '(' . implode(' OR ', $conditions) . ')', $params];
+}
+
+/**
+ * Find bounded gallery candidates whose own metadata satisfies a compound query.
+ *
+ * No images or image tags participate in gallery eligibility: media matches
+ * belong to photo entities and continue through their separately authorized
+ * media/deep phases.
+ *
+ * @param array<int,array<int,string>> $groups Parsed query groups.
+ * @param string $phase primary, descriptive, or deep.
+ * @param bool $listedOnly Whether galleries must be publicly listed.
+ * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @param bool $translated Whether active-language gallery translations are ready.
+ * @param string $language Active content language.
+ * @param int $limit Maximum candidate rows.
+ * @return array<int,array<string,mixed>> Bounded gallery candidate rows.
+ */
+function public_search_model_compound_gallery_rows(
+    array $groups,
+    string $phase,
+    bool $listedOnly,
+    ?array $contextGallery,
+    bool $translated,
+    string $language,
+    int $limit
+): array {
+    $limit = max(1, min(90, $limit));
+    [$listing, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$required, $matchParams] = public_search_model_compound_expression(
+        $groups, 'gallery', $phase, $translated, $language, false
+    );
+    [$newSource, $newParams] = public_search_model_compound_new_source_condition(
+        $groups, 'gallery', $phase, $translated, $language, false
+    );
+    $joined = implode(' ', $groups[0] ?? []);
+    $first = (string) ($groups[0][0] ?? '');
+    $scoreParams = [
+        $joined, public_search_model_prefix_pattern($joined),
+        public_search_model_like_pattern($first), public_search_model_like_pattern($first),
+    ];
+    $descriptionScore = '';
+    if ($phase !== 'primary') {
+        $descriptionScore = 'WHEN g.description LIKE ? THEN 520';
+        $scoreParams[] = public_search_model_like_pattern($first);
+    }
+    $sql = "SELECT g.id, g.title,
+            CASE
+                WHEN LOWER(g.title) = LOWER(?) THEN 1200
+                WHEN g.title LIKE ? THEN 1100
+                WHEN g.title LIKE ? THEN 950
+                WHEN EXISTS (
+                    SELECT 1 FROM gallery_tags gt
+                    INNER JOIN tags t ON t.id = gt.tag_id
+                    WHERE gt.gallery_id = g.id AND t.name LIKE ?
+                ) THEN 800
+                $descriptionScore
+                ELSE 360
+            END AS match_score
+        FROM galleries g
+        WHERE $listing
+          AND $required
+          AND $newSource
+        ORDER BY match_score DESC, LOWER(g.title) ASC, g.id ASC
+        LIMIT " . (int) $limit;
+    return public_search_diagnostics_fetch_all(
+        'compound.' . $phase . '.gallery_candidates',
+        $sql,
+        array_merge($scoreParams, $contextParams, $matchParams, $newParams)
+    );
+}
+
+/**
+ * Find bounded photo candidates against phase-appropriate photo metadata.
+ *
+ * @param array<int,array<int,string>> $groups Parsed query groups.
+ * @param string $phase media or deep.
+ * @param bool $listedOnly Whether the parent gallery must be publicly listed.
+ * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @param bool $translated Whether active-language image translations are ready.
+ * @param string $language Active content language.
+ * @param bool $aiReady Whether AI image metadata can be searched.
+ * @param int $limit Maximum candidate rows.
+ * @return array<int,array<string,mixed>> Bounded image candidate rows.
+ */
+function public_search_model_compound_image_rows(
+    array $groups,
+    string $phase,
+    bool $listedOnly,
+    ?array $contextGallery,
+    bool $translated,
+    string $language,
+    bool $aiReady,
+    int $limit
+): array {
+    $limit = max(1, min(90, $limit));
+    [$listing, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$required, $matchParams] = public_search_model_compound_expression(
+        $groups, 'photo', $phase, $translated, $language, $aiReady
+    );
+    [$newSource, $newParams] = public_search_model_compound_new_source_condition(
+        $groups, 'photo', $phase, $translated, $language, $aiReady
+    );
+    $joined = implode(' ', $groups[0] ?? []);
+    $first = (string) ($groups[0][0] ?? '');
+    $prefix = public_search_model_prefix_pattern($joined);
+    $like = public_search_model_like_pattern($first);
+    $scoreParams = [$joined, $joined, $prefix, $prefix, $like, $like, $like];
+    $descriptionScore = '';
+    if ($phase === 'deep') {
+        $descriptionScore = 'WHEN i.description LIKE ? THEN 420';
+        $scoreParams[] = $like;
+    }
+    $sql = "SELECT i.id, i.filename, i.title,
+            CASE
+                WHEN LOWER(i.filename) = LOWER(?) OR LOWER(COALESCE(i.title, '')) = LOWER(?) THEN 900
+                WHEN i.filename LIKE ? OR i.title LIKE ? THEN 820
+                WHEN i.filename LIKE ? OR i.title LIKE ? THEN 720
+                WHEN EXISTS (
+                    SELECT 1 FROM image_tags it
+                    INNER JOIN tags t ON t.id = it.tag_id
+                    WHERE it.image_id = i.id AND t.name LIKE ?
+                ) THEN 680
+                $descriptionScore
+                ELSE 300
+            END AS match_score
+        FROM images i
+        INNER JOIN galleries g ON g.id = i.gallery_id
+        WHERE i.visibility = 'public'
+          AND $listing
+          AND $required
+          AND $newSource
+        ORDER BY match_score DESC, LOWER(COALESCE(NULLIF(i.title, ''), i.filename)) ASC, i.id ASC
+        LIMIT " . (int) $limit;
+    return public_search_diagnostics_fetch_all(
+        'compound.' . $phase . '.image_candidates',
+        $sql,
+        array_merge($scoreParams, $contextParams, $matchParams, $newParams)
+    );
+}
+
 require_once __DIR__ . '/public_search_progressive/deferred.php';

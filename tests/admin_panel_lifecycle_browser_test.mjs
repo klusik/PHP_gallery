@@ -23,8 +23,8 @@ import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Browser process wall-clock deadline, in milliseconds; separate from virtual fixture time. */
 const browserTimeoutMs = 45000;
-/** Allow hosted runners time to start Chromium before its DevTools endpoint appears. */
-const browserStartupTimeoutMs = 15000;
+/** Allow cold hosted runners extra time for a disposable Chromium DevTools endpoint. */
+const browserStartupTimeoutMs = 30000;
 /** Chromium executable supplied by the central browser registry. */
 const executable = process.argv[2];
 /** Explicit fixture allowlist; alternate wrapper never exposes arbitrary repository files. */
@@ -237,7 +237,12 @@ try {
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
         '--remote-debugging-port=0', ...(fixtureName === 'admin_gallery_tree.html' ? ['--window-size=1280,1000'] : []),
         '--user-data-dir=' + profile,
-        'about:blank'], {windowsHide: true});
+        'about:blank'], {
+            windowsHide: true,
+            // Fontconfig on hosted Linux can start without writable default caches.
+            // Keep its cache writable and confined to this test-owned browser profile.
+            env: {...process.env, XDG_CACHE_HOME: profile},
+        });
     browserReady = attachKeyboard(profile);
     // The HTTP keyboard boundary reports setup failure without an unhandled rejection.
     browserReady.catch(/** Consume the setup rejection already reported at the HTTP keyboard boundary. @return {void} Avoids an unhandled rejection without treating setup as successful. */ () => {});

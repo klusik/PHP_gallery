@@ -48,6 +48,8 @@ use function Gallery\Models\public_search_model_media_image_rows_by_ids;
 use function Gallery\Models\public_search_model_media_image_tag_rows;
 use function Gallery\Models\public_search_model_primary_gallery_tag_rows;
 use function Gallery\Models\public_search_model_primary_gallery_title_rows;
+use function Gallery\Models\public_search_model_compound_gallery_rows;
+use function Gallery\Models\public_search_model_compound_image_rows;
 
 const PUBLIC_SEARCH_PHASE_PRIMARY = 'primary';
 const PUBLIC_SEARCH_PHASE_MEDIA = 'media';
@@ -152,6 +154,19 @@ function public_search_phase_results(string $phase, string $query, int $limit = 
     }
 
     $limit = public_search_phase_result_limit($phase, $limit);
+    $groups = public_search_parse_groups($query);
+    if ($groups === []) {
+        return [];
+    }
+    if (count($groups) === 1 && count($groups[0]) === 1) {
+        // An ordinary one-term or explicitly quoted phrase stays on the fast path.
+        $query = $groups[0][0];
+        if (public_search_query_length($query) < 2) {
+            return [];
+        }
+    } else {
+        return public_search_compound_phase_results($phase, $groups, $limit, $contextGallery);
+    }
 
     if ($phase === PUBLIC_SEARCH_PHASE_PRIMARY) {
         return public_search_primary_results($query, $limit, $contextGallery);
@@ -763,6 +778,178 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
     }
 
     return $results;
+}
+
+// Compound phase orchestration must be part of the selective public-search runtime.
+/**
+ * Convert bounded compound gallery rows into the existing result candidate shape.
+ *
+ * @param array<int,array<string,mixed>> $rows Model gallery candidate rows.
+ * @return array<int,array<string,mixed>> Stable candidate models.
+ */
+function public_search_compound_gallery_candidates(array $rows): array
+{
+    $candidates = [];
+    foreach ($rows as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        $score = (int) ($row['match_score'] ?? 0);
+        if ($id < 1 || $score < 1) {
+            continue;
+        }
+        $source = match ($score) {
+            1200 => 'gallery_title_exact',
+            1100 => 'gallery_title_prefix',
+            950 => 'gallery_title_substring',
+            800 => 'gallery_tag_substring',
+            520 => 'gallery_description',
+            default => 'tag_description',
+        };
+        $candidates[] = public_search_candidate_model('gallery', $id, $score, $source, (string) ($row['title'] ?? ''));
+    }
+    return $candidates;
+}
+
+/**
+ * Convert bounded compound photo rows into the existing result candidate shape.
+ *
+ * @param array<int,array<string,mixed>> $rows Model photo candidate rows.
+ * @return array<int,array<string,mixed>> Stable candidate models.
+ */
+function public_search_compound_photo_candidates(array $rows): array
+{
+    $candidates = [];
+    foreach ($rows as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        $score = (int) ($row['match_score'] ?? 0);
+        if ($id < 1 || $score < 1) {
+            continue;
+        }
+        $source = match ($score) {
+            900 => 'image_name_exact',
+            820 => 'image_name_prefix',
+            720 => 'image_name_substring',
+            680 => 'image_tag_substring',
+            420 => 'image_description',
+            default => 'ai_searchable_metadata',
+        };
+        $title = trim((string) ($row['title'] ?? ''));
+        if ($title === '') {
+            $title = (string) ($row['filename'] ?? '');
+        }
+        $candidates[] = public_search_candidate_model('photo', $id, $score, $source, $title);
+    }
+    return $candidates;
+}
+
+/**
+ * Execute a single compound search phase and reuse canonical result hydration.
+ *
+ * Primary phase inspects gallery titles/tags; media inspects image names/tags.
+ * Deferred phases progressively add descriptions and enabled translations/AI.
+ * All required terms must match the SAME gallery or the SAME photo.
+ *
+ * @param string $phase Supported public search phase.
+ * @param array<int,array<int,string>> $groups OR groups containing AND terms.
+ * @param int $limit Maximum returned items.
+ * @param ?array $contextGallery Optional branch restriction.
+ * @return array<int,array<string,mixed>> Progressive result payload items.
+ */
+function public_search_compound_phase_results(
+    string $phase,
+    array $groups,
+    int $limit,
+    ?array $contextGallery = null
+): array {
+    if (!public_search_phase_supported($phase) || $groups === []) {
+        return [];
+    }
+
+    $limit = max(1, min(30, $limit));
+    $candidateLimit = min(90, max($limit * 3, $limit + 8));
+    $listedOnly = public_search_listing_requires_listed();
+    $language = translation_active_language();
+
+    if ($phase === PUBLIC_SEARCH_PHASE_PRIMARY || $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE) {
+        $translated = $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE
+            && content_localization_enabled()
+            && content_localization_schema_ready('gallery');
+        $rows = public_search_model_compound_gallery_rows(
+            $groups, $phase, $listedOnly, $contextGallery, $translated, $language, $candidateLimit
+        );
+        $candidates = array_slice(public_search_compound_gallery_candidates($rows), 0, $limit);
+        return public_search_hydrate_primary_gallery_candidates($candidates);
+    }
+
+    if ($phase === PUBLIC_SEARCH_PHASE_MEDIA) {
+        $rows = public_search_model_compound_image_rows(
+            $groups, $phase, $listedOnly, $contextGallery, false, $language, false, $candidateLimit
+        );
+        $candidates = array_slice(public_search_compound_photo_candidates($rows), 0, $limit);
+        return public_search_hydrate_media_image_candidates($candidates, $contextGallery);
+    }
+
+    $galleryTranslated = content_localization_enabled() && content_localization_schema_ready('gallery');
+    $imageTranslated = content_localization_enabled() && content_localization_schema_ready('image');
+    $aiReady = public_search_ai_metadata_ready();
+    $galleryRows = public_search_model_compound_gallery_rows(
+        $groups, $phase, $listedOnly, $contextGallery, $galleryTranslated, $language, $candidateLimit
+    );
+    $imageRows = public_search_model_compound_image_rows(
+        $groups, $phase, $listedOnly, $contextGallery, $imageTranslated, $language, $aiReady, $candidateLimit
+    );
+
+    $candidates = [];
+    public_search_merge_candidate_rows($candidates, public_search_compound_gallery_candidates($galleryRows));
+    public_search_merge_candidate_rows($candidates, public_search_compound_photo_candidates($imageRows));
+    $ordered = array_slice(public_search_sort_candidate_rows(array_values($candidates)), 0, $limit);
+    return public_search_hydrate_deep_candidates($ordered, $contextGallery);
+}
+
+/**
+ * Combine bounded compound phase results for callers of the non-phased endpoint.
+ *
+ * The live browser keeps its four asynchronous requests. This compatibility
+ * fallback uses the same phase-level eligibility and canonical authorization,
+ * then deduplicates stable result keys and retains the strongest score.
+ *
+ * @param array<int,array<int,string>> $groups Parsed boolean search expression.
+ * @param int $limit Maximum returned results.
+ * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @return array<int,array<string,mixed>> Bounded, merged search results.
+ */
+function public_search_compound_results(array $groups, int $limit, ?array $contextGallery = null): array
+{
+    $limit = max(1, min(30, $limit));
+    $byKey = [];
+
+    foreach ([PUBLIC_SEARCH_PHASE_PRIMARY, PUBLIC_SEARCH_PHASE_MEDIA, PUBLIC_SEARCH_PHASE_DESCRIPTIVE, PUBLIC_SEARCH_PHASE_DEEP] as $phase) {
+        foreach (public_search_compound_phase_results($phase, $groups, $limit, $contextGallery) as $row) {
+            $key = (string) ($row['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $existing = $byKey[$key] ?? null;
+            if (!is_array($existing) || (int) ($row['rank'] ?? 0) > (int) ($existing['rank'] ?? 0)) {
+                $byKey[$key] = $row;
+            }
+        }
+    }
+
+    $results = array_values($byKey);
+    usort($results, static function (array $left, array $right): int {
+        $rank = ((int) ($right['rank'] ?? 0)) <=> ((int) ($left['rank'] ?? 0));
+        if ($rank !== 0) {
+            return $rank;
+        }
+        $kind = (($left['type'] ?? '') === 'gallery' ? 0 : 1)
+            <=> (($right['type'] ?? '') === 'gallery' ? 0 : 1);
+        if ($kind !== 0) {
+            return $kind;
+        }
+        $title = strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+        return $title !== 0 ? $title : strcmp((string) ($left['key'] ?? ''), (string) ($right['key'] ?? ''));
+    });
+    return array_slice($results, 0, $limit);
 }
 
 require_once __DIR__ . '/public_search_progressive/deferred.php';
