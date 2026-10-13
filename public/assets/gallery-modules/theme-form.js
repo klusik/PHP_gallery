@@ -688,8 +688,15 @@ export function setupThemeLivePreview(form) {
             previewContextLabel.textContent = `${contextLabel} · ${layoutLabel}`;
         }
 
-        const countBadgeEnabled = themeBooleanControlValue(form, '[data-theme-preview-count-badge]', true);
-        countBadgeSamples.forEach((badge) => { badge.hidden = !countBadgeEnabled; });
+        const countModeControl = form.querySelector('[data-theme-preview-count-badge-mode]');
+        const countMode = countModeControl
+            ? themeControlValue(form, '[data-theme-preview-count-badge-mode]', 'both')
+            : (themeBooleanControlValue(form, '[data-theme-preview-count-badge]', true) ? 'both' : 'hidden');
+        const countPreviewText = countMode === 'both' ? '12 / 15' : (countMode === 'all' ? '15' : '12');
+        countBadgeSamples.forEach((badge) => {
+            badge.hidden = countMode === 'hidden';
+            badge.textContent = countPreviewText;
+        });
 
         const paginationEnabled = themeBooleanControlValue(form, '[data-theme-preview-pagination-enabled]', false);
         if (paginationPreview) {
@@ -720,7 +727,7 @@ export function setupThemeLivePreview(form) {
         }
     };
 
-    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size], [data-theme-preview-description-layout], [name="theme_gallery_description_layout"], [data-theme-preview-count-badge], [data-theme-preview-pagination-enabled], [data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows], [data-theme-preview-tag-description-layout], [name="tag_page_gallery_description_layout"], [data-theme-preview-context-select], [data-theme-preview-lightbox-mode], [data-theme-preview-thumbnail-mode]').forEach(/**
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size], [data-theme-preview-description-layout], [name="theme_gallery_description_layout"], [data-theme-preview-count-badge], [data-theme-preview-count-badge-mode], [data-theme-preview-count-badge-icons], [data-theme-preview-pagination-enabled], [data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows], [data-theme-preview-tag-description-layout], [name="tag_page_gallery_description_layout"], [data-theme-preview-context-select], [data-theme-preview-lightbox-mode], [data-theme-preview-thumbnail-mode]').forEach(/**
      * Bind each canonical or compatibility-hook control to the shared unsaved preview.
      * @param {Element} control Theme or wizard form control that affects preview presentation.
      * @return {void} Registers the existing input/change preview pipeline once per matching element.

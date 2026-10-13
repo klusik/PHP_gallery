@@ -45,6 +45,8 @@ use function Gallery\Services\gallery_count_badge_override_values;
 use function Gallery\Services\gallery_count_badge_schema_ready;
 use function Gallery\Services\gallery_count_badge_source_label;
 use function Gallery\Services\gallery_count_badge_state_label;
+use function Gallery\Services\gallery_count_badge_mode_label;
+use function Gallery\Services\gallery_effective_count_badge_mode;
 use function Gallery\Services\gallery_count_badge_storage_value;
 use function Gallery\Services\gallery_description_layout_label;
 use function Gallery\Services\gallery_description_layout_options;
@@ -149,8 +151,11 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
     if ($countBadge['ready']) {
         // $currentCountBadgeVisibility stores the optional value saved directly on this gallery.
         $currentCountBadgeVisibility = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null) ?? 'inherit';
-        // $effectiveCountBadgeEnabled stores the visible count badge state before any form edits.
-        $effectiveCountBadgeEnabled = gallery_effective_count_badge_enabled($gallery);
+        // Preserve the legacy explicit Show override as the new Both selection.
+        if ($currentCountBadgeVisibility === 'show') {
+            $currentCountBadgeVisibility = 'both';
+        }
+        $effectiveCountBadgeMode = gallery_effective_count_badge_mode($gallery);
         $countBadge += [
             'current' => $currentCountBadgeVisibility,
             'title' => t('admin.gallery_editor.count_badge_title', 'Contained-picture badge'),
@@ -159,9 +164,9 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
                 static fn (string $value): array => ['value' => $value, 'label' => gallery_count_badge_override_label($value)],
                 gallery_count_badge_override_values()
             ),
-            'help' => t('admin.gallery_editor.count_badge_help', 'Current source: {source}. Effective state: {state}. This controls the stacked-picture branch image count on gallery cards and in this gallery hero.', [
+            'help' => t('admin.gallery_editor.count_badge_help', 'Source: {source}. Effective mode: {state}. Visitors see only their public photo count; Show icons is configured in Theme.', [
                 'source' => gallery_count_badge_source_label($gallery),
-                'state' => gallery_count_badge_state_label($effectiveCountBadgeEnabled),
+                'state' => gallery_count_badge_mode_label($effectiveCountBadgeMode),
             ]),
         ];
     }

@@ -179,7 +179,7 @@ function admin_setup_wizard_entry_presentation(string $id, array $entry): array
         'site' => ['public_address', 'Public address'],
         'appearance' => str_contains($id, 'gps_pin')
             ? ['map_markers', 'Map markers']
-            : ((str_contains($id, 'grid') || str_starts_with($id, 'pagination_') || str_contains($id, 'description_layout') || $id === 'theme_gallery_count_badge_enabled')
+            : ((str_contains($id, 'grid') || str_starts_with($id, 'pagination_') || str_contains($id, 'description_layout') || str_starts_with($id, 'theme_gallery_count_badge_'))
                 ? ['gallery_layout', 'Gallery layout']
                 : ['visual_style', 'Visual style']),
         'content' => str_starts_with($id, 'theme_hero_tag_')
@@ -317,12 +317,15 @@ function admin_setup_wizard_theme_layout_input_definition(string $id): array
     if (in_array($id, [
         'theme_gps_pin_enabled',
         'theme_gps_pin_background_enabled',
-        'theme_gallery_count_badge_enabled',
+        'theme_gallery_count_badge_icons_enabled',
         'pagination_enabled',
         'theme_hero_tag_display_all',
         'theme_hero_tag_scrollbar_enabled',
     ], true)) {
         return ['input_type' => 'checkbox', 'validation' => []];
+    }
+    if ($id === 'theme_gallery_count_badge_mode') {
+        return ['input_type' => 'select', 'validation' => ['allowed' => ['public', 'all', 'both', 'hidden']]];
     }
     if ($id === 'theme_hero_tag_visible_limit') {
         return ['input_type' => 'range', 'validation' => ['min' => 1, 'max' => 200, 'step' => 1]];
@@ -363,6 +366,14 @@ function admin_setup_wizard_theme_layout_input_definition(string $id): array
  */
 function admin_setup_wizard_entry_options(string $id, array $entry): array
 {
+    if ($id === 'theme_gallery_count_badge_mode') {
+        return [
+            'public' => gallery_count_badge_mode_label('public'),
+            'all' => gallery_count_badge_mode_label('all'),
+            'both' => gallery_count_badge_mode_label('both'),
+            'hidden' => gallery_count_badge_mode_label('hidden'),
+        ];
+    }
     if (in_array($id, ['theme_gallery_description_layout', 'tag_page_gallery_description_layout'], true)) {
         return [
             'vertical' => gallery_description_layout_label('vertical'),

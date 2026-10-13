@@ -730,3 +730,39 @@ body.public-reorder-active {
         min-height: 11rem;
     }
 }
+
+/* Privileged dual photo counters reuse the original card/hero badge shells. */
+.public-page .gallery-count-badge-admin {
+    gap: 0.28rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.public-page .gallery-count-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.26rem;
+    min-width: 0;
+}
+.public-page .gallery-count-number {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.public-page .gallery-count-eye-icon {
+    display: block;
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: none;
+}
+.public-page .gallery-count-separator {
+    padding-inline: 0.12rem;
+    opacity: 0.72;
+}
+@media (max-width: 480px) {
+    .public-page .gallery-count-badge-admin {
+        gap: 0.18rem;
+        padding-inline: 0.38rem;
+    }
+    .public-page .gallery-count-segment { gap: 0.18rem; }
+    .public-page .gallery-count-eye-icon { width: 0.95rem; height: 0.95rem; }
+}
+

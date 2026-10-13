@@ -71,6 +71,7 @@ use function Gallery\Services\delete_theme_branding_asset;
 use function Gallery\Services\favicon_asset_url;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\gallery_background_source_schema_ready;
+use function Gallery\Services\gallery_count_badge_mode_label;
 use function Gallery\Services\gallery_description_layout_label;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_description_layout_options;
@@ -340,7 +341,15 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         'home_token' => THEME_FAVORITE_GALLERIES_HOME_TOKEN,
         'description_layouts' => $descriptionLayouts,
         'breadcrumb_style_picker' => $breadcrumbStylePicker,
-        'gallery_count_badge_enabled' => ((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1',
+        'gallery_count_badge_mode' => (string) ($theme['gallery_count_badge_mode'] ?? 'both'),
+        'gallery_count_badge_icons_enabled' => ((string) ($theme['gallery_count_badge_icons_enabled'] ?? '1')) === '1',
+        'gallery_count_badge_modes' => array_map(
+            static fn (string $mode): array => [
+                'value' => $mode,
+                'label' => gallery_count_badge_mode_label($mode),
+            ],
+            ['public', 'all', 'both', 'hidden']
+        ),
         'thumbnail_modes' => [
             [
                 'value' => PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
@@ -393,8 +402,9 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
             'description_preview_tag_travel' => t('admin.theme.layout.description_preview_tag_travel', 'travel'),
             'description_preview_tag_family' => t('admin.theme.layout.description_preview_tag_family', 'family'),
             'count_badge_legend' => t('admin.theme.layout.count_badge_legend', 'Contained-picture badge'),
-            'show_count_badge' => t('admin.theme.layout.count_badge_compact_label', 'Show image counts'),
-            'count_badge_hint' => t('admin.theme.layout.count_badge_compact_hint', 'Default for gallery cards and gallery headers; individual galleries may override it.'),
+            'count_badge_mode_label' => t('admin.theme.layout.count_badge_mode_label', 'Display'),
+            'count_badge_icons_label' => t('admin.theme.layout.count_badge_icons_label', 'Show icons'),
+            'count_badge_hint' => t('admin.theme.layout.count_badge_compact_hint', 'Default for cards and gallery heroes. Full counts are admin-only; visitors always see their public count.'),
             'thumbnail_rendering_legend' => t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering'),
             'thumbnail_rendering_label' => t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards'),
             'thumbnail_rendering_responsive_title' => t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:'),

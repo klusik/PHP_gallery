@@ -86,6 +86,8 @@ use function Gallery\Services\gallery_cover_collage_images;
 use function Gallery\Services\gallery_cover_image;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
+use function Gallery\Services\gallery_count_badge_needs_total;
+use function Gallery\Services\gallery_count_badge_presentation;
 use function Gallery\Services\gallery_effective_description_layout;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_effective_grid_settings;
@@ -194,7 +196,7 @@ function public_thumbnail_loading_attributes(int $index): string
  * only coordinates service-layer lookups so visible cards can share batched
  * child-gallery, branch-count, cover, collage, and thumbnail-bundle work.
  *
- * @param array $galleries Gallery rows to render.
+ * @param array<int,array<string,mixed>> $galleries Gallery rows to render.
  * @param bool $publicOnly Public only value.
  * @param bool $includeCounts Include branch image counts in the context.
  * @return array<int,array<string,mixed>> Context values keyed by gallery id.
@@ -209,8 +211,17 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
 
     child_galleries_tree_preload($galleryIds, $publicOnly);
 
-    // $branchCounts stores optional contained image counts keyed by gallery id.
-    $branchCounts = $includeCounts ? gallery_branch_image_counts($galleryIds, $publicOnly) : [];
+    // The displayed public number must follow normal visitor access even within Admin pages.
+    $isCountAdmin = current_user() !== null && !current_user_is_known_under_18() && !admin_anonymous_preview_active();
+    $countable = $includeCounts ? array_values(array_filter($galleries, static fn (array $g): bool => gallery_effective_count_badge_enabled($g))) : [];
+    $countIds = array_values(array_unique(array_map(static fn (array $g): int => (int) $g['id'], $countable)));
+    // Counts are batched independently of thumbnail preparation and gallery-card iteration.
+    $branchCounts = $countIds !== [] ? gallery_branch_image_counts($countIds, true, true) : [];
+    $totalIds = $isCountAdmin ? array_values(array_unique(array_map(
+        static fn (array $g): int => (int) $g['id'],
+        array_values(array_filter($countable, static fn (array $g): bool => gallery_count_badge_needs_total($g, true)))
+    ))) : [];
+    $totalCounts = $totalIds !== [] ? gallery_branch_image_counts($totalIds, false) : [];
     // $contexts stores preloaded rendering values keyed by gallery id.
     $contexts = [];
     // $thumbnailImages stores all cover and collage images whose thumbnail bundles can be warmed in one pass.
@@ -228,6 +239,7 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
         // $context stores preloaded values for this card.
         $context = [
             'branch_image_count' => (int) ($branchCounts[$galleryId] ?? 0),
+            'total_image_count' => array_key_exists($galleryId, $totalCounts) ? (int) $totalCounts[$galleryId] : null,
             'cover_asset' => '',
             'cover' => null,
             'collage' => [],
@@ -280,10 +292,20 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $coverAsset = $isProtectedPublicCard ? '' : (array_key_exists('cover_asset', $cardContext) ? (string) $cardContext['cover_asset'] : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)));
     // $cover stores the selected real image when no explicit asset is available.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : (array_key_exists('cover', $cardContext) ? $cardContext['cover'] : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly)));
-    // $showCountBadge stores whether this card should show the contained-picture badge.
-    $showCountBadge = !$isProtectedPublicCard && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
-    // $branchImageCount stores this steps working value.
-    $branchImageCount = $showCountBadge ? (array_key_exists('branch_image_count', $cardContext) ? (int) $cardContext['branch_image_count'] : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly))) : 0;
+    // Admin-only totals also appear on a protected gallery card; anonymous protected cards keep the old rule.
+    $isCountAdmin = current_user() !== null && !current_user_is_known_under_18() && !admin_anonymous_preview_active();
+    $showCountBadge = (!$isProtectedPublicCard || $isCountAdmin) && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
+    // The public portion is the same access-filtered branch count seen by a visitor.
+    $branchImageCount = $showCountBadge
+        ? (array_key_exists('branch_image_count', $cardContext) ? (int) $cardContext['branch_image_count'] : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true, true)))
+        : 0;
+    $totalImageCount = null;
+    if ($showCountBadge && gallery_count_badge_needs_total($gallery, $isCountAdmin)) {
+        $totalImageCount = isset($cardContext['total_image_count'])
+            ? (int) $cardContext['total_image_count']
+            : gallery_branch_image_count((int) $gallery['id'], false);
+    }
+    $countBadgePresentation = gallery_count_badge_presentation($gallery, $isCountAdmin, $branchImageCount, $totalImageCount === null ? null : (int) $totalImageCount);
     // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
     $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
         // $ownTags stores tags attached directly to the gallery record.
@@ -356,6 +378,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         'show_unpublished_marker' => $showAdminUnpublishedMarker,
         'show_count_badge' => $showCountBadge,
         'branch_image_count' => $branchImageCount,
+        'count_badge' => $countBadgePresentation,
         'cover_asset' => $coverAsset,
         'cover_loading_attributes' => $coverLoadingAttributes,
         'cover_picture_html' => $coverPictureHtml,

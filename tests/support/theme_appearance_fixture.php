@@ -121,7 +121,10 @@ namespace {
             'current'=>$breadcrumbStyle,
             'options'=>\Gallery\Services\breadcrumb_style_picker_options(),
         ];
-        return array_replace(['favorite_shortcuts'=>$shortcuts,'home_token'=>'home','gallery_count_badge_enabled'=>true,'thumbnail_modes'=>[['value'=>'progressive','label'=>'Progressive','selected'=>true],['value'=>'responsive','label'=>'Responsive','selected'=>false]],
+        return array_replace(['favorite_shortcuts'=>$shortcuts,'home_token'=>'home','gallery_count_badge_mode'=>'both','gallery_count_badge_icons_enabled'=>true,'gallery_count_badge_modes'=>[
+                ['value'=>'public','label'=>'Public only'],['value'=>'all','label'=>'All only'],
+                ['value'=>'both','label'=>'Both'],['value'=>'hidden','label'=>'Hidden'],
+            ],'thumbnail_modes'=>[['value'=>'progressive','label'=>'Progressive','selected'=>true],['value'=>'responsive','label'=>'Responsive','selected'=>false]],
             'breadcrumb_style_picker'=>$breadcrumbStylePicker,
             'pagination'=>['enabled'=>true,'columns'=>3,'rows'=>4,'items_per_page'=>12],'home_grid'=>['columns'=>4,'rows'=>5],'lightbox_modes_enabled'=>true,'lightbox_options'=>[['value'=>'single','label'=>'Single image','selected'=>true],['value'=>'picture_strip','label'=>'Picture strip','selected'=>false],['value'=>'3d_carousel','label'=>'3D carousel','selected'=>false]],'max_columns'=>12,'max_rows'=>50,'labels'=>['reset_gallery_grids_confirm'=>'Reset all custom gallery grids?','reset_all_gallery_grids'=>'Reset all custom gallery grids','show_count_badge'=>'Show picture count']],$overrides);
     }

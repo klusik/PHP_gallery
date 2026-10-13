@@ -314,12 +314,13 @@ function gallery_breadcrumb_ancestors(array $gallery): array
  *
  * @param int $galleryId Gallery identifier.
  * @param bool $publicOnly Public only value.
+ * @param bool $withoutAdminBypass Apply ordinary visitor access even for Admin sessions.
  * @return int Integer result for the caller.
  */
-function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
+function gallery_branch_image_count(int $galleryId, bool $publicOnly, bool $withoutAdminBypass = false): int
 {
     // $counts stores the batch count result reused by the single-gallery compatibility wrapper.
-    $counts = gallery_branch_image_counts([$galleryId], $publicOnly);
+    $counts = gallery_branch_image_counts([$galleryId], $publicOnly, $withoutAdminBypass);
     return (int) ($counts[$galleryId] ?? 0);
 }
 
@@ -331,11 +332,12 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
  * This helper keeps the same visibility/access semantics while collapsing the
  * work into one descendant-gallery query and one grouped image-count query.
  *
- * @param array $galleryIds Gallery identifiers to count.
+ * @param list<int> $galleryIds Gallery identifiers to count.
  * @param bool $publicOnly Public only value.
+ * @param bool $withoutAdminBypass Apply ordinary visitor access even for Admin sessions.
  * @return array<int, int> Image counts keyed by root gallery id.
  */
-function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
+function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $withoutAdminBypass = false): array
 {
     static $cache = [];
     // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
@@ -350,7 +352,7 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
     $missingIds = [];
     foreach ($galleryIds as $galleryId) {
         // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
+        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . ($withoutAdminBypass ? 'visitor' : 'request');
         if (array_key_exists($cacheKey, $cache)) {
             $counts[$galleryId] = $cache[$cacheKey];
             continue;
@@ -375,7 +377,7 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
         if ($rootId <= 0 || $descendantId <= 0) {
             continue;
         }
-        if ($publicOnly && !visitor_can_access_gallery($row)) {
+        if ($publicOnly && !($withoutAdminBypass ? visitor_can_access_gallery_without_admin_bypass($row) : visitor_can_access_gallery($row))) {
             continue;
         }
         $rootIdsByGallery[$descendantId][$rootId] = $rootId;
@@ -392,7 +394,7 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
 
     foreach ($missingIds as $galleryId) {
         // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
+        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . ($withoutAdminBypass ? 'visitor' : 'request');
         $cache[$cacheKey] = (int) ($counts[$galleryId] ?? 0);
         $counts[$galleryId] = $cache[$cacheKey];
     }
