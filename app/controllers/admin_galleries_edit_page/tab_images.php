@@ -51,8 +51,8 @@ use function Gallery\Views\view_render_admin_gallery_image_rows;
 /**
  * Render the Images tab panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
- * @param array<int, array<string, mixed>> $images Images attached to this gallery.
+ * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, cover choice and thumbnail URL policy inputs.
+ * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param bool $rowsOnly Whether only canonical table rows are requested.
  * @param bool $deferred Whether thumbnail requests are reserved for the preload queue.

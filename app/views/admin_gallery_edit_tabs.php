@@ -471,7 +471,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
 /**
  * Render the Images tab from controller-prepared rows and URLs.
  *
- * @param array<string, mixed> $viewModel Controller-prepared image table presentation data.
+ * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,edit_url:string,panel_url:string}>,labels:array<string,string>} $viewModel Prepared canonical table, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
  * @return void Render compact image controls using the shared public-card renderers.
  */
 function view_render_admin_gallery_images_tab(array $viewModel): void

@@ -196,7 +196,7 @@ function admin_edit_gallery_handle_json_panel_request(array $gallery): bool
  * Each request validates inventory and gallery revision before and after rendering.
  * Session writes are finished after CSRF initialization, so photo preparation
  * cannot hold the administrator's session lock while settings are saved.
- * @param array{id:int|string,cover_image_id?:int|string,edit_revision?:int|string|null} $gallery Authorized gallery snapshot; additional fields feed the existing revision owner.
+ * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Authorized editor identity, revision, cover choice and inherited thumbnail policy.
  * @return void Emit a bounded JSON fragment or a safe retryable failure.
  */
 function admin_edit_gallery_images_batch_response(array $gallery): void
