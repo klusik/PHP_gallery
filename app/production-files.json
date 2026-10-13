@@ -2288,6 +2288,7 @@
         "tests/public_media_url_rewrite_test.php",
         "tests/public_media_version_routing_test.php",
         "tests/public_search_authorization_contract_test.php",
+        "tests/public_search_compound_test.php",
         "tests/public_search_default_policy_test.php",
         "tests/public_search_diagnostics_stage0a_test.php",
         "tests/public_search_mvc_boundaries_test.php",
