@@ -150,3 +150,15 @@ body.admin-gallery-order-active {
     overflow-wrap: anywhere;
 }
 
+
+/* Compact progress lives outside forms; failed resources retain a stable thumbnail box. */
+.admin-images-preload { margin: .25rem 0 .5rem; min-height: 1.5rem; }
+.admin-images-preload-track { height: 3px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; }
+.admin-images-preload-track > span { display: block; height: 100%; background: var(--accent, #607d8b); }
+.admin-images-preload small { font-size: .75rem; }
+.admin-images-preload button { margin-inline-start: .5rem; }
+.admin-tab[aria-disabled="true"] { opacity: .45; cursor: wait; }
+img[data-admin-thumbnail-failed] { min-width: 48px; min-height: 48px; background: color-mix(in srgb, currentColor 10%, transparent); font-size: .65rem; }
+
+/* A static partial segment is honest indeterminate preparation, not a fake timer. */
+.admin-images-preload-track:not([aria-valuenow]) > span { width: 24%; opacity: .6; }

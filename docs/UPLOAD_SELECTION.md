@@ -8,6 +8,15 @@ The right-hand existing-gallery and create-with-upload drawers collect paste, pi
 
 ## Preview budget
 
+The optional iCloud source uses this same submission/batcher/ACK owner. Automatic
+imports stage Apple's public export in OPFS and pull checked images through the
+existing File-stream seam, without filling the picker or an all-images File array.
+The explicit manual alternative feeds this picker. Bearer URLs are never persisted
+or submitted to Gallery. See [the acquisition, ZIP limits and retry contract](ICLOUD_IMPORT.md).
+Manual ZIP selections share a 64 MiB retained-original budget; the disk stream
+bounds each image instead. These bounds are independent from preview admission
+and upload batch size.
+
 | Resource | Bound | Effect outside the bound |
 | --- | --- | --- |
 | Encoded source admitted to miniature decoding | 24 MiB | Keep original selected with an icon |
@@ -34,7 +43,7 @@ The current picker exposes JPEG/PNG/GIF/WebP and optional server-capability form
 
 Every occurrence with the same exact filename receives a repeated-name warning, including intentional duplicate screenshots. The queue keeps all originals and clears that warning when only one occurrence remains. Filenames do not serve as upload identities. Empty files, reported server-size excess, unsupported formats and unavailable previews likewise remain visible; one failed preview cannot remove healthy sources. Disabling the native input directly or through its fieldset prevents both paste and drop from appending files.
 
-Shared-hosting limits remain in `app/services/browser_uploads/settings.php` and the runtime limit registry. The form receives the effective `upload_limit_bytes`; worker concurrency and maximum items per ZIP batch remain administrator-bounded. The ZIP soft packing target is not the preview byte ceiling, and the PHP request ceiling remains hard. Existing ZIP entry/expansion/path checks and bounded batch retry are unchanged. No actual WEDOS capacity or browser-process memory measurement is claimed here.
+Shared-hosting limits remain in `app/services/browser_uploads/settings.php` and the runtime limit registry. The form receives the effective `upload_limit_bytes`; worker concurrency and maximum items per ZIP batch remain administrator-bounded. The ZIP soft packing target is not the preview byte ceiling, and the PHP request ceiling remains hard. ZIP entry/expansion/path checks now also bound directory allocation, retained originals across archives and actual Deflate output. Existing bounded batch replay remains authoritative. No actual WEDOS capacity or browser-process memory measurement is claimed here.
 
 The displayed selection count and total byte size describe the local queue, not one HTTP request: classic AJAX sends one image per request and prepared upload applies its existing ZIP batch limits. No new total-selection limit is inferred from PHP's multipart limits. A hosting-provided CSP must allow local `blob:` image URLs for miniature display; a blocked miniature keeps its filename/icon and original input rather than weakening that CSP or upload authorization.
 

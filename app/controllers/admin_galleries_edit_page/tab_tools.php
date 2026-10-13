@@ -66,14 +66,21 @@ function admin_edit_gallery_render_organizer_tab(array $gallery, string $activeE
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @param bool $deferred Whether the drawer defers its image-dependent renaming plan until requested.
+ * @return void Render the plan or its demand-load placeholder.
  */
-function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEditTab, array $capabilities): void
+function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEditTab, array $capabilities, bool $deferred = false): void
 {
     if (!$capabilities['media_renamer_feature_enabled']) {
         return;
     }
     ob_start();
-    if (function_exists('Gallery\\Controllers\\render_admin_media_renamer_gallery_panel')) {
+    if ($deferred) {
+        \Gallery\Views\view_render_admin_gallery_tool_placeholder([
+            'endpoint' => url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'tab' => 'admin-edit-renamer']),
+            'label' => t('admin.gallery_editor.images_preparing', 'Preparing photos…'),
+        ]);
+    } elseif (function_exists('Gallery\\Controllers\\render_admin_media_renamer_gallery_panel')) {
         render_admin_media_renamer_gallery_panel($gallery);
     }
     render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');

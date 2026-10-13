@@ -1,5 +1,52 @@
 # Compatibility lifecycle and retirement register
 
+## Retained Actions job inventory provider failures
+
+Owner: `.github/scripts/release-promotion.mjs`, `command()` and `fetchJobs()`.
+Release qualification must independently read the complete job inventory of the
+exact retained integration attempt. GitHub returned HTTP 502 for the 100-job
+page of integration run 38465847308 attempt 2; a complete one-job-page read
+returned all 16 jobs. This is a provider read failure, not failed Gallery runtime
+qualification. Usage frequency is **unknown**; the incident is documented in
+issue #202.
+
+Only an explicitly classified HTTP 5xx allows one alternate paginated read with
+one job per page, on the identical run and attempt. Permission, missing-resource,
+malformed/incomplete evidence and unclassified command errors remain terminal.
+The smaller-page read retains total-count completeness, exact check identities
+and all mandatory job gates; it cannot authorize writes or accept partial proof.
+Regression coverage belongs to `tests/hosted_release_policy_test.mjs`.
+Retire the fallback only after supported GitHub retained-job collections have
+reliable large-page reads and exact-coverage regression acceptance remains intact.
+
+## Public iCloud exports and bounded ZIP sources
+
+Owner: `admin-icloud-source.js`, `admin-icloud-download.js`, the existing browser
+uploader and image worker. The observed anonymous Photos sharing protocol can
+produce CORS-readable compatible ZIPs for the owner-provided Shared Album. It is
+undocumented and may change; strict schema/host/availability failures retain the
+explicit manual alternative. No Apple credentials, cookies or Gallery proxy are
+introduced. Historical Photos fragments and Shared Album `#/sc,` redirects remain
+separate source inputs. Usage is **unknown**; live Photos Link, physical large-source
+and Safari/Firefox/mobile qualification remain separate evidence requirements.
+Retirement of the manual alternative requires those supported-source/client
+acceptance proofs; it is not inferred from one successful Shared Album export.
+
+Manual ZIP selections retain the 64 MiB aggregate-original cap. Automatic sources
+use OPFS and the existing pull-driven worker/batcher seam, bounding one original
+to 64 MiB/the effective server limit instead of retaining every image. Both modes
+retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and explicit
+ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes after
+the end record. The shared parser accepts only all-zero suffixes up to 4 KiB,
+with unchanged directory/entry/CRC/signature checks; nonzero trailers remain
+invalid. Permanent compatibility is justified by ordinary ZIP-library acceptance
+and the observed Apple producer; regression fixtures cover both acceptance and
+hostile/nonzero/oversized suffix refusal. Tail allocation is at most 69,653 bytes.
+Disk files are locked across active/retry work, removed on success/safe failure,
+and aged unlocked orphans are reclaimed at the next acquisition. Synthetic
+protocol/storage/incremental/replay and existing PDF scenarios run under the
+inherited central ZIP owner; BASIC alone does not execute them.
+
 ## PDF conversion generations after target loss
 
 Owner: `app/services/gallery_pdf_conversion.php`. Existing v1 markers omit
@@ -942,3 +989,16 @@ complete upload usage is **unknown** after the observed v_0.127.5 transport fail
 and manual publication. Retain recovery while GitHub responses may be interrupted;
 retirement requires an accepted replacement preserving create-only idempotence,
 original bytes and published-release immutability.
+
+## Admin Images background preparation (#202)
+
+The gallery editor owns the complete ordinary/no-JavaScript table fallback.
+Drawer `panel=1` responses defer Images through the same authenticated route and
+canonical row renderer. Retain the full-page path for supported browsers without
+scripting and direct Admin navigation; usage is unknown. Retirement requires a
+replacement that preserves all row actions, keyboard/accessibility and accepted
+no-JavaScript journeys. `thumbnail_readonly_existing_response_file(..., exactOnly)`
+defaults to false so existing visual-preview nearest-derivative fallback remains
+compatible. The editor's explicit `existing_only=1` opt-in protects read-only
+300px preload; ordinary media loading and generation keep their current owner.
+Evidence owners and live acceptance limits are in [ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).

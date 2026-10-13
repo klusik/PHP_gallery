@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.128.2}
+\newcommand{\version}{0.129}
 \newcommand{\manualdate}{13.~října~2026}
 
 \hypersetup{
@@ -686,6 +686,19 @@ V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat
 
 U~velké akce nahrávejte po smysluplných skupinách. Menší skupiny usnadňují identifikaci chyb a~umožňují průběžnou kontrolu názvů, pořadí a~viditelnosti.
 
+
+% iCloud assisted import contract
+\subsection{Import fotografií z~iCloudu}
+Otevřete \ui{Import z iCloudu}, vložte veřejný odkaz na Fotky na iCloudu na \url{https://share.icloud.com/photos/} nebo veřejné sdílené album na \url{https://photos.icloud.com/shared/album/}, vyberte cílovou galerii a~klikněte vedle odkazu na \ui{Stáhnout a importovat z iCloudu}. Jediné tlačítko rozpozná odkaz a~spustí dosavadní formulář; stejná akce se zobrazí i~v~jeho patičce. Ponechte zapnutou přípravu v~prohlížeči. Galerie ověří veřejnou dostupnost, požádá Apple o~kompatibilní export, stáhne jej do dočasného diskového prostoru prohlížeče a~automaticky importuje podporované fotografie. ZIP nemusíte sami stahovat ani vybírat. Nová galerie musí být Soukromá nebo Nepublikovaná; u~existující galerie ověřte viditelnost, protože platí i~pro částečný import.
+
+Oba typy zdrojů mají samostatnou cestu získání dat. Odkaz na~fotografie může vypršet či být odvolán; dostupnost sdíleného alba určuje vlastník včetně volitelné dočasné expirace. Galerie požaduje kompatibilní JPEG/PNG/GIF; přijaté JPEG/PNG/WebP/GIF ověřuje podle skutečné signatury. HEIC/HEIF/DNG/RAW, MP4/MOV, pohyblivé součásti Live Photo a~doprovodné soubory vykazuje jako nepodporované, nepřejmenovává je ani skrytě nekonvertuje. JPEG není zachovaný originál RAW; metadata pořízení/GPS ani úpravy Applu nejsou zaručeny. Stahovací protokol se~může změnit a~zdroj vyžadující přihlášení nelze anonymně importovat.
+
+Automatický přenos vyžaduje podporovaný prohlížeč na~HTTPS s~dočasným diskovým úložištěm OPFS. Je-li celková velikost známa, zobrazí se~průběh stahování; jinak pouze skutečně přijaté bajty. Data se~zapisují postupně, celý archiv se~nedrží v~jednom paměťovém bufferu. Dosavadní ZIP worker čte omezená metadata a~jeden obrázek po~druhém; fotografie připravuje a~odesílá v~malých dávkách uložených v~IndexedDB. Podporuje Stored a~Deflate; ZIP64 a~vícediskové archivy výslovně odmítá. Limity zahrnují 10~000 položek, 4~MiB metadat adresáře, 2~GiB rozbalených dat a~64~MiB/limit serveru na~obrázek. Ruční ZIP výběr zachovává souhrnný limit 64~MiB originálů. Dekódování a~náhledy potřebují další paměť; nejde o~měření celkové spotřeby.
+
+\ui{Zrušit import} zastaví získávání dat a~probíhající práci; přijaté fotografie zůstanou zachovány. Při neurčitém výsledku ponechte stejný formulář otevřený a~zvolte \ui{Opakovat stejný import}: diskový zdroj, pozice a~identita nepotvrzené dávky i~session zůstanou zachovány, takže nevzniknou duplicity. Zdroj a~cíl zůstávají do~vyřešení uzamčené. Bezpečné selhání před prací serveru a~úspěšné dokončení odstraní dočasný zdroj. Zavřením karty se~ztratí možnost pokračování v~tomto formuláři; další import odstraní opuštěné neuzamčené zdroje starší než jeden den. Import na~pozadí ani obnovení mezi relacemi není slíbeno.
+
+Není-li automatická cesta dostupná, otevřete \ui{Ruční export a podrobnosti} a~zvolte \ui{Otevřít iCloud pro ruční export}. U~Applu vyberte \ui{Nejkompatibilnější}, pokud je nabízena, stáhněte ZIP nebo podporované obrázky a~vyberte je v~dosavadním výběru souborů. Pro běžné místní soubory zdroj vymažte. Odkaz se~po~rozpoznání odstraní ze~vstupu a~zůstává pouze v~paměti formuláře; přístupový odkaz, cookies ani přihlašovací údaje Applu se~neposílají do~galerie ani neukládají do~konceptů. K~Applu se~přihlašujte jen na~jeho oficiální stránce.
+
 \subsection{Psaní užitečných názvů fotografií}
 \index{n00105@název fotografie}
 \index{p00142@popisky}
@@ -1081,6 +1094,8 @@ Hromadné operace s~obrázky jsou záměrně užší než individuální editor 
 \end{itemize}
 
 Pořadí fotografií lze měnit přetažením úchytu řádku a~galerii lze seřadit podle názvu souboru nebo data pořízení EXIF. Fotografie bez data pořízení zůstávají na konci; změny se ukládají běžnou trasou pořadí.
+
+Při otevření \ui{Upravit galerii} v~pravém administračním panelu zůstávají běžná nastavení dostupná, zatímco se fotografie načítají na~pozadí. Tenký ukazatel počítá zpracované náhledy; záložka \ui{Obrázky} se zpřístupní až~po~dokončení seznamu a~všech požadavků na~náhledy. Neúspěšné náhledy mají zástupné místo a~akci \ui{Znovu načíst fotografie}; nastavení lze nadále ukládat. Přednačítají se pouze malé náhledy tabulky. Velké náhledy se načítají na~vyžádání a~přejmenovač připraví plán po~otevření své záložky. Zavření nebo nahrazení panelu ruší zastaralou práci. Běžná samostatná stránka zůstává úplnou alternativou pro~prohlížeče bez~JavaScriptu.
 
 Karta \ui{Obrázky} v~editoru galerie soustřeďuje běžnou práci s~fotografiemi do přehledného seznamu. Přístupné náhledy lze otevřít ukazatelem, při zaměření klávesnicí nebo kliknutím; výběr řádků podporuje rozsah označený kliknutím se Shiftem. Každý řádek nabízí přímé ovládání viditelnosti, nastavení titulní fotografie galerie, úpravy a~odstranění fotografie. Tyto akce nadále používají stávající ověřené postupy na serveru. Volba \ui{Zobrazit názvy souborů} mění pouze zobrazení editoru; správce může uložit volitelné výchozí nastavení v~prohlížeči a~každá galerie si volbu pamatuje po~dobu aktuální relace editoru.
 

@@ -1,5 +1,36 @@
 # Testing Guide
 
+Gallery editor Images background preparation is covered by the central PHP
+`admin_gallery_images_deferred_test.php` and the existing Node delegation owner,
+which unconditionally awaits `admin_side_panel_delegation/images_preload.mjs`.
+The protected BASIC registry remains unchanged. These fixtures separate source,
+queue and synthetic orchestration evidence from live browser/hosting acceptance;
+see `docs/ADMIN_IMAGES_PRELOAD.md` for the required measurement boundaries.
+
+Automatic browser-local iCloud import uses the centrally registered
+`browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the
+synthetic `browser_upload_zip_worker/icloud_source.mjs` and
+`browser_upload_zip_worker/icloud_upload.mjs`, `icloud_download.mjs` and
+`icloud_stream.mjs` scenario modules. Every assertion
+failure propagates to that owner; no scenario is optional or separately selected.
+The central BASIC evaluator/registry stays byte-identical to protected develop,
+as required by the installed integration authority contract.
+They cover strict source recognition, native form validation, mounted/re-rendered
+controls, one-click source/ordinary-form submission, Enter/footer validation,
+label restoration, four locale catalogs/manual sources, injected Admin language ownership,
+anonymous CORS request policy,
+bounded metadata/pagination, refreshed public tokens, streamed OPFS writes,
+cancellation, quota, early EOF, owned orphan cleanup, transaction durability,
+interleaved image preparation/upload and exact batch/create replay after uncertain
+ACKs. ZIP coverage includes classic Stored/Deflate, CRC/paths/duplicates, ZIP64
+rejection, zero-only producer padding bounded to 4 KiB, metadata/retention limits
+and bounded reads on sparse 100 MiB/1 GiB/3 GiB sources.
+Sparse sources are not real browser heap/storage measurements. A real internal
+browser Shared Album download/verification is recorded separately; live gallery
+mutation, Photos Links, metadata fidelity and desktop/mobile acceptance remain in
+`docs/ICLOUD_IMPORT.md`. Existing PDF/manual upload regressions remain required;
+BASIC syntax/documentation alone does not execute these functional fixtures.
+
 The project website has an isolated hosted suite: `php scripts/audit.php --suite=website`.
 It checks the explicit website-only artifact, all eight localized project routes,
 release-bound references and required Chromium at desktop, 390px and 320px widths,
@@ -18,7 +49,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.128.2. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.129. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 

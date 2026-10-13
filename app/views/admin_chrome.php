@@ -142,12 +142,10 @@ function view_admin_menu_item_is_active(array $item, string $currentPage): bool
 }
 
 /**
- * Handle view render admin tabs.
- *
- * Used by server-rendered view helpers.
- *
- * @param array $tabs Tabs value.
- * @param string $activeId Active id identifier.
+ * Render accessible top-level Admin tab controls from prepared definitions.
+ * @param list<array{id:string,label?:string,href?:string,active?:bool,badge?:int|string|null,disabled?:bool}> $tabs Prepared controls; disabled entries have no navigation target until their owner enables them.
+ * @param string $activeId Preferred active identity; a disabled entry falls back to the first enabled tab.
+ * @return void Emit tab controls and optional count badges.
  */
 function view_render_admin_tabs(array $tabs, string $activeId = ''): void
 {
@@ -164,6 +162,18 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
         $resolvedActiveId = (string) $tabs[0]['id'];
     }
 
+    foreach ($tabs as $tab) {
+        if ((string) ($tab['id'] ?? '') === $resolvedActiveId && !empty($tab['disabled'])) {
+            foreach ($tabs as $candidate) {
+                if (empty($candidate['disabled'])) {
+                    $resolvedActiveId = (string) ($candidate['id'] ?? '');
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
     echo '<nav class="admin-tabs" data-admin-tabs aria-label="' . e(t('admin.tabs.aria_sections', 'Admin sections')) . '">';
     echo '<div class="admin-tab-list" role="tablist">';
     foreach ($tabs as $tab) {
@@ -173,9 +183,10 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
         }
         $tabLabel = (string) ($tab['label'] ?? $tabId);
         $tabHref = (string) ($tab['href'] ?? ('#' . $tabId));
-        $isActive = $tabId === $resolvedActiveId;
+        $disabled = (bool) ($tab['disabled'] ?? false);
+        $isActive = !$disabled && $tabId === $resolvedActiveId;
         $controlId = $tabId . '-control';
-        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" href="' . e($tabHref) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($tabId) . '">';
+        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '"' . ($disabled ? ' aria-disabled="true"' : ' href="' . e($tabHref) . '"') . ' role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($tabId) . '">';
         echo '<span>' . e($tabLabel) . '</span>';
         if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
             echo '<span class="admin-tab-badge">' . e((string) $tab['badge']) . '</span>';

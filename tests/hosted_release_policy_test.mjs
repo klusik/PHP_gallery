@@ -381,6 +381,37 @@ const foreign=path=>({...readCheck(path),external_id:'candidate:500:1:'+candidat
 assert.throws(()=>verifyQualification(request,run,fetchJobs(record.repository,'123',1,candidate,readJobs,foreign),record,record.repository,candidate),/ambiguous/);
 assert.throws(()=>fetchJobs(record.repository,'123',1,candidate,()=>JSON.stringify([{total_count:rawJobs.length+1,jobs:rawJobs}]),readCheck),/incomplete/);
 assert.throws(()=>fetchJobs(record.repository,'123',1,candidate,readJobs,path=>({...readCheck(path),id:1})),/identity/);
+// Provider failures permit only a complete smaller-page read of the same attempt.
+const providerReads=[];
+const smallPages=rawJobs.map(job=>({total_count:rawJobs.length,jobs:[job]}));
+const providerRead=(executable,args)=>{
+    providerReads.push({executable,args});
+    if (args[1].endsWith('?per_page=100')) throw new Error('BLOCKED_API_PROVIDER: gh command failed (1).');
+    return JSON.stringify(smallPages);
+};
+assert.deepEqual(fetchJobs(record.repository,'123',1,candidate,providerRead,readCheck),coverageJobs);
+assert.equal(providerReads.length,2);
+assert.deepEqual(providerReads[1],{executable:'gh',args:['api',
+    'repos/'+record.repository+'/actions/runs/123/attempts/1/jobs?per_page=1','--paginate','--slurp']});
+for (const reason of ['BLOCKED_API_PERMISSION: ','BLOCKED_API_NOT_FOUND: ','BLOCKED_COMMAND: ']) {
+    let calls=0;
+    assert.throws(()=>fetchJobs(record.repository,'123',1,candidate,()=>{
+        calls+=1;throw new Error(reason+'gh command failed (1).');
+    },readCheck),/BLOCKED/);
+    assert.equal(calls,1,'Permission, missing-resource and unclassified failures never use fallback.');
+}
+let exhaustedReads=0;
+assert.throws(()=>fetchJobs(record.repository,'123',1,candidate,()=>{
+    exhaustedReads+=1;throw new Error('BLOCKED_API_PROVIDER: gh command failed (1).');
+},readCheck),/BLOCKED_API_PROVIDER/);
+assert.equal(exhaustedReads,2,'Repeated provider failure stops after one alternate read.');
+assert.throws(()=>fetchJobs(record.repository,'123',1,candidate,(_executable,args)=>{
+    if (args[1].endsWith('?per_page=100')) throw new Error('BLOCKED_API_PROVIDER: gh command failed (1).');
+    return JSON.stringify(smallPages.slice(1));
+},readCheck),/incomplete/,'Smaller pages cannot omit a required job.');
+assert.throws(()=>verifyQualification(request,run,
+    fetchJobs(record.repository,'123',1,candidate,providerRead,foreign),record,record.repository,candidate),
+    /ambiguous/,'Foreign checks remain visible to the unchanged qualification gate.');
 assert.throws(()=>verifyQualification({...request,override:true,reason:'outage',acceptedFailures:['Required Chromium fixtures']},run,jobs,record,record.repository,candidate),/overrides/);
 const release={id:1,tag_name:'v_1.2',draft:false,prerelease:false,html_url:'https://example.test',assets:[]};
 assert.equal(fetchReleases('owner/gallery',()=>JSON.stringify([[release],[{...release,id:2}]])).length,2);

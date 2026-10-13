@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.128.2}
+\newcommand{\version}{0.129}
 \newcommand{\manualdate}{13 October 2026}
 
 \hypersetup{
@@ -690,6 +690,19 @@ In~the~right-hand Admin \ui{Upload photos} panel, paste successive screenshots w
 
 For~a~large event, upload in~meaningful groups. Smaller groups make errors easier to~identify and~allow titles, ordering, and~visibility to~be~reviewed incrementally.
 
+
+% iCloud assisted import contract
+\subsection{Import photos from iCloud}
+Open \ui{Import from iCloud}, paste a~public Photos Link at~\url{https://share.icloud.com/photos/} or~a~public Shared Album at~\url{https://photos.icloud.com/shared/album/}, select the~destination and~click \ui{Download and import from iCloud} beside the~link. This action recognizes the~link and~starts the~existing upload form in~one step; the~footer shows the~same action for~an~automatic source. Keep browser preparation enabled. Gallery checks public availability, requests Apple's compatible export, downloads it~to~temporary browser disk storage and~imports supported photos automatically. You~do~not~need to~download or~select a~ZIP yourself. A~new gallery must be~Private or~Unpublished; review an~existing gallery's visibility because it~also applies to~partial imports.
+
+The~source types use separate acquisition paths. Photos Links can~expire or~be~revoked; Shared Album availability is~controlled by~the~owner, including optional temporary expiry. Gallery requests compatible JPEG/PNG/GIF representations; received JPEG/PNG/WebP/GIF images are~checked by~their actual signature. HEIC/HEIF/DNG/RAW, MP4/MOV, Live Photo motion and~sidecars are~counted as~unsupported rather than renamed or~silently converted. Compatible JPEG is~not~a~preserved RAW original; capture/GPS metadata and~Apple edits are~not~guaranteed. Apple's download protocol can~change and~a~sign-in-only source cannot be~imported anonymously.
+
+Automatic transfer requires a~supported browser on~HTTPS with OPFS temporary disk storage. Known byte totals produce download progress; unknown totals show received bytes only. The~response is~written incrementally, never held as~one whole-archive memory buffer. The~existing ZIP worker reads bounded metadata and~one image at~a~time, preparing and~uploading small IndexedDB-backed batches. Stored and~Deflate are~supported; ZIP64 and~multi-disk archives fail explicitly. Bounds include 10,000 entries, 4~MiB directory metadata, 2~GiB expanded data and~64~MiB/the~server limit per~image. Manual ZIP selections retain a~64~MiB combined-original budget. Decoders and~thumbnails also use memory; these bounds are~not~a~total heap measurement.
+
+\ui{Cancel import} stops acquisition and~the~active work; accepted photos remain. Keep the~same form open and~choose \ui{Retry the~same import} after an~uncertain result: the~disk source, cursor and~unacknowledged batch/session identity are~retained, so~retry does not~insert duplicates. Source and~target controls remain locked until reconciliation. Safe failure before server work and~successful completion remove temporary sources. Closing the~tab loses in-page retry; the~next acquisition removes abandoned unlocked source files older than one day. No~background import or~cross-session restart is~promised.
+
+If~the~automatic path is~unavailable, open \ui{Manual export and details} and~choose \ui{Open iCloud for manual export}. On~Apple, choose \ui{Most Compatible} when offered, download the~ZIP or~supported images and~select them in~the~existing picker. Clear the~source for~ordinary local uploads. The~link is~cleared from its input after recognition and~retained only in~this form's memory; bearer links, Apple cookies and~credentials are~never sent to~Gallery or~stored in~drafts. Sign in~to~Apple only on~its official page.
+
 \subsection{Write useful photo titles}
 \index{photo title}
 \index{captions}
@@ -1088,6 +1101,8 @@ Bulk image operations are intentionally narrower than the~individual editor and~
 \end{itemize}
 
 Photo ordering can~be~changed by~dragging the~row handle, and~the~gallery can~be~sorted by~filename or~EXIF capture date. Photos without a~capture date stay last, and~changes are~saved through the~normal ordering route.
+
+When opening \ui{Edit gallery} in~the~right Admin drawer, ordinary settings remain usable while photos load in~the~background. A~thin progress strip counts processed thumbnails; \ui{Images} stays unavailable until the~complete list and~all thumbnail requests have settled. Failed thumbnails receive placeholders and~an~explicit \ui{Retry images} action; settings can~still be~saved. Only the~small table thumbnails are~preloaded. Large previews remain on~demand, and~the~File renamer prepares its~plan when its~tab is~opened. Closing or~replacing the~drawer cancels obsolete work. Ordinary full-page navigation remains the~complete fallback for~browsers without JavaScript.
 
 The~gallery editor's \ui{Images} tab keeps common photo work in~one compact list. Accessible thumbnail previews can~be~opened by~pointer, keyboard focus, or~click; row selection supports a~Shift-click range. Each row provides direct controls for~visibility, choosing the~gallery title picture, editing, and~deleting that photo. These actions continue to~use the~existing authenticated server workflows. The~\ui{Show file names} option changes only the~editor display; administrators can~save an~optional browser-wide default, while each gallery remembers its~choice for~the~current editor session.
 

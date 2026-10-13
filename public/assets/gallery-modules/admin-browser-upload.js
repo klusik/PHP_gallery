@@ -32,12 +32,12 @@
  *   2026-09-02
  */
 
-import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
+import { appendUploadProgressLog, i18n, i18nForElement, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 
 /**
  * Prepared uploader's existing session retained only for the current document's explicit retries.
- * @typedef {Object} PreparedUploadAttempt
+ * @typedef {Object} PreparedSelectionUploadAttempt
  * @property {File[]} files Expanded immutable originals in upload order; no duplicate file-byte copy.
  * @property {ReturnType<typeof browserUploadConfig>} processingConfig Frozen-by-ownership preparation settings from the original attempt.
  * @property {ReturnType<typeof createBrowserProgressState>} progressState Pre-upload progress snapshot; byte counters use bytes.
@@ -48,7 +48,32 @@ import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation
  * @property {Record<string, unknown>} [acknowledgedPhotoResult] Canonical photo aggregate retained after package cleanup while subsequent PDFs are unresolved.
  */
 
-const workerScriptUrl = new URL('./browser-image-worker.js?v=20260815-upload-zip-import-v1', import.meta.url);
+/** Describe the retained state of an incremental PDF or ordinary-image upload.
+ * @typedef {Object} PreparedFileStreamUploadAttempt
+ * @property {'pdf-file-stream'|'image-file-stream'} kind Source preparation contract selected for this intent.
+ * @property {ReturnType<typeof browserUploadConfig>} processingConfig Original image and batch preparation settings.
+ * @property {ReturnType<typeof createBrowserProgressState>} progressState Mutable byte/count counters owned by this upload.
+ * @property {string} uploadSessionId Stable prepared-batch replay identity.
+ * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original IndexedDB package owner.
+ * @property {PdfUploadBatch[]} batches Original batch identities; acknowledged blobs are cleared.
+ * @property {Set<number>} acknowledgedBatches Batch indices whose result has been merged exactly once.
+ * @property {boolean} serverSideStarted Whether automatic abandonment is unsafe.
+ * @property {Record<string,unknown>|null} gallerySeed Canonical acknowledged creation envelope, absent before creation or for an existing target.
+ * @property {number} galleryId Destination ID, zero until a new private gallery is acknowledged.
+ * @property {string} endpoint Original checked same-origin upload endpoint.
+ * @property {string} conversionToken PDF conversion token; empty for ordinary images.
+ * @property {number} sourceGalleryId Source PDF gallery; zero for ordinary images.
+ * @property {number} startPage One-based original starting source position.
+ * @property {number} nextSourceIndex Zero-based next source item not yet persisted by the batcher.
+ * @property {ReturnType<typeof emptyBrowserAggregate>} aggregate Canonical merged server result and counters.
+ * @property {(PdfUploadStreamOptions & {endpoint:string,uploadSessionId:string,galleryId:number,conversionToken:string,sourceGalleryId:number,preparedThumbnailsRequired:boolean,processingConfig:ReturnType<typeof browserUploadConfig>,progressState:ReturnType<typeof createBrowserProgressState>,pageCount:number,dpi:number})|null} transportOptions Current attempt signal/callbacks and retained transport identity; null before transport setup.
+ */
+
+/** Describe either existing selection packages or an incremental source retained for exact retry.
+ * @typedef {PreparedSelectionUploadAttempt|PreparedFileStreamUploadAttempt} PreparedUploadAttempt
+ */
+
+const workerScriptUrl = new URL('./browser-image-worker.js?v=20261013-icloud-auto-v2', import.meta.url);
 const tempDatabaseName = 'php_gallery_browser_uploads';
 const tempStoreName = 'prepared_batches';
 
@@ -63,14 +88,25 @@ const tempStoreName = 'prepared_batches';
 const maximumPngCompareChunkBytes = 1024 * 1024;
 
 /**
- * Describe a pull-driven source of generated PDF page PNG files.
+ * Bound originals retained by a selection containing archives across worker requests.
+ * Type: number.
+ * Units: bytes. Scope: one upload selection containing at least one ZIP.
+ * Consumers: expandBrowserUploadArchives and extractBrowserUploadZip.
+ * Rationale: carry the worker's 64 MiB retention ceiling across multiple selected
+ * archives instead of allowing each worker to consume a separate full budget.
+ */
+const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
+
+/**
+ * Describe a pull-driven ordered File source; PDF callers provide generated PNG pages.
  * @typedef {Object} PdfUploadFileStream
- * @property {number|undefined} pageCount Total source PDF page count when known.
+ * @property {number|undefined} pageCount Total source File count when known; PDF counts pages and image streams count admitted images.
  * @property {number|undefined} dpi Output resolution in dots per inch when known.
  * @property {string|undefined} sourceId Caller-owned source document identity.
  * @property {() => AsyncIterator<File>} [Symbol.asyncIterator] Create the ordered page iterator.
  * @property {(() => Promise<void>)|undefined} cancel Cancel current PDF work when supported.
  * @property {(() => Promise<void>)|undefined} dispose Release renderer resources when supported.
+ * Image-mode callers provide supported originals; pageCount/startIndex retain the existing ordered stream cursor.
  */
 
 /**
@@ -86,6 +122,7 @@ const maximumPngCompareChunkBytes = 1024 * 1024;
  * @property {number} [startBatchIndex] First batch index for resumed upload.
  * @property {PdfUploadProgressHandler} [onProgress] Observe render, packaging and upload progress.
  * @property {PdfUploadAcknowledgmentHandler} [onBatchAcknowledged] Observe durable batch acknowledgment.
+ * @property {'pdf'|'images'} [sourceKind] PDF retains strict PNG checks; images use the ordinary image worker and gallery creation path.
  */
 
 /**
@@ -117,8 +154,8 @@ const maximumPngCompareChunkBytes = 1024 * 1024;
  * @typedef {Object} PdfUploadBatch
  * @property {string} id Stable batch storage identifier.
  * @property {number} index Zero-based batch index.
- * @property {Blob} blob Store-only ZIP bytes retained until acknowledgment.
- * @property {number} itemCount Number of PNG pages in the batch.
+ * @property {Blob|null} blob Store-only ZIP bytes retained until acknowledgment, then cleared.
+ * @property {number} itemCount Number of ordered images in the batch; PDF callers supply PNG pages.
  * @property {number|undefined} [firstSourceIndex] Zero-based first source page index.
  * @property {number|undefined} [lastSourceIndex] Zero-based final source page index.
  * @property {() => Promise<void>} cleanup Remove the batch's temporary store data.
@@ -157,19 +194,22 @@ export function browserUploadRequested(form) {
  * @param {HTMLFormElement} form Existing Admin upload or create-gallery form.
  * @param {HTMLElement} progress Existing upload progress container.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Active form intent that owns retry identity.
- * @param {PdfUploadFileStream} fileStream Ordered File stream, including optional PDF metadata and cleanup methods.
+ * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream} fileStream Ordered File stream, including optional PDF metadata or archive cursor and cleanup methods.
  * @param {PdfUploadStreamOptions} options Stream transport and acknowledgment options.
  * @returns {Promise<Record<string, unknown>>} Canonical merged server acknowledgment fields and accumulated upload counters.
  */
 export async function uploadBrowserFileStream(form, progress, operation, fileStream, options = {}) {
+    const imageMode = options.sourceKind === 'images';
+    const imageText = (key, parameters = {}) => i18nForElement(form, key, i18n(key, ''), parameters);
+    const preparedKind = imageMode ? 'image-file-stream' : 'pdf-file-stream';
     if (!fileStream || typeof fileStream[Symbol.asyncIterator] !== 'function') {
-        throw new Error(i18n('pdf.upload.stream_unavailable', 'The browser upload stream is unavailable.'));
+        throw new Error(imageMode ? imageText('admin.icloud.image_prepare_failed') : i18n('pdf.upload.stream_unavailable', 'The browser upload stream is unavailable.'));
     }
     const config = browserUploadConfig(form);
     const endpoint = String(options.endpoint || config.endpoint || '');
     const endpointUrl = new URL(endpoint, window.location.href);
     if (!config.enabled || !endpoint || endpointUrl.origin !== window.location.origin) {
-        throw new Error(i18n('pdf.upload.endpoint_unavailable', 'The protected browser upload endpoint is unavailable. No pages were uploaded.'));
+        throw new Error(imageMode ? imageText('admin.browser_upload.strict_unavailable') : i18n('pdf.upload.endpoint_unavailable', 'The protected browser upload endpoint is unavailable. No pages were uploaded.'));
     }
     const signal = options.signal || null;
     const startPage = Math.max(1, Math.floor(Number(options.startPage || 1)));
@@ -185,11 +225,11 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
     const prepareThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
 
     if (prepared) {
-        if (prepared.kind !== 'pdf-file-stream') {
-            throw new Error(i18n('pdf.upload.retry_pending', 'Another prepared upload is awaiting an exact retry. Keep the original upload form open.'));
+        if (prepared.kind !== preparedKind) {
+            throw new Error(imageMode ? imageText('admin.operation.client_unresolved') : i18n('pdf.upload.retry_pending', 'Another prepared upload is awaiting an exact retry. Keep the original upload form open.'));
         }
         if (startPage !== Number(prepared.nextSourceIndex || 0) + 1) {
-            throw new Error(i18n('pdf.upload.resume_page', 'Resume this PDF conversion at page {page}.', {page: Number(prepared.nextSourceIndex || 0) + 1}));
+            throw new Error(imageMode ? imageText('admin.operation.client_unresolved') : i18n('pdf.upload.resume_page', 'Resume this PDF conversion at page {page}.', {page: Number(prepared.nextSourceIndex || 0) + 1}));
         }
         ({processingConfig, uploadSessionId, progressState, batcher} = prepared);
     } else {
@@ -223,20 +263,21 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
         if (!prepared) {
             batcher = await createBrowserBatcher({...processingConfig, expectedItemCount: pageCount, startBatchIndex: options.startBatchIndex}, uploadSessionId, {
                 onBatchPackaging: (batchIndex, itemCount, byteCount) => {
-                    appendUploadProgressLog(progress, i18n('pdf.upload.packaging', 'Packaging PDF pages ZIP {batch}: {count} page(s), estimated {bytes}.', {batch: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
+                    appendUploadProgressLog(progress, imageMode ? imageText('admin.browser_upload.log_packaging_batch', {index: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}) : i18n('pdf.upload.packaging', 'Packaging PDF pages ZIP {batch}: {count} page(s), estimated {bytes}.', {batch: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
                     if (typeof options.onProgress === 'function') options.onProgress({phase: 'packaging', page: Number(prepared?.nextSourceIndex || 0), pages: pageCount, dpi: Number(fileStream.dpi || 150), batch: batchIndex + 1, bytes: byteCount, uploadedBytes: 0});
                 },
                 onBatchReady: async (batch) => {
-                    appendUploadProgressLog(progress, i18n('pdf.upload.batch_ready', 'PDF pages ZIP {batch} ready: {count} page(s), {bytes}.', {batch: batch.index + 1, count: batch.itemCount, bytes: formatFileSize(batch.blob.size)}));
+                    appendUploadProgressLog(progress, imageMode ? imageText('admin.browser_upload.log_packaged_batch', {index: batch.index + 1, count: batch.itemCount, bytes: formatFileSize(batch.blob.size)}) : i18n('pdf.upload.batch_ready', 'PDF pages ZIP {batch} ready: {count} page(s), {bytes}.', {batch: batch.index + 1, count: batch.itemCount, bytes: formatFileSize(batch.blob.size)}));
                     await acknowledgePdfUploadBatch(form, progress, operation, batch, prepared.transportOptions);
                 },
             });
-            updateBasicProgress(progress, 1, i18n('pdf.upload.preparing', 'Preparing {count} PDF page image(s) in the browser...', {count: totalFiles || 'PDF'}));
+            updateBasicProgress(progress, 1, imageMode ? imageText('admin.browser_upload.preparing') : i18n('pdf.upload.preparing', 'Preparing {count} PDF page image(s) in the browser...', {count: totalFiles || 'PDF'}));
             let sourceIndex = startPage - 1;
             const existingGalleryId = Number(options.galleryId || selectedBrowserGalleryId(form) || 0);
-            if (!existingGalleryId) throw new Error(i18n('pdf.upload.destination_required', 'Select the destination gallery before starting PDF page upload.'));
+            if (!existingGalleryId && !imageMode) throw new Error(i18n('pdf.upload.destination_required', 'Select the destination gallery before starting PDF page upload.'));
+            if (!existingGalleryId && imageMode && (form.querySelector('[name="upload_mode"]')?.value !== 'new' || !['private', 'unpublished', 'draft'].includes(form.querySelector('[name="visibility"]')?.value))) throw new Error(imageText('admin.icloud.private_required'));
             prepared = {
-                kind: 'pdf-file-stream',
+                kind: preparedKind,
                 processingConfig,
                 uploadSessionId,
                 progressState,
@@ -281,11 +322,11 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
             }
         }
         await consumePdfPageStream(fileStream, startPage, pageCount, progress, batcher, prepared, prepared.transportOptions, options.onProgress);
-        if (prepared.nextSourceIndex < pageCount) {
-            throw new Error(i18n('pdf.upload.stream_ended_early', 'PDF conversion ended before page {page}.', {page: prepared.nextSourceIndex + 1}));
+        if (prepared.nextSourceIndex < (imageMode ? fileStream.pageCount : pageCount)) {
+            throw new Error(imageMode ? imageText('admin.icloud.download_incomplete') : i18n('pdf.upload.stream_ended_early', 'PDF conversion ended before page {page}.', {page: prepared.nextSourceIndex + 1}));
         }
         await batcher.finish();
-        if (!prepared.batches.length) throw new Error(i18n('pdf.upload.no_batches', 'The PDF conversion produced no upload batches.'));
+        if (!prepared.batches.length) throw new Error(imageMode ? imageText('admin.browser_upload.zip_no_supported_images') : i18n('pdf.upload.no_batches', 'The PDF conversion produced no upload batches.'));
         for (const batch of prepared.batches) {
             if (batch.blob && !prepared.acknowledgedBatches.has(batch.index)) {
                 await acknowledgePdfUploadBatch(form, progress, operation, batch, {
@@ -294,7 +335,8 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
             }
         }
         await batcher.cleanupPrepared();
-        updateBasicProgress(progress, 98, i18n('pdf.upload.finishing', 'Finishing PDF page upload...'));
+        if (imageMode) progressState.totalFiles = fileStream.pageCount;
+        updateBasicProgress(progress, 98, imageMode ? imageText('admin.icloud.finalizing') : i18n('pdf.upload.finishing', 'Finishing PDF page upload...'));
         const aggregate = prepared.aggregate;
         aggregate.total_files = progressState.totalFiles;
         aggregate.redirect_url = appendUploadResultParams(aggregate.redirect_url || window.location.href, aggregate.uploaded, aggregate.scanned, aggregate.thumbnails, aggregate.thumbnail_failed);
@@ -318,13 +360,13 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
 }
 
 /**
- * Consume generated page Files one at a time and upload each bounded batch before pulling again.
- * @param {PdfUploadFileStream} fileStream Pull-driven PDF page stream.
+ * Consume ordered source Files one at a time and upload each ready batch before pulling again.
+ * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream} fileStream Pull-driven source; PDF requires PNGs and image mode uses ordinary preparation.
  * @param {number} startPage One-based first source page in this stream.
- * @param {number} pageCount Total source PDF pages.
+ * @param {number} pageCount Initial admitted source count; archive integrity skips can reduce fileStream.pageCount.
  * @param {HTMLElement} progress Existing upload progress surface.
  * @param {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Existing ZIP batcher.
- * @param {{processingConfig: Record<string, unknown>, progressState: Record<string, number>, nextSourceIndex: number}} prepared Retained stream preparation state.
+ * @param {{kind:'pdf-file-stream'|'image-file-stream',processingConfig: Record<string, unknown>, progressState: Record<string, number>, nextSourceIndex: number}} prepared Retained source kind, preparation and cursor state.
  * @param {PdfUploadStreamOptions & {endpoint: string, uploadSessionId: string, galleryId: number, conversionToken: string, sourceGalleryId: number, preparedThumbnailsRequired: boolean, dpi: number, pageCount: number, processingConfig: Record<string, unknown>, progressState: Record<string, number>}} transportOptions Current batch transport, progress counters and callbacks.
  * @param {PdfUploadProgressHandler|undefined} onProgress Optional conversion and upload progress callback.
  * @returns {Promise<void>} Resolves after each page has been staged and eligible batches acknowledged.
@@ -344,10 +386,14 @@ async function consumePdfPageStream(fileStream, startPage, pageCount, progress, 
             }
             const file = next.value;
             throwIfUploadStreamAborted(transportOptions.signal);
-            if (!(file instanceof File) || file.type !== 'image/png' || !/\.png$/i.test(file.name)) {
-                throw new Error(i18n('pdf.upload.invalid_page_file', 'The PDF converter must provide genuine PNG Files in page order.'));
+            const imageMode = prepared.kind === 'image-file-stream';
+            if (!(file instanceof File) || (!imageMode && (file.type !== 'image/png' || !/\.png$/i.test(file.name)))) {
+                throw new Error(imageMode ? i18nForElement(progress, 'admin.icloud.image_prepare_failed', i18n('admin.icloud.image_prepare_failed', 'Image preparation failed.')) : i18n('pdf.upload.invalid_page_file', 'The PDF converter must provide genuine PNG Files in page order.'));
             }
-            const item = await prepareStreamPngFile(file, prepared.processingConfig, sourceIndex);
+            const item = imageMode
+                ? await prepareStreamImageFile(file, {...prepared.processingConfig, signal: transportOptions.signal}, sourceIndex)
+                : await prepareStreamPngFile(file, prepared.processingConfig, sourceIndex);
+            if (!item) throw new Error(i18nForElement(progress, 'admin.icloud.image_prepare_failed', i18n('admin.icloud.image_prepare_failed', 'Image preparation failed.')));
             throwIfUploadStreamAborted(transportOptions.signal);
             if (batcher.shouldFlushBefore(item)) await batcher.flush();
             const added = await batcher.addItem(item);
@@ -357,7 +403,7 @@ async function consumePdfPageStream(fileStream, startPage, pageCount, progress, 
             prepared.progressState.preparedPackageBytes += added.itemBytes;
             sourceIndex++;
             prepared.nextSourceIndex = sourceIndex;
-            updateBasicProgress(progress, Math.max(2, totalPagesRemaining ? Math.round(prepared.progressState.preparedFiles / prepared.progressState.totalFiles * 45) : 2), i18n('pdf.upload.prepared_page', 'Prepared PDF page {page} in the browser.', {page: sourceIndex}));
+            updateBasicProgress(progress, Math.max(2, totalPagesRemaining ? Math.round(prepared.progressState.preparedFiles / prepared.progressState.totalFiles * 45) : 2), imageMode ? i18nForElement(progress, 'admin.browser_upload.prepared_count', '', {count: sourceIndex, total: fileStream.pageCount}) : i18n('pdf.upload.prepared_page', 'Prepared PDF page {page} in the browser.', {page: sourceIndex}));
             updateUploadProgressMetrics(progress, browserProgressMetrics(prepared.progressState));
             if (typeof onProgress === 'function') {
                 onProgress({phase: 'prepared', page: sourceIndex, pages: pageCount, dpi: Number(fileStream.dpi || 150)});
@@ -370,17 +416,32 @@ async function consumePdfPageStream(fileStream, startPage, pageCount, progress, 
 }
 
 /**
- * Upload one newly packaged PDF page batch and release its bytes only after acknowledgment.
+ * Upload one newly packaged File-stream batch and release its bytes only after acknowledgment.
  * @param {HTMLFormElement} form Original upload form with current CSRF fields.
  * @param {HTMLElement} progress Upload progress surface.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Active upload intent.
- * @param {PdfUploadBatch} batch One prepared page ZIP batch.
+ * @param {PdfUploadBatch} batch One pending prepared ZIP batch with its original blob.
  * @param {PdfUploadStreamOptions & {endpoint: string, uploadSessionId: string, galleryId: number, conversionToken: string, sourceGalleryId: number, preparedThumbnailsRequired: boolean, processingConfig: Record<string, unknown>, progressState: Record<string, number>, pageCount: number, dpi?: number}} options Batch transport and progress state.
  * @returns {Promise<void>} Resolves after durable acknowledgment and local batch cleanup.
  */
 async function acknowledgePdfUploadBatch(form, progress, operation, batch, options) {
     throwIfUploadStreamAborted(options.signal);
     assertAdminOperationCurrent(operation);
+    if (operation.prepared.kind === 'image-file-stream' && !operation.prepared.galleryId) {
+        operation.unresolved = true;
+        operation.prepared.serverSideStarted = true;
+        const seed = await createGalleryForBrowserUpload(form, operation);
+        const galleryId = Number(seed.gallery_id || 0);
+        if (!galleryId) throw new Error(i18n('admin.browser_upload.gallery_create_failed'));
+        operation.prepared.gallerySeed = seed;
+        operation.prepared.galleryId = galleryId;
+        options.galleryId = galleryId;
+        operation.prepared.aggregate = emptyBrowserAggregate(seed, galleryId, 0);
+        operation.prepared.aggregate.created_gallery = true;
+        operation.prepared.aggregate.gallery_id = galleryId;
+        appendServerUploadEvents(progress, seed.upload_events || []);
+    }
+    if (operation.prepared.kind === 'image-file-stream') options.galleryId = operation.prepared.galleryId;
     operation.unresolved = true;
     operation.prepared.serverSideStarted = true;
     const progressState = options.progressState;
@@ -417,11 +478,11 @@ async function acknowledgePdfUploadBatch(form, progress, operation, batch, optio
 
 /**
  * Throw when an upload stream has been cancelled by its owning form workflow.
- * @param {AbortSignal|null} signal Optional upload cancellation signal.
+ * @param {AbortSignal|null} signal Optional PDF or automatic archive cancellation signal.
  * @returns {void} No value when the operation remains active.
  */
 function throwIfUploadStreamAborted(signal) {
-    if (signal && signal.aborted) throw new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+    if (signal && signal.aborted) throw new Error(i18n('admin.icloud.cancelled', 'Import cancelled. Keep this form open and retry to reconcile any batch already sent.'));
 }
 
 /**
@@ -432,13 +493,22 @@ function throwIfUploadStreamAborted(signal) {
  * @returns {Promise<{originalFile: File, originalDetectedFormat: string, originalPath: string, originalName: string, originalSize: number, variants: Array<{path: string, blob: Blob}>, sourceIndex: number}>} Prepared image metadata with the exact input PNG as originalFile.
  */
 async function prepareStreamPngFile(file, config, sourceIndex) {
-    let prepared = null;
-    await processFilesWithWorkerPool([file], {...config, workerCount: 1, workerItemIdOffset: sourceIndex}, async (item) => {
-        prepared = {...item, sourceIndex};
-    });
+    const prepared = await prepareStreamImageFile(file, config, sourceIndex);
     if (!prepared || prepared.originalDetectedFormat !== 'png' || !(await filesHaveSameBytes(prepared.originalFile, file))) {
         throw new Error(i18n('pdf.upload.page_prepare_failed', 'Rendered PDF page {page} failed PNG preparation.', {page: sourceIndex + 1}));
     }
+    return prepared;
+}
+
+/** Prepare one ordered ordinary image through the existing worker pool without retaining other source images.
+ * @param {File} file One verified ZIP image or rendered PDF page.
+ * @param {Record<string, unknown>} config Existing image-worker settings including optional cancellation.
+ * @param {number} sourceIndex Stable zero-based File-stream index used by the existing manifest/batcher.
+ * @returns {Promise<{originalFile:File,originalDetectedFormat:string,originalPath:string,originalName:string,originalSize:number,variants:Array<{path:string,blob:Blob}>,sourceIndex:number}|null>} Ordinary prepared original/variants, or null if no worker item was produced so the source-specific caller can report failure.
+ */
+async function prepareStreamImageFile(file, config, sourceIndex) {
+    let prepared = null;
+    await processFilesWithWorkerPool([file], {...config, workerCount: 1, workerItemIdOffset: sourceIndex}, async item => { prepared = {...item, sourceIndex}; });
     return prepared;
 }
 
@@ -471,9 +541,11 @@ async function filesHaveSameBytes(preparedFile, inputFile) {
  * @param {HTMLFormElement} form Upload form.
  * @param {HTMLElement} progress Progress container.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original form intent; retains this uploader's own session/batches after uncertainty.
- * @return {Promise<Record<string, *> | {fallback: true, reason: string} >} Upload result or fallback request.
+ * @param {AbortSignal|null} signal Optional assisted-import cancellation; retains uncertain prepared batches for exact replay.
+ * @return {Promise<import('./admin-side-panel.js').AdminPanelResponse|{fallback:true,reason:string}>} Canonical upload response or no-files fallback request.
  */
-export async function runBrowserGalleryUpload(form, progress, operation) {
+export async function runBrowserGalleryUpload(form, progress, operation, signal = null) {
+    throwIfUploadStreamAborted(signal);
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
     const pdfFiles = selectedBrowserUploadPdfFiles(form);
@@ -519,7 +591,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
     }
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
+    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, {...processingConfig, signal}, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
     const files = expanded.files;
     if (files.length === 0 && pdfFiles.length > 0) {
         return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
@@ -543,7 +615,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
                     appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaged_batch', 'ZIP {index} ready: {count} image(s), {bytes}.', {index: batch.index + 1, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
                 },
             });
-            await processFilesWithWorkerPool(files, processingConfig, async (item, completed, total) => {
+            await processFilesWithWorkerPool(files, {...processingConfig, signal}, async (item, completed, total) => {
                 const prepared = await batcher.addItem(item);
                 progressState.preparedFiles = completed;
                 progressState.preparedOriginalBytes += Number(item.originalSize || 0);
@@ -561,6 +633,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
             updateBasicProgress(progress, 46, i18n('admin.browser_upload.packaging', 'Packaging prepared images into upload ZIP batches...'));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_started', 'All images are prepared. Building upload ZIP files now.'));
             const batches = await batcher.finish();
+            throwIfUploadStreamAborted(signal);
             if (batches.length === 0) {
                 throw new Error(i18n('admin.browser_upload.strict_empty_batches', 'Browser-side processing produced no upload batches. No files were uploaded; the server-side fallback was not started.'));
             }
@@ -576,6 +649,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
 
         let gallerySeed = null;
         let galleryId = selectedBrowserGalleryId(form);
+        throwIfUploadStreamAborted(signal);
         if (!galleryId) {
             updateBasicProgress(progress, 48, i18n('admin.browser_upload.creating_gallery', 'Creating gallery before uploading prepared batches...'));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_creating_gallery', 'Creating target gallery before uploading ZIP files.'));
@@ -592,6 +666,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
 
         const aggregate = emptyBrowserAggregate(gallerySeed, galleryId, batches.length);
         for (let index = 0; index < batches.length; index++) {
+            throwIfUploadStreamAborted(signal);
             const batch = batches[index];
             const uploadedBeforeBatch = progressState.uploadedZipBytes;
             progressState.currentBatchIndex = index + 1;
@@ -611,7 +686,7 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
                 }
                 progressState.uploadedZipBytes = uploadedBeforeBatch + progressState.currentBatchUploadedBytes;
                 updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
-            });
+            }, {signal});
             progressState.uploadedBatches = index + 1;
             progressState.uploadedFiles += Number(batch.itemCount || 0);
             progressState.uploadedZipBytes = uploadedBeforeBatch + Number(batch.blob?.size || 0);
@@ -654,6 +729,9 @@ export async function runBrowserGalleryUpload(form, progress, operation) {
         if (batcher && !serverSideStarted) {
             await batcher.abort();
             operation.prepared = null;
+        }
+        if (!serverSideStarted && ['QuotaExceededError', 'InvalidStateError', 'SecurityError', 'UnknownError'].includes(error?.name)) {
+            throw new Error(i18n('admin.icloud.storage_failed'));
         }
         if (!serverSideStarted && !archiveSelected) {
             const reason = error instanceof Error ? error.message : String(error || 'preparation_failed');
@@ -725,6 +803,14 @@ function browserUploadConfig(form) {
     };
 }
 
+/** Expose the existing effective per-image limit to the ZIP File-stream adapter without a second policy owner.
+ * @param {HTMLFormElement} form Existing protected upload form.
+ * @returns {{uploadLimitBytes:number}} Existing server-aligned image admission limit.
+ */
+export function browserArchiveUploadConfig(form) {
+    return {uploadLimitBytes: browserUploadConfig(form).uploadLimitBytes};
+}
+
 /**
  * Clamp an integer value.
  *
@@ -757,10 +843,10 @@ function clampQuality(value, fallback) {
 /**
  * Return a readable byte count for upload progress text.
  *
- * @param {*} value Byte count value.
+ * @param {number|string|null|undefined} value Byte count or numeric scalar; absent values display zero bytes.
  * @return {string} Human-readable byte count.
  */
-function formatFileSize(value) {
+export function formatFileSize(value) {
     const bytes = Math.max(0, Number(value || 0));
     if (bytes < 1024) {
         return `${Math.round(bytes)} B`;
@@ -945,43 +1031,67 @@ function isBrowserUploadZipFile(file) {
  * Replace selected ZIPs with their supported image entries before preparation.
  *
  * @param {File[]} selectedFiles Original browser selection.
- * @param {Record<string, *>} config Browser upload configuration.
+ * @param {{uploadLimitBytes:number,signal?:AbortSignal|null}} config Effective per-file limit and optional cancellation.
  * @param {HTMLElement} progress Progress container.
  * @param {boolean} preserveOrder Honour explicit drawer order, including ZIP positions.
- * @return {Promise<{files: File[], skipped: number}>} Expanded upload selection.
+ * @return {Promise<{files:File[],skipped:number}>} Ordered bounded originals; oversized selections fail before server mutation.
  */
 async function expandBrowserUploadArchives(selectedFiles, config, progress, preserveOrder = false) {
     const files = [];
     let skipped = 0;
+    let retainedBytes = selectedFiles.filter(file => !isBrowserUploadZipFile(file)).reduce((sum, file) => sum + file.size, 0);
+    if (selectedFiles.some(isBrowserUploadZipFile) && retainedBytes > maximumArchiveSelectionBytes) {
+        throw new Error(i18n('admin.icloud.zip_retention'));
+    }
     for (const selectedFile of selectedFiles) {
+        throwIfUploadStreamAborted(config.signal || null);
         if (!isBrowserUploadZipFile(selectedFile)) {
             files.push(selectedFile);
             continue;
         }
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracting_zip', 'Inspecting ZIP: {name} ({bytes}).', {name: selectedFile.name, bytes: formatFileSize(selectedFile.size)}));
-        const result = await extractBrowserUploadZip(selectedFile, config);
+        const result = await extractBrowserUploadZip(selectedFile, {...config, remainingArchiveBytes: maximumArchiveSelectionBytes - retainedBytes});
         skipped += Number(result.skipped || 0);
         const archiveFiles = (result.entries || []).map((entry) => new File([entry.blob], String(entry.name || 'archive-image'), {
             type: browserUploadMimeFromFilename(String(entry.name || '')),
             lastModified: selectedFile.lastModified,
         }));
         files.push(...archiveFiles);
+        retainedBytes += archiveFiles.reduce((sum, file) => sum + file.size, 0);
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracted_zip', 'ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.', {name: selectedFile.name, added: archiveFiles.length, skipped: Number(result.skipped || 0)}));
+        for (const [reason, count] of Object.entries(result.reasons || {})) {
+            appendUploadProgressLog(progress, i18n('admin.icloud.skipped', 'Skipped {count}: {reason}.', {count, reason: i18n('admin.icloud.skip_' + reason)}));
+        }
     }
     return {files: preserveOrder ? files : files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
 }
 
-/** Ask a short-lived worker to safely extract one selected user ZIP. */
+/**
+ * Extract one selected ZIP in a cancellable worker with a shared retention budget.
+ * @param {File} zipFile Disk-backed user selection, never a full archive buffer.
+ * @param {{uploadLimitBytes:number,remainingArchiveBytes:number,signal?:AbortSignal|null}} config Effective per-file/selection limits and cancellation.
+ * @returns {Promise<{entries:Array<{name:string,path:string,blob:Blob}>,skipped:number,totalEntries:number,reasons:Record<string,number>}>} Bounded checked images and categorized skipped entries.
+ */
 function extractBrowserUploadZip(zipFile, config) {
     return new Promise((resolve, reject) => {
         const worker = new Worker(workerScriptUrl);
         /** Release the archive worker after its single extraction request. */
-        const finish = () => worker.terminate();
+        const finish = () => {
+            worker.terminate();
+            config.signal?.removeEventListener('abort', abort);
+        };
+        const abort = () => {
+            finish();
+            reject(new Error(i18n('admin.icloud.cancelled')));
+        };
+        if (config.signal?.aborted) { abort(); return; }
+        config.signal?.addEventListener('abort', abort, {once: true});
         worker.addEventListener('message', (event) => {
             const data = event.data || {};
             finish();
             if (!data.ok) {
-                reject(new Error(data.error || i18n('admin.browser_upload.zip_extract_failed', 'The selected ZIP archive could not be read.')));
+                const code = ['zip64', 'entries', 'directory', 'size', 'retention', 'deflate'].includes(data.code) ? data.code : 'invalid';
+                reject(new Error(i18n('admin.icloud.zip_' + code)));
                 return;
             }
             resolve(data.result || {entries: [], skipped: 0, totalEntries: 0});
@@ -997,13 +1107,18 @@ function extractBrowserUploadZip(zipFile, config) {
             limits: {
                 maximumEntries: 10000,
                 maximumEntryBytes: Number(config.uploadLimitBytes || 8 * 1024 * 1024),
+                maximumRetainedBytes: config.remainingArchiveBytes,
                 maximumTotalBytes: Math.min(2 * 1024 * 1024 * 1024, Math.max(Number(config.uploadLimitBytes || 1), Number(config.uploadLimitBytes || 1) * 1000)),
             },
         });
     });
 }
 
-/** Return the browser MIME hint for one extracted supported filename. */
+/**
+ * Return the existing MIME hint for an extracted supported image name.
+ * @param {string} filename Checked image filename.
+ * @returns {string} JPEG/PNG/WebP/GIF MIME, or the binary fallback.
+ */
 function browserUploadMimeFromFilename(filename) {
     const extension = String(filename || '').split('.').pop()?.toLowerCase() || '';
     return {jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'}[extension] || 'application/octet-stream';
@@ -1136,7 +1251,7 @@ function browserUploadSessionId() {
  * Run files through a bounded worker pool.
  *
  * @param {File[]} files Selected files.
- * @param {{workerCount?:number,workerItemIdOffset?:number,thumbnailSizes:number[],thumbnailFormats:string[],jpegQuality:number,webpQuality:number}} config Decoder settings; the item offset defaults to zero and keeps streamed PDF thumbnail paths unique.
+ * @param {{workerCount?:number,workerItemIdOffset?:number,thumbnailSizes:number[],thumbnailFormats:string[],jpegQuality:number,webpQuality:number,signal?:AbortSignal|null}} config Decoder settings and cancellation; the item offset keeps streamed PDF thumbnail paths unique.
  * @param {PreparedWorkerImageCallback} onItem Persist each original and derivative result with decoded-file counts.
  * @return {Promise<void>} Result value for the caller.
  */
@@ -1157,6 +1272,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
          */
         const stopWorkers = () => {
             workers.forEach((worker) => worker.terminate());
+            config.signal?.removeEventListener('abort', abort);
         };
         /**
          * Handle reject once.
@@ -1171,8 +1287,12 @@ function processFilesWithWorkerPool(files, config, onItem) {
             }
             rejected = true;
             stopWorkers();
-            reject(error instanceof Error ? error : new Error(String(error)));
+            // Let admitted IndexedDB writes settle before abort cleanup deletes them.
+            Promise.allSettled([...pendingItemWrites]).then(() => reject(error instanceof Error ? error : new Error(String(error))));
         };
+        const abort = () => rejectOnce(new Error(i18n('admin.icloud.cancelled')));
+        if (config.signal?.aborted) { abort(); return; }
+        config.signal?.addEventListener('abort', abort, {once: true});
         /**
          * Resolve after every worker result has also reached temporary storage.
          *
@@ -1239,6 +1359,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
             }
             workers.push(worker);
             worker.addEventListener('message', (event) => {
+                if (rejected) return;
                 const data = event.data || {};
                 if (!data.ok) {
                     rejectOnce(new Error(data.error || i18n('admin.browser_upload.worker_failed', 'Browser image preparation worker failed.')));
@@ -1536,19 +1657,25 @@ function openPreparedBatchStore() {
 }
 
 /**
- * Run one IndexedDB object store request.
+ * Describe an IndexedDB operation on one prepared-image/batch store.
+ * @typedef {(store: IDBObjectStore) => IDBRequest<Blob|PreparedWorkerImage|IDBValidKey|undefined>} IndexedDbOperation
+ */
+/**
+ * Run one IndexedDB object store request and wait for its transaction to commit.
  *
  * @param {IDBDatabase} database Database connection.
  * @param {IDBTransactionMode} mode Transaction mode.
- * @param {(store: IDBObjectStore) => IDBRequest} operation Store operation.
- * @return {Promise<*>} Request result.
+ * @param {IndexedDbOperation} operation Prepared-image read/write/delete request factory.
+ * @return {Promise<Blob|PreparedWorkerImage|IDBValidKey|undefined>} Stored image/batch, write key or absent/delete result, only after transaction commit.
  */
 function indexedDbRequest(database, mode, operation) {
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(tempStoreName, mode);
         const store = transaction.objectStore(tempStoreName);
         const request = operation(store);
-        request.addEventListener('success', () => resolve(request.result));
+        transaction.addEventListener('complete', () => resolve(request.result));
+        transaction.addEventListener('abort', () => reject(transaction.error || new Error(i18n('admin.icloud.storage_failed'))));
+        transaction.addEventListener('error', () => reject(transaction.error || new Error(i18n('admin.icloud.storage_failed'))));
         request.addEventListener('error', () => reject(request.error || new Error('IndexedDB request failed.')));
     });
 }
@@ -1654,7 +1781,7 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
         const abortRequest = () => xhr.abort();
         if (options.signal) {
             if (options.signal.aborted) {
-                reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+                reject(new Error(i18n('admin.icloud.cancelled')));
                 return;
             }
             options.signal.addEventListener('abort', abortRequest, {once: true});
@@ -1686,7 +1813,7 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
             reject(failure);
         });
         xhr.addEventListener('abort', () => {
-            const failure = new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.'));
+            const failure = new Error(i18n('admin.icloud.cancelled'));
             failure.retryable = false;
             reject(failure);
         }, {once: true});
@@ -1924,7 +2051,7 @@ function delay(milliseconds, signal = null) {
         const abort = () => {
             if (timer !== null) window.clearTimeout(timer);
             if (signal) signal.removeEventListener('abort', abort);
-            reject(new Error(i18n('pdf.upload.cancelled', 'The PDF page upload was cancelled.')));
+            reject(new Error(i18n('admin.icloud.cancelled')));
         };
         if (signal?.aborted) {
             abort();

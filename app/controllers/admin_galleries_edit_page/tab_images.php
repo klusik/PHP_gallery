@@ -43,17 +43,22 @@ use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\thumbnail_editor_preload_url;
+use function Gallery\Services\thumbnail_editor_preview_url;
 use function Gallery\Views\view_render_admin_gallery_images_tab;
+use function Gallery\Views\view_render_admin_gallery_image_rows;
 
 /**
  * Render the Images tab panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
- * @param array<int, array<string, mixed>> $images Images attached to this gallery.
+ * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, cover choice and thumbnail URL policy inputs.
+ * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
  * @param string $activeEditTab Currently selected editor tab.
+ * @param bool $rowsOnly Whether only canonical table rows are requested.
+ * @param bool $deferred Whether thumbnail requests are reserved for the preload queue.
  * @return void Render prepared compact image rows and their panel actions.
  */
-function admin_edit_gallery_render_images_tab(array $gallery, array $images, string $activeEditTab): void
+function admin_edit_gallery_render_images_tab(array $gallery, array $images, string $activeEditTab, bool $rowsOnly = false, bool $deferred = false): void
 {
     $actions = [
         [
@@ -85,7 +90,9 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
     }
 
     ob_start();
-    render_admin_image_bulk_toolbar($gallery);
+    if (!$rowsOnly) {
+        render_admin_image_bulk_toolbar($gallery);
+    }
     $bulkToolbarHtml = (string) ob_get_clean();
 
     $imageRows = [];
@@ -96,8 +103,8 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'id' => $imageId,
             'relative_path' => $relativePath,
             'visibility' => normalize_gallery_visibility((string) $image['visibility']),
-            'thumbnail_url' => thumbnail_url($image, 300),
-            'preview_url' => thumbnail_url($image, 900),
+            'thumbnail_url' => $deferred ? thumbnail_editor_preload_url($image) : thumbnail_url($image, 300),
+            'preview_url' => $deferred ? thumbnail_editor_preview_url($image, $gallery) : thumbnail_url($image, 900),
             'capture_date' => (string) ($image['exif_taken_at'] ?? ''),
             'move_aria' => t('admin.image_order.move_aria', 'Move {file}', ['file' => $relativePath]),
             'cover_label' => (int) ($gallery['cover_image_id'] ?? 0) === $imageId
@@ -108,7 +115,8 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
         ];
     }
 
-    view_render_admin_gallery_images_tab([
+    $viewModel = [
+        'deferred' => $deferred,
         'active' => $activeEditTab === 'admin-edit-images',
         'gallery_id' => (int) $gallery['id'],
         'csrf_html' => csrf_field(),
@@ -151,5 +159,10 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'set_cover' => t('admin.gallery_editor.set_as_title_picture', 'Set as title picture'),
             'close_preview' => t('admin.gallery_editor.images_close_preview', 'Close preview'),
         ],
-    ]);
+    ];
+    if ($rowsOnly) {
+        view_render_admin_gallery_image_rows($imageRows, $viewModel['labels'], $deferred);
+        return;
+    }
+    view_render_admin_gallery_images_tab($viewModel);
 }

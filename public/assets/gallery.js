@@ -115,7 +115,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261013-pdf-upload-optin-v1';
+} from './gallery-modules/admin-operations.js?v=20261013-images-icloud-rebase-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
