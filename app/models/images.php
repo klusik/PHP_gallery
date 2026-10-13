@@ -918,3 +918,39 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
     $stmt->execute(array_values($insertFields));
     return (int) db()->lastInsertId();
 }
+
+/**
+ * Read a bounded page of direct editor images without filtering access classes.
+ * The authenticated controller owns permission; the ordering matches the legacy
+ * gallery list, with id breaking filename ties deterministically.
+ * @param int $galleryId Positive gallery identity.
+ * @param int $offset Nonnegative row offset.
+ * @param int $limit Page size between one and one hundred rows.
+ * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> Stored direct image identities, presentation values and optional derivative metadata; unprojected persistence fields are preserved for compatibility.
+ */
+function image_model_editor_page(int $galleryId, int $offset, int $limit): array
+{
+    if ($galleryId < 1 || $offset < 0 || $limit < 1 || $limit > 100) {
+        throw new InvalidArgumentException('Invalid editor page bounds.');
+    }
+    $stmt = db()->prepare("SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY sort_order, filename, id LIMIT " . $limit . ' OFFSET ' . $offset);
+    $stmt->execute([$galleryId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Observe direct editor membership and ordering without materializing image rows.
+ * Weighted order detects ordinary reordering even when the unweighted sum stays
+ * unchanged; this observation is a drift guard, not a database snapshot lock.
+ * @param int $galleryId Positive gallery identity.
+ * @return array{total:int,revision:string} Direct row count and opaque inventory observation.
+ */
+function image_model_editor_inventory(int $galleryId): array
+{
+    $stmt = db()->prepare("SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS newest,
+        COALESCE(SUM(id), 0) AS identities, COALESCE(SUM(id * sort_order), 0) AS ordering
+        FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'");
+    $stmt->execute([$galleryId]);
+    $row = $stmt->fetch() ?: [];
+    return ['total' => (int) ($row['total'] ?? 0), 'revision' => hash('sha256', (string) json_encode($row))];
+}

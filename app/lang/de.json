@@ -1,4 +1,10 @@
 {
+    "admin.gallery_editor.images_preparing": "Fotos werden vorbereitet …",
+    "admin.gallery_editor.images_progress": "Verarbeitete Fotos: {current} / {total}",
+    "admin.gallery_editor.images_ready": "Fotos sind bereit.",
+    "admin.gallery_editor.images_failed": "{count} Vorschaubilder konnten nicht geladen werden. Bilder erneut laden.",
+    "admin.gallery_editor.images_load_error": "Fotos konnten nicht geladen werden. Andere Einstellungen bleiben verfügbar.",
+    "admin.gallery_editor.images_retry": "Bilder erneut laden",
     "admin.theme.overrides.clear_required": "Bestätigen Sie das Löschen der manuellen Overrides vor dem Absenden.",
     "admin.theme.overrides.clear_check": "Ich bestätige das Löschen der manuellen Overrides",
     "admin.theme.advanced.title": "Erweitertes Erscheinungsbild",

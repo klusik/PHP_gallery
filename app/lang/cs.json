@@ -1,4 +1,10 @@
 {
+    "admin.gallery_editor.images_preparing": "Připravuji fotografie…",
+    "admin.gallery_editor.images_progress": "Zpracované fotografie: {current} / {total}",
+    "admin.gallery_editor.images_ready": "Fotografie jsou připravené.",
+    "admin.gallery_editor.images_failed": "{count} náhledů se nepodařilo načíst. Zkuste fotografie načíst znovu.",
+    "admin.gallery_editor.images_load_error": "Fotografie se nepodařilo načíst. Ostatní nastavení zůstávají dostupná.",
+    "admin.gallery_editor.images_retry": "Znovu načíst fotografie",
     "admin.theme.overrides.clear_required": "Před odesláním této akce potvrďte vymazání vlastních úprav CSS.",
     "admin.theme.overrides.clear_check": "Potvrzuji vymazání vlastních úprav CSS",
     "admin.theme.advanced.title": "Pokročilý vzhled",

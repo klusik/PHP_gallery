@@ -37,7 +37,7 @@ import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } fr
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261002-overview-navigation-v1';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261013-images-preload-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
@@ -397,6 +397,16 @@ export function setupAdminGallerySidePanel() {
     if (document.body) {
         document.body.dataset.adminGallerySidePanelBound = '1';
     }
+
+    document.addEventListener('php-gallery:images-ready', (event) => {
+        const imagesPanel = event.target;
+        if (!(imagesPanel instanceof HTMLElement) || !imagesPanel.closest('[data-admin-side-panel]')) return;
+        prepareAdminPanelBulkForm(imagesPanel.querySelector('[data-admin-image-bulk-form]'));
+        setupGallerySearchPickers();
+        setupImageBulkMoveFields();
+        setupAdminGalleryImages(imagesPanel);
+        setupAdminImageReordering();
+    });
 
     document.addEventListener('php-gallery:admin-image-order-saved', /** Forward image-order completion with its captured drawer owner. @param {CustomEvent} event Canonical result and originating panelOwner from the reorder module. @return {Promise<void>} Delegates public/panel synchronization to the canonical coordinator. */ async (event) => {
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
@@ -853,6 +863,7 @@ async function openAdminGallerySidePanel(link) {
     try {
         const url = new URL(link.dataset.gallerySidePanelUrl || link.href, window.location.href);
         url.searchParams.set('panel', '1');
+        if (workflow.name === 'gallery-edit' && (url.hash || link.hash) === '#admin-edit-images') url.searchParams.set('tab', 'admin-edit-images');
         const response = await fetch(url.toString(), {
             credentials: 'same-origin',
             signal: owner.signal,
@@ -1132,7 +1143,6 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
         try { await loadAdminI18nScope(workspace); } catch { workspace.dataset.adminI18nFailed = '1'; }
     }
     setupGalleryUploadProgress();
-    setupAdminTabsInRoot(body);
     setupAdminNestedTabs(body);
     setupAdminGalleryGridControls(body);
     setupAdminPanelThumbnailBoundControls(body);
@@ -1142,12 +1152,14 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
         setupAdminDatePickers(body);
     }
     setupGallerySearchPickers();
-    setupImageBulkMoveFields();
+    if (!body.querySelector('[data-gallery-images-preload]')) setupImageBulkMoveFields();
     if (workflow.name === 'gallery-edit') {
         prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
-        prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
-        setupAdminImageReordering();
-        setupAdminGalleryImages(body);
+        if (!body.querySelector('[data-gallery-images-preload]')) {
+            prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
+            setupAdminImageReordering();
+            setupAdminGalleryImages(body);
+        }
     } else if (workflow.name === 'image-edit') {
         const imageForm = body.querySelector('section.panel form.form-grid, form.form-grid');
         prepareAdminPanelEditForm(imageForm, workflow.name, sourceUrl);
@@ -1168,6 +1180,7 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
             }
         });
     }
+    setupAdminTabsInRoot(body);
     const panel = body.closest('[data-admin-side-panel]');
     if (panel instanceof HTMLElement) prepareAdminPanelDrafts(panel);
 }

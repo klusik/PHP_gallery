@@ -134,7 +134,7 @@ function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int
 
 
 /**
- * Resolve a thumbnail response file, using a strictly read-only lookup for visual preview requests.
+ * Resolve a thumbnail response file, preserving exact read-only editor preload and visual preview.
  *
  * Public thumbnail URLs may touch the filesystem because the browser is asking
  * for a specific derivative. Invalid aspect-ratio variants are deleted and are
@@ -149,6 +149,11 @@ function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int
  */
 function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $size, string $format): ?array
 {
+    // Explicit read-only resource requests retain all route authorization and
+    // privacy checks, but must never repair derivatives or fall back to originals.
+    if ((string) ($_GET['existing_only'] ?? '') === '1') {
+        return thumbnail_readonly_existing_response_file($image, $gallery, $size, $format, true);
+    }
     if (public_visual_preview_is_active($_GET)) {
         return thumbnail_readonly_existing_response_file($image, $gallery, $size, $format);
     }

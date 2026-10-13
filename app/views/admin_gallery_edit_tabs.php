@@ -497,20 +497,7 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
     echo '<div class="admin-image-view-controls"><label class="admin-compact-toggle"><input type="checkbox" data-admin-image-names-toggle checked> <span>' . e((string) ($labels['show_names'] ?? 'Show filenames')) . '</span></label><button type="button" class="secondary admin-image-default-button" data-admin-image-names-default data-saved-message="' . e((string) ($labels['names_default_saved'] ?? '')) . '" data-unavailable-message="' . e((string) ($labels['names_unavailable'] ?? '')) . '">' . e((string) ($labels['save_names_default'] ?? 'Use as default')) . '</button><span class="visually-hidden" data-admin-image-names-status role="status"></span></div>';
     echo '<div class="admin-image-sort-controls"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="' . e((string) ($labels['sort_a_z'] ?? '')) . '">' . e((string) ($labels['name'] ?? 'Name')) . ' <span aria-hidden="true">↕</span></button><button type="button" class="admin-image-name-sort" data-admin-image-capture-date-sort data-sort-direction="asc" aria-label="' . e((string) ($labels['sort_capture_date'] ?? '')) . '">' . e((string) ($labels['capture_date'] ?? 'Date taken')) . ' <span aria-hidden="true">↕</span></button><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">' . e((string) ($labels['order_unchanged'] ?? '')) . '</span><details class="admin-inline-help"><summary title="' . e((string) ($labels['drag_help'] ?? '')) . '" aria-label="' . e((string) ($labels['drag_title'] ?? '')) . '">?</summary><div class="admin-inline-help-content">' . e((string) ($labels['drag_help'] ?? '')) . '</div></details></div></div>';
     echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th class="admin-image-order-cell"><span class="visually-hidden">' . e((string) ($labels['move'] ?? 'Move')) . '</span></th><th class="admin-image-thumbnail-cell">' . e((string) ($labels['preview'] ?? 'Preview')) . '</th><th data-admin-image-name-cell>' . e((string) ($labels['name'] ?? 'Name')) . '</th><th class="admin-image-actions-cell">' . e((string) ($labels['actions'] ?? 'Actions')) . '</th></tr></thead><tbody>';
-    foreach ((array) ($viewModel['images'] ?? []) as $image) {
-        $imageId = (int) ($image['id'] ?? 0);
-        $relativePath = (string) ($image['relative_path'] ?? '');
-        $isCover = (string) ($image['cover_label'] ?? '') !== '';
-        echo '<tr data-admin-image-order-row data-image-id="' . $imageId . '" data-image-name="' . e($relativePath) . '" data-image-captured-at="' . e((string) ($image['capture_date'] ?? '')) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="' . e((string) ($image['move_aria'] ?? '')) . '" title="' . e((string) ($labels['drag_title'] ?? '')) . '">↕</span></td>';
-        echo '<td class="admin-image-thumbnail-cell"><div class="admin-image-thumbnail"><button type="button" class="admin-image-preview-button" data-admin-image-preview data-preview-src="' . e((string) ($image['preview_url'] ?? '')) . '" data-preview-name="' . e($relativePath) . '" data-preview-close-label="' . e((string) ($labels['close_preview'] ?? 'Close preview')) . '" aria-label="' . e((string) ($labels['preview'] ?? 'Preview') . ' ' . $relativePath) . '"><img class="admin-thumb" decoding="async" loading="lazy" src="' . e((string) ($image['thumbnail_url'] ?? '')) . '" alt=""></button>';
-        echo '<label class="picture-manager-select-button admin-image-select" title="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><input type="checkbox" name="image_ids[]" value="' . $imageId . '" aria-label="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><span aria-hidden="true">✓</span></label></div></td>';
-        echo '<td data-admin-image-name-cell title="' . e($relativePath) . '"><span class="admin-image-filename">' . e($relativePath) . '</span></td><td class="admin-image-actions-cell"><div class="admin-image-row-actions"><span data-admin-image-visibility-cell>';
-        view_render_public_admin_visibility_menu(['image_bulk' => true, 'entity_id' => $imageId, 'kind' => 'image', 'name' => $relativePath, 'visibility' => (string) ($image['visibility'] ?? 'unpublished')]);
-        echo '</span><span data-admin-image-cover-cell><button type="submit" class="public-admin-card-action-button admin-image-cover-button' . ($isCover ? ' is-cover' : '') . '" name="action" value="cover:' . $imageId . '" data-admin-image-row-action data-image-id="' . $imageId . '" aria-pressed="' . ($isCover ? 'true' : 'false') . '" title="' . e((string) ($isCover ? ($image['cover_label'] ?? '') : ($labels['set_cover'] ?? 'Set as title picture'))) . '" aria-label="' . e((string) ($labels['set_cover'] ?? 'Set as title picture') . ' ' . $relativePath) . '"><span aria-hidden="true">' . ($isCover ? '★' : '☆') . '</span></button></span>';
-        view_render_public_image_admin_edit_link(['name' => $relativePath, 'url' => (string) ($image['edit_url'] ?? ''), 'panel_url' => (string) ($image['panel_url'] ?? '')]);
-        view_render_public_image_admin_delete_form(['image_bulk' => true, 'name' => $relativePath, 'image_id' => $imageId]);
-        echo '</div></td></tr>';
-    }
+    view_render_admin_gallery_image_rows((array) ($viewModel['images'] ?? []), $labels, (bool) ($viewModel['deferred'] ?? false));
     echo '</tbody></table></form></div>';
     view_render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), (bool) ($viewModel['active'] ?? false));
 }
@@ -722,3 +709,64 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
     echo '</section>';
 }
 
+
+/**
+ * Render canonical image rows for a complete table or a bounded deferred batch.
+ * @param list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,edit_url:string,panel_url:string}> $images Prepared row presentation data.
+ * @param array<string,string> $labels Localized row control labels.
+ * @param bool $deferred Whether thumbnail sources belong to the bounded preload owner.
+ * @return void Emit identical row actions while optionally withholding thumbnail requests.
+ */
+function view_render_admin_gallery_image_rows(array $images, array $labels, bool $deferred = false): void
+{
+    foreach ($images as $image) {
+        $imageId = (int) ($image['id'] ?? 0);
+        $relativePath = (string) ($image['relative_path'] ?? '');
+        $isCover = (string) ($image['cover_label'] ?? '') !== '';
+        echo '<tr data-admin-image-order-row data-image-id="' . $imageId . '" data-image-name="' . e($relativePath) . '" data-image-captured-at="' . e((string) ($image['capture_date'] ?? '')) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="' . e((string) ($image['move_aria'] ?? '')) . '" title="' . e((string) ($labels['drag_title'] ?? '')) . '">↕</span></td>';
+        echo '<td class="admin-image-thumbnail-cell"><div class="admin-image-thumbnail"><button type="button" class="admin-image-preview-button" data-admin-image-preview data-preview-src="' . e((string) ($image['preview_url'] ?? '')) . '" data-preview-name="' . e($relativePath) . '" data-preview-close-label="' . e((string) ($labels['close_preview'] ?? 'Close preview')) . '" aria-label="' . e((string) ($labels['preview'] ?? 'Preview') . ' ' . $relativePath) . '"><img class="admin-thumb" decoding="async" loading="lazy" ' . ($deferred ? 'data-admin-preload-src' : 'src') . '="' . e((string) ($image['thumbnail_url'] ?? '')) . '" alt=""></button>';
+        echo '<label class="picture-manager-select-button admin-image-select" title="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><input type="checkbox" name="image_ids[]" value="' . $imageId . '" aria-label="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><span aria-hidden="true">✓</span></label></div></td>';
+        echo '<td data-admin-image-name-cell title="' . e($relativePath) . '"><span class="admin-image-filename">' . e($relativePath) . '</span></td><td class="admin-image-actions-cell"><div class="admin-image-row-actions"><span data-admin-image-visibility-cell>';
+        view_render_public_admin_visibility_menu(['image_bulk' => true, 'entity_id' => $imageId, 'kind' => 'image', 'name' => $relativePath, 'visibility' => (string) ($image['visibility'] ?? 'unpublished')]);
+        echo '</span><span data-admin-image-cover-cell><button type="submit" class="public-admin-card-action-button admin-image-cover-button' . ($isCover ? ' is-cover' : '') . '" name="action" value="cover:' . $imageId . '" data-admin-image-row-action data-image-id="' . $imageId . '" aria-pressed="' . ($isCover ? 'true' : 'false') . '" title="' . e((string) ($isCover ? ($image['cover_label'] ?? '') : ($labels['set_cover'] ?? 'Set as title picture'))) . '" aria-label="' . e((string) ($labels['set_cover'] ?? 'Set as title picture') . ' ' . $relativePath) . '"><span aria-hidden="true">' . ($isCover ? '★' : '☆') . '</span></button></span>';
+        view_render_public_image_admin_edit_link(['name' => $relativePath, 'url' => (string) ($image['edit_url'] ?? ''), 'panel_url' => (string) ($image['panel_url'] ?? '')]);
+        view_render_public_image_admin_delete_form(['image_bulk' => true, 'name' => $relativePath, 'image_id' => $imageId]);
+        echo '</div></td></tr>';
+    }
+}
+
+/**
+ * Render the compact top-of-editor loading state independently of the settings form.
+ * @param array{gallery_id:int,total:int,requested:bool,endpoint:string,labels:array<string,string>} $viewModel Authorized transport identity and localized progress/retry labels.
+ * @return void Emit an indeterminate accessible progress strip and compact retry control.
+ */
+function view_render_admin_gallery_images_loading(array $viewModel): void
+{
+    echo '<div class="admin-images-preload" data-gallery-images-preload data-gallery-id="' . $viewModel['gallery_id'] . '" data-total="' . $viewModel['total'] . '" data-requested="' . ($viewModel['requested'] ? '1' : '0') . '" data-endpoint="' . e($viewModel['endpoint']) . '"';
+    foreach ($viewModel['labels'] as $key => $label) {
+        echo ' data-label-' . e($key) . '="' . e($label) . '"';
+    }
+    echo '><div class="admin-images-preload-track" role="progressbar" aria-label="' . e($viewModel['labels']['preparing']) . '" aria-valuemin="0" aria-valuemax="100"><span data-images-preload-fill></span></div>';
+    echo '<small data-images-preload-status>' . e($viewModel['labels']['preparing']) . '</small><span class="visually-hidden" role="status" aria-live="polite" data-images-preload-announcement></span>';
+    echo '<button type="button" class="secondary" data-images-preload-retry hidden>' . e($viewModel['labels']['retry']) . '</button></div>';
+}
+
+/**
+ * Render an inert Images placeholder with a normal-page compatibility link.
+ * @param array{fallback_url:string,label:string} $viewModel Complete editor URL and localized preparing label.
+ * @return void Emit the unselected Images panel without image rows or thumbnail requests.
+ */
+function view_render_admin_gallery_images_placeholder(array $viewModel): void
+{
+    view_render_admin_tab_panel('admin-edit-images', '<p>' . e($viewModel['label']) . '</p><noscript><a href="' . e($viewModel['fallback_url']) . '">' . e($viewModel['label']) . '</a></noscript>', false);
+}
+
+/**
+ * Render a demand-loaded image-dependent tool without evaluating its expensive plan.
+ * @param array{endpoint:string,label:string} $viewModel Authenticated tool URL and localized pending label.
+ * @return void Emit a placeholder consumed by the shared deferred-tab loader.
+ */
+function view_render_admin_gallery_tool_placeholder(array $viewModel): void
+{
+    echo '<div data-admin-gallery-tool-placeholder data-endpoint="' . e($viewModel['endpoint']) . '"><span role="status">' . e($viewModel['label']) . '</span></div>';
+}

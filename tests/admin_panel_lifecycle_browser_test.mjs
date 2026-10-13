@@ -164,6 +164,9 @@ async function attachKeyboard(profilePath) {
     closeOwnedBrowser = () => command('Browser.close');
 }
 
+/** Per-run synthetic thumbnail concurrency; never installation media or session data. */
+const preloadResourceMetrics = new Map();
+
 /**
  * Serve the single synthetic document and confined public JavaScript assets.
  * @param {import('node:http').IncomingMessage} request Loopback request.
@@ -172,6 +175,27 @@ async function attachKeyboard(profilePath) {
  */
 async function serveFixture(request, response) {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (fixtureName === 'admin_panel_lifecycle.html' && ['/__preload_thumb', '/__preload_stats'].includes(pathname)) {
+        const parameters = new URL(request.url, 'http://localhost').searchParams;
+        const run = parameters.get('run') || '0';
+        if (!preloadResourceMetrics.has(run)) preloadResourceMetrics.set(run, {active: 0, peak: 0});
+        const metrics = preloadResourceMetrics.get(run);
+        if (pathname === '/__preload_stats') {
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify(metrics));
+            return;
+        }
+        metrics.active += 1;
+        metrics.peak = Math.max(metrics.peak, metrics.active);
+        setTimeout(() => {
+            metrics.active -= 1;
+            if (parameters.get('fail') === '1') { response.writeHead(404).end(); return; }
+            response.setHeader('Content-Type', 'image/png');
+            response.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+            response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jqbkAAAAASUVORK5CYII=', 'base64'));
+        }, 3);
+        return;
+    }
     if (pathname === '/__viewport' && fixtureName === 'gallery_tags.html') {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
         if (width !== 390) { response.writeHead(400).end(); return; }
@@ -217,6 +241,7 @@ async function serveFixture(request, response) {
         return;
     }
     const relative = pathname === '/' ? 'tests/fixtures/' + fixtureName
+        : pathname === '/tests/fixtures/admin_images_preload_scenarios.js' && fixtureName === 'admin_panel_lifecycle.html' ? 'tests/fixtures/admin_images_preload_scenarios.js'
         : /^\/public\/assets\/[a-zA-Z0-9_/-]+\.(?:js|css)$/.test(pathname) ? pathname.slice(1) : '';
     if (!relative || relative.includes('..')) { response.writeHead(404).end(); return; }
     try {

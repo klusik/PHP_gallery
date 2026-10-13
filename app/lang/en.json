@@ -1,4 +1,10 @@
 {
+    "admin.gallery_editor.images_preparing": "Preparing photos…",
+    "admin.gallery_editor.images_progress": "Photos processed: {current} / {total}",
+    "admin.gallery_editor.images_ready": "Photos ready.",
+    "admin.gallery_editor.images_failed": "{count} thumbnails failed. Retry images.",
+    "admin.gallery_editor.images_load_error": "Photos could not be loaded. Other settings remain available.",
+    "admin.gallery_editor.images_retry": "Retry images",
     "admin.theme.overrides.clear_required": "Confirm clearing the manual overrides before submitting this action.",
     "admin.theme.overrides.clear_check": "I confirm clearing the manual overrides",
     "admin.theme.advanced.title": "Advanced appearance",

@@ -61,3 +61,6 @@ assert(!/window\.location\.reload\s*\(/.test(source), 'Side-panel-owned enhanced
 assert(!/history\.replaceState\s*\(/.test(source), 'Side-panel completion must preserve the visible browser URL.');
 
 console.log('admin_side_panel_delegation_test: OK');
+
+// Mandatory feature scenarios inherit the existing central regression owner.
+await import('./admin_side_panel_delegation/images_preload.mjs');
