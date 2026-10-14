@@ -500,15 +500,28 @@ function maintenance_center_analyze_security(array $context): array
     ];
 }
 
-/** Read-only cache analyzer without deleting or creating cache entries. */
+/**
+ * Report existing owner policy and committed updater GC evidence without a tree scan.
+ * @param array<string,mixed> $context Unused shared Maintenance Center analyzer context.
+ * @return array{available:bool,has_work:bool,work_units:int,candidate_count_known:bool,note:string} Safe analysis note; unknown candidate counts are never represented as zero.
+ */
 function maintenance_center_analyze_downloads(array $context): array
 {
+    $note = maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_note', 'Bounded cache owners determine safe expired/stale entries again at execution time.');
+    $gc = application_update_cache_cleanup_status();
+    $lifecycle = cache_lifecycle_status();
+    $note .= ' ' . maintenance_center_runtime_text('admin.cache_lifecycle.analysis',
+        'Lifecycle preview {phase}: {bytes} observed bytes, {eligible} eligible bytes; partial: {partial}. Active leases and recovery references are revalidated at execution.',
+        ['phase'=>$lifecycle['phase'],'bytes'=>$lifecycle['bytes'],'eligible'=>$lifecycle['candidate_bytes'],'partial'=>$lifecycle['partial'] ? '1' : '0']);
+    $note .= ' ' . maintenance_center_runtime_text('admin.maintenance_center.runtime.updater_gc_note',
+        'Updater GC has reclaimed {bytes} bytes. Queue present: {pending}; blocked: {blocked}. Queue size is not yet measured.',
+        ['bytes' => $gc['bytes_reclaimed'], 'pending' => $gc['pending'] ? '1' : '0', 'blocked' => $gc['blocked'] ? '1' : '0']);
     return [
         'available' => true,
         'has_work' => true,
         'work_units' => 10,
         'candidate_count_known' => false,
-        'note' => maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_note', 'Bounded cache owners determine safe expired/stale entries again at execution time.'),
+        'note' => $note,
     ];
 }
 

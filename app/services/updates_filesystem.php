@@ -86,10 +86,11 @@ function application_update_ensure_dir(string $path): void
 /**
  * Return the application project root that contains index.php, app, public, and cache.
  *
- * @return string Text result for the caller.
+ * @return string Validated production installation root; a defined CACHE_LIFECYCLE_TEST_ROOT confines disposable fixtures without requiring a complete installed application tree.
  */
 function application_update_project_root(): string
 {
+    if (defined('CACHE_LIFECYCLE_TEST_ROOT')) return (string) constant('CACHE_LIFECYCLE_TEST_ROOT');
     // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = dirname(__DIR__, 2);
     application_update_assert_project_root($root);
@@ -812,68 +813,17 @@ function application_update_stage_path_for_prune(string $source, string $target)
 }
 
 /**
- * Stage legacy updater backups and extraction folders for bounded deletion.
- *
- * @return array{moved:int,remaining:bool}
+ * Preserve legacy updater artifacts whose current/previous recovery identity cannot be proven.
+ * @param string $root Installation root retained for the historical owner interface.
+ * @param int $maxMoves Historical move budget retained for compatibility; unknown legacy artifacts are never admitted.
+ * @return array{moved:int,remaining:bool} No automatic moves; the lifecycle inventory reports this protected storage for explicit owner migration.
  */
 function application_update_stage_legacy_cache_artifacts(string $root, int $maxMoves = 12): array
 {
-    $updateRoot = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates';
-    if (!is_dir($updateRoot)) {
-        return ['moved' => 0, 'remaining' => false];
-    }
-    $trashRoot = application_update_prune_trash_root($root) . DIRECTORY_SEPARATOR . 'legacy';
-    $moved = 0;
-    $remaining = false;
-    $now = time();
-
-    $backupRoot = $updateRoot . DIRECTORY_SEPARATOR . 'backups';
-    if (is_dir($backupRoot)) {
-        foreach ((array) @scandir($backupRoot) as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $source = $backupRoot . DIRECTORY_SEPARATOR . $entry;
-            if (!is_file($source) || $now - (int) (@filemtime($source) ?: $now) < 7 * 86400) {
-                continue;
-            }
-            if ($moved >= $maxMoves) {
-                $remaining = true;
-                continue;
-            }
-            $target = $trashRoot . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . $entry;
-            if (application_update_stage_path_for_prune($source, $target)) {
-                $moved++;
-            } else {
-                $remaining = true;
-            }
-        }
-    }
-
-    foreach ((array) @scandir($updateRoot) as $entry) {
-        if ($entry === '.' || $entry === '..' || in_array($entry, ['jobs', 'backups', 'prune-trash'], true)) {
-            continue;
-        }
-        if (preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $entry) !== 1) {
-            continue;
-        }
-        $source = $updateRoot . DIRECTORY_SEPARATOR . $entry;
-        if (!is_dir($source)) {
-            continue;
-        }
-        if ($moved >= $maxMoves) {
-            $remaining = true;
-            continue;
-        }
-        $target = $trashRoot . DIRECTORY_SEPARATOR . 'extracts' . DIRECTORY_SEPARATOR . $entry;
-        if (application_update_stage_path_for_prune($source, $target)) {
-            $moved++;
-        } else {
-            $remaining = true;
-        }
-    }
-
-    return ['moved' => $moved, 'remaining' => $remaining];
+    // Legacy timestamps cannot identify the selected rollback version. Preserve
+    // pre-job-format backups and extraction directories until an owner migration
+    // supplies version identity; age alone must never remove recovery storage.
+    return ['moved' => 0, 'remaining' => false];
 }
 
 /**
@@ -882,46 +832,184 @@ function application_update_stage_legacy_cache_artifacts(string $root, int $maxM
  * The caller controls both entry count and wall-clock duration. This prevents a large historical
  * cache from turning one automatic-update request into a long-running shared-hosting worker.
  *
- * @return array{removed:int,done:bool,elapsed_ms:float}
+ * @param string $path Owner-approved tree to reclaim; callers must validate its ancestors.
+ * @param int $maxEntries Maximum filesystem observations and mutation attempts per slice.
+ * @param float $maxSeconds Wall-clock admission budget in seconds; blocking filesystem calls may overrun it.
+ * @param list<string> $cursor Relative directory stack from the preceding slice, never trusted as an absolute path.
+ * @return array{removed:int,done:bool,elapsed_ms:float,bytes_removed:int,visited:int,blocked:bool,cursor:list<string>,failure_code:string,failure_operation:string,object_token:string} Actual reclamation, safe failure classification and a bounded continuation stack.
  */
-function application_update_delete_tree_slice(string $path, int $maxEntries = 180, float $maxSeconds = 0.18): array
+function application_update_delete_tree_slice(string $path, int $maxEntries = 180, float $maxSeconds = 0.18, array $cursor = []): array
 {
     $startedAt = microtime(true);
     $deadline = $startedAt + max(0.01, min(0.50, $maxSeconds));
     $removed = 0;
-
-    if (is_file($path) || is_link($path)) {
-        $done = @unlink($path) || !file_exists($path);
-        return ['removed' => $done ? 1 : 0, 'done' => $done, 'elapsed_ms' => (microtime(true) - $startedAt) * 1000];
-    }
-    if (!is_dir($path)) {
-        return ['removed' => 0, 'done' => true, 'elapsed_ms' => (microtime(true) - $startedAt) * 1000];
-    }
-
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
-    );
-    foreach ($iterator as $item) {
-        if ($removed >= max(1, $maxEntries) || microtime(true) >= $deadline) {
+    $bytes = 0;
+    $visited = 0;
+    $blocked = false;
+    $failureCode = '';
+    $failureOperation = '';
+    $failureObject = '';
+    $path = rtrim($path, '/\\');
+    $stack = [''];
+    // A checkpoint is only a hint. Validate every component again, including links,
+    // before resuming; a moved/replaced directory must never redirect deletion.
+    $previous = '';
+    foreach (array_slice($cursor, 1, 64) as $relative) {
+        if (!is_string($relative) || str_contains($relative, '\\') || str_contains($relative, ':') || str_contains($relative, "\0")
+            || dirname($relative) !== ($previous === '' ? '.' : $previous)
+            || in_array(basename($relative), ['', '.', '..'], true)) {
+            $blocked = true;
+            $failureCode = 'invalid_cursor';
+            $failureOperation = 'validate_cursor';
             break;
         }
-        $itemPath = $item->getPathname();
-        $ok = $item->isDir() && !$item->isLink() ? @rmdir($itemPath) : @unlink($itemPath);
-        if ($ok || (!file_exists($itemPath) && !is_link($itemPath))) {
-            $removed++;
+        $candidate = $path . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        if (is_link($candidate) || !is_dir($candidate)) {
+            break;
         }
+        if (realpath($candidate) !== realpath($path) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative)) {
+            $blocked = true;
+            $failureCode = 'unsafe_redirect';
+            $failureOperation = 'validate_cursor';
+            break;
+        }
+        $stack[] = $relative;
+        $previous = $relative;
     }
 
-    if (microtime(true) < $deadline && is_dir($path)) {
-        @rmdir($path);
+    $handle = null;
+    $opened = null;
+    try {
+        while (!$blocked && $stack !== [] && $visited < max(1, $maxEntries) && microtime(true) < $deadline) {
+            $relative = $stack[count($stack) - 1];
+            $directory = $path . ($relative === '' ? '' : DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
+            if (is_link($directory) || is_file($directory)) {
+                $visited++;
+                $size = is_link($directory) ? 0 : max(0, (int) @filesize($directory));
+                error_clear_last();
+                if (@unlink($directory)) {
+                    $removed++;
+                    $bytes += $size;
+                    array_pop($stack);
+                    continue;
+                }
+                $blocked = true;
+                $failureCode = application_update_prune_failure_code();
+                $failureOperation = 'unlink';
+                $failureObject = $relative;
+                break;
+            }
+            if (!file_exists($directory)) {
+                $visited++;
+                array_pop($stack);
+                continue;
+            }
+            if ($opened !== $directory) {
+                if (is_resource($handle)) {
+                    closedir($handle);
+                }
+                error_clear_last();
+                $handle = @opendir($directory);
+                $opened = $directory;
+                if ($handle === false) {
+                    $blocked = true;
+                    $failureCode = application_update_prune_failure_code();
+                    $failureOperation = 'opendir';
+                    $failureObject = $relative;
+                    break;
+                }
+            }
+            $name = readdir($handle);
+            $visited++;
+            if ($name === false) {
+                closedir($handle);
+                $handle = null;
+                $opened = null;
+                error_clear_last();
+                if (@rmdir($directory)) {
+                    array_pop($stack);
+                } else {
+                    $blocked = true;
+                    $failureCode = application_update_prune_failure_code();
+                    $failureOperation = 'rmdir';
+                    $failureObject = $relative;
+                }
+                continue;
+            }
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $itemPath = $directory . DIRECTORY_SEPARATOR . $name;
+            if (is_dir($itemPath) && !is_link($itemPath)) {
+                // Bound persisted traversal depth without allocating a recursive iterator.
+                // Type: int. Units: directory levels. Scope: one prune slice/checkpoint.
+                // Consumers: resumable updater trash deletion.
+                // Rationale: 64 nested levels cover updater trees; deeper or redirected
+                // trees require operator review rather than unbounded traversal state.
+                if (count($stack) >= 65) {
+                    $blocked = true;
+                    $failureCode = 'depth_limit';
+                    $failureOperation = 'descend';
+                    $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+                    break;
+                }
+                if (realpath($itemPath) !== realpath($path) . DIRECTORY_SEPARATOR
+                    . str_replace('/', DIRECTORY_SEPARATOR, $relative === '' ? $name : $relative . '/' . $name)) {
+                    $blocked = true;
+                    $failureCode = 'unsafe_redirect';
+                    $failureOperation = 'descend';
+                    $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+                    break;
+                }
+                $stack[] = $relative === '' ? $name : $relative . '/' . $name;
+                continue;
+            }
+            $size = is_link($itemPath) ? 0 : max(0, (int) @filesize($itemPath));
+            error_clear_last();
+            if (@unlink($itemPath)) {
+                $removed++;
+                $bytes += $size;
+            } else {
+                $blocked = true;
+                $failureCode = application_update_prune_failure_code();
+                $failureOperation = 'unlink';
+                $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+            }
+        }
+    } finally {
+        if (is_resource($handle)) {
+            closedir($handle);
+        }
     }
     clearstatcache(true, $path);
     return [
         'removed' => $removed,
         'done' => !file_exists($path) && !is_link($path),
         'elapsed_ms' => (microtime(true) - $startedAt) * 1000,
+        'bytes_removed' => $bytes,
+        'visited' => $visited,
+        'blocked' => $blocked,
+        'cursor' => $stack,
+        'failure_code' => $failureCode,
+        'failure_operation' => $failureOperation,
+        'object_token' => $blocked ? substr(hash('sha256', $failureObject), 0, 16) : '',
     ];
+}
+
+/**
+ * Classify the last failed filesystem operation without retaining its raw warning.
+ * @return string Stable permission_denied, read_only, directory_not_empty, file_in_use or io_failed reason.
+ */
+function application_update_prune_failure_code(): string
+{
+    $message = strtolower((string) (error_get_last()['message'] ?? ''));
+    foreach (['permission denied' => 'permission_denied', 'read-only' => 'read_only',
+        'not empty' => 'directory_not_empty', 'being used' => 'file_in_use'] as $needle => $code) {
+        if (str_contains($message, $needle)) {
+            return $code;
+        }
+    }
+    return 'io_failed';
 }
 
 

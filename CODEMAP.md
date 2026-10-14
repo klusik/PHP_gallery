@@ -1,5 +1,37 @@
 # PHP Gallery Code Map
 
+- Updater status diagnostics expose nonmutating worker-lock observation and
+  server checkpoint age. Cache UI samples compare phase counters and retain one
+  latest observation; retry preserves the prior owner-redacted failure separately.
+
+- `app/bootstrap/maintenance.php`: explicit cache transports/passive updater
+  reads bypass background maintenance before controller dispatch; ordinary routes
+  keep the established triggers. The actual dispatch probe is owned by
+  `tests/cache_transport_maintenance_test.php`.
+
+- Cache diagnostic controls share document delegation: copy the current JSON,
+  read blocking-job phase counters through Admin Updates, and cancel only through
+  its pre-activation owner. The site-maintenance controller's `cache_job_stop`
+  action returns canonical in-place completion; the four-pixel bar stays compact.
+
+- `app/services/cache_cleanup_diagnostics.php`: safe manual-run correlation,
+  bounded lifecycle traces, confirmed Admin-log receipts and PHP error-log fallback.
+- `tests/cache_cleanup_diagnostics_test.php`: isolated installed-schema width
+  rejection, insertion receipts and secret-redaction regression coverage.
+
+- `public/assets/gallery-modules/admin-cache-cleanup.js`: document-delegated,
+  single-flight manual cache form with canonical completion and owned result text.
+- `app/controllers/site_maintenance.php`: existing authenticated/CSRF settings
+  route also handles the manual `cache_cleanup` action and non-JS return to Media.
+
+- `app/services/updates_jobs/cleanup.php`: independent scheduled prune-trash GC
+  and read-only committed evidence; it never stages live jobs or rollback backups.
+- `app/services/updates_filesystem.php`: observation/deadline-bounded physical
+  deletion with a validated relative directory checkpoint.
+- `scripts/site_maintenance.php --cache-only`: hosting cron entry point for
+  updater trash reclamation without thumbnail/telemetry work.
+- `docs/CACHE_MAINTENANCE.md`: owner safety, scheduling and #212 incident boundaries.
+
 Hosted source/release lifecycle ownership:
 
 - `.github/workflows/candidate-preparation.yml`: source-only preflight, canonical
@@ -968,3 +1000,29 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 | Python policies | `scripts/source_contracts/python.php`, `scripts/source_contracts/python_scan.py`, `scripts/check_python_import_policy.php` | Non-executing AST declarations and whole-tree import prohibition. |
 | Bash and PowerShell source contracts | `scripts/source_contracts/scripts.php`, `tests/source_contract_scripts_test.php` | Non-executing bounded parser for changed brace-bodied functions, preceding documentation, stable body fingerprints, and explicit refusal of unsupported forms. |
 | Windows release pair | `winapp/build_installer.py` | Version folder, exact JSON integrity and publication rollback. |
+
+## Cache lifecycle (#212)
+
+`app/services/cache_lifecycle.php` owns producer policy, guarded private storage, streamed inventory and bounded reclamation through its sibling `cache_lifecycle/` parts. `site_maintenance.php` and Maintenance Center use that owner; controllers keep HTTP/CSRF and canonical envelopes. `admin-cache-lifecycle.js` delegates mounted/dynamic controls and preserves the preview ID. Native audit/GitHub producers hold shared leases. See `docs/CACHE_MAINTENANCE.md` for retention, pins, contextual rollback and partial-inventory bounds.
+
+Its reclamation part admits external cache-only bursts under a separate
+invocation lock and bounded time/slice budgets. Inventory and reclamation share
+committed plan offsets and alternate without resetting the scan. Durable
+scheduler evidence separates arrivals, progress and gaps from historical
+measurements; idle unapproved manual plans receive a new identity, while approved
+deletion cursors remain resumable. The `visitor.php` part uses the same scheduler lock for ordinary public GET
+opportunities, registered by `site_maintenance_register_cache_trigger()` and
+loaded through the existing deferred worker root. The dependency-free Core
+`request_data.php` adapter owns passive response-status observation; services do
+not call the native HTTP response API. Installation/upgrade migration
+`202610140001_automatic_cache_cleanup.php` seeds the single capability ON without
+overwriting OFF. Foreground leases/signals, 60-second throttling and 40/120/600 ms
+admission preserve bounded occupancy; <=128 MiB selects the small attempt, with
+independent operation/memory limits. Completed inventory is due hourly; unfinished
+work retains checkpoints. Cron is optional for zero-traffic installations.
+
+`app/services/cache_lifecycle_storage.php` is the shared lightweight storage
+owner for guarded paths, producer leases, bounded checkpoints, passive status
+and retention category definitions. Existing lifecycle function names remain
+stable. Public cache writers and passive registration depend on this owner;
+only explicit worker roots load inventory/reclamation through `cache_lifecycle.php`.

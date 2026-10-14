@@ -11,7 +11,7 @@
  * File: tests/support/headless_browser_fixture.mjs
  * Author: Rudolf Klusal
  */
-import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -97,6 +97,9 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
     let errors = '';
 
     try {
+        // Record actual creation before Chromium writes mutable profile contents.
+        await writeFile(path.join(profile, 'cache-owner.json'), JSON.stringify({schema_version: 1,
+            producer: 'php_gallery_browser_fixture', directory: path.basename(profile), created_at: Math.floor(Date.now() / 1000)}));
         browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
             '--disable-background-networking', '--disable-extensions', '--disable-component-update',
             '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--remote-debugging-port=0',

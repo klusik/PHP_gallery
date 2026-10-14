@@ -19,13 +19,17 @@ import {api,command,output,verifyQualification,fetchJobs,requireQualificationChe
 import {loadQualification,qualificationRequest} from './release-completion.mjs';
 import {requireBotPullRequest,effectiveOwnerReview} from './release-owner-authorization.mjs';
 import {isAncestor,downloadReleaseEvidence,verifyLinearContent,qualifiedLinearCandidate} from './release-reconciliation.mjs';
+import {loadReleaseCoverage} from './coverage-artifacts.mjs';
 
 /** Explicit origin chosen by the maintainer before stabilizing a release branch.
  * @typedef {{schema_version:number,version:string,release_branch:string,selected_develop_sha:string,
  *  initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string}} OriginRecord
  */
 /** @typedef {function(string,string=,object=):object} GithubReader */
-/** @typedef {function(string,string[]):string} GitReader */
+/** @typedef {function(string,string[],(string|null)=):string} GitReader */
+/** Historical predecessor readers, with independently authenticated raw coverage archives for schema 3.
+ * @typedef {{git?:GitReader,evidence?:import('./release-promotion.mjs').PublicationEvidence,legacy?:{repository:string,tag:string,tag_object_sha:string,published_commit_sha:string,first_parent_sha:string,release_candidate_sha:string,tree_sha:string,qualification:string,owner:string},predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[],predecessorArtifacts?:import('./coverage-artifacts.mjs').ArtifactAdapters}} PredecessorAdapters
+ */
 
 /** Return only the accepted release path derived from a canonical numeric version.
  * @param {string} version Requested version without prefix.
@@ -77,7 +81,7 @@ export function validateOriginRecord(record,version) {
  * @param {string} version Canonical release version.
  * @param {string} candidateSha Exact checkout/release head SHA being qualified.
  * @param {string} repository GitHub owner/repo identity.
- * @param {{api?:GithubReader,git?:GitReader,evidence?:Record<string,unknown>,legacy?:Record<string,unknown>,publishedMainSha?:string,reconciliation?:Record<string,unknown>}} adapters Hermetic readers or the real GitHub/Git adapters.
+ * @param {PredecessorAdapters & {api?:GithubReader,publishedMainSha?:string,reconciliation?:Record<string,unknown>}} adapters Hermetic origin/predecessor readers or the real GitHub/Git and authenticated archive transports.
  * @returns {Record<string,string>} Server-checked origin, blob and predecessor identities.
  */
 export function verifyReleaseOrigin(record, version, candidateSha, repository, adapters = {}) {
@@ -174,7 +178,7 @@ export function peelReleaseTag(call,repository,tag) {
  * @param {GithubReader} call GitHub reader.
  * @param {string} repository Exact repository.
  * @param {string} tag Previous immutable stable tag.
- * @param {{evidence?:Record<string,unknown>,legacy?:Record<string,unknown>,predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional inert historical asset or exact hosted predecessor fixtures.
+ * @param {PredecessorAdapters} adapters Optional historical asset, literal command, exact hosted predecessor and raw archive readers; schema-3 archives retain provider and byte authentication.
  * @returns {{previous_stable_tag:string,previous_tag_object_sha:string,previous_tag_object_type:string,previous_stable_sha:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string}} Complete predecessor identities.
  */
 export function verifyPredecessor(call,repository,tag,adapters={}) {
@@ -222,11 +226,16 @@ export function verifyPredecessor(call,repository,tag,adapters={}) {
         if (merge.parents?.length!==2 || !/^[a-f0-9]{40}$/.test(qualified ?? '')) {
             throw new Error('BLOCKED tagged predecessor lacks the standard release merge.');
         }
-        const record=adapters.predecessorRecord ?? loadQualification(repository,qualified,call);
+        const execute=adapters.git ?? command;
+        const record=adapters.predecessorRecord ?? loadQualification(repository,qualified,call,execute);
         const request=qualificationRequest(record);
         const run=call('repos/'+repository+'/actions/runs/'+record.run_id);
+        // The predecessor's FULL/BASIC archives are distinct from the current release's coverage.
+        // Authenticate their original bytes before the shared schema-3 verifier consumes them.
+        const coverage=loadReleaseCoverage(record,{...adapters.predecessorArtifacts,api:call});
         // Historical qualification binds Q even when the original release branch was retired.
-        verifyQualification(request,run,adapters.predecessorJobs ?? fetchJobs(repository,record.run_id,run.run_attempt,qualified),record,repository,qualified);
+        verifyQualification(request,run,adapters.predecessorJobs ?? fetchJobs(repository,record.run_id,run.run_attempt,qualified,execute,call),
+            record,repository,qualified,{...coverage,api:call,execute});
         requireQualificationChecks(call,repository,request,record.run_attempt);
         const listed=call('repos/'+repository+'/commits/'+identity.commit_sha+'/pulls?per_page=100');
         if (!Array.isArray(listed) || listed.length>=100) throw new Error('BLOCKED predecessor PR inventory incomplete.');

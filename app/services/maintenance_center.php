@@ -36,12 +36,20 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/cache_lifecycle_storage.php';
+
 use JsonException;
 use RuntimeException;
 use Throwable;
 
 /** Registry revision bound into every analyzed plan. */
-const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-09-20.2';
+/**
+ * Invalidate approved plans that predate producer-specific cache lifecycle reclamation.
+ * Type: string. Units: registry revision identifier. Scope: Maintenance Center plans.
+ * Consumers: plan freshness and execution admission.
+ * Rationale: require fresh analysis before approving the expanded cache task.
+ */
+const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-14.cache-lifecycle';
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;
 /** Conservative web-maintenance classification threshold for one physical DB table operation. */

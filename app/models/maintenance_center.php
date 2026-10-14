@@ -168,14 +168,19 @@ function maintenance_center_model_latest_unfinished_actor_job(int $actorId): ?ar
     return is_array($row) ? $row : null;
 }
 
-/** Load the current installation-wide central mutation owner. */
-function maintenance_center_model_mutation_owner(): ?array
+/**
+ * Load the current installation-wide central mutation owner.
+ * @param bool $requireKnown Whether an unavailable query must refuse a new automatic mutation instead of preserving the legacy nullable observation.
+ * @return array<string,mixed>|null Persisted central job row with id/actor_id/status/phase/updated_at, or null when no owner exists; strict observation throws on query failure.
+ */
+function maintenance_center_model_mutation_owner(bool $requireKnown = false): ?array
 {
     try {
         $stmt = db()->query("SELECT id, actor_id, status, phase, updated_at FROM maintenance_jobs WHERE lock_key = 'central' LIMIT 1");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? $row : null;
     } catch (\Throwable) {
+        if ($requireKnown) throw new RuntimeException('Maintenance ownership could not be established.');
         return null;
     }
 }

@@ -46,6 +46,234 @@ use ZipArchive;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
+ * Read updater-GC evidence without scanning trees, creating locks or deleting data.
+ * @return array{pending:bool,bytes_reclaimed:int,blocked:bool,next_due:int,updated_at:int} Last committed actual reclamation and current queue presence; pending is not a size estimate.
+ */
+function application_update_cache_cleanup_status(): array
+{
+    $root = application_update_project_root();
+    application_update_assert_safe_target($root, 'cache/updates/cache-gc.json', true);
+    application_update_assert_safe_target($root, 'cache/updates/prune-trash', true);
+    $statePath = $root . '/cache/updates/cache-gc.json';
+    $state = [];
+    if (is_file($statePath)) {
+        if ((int) @filesize($statePath) > APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES) {
+            throw new RuntimeException('Updater cache cleanup checkpoint is oversized.');
+        }
+        $state = application_update_read_json($statePath);
+        if ($state === []) {
+            throw new RuntimeException('Updater cache cleanup checkpoint is unreadable.');
+        }
+    }
+    return ['pending' => is_dir(application_update_prune_trash_root($root)),
+        'bytes_reclaimed' => max(0, (int) ($state['total_bytes_removed'] ?? 0)),
+        'blocked' => !empty($state['blocked']), 'next_due' => max(0, (int) ($state['next_due'] ?? 0)),
+        'updated_at' => max(0, (int) ($state['updated_at'] ?? 0))];
+}
+
+/**
+ * Resume already-detached updater trash without staging live workspaces or rollback data.
+ *
+ * The shared start lock excludes new updater starts and other GC workers. Any active
+ * pointer (including unreadable/corrupt state) blocks deletion; this deliberately
+ * does not use active_job(), whose lookup may clear an invalid pointer. Progress
+ * survives worker death because successful removals shrink the queue, and the
+ * relative directory stack is committed atomically after each successful slice.
+ *
+ * @param bool $force Whether an approved Maintenance Center/CLI call bypasses the due-time throttle.
+ * @param string $runId Optional manual-request correlation ID enabling bounded lifecycle diagnostics.
+ * @return array{ok:bool,skipped:bool,reason:string,done:bool,removed:int,bytes_removed:int,visited:int,blocked:bool,elapsed_ms:float,total_bytes_removed:int,next_due:int,failure_code:string,failure_operation:string,object_token:string} Safe evidence without raw paths or checkpoint data.
+ */
+function application_update_run_scheduled_cache_cleanup(bool $force = false, string $runId = ''): array
+{
+    $result = ['ok' => true, 'skipped' => false, 'reason' => '', 'done' => false,
+        'removed' => 0, 'bytes_removed' => 0, 'visited' => 0, 'blocked' => false,
+        'elapsed_ms' => 0.0, 'total_bytes_removed' => 0, 'next_due' => 0,
+        'failure_code' => '', 'failure_operation' => '', 'object_token' => ''];
+    if ($runId !== '') {
+        cache_cleanup_diagnostic_event($runId, 'owner_entered', ['forced' => $force]);
+    }
+    $root = application_update_project_root();
+    $workspace = $root . '/cache/updates';
+    if (!file_exists($workspace) && !is_link($workspace)) {
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'skipped', ['reason' => 'no_updater_cache', 'done' => true]);
+        }
+        return array_replace($result, ['skipped' => true, 'reason' => 'no_updater_cache', 'done' => true]);
+    }
+    // Reuse the updater's component-by-component link/path guard before opening
+    // locks, checkpoints or a deletion root inside a writable runtime tree.
+    application_update_assert_safe_target($root, 'cache/updates');
+    foreach (['start.lock', 'cache-gc.json', 'prune-trash', 'active-job.json'] as $name) {
+        application_update_assert_safe_target($root, 'cache/updates/' . $name, true);
+    }
+    if ($runId !== '') {
+        cache_cleanup_diagnostic_event($runId, 'paths_verified');
+    }
+    $lock = application_update_acquire_lock($workspace . '/start.lock', 15);
+    if ($lock === null) {
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'skipped', ['reason' => 'updater_or_gc_busy', 'lock' => 'updater_start']);
+        }
+        return array_replace($result, ['skipped' => true, 'reason' => 'updater_or_gc_busy']);
+    }
+    try {
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'lock_acquired', ['lock' => 'updater_start']);
+        }
+        if (file_exists($workspace . '/active-job.json') || is_link($workspace . '/active-job.json')) {
+            if ($runId !== '') {
+                cache_cleanup_diagnostic_event($runId, 'skipped', ['reason' => 'active_updater_pointer']
+                    + application_update_cache_blocking_job_diagnostic($root));
+            }
+            return array_replace($result, ['skipped' => true, 'reason' => 'active_updater_pointer']);
+        }
+        $statePath = $workspace . '/cache-gc.json';
+        // The module-owned byte limit bounds state decoding for all GC consumers.
+        if (is_file($statePath) && (int) @filesize($statePath) > APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES) {
+            throw new RuntimeException('Updater cache cleanup checkpoint is oversized.');
+        }
+        $state = application_update_read_json($statePath);
+        if (is_file($statePath) && $state === []) {
+            throw new RuntimeException('Updater cache cleanup checkpoint is unreadable.');
+        }
+        $result['total_bytes_removed'] = max(0, (int) ($state['total_bytes_removed'] ?? 0));
+        $result['next_due'] = max(0, (int) ($state['next_due'] ?? 0));
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'checkpoint_loaded', [
+                'cursor_depth' => is_array($state['cursor'] ?? null) ? count($state['cursor']) : 0,
+                'total_bytes_removed' => $result['total_bytes_removed'], 'next_due' => $result['next_due']]);
+        }
+        if (!$force && $result['next_due'] > time()) {
+            if ($runId !== '') {
+                cache_cleanup_diagnostic_event($runId, 'skipped', ['reason' => 'cache_gc_not_due']);
+            }
+            return array_replace($result, ['skipped' => true, 'reason' => 'cache_gc_not_due', 'done' => !empty($state['done'])]);
+        }
+        // Bound scheduled reclamation independently of the thumbnail worker.
+        // Type: int and float. Units: observations/attempts and seconds.
+        // Scope: one locked GC slice. Consumers: updater-owned prune queue.
+        // Rationale: reuse the updater's 180-entry/180-ms shared-hosting budget.
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'slice_started', ['entry_cap' => 180, 'time_cap_ms' => 180]);
+        }
+        $slice = application_update_delete_tree_slice(
+            application_update_prune_trash_root($root), 180, 0.18,
+            is_array($state['cursor'] ?? null) ? $state['cursor'] : []
+        );
+        $result = array_replace($result, array_intersect_key($slice, $result));
+        $result['ok'] = !$slice['blocked'];
+        $result['reason'] = $slice['blocked'] ? 'cache_gc_io_or_cursor_blocked' : '';
+        $result['total_bytes_removed'] += $slice['bytes_removed'];
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, $slice['blocked'] ? 'blocked' : 'slice_finished',
+                array_diff_key($slice, ['cursor' => true]));
+        }
+        // Retry debt every minute; idle/error passes wait fifteen minutes.
+        // Type: int. Units: seconds. Scope: scheduled updater GC.
+        // Consumers: cron and bounded after-response maintenance.
+        // Rationale: drain successful debt promptly while backing off idle/failed I/O.
+        $result['next_due'] = time() + ($slice['done'] || $slice['blocked'] ? 900 : 60);
+        application_update_write_json_atomic($statePath, $result + [
+            'cursor' => $slice['cursor'], 'updated_at' => time(),
+        ]);
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'checkpoint_committed', $result);
+        }
+        return $result;
+    } finally {
+        application_update_release_lock($lock);
+        if ($runId !== '') {
+            cache_cleanup_diagnostic_event($runId, 'lock_released', ['lock' => 'updater_start']);
+        }
+    }
+}
+
+/**
+ * Read bounded blocking-job metadata without clearing any pointer or advancing work.
+ * @param string $root Canonical installation root already protected by the updater start lock.
+ * @return array{updater_pointer_state:string,updater_job_id?:string,updater_status?:string,updater_stage?:string,updater_updated_at?:int} Validated identity and enum state, or a safe unreadable marker.
+ */
+function application_update_cache_blocking_job_diagnostic(string $root): array
+{
+    $result = ['updater_pointer_state' => 'pointer_unreadable_or_invalid'];
+    // Reuse the GC metadata cap for two diagnostic-only reads. Raw state and
+    // oversized files remain private; the presence of a pointer still blocks GC.
+    $read = static function (string $relative) use ($root): array {
+        application_update_assert_safe_target($root, $relative, true);
+        $path = $root . '/' . $relative;
+        if (!is_file($path) || is_link($path)) return [];
+        $json = @file_get_contents($path, false, null, 0, APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES + 1);
+        if (!is_string($json) || strlen($json) > APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES) return [];
+        $state = json_decode($json, true);
+        return is_array($state) ? $state : [];
+    };
+    try {
+        $pointer = $read('cache/updates/active-job.json');
+        $jobId = (string) ($pointer['job_id'] ?? '');
+        if (preg_match('/^[0-9]{14}-[a-f0-9]{12}$/D', $jobId) !== 1) return $result;
+        $result['updater_job_id'] = $jobId;
+        $result['updater_pointer_state'] = 'job_unreadable_or_invalid';
+        $job = $read('cache/updates/jobs/' . $jobId . '/job.json');
+        if (($job['id'] ?? null) !== $jobId) return $result;
+        $status = (string) ($job['status'] ?? '');
+        $result['updater_status'] = in_array($status, ['running', 'failed', 'completed', 'cancelled'], true) ? $status : 'unknown';
+        $stage = (string) ($job['stage'] ?? '');
+        $result['updater_stage'] = in_array($stage, application_update_job_stages(), true) ? $stage : 'unknown';
+        $result['updater_updated_at'] = max(0, (int) ($job['updated_at'] ?? 0));
+        $result['updater_pointer_state'] = in_array($status, ['completed', 'cancelled'], true)
+            ? 'terminal_job_requires_owner_review' : 'nonterminal_job';
+        return $result;
+    } catch (\Throwable) {
+        $result['updater_pointer_state'] = 'unsafe_or_unreadable_job_metadata';
+        return $result;
+    }
+}
+
+/**
+ * Observe worker-lock ownership without creating files, changing metadata or advancing a job.
+ * @param string $jobId Valid updater job identifier selected by the authenticated controller.
+ * @param int $updatedAt Persisted checkpoint update epoch, or zero when absent.
+ * @return array{observed_at:int,checkpoint_age_seconds:int|null,worker_lock:string} Server-clock checkpoint age and instantaneous held/available/missing/unreadable/unsafe/unavailable lock observation; availability is not a lease or OS process proof.
+ */
+function application_update_job_worker_diagnostic(string $jobId, int $updatedAt): array
+{
+    $now = time();
+    $result = ['observed_at' => $now, 'checkpoint_age_seconds' => $updatedAt > 0 ? max(0, $now - $updatedAt) : null,
+        'worker_lock' => 'unavailable'];
+    $handle = null;
+    try {
+        $root = application_update_project_root();
+        application_update_job_dir($jobId);
+        $relative = 'cache/updates/jobs/' . $jobId . '/worker.lock';
+        application_update_assert_safe_target($root, $relative, true);
+        $path = $root . '/' . $relative;
+        if (!is_file($path)) {
+            $result['worker_lock'] = 'missing';
+            return $result;
+        }
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            $result['worker_lock'] = 'unreadable';
+            return $result;
+        }
+        $wouldBlock = 0;
+        if (@flock($handle, LOCK_EX | LOCK_NB, $wouldBlock)) {
+            $result['worker_lock'] = 'available';
+            flock($handle, LOCK_UN);
+        } elseif ($wouldBlock !== 0) {
+            $result['worker_lock'] = 'held';
+        }
+        return $result;
+    } catch (\Throwable) {
+        $result['worker_lock'] = 'unsafe';
+        return $result;
+    } finally {
+        if (is_resource($handle)) fclose($handle);
+    }
+}
+
+/**
  * Stage current-job transient payloads for bounded deletion without touching rollback data.
  *
  * @return array{ok:bool,moved:int}
@@ -113,33 +341,23 @@ function application_update_prune_protected_job_ids(array $job): array
 }
 
 /**
- * Return whether an inactive historical update job is eligible for physical pruning.
+ * Permit contextual pruning only for verified terminal work outside protected recovery references.
+ * @param array<string,mixed> $candidate Persisted updater state with id/status; protected IDs are filtered by the caller.
+ * @param int $fallbackMtime Historical directory modification time retained for the compatibility signature, never deletion authority.
+ * @return bool True for completed/cancelled work; failed, running and unproven recovery remain protected without an age deadline.
  */
 function application_update_job_prune_eligible(array $candidate, int $fallbackMtime): bool
 {
-    $status = (string) ($candidate['status'] ?? '');
-    $timestamp = max(
-        (int) ($candidate['finished_at'] ?? 0),
-        (int) ($candidate['updated_at'] ?? 0),
-        $fallbackMtime
-    );
-    $age = max(0, time() - $timestamp);
-
-    if ($status === 'completed') {
-        return true;
-    }
-    if (in_array($status, ['cancelled', 'failed'], true)) {
-        return $age >= 7 * 86400;
-    }
-    // Preserve recent orphaned/running state for manual recovery. Truly abandoned
-    // non-active workspaces are eventually reclaimable instead of living forever.
-    return $status === 'running' && $age >= 30 * 86400;
+    return preg_match('/^[0-9]{14}-[a-f0-9]{12}$/D', (string) ($candidate['id'] ?? '')) === 1
+        && in_array($candidate['status'] ?? '', ['completed', 'cancelled'], true);
 }
 
 /**
  * Atomically stage obsolete updater job directories for bounded deletion.
  *
- * @return array{moved:int,remaining:bool}
+ * @param array<string,mixed> $job Current updater state with id and parameters.source_job_id, used to protect current/active/last/selected recovery references.
+ * @param int $maxMoves Maximum job directories admitted for detachment during this cleanup pass.
+ * @return array{moved:int,remaining:bool} Successful directory detachments and whether eligible work remains after the move cap or a refused mutation.
  */
 function application_update_stage_stale_jobs_for_prune(array $job, int $maxMoves = 20): array
 {
@@ -165,7 +383,7 @@ function application_update_stage_stale_jobs_for_prune(array $job, int $maxMoves
         if ($candidate !== [] && !application_update_job_prune_eligible($candidate, $fallbackMtime)) {
             continue;
         }
-        if ($candidate === [] && time() - $fallbackMtime < 30 * 86400) {
+        if ($candidate === [] || ($candidate['id'] ?? '') !== $jobId) {
             continue;
         }
         if ($moved >= max(1, $maxMoves)) {
@@ -190,9 +408,9 @@ function application_update_stage_stale_jobs_for_prune(array $job, int $maxMoves
  * atomically moved out of live locations. Physical deletion is deliberately capped to
  * a small slice even when the surrounding updater worker has a larger request budget.
  *
- * @param array $job Job state, updated by reference.
- * @param array $budget Worker wall-clock budget.
- * @return bool True when the post-update prune queue is empty.
+ * @param array<string,mixed> $job Updater state with id, parameters, checkpoints, result and progress, updated by reference; checkpoints retain the relative cache_cleanup_cursor directory stack.
+ * @param array{deadline:float} $budget Worker deadline in monotonic wall-clock seconds from microtime(true).
+ * @return bool True when physical cleanup is complete or its stage defers remaining debt after twenty slices; result.cache_cleanup.completed distinguishes these outcomes.
  */
 function application_update_job_cleanup(array &$job, array $budget): bool
 {
@@ -205,8 +423,10 @@ function application_update_job_cleanup(array &$job, array $budget): bool
     $delete = application_update_delete_tree_slice(
         application_update_prune_trash_root(application_update_project_root()),
         180,
-        $sliceSeconds
+        $sliceSeconds,
+        is_array($job['checkpoints']['cache_cleanup_cursor'] ?? null) ? $job['checkpoints']['cache_cleanup_cursor'] : []
     );
+    $job['checkpoints']['cache_cleanup_cursor'] = $delete['cursor'];
 
     $job['checkpoints']['cache_cleanup_removed_entries'] = (int) ($job['checkpoints']['cache_cleanup_removed_entries'] ?? 0) + (int) ($delete['removed'] ?? 0);
     $job['checkpoints']['cache_cleanup_slices'] = (int) ($job['checkpoints']['cache_cleanup_slices'] ?? 0) + 1;
@@ -237,7 +457,9 @@ function application_update_job_cleanup(array &$job, array $budget): bool
     $deferred = !$complete && (int) $job['checkpoints']['cache_cleanup_slices'] >= 20;
     if ($complete || $deferred) {
         $job['checkpoints']['cleanup_complete'] = true;
-        $job['result']['cache_cleanup']['completed'] = true;
+        // The updater stage may finish with deferred debt; physical cleanup is
+        // complete only when all staging owners and the deletion queue are done.
+        $job['result']['cache_cleanup']['completed'] = $complete;
         $job['result']['cache_cleanup']['deferred_remaining_trash'] = $deferred;
     }
     if ($deferred) {

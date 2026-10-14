@@ -1,5 +1,9 @@
 # PHP Gallery CMS
 
+Cache operations: [automatic visitor-driven retention, independent updater GC and safe incident remediation](docs/CACHE_MAINTENANCE.md). Installation/update enables the single Admin Features cache preference; explicit OFF survives updates. Ordinary public visits supply short server-side opportunities, hourly inventory resumes from checkpoints, and zero traffic waits for the next suitable visit. Cron is optional.
+Hosting cron can run `php scripts/site_maintenance.php --cache-only` every minute
+to drain already-staged updater trash independently of thumbnail maintenance.
+
 [Project website](https://klusik.github.io/PHP_gallery/) ·
 [Documentation and published-release references](https://klusik.github.io/PHP_gallery/docs/)
 — presentation in English, Czech, German and Swedish. Website source, preview,
@@ -18,7 +22,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.131.1
+**Current Version:** 0.132
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 

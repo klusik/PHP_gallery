@@ -14,7 +14,7 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, rm} from 'node:fs/promises';
+import {readFile, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {spawn, execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -266,6 +266,9 @@ const profile = await mkdtemp(path.join(root, 'cache', 'panel-lifecycle-browser-
 let browser;
 let browserExit;
 try {
+    // A fixed creation epoch prevents active profile writes from renewing its TTL.
+    await writeFile(path.join(profile, 'cache-owner.json'), JSON.stringify({schema_version: 1,
+        producer: 'php_gallery_browser_fixture', directory: path.basename(profile), created_at: Math.floor(Date.now() / 1000)}));
     browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
         '--disable-background-networking', '--disable-extensions', '--disable-component-update',
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',

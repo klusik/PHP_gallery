@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.131.1}
+\newcommand{\version}{0.132}
 \newcommand{\manualdate}{14~oktober~2026}
 
 \hypersetup{
@@ -2027,6 +2027,70 @@ Administrationens \ui{Integritet}-flöde kontrollerar integritetshanterade kärn
 När utvecklingsdiagnostik är tillgänglig kan en inloggad administratör starta ett \ui{Prestandatest för offentlig galleriinläsning} för aktuellt galleri. Webbläsaren läser in galleriet flera gånger i en dold ram med samma ursprung och anonym förhandsvisning, kombinerar PHP-renderingsräknare med webbläsarens navigeringstider och erbjuder sedan testloggen som JSON. Använd samma galleri, presentationsläge och nätverks- och cacheförhållanden när du jämför två ändringar; testet är mest användbart som en före- och eftermätning snarare än ett universellt poängtal.
 
 \subsection{Schemalagt webbplatsunderhåll}
+
+Under Administration > Underhåll > Media och cache kör \emph{Rensa uppdaterarens
+cache nu} ett begränsat steg direkt på sidan. Endast redan undanlagt avfall i
+\filepath{cache/updates/prune-trash} tas bort; foton, miniatyrbilder,
+nedladdningar, återställningskopior och okända data bevaras. Tvingad körning
+hoppar över tidsintervallet men respekterar aktiva uppdateringar och
+underhållslås. Använd \emph{Fortsätt rensningen} om avfall återstår. Resultatet
+visar faktiskt borttagna filer och frigjorda byte. Kör
+\filepath{scripts/site_maintenance.php} med \texttt{--cache-only} varje minut
+via webbhotellets cron för automatisk fortsättning. Rensningen är oberoende av
+miniatyrbildsschemat och inför ingen övergripande cachekvot. Kompatibilitet och
+schemadiagnostik finns i utfällbara detaljer; Underhållscenter äger fortfarande
+rensningen av nedladdningscache.
+
+\paragraph{Uppmätt cachelagring.}
+Registrerade tillfälliga webbläsarprofiler och versionsmärkta arbetskopior för
+utgåvor har en fast livslängd på 24 timmar. Användning förlänger inte tiden.
+Nya profiler sparar skapelsetiden; äldre arbetskopior använder en tidsankare från
+filsystemet som sparas en gång. Skyddsmarkeringar och osäkra eller upptagna
+resurser kan skjuta upp fysisk radering. Beständig utgåveförberedelse och
+kvalificering förblir skyddade.
+
+Media och cache har även \emph{Skanna cache} och ett uttryckligt godkännande
+\emph{Rensa berättigad cache} för den aktuella förhandsgranskningen. Inventeringen
+raderar inget och fortsätter på samma sida. Tabellen visar uppmätta och
+rensningsbara byte, exempel, ofullständiga delar och faktiskt frigjort utrymme.
+Avslutade testgranskningar och verifierade hämtade CI-diagnoser behålls 24 timmar,
+hanterade ZIP-nedladdningar sju dagar. Nya ägarmarkörer gör även avbrutna
+utgångna granskningar rensningsbara när producentlåset är ledigt. Uppdateringar
+har ingen tidsgräns: aktuell installation och senaste lyckade återställningsdata
+bevarar aktuell/föregående version; aktiva jobb, vald betaåterställning och
+återställningskällor skyddas. Äldre verifierade avslutade/avbrutna jobb kan rensas;
+misslyckade jobb och äldre säkerhetskopior utan versionsidentitet kräver granskning.
+Okända data, original, uppladdningsfortsättning och \texttt{.keep}-markörer bevaras.
+GitHub-metadata behålls ett dygn och SimBrief-utkast har befintliga 30 minuter
+plus en minuts marginal. Cron med \texttt{--cache-only} fortsätter denna oberoende
+livscykel men godkänner aldrig en manuell förhandsgranskning. Täta, långsamma eller
+oläsbara kataloger markeras uttryckligen som ofullständiga och skyddas. Utgång
+betyder berättigande, inte omedelbar radering. Befintlig ZIP-kapacitetsgräns består;
+ingen global cachekvot införs. Aktiva inventeringsjournaler räknas inte som payload.
+
+Automatisk cacherensning aktiveras vid installation och uppdatering genom den enda inställningen i Admin Features; ett senare uttryckligt OFF bevaras vid uppdateringar. Vanliga GET-besök på startsidan och fysiska/Smart Galleries ger korta serverbaserade arbetstillfällen utan cron, öppet Admin-dashboard eller besökarens JavaScript. Avslutad inventering förfaller varje timme; pågående skanning behåller sin kontrollpunkt. Utan inkommande anrop kan PHP inte väcka sig självt: arbetet väntar på nästa lämpliga besök. Ingen självanropskedja eller permanent process skapas.
+
+En uppmätt berättigad kö på högst 128~MiB får, när svarsslutförande stöds, ett försök på högst 600~ms och åtta korta delar. Större köer får 120~ms och två delar. Utan detta stöd är antagningsbudgeten 40~ms och två delar; klienten kan vänta på det korta avslutande arbetet. Detta är antagningsgränser, inte latensgarantier för systemanrop. PHP-arbetaren förblir upptagen även efter att svaret avslutats. Gemensam 60-sekunders begränsning, icke blockerande lås, förgrundsleaser och signaler om nya besök prioriterar frontend. En del medger högst 60~ms; inventering 5000 observationer och 4096 katalognamn; radering 180 operationer. Extra minne och ledigt PHP-utrymme begränsas till åtta MiB vardera. Många små filer fortsätter därför över flera besök även under 128~MiB. Fullständigt verifierade kandidater kan tas bort under inventeringen; skanning och rensning växlar rättvist.
+
+En obekräftad manuell förhandsgranskning ersätts efter femton minuters inaktivitet med en ny plan; gammalt ID avvisas och godkänns aldrig automatiskt. Godkända raderingskontrollpunkter överlever avbrott. Försök, verkliga framsteg, föråldrade observationer, förfallotid, aktuell kö och borttagna byte hålls åtskilda från historiska mätningar; HTTP 200 ensamt bevisar inget. Valfri CLI- eller skyddad HTTPS-cron ger arbetstillfällen utan besök med högst tio sekunder och 32 delar. Besöksbaserad automatik kräver ingen hostingkonfiguration. Se \filepath{docs/CACHE_MAINTENANCE.md}. Arbetskopior behåller fast 24 timmar, ZIP sju dagar och uppdaterarens återställning förblir kontextberoende utan TTL.
+
+Manuella körningar visar genast ett diagnostik-ID och en händelselista med länk
+till filtrerade administratörsloggar. Händelser visar lås, kontrollpunkter,
+granskade poster, frigjorda byte och säkra felkoder. Blockering visar ansvarig
+ägare; tvingad körning respekterar låset. Misslyckad loggskrivning syns i
+diagnostiken, med PHP:s fellogg som reserv. Tvångsavslutade processer kan
+lämna en ofullständig händelselista.
+
+\emph{Kopiera logg} kopierar den aktuella JSON-listan. En tunn förloppsindikator
+använder kända räknare för uppdateringsfasen; okänd omfattning visas obestämt.
+\emph{Stoppa uppdatering} använder säker avbrytning före aktivering och kringgår
+inte lås. Den synliga panelen läser endast kontrollpunkter och fortsätter inte
+uppdateringen.
+Fel visar ett säkert meddelande och en referens även i den kopierade loggen.
+100\% av fasens poster betyder inte att valideringen lyckades.
+Kopierade kontrollpunkter visar ålder, processlås, räknarförändring och tillgänglig
+felhistorik före omförsök. Lagrad körstatus bevisar inte aktivt arbete; låskontrollen
+gäller endast det observerade ögonblicket.
 \index{s00213@schemalagt underhåll}
 \index{c00046@cron!w00270@webbplatsunderhåll}
 
@@ -2570,6 +2634,15 @@ Arbetsflödet lägger till en oföränderlig utgångspunkt direkt efter vald com
  och kör Stage~A/B, befintliga AI-anteckningar, låst TinyTeX, alla fyra manualer,
 manifest och fullständig kvalificering av exakt Q. Tidigare utgångspunkter och den
 publicerade \codeword{v\_0.126} förblir oförändrade.
+
+En föregångare med tagg kan fortfarande vänta på manuell publicering av GitHub
+Release. För schema~3 autentiserar initieringen föregångarens ursprungliga
+FULL-integrationsarkiv och BASIC-arkiv för utgåvans ändringar innan exakt tidigare
+kandidat, körning och försök, Git-träd och mänskligt godkännande kontrolleras.
+Den aktuella utgåvans bevis ersätter inte dessa arkiv. Saknade, utgångna, skadade
+eller främmande bevis och misslyckade obligatoriska jobb stoppar initieringen.
+Den centrala regressionen täcker starten av nästa utgåva före publicering med
+detta aktuella bevisformat.
 
 Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
 Arbetsflödet startar avslutet automatiskt på Q genom filen som redan är registrerad

@@ -224,18 +224,33 @@ function ensure_admin_log_status_schema(): bool
 }
 
 /**
- * Handles admin log event logic for the gallery application.
+ * Preserve the historical best-effort Admin log API for all existing event owners.
  *
- * @param mixed $level Input used by this operation.
- * @param mixed $eventKey Input used by this operation.
- * @param mixed $message Input used by this operation.
- * @param mixed $context Input used by this operation.
- * @param array $options Optional behavior flags.
+ * @param string $level Event level: info, warning or error.
+ * @param string $eventKey Stable owner-qualified event key.
+ * @param string $message Human-readable safe event explanation.
+ * @param array<string,mixed> $context Event-owned JSON fields, such as run_id:string, stage:string and removed:int; nested shapes remain the emitting owner's contract.
+ * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
+ * @return void Attempts persistence without making a caller's operation depend on logging.
  */
 function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
+    admin_log_event_result($level, $eventKey, $message, $context, $options);
+}
+
+/**
+ * Persist an Admin event through the existing owner and return a safe storage receipt.
+ * @param string $level Event level: info, warning or error.
+ * @param string $eventKey Stable owner-qualified event key.
+ * @param string $message Safe human-readable event explanation.
+ * @param array<string,mixed> $context Owner-defined JSON fields; cache events document run_id, stage, counters and failure enums at their emitting owner.
+ * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
+ * @return array{ok:bool,failure_code?:string,exception_class?:string,sqlstate?:string,driver_code?:int,field?:string} Confirmed insertion or safe failure; field is an approved log-column identifier, never raw SQL/PDO text.
+ */
+function admin_log_event_result(string $level, string $eventKey, string $message, array $context = [], array $options = []): array
+{
     if (!admin_log_schema_ready()) {
-        return;
+        return ['ok' => false, 'failure_code' => 'log_schema_unavailable'];
     }
     $allowedLevels = ['info', 'warning', 'error'];
     $level = in_array($level, $allowedLevels, true) ? $level : 'error';
@@ -268,8 +283,11 @@ function admin_log_event(string $level, string $eventKey, string $message, array
             'context_json' => $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
             'created_at' => now_sql(),
         ];
-        admin_log_model_insert_available($values);
-    } catch (Throwable) {
+        $diagnostic = [];
+        $ok = admin_log_model_insert_available($values, $diagnostic);
+        return ['ok' => $ok] + $diagnostic;
+    } catch (Throwable $exception) {
+        return ['ok' => false, 'failure_code' => 'log_service_exception', 'exception_class' => $exception::class];
     }
 }
 

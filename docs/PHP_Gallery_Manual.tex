@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.131.1}
+\newcommand{\version}{0.132}
 \newcommand{\manualdate}{14 October 2026}
 
 \hypersetup{
@@ -2048,6 +2048,68 @@ When development diagnostics are~available, a~signed-in administrator can~start 
 \index{scheduled maintenance}
 \index{cron!site maintenance}
 
+In~Admin > Maintenance > Media and~cache, use~\emph{Clean updater cache now}
+to~run one bounded step in~place. The~step removes only already staged updater
+trash in~\filepath{cache/updates/prune-trash}; it~preserves photos, thumbnails,
+downloads, rollback backups and~unknown cache data. Force bypasses the~timer,
+but~respects active updates and~maintenance locks. If~debt remains, use~
+\emph{Continue cleanup}. The~result reports actual files and~bytes removed.
+For~unattended progress, run~\filepath{scripts/site_maintenance.php} with
+\texttt{--cache-only} every minute from~hosting cron. This cleanup is~independent
+of~thumbnail scheduling and~does~not~establish an~overall cache quota.
+Compatibility settings and~schedule diagnostics remain available in~the~native
+disclosures; Maintenance Center retains ownership of~download-cache cleanup.
+
+\paragraph{Measured cache retention.}
+Registered disposable browser profiles and versioned release working copies have
+a fixed 24-hour lifetime. Use does not renew expiry. New browser profiles record
+creation; older workspaces use a filesystem-derived age anchor saved once.
+Pins and unsafe or busy ownership can defer physical removal. Persistent release
+preparation/qualification storage remains protected.
+
+The same Media and cache page adds \emph{Scan cache} and an explicit
+\emph{Clean eligible cache} approval for the exact preview. Inventory is
+non-destructive; continuation stays on the page. The compact table shows observed
+and eligible bytes by owner, candidate examples, partial scans and actual
+reclamation. Completed test audits and verified downloaded CI diagnostics expire
+after 24 hours; generated managed ZIPs remain available for seven days. New audit
+ownership markers also permit expired interrupted reports once their producer
+lease is free. Updater retention has no time limit: current installed files and
+the latest successful rollback retain current/previous versions; active jobs,
+selected beta recovery and rollback sources remain protected. Older verified
+completed/cancelled work is reclaimable; failed jobs and unversioned legacy
+backups require recovery review. Unknown content, originals, resume state and
+\texttt{.keep} pins are preserved. GitHub response metadata expires after one day,
+and SimBrief drafts after their existing 30-minute expiry plus a one-minute grace.
+Hosting cron with \texttt{--cache-only} also advances this independent lifecycle;
+it never auto-approves a manual preview. Dense, slow or unreadable directories
+are explicitly partial and preserved. Expiry establishes eligibility, not instant
+deletion. The existing managed-download capacity limit remains; there is no global
+cache quota. Inventory controls are excluded from measured payload totals.
+
+Automatic cache cleanup is~enabled on~installation and~upgrade through the~canonical Admin Features preference; a~later explicit OFF survives updates. Ordinary GET visits to~the~home page and~physical/Smart Galleries provide server-side opportunities without cron, an~open Admin dashboard or~visitor JavaScript. Finished inventory is~due hourly; unfinished scans retain their checkpoint. With no~incoming requests PHP cannot wake itself, so~work waits for~the~next suitable visit. No~self-request chain or~persistent process is~created.
+
+A~measured eligible backlog of~at~most 128~MiB receives an~attempt of~up~to~600~ms and~eight short slices where response finishing is~supported. Larger backlogs receive 120~ms and~two slices. Without that support, admission is~40~ms and~two slices; the~client may~wait for~this short shutdown work. These are~admission deadlines, not~OS-call latency guarantees. PHP retains its worker even after response finishing. A~shared 60-second throttle, nonblocking worker locks, foreground leases and~arrival signals make cleanup yield to~other visits. Each inner slice admits at~most 60~ms, inventory at~most 5000 observations and~a~4096-name catalog, deletion 180 operations, with eight MiB incremental memory admission and~eight MiB PHP memory headroom. Many tiny files therefore continue across visits even below 128~MiB. Known committed eligible candidates can~be~reclaimed before the~whole scan finishes; scan and~deletion alternate fairly.
+
+An~unapproved manual preview idle for~fifteen minutes receives a~new scheduled identity; its old ID is~refused, never automatically approved. Approved deletion cursors survive interruption. Attempts, actual progress, stale observations, next due, current pending bytes and~successfully removed bytes remain separate from~historical measurements; HTTP 200 alone proves no~progress. Optional CLI or~protected HTTPS cron can~supply opportunities on~an~idle installation, with at~most ten seconds and~32 slices per~invocation. No~hosting setup is~needed for~visitor-driven operation. See~\filepath{docs/CACHE_MAINTENANCE.md}. Fixed workspace lifetime remains 24~hours, ZIP retention seven days and~updater recovery contextual without a~TTL.
+
+Manual runs immediately show a~diagnostic ID and~a~trace linking to~filtered
+Admin Logs. Events record locks, checkpoints, observed entries, removed bytes
+and~safe failure codes. Busy results identify the~owner; force respects it.
+Failed log writes are~visible in~diagnostics, with best-effort fallback
+to~PHP's error log. Hard process termination can~leave an~incomplete trace.
+
+Use~\emph{Copy log} inside the~disclosure to~copy its current JSON trace.
+A~thin progressbar uses known updater phase counters; unknown totals remain
+indeterminate. \emph{Stop update} uses safe pre-activation cancellation and~never
+forces an~activation-stage stop. Busy refusal remains visible. Read-only progress
+refreshes while the~panel is~visible and~does~not~advance the~update.
+Failed phases show the~safe updater error/reference, also included in~the~copied
+trace. A~phase counter at~100\% does~not~mean successful validation.
+Copied checkpoints also include age, worker-lock observation, counter movement
+and~available retry history. A~stored running status alone does~not~prove live
+work; an~unlocked worker is~only an~instantaneous observation.
+
 Routine maintenance can~run in~bounded slices instead of~one long request. The~maintenance service chains safe web requests when traffic is~available and~can~also be~called from~hosting cron with the~CLI command shown in~Admin. It~can~check thumbnail state, refresh metadata, process cleanup tasks, roll up~telemetry, and~archive eligible Admin-log days according to~their configured policies. The~hidden web-cron token is~rotatable; rotating it~invalidates previously published web-cron URLs. Maintenance is~non-destructive by~default and~does~not~replace explicit confirmation for~database optimization or~other consequential actions.
 
 \subsection{Admin log history and~archives}
@@ -2647,6 +2709,14 @@ TinyTeX, all four manuals/PDFs, inventory and~manifest into B. Under the~\#185
 target it~then runs only BASIC changed-source checks for A..B plus proof that
 changes belong to~the~approved release inputs; it~does not rerun the~functional
 matrix on~B. Historical origins and~published \codeword{v\_0.126} remain unchanged.
+
+A~tagged predecessor may still await manual GitHub Release publication. For~a~schema-3
+predecessor, initialization authenticates its~original FULL integration archive
+and~BASIC release-delta archive before verifying the~exact prior candidate,
+run/attempt, Git trees and~human approval. Current-release evidence cannot replace
+those archives. Missing, expired, corrupt or~foreign evidence and~failed mandatory
+owners block initialization. Central regression coverage includes starting the~next
+release before publication with this~current evidence format.
 
 After qualification and~manual-publication assets succeed, the~bot opens one PR
 to~main and~automatically dispatches completion at~Q using the~workflow filename

@@ -1,0 +1,71 @@
+<?php
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: app/services/cache_lifecycle/visitor.php
+ * Module Type: Service Part
+ * Purpose: Admit short visitor-driven opportunities to the canonical cache lifecycle.
+ * Responsibilities: Preserve foreground priority, hourly due dates, worker exclusion and bounded attempt evidence without self-requests.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+declare(strict_types=1);
+namespace Gallery\Services;
+
+/**
+ * Admit one visitor burst with foreground priority and shared scheduler exclusion.
+ * @param bool $detached Whether this server supports finishing the response; false retains a 40 ms admission budget and never claims asynchronous execution.
+ * @return array<string,mixed> Canonical progress/skip/block evidence with slices, elapsed_ms and actual counters; no live installation data is substituted by test fixtures.
+ */
+function cache_lifecycle_visitor_run(bool $detached): array
+{
+    if (!feature_capability_effective_enabled('automatic_cache_cleanup')) return ['ok'=>true,'skipped'=>true,'reason'=>'automatic_cache_cleanup_disabled'];
+    $directory = cache_lifecycle_path('site-maintenance');
+    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_storage_unavailable'];
+    foreach (['visitor.lock', 'visitor-attempt', 'visitor-signal'] as $name) cache_lifecycle_assert_path($directory . '/' . $name);
+    $path = cache_lifecycle_control_directory() . '/scheduler.lock';
+    cache_lifecycle_assert_path($path);
+    $scheduler = @fopen($path, 'c');
+    $foreground = @fopen($directory . '/visitor.lock', 'c');
+    try {
+        if (!is_resource($scheduler) || !is_resource($foreground)) return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_lock_unavailable'];
+        if (!flock($scheduler, LOCK_EX | LOCK_NB)) return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'cache_scheduler_busy'];
+        clearstatcache(true, $directory . '/visitor-attempt');
+        if (is_file($directory . '/visitor-attempt') && cache_lifecycle_now() - (int) filemtime($directory . '/visitor-attempt') < 60) return ['ok'=>true,'skipped'=>true,'reason'=>'cache_visitor_throttled'];
+        if (!@touch($directory . '/visitor-attempt', cache_lifecycle_now())) return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_checkpoint_unavailable'];
+        if (!flock($foreground, LOCK_EX | LOCK_NB)) {
+            cache_lifecycle_scheduler_deferred('public_visit', 'foreground_requests_active');
+            return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'foreground_requests_active'];
+        }
+        if (is_array(\Gallery\Models\maintenance_center_model_mutation_owner(true))) {
+            cache_lifecycle_scheduler_deferred('public_visit', 'central_maintenance_active');
+            return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'central_maintenance_active'];
+        }
+        cache_lifecycle_assert_path($directory . '/worker.lock');
+        $siteLock = @fopen($directory . '/worker.lock', 'c');
+        try {
+            if (!is_resource($siteLock) || !flock($siteLock, LOCK_EX | LOCK_NB)) {
+                cache_lifecycle_scheduler_deferred('public_visit', 'maintenance_already_running');
+                return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'maintenance_already_running'];
+            }
+            $state = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
+            $pending = max(0, (int) ($state['candidate_bytes'] ?? 0) - (int) ($state['settled_bytes'] ?? 0));
+            // Bound worker occupancy independently of payload bytes.
+            // Type: float. Units: seconds. Scope: one visitor invocation.
+            // Consumers: canonical burst deadline. Rationale: a small queue gets a 600 ms attempt, a large queue 120 ms; unsupported response finishing gets only 40 ms. Blocking OS calls can overrun admission.
+            $seconds = !$detached ? 0.04 : ($pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 0.60 : 0.12);
+            // Cap admissions even on a very fast filesystem.
+            // Type: int. Units: slices. Scope: one visitor invocation.
+            // Consumers: canonical burst loop. Rationale: eight short slices can finish a few-file small backlog; large/fallback bursts admit at most two and resume fairly.
+            $slices = $detached && $pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 8 : 2;
+            return cache_lifecycle_scheduled_burst($seconds, 'public_visit', $slices);
+        } finally {
+            if (is_resource($siteLock)) { flock($siteLock, LOCK_UN); fclose($siteLock); }
+        }
+    } catch (\Throwable) {
+        try { cache_lifecycle_scheduler_deferred('public_visit', 'cache_visitor_exception'); } catch (\Throwable) {}
+        return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_exception'];
+    } finally {
+        foreach ([$foreground, $scheduler] as $handle) if (is_resource($handle)) { flock($handle, LOCK_UN); fclose($handle); }
+    }
+}

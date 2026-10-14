@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.131.1}
+\newcommand{\version}{0.132}
 \newcommand{\manualdate}{14.~října~2026}
 
 \hypersetup{
@@ -2027,6 +2027,67 @@ Postup \ui{Integrita} v~administraci kontroluje soubory jádra spravované integ
 Je-li dostupná vývojová diagnostika, přihlášený správce může pro aktuální galerii zahájit \ui{Měření načítání veřejné galerie}. Prohlížeč několikrát načte galerii ve skrytém rámci stejného původu s~anonymním náhledem, spojí čítače vykreslování PHP s~časováním navigace prohlížeče a~poté nabídne protokol měření jako JSON. Při porovnávání dvou změn použijte stejnou galerii, režim prezentace a~podmínky sítě a~mezipaměti; měření je nejužitečnější pro porovnání před a~po, nikoli jako univerzální skóre.
 
 \subsection{Plánovaná údržba webu}
+
+V~Administraci > Údržba > Média a~cache spustí tlačítko \emph{Vyčistit cache
+aktualizátoru nyní} jeden omezený krok přímo na~stránce. Odstraňuje pouze již
+odložený odpad v~\filepath{cache/updates/prune-trash}; fotografie, náhledy,
+soubory ke~stažení, rollback zálohy a~neznámý obsah zachová. Vynucení obchází
+časový interval, ale respektuje aktivní aktualizace a~zámky údržby. Zbývá-li
+odpad, použijte \emph{Pokračovat v~čištění}. Výsledek uvádí skutečně odstraněné
+soubory a~uvolněné bajty. Pro~automatické pokračování spouštějte každou minutu
+z~cronu hostingu \filepath{scripts/site_maintenance.php} s~volbou
+\texttt{--cache-only}. Čištění je~nezávislé na~plánu náhledů a~nezavádí celkovou
+kvótu cache. Nastavení kompatibility a~diagnostika plánu jsou v~rozbalovacích
+detailech; čištění cache stahování nadále vlastní Centrum údržby.
+
+\paragraph{Měřená životnost cache.}
+Registrované dočasné browser profily a verzované pracovní kopie vydání mají
+pevnou životnost 24 hodin. Používání ji neprodlužuje. Nové profily zapisují čas
+vytvoření; starší složky používají jednou uložený časový údaj z filesystemu.
+Ochranné značky a nebezpečné či obsazené prostředky mohou odložit fyzické smazání.
+Trvalá data přípravy a kvalifikace vydání zůstávají chráněná.
+
+Na~stejné stránce Média a~cache přibývá \emph{Prohlédnout cache} a~výslovné
+\emph{Vyčistit způsobilou cache} pro~konkrétní náhled. Inventář nic nemaže;
+pokračování zůstává na~stránce. Kompaktní tabulka ukazuje velikosti podle vlastníků,
+příklady kandidátů, neúplné části a~skutečně uvolněné bajty. Dokončené testovací
+audity a~ověřené stažené CI diagnostiky mají životnost 24~hodin, spravované ZIPy
+ke~stažení sedm dní. Nové značky vlastníka umožní uklidit i~přerušený audit,
+jakmile jeho zámek přestane být aktivní. Aktualizace nemají časovou expiraci:
+aktuální instalace a~rollback poslední úspěšné aktualizace zachovají aktuální
+a~předchozí verzi; aktivní joby, vybraná beta obnova a~zdroje rollbacku zůstanou
+chráněné. Starší ověřené dokončené či~zrušené joby lze uklidit; selhané joby
+a~legacy zálohy bez identity verze vyžadují kontrolu obnovy. Neznámý obsah,
+originály, stav pokračování uploadů a~značky \texttt{.keep} se~zachovají.
+GitHub metadata mají jeden den; SimBrief koncepty dosavadních 30~minut
+s~minutovou rezervou. Cron s~\texttt{--cache-only} pokračuje i~v~tomto nezávislém
+čištění, ale nikdy sám neschválí ruční náhled. Příliš husté, pomalé či~nečitelné
+adresáře jsou výslovně neúplné a~zachované. Expirace znamená způsobilost,
+nikoli okamžité smazání. Stávající limit spravovaných ZIPů zůstává;
+celková kvóta cache se~nezavádí. Živé inventární záznamy nejsou v~měření payloadů.
+
+Automatické čištění cache je~zapnuté při instalaci i~aktualizaci prostřednictvím jediné volby v~Admin Features; pozdější výslovné OFF zůstane zachované. Běžné GET návštěvy hlavní stránky a~fyzických či Smart galerií poskytují krátké serverové příležitosti bez cronu, otevřené administrace nebo JavaScriptu návštěvníka. Dokončený inventář je~splatný po~hodině; rozpracovaný sken pokračuje z~checkpointu. Bez příchozích požadavků se~PHP samo neprobudí: práce počká na~další vhodnou návštěvu. Nevytváří se~řetězec self-requestů ani trvalý proces.
+
+Naměřený eligible backlog do~128~MiB včetně dostane při podporovaném dokončení odpovědi pokus do~600~ms a~osmi krátkých částí; větší backlog do~120~ms a~dvou částí. Bez této podpory je~rozpočet přijímání práce 40~ms a~dvě části a~klient může na~tuto krátkou závěrečnou práci čekat. Jde o~limity přijímání práce, nikoli záruku latence systémových operací. PHP worker zůstává obsazený i~po~dokončení odpovědi. Společný 60sekundový throttle, neblokující zámky, leases veřejných požadavků a~signály nových návštěv dávají přednost frontendu. Jedna část připouští nejvýše 60~ms, inventář 5000 pozorování a~katalog 4096 jmen, mazání 180 operací; přírůstek paměti i~volná rezerva PHP mají hranici osm MiB. Mnoho drobných souborů proto pokračuje mezi návštěvami i~pod~128~MiB. Kompletně ověření kandidáti se~mažou už~během inventáře; sken a~mazání se~férově střídají.
+
+Neschválený ruční náhled po~patnácti minutách nečinnosti nahradí nový plán; staré ID se~odmítne a~nikdy automaticky neschválí. Schválené mazání přežije přerušení. Pokusy, skutečný postup, stáří pozorování, splatnost, aktuální backlog a~smazané bajty jsou oddělené od~historických měření; samotné HTTP 200 nic neprokazuje. Volitelný CLI či chráněný HTTPS cron dodává příležitosti i~bez návštěv a~připouští nejvýše deset sekund a~32 částí. Pro návštěvnickou automatiku není potřeba nastavovat hosting. Viz~\filepath{docs/CACHE_MAINTENANCE.md}. Pracovní složky mají pevně 24~hodin, ZIPy sedm dní a~obnova updateru zůstává kontextová bez TTL.
+
+Ruční běh ihned zobrazí diagnostické ID a~průběh s~odkazem na~filtrovaný protokol.
+Události popisují zámky, kontrolní body, prohlédnuté položky, uvolněné bajty
+a~bezpečné kódy chyb. Blokování uvádí vlastníka; vynucení jej neobchází.
+Selhání zápisu protokolu je~viditelné v~diagnostice; záložní zápis míří
+do~chybového protokolu PHP. Násilné ukončení procesu může zanechat neúplný průběh.
+
+Tlačítko \emph{Kopírovat log} v~detailech zkopíruje aktuální JSON průběh.
+Tenký progressbar používá známé počty položek fáze; neznámý rozsah je~neurčitý.
+\emph{Zastavit aktualizaci} využívá bezpečné zrušení před aktivací a~neobchází
+aktivaci ani zámky. Průběh se~obnovuje pouze pro~čtení při viditelném panelu;
+aktualizaci tím nespouští ani neposouvá.
+Selhání zobrazí bezpečnou chybu a~referenci updateru také v~kopírovaném logu.
+Dokončený počet položek fáze (100\%) neznamená úspěšnou validaci.
+Kopírovaný checkpoint obsahuje také stáří, stav worker zámku, pohyb počítadel
+a~dostupnou historii chyby před opakováním. Uložený stav running nedokazuje
+aktivní práci; volný zámek je~jen okamžitý odečet.
 \index{p00135@plánovaná údržba}
 \index{c00019@cron!u00241@údržba webu}
 
@@ -2568,6 +2629,14 @@ Pracovní postup přidá neměnný výchozí bod přímo za vybraný commit
 stávající poznámky AI, uzamčený TinyTeX, všechny čtyři příručky, manifesty
  a~úplnou kvalifikaci přesného Q na~serverech GitHubu. Dřívější výchozí body a~již vydané
 \codeword{v\_0.126} zůstávají beze změny.
+
+Předchozí vydání s~tagem může ještě čekat na~ruční zveřejnění GitHub Release.
+U~předchůdce se~schématem~3 inicializace ověří původní archiv FULL integrace
+a~archiv BASIC rozdílu vydání před kontrolou přesného předchozího kandidáta,
+běhu a~pokusu, stromů Gitu a~lidského schválení. Důkazy současného vydání tyto
+archivy nenahrazují. Chybějící, vypršené, poškozené nebo cizí důkazy a~neúspěšné
+povinné úlohy inicializaci zastaví. Centrální regrese zahrnuje zahájení dalšího
+vydání před zveřejněním s~tímto aktuálním formátem důkazů.
 
 Po kvalifikaci a~přípravě artefaktů bot vytvoří jediný PR do main.
 Pracovní postup automaticky spustí dokončení na Q pomocí souboru již registrovaného

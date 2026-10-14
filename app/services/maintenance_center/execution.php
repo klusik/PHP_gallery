@@ -717,13 +717,17 @@ function maintenance_center_run_download_cleanup_operation(int $jobId, string $o
     }
 }
 
-/** Run exactly one cache/download cleanup owner slice per browser request. */
+/**
+ * Run one existing cache owner or independently resumable updater-trash slice.
+ * @param array{job:array{id?:int},task_state:array<string,mixed>} $context Central job identity and persisted task continuation state.
+ * @return array{done:bool,fraction:float,task_state:array<string,mixed>,activity:string,metrics?:array<string,mixed>,current_subtask?:string,warning?:string,warning_code?:string} Bounded task progress with actual removals and visible owner warnings.
+ */
 function maintenance_center_execute_downloads(array $context): array
 {
     $jobId = max(0, (int) (($context['job']['id'] ?? 0)));
     $taskState = (array) $context['task_state'];
     $operationIndex = max(0, (int) ($taskState['operation_index'] ?? 0));
-    $operations = ['download_manifests', 'legacy_download_artifacts', 'zip_cache'];
+    $operations = ['updater_prune_trash', 'download_manifests', 'legacy_download_artifacts', 'zip_cache', 'cache_lifecycle'];
     if (!isset($operations[$operationIndex])) {
         return [
             'done' => true,
@@ -739,8 +743,40 @@ function maintenance_center_execute_downloads(array $context): array
     $rows = 0;
     $advance = true;
     $activity = '';
+    $bytes = 0;
 
-    if ($operation === 'download_manifests') {
+    if ($operation === 'cache_lifecycle') {
+        $before = cache_lifecycle_status();
+        $result = maintenance_center_run_download_cleanup_operation($jobId, $operation, static fn (): array => cache_lifecycle_scheduled_slice(true));
+        $lifecycle = $result['value'];
+        $after = cache_lifecycle_status();
+        $same = $before['id'] === $after['id'];
+        $files = max(0, $after['removed'] - ($same ? $before['removed'] : 0));
+        $bytes = max(0, $after['bytes_removed'] - ($same ? $before['bytes_removed'] : 0));
+        $advance = empty($result['ok']) || !empty($lifecycle['skipped']) || empty($lifecycle['ok']) || $after['phase'] === 'complete';
+        if ($after['partial'] || empty($result['ok']) || !empty($lifecycle['skipped']) || empty($lifecycle['ok'])) {
+            $warning = maintenance_center_runtime_text('admin.cache_lifecycle.central_partial', 'Cache lifecycle has protected, partial or unavailable work; inspect its preview and diagnostics.');
+        }
+        $taskState['cache_lifecycle'] = $after;
+        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+        $activity = maintenance_center_runtime_text('admin.cache_lifecycle.central_progress', 'Cache lifecycle {phase}: {files} removed, {bytes} bytes reclaimed.',
+            ['phase'=>$after['phase'],'files'=>$files,'bytes'=>$bytes]);
+    } elseif ($operation === 'updater_prune_trash') {
+        $result = maintenance_center_run_download_cleanup_operation($jobId, $operation,
+            static fn (): array => application_update_run_scheduled_cache_cleanup(true));
+        $prune = $result['value'];
+        $files = max(0, (int) ($prune['removed'] ?? 0));
+        $bytes = max(0, (int) ($prune['bytes_removed'] ?? 0));
+        $advance = empty($result['ok']) || empty($prune['ok']) || !empty($prune['skipped']) || !empty($prune['done']);
+        if (empty($result['ok']) || empty($prune['ok']) || !empty($prune['skipped'])) {
+            $warning = maintenance_center_runtime_text('admin.maintenance_center.runtime.updater_gc_blocked',
+                'Updater trash cleanup paused or failed; inspect cache GC diagnostics before retrying.');
+        }
+        $taskState['updater_cache_gc'] = $prune;
+        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+        $activity = maintenance_center_runtime_text('admin.maintenance_center.runtime.updater_gc_slice',
+            'Updater trash cleanup removed {files} file(s), reclaiming {bytes} bytes.', ['files' => $files, 'bytes' => $bytes]);
+    } elseif ($operation === 'download_manifests') {
         $result = maintenance_center_run_download_cleanup_operation($jobId, $operation, static fn (): array => cleanup_download_manifest_cache());
         $manifest = $result['value'];
         $files = max(0, (int) ($manifest['files_deleted'] ?? 0)) + max(0, (int) ($manifest['partials_deleted'] ?? 0));
@@ -812,14 +848,14 @@ function maintenance_center_execute_downloads(array $context): array
     $done = $operationIndex >= count($operations);
     $fraction = $done ? 1.0 : min(0.99, max(0.05, $operationIndex / count($operations)));
     if (!$advance && $operation === 'download_manifests') {
-        $fraction = min(0.32, max(0.05, ((int) ($taskState['manifest_slices'] ?? 1) / 10) * 0.32));
+        $fraction = ($operationIndex + min(0.99, (int) ($taskState['manifest_slices'] ?? 1) / 10)) / count($operations);
     }
 
     return [
         'done' => $done,
         'fraction' => $fraction,
         'task_state' => $taskState,
-        'metrics' => ['files_removed' => $files, 'rows_removed' => ['download_cache' => $rows]],
+        'metrics' => ['files_removed' => $files, 'updater_cache_bytes_removed' => $bytes, 'rows_removed' => ['download_cache' => $rows]],
         'current_subtask' => $operation,
         'warning' => $warning,
         'warning_code' => $warning !== '' ? 'downloads_cache.' . $operation : '',

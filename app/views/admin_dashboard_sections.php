@@ -428,26 +428,143 @@ function view_render_admin_dashboard_gps_override_reset(int $overrideCount): voi
 /**
  * Render maintenance tools for generated media and archives.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Prepared thumbnail, cron and cache-evidence view model.
+ * @return void Emits compact cache controls, two media groups and existing tool shortcuts.
  */
 function view_render_admin_dashboard_media_tools(array $model): void
 {
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.dashboard.media_cache_kicker', 'Media'),
-        'title' => t('admin.dashboard.media_cache_title', 'Generated files and archives'),
-        'description' => t('admin.dashboard.media_cache_hint', 'Thumbnail cache, archive downloads, and physical filename maintenance.'),
-        'class' => 'admin-dashboard-subtab-heading',
-    ]);
-    echo '<div class="admin-maintenance-grid">';
-    view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
-    view_render_admin_dashboard_site_maintenance_card($model, 'admin-maintenance-card');
+    echo '<div class="admin-media-cache-workspace"><div class="admin-cache-owner-grid">';
+    view_render_admin_dashboard_cache_cleanup_card(view_admin_dashboard_array($model, 'site_maintenance_status'));
+    $maintenance = view_admin_dashboard_array($model, 'site_maintenance_status');
+    view_render_admin_dashboard_cache_lifecycle_card(is_array($maintenance['cache_lifecycle'] ?? null) ? $maintenance['cache_lifecycle'] : []);
+    echo '</div><div class="admin-media-cache-tools">';
     if (view_admin_dashboard_feature_enabled($model, 'downloads')) {
-        view_render_admin_dashboard_archive_card('admin-maintenance-card');
+        view_render_admin_dashboard_archive_card('admin-maintenance-card admin-media-shortcut');
     }
     if (view_admin_dashboard_feature_enabled($model, 'media_renamer')) {
-        view_render_admin_dashboard_media_renamer_card('admin-maintenance-card');
+        view_render_admin_dashboard_media_renamer_card('admin-maintenance-card admin-media-shortcut');
     }
-    echo '</div>';
+    echo '</div><div class="admin-maintenance-grid admin-media-maintenance-grid">';
+    view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
+    view_render_admin_dashboard_site_maintenance_card($model, 'admin-maintenance-card');
+    echo '</div></div>';
+}
+
+/**
+ * Render measured cache ownership and explicit preview/approval controls from prepared state.
+ * @param array<string,mixed> $status Prepared lifecycle id/phase, aggregate totals and policies; an empty state remains explicitly unmeasured.
+ * @return void Emits one compact control row and status line; operational evidence and producer policies stay in native details without domain service calls.
+ */
+function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
+{
+    $phase = (string) ($status['phase'] ?? 'idle');
+    $epoch = static fn (int $value): string => $value > 0 ? gmdate('Y-m-d H:i:s\Z', $value) : '—';
+    echo '<section class="admin-maintenance-card admin-cache-lifecycle" data-admin-cache-lifecycle data-admin-cache-cleanup><div class="admin-cache-cleanup-header"><h2>'
+        . e(t('admin.cache_lifecycle.title', 'Cache inventory and retention')) . '</h2><form method="post" action="' . e(url_for('admin_site_maintenance_settings'))
+        . '" data-cache-lifecycle-form>' . csrf_field() . '<input type="hidden" name="preview_id" value="' . e((string) ($status['id'] ?? '')) . '">';
+    foreach (['cache_inventory_start'=>['Scan cache', !in_array($phase, ['inventory','cleanup'], true)],
+        'cache_inventory_step'=>['Continue scan', $phase === 'inventory'],
+        'cache_cleanup_start'=>['Clean eligible cache', $phase === 'preview'],
+        'cache_cleanup_step'=>['Continue cleanup', $phase === 'cleanup']] as $action => [$label, $visible]) {
+        echo '<button type="submit" class="secondary" name="site_maintenance_action" value="' . e($action) . '"' . ($visible ? '' : ' hidden') . '>'
+            . e(t('admin.cache_lifecycle.' . $action, $label)) . '</button> ';
+    }
+    echo '</form></div><p role="status" data-cache-lifecycle-status>' . e(t('admin.cache_lifecycle.initial', 'Phase: {phase}. Observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
+        ['phase'=>$phase,'bytes'=>format_bytes((int) ($status['bytes'] ?? 0)), 'eligible'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
+            'reclaimed'=>format_bytes((int) ($status['bytes_removed'] ?? 0))]))
+        . (!empty($status['partial']) ? ' ' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) : '')
+        . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
+        . e(t('admin.cache_lifecycle.progress_label', 'Cache action progress')) . '" style="width:100%;height:4px"></progress>'
+        . '<details class="admin-media-details"><summary>' . e(t('admin.cache_lifecycle.policies', 'Sizes and retention by owner'))
+        . ' · <span data-cache-scheduler-summary>' . e(t('admin.cache_lifecycle.scheduler_short', 'Scheduler: {health}', ['health'=>(string) ($status['scheduler_health'] ?? 'unobserved')]))
+        . '</span></summary><p class="muted" data-cache-scheduler-status>' . e(t('admin.cache_lifecycle.scheduler',
+            'Scheduler: {health}; last attempt {attempt}; last progress {progress}; observed {observed}; next due {due}; pending {pending}; reason {reason}.',
+            ['health'=>(string) ($status['scheduler_health'] ?? 'unobserved'),
+                'attempt'=>$epoch((int) ($status['last_attempt_at'] ?? 0)),'progress'=>$epoch((int) ($status['last_progress_at'] ?? 0)),
+                'observed'=>$epoch((int) ($status['last_observed_at'] ?? 0)),'due'=>$epoch((int) ($status['next_due'] ?? 0)),
+                'pending'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
+                'reason'=>(string) ($status['scheduler_reason'] ?? '')]))
+        . (!empty($status['stale']) ? ' ' . e(t('admin.cache_lifecycle.stale', 'Observation is stale or absent.')) : '')
+        . (!empty($status['stalled']) ? ' ' . e(t('admin.cache_lifecycle.stalled', 'No recent successful progress.')) : '')
+        . (!empty($status['superseded_manual_at']) ? ' ' . e(t('admin.cache_lifecycle.superseded', 'An idle manual preview was replaced; its old ID is invalid.')) : '')
+        . '</p><p class="muted">' . e(t('admin.cache_lifecycle.automatic', 'Automatic cleanup is enabled after installation/update. Ordinary visits supply short server-side opportunities; inventory is due hourly. Without visits work waits. Admin Features can disable it permanently across updates.')) . '</p><p class="muted">'
+        . e(t('admin.cache_lifecycle.scope', 'Only verified expired producer data and obsolete terminal update work are eligible. Originals, active leases, recovery references, .keep pins and unknown entries are preserved. Measurements exclude live inventory journals.'))
+        . '</p><table><thead><tr><th>' . e(t('admin.cache_lifecycle.owner', 'Owner')) . '</th><th>' . e(t('admin.cache_lifecycle.lifetime', 'Lifetime'))
+        . '</th><th>' . e(t('admin.cache_lifecycle.observed', 'Observed')) . '</th><th>' . e(t('admin.cache_lifecycle.eligible', 'Eligible')) . '</th></tr></thead><tbody>';
+    foreach ((array) ($status['policies'] ?? []) as $owner => $policy) {
+        $total = $status['totals'][$owner] ?? [];
+        $seconds = $policy['seconds'] ?? null;
+        $lifetime = $seconds === null ? t('admin.cache_lifecycle.context', 'Context / owner') : ($seconds >= 86400 ? ($seconds / 86400) . ' d' : ($seconds / 60) . ' min');
+        echo '<tr data-cache-owner="' . e((string) $owner) . '"><td title="' . e((string) ($policy['reason'] ?? '')) . '">' . e((string) ($policy['label'] ?? $owner))
+            . '</td><td>' . e($lifetime) . '</td><td data-cache-owner-bytes>' . e(format_bytes((int) ($total['bytes'] ?? 0)))
+            . '</td><td data-cache-owner-eligible>' . e(format_bytes((int) ($total['reclaimable_bytes'] ?? 0))) . '</td></tr>';
+    }
+    echo '</tbody></table><p>' . e(t('admin.cache_lifecycle.sample', 'Preview examples (up to 16 candidates; totals above describe the full plan):')) . '</p><ul data-cache-lifecycle-sample>';
+    foreach ((array) ($status['sample'] ?? []) as $item) {
+        echo '<li>' . e((string) ($item['path'] ?? '')) . ' — ' . e(format_bytes((int) ($item['bytes'] ?? 0))) . '</li>';
+    }
+    echo '</ul>';
+    if (!empty($status['partial'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) . '</p>';
+    echo '</details><details class="admin-media-details" data-cache-diagnostics hidden><summary>' . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
+        . '</summary><button type="button" class="secondary" data-cache-diagnostic-copy data-copied-label="' . e(t('admin.cache_cleanup.copied', 'Log copied.'))
+        . '" data-copy-failed-label="' . e(t('admin.cache_cleanup.copy_failed', 'Copy failed. Select the log and copy it manually.')) . '">'
+        . e(t('admin.cache_cleanup.copy', 'Copy log')) . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre></details></section>';
+}
+
+/**
+ * Render the manual updater-cache action from prepared evidence, without service calls.
+ * @param array<string,mixed> $status Prepared site-maintenance data with cache_cleanup evidence fields available, pending, blocked and bytes_reclaimed.
+ * @return void Emits a compact CSRF-protected action/status row with scope and recovery instructions in a native disclosure.
+ */
+function view_render_admin_dashboard_cache_cleanup_card(array $status): void
+{
+    $cache = is_array($status['cache_cleanup'] ?? null) ? $status['cache_cleanup'] : [];
+    $available = !empty($cache['available']);
+    $label = !$available ? t('admin.cache_cleanup.unknown', 'Cache status is unavailable; the action rechecks safety before deleting.')
+        : (!empty($cache['blocked']) ? t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.')
+            : t(!empty($cache['pending']) ? 'admin.cache_cleanup.pending' : 'admin.cache_cleanup.empty',
+                !empty($cache['pending']) ? 'Updater trash is waiting for cleanup.' : 'No staged updater trash is waiting.'));
+    echo '<section class="admin-cache-cleanup" data-admin-cache-cleanup><div class="admin-cache-cleanup-copy"><h2>'
+        . e(t('admin.cache_cleanup.title', 'Updater cache cleanup')) . '</h2></div>';
+    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" data-admin-cache-cleanup-form>' . csrf_field()
+        . '<input type="hidden" name="site_maintenance_action" value="cache_cleanup"><button type="submit" class="secondary" data-cache-cleanup-button data-idle-label="'
+        . e(t('admin.cache_cleanup.run', 'Clean updater cache now')) . '" data-continue-label="'
+        . e(t('admin.cache_cleanup.continue', 'Continue cleanup')) . '" data-working-label="'
+        . e(t('admin.cache_cleanup.working', 'Cleaning…')) . '" data-error-label="'
+        . e(t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.')) . '" data-diagnostic-label="'
+        . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID')) . '" data-log-failure-label="'
+        . e(t('admin.cache_cleanup.log_failed', 'Admin log write failed; see diagnostics / PHP error log.')) . '">'
+        . e(t('admin.cache_cleanup.run', 'Clean updater cache now')) . '</button></form>';
+    echo '<p class="admin-cache-cleanup-result" role="status" aria-live="polite" data-cache-cleanup-result>' . e($label);
+    if ($available) {
+        echo ' ' . e(t('admin.cache_cleanup.reclaimed', 'Reclaimed so far: {bytes}.',
+            ['bytes' => format_bytes(max(0, (int) ($cache['bytes_reclaimed'] ?? 0)))]));
+    }
+    echo '</p><progress class="admin-cache-progress" data-cache-progress max="100" hidden aria-label="'
+        . e(t('admin.cache_cleanup.progress_label', 'Action progress')) . '"></progress><span role="status" data-cache-job-progress></span>';
+    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" data-admin-cache-cleanup-form data-cache-job-stop hidden data-update-status-url="'
+        . e(url_for('admin_update', ['update_job_status' => 1])) . '" data-status-failed-label="'
+        . e(t('admin.cache_cleanup.status_failed', 'Could not refresh update progress.')) . '" data-phase-label="'
+        . e(t('admin.cache_cleanup.phase', 'Phase')) . '" data-failed-label="'
+        . e(t('admin.cache_cleanup.updater_failed', 'Update failed. Check Admin Updates.')) . '" data-worker-active-label="'
+        . e(t('admin.cache_cleanup.worker_active', 'Worker lock held')) . '" data-worker-idle-label="'
+        . e(t('admin.cache_cleanup.worker_idle', 'Worker activity not confirmed')) . '">' . csrf_field()
+        . '<input type="hidden" name="site_maintenance_action" value="cache_job_stop"><input type="hidden" name="job_id" value="">'
+        . '<button type="submit" class="button secondary" data-cache-cleanup-button data-idle-label="' . e(t('admin.cache_cleanup.stop', 'Stop update'))
+        . '" data-working-label="' . e(t('admin.cache_cleanup.stopping', 'Stopping…')) . '" data-error-label="' . e(t('admin.cache_cleanup.stop_failed', 'Update could not be stopped safely. Check diagnostics and Admin Updates.'))
+        . '" data-diagnostic-label="' . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID')) . '">' . e(t('admin.cache_cleanup.stop', 'Stop update')) . '</button></form>';
+    echo '<details class="admin-media-details" data-cache-diagnostics hidden><summary>'
+        . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics')) . '</summary><button type="button" class="button secondary" data-cache-diagnostic-copy data-copied-label="'
+        . e(t('admin.cache_cleanup.copied', 'Log copied.')) . '" data-copy-failed-label="'
+        . e(t('admin.cache_cleanup.copy_failed', 'Copy failed. Select the log and copy it manually.')) . '">'
+        . e(t('admin.cache_cleanup.copy', 'Copy log')) . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre><a data-cache-diagnostic-log href="'
+        . e(url_for('admin_logs')) . '">' . e(t('admin.cache_cleanup.open_logs', 'Open this run in logs')) . '</a></details>';
+    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.details', 'Scope and automatic cleanup')) . '</summary><p>'
+        . e(t('admin.cache_cleanup.scope', 'Removes only already-staged updater trash. Photos, thumbnails, downloads, rollback backups and unknown cache entries are preserved.')) . '</p><p>'
+        . e(t('admin.cache_cleanup.force_hint', 'One click runs one bounded step immediately, bypassing the timer but respecting active updates and maintenance locks. Continue for another step when needed.'))
+        . '</p><p>' . e(t('admin.cache_cleanup.cron_hint', 'For automatic progress without visitors, run this every minute:'))
+        . ' <code>php scripts/site_maintenance.php --cache-only</code></p><a href="' . e(url_for('admin_maintenance_center')) . '">'
+        . e(t('admin.cache_cleanup.other_owners', 'Open Maintenance Center for download-cache cleanup')) . '</a></details></section>';
 }
 
 /**
@@ -969,6 +1086,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
         echo '</div>';
     }
 
+    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.thumbnail_details', 'Compatibility, legacy files and metadata')) . '</summary>';
     echo '<form method="post" action="' . e(url_for('admin_thumbnail_compatibility_settings')) . '" class="admin-thumbnail-compatibility-form">' . csrf_field();
     echo '<span class="admin-thumbnail-card-subtitle">' . e(t('admin.thumbnails.compatibility_title', 'Thumbnail compatibility mode')) . '</span>';
     echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="modern"' . ($compatibilityMode === 'modern' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_modern_short', 'Modern')) . '</strong> ' . e(t('admin.thumbnails.compatibility_modern_help', 'Generate WebP thumbnails only where the server can write WebP.')) . '</span></label>';
@@ -1002,6 +1120,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="button" class="secondary" data-refresh-thumbnail-metadata>' . e(t('admin.thumbnails.refresh_metadata', 'Refresh thumbnail database')) . '</button>';
     echo '</form>';
 
+    echo '</details>';
     echo '<form method="post" action="' . e(url_for('admin_check_thumbnail_maintenance')) . '" class="admin-thumbnail-check-actions-form" data-thumbnail-check-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<span>' . e(t('admin.thumbnails.check_missing_hint', 'Check every imported photo and list galleries that need thumbnail generation. No thumbnails are created.')) . '</span>';
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
@@ -1039,8 +1158,9 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 /**
  * Render the scheduled site-maintenance settings card.
  *
- * @param array $model Model value.
- * @param string $className Class name value.
+ * @param array<string,mixed> $model Prepared site-maintenance status and centralized Settings URLs.
+ * @param string $className Card CSS classes from the dashboard composer.
+ * @return void Emits summarized cron status with settings/diagnostics in native disclosures.
  */
 function view_render_admin_dashboard_site_maintenance_card(array $model, string $className): void
 {
@@ -1072,6 +1192,8 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     echo '<article class="' . e($className) . ' admin-site-maintenance-card">';
     echo '<strong>' . e(t('admin.site_maintenance.title', 'Scheduled site maintenance')) . '</strong>';
     echo '<p class="admin-site-maintenance-copy">' . e(t('admin.site_maintenance.hint', 'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired. Admin log archiving is managed separately from the Admin Logs page.')) . '</p>';
+
+    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.schedule_details', 'Schedule, results and diagnostics')) . '</summary>';
 
     if ($stateStatus !== '') {
         echo '<div class="admin-site-maintenance-statusline"><strong>' . e(t('admin.site_maintenance.current_state', 'Current state')) . ':</strong> <span>' . e($stateStatus) . ($phase !== '' ? ' / ' . e($phase) : '') . '</span></div>';
@@ -1157,6 +1279,8 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
         'command' => 'php ' . dirname(dirname(__DIR__)) . '/scripts/site_maintenance.php --quiet',
     ])) . '</span>';
     echo '</div>';
+
+    echo '</details>';
 
     echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-actions">' . csrf_field();
     echo '<div class="nav">';

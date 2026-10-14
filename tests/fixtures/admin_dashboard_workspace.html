@@ -36,8 +36,8 @@ const originalFetch = window.fetch.bind(window);
 let assertions = 0, summaryReads = 0, galleryReads = 0, releaseSummary = null, releaseGalleries = null, primaryClicks = 0;
 /** Assert fixture behavior. @param {boolean} value Expected result. @param {string} message Failure context. @return {void} Counts successful checks. */
 function check(value, message) { if (!value) throw new Error(message); assertions++; }
-/** Wait for an observable condition. @param {function():boolean} predicate DOM or request condition. @return {Promise<void>} Resolves on success or throws a bounded failure. */
-async function until(predicate) { for (let i = 0; i < 160; i++) { if (predicate()) return; await new Promise(/** Schedule one fixture observation. @param {function():void} resolve Ready callback. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10)); } throw new Error('Fixture timeout'); }
+/** Wait for an observable condition. @param {function():boolean} predicate DOM or request condition. @param {number} timeoutMs Maximum observation duration in milliseconds; ordinary UI waits use 1600 and checkpoint polling uses 6000. @return {Promise<void>} Resolves on success or throws a bounded failure. */
+async function until(predicate, timeoutMs = 1600) { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 10)); } throw new Error('Fixture timeout'); }
 /** Activate a production tab. @param {string} name Surface name. @return {void} Clicks the native link. */
 function tab(name) { document.querySelector(`[data-admin-tab-target="admin-tab-${name}"]`).click(); }
 /** Return synthetic read JSON. @param {string} html Fragment. @return {Response} Owned fixture response. */
@@ -145,6 +145,144 @@ try {
     check(noScriptFrame.contentWindow.getComputedStyle(noScriptDocument.querySelector('#admin-tab-galleries')).display !== 'none' && noScriptFrame.contentWindow.getComputedStyle(noScriptDocument.querySelector('#admin-tab-overview')).display === 'none', 'Legacy hash links expose the no-script load fallback without a second visible panel');
     check(noScriptDocument.querySelector('#fallback').href.includes('dashboard_tab=galleries'), 'No-script loading uses the directly rendered gallery route');
     noScriptFrame.remove();
+    const cacheHost = document.createElement('aside');
+    cacheHost.dataset.panelOpen = '1';
+    document.body.append(cacheHost);
+    const cacheMarkup = '<section data-admin-cache-cleanup><form action="/fixture-cache-cleanup" method="post" data-admin-cache-cleanup-form><input name="csrf_token" value="fixture"><input name="site_maintenance_action" value="cache_cleanup"><button data-cache-cleanup-button data-idle-label="Clean" data-continue-label="Continue" data-working-label="Working" data-error-label="Safe failure">Clean</button></form><p data-cache-cleanup-result role="status"></p></section>';
+    const cacheTools = '<progress data-cache-progress max="100" hidden></progress><span data-cache-job-progress></span><form action="/fixture-cache-cleanup" data-admin-cache-cleanup-form data-cache-job-stop hidden data-update-status-url="/fixture-job-status"><input name="csrf_token" value="fixture"><input name="site_maintenance_action" value="cache_job_stop"><input name="job_id"><button data-cache-cleanup-button data-idle-label="Stop" data-working-label="Stopping" data-error-label="Stop failed">Stop</button></form><details hidden data-cache-diagnostics><summary>Diagnostics</summary><button type="button" data-cache-diagnostic-copy data-copied-label="Copied" data-copy-failed-label="Copy failed">Copy log</button><span data-cache-copy-status></span><pre data-cache-diagnostic-events></pre><a href="/logs" data-cache-diagnostic-log>Logs</a></details>';
+    cacheHost.innerHTML = cacheMarkup.replace('</section>', cacheTools + '</section>');
+    const cacheUrl = location.href;
+    let cacheWrites = 0;
+    let cacheCompletions = 0;
+    let cacheRelease = null;
+    let diagnosticReports = 0;
+    const priorFetch = window.fetch;
+    const blockingId = '20260824203916-bc38d8dd3a23';
+    let fixtureJobCancelled = false;
+    let fixtureJobFailed = false;
+    let progressReads = 0;
+    document.addEventListener('php-gallery:mutation-complete', (event) => {
+        if (event.detail.envelope?.mutation?.type === 'cache.cleanup') {
+            cacheCompletions++;
+            check(event.detail.envelope.mutation.entity_ids.length === 0 && event.detail.envelope.contexts.length === 0,
+                'Singleton cache completion preserves canonical IDs and public context scope');
+        }
+    });
+    window.fetch = async (url, options) => {
+        if (new URL(url, location.href).pathname === '/fixture-job-status') {
+            progressReads++;
+            check(new URL(url, location.href).searchParams.get('job_id') === blockingId && !options.body, 'Progress reads select a known job without advancing it');
+            return new Response(JSON.stringify({ok:true,diagnostic:{observed_at:1234,checkpoint_age_seconds:7,worker_lock:'available'},job:{id:blockingId,status:fixtureJobCancelled ? 'cancelled' : (fixtureJobFailed ? 'failed' : 'running'),stage:fixtureJobFailed ? 'package_validate' : 'extract',can_cancel:!fixtureJobCancelled,progress:{current:fixtureJobFailed ? 100 : 25,total:100},error:fixtureJobFailed ? {message:'Safe fixture package failure',reference:'fixture-validation-ref'} : null}}));
+        }
+        if (new URL(url, location.href).pathname !== '/fixture-cache-cleanup') return priorFetch(url, options);
+        if (options.body.get('site_maintenance_action') === 'cache_diagnostic') {
+            diagnosticReports++;
+            check(options.body.get('diagnostic_code') === 'invalid_json' && options.body.get('csrf_token') === 'fixture', 'Transport diagnostics keep safe codes and CSRF');
+            return new Response(JSON.stringify({ok:true}));
+        }
+        cacheWrites++;
+        check(options.method === 'POST' && options.body.get('ajax') === '1' && options.body.get('csrf_token') === 'fixture',
+            'Cache action retains POST/CSRF and explicitly requests JSON');
+        return new Promise((resolve) => { cacheRelease = resolve; });
+    };
+    cacheHost.querySelector('button').click();
+    await until(() => cacheWrites === 1 && cacheRelease !== null);
+    check(cacheHost.querySelector('[role="status"]').textContent.includes('Working · Diagnostic ID:')
+        && !cacheHost.querySelector('[data-cache-diagnostics]').hidden, 'Pending cleanup immediately exposes its correlation ID and diagnostics');
+    cacheHost.querySelector('form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    check(cacheWrites === 1, 'Concurrent cache submits share one browser write');
+    cacheRelease(new Response(JSON.stringify({ok:true,message:'Reclaimed 32 B; more remains',
+        diagnostic_id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',cache_diagnostics:[{stage:'completed',removed:2,admin_log_written:true}],
+        mutation:{type:'cache.cleanup',entity:'cache',action:'cleanup',entity_ids:[]},panel:null,contexts:[],
+        fallback:{redirect_url:'/must-not-navigate'},cache_cleanup:{can_continue:true,done:false}}), {headers:{'Content-Type':'application/json'}}));
+    await until(() => !cacheHost.querySelector('button').disabled);
+    check(cacheHost.querySelector('button').textContent === 'Continue' && cacheCompletions === 1
+        && cacheHost.querySelector('[role="status"]').textContent.includes('32 B'), 'Cache progress and explicit continuation remain visible');
+    check(cacheHost.querySelector('[data-cache-diagnostic-events]').textContent.includes('completed'), 'Server lifecycle evidence remains inspectable');
+    const priorClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    let copiedText = '';
+    Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async (text) => { copiedText = text; }}});
+    cacheHost.querySelector('[data-cache-diagnostics]').open = true;
+    cacheHost.querySelector('[data-cache-diagnostic-copy]').click();
+    await until(() => cacheHost.querySelector('[data-cache-copy-status]').textContent === 'Copied');
+    check(copiedText === cacheHost.querySelector('[data-cache-diagnostic-events]').textContent, 'Copy log preserves the complete current trace');
+    cacheHost.innerHTML = cacheMarkup.replace('</section>', cacheTools + '</section>');
+    cacheRelease = null;
+    cacheHost.querySelector('button').click();
+    await until(() => cacheWrites === 2 && cacheRelease !== null);
+    cacheRelease(new Response(JSON.stringify({ok:false,message:'Active update; no lock bypass',error_code:'cache_cleanup_busy'}),
+        {status:409,headers:{'Content-Type':'application/json'}}));
+    await until(() => !cacheHost.querySelector('button').disabled);
+    check(cacheHost.querySelector('[role="status"]').textContent.includes('no lock bypass') && cacheCompletions === 1,
+        'Dynamically injected cache controls retain delegated refusal handling');
+    check(location.href === cacheUrl && cacheHost.dataset.panelOpen === '1', 'Cache mutation never navigates or closes the panel');
+    cacheRelease = null;
+    cacheHost.querySelector('button').click();
+    await until(() => cacheWrites === 3 && cacheRelease !== null);
+    cacheRelease(new Response('<html>upstream failure</html>', {status:502}));
+    await until(() => !cacheHost.querySelector('button').disabled && diagnosticReports === 1);
+    check(cacheWrites === 3 && cacheHost.querySelector('[role="status"]').textContent.includes('invalid_json (HTTP 502)')
+        && location.href === cacheUrl && cacheHost.dataset.panelOpen === '1', 'Invalid JSON is visible and reported once without retrying cleanup or closing its panel');
+    cacheRelease = null;
+    cacheHost.querySelector('button').click();
+    await until(() => cacheWrites === 4 && cacheRelease !== null);
+    cacheRelease(new Response(JSON.stringify({ok:false,message:'Blocking updater',cache_diagnostics:[{updater_job_id:blockingId}]}),{status:409}));
+    await until(() => !cacheHost.querySelector('[data-cache-job-stop]').hidden);
+    check(progressReads === 1 && cacheHost.querySelector('[data-cache-progress]').value === 25, 'Compact progress uses actual phase counters');
+    check(cacheHost.querySelector('[data-cache-diagnostic-events]').textContent.includes('checkpoint_age_seconds')
+        && cacheHost.querySelector('[data-cache-job-progress]').textContent.includes('Worker activity not confirmed'), 'Running state is distinguished from actual worker lock ownership');
+    cacheHost.querySelector('[data-cache-diagnostic-copy]').click();
+    await until(() => cacheHost.querySelector('[data-cache-copy-status]').textContent === 'Copied');
+    check(copiedText.includes(blockingId), 'Dynamically replaced copy controls read the current diagnostic content');
+    await until(() => JSON.parse(cacheHost.querySelector('[data-cache-diagnostic-events]').textContent).find(item => item.stage === 'updater_checkpoint')?.observed_samples >= 2, 6000);
+    const sampledCheckpoint = JSON.parse(cacheHost.querySelector('[data-cache-diagnostic-events]').textContent).find(item => item.stage === 'updater_checkpoint');
+    check(sampledCheckpoint.progress_changed === false && sampledCheckpoint.delta_current === 0
+        && sampledCheckpoint.checkpoint_age_seconds === 7 && sampledCheckpoint.worker_lock === 'available', 'Unchanged counters and free worker lock are copied without claiming live progress');
+    fixtureJobFailed = true;
+    await until(() => cacheHost.querySelector('[data-cache-job-progress]').textContent.includes('fixture-validation-ref'), 6000);
+    check(cacheHost.querySelector('[data-cache-progress]').dataset.state === 'failed'
+        && cacheHost.querySelector('[data-cache-diagnostic-events]').textContent.includes('Safe fixture package failure'), 'Failed phase at 100 percent exposes the actual safe updater error and copied checkpoint');
+    cacheRelease = null;
+    cacheHost.querySelector('[data-cache-job-stop] button').click();
+    await until(() => cacheWrites === 5 && cacheRelease !== null);
+    fixtureJobCancelled = true;
+    cacheRelease(new Response(JSON.stringify({ok:true,message:'Stopped',mutation:{type:'update.cancel',entity:'update',action:'cancel',entity_ids:[]},panel:null,contexts:[],fallback:{redirect_url:'/must-not-navigate'}})));
+    await until(() => !cacheHost.querySelector('[data-cache-job-stop] button').disabled);
+    check(cacheHost.querySelector('[data-cache-job-stop]').hidden && cacheHost.querySelector('[data-cache-progress]').value === 100
+        && location.href === cacheUrl && cacheHost.dataset.panelOpen === '1', 'Confirmed stop completes in place and stops progress polling');
+    if (priorClipboard) Object.defineProperty(navigator, 'clipboard', priorClipboard); else delete navigator.clipboard;
+    window.fetch = priorFetch;
+    cacheHost.remove();
+    const lifecycleMarkup = '<form action="/fixture-lifecycle" data-cache-lifecycle-form><input name="preview_id" value=""><input name="csrf_token" value="fixture"><button type="submit" name="site_maintenance_action" value="cache_inventory_start">Scan</button><button type="submit" name="site_maintenance_action" value="cache_inventory_step" hidden>Continue scan</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_start" hidden>Approve</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_step" hidden>Continue cleanup</button></form><p data-cache-lifecycle-status></p><progress data-cache-lifecycle-progress max="100" hidden></progress><table><tr data-cache-owner="audits"><td data-cache-owner-bytes></td><td data-cache-owner-eligible></td></tr></table><ul data-cache-lifecycle-sample></ul><details data-cache-diagnostics hidden><summary>Diagnostics</summary><pre data-cache-diagnostic-events></pre></details>';
+    const lifecycleHost = document.createElement('section');
+    lifecycleHost.setAttribute('data-admin-cache-lifecycle','');
+    lifecycleHost.dataset.panelOpen = '1';
+    lifecycleHost.innerHTML = lifecycleMarkup;
+    document.body.append(lifecycleHost);
+    const lifecycleActions = [];
+    window.fetch = async (url, options) => {
+        if (new URL(url,location.href).pathname !== '/fixture-lifecycle') return priorFetch(url,options);
+        const action = options.body.get('site_maintenance_action');
+        lifecycleActions.push(action);
+        const phase = {cache_inventory_start:'inventory',cache_inventory_step:'preview',cache_cleanup_start:'cleanup',cache_cleanup_step:'complete'}[action];
+        const state = {id:'a'.repeat(32),phase,files:2,candidates:1,bytes:200,candidate_bytes:200,bytes_removed:phase==='complete'?200:0,
+            skipped:0,errors:0,blocked:0,partial:false,totals:{audits:{bytes:200,reclaimable_bytes:200}},sample:[{path:'test-audit/example',owner:'audits',bytes:200}]};
+        if (action !== 'cache_inventory_start') check(options.body.get('preview_id')===state.id,'Lifecycle continuation preserves exact preview identity');
+        return new Response(JSON.stringify({ok:true,message:'Lifecycle '+phase,mutation:{type:'cache.lifecycle',entity:'cache',action:'maintenance',entity_ids:[]},
+            panel:null,contexts:[],fallback:{redirect_url:'/must-not-navigate'},cache_lifecycle:state}));
+    };
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length===2 && !lifecycleHost.querySelector('button').disabled);
+    check(!lifecycleActions.includes('cache_cleanup_start') && !lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden,'Scan reaches preview without automatically approving deletion');
+    lifecycleHost.querySelector('[value="cache_cleanup_start"]').click();
+    await until(() => lifecycleActions.length===4 && !lifecycleHost.querySelector('button').disabled);
+    check(lifecycleHost.querySelector('[data-cache-lifecycle-progress]').value===100 && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1','Approved lifecycle completes in place and retains panel/URL');
+    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length===6 && !lifecycleHost.querySelector('button').disabled);
+    check(!lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden && location.href===cacheUrl,'Dynamically rerendered lifecycle controls retain capture delegation without rebinding');
+    lifecycleHost.remove();
+    window.fetch = priorFetch;
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
 } catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
 </script></body></html>

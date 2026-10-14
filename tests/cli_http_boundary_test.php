@@ -175,6 +175,22 @@ $apacheCoverageComplete = false;
 try {
     cli_http_check(mkdir($fixture, 0700), 'Could not create isolated HTTP fixture directory.');
     file_put_contents($fixture . '/.cli-http-owner', $token);
+    // This existing serial owner also owns the hosted cache HTTP child, keeping
+    // BASIC's inherited registry unchanged and all nested servers exclusive.
+    if (getenv('CI') === 'true') {
+        $visitorLog = $fixture . '/cache-visitor.log';
+        $visitor = proc_open([PHP_BINARY, __DIR__ . '/support/cache_lifecycle_public_http_fixture.php'],
+            [0 => ['pipe', 'r'], 1 => ['file', $visitorLog, 'w'], 2 => ['file', $visitorLog, 'a']],
+            $visitorPipes, $root, getenv(), ['bypass_shell' => true]);
+        cli_http_check(is_resource($visitor), 'Could not start serial hosted cache HTTP fixture.');
+        fclose($visitorPipes[0]);
+        $visitorExit = proc_close($visitor);
+        $visitorOutput = file_get_contents($visitorLog);
+        cli_http_check($visitorExit === 0 && is_string($visitorOutput)
+            && str_contains($visitorOutput, 'Public HTTP opportunities without Admin, cron, JavaScript or response detachment: PASS'),
+            'Hosted cache HTTP fixture failed: ' . (string) $visitorOutput);
+        echo $visitorOutput;
+    }
     foreach (['app', 'scripts'] as $tree) {
         cli_http_copy_tree($root . '/' . $tree, $fixture . '/' . $tree,
             static fn(string $relative): bool => str_ends_with($relative, '.php') || basename($relative) === '.htaccess');

@@ -123,12 +123,14 @@ Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
 Gallery\Services\admin_test_run_create|variable_callable|$callback()
 Gallery\Services\admin_test_run_create|variable_callable|$phase()
 Gallery\Services\application_autoupdate_maybe_run|variable_callable|$loadDependencies()
+Gallery\Services\application_update_cache_blocking_job_diagnostic|variable_callable|$read()
 Gallery\Services\application_update_job_finalize|dynamic_function_exists|function_exists(dynamic)
 Gallery\Services\application_update_job_finalize|variable_callable|$callback()
 Gallery\Services\application_update_release_files|variable_callable|$priority()
 Gallery\Services\browser_thumbnail_rebuild_stream_file_payload|variable_callable|$emit()
 Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$emit()
 Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$writeEntry()
+Gallery\Services\cache_lifecycle_with_lock|variable_callable|$operation()
 Gallery\Services\content_translation_rows|dynamic_callback_argument|is_callable($contentLocalizationLoaderForTests)
 Gallery\Services\content_translation_rows|variable_callable|$contentLocalizationLoaderForTests()
 Gallery\Services\custom_css_visual_preview_css_has_imports|variable_callable|$decodeIdentifier()
@@ -173,6 +175,7 @@ Gallery\Services\schema_inspection_prime_table_snapshots|dynamic_callback_argume
 Gallery\Services\simbrief_description_build_localized_markdown|variable_callable|$replace()
 Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
 Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()
+Gallery\Services\site_maintenance_register_cache_trigger|variable_callable|$loadDependencies()
 Gallery\Services\site_maintenance_run_cleanup_operation|variable_callable|$callback()
 Gallery\Services\site_maintenance_with_lock|variable_callable|$callback()
 Gallery\Services\theme_background_with_writer_lock|variable_callable|$operation()
@@ -190,6 +193,7 @@ Gallery\Services\weighted_tag_suggestions_for_gallery|variable_callable|$addRows
 Gallery\Services\navigation_data_navigraph_exchange_code|variable_callable|$postForm()
 Gallery\Views\admin_gallery_report_table|dynamic_callback_argument|is_callable($column)
 Gallery\Views\view_telemetry_export_table|dynamic_callback_argument|is_callable($column)
+Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card|variable_callable|$epoch()
 SITES;
 
     $reviewed = [];
@@ -204,6 +208,7 @@ SITES;
             str_contains($signature, 'cms_route_from_request|') => 'injected-module-loader:routing-paths',
             str_contains($signature, 'application_autoupdate_maybe_run|'),
             str_contains($signature, 'site_maintenance_register_request_trigger|'),
+            str_contains($signature, 'site_maintenance_register_cache_trigger|'),
             str_contains($signature, 'admin_log_archive_register_request_trigger|') => 'injected-module-loader:explicit-module-id',
             str_contains($signature, 'maintenance_center_load_task_dependencies|') => 'injected-module-loader:maintenance-center-task-worker',
             str_contains($signature, 'application_update_job_finalize|') => 'string-callbacks:required-updater-cache-roots',
@@ -214,6 +219,9 @@ SITES;
             str_contains($signature, 'public_visual_preview_inherit_referrer_context|') => 'visual-preview-referrer:local-origin-normalizer-no-module-edge',
             str_contains($signature, 'image_decode_gd_path_result|') => 'runtime-function:optional-gd-decoder',
             str_contains($signature, 'navigation_data_navigraph_exchange_code|') => 'injected-oauth-transport:default-http-post-remains-static',
+            str_contains($signature, 'application_update_cache_blocking_job_diagnostic|') => 'updater-gc:local-bounded-json-reader-no-module-edge',
+            str_contains($signature, 'cache_lifecycle_with_lock|') => 'cache-lifecycle:caller-owned-static-operation-closure',
+            str_contains($signature, 'view_render_admin_dashboard_cache_lifecycle_card|') => 'cache-lifecycle-view:local-utc-formatter-no-module-edge',
             default => 'caller-owned-or-local-callback:no-module-edge',
         };
     }

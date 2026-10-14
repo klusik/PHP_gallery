@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.131.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.132. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -1441,3 +1441,14 @@ The semantics migration delegates persistence to `app/models/gallery_description
 Established installations swap explicit historical orientations and retain the old effective global default if none was saved. Nullable overrides remain inherited; fresh installs keep the corrected vertical default. The transactional `gallery_description_layout_semantics_version=2` checkpoint and independent document `description_layout_semantics_version` markers prevent double conversion on retry. Converted gallery values advance edit revisions and public content revision.
 
 Feature plans reuse existing feature/revision columns and locked snapshots; no plan table is created. Password quick access changes only existing password hash/access mode after verified schema/revision checks. `admin_legacy_upload_navigation_enabled` uses `app_settings`, default `0`. Uploads and mobile connections retain their original storage and distinct issuance/revocation policy.
+
+## Automatic cache preference lifecycle
+
+Migration `202610140001_automatic_cache_cleanup.php` inserts
+`feature_flag.automatic_cache_cleanup.enabled=1` into existing `app_settings`
+only when absent. It runs through ordinary installation/update migrations and
+leaves explicit ON/OFF unchanged on replay. No new table, duplicate domain switch
+or cron registration is introduced. The canonical capability declares fresh ON;
+the existing fresh-default seeder preserves explicit preferences. The installer
+fixture checks installation ON, missing-preference upgrade ON and replay after
+explicit OFF against its own disposable database.

@@ -297,6 +297,18 @@ function feature_capability_definitions(): array
                 'usage_collect',
             ],
         ],
+        'automatic_cache_cleanup' => [
+            'group' => 'admin_tools',
+            'label' => t('admin.features.automatic_cache_cleanup.label', 'Automatic cache cleanup'),
+            'description' => t('admin.features.automatic_cache_cleanup.description', 'Advance verified cache retention in short server-side steps during ordinary visits. Inventory is due hourly; without visits work waits. Explicit OFF is preserved across updates.'),
+            'default_enabled' => true,
+            'fresh_default_enabled' => true,
+            'dependencies' => [],
+            'routes' => [],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['background-work', 'writes-files', 'destructive-maintenance'],
+            'settings_route' => 'admin_features',
+        ],
         'admin_test_runs' => [
             'group' => 'admin_tools',
             'label' => t('admin.features.admin_test_runs.label', 'Enable test runs for admins'),

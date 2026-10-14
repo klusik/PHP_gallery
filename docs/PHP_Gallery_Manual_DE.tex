@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.131.1}
+\newcommand{\version}{0.132}
 \newcommand{\manualdate}{14.~Oktober~2026}
 
 \hypersetup{
@@ -2033,6 +2033,73 @@ Der administrative Ablauf \ui{Integrität} prüft integritätsverwaltete Kerndat
 Bei verfügbarer Entwicklungsdiagnose kann ein angemeldeter Administrator für die aktuelle Galerie einen \ui{Benchmark zum Laden der öffentlichen Galerie} starten. Der Browser lädt die Galerie mehrfach in einem verborgenen Frame desselben Ursprungs mit anonymer Vorschau, kombiniert PHP-Darstellungszähler mit Browsernavigationstiming und bietet anschließend das Benchmarkprotokoll als JSON an. Verwenden Sie zum Vergleich zweier Änderungen dieselbe Galerie, denselben Präsentationsmodus und dieselben Netzwerk-/Cachebedingungen; der Benchmark ist als Vorher-/Nachhermessung nützlicher denn als universelle Punktzahl.
 
 \subsection{Geplante Websitewartung}
+
+Unter Administration > Wartung > Medien und Cache startet \emph{Updater-Cache
+jetzt bereinigen} einen begrenzten Schritt direkt auf der Seite. Entfernt wird
+nur bereits ausgelagerter Abfall in \filepath{cache/updates/prune-trash}; Fotos,
+Vorschaubilder, Downloads, Rollback-Sicherungen und unbekannte Daten bleiben
+erhalten. Die erzwungene Ausführung überspringt den Zeitabstand, respektiert aber
+aktive Updates und Wartungssperren. Bei verbleibendem Abfall verwenden Sie
+\emph{Bereinigung fortsetzen}. Das Ergebnis zeigt tatsächlich entfernte Dateien
+und freigegebene Bytes. Für automatische Fortsetzung führen Sie jede Minute
+\filepath{scripts/site_maintenance.php} mit \texttt{--cache-only} über Hosting-Cron
+aus. Die Bereinigung ist unabhängig vom Vorschaubildzeitplan und führt keine
+globale Cache-Quote ein. Kompatibilität und Zeitplandiagnose bleiben in
+aufklappbaren Details verfügbar; der Download-Cache gehört zur Wartungszentrale.
+
+\paragraph{Gemessene Cache-Aufbewahrung.}
+Registrierte temporäre Browserprofile und versionierte Release-Arbeitskopien
+haben eine feste Lebensdauer von 24 Stunden. Nutzung verlängert sie nicht.
+Neue Browserprofile speichern den Erstellungszeitpunkt; ältere Arbeitskopien
+verwenden einen einmal gespeicherten Dateisystem-Zeitanker. Pins und unsichere
+oder belegte Ressourcen können die physische Löschung verzögern. Dauerhafte
+Release-Vorbereitungs- und Qualifikationsdaten bleiben geschützt.
+
+Medien und Cache bietet zusätzlich \emph{Cache analysieren} und die ausdrückliche
+Freigabe \emph{Geeigneten Cache bereinigen} für die konkrete Vorschau. Die Analyse
+löscht nichts und bleibt auf der Seite. Die kompakte Tabelle zeigt gemessene und
+bereinigbare Bytes, Beispiele, unvollständige Bereiche und tatsächliche Freigabe.
+Abgeschlossene Testaudits und verifizierte heruntergeladene CI-Diagnosen bleiben
+24 Stunden, verwaltete Download-ZIPs sieben Tage. Neue Audit-Besitzermarker
+ermöglichen auch die Bereinigung abgebrochener Berichte nach Ablauf und Freigabe
+der Produzentensperre. Updates haben keine zeitliche Ablaufgrenze: aktuelle
+Installation und letzte erfolgreiche Rollback-Daten erhalten aktuelle/vorherige
+Version; aktive Jobs, ausgewählte Beta-Wiederherstellung und Rollback-Quellen sind
+geschützt. Ältere verifizierte abgeschlossene/abgebrochene Jobs sind bereinigbar;
+fehlgeschlagene Jobs und Legacy-Sicherungen ohne Versionsidentität erfordern
+Prüfung. Unbekannte Daten, Originale, Upload-Fortsetzung und \texttt{.keep}-Marker
+bleiben erhalten. GitHub-Metadaten bleiben einen Tag; SimBrief-Entwürfe haben die
+bisherige 30-Minuten-Frist plus eine Minute Reserve. Cron mit
+\texttt{--cache-only} setzt auch diesen unabhängigen Lebenszyklus fort und gibt
+manuelle Vorschauen niemals selbst frei. Dichte, langsame oder unlesbare
+Verzeichnisse werden ausdrücklich als unvollständig geschützt. Ablauf bedeutet
+Eignung, keine sofortige Löschung. Das bestehende ZIP-Kapazitätslimit bleibt;
+eine globale Cache-Quote wird nicht eingeführt. Aktive Inventarjournale werden
+nicht zu den gemessenen Nutzdaten gezählt.
+
+Die automatische Cache-Bereinigung ist nach Installation und Update über die einzige Einstellung in Admin Features aktiviert; ein späteres ausdrückliches OFF bleibt bei Updates erhalten. Normale GET-Besuche der Startseite und physischer/Smart Galleries bieten kurze serverseitige Arbeitsmöglichkeiten ohne Cron, geöffnetes Admin-Dashboard oder Besucher-JavaScript. Abgeschlossene Inventare sind stündlich fällig; laufende Scans behalten ihren Prüfpunkt. Ohne eingehende Anfragen kann PHP sich nicht selbst aufwecken: Die Arbeit wartet auf den nächsten geeigneten Besuch. Es gibt keine Self-Request-Kette und keinen dauerhaften Prozess.
+
+Ein gemessener geeigneter Rückstand bis einschließlich 128~MiB erhält bei unterstütztem Antwortabschluss einen Versuch bis 600~ms und acht kurze Schritte; größere Rückstände erhalten 120~ms und zwei Schritte. Ohne diese Unterstützung beträgt das Aufnahmebudget 40~ms und zwei Schritte; der Client kann auf diese kurze Abschlussarbeit warten. Dies sind Aufnahmegrenzen, keine Latenzgarantie für Betriebssystemaufrufe. Auch nach Antwortabschluss bleibt der PHP-Worker belegt. Eine gemeinsame 60-Sekunden-Drossel, nicht blockierende Sperren, Vordergrund-Leases und Signale neuer Besuche geben dem Frontend Vorrang. Ein Schritt lässt höchstens 60~ms zu; Inventar: 5000 Beobachtungen und 4096 Katalognamen; Löschen: 180 Operationen. Zusätzlicher Speicher und freier PHP-Spielraum sind jeweils auf acht MiB begrenzt. Viele kleine Dateien werden daher auch unter 128~MiB über mehrere Besuche bearbeitet. Vollständig geprüfte Kandidaten dürfen während des Inventars entfernt werden; Scan und Löschung wechseln fair.
+
+Eine unbestätigte manuelle Vorschau wird nach fünfzehn Minuten Inaktivität durch einen neuen Plan ersetzt; die alte ID wird abgelehnt und niemals automatisch bestätigt. Bestätigte Löschprüfpunkte überstehen Unterbrechungen. Versuche, tatsächlicher Fortschritt, veraltete Beobachtungen, Fälligkeit, aktueller Rückstand und entfernte Bytes bleiben von historischen Messungen getrennt; HTTP 200 allein beweist nichts. Optionaler CLI- oder geschützter HTTPS-Cron bietet auch ohne Besucher Arbeitsmöglichkeiten mit höchstens zehn Sekunden und 32 Schritten. Für besucherbasierte Automatik ist keine Hosting-Einrichtung erforderlich. Siehe \filepath{docs/CACHE_MAINTENANCE.md}. Arbeitskopien behalten feste 24 Stunden, ZIPs sieben Tage; Updater-Recovery bleibt kontextabhängig ohne TTL.
+
+Manuelle Läufe zeigen sofort eine Diagnose-ID und einen Verlauf mit Link zum
+gefilterten Admin-Protokoll. Ereignisse zeigen Sperren, Prüfpunkte, untersuchte
+Einträge, freigegebene Bytes und sichere Fehlercodes. Blockierungen nennen den
+Besitzer; Erzwingen respektiert ihn. Fehler beim Protokollieren bleiben sichtbar,
+mit dem PHP-Fehlerprotokoll als bestmöglichem Ersatz. Ein hart beendeter Prozess
+kann einen unvollständigen Verlauf hinterlassen.
+
+\emph{Protokoll kopieren} kopiert den aktuellen JSON-Verlauf. Ein schmaler
+Fortschrittsbalken nutzt bekannte Zähler der Update-Phase; unbekannte Gesamtwerte
+bleiben unbestimmt. \emph{Update stoppen} nutzt die sichere Abbruchfunktion vor
+der Aktivierung und umgeht keine Sperren. Die sichtbare Anzeige liest nur
+Prüfpunkte und führt das Update nicht weiter.
+Fehler zeigen die sichere Meldung und Referenz auch im kopierten Verlauf.
+100\% der Phaseneinträge bedeuten keine erfolgreiche Validierung.
+Kopierte Prüfpunkte enthalten Alter, Worker-Sperre, Zähleränderung und verfügbare
+Fehlerhistorie vor Wiederholungen. Ein gespeicherter laufender Status beweist
+keine aktive Arbeit; die Sperrprüfung gilt nur für den beobachteten Moment.
 \index{g00137@geplante Wartung}
 \index{c00056@Cron!w00273@Websitewartung}
 
@@ -2576,6 +2643,16 @@ und übertragen Sie ihn in das Remote-Repository. Der Arbeitsablauf legt direkt
 nach dem gewählten Commit einen unveränderlichen Ausgangspunkt an und führt Stage~A/B, vorhandene KI-Notizen, gesperrtes
 TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q aus.
 Frühere Ausgangspunkte und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
+
+Ein Vorgänger mit Tag kann noch auf die manuelle Veröffentlichung des GitHub
+Release warten. Bei Schema~3 authentifiziert die Initialisierung dessen
+ursprüngliches FULL-Integrationsarchiv und BASIC-Release-Differenzarchiv vor der
+Prüfung des exakten vorherigen Kandidaten, Laufs und Versuchs, der Git-Bäume und
+der menschlichen Genehmigung. Nachweise der aktuellen Ausgabe ersetzen diese
+Archive nicht. Fehlende, abgelaufene, beschädigte oder fremde Nachweise und
+fehlgeschlagene Pflichtjobs blockieren die Initialisierung. Die zentrale
+Regression prüft den Start der nächsten Ausgabe vor der Veröffentlichung mit
+diesem aktuellen Nachweisformat.
 
 Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
 nach main und startet den Abschluss automatisch auf Q über die auf main bereits

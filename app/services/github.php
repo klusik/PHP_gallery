@@ -104,8 +104,9 @@ function cms_github_api_read_cache(string $url): array
  *
  * @param string $url URL used by this workflow.
  * @param int $status Status value.
- * @param array $headers Headers value.
+ * @param array<string,string> $headers Normalized response header names and scalar values cached for conditional requests.
  * @param string $body Body value.
+ * @return void Writes response metadata while holding its producer lease, or leaves cache unchanged when storage/lease acquisition is unavailable.
  */
 function cms_github_api_write_cache(string $url, int $status, array $headers, string $body): void
 {
@@ -132,7 +133,16 @@ function cms_github_api_write_cache(string $url, int $status, array $headers, st
         return;
     }
 
-    @file_put_contents(cms_github_api_cache_path($url), $json, LOCK_EX);
+    // Load the lease owner only for a write; public cache reads stay lightweight.
+    require_once __DIR__ . '/cache_lifecycle_storage.php';
+    $lease = cache_lifecycle_producer_lease('github-api/' . cms_github_api_cache_key($url) . '.json');
+    if (!is_resource($lease)) return;
+    try {
+        @file_put_contents(cms_github_api_cache_path($url), $json, LOCK_EX);
+    } finally {
+        flock($lease, LOCK_UN);
+        fclose($lease);
+    }
 }
 
 /**

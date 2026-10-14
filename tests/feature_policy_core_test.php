@@ -139,11 +139,18 @@ namespace {
         'advanced_database_maintenance',
         'media_renamer',
         'telemetry',
+        'automatic_cache_cleanup',
         'admin_test_runs',
     ];
 
-    feature_policy_core_assert(array_keys($definitions) === $expectedKeys, 'Canonical feature policy changed the expected set or order of the 34 Admin feature switches.');
+    feature_policy_core_assert(array_keys($definitions) === $expectedKeys, 'Canonical feature policy changed the expected set or order of Admin feature switches.');
     feature_policy_core_assert(feature_capability_validate_registry() === [], 'The canonical capability registry must validate without errors.');
+    feature_policy_core_assert(feature_capability_effective_enabled('automatic_cache_cleanup')
+        && ($definitions['automatic_cache_cleanup']['fresh_default_enabled'] ?? null) === true, 'Automatic cache must default ON for installation and upgrade fallback.');
+    set_feature_capability_enabled('automatic_cache_cleanup', false);
+    \Gallery\Services\feature_capability_seed_fresh_install_defaults();
+    feature_policy_core_assert(!feature_capability_effective_enabled('automatic_cache_cleanup'), 'Fresh-default replay overwrote explicit automatic cache OFF.');
+    set_feature_capability_enabled('automatic_cache_cleanup', true);
     feature_policy_core_assert(($definitions['picture_game']['dependencies'] ?? []) === ['image_voting'], 'Picture Game must canonically depend on Image Voting.');
     feature_policy_core_assert(($definitions['viewer_accounts']['default_enabled'] ?? null) === false, 'Viewer accounts must remain disabled by default.');
     feature_policy_core_assert(($definitions['admin_test_runs']['default_enabled'] ?? null) === false, 'Admin test runs must remain disabled by default.');
