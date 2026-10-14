@@ -278,6 +278,16 @@ Audits and AI/WinApp comparison scope use Qprev and endpoint tree comparisons.
 Published predecessor assets retain their original SHA-256 validation. A newer
 tagged predecessor may have no GitHub Release yet: resolve its two-parent merge,
 exact successful hosted Q qualification and complete bot PR/human review instead.
+For a schema-3 predecessor, this path authenticates that predecessor's original
+FULL integration archive and BASIC release-delta archive before calling the shared
+qualification verifier. The archives, provider digests, run/attempt identities,
+native owner inventory and exact Git trees belong to the predecessor; the current
+release's coverage cannot stand in for them. Missing, expired, corrupt or foreign
+archives and red integration owners block initialization without any ref write.
+The central `hosted_release_policy_test.mjs` exercises successor initialization
+from an unpublished schema-3 predecessor with real ZIP bytes, also covering an
+existing draft and the failing evidence variants. The older real-Git schema-2
+two-release fixture remains historical compatibility coverage.
 Unavailable/expired evidence fails closed. Completion automatically attaches the
 qualification archive, `release-evidence.json` and its SHA-256 to the draft for
 durable publication evidence. Actions retains `release-completion.json` and the

@@ -7,6 +7,7 @@
  * Responsibilities:
  *   - Exercise real qualification validators with immutable synthetic server records
  *   - Protect CI-first instructions, branch triggers and isolated release credentials
+ *   - Initialize a successor of an unpublished schema-3 release using authenticated FULL/BASIC ZIPs
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -17,6 +18,9 @@ import {validateRequest,verifyQualification,verifyFinalContent,requireQualificat
 import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,integrationCheckBinding} from '../.github/scripts/release-owner-authorization.mjs';
 import {dispatchPublishedWebsite} from '../.github/scripts/project-website-dispatch.mjs';
 import {verifyAutomaticCompletion} from '../.github/scripts/release-reconciliation.mjs';
+import {verifyPredecessor} from '../.github/scripts/release-origin.mjs';
+import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
+import {coverageFixtureZip} from './support/coverage_artifact_fixture.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 {
     const publication={repository:'owner/gallery',tag:'v_1.2.3'};
@@ -208,6 +212,111 @@ const basicJobs=[workflowJob('Select release coverage owner',800),
         'Complete release matrix / Complete required CI matrix']
         .map((name,index)=>workflowJob(bootstrapPrefix+name,900+index,'completed','skipped'))];
 assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,schema3Adapters),[]);
+// Start a second release while its schema-3 predecessor is tagged but still unpublished.
+// Real ZIP bytes exercise the production coverage loader, not prehydrated payload adapters.
+{
+    const checksum=bytes=>'sha256:'+createHash('sha256').update(bytes).digest('hex');
+    const report=Buffer.from(JSON.stringify({schema_version:1,profile:'basic',status:'PASS',
+        source:{head_sha:candidate,comparison_base:releaseA,worktree_dirty:false},
+        tasks:['php-lint-changed','js-lint-changed','source-documentation-changed'].map(id=>({id,status:'PASS'}))}));
+    const predecessor=structuredClone(schema3Record);
+    const retainedDelta={...deltaPayload,basic_report_sha256:checksum(report)};
+    const archives=new Map([
+        [501,coverageFixtureZip([['develop-integration.json',Buffer.from(JSON.stringify(integrationPayload))]])],
+        [502,coverageFixtureZip([['release-delta.json',Buffer.from(JSON.stringify(retainedDelta))],['basic-report.json',report]])],
+    ]);
+    predecessor.integration.artifact_sha256=checksum(archives.get(501));
+    predecessor.delta.artifact_sha256=checksum(archives.get(502));
+    const currentMain='7'.repeat(40),nextSource='d'.repeat(40),nextOrigin='c'.repeat(40);
+    const nextBranch='release/v_1.2.4';
+    const previousPr={number:91,user:{login:'github-actions[bot]'},state:'closed',merged:true,merged_at:'2026-10-02T00:00:00Z',
+        created_at:'2026-10-01T00:00:00Z',merge_commit_sha:currentMain,merged_by:{login:'github-actions[bot]'},
+        head:{sha:candidate,ref:predecessor.branch,repo:{full_name:record.repository}},
+        base:{ref:'main',sha:record.initial_main_sha,repo:{full_name:record.repository}}};
+    const releaseChecks=['Release qualification','Complete required CI matrix'].map((name,index)=>({id:1000+index,name,
+        app:{id:15368},head_sha:candidate,status:'completed',conclusion:'success',external_id:`release:123:1:${candidate}`}));
+    const state={publication:null,artifactPatch:null,corrupt:false,redOwner:false,head:nextSource,downloads:[],writes:[]};
+    const call=(path,method='GET',payload=null)=>{
+        if (method!=='GET') state.writes.push({path,method,payload});
+        if (path.endsWith('/collaborators/owner/permission')) return {permission:'admin'};
+        if (path.endsWith('/git/matching-refs/tags/v_1.2.4')) return [];
+        if (path.endsWith('/git/matching-refs/heads/'+nextBranch))
+            return [{ref:'refs/heads/'+nextBranch,object:{type:'commit',sha:state.head}}];
+        if (path.endsWith('/git/ref/heads/'+nextBranch)) return {object:{type:'commit',sha:state.head}};
+        if (path.endsWith('/git/ref/heads/develop')) return {object:{type:'commit',sha:nextSource}};
+        if (path.endsWith('/git/ref/tags/v_1.2.3')) return {object:{type:'commit',sha:currentMain}};
+        if (path.endsWith('/releases/tags/v_1.2.3')) {
+            if (state.publication) return state.publication;
+            throw new Error('BLOCKED_API_NOT_FOUND: predecessor GitHub Release is not published yet.');
+        }
+        if (path.endsWith('/commits/'+currentMain)) return {sha:currentMain,commit:{tree:{sha:'3'.repeat(40)}},
+            parents:[{sha:record.initial_main_sha},{sha:candidate}]};
+        if (path.endsWith('/commits/'+currentMain+'/pulls?per_page=100')) return [previousPr];
+        if (path.endsWith('/pulls/91')) return previousPr;
+        if (path.endsWith('/pulls/91/reviews?per_page=100')) return [{id:19,user:{login:'owner'},state:'APPROVED',
+            commit_id:candidate,submitted_at:'2026-10-01T12:00:00Z'}];
+        if (path.endsWith('/actions/runs/123')) return {id:123,...run};
+        if (path.endsWith(`/commits/${candidate}/check-runs?per_page=100&filter=all`))
+            return {total_count:releaseChecks.length,check_runs:releaseChecks};
+        const artifact=/\/actions\/artifacts\/(501|502)$/.exec(path);
+        if (artifact) {
+            const id=Number(artifact[1]),bytes=archives.get(id);
+            return {id,name:id===501?'develop-integration-record':'release-delta-evidence',expired:false,
+                digest:checksum(bytes),size_in_bytes:bytes.length,workflow_run:{id:id===501?456:123},...state.artifactPatch};
+        }
+        if (path.endsWith('/commits/'+nextSource)) return {sha:nextSource,tree:{sha:'2'.repeat(40)}};
+        if (path.endsWith('/git/commits/'+nextSource)) return {sha:nextSource,tree:{sha:'2'.repeat(40)}};
+        if (path.includes('/compare/') && (path.endsWith(candidate+'...'+nextSource)||path.endsWith(nextSource+'...'+nextSource)))
+            return {behind_by:0};
+        if (path.endsWith('/git/blobs') && method==='POST') return {sha:gitBlobSha(Buffer.from(payload.content))};
+        if (path.endsWith('/git/trees') && method==='POST') return {sha:'1'.repeat(40)};
+        if (path.endsWith('/git/commits') && method==='POST') return {sha:nextOrigin,parents:[{sha:nextSource}]};
+        return schema3Call(path);
+    };
+    const transport=(executable,args)=>{
+        if (executable==='gh') {
+            if (args[1].includes('matching-refs/tags/v_')) return JSON.stringify([[{ref:'refs/tags/v_1.2.3'}]]);
+            assert.match(args[1],/actions\/runs\/456\/attempts\/1\/jobs/);
+            const jobs=schema3Adapters.integrationJobs.map(job=>state.redOwner&&job.name.endsWith('Required Chromium fixtures')
+                ? {...job,conclusion:'failure'} : job);
+            return JSON.stringify([{total_count:jobs.length,jobs}]);
+        }
+        assert.equal(executable,'git');
+        if (args[0]==='fetch'||args[0]==='ls-tree') return '';
+        if (args[0]==='rev-parse') return currentMain;
+        if (args[0]==='push') {state.head=nextOrigin;return '';}
+        assert.fail('Unexpected successor origin command '+args.join(' '));
+    };
+    const adapters={predecessorRecord:predecessor,predecessorJobs:basicJobs,git:transport,
+        predecessorArtifacts:{download:(repository,id)=>{
+            assert.equal(repository,record.repository);state.downloads.push(id);
+            const bytes=Buffer.from(archives.get(id));if (state.corrupt) bytes[30]^=1;return bytes;
+        }}};
+    assert.equal(verifyPredecessor(call,record.repository,'v_1.2.3',adapters).previous_release_candidate_sha,candidate);
+    assert.deepEqual(state.downloads,[501,502],'Both original predecessor archives are authenticated.');
+    state.publication={tag_name:'v_1.2.3',draft:true,prerelease:false,assets:[]};
+    assert.equal(verifyPredecessor(call,record.repository,'v_1.2.3',adapters).previous_stable_sha,currentMain);
+    state.publication=null;
+    for (const patch of [{expired:true},{workflow_run:{id:999}},{digest:'sha256:'+'0'.repeat(64)}]) {
+        state.artifactPatch=patch;
+        assert.throws(()=>verifyPredecessor(call,record.repository,'v_1.2.3',adapters),/BLOCKED/);
+    }
+    state.artifactPatch=null;state.corrupt=true;
+    assert.throws(()=>verifyPredecessor(call,record.repository,'v_1.2.3',adapters),/digest/);
+    state.corrupt=false;state.redOwner=true;
+    assert.throws(()=>verifyPredecessor(call,record.repository,'v_1.2.3',adapters),/native owners/);
+    state.redOwner=false;
+    assert.throws(()=>verifyPredecessor(call,record.repository,'v_1.2.3',{
+        ...adapters,predecessorArtifacts:{download:()=>{throw new Error('BLOCKED missing predecessor archive.');}}}),/missing predecessor archive/);
+    assert.equal(state.writes.length,0,'Invalid predecessor evidence performs no writes.');
+    const initialized=startNewRelease({version:'1.2.4',selected:nextSource},record.repository,{...adapters,api:call,
+        context:{GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/'+nextBranch,GITHUB_SHA:nextSource,GITHUB_ACTOR:'owner'}});
+    assert.equal(initialized.state,'INITIALIZED');
+    assert.equal(initialized.origin_sha,nextOrigin);
+    assert.equal(initialized.selected_develop_sha,nextSource);
+    assert.equal(initialized.previous_stable_sha,currentMain);
+    assert.deepEqual(state.writes.find(write=>write.path.endsWith('/git/commits')).payload.parents,[nextSource]);
+}
 assert.throws(()=>verifyQualification(request,run,basicJobs,schema2Record,record.repository,candidate),
     /first-install bootstrap selection or skipped strict-path inventory is incomplete/);
 assert.throws(()=>verifyQualification(request,run,basicJobs,{...schema3Record,installer_required:true},record.repository,candidate,schema3Adapters),

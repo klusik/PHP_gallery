@@ -2844,6 +2844,13 @@ operator path and exact live GitHub protections. Tests
 `tests/hosted_release_policy_test.mjs`, `tests/release_origin_test.mjs`,
 `tests/release_reconciliation_test.mjs` and
 `tests/release_retirement_test.mjs` are registered with the central audit.
+The hosted policy suite also starts a successor release from a tagged but
+unpublished schema-3 predecessor. Shared in-memory ZIP fixtures feed the real
+coverage loader and verify both the predecessor's FULL integration archive and
+BASIC delta/report archive, rather than injecting already parsed payloads.
+It covers an existing unpublished draft and rejects expired/foreign provider
+metadata, corrupt or missing archives and red mandatory integration owners before
+initialization writes. Historical schema-2 real-Git lifecycle coverage remains.
 They use inert server/Git fixtures to reject changed origin bytes, stale main,
 missing owner review, incorrect release merge parents, non-linear reconciliation,
 wrong trees, lost released/parallel changes, red hosted checks, conflicts, active

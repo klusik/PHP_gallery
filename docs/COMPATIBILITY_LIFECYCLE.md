@@ -884,6 +884,20 @@ linear_release_graph_test.mjs, registered in the central audit. Direct CLI relea
 notes retain their explicit tag-based default; hosted preparation supplies verified
 release-side SHA and checks tree equality. Direct CLI usage is unknown.
 
+Tagged releases can precede manual GitHub Release publication. This permanent
+ordering is owned by `release-origin.mjs`: when published permanent assets are
+unavailable, schema-3 predecessor validation loads that predecessor's original
+FULL integration and BASIC release-delta archives through `coverage-artifacts.mjs`
+and supplies their authenticated payload/provider pairs to the shared verifier.
+Current-release evidence is never reused for the predecessor. This protects the
+supported ability to begin another release before publishing the prior draft;
+missing, expired, corrupt, foreign or red evidence remains blocking.
+Usage: observed on the attempted v_0.132 initialization after tagged v_0.131.1;
+other usage unknown. Regression: `hosted_release_policy_test.mjs` supplies real
+ZIP bytes, starts the successor and checks invalid evidence before writes. The
+schema-2 real-Git lifecycle remains separately covered. Preserve this path while
+manual publication may follow tagging; there is no automatic retirement date.
+
 ## Historical release evidence after automatic lifecycle simplification
 
 Release tooling owns permanent validation of existing schema-v1 origins,

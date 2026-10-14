@@ -2444,6 +2444,7 @@
         "tests/support/audit_route_probe_fixture.php",
         "tests/support/cache_lifecycle_public_http_fixture.php",
         "tests/support/cooperative_exchange_fixture.php",
+        "tests/support/coverage_artifact_fixture.mjs",
         "tests/support/dispatch_kernel.php",
         "tests/support/dng_policy_shims.php",
         "tests/support/fixed_clock_shim.php",

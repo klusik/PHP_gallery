@@ -24,7 +24,7 @@ import {isAncestor,matchingBranchSha} from './release-reconciliation.mjs';
 /** Initialize or reuse the origin of the exact pushed release branch.
  * @param {{version:string,selected:string}} request Branch-derived version and exact event commit.
  * @param {string} repository Exact owner/repository identity.
- * @param {{api?:function(string,string=,(InitializationJson|null)=):InitializationJson,git?:function(string,string[],(string|null)=):string,context?:Record<string,string|undefined>,evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated API, Git, event and fully bound predecessor readers.
+ * @param {import('./release-origin.mjs').PredecessorAdapters & {api?:function(string,string=,(InitializationJson|null)=):InitializationJson,context?:Record<string,string|undefined>}} adapters Optional isolated API, literal command, event and fully bound predecessor/archive readers.
  * @returns {{state:string,branch:string,origin_sha:string,candidate_sha:string,selected_develop_sha:string,previous_stable_sha:string}} Immutable origin and current preparation checkout.
  */
 export function startNewRelease(request,repository,adapters={}) {

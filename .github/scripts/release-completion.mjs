@@ -102,7 +102,7 @@ export function loadQualification(repository,sha,call=api,execute=command) {
 /** Verify complete successful hosted qualification, exact release head and immutable origin.
  * @param {CompletionRecord} record Retained candidate and predecessor identities.
  * @param {string} repository Expected repository.
- * @param {CompletionCoverage & {api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,publishedMainSha?:string,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers, authenticated coverage and exact predecessor evidence.
+ * @param {CompletionCoverage & import('./release-origin.mjs').PredecessorAdapters & {api?:CompletionApi,jobs?:import('./release-promotion.mjs').ReleaseJob[],publishedMainSha?:string}} adapters Optional isolated readers, authenticated current coverage and independently bound predecessor/archive evidence.
  * @returns {void} Throws for any stale source, red coverage, moved predecessor or changed origin.
  */
 export function verifyCandidate(record,repository,adapters={}) {
@@ -127,7 +127,7 @@ export function verifyCandidate(record,repository,adapters={}) {
  * @param {CompletionRecord} record Current run's successful exact-Q record.
  * @param {string} repository Expected repository.
  * @param {string} notes Validated target-version patch notes.
- * @param {{api?:CompletionApi,evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated readers and exact predecessor evidence.
+ * @param {import('./release-origin.mjs').PredecessorAdapters & {api?:CompletionApi}} adapters Optional isolated readers and independently bound predecessor/archive evidence.
  * @returns {{number:number,html_url:string}} Exact PR awaiting the sole owner approval, or a verified already merged PR reused for completion recovery.
  */
 export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
@@ -203,7 +203,7 @@ export async function waitForMergeability(repository,number,candidate,previousMa
  * @param {CompletionRecord} record Fully qualified exact-Q identities.
  * @param {string} repository Expected repository.
  * @param {number} number Server PR number derived from the review event.
- * @param {CompletionCoverage & {api?:CompletionApi,git?:CompletionCommand,jobs?:import('./release-promotion.mjs').ReleaseJob[],evidence?:import('./release-promotion.mjs').PublicationEvidence,predecessorRecord?:CompletionRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated server, Git, authenticated coverage and bound predecessor readers.
+ * @param {CompletionCoverage & import('./release-origin.mjs').PredecessorAdapters & {api?:CompletionApi,jobs?:import('./release-promotion.mjs').ReleaseJob[]}} adapters Optional isolated server, literal command, authenticated current coverage and independently bound predecessor/archive readers.
  * @returns {CompletionResult} Completion with independently reported develop synchronization and immutable manual-publication evidence.
  */
 export function completeRelease(record,repository,number,adapters={}) {

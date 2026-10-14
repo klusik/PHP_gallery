@@ -2710,6 +2710,14 @@ target it~then runs only BASIC changed-source checks for A..B plus proof that
 changes belong to~the~approved release inputs; it~does not rerun the~functional
 matrix on~B. Historical origins and~published \codeword{v\_0.126} remain unchanged.
 
+A~tagged predecessor may still await manual GitHub Release publication. For~a~schema-3
+predecessor, initialization authenticates its~original FULL integration archive
+and~BASIC release-delta archive before verifying the~exact prior candidate,
+run/attempt, Git trees and~human approval. Current-release evidence cannot replace
+those archives. Missing, expired, corrupt or~foreign evidence and~failed mandatory
+owners block initialization. Central regression coverage includes starting the~next
+release before publication with this~current evidence format.
+
 After qualification and~manual-publication assets succeed, the~bot opens one PR
 to~main and~automatically dispatches completion at~Q using the~workflow filename
 already registered on~main. The~maintainer approves its~exact Q head once.

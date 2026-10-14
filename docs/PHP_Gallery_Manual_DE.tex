@@ -2644,6 +2644,16 @@ nach dem gewählten Commit einen unveränderlichen Ausgangspunkt an und führt S
 TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q aus.
 Frühere Ausgangspunkte und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
 
+Ein Vorgänger mit Tag kann noch auf die manuelle Veröffentlichung des GitHub
+Release warten. Bei Schema~3 authentifiziert die Initialisierung dessen
+ursprüngliches FULL-Integrationsarchiv und BASIC-Release-Differenzarchiv vor der
+Prüfung des exakten vorherigen Kandidaten, Laufs und Versuchs, der Git-Bäume und
+der menschlichen Genehmigung. Nachweise der aktuellen Ausgabe ersetzen diese
+Archive nicht. Fehlende, abgelaufene, beschädigte oder fremde Nachweise und
+fehlgeschlagene Pflichtjobs blockieren die Initialisierung. Die zentrale
+Regression prüft den Start der nächsten Ausgabe vor der Veröffentlichung mit
+diesem aktuellen Nachweisformat.
+
 Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
 nach main und startet den Abschluss automatisch auf Q über die auf main bereits
 registrierte Workflow-Datei. Der Maintainer genehmigt den exakten Q-Stand einmal.
