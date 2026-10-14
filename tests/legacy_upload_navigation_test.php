@@ -128,5 +128,13 @@ namespace {
     }
     $controller = (string) file_get_contents(__DIR__ . '/../app/controllers/shared_layout.php');
     legacy_navigation_expect(str_contains($controller, "'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled()"), 'Controller prepares central navigation preference before rendering');
-    echo "Legacy upload navigation tests passed.\n";
+    foreach ([false, true] as $widgetsActive) {
+        ob_start();
+        \Gallery\Views\view_render_admin_sidebar('admin_theme', ['theme_widgets_active' => $widgetsActive]);
+        $themeSidebar = (string) ob_get_clean();
+        preg_match_all('/<a class="admin-menu-link is-active" href="([^"]+)"/', $themeSidebar, $activeLinks);
+        $expectedUrl = \Gallery\Core\e(\Gallery\Core\url_for('admin_theme', $widgetsActive ? ['widgets' => '1'] : []));
+        legacy_navigation_expect($activeLinks[1] === [$expectedUrl], 'Theme and Widgets must have exactly one correctly selected sidebar link');
+    }
+    echo "Legacy upload and Theme surface navigation tests passed.\n";
 }

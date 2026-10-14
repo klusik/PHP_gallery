@@ -2601,6 +2601,14 @@ The negative installed-dependency cases in `winapp/tests/test_build_installer.py
 
 The central audit registers `tests/admin_settings_workspace_browser_test.mjs` and `tests/admin_dashboard_workspace_browser_test.mjs` with isolated fixtures. These cover lazy sections, save/revert, failure/retry and panel persistence. PHP contracts cover Settings normalization/controller envelopes, deferred dashboard fragment validation/session release and indexed Overview totals. Live authenticated installation testing remains separate from these fixtures.
 
+`admin_settings_entry_runtime_test.php` executes the real owner resolver for literal registry entries and constructs the real PDF DPI entry, including its current/default resolvers. It converts PHP diagnostics into exceptions and verifies every accepted DPI plus rejected values before persistence. The lightweight test belongs to automatic FULL discovery; the bounded quick registry remains unchanged. Source-string contracts, controller doubles and static browser HTML do not execute the real registry; PHP syntax validation does not detect undefined runtime variables. BASIC deliberately remains syntax/documentation-only, so passing BASIC does not prove this regression test ran. This focused runtime test does not replace full authenticated Settings-page qualification.
+
+`frontend_operational_policy_test.mjs` imports `browser_module_link_scenarios.mjs` to link the production `gallery.js` static import graph with real ES modules, without stripping imports or evaluating UI code. This uses the inherited Node registry without changing BASIC authority inputs. Missing named exports fail before any browser journey. It also requires the PDF module to use the uploader's scoped Admin helper cache URL and keeps static/on-demand PDF versions identical. Fresh CI assets cannot reproduce every existing browser cache; verify Settings search in an already-used browser after deployment. A stale PDF dependency can prevent the entire entry graph from initializing, including unrelated Settings search handlers.
+
+The production-markup Theme Layout browser fixture starts at `#admin-gallery-count-badge` and verifies that both Layout and Cards & badges open, the counter mode control is visible, and the precise hash is preserved. Admin tab navigation resolves control anchors through their containing primary panel and reveals nested panels; it retains direct-tab and unknown-hash behavior.
+
+The real sidebar rendering in `legacy_upload_navigation_test.php` checks that ordinary Theme and the controller-prepared Widgets surface each select exactly one matching link. Both share the `admin_theme` route, so route identity alone is insufficient; the view consumes prepared surface state without reading request globals.
+
 
 ## Administration and orientation live acceptance
 

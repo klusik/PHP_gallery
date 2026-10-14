@@ -37,14 +37,14 @@ import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } fr
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261013-images-preload-v1';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261014-settings-control-links-v2';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261013-icloud-auto-v2';
-import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261013-icloud-ui-v3';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261014-pdf-core-cache-v1';
+import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261014-pdf-core-cache-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';

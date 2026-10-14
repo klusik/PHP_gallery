@@ -12,7 +12,7 @@
  */
 import {stageIcloudZip} from './admin-icloud-download.js?v=20261013-icloud-auto-v2';
 import {createBrowserArchiveStream} from './browser-upload-archive-stream.js?v=20261013-icloud-auto-v2';
-import {uploadBrowserFileStream, browserArchiveUploadConfig, formatFileSize} from './admin-browser-upload.js?v=20261013-icloud-auto-v2';
+import {uploadBrowserFileStream, browserArchiveUploadConfig, formatFileSize} from './admin-browser-upload.js?v=20261014-pdf-core-cache-v1';
 import {adminOperationOwnsInput} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {i18n, i18nForElement, updateBasicProgress} from './admin-core.js?v=20261003-scoped-i18n-v1';
 

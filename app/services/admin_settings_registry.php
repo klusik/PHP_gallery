@@ -560,7 +560,7 @@ function admin_settings_owner_for_id(string $id): string
         return 'admin_settings_registry';
     }
     if ($id === 'gallery_pdf_render_dpi') {
-        return (string) gallery_pdf_render_dpi_validate((string) $value);
+        return 'gallery_pdf_settings';
     }
     if ($id === 'base_url') {
         return 'config.php / site_url';
@@ -697,6 +697,9 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     }
 
     $id = (string) ($entry['id'] ?? '');
+    if ($id === 'gallery_pdf_render_dpi') {
+        return (string) gallery_pdf_render_dpi_validate((string) $value);
+    }
     if (isset(admin_settings_browser_upload_definitions()[$id])) {
         return admin_settings_browser_upload_normalize_value($id, $value);
     }
