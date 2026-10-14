@@ -1,5 +1,40 @@
 # Patch notes
 
+## Version 0.132.1
+
+Updated automatic cache cleanup to support hosting environments where disk-capacity checks were unavailable or failed, while retaining bounded work and safeguards for protected data.
+
+### Highlights
+
+#### Automatic cache cleanup
+- Allowed checkpoint-guarded cleanup to proceed when disk capacity was unknown; known free space below 16 MiB continued to block work. [#212](https://github.com/klusik/PHP_gallery/issues/212)
+- Kept cleanup opt-out respected and protected unregistered originals during ordinary public visits.
+
+### Technical Details
+
+#### Backend
+- Updated `app/services/cache_lifecycle.php` and `app/services/cache_lifecycle/reclamation.php` to distinguish unknown capacity from measured free space and to stop cleanup if checkpoint writes failed.
+- Retained private capacity and exception-class evidence without storing exception messages or path-like class identities.
+
+#### Tests
+- Expanded scheduler coverage for low capacity, the 16 MiB threshold, and unavailable or throwing capacity probes.
+- Updated hosted HTTP fixtures to exercise disabled `disk_free_space()`, expired-payload deletion, protected originals, and explicit opt-out behavior.
+
+#### Documentation
+- Updated cache-maintenance and compatibility guidance, testing instructions, and all four maintained manual sources.
+- Initialized immutable origin and predecessor records for `v_0.132.1`.
+
+### User Impact
+
+#### For visitors
+- Ordinary public visits could continue advancing bounded cache cleanup on hosts without a usable disk-capacity check. Gallery content and visitor-facing workflows did not change.
+
+#### For administrators
+- An explicit cache-cleanup opt-out remained respected. No administrator-facing behavior changed.
+
+#### For maintainers
+- Capacity-check failures no longer prevented checkpoint-guarded cleanup, while known-low capacity and checkpoint-write failures continued to stop admission.
+
 ## Version 0.132
 
 Added bounded automatic cache maintenance during ordinary public visits, with resumable cleanup, explicit Admin controls, and retention rules that protected unknown and recovery-critical data. Improved release initialization by verifying the archived qualification evidence of an unpublished predecessor.
