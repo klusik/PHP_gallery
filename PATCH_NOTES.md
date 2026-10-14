@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.132
+
+Added bounded automatic cache maintenance during ordinary public visits, with resumable cleanup, explicit Admin controls, and retention rules that protected unknown and recovery-critical data. Improved release initialization by verifying the archived qualification evidence of an unpublished predecessor.
+
+### Highlights
+
+#### Automatic cache maintenance
+- Added visitor-driven cache inventory and reclamation with bounded work, durable checkpoints, and fair continuation. [#212](https://github.com/klusik/PHP_gallery/issues/212)
+- Added Admin inventory, preview, and approval controls for eligible cache cleanup, plus separate cleanup for already-staged updater trash.
+- Preserved unknown, pinned, active, and recovery-critical data; expiration made content eligible for cleanup but did not guarantee immediate deletion.
+
+#### Release predecessor verification
+- Required release initialization to authenticate the predecessor’s archived FULL and BASIC evidence before proceeding. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#185](https://github.com/klusik/PHP_gallery/issues/185)
+
+### Technical Details
+
+#### Backend
+- Added cache lifecycle policy, inventory, reclamation, storage, visitor scheduling, and diagnostics services.
+- Scheduled bounded cleanup during eligible public visits and added independent cache-only maintenance through `scripts/site_maintenance.php --cache-only`.
+- Added producer-specific retention and ownership checks, resumable deletion, and safeguards for active updater work, rollback data, leases, `.keep` pins, and unproven cache entries.
+
+#### Database
+- Added migration `202610140001_automatic_cache_cleanup.php` to enable the existing `automatic_cache_cleanup` preference only when it was absent. Existing explicit OFF preferences remained unchanged; no new table or separate preference was added.
+
+#### Frontend
+- Added in-place Admin cache inventory, preview, approval, progress, diagnostics, and updater-trash cleanup controls.
+- Updated English, Czech, German, and Swedish translations for the new controls and lifecycle status.
+
+#### Tests
+- Added and expanded coverage for visitor and scheduled cleanup, bounds, retention, approval, contention, interruption recovery, protected data, Admin interactions, updater cleanup, and installation preference behavior.
+- Added release-policy coverage for predecessor archive verification and refusal of missing, expired, corrupt, foreign, or failed evidence.
+
+### User Impact
+
+#### For visitors
+- Eligible ordinary public visits could advance bounded cache maintenance without requiring visitor-side JavaScript or a cron job. No change was made to gallery content or visitor-facing gallery workflows.
+
+#### For administrators
+- Administrators gained cache inventory and explicit cleanup controls in Maintenance, with progress and diagnostics shown in place. Automatic cleanup was enabled by default when no preference existed, while an explicit OFF preference remained respected.
+
+#### For maintainers
+- Hosting cron could advance cache cleanup independently of thumbnail maintenance. Release initialization now required authenticated predecessor qualification evidence before proceeding; the added tests documented these behaviors but did not establish production cleanup or release qualification.
+
 ## Version 0.131.1
 
 Updated the public and Admin floating **Top** and **Down** controls with aligned icons and labels and a translucent surface matching the photo-overlay styling.
