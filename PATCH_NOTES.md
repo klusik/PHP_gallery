@@ -1,5 +1,32 @@
 # Patch notes
 
+## Version 0.131.1
+
+Updated the public and Admin floating **Top** and **Down** controls with aligned icons and labels and a translucent surface matching the photo-overlay styling.
+
+### Highlights
+
+#### Floating listing navigation
+- Styled the controls with a translucent dark surface, blur, light border, and white labels to match the photo-overlay palette.
+- Aligned arrows consistently beside labels of different lengths and improved background and border contrast on hover and keyboard focus.
+
+### Technical Details
+
+#### Frontend
+- Updated floating-control styles in `public/assets/styles/public-shared.css`, `public/assets/styles/admin.css`, and `public/assets/styles/admin-layout.css`.
+- Documented the styling in `docs/FLOATING_SCROLL_CONTROLS.md`.
+
+### User Impact
+
+#### For visitors
+- Floating navigation controls gained more consistent icon alignment and clearer hover and keyboard-focus contrast.
+
+#### For administrators
+- Admin floating navigation controls received the same visual updates. No Admin workflow behavior changed.
+
+#### For maintainers
+- Updated the floating-controls documentation to reflect the styling changes.
+
 ## Version 0.131
 
 Added a translated floating **Down** navigation control beside the existing **Top** control on public listings. Improved grouped navigation styling, accessible focus behavior, and preservation of the controls during Admin-driven listing refreshes.
