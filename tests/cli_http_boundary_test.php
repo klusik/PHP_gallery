@@ -178,18 +178,24 @@ try {
     // This existing serial owner also owns the hosted cache HTTP child, keeping
     // BASIC's inherited registry unchanged and all nested servers exclusive.
     if (getenv('CI') === 'true') {
-        $visitorLog = $fixture . '/cache-visitor.log';
-        $visitor = proc_open([PHP_BINARY, __DIR__ . '/support/cache_lifecycle_public_http_fixture.php'],
-            [0 => ['pipe', 'r'], 1 => ['file', $visitorLog, 'w'], 2 => ['file', $visitorLog, 'a']],
-            $visitorPipes, $root, getenv(), ['bypass_shell' => true]);
-        cli_http_check(is_resource($visitor), 'Could not start serial hosted cache HTTP fixture.');
-        fclose($visitorPipes[0]);
-        $visitorExit = proc_close($visitor);
-        $visitorOutput = file_get_contents($visitorLog);
-        cli_http_check($visitorExit === 0 && is_string($visitorOutput)
-            && str_contains($visitorOutput, 'Public HTTP opportunities without Admin, cron, JavaScript or response detachment: PASS'),
-            'Hosted cache HTTP fixture failed: ' . (string) $visitorOutput);
-        echo $visitorOutput;
+        foreach ([false, true] as $restrictedCapacity) {
+            $visitorLog = $fixture . '/cache-visitor-' . (int) $restrictedCapacity . '.log';
+            $visitorCommand = $restrictedCapacity
+                ? [PHP_BINARY, '-d', 'disable_functions=disk_free_space', __DIR__ . '/support/cache_lifecycle_public_http_fixture.php', '--no-disk-free-space']
+                : [PHP_BINARY, __DIR__ . '/support/cache_lifecycle_public_http_fixture.php'];
+            $visitor = proc_open($visitorCommand,
+                [0 => ['pipe', 'r'], 1 => ['file', $visitorLog, 'w'], 2 => ['file', $visitorLog, 'a']],
+                $visitorPipes, $root, getenv(), ['bypass_shell' => true]);
+            cli_http_check(is_resource($visitor), 'Could not start serial hosted cache HTTP fixture.');
+            fclose($visitorPipes[0]);
+            $visitorExit = proc_close($visitor);
+            $visitorOutput = file_get_contents($visitorLog);
+            cli_http_check($visitorExit === 0 && is_string($visitorOutput)
+                && str_contains($visitorOutput, 'Public HTTP opportunities without Admin, cron, JavaScript or response detachment: PASS')
+                && (!$restrictedCapacity || str_contains($visitorOutput, 'Native disk_free_space disabled in parent and HTTP worker; automatic deletion and protected data: PASS')),
+                'Hosted cache HTTP fixture failed: ' . (string) $visitorOutput);
+            echo $visitorOutput;
+        }
     }
     foreach (['app', 'scripts'] as $tree) {
         cli_http_copy_tree($root . '/' . $tree, $fixture . '/' . $tree,

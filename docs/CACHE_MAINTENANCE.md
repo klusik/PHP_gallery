@@ -481,8 +481,16 @@ or the time to drain it. Five-minute invocations provide roughly one fifth the
 minute-based opportunities; hourly invocations offer fewer backlog opportunities than visitor traffic or minute-based scheduling.
 
 Private metadata is capped at 64 MiB per cycle, plus bounded atomic-control
-temporary files and one bounded catalog temporary. Admission reserves 16 MiB
-free space; an unknown/low disk-free result blocks new scheduled work. Payload
+temporary files and one bounded catalog temporary. Admission requires 16 MiB of
+reported free space when the host exposes a valid measurement; known-low capacity
+blocks new scheduled work. WEDOS and other shared hosts may disable
+`disk_free_space()`. Missing, failed or invalid probes remain explicitly unknown
+and permit the already checkpoint-validated worker. The scheduler record commits
+before admission and each detached candidate cursor commits before unlink.
+Failed journal/checkpoint writes stop work under the same metadata bounds.
+Unknown space is neither a measured reserve nor evidence of an account quota.
+The private scheduler record retains `free_space_known`, nullable `free_bytes`
+and an exception class without messages or credentials. Payload
 detachment is a same-filesystem rename, not a second 900-GB copy. Retired journals
 are reclaimed in short slices alongside ongoing work; a new completed cycle
 waits for old journal debt to drain, preventing indefinite accumulation. Keep at

@@ -1127,6 +1127,22 @@ Registered legacy browser profiles and versioned release working copies lack rel
 
 ### Visitor cache opportunities and strict central ownership
 
+WEDOS shared hosting disables `disk_free_space()` in PHP 8, as confirmed by
+[WEDOS support](https://help.wedos.cz/otazka/chyba-uncaught-error-call-to-undefined-function-hmbackupwordpressdisk_free_space-in/134191/answer/134193/).
+Version 0.132 called it unconditionally before inventory, producing
+`cache_worker_exception` with observed arrivals but no progress on restricted
+hosts. The cache lifecycle owner now permanently supports unavailable, invalid
+or throwing capacity probes without claiming known free bytes. Known-low space
+still refuses admission; unknown capacity uses committed scheduler/candidate
+checkpoints and existing bounded journals, and actual write failures stop work.
+This is a hosting compatibility path, not a measured disk reserve or quota.
+Usage of the reported symptom is confirmed by the deployed Admin screenshot;
+the exact site's exception trace was not available. The hosted serial HTTP
+fixture disables the real native function in both processes and requires
+ordinary-visit reclamation plus protected-data/OFF assertions. Retirement requires
+a hosting support contract that guarantees the native probe for every supported
+installation; generic shared hosting currently needs permanent support.
+
 The cache lifecycle owner permanently supports PHP webhosts without
 `fastcgi_finish_request`/`litespeed_finish_request`: a 40 ms admission opportunity
 runs at shutdown and may add to client latency. Supported response finishing still

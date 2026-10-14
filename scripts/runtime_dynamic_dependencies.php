@@ -85,6 +85,9 @@ function runtime_dynamic_dependency_callback_targets(): array
  */
 function runtime_dynamic_dependency_reviewed_sites(): array
 {
+    // The cache capacity probe is a native disk_free_space closure or an explicit
+    // service/fixture provider parameter. No hidden Gallery declaration needs a
+    // generated root; request input never selects this callback.
     $signatures = <<<'SITES'
 Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
 Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
@@ -130,6 +133,7 @@ Gallery\Services\application_update_release_files|variable_callable|$priority()
 Gallery\Services\browser_thumbnail_rebuild_stream_file_payload|variable_callable|$emit()
 Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$emit()
 Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$writeEntry()
+Gallery\Services\cache_lifecycle_checkpoint_capacity|variable_callable|$probe()
 Gallery\Services\cache_lifecycle_with_lock|variable_callable|$operation()
 Gallery\Services\content_translation_rows|dynamic_callback_argument|is_callable($contentLocalizationLoaderForTests)
 Gallery\Services\content_translation_rows|variable_callable|$contentLocalizationLoaderForTests()

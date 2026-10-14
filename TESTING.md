@@ -2933,6 +2933,12 @@ registration without Admin, cron, JavaScript or a response-finishing primitive,
 including refusal to advance on HEAD, POST or denied responses.
 The child must exit successfully and emit its explicit PASS before the parent
 continues. Apache availability remains the parent's separate contextual SKIP.
+This serial child runs both normally and with native `disk_free_space` disabled
+in the parent and actual HTTP worker. A worker-written capability marker proves
+the restriction, while ordinary public visits must complete expired-payload
+deletion, preserve pinned unknown originals and respect explicit OFF. Scheduler
+capacity fixtures retain known-zero/below-reserve refusal, the exact 16 MiB
+boundary, and false/throwing observations without inventing free bytes.
 The BASIC audit runner and its registry remain inherited from develop. Native
 audit-retention fixtures require the final JSON/Markdown publication and preserve
 owner-only runs, missing/truncated Markdown and custom in-subtree publications.

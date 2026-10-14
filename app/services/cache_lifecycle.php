@@ -81,10 +81,10 @@ const CACHE_LIFECYCLE_CATALOG_ATTEMPTS = 3;
  */
 const CACHE_LIFECYCLE_RUN_SLICES = 32;
 /**
- * Reserve checkpoint space before admitting inventory or payload detachment.
+ * Refuse known-low filesystem capacity before admitting inventory or payload detachment.
  * Type: int. Units: bytes. Scope: the cache filesystem.
  * Consumers: scheduled worker admission.
- * Rationale: sixteen MiB leaves room for bounded controls and recovery writes; an unknown free-space result refuses new work.
+ * Rationale: sixteen MiB is planning headroom when measurable. Hosting-disabled/unknown capacity instead relies on successful bounded checkpoint writes; it never claims a measured reserve or host quota.
  */
 const CACHE_LIFECYCLE_RESERVE_BYTES = 16777216;
 /**

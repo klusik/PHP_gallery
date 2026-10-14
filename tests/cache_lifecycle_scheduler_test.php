@@ -48,6 +48,22 @@ namespace {
     mkdir($root . '/cache', 0775, true);
     require_once __DIR__ . '/../app/services/cache_lifecycle.php';
     try {
+        foreach ([0, \Gallery\Services\CACHE_LIFECYCLE_RESERVE_BYTES - 1] as $lowBytes) {
+            $refused = \Gallery\Services\cache_lifecycle_scheduled_burst(\Gallery\Services\CACHE_LIFECYCLE_COMBINED_SECONDS, 'cli_cron', 1,
+                static fn(string $path): int => $lowBytes);
+            scheduler_assert(!$refused['ok'] && $refused['reason'] === 'cache_checkpoint_space_unavailable'
+                && $refused['free_space_known'] && $refused['free_bytes'] === $lowBytes
+                && !is_file($root . '/cache/cache-lifecycle/state.json'), 'Known-low capacity started inventory or pretended capacity was unknown.');
+        }
+        foreach ([static fn(string $path): bool => false,
+            static function (string $path): float|false { throw new \RuntimeException('Unavailable fixture capacity.'); }] as $probe) {
+            $capacity = \Gallery\Services\cache_lifecycle_checkpoint_capacity($probe);
+            scheduler_assert(!$capacity['known'] && $capacity['bytes'] === null && $capacity['admitted'],
+                'Unavailable capacity blocked checkpoint-guarded cleanup or invented free bytes.');
+        }
+        scheduler_assert(\Gallery\Services\cache_lifecycle_checkpoint_capacity(
+            static fn(string $path): int => \Gallery\Services\CACHE_LIFECYCLE_RESERVE_BYTES)['admitted'],
+            'Exact known capacity threshold was rejected.');
         for ($index = 0; $index < 120; $index++) {
             $directory = 'map-browser-profile-' . sprintf('%06d', $index);
             mkdir($root . '/cache/' . $directory);
