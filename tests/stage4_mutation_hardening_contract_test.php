@@ -129,11 +129,11 @@ foreach ([
 $sidePanel = stage4_source('public/assets/gallery-modules/admin-side-panel.js');
 stage4_expect(str_contains($sidePanel, 'completionGuard?.signal || undefined'), 'Side-panel refresh fetches must participate in coordinator aborts.');
 stage4_expect(str_contains($sidePanel, 'completionGuard.isCurrent()'), 'Side-panel replacements must reject superseded operation generations.');
-stage4_expect(str_contains($sidePanel, 'admin-mutation-completion.js?v=20260902-create-delete-hotfix1'), 'Side-panel module must load the current coordinator cache version.');
+stage4_expect(str_contains($sidePanel, 'admin-mutation-completion.js?v=20261014-floating-shell-v1'), 'Side-panel module must load the current coordinator cache version.');
 
 $operations = stage4_source('public/assets/gallery-modules/admin-operations.js');
-stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20261014-settings-control-links-v2'), 'Admin operations must load the current side-panel cache version.');
+stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20261014-floating-shell-v1'), 'Admin operations must load the current side-panel cache version.');
 $galleryJs = stage4_source('public/assets/gallery.js');
-stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20261014-settings-control-links-v2'), 'Gallery entrypoint must load the current admin-operations cache version.');
+stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20261014-floating-shell-v1'), 'Gallery entrypoint must load the current admin-operations cache version.');
 
 echo "Stage 4 mutation hardening contracts passed.\n";

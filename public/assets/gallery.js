@@ -59,14 +59,14 @@ import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=2026100
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
-import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
+import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261008-legacy-ofp-dispatch-fl-v3';
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
 import { setupGalleryPdfDocuments } from './gallery-modules/admin-pdf-documents.js?v=20261014-pdf-core-cache-v1';
-import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
+import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261014-route-navdata-v3';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261003-images-v4';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
@@ -82,7 +82,7 @@ import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=2
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20261003-admin-scoped-i18n-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';
-import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20260927-cooperative-complete-v4';
+import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20261014-cooperative-complete-v5';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
@@ -115,7 +115,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261014-settings-control-links-v2';
+} from './gallery-modules/admin-operations.js?v=20261014-floating-shell-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

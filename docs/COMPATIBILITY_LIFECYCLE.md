@@ -1002,3 +1002,15 @@ defaults to false so existing visual-preview nearest-derivative fallback remains
 compatible. The editor's explicit `existing_only=1` opt-in protects read-only
 300px preload; ordinary media loading and generation keep their current owner.
 Evidence owners and live acceptance limits are in [ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).
+
+## Floating navigation shell refresh (#208)
+
+`admin-mutation-completion.js` preserves the grouped Top/Down shell as a direct
+child of the listing frame. Its existing single-Top fallback protects already
+mounted pre-update public markup and remains owned by the Admin mutation
+coordinator. Usage is unknown. Retirement requires proof that supported page
+renderers and custom layouts all emit the grouped shell and accepted live
+fragment-refresh journeys no longer require the old shape. The production
+Theme-width browser fixture verifies repeated grouped-shell refresh, stable
+button identities and retained gallery cards; exact-candidate hosted integration
+also owns the real application visibility/delete/restore journey.

@@ -131,13 +131,25 @@
     font-weight: 700;
 }
 
-/* Public back-to-top control. The button is server-rendered after public lists
-   and toggled by back-to-top.js. Keep it styled without loading admin-layout.css. */
-.public-page .back-to-top-button {
+/* Public floating page-edge controls. The shared group occupies the existing
+   zero-width gallery-list grid column; both buttons use identical styling. */
+.public-page .floating-scroll-controls {
     position: sticky;
-    top: calc(100dvh - 5.25rem);
+    top: max(0.85rem, calc(100dvh - 8rem));
     z-index: 900;
-    margin-left: 0.85rem;
+    /* Keep the stack inside the listing edge so its zero-width grid track cannot widen the page. */
+    justify-self: end;
+    margin-right: 0.85rem;
+    display: grid;
+    grid-template-rows: repeat(2, minmax(2.85rem, auto));
+    gap: 0.45rem;
+    width: max-content;
+    pointer-events: none;
+}
+
+.public-page .back-to-top-button {
+    grid-row: 1;
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -155,6 +167,10 @@
     opacity: 0;
     transform: translateY(0.75rem);
     transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.public-page .back-to-top-button[data-scroll-to-bottom-button] {
+    grid-row: 2;
 }
 
 .public-page .back-to-top-button[hidden] {
@@ -188,12 +204,15 @@
         display: block;
     }
 
-    .public-page .back-to-top-button {
+    .public-page .floating-scroll-controls {
         position: fixed;
-        right: 0.85rem;
-        bottom: 0.85rem;
+        right: max(0.85rem, env(safe-area-inset-right, 0px));
+        bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
         top: auto;
-        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .public-page .back-to-top-button {
         padding: 0.65rem 0.8rem;
     }
 }

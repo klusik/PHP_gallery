@@ -267,11 +267,22 @@
 .gallery-image-grid {
     min-width: 0;
 }
-.back-to-top-button {
+.floating-scroll-controls {
     position: sticky;
-    top: calc(100dvh - 5.25rem);
+    top: max(0.85rem, calc(100dvh - 8rem));
     z-index: 900;
-    margin-left: 0.85rem;
+    /* Keep the stack inside the listing edge so its zero-width grid track cannot widen the page. */
+    justify-self: end;
+    margin-right: 0.85rem;
+    display: grid;
+    grid-template-rows: repeat(2, minmax(2.85rem, auto));
+    gap: 0.45rem;
+    width: max-content;
+    pointer-events: none;
+}
+.back-to-top-button {
+    grid-row: 1;
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -287,6 +298,9 @@
     opacity: 0;
     transform: translateY(0.75rem);
     transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.back-to-top-button[data-scroll-to-bottom-button] {
+    grid-row: 2;
 }
 .back-to-top-button[hidden] {
     display: none;
@@ -314,11 +328,14 @@
 .gallery-list-frame {
         display: block;
     }
-.back-to-top-button {
+.floating-scroll-controls {
         position: fixed;
-        right: 0.85rem;
-        bottom: 0.85rem;
+        right: max(0.85rem, env(safe-area-inset-right, 0px));
+        bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
         top: auto;
+        margin-right: 0;
+    }
+.back-to-top-button {
         padding: 0.65rem 0.8rem;
     }
 }

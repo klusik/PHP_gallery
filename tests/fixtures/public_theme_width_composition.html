@@ -302,6 +302,12 @@ License: MIT License (see LICENSE file in repository)
                     context + ' intentional mobile gallery-frame bleed stays inside the viewport');
             }
 
+            // Visible page-edge controls must stay inside the rendered listing without widening its ancestors.
+            for (const control of document.querySelectorAll('.floating-scroll-controls .back-to-top-button:not([hidden])')) {
+                const controlRect = control.getBoundingClientRect();
+                check(controlRect.left >= -1 && controlRect.right <= layoutWidth + 1,
+                    context + ' visible floating scroll control stays inside the viewport');
+            }
             const overflowOwners = [header, main, footer, rails, layout, primary, leftRail, rightRail, footerWidget,
                 galleryListFrame,
                 ...paginations, ...document.querySelectorAll('.site-main .hero, .site-main .grid, .public-content-widget')];
@@ -443,6 +449,19 @@ License: MIT License (see LICENSE file in repository)
                 && homePageThree.querySelector('.gallery-card-title-link[href*="/fixture/gallery/305"]'),
             'The selected Home page replaces the prior gallery cards with its own six-card page.');
             checkPageScenario(homePageThree, 'home', 'default', 1440);
+            const {replaceOwnedPublicGalleryFragments} = await import('/public/assets/gallery-modules/admin-mutation-completion.js');
+            const navigationShell = homePageThree.querySelector('[data-floating-scroll-controls]');
+            const navigationButtons = Array.from(navigationShell.querySelectorAll('button'));
+            for (let refresh = 0; refresh < 2; refresh++) {
+                const freshDocument = homePageThree.cloneNode(true);
+                check(replaceOwnedPublicGalleryFragments(freshDocument, {documentRoot: homePageThree}),
+                    'A repeated production listing refresh replaces its owned fragments.');
+                check(homePageThree.querySelector('[data-floating-scroll-controls]') === navigationShell
+                    && navigationButtons.every(button => button.isConnected),
+                'Listing refresh retains both mounted floating navigation buttons in their shared shell.');
+                check(homePageThree.querySelectorAll('[data-public-gallery-index-grid] .gallery-card').length === 6,
+                    'Listing refresh preserves all server-rendered gallery cards.');
+            }
             document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' production Home/Gallery Theme-width layout assertions';
         } catch (error) {
             document.getElementById('results').textContent = 'BROWSER FAIL ' + (error instanceof Error ? error.message : String(error));
