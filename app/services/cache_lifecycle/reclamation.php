@@ -358,13 +358,34 @@ function cache_lifecycle_scheduled_run(int $seconds, string $source, int $maxSli
 }
 
 /**
+ * Observe optional filesystem capacity without requiring hosting-disabled PHP functions.
+ * @param callable(string):(int|float|false)|null $probe Optional capacity provider for the guarded cache directory; null discovers the native function only when available.
+ * @return array{known:bool,bytes:int|null,admitted:bool} Known low capacity refuses admission; unavailable/invalid/throwing measurements remain unknown and permit the already checkpoint-validated worker under its metadata and write guards.
+ */
+function cache_lifecycle_checkpoint_capacity(?callable $probe = null): array
+{
+    if ($probe === null && \function_exists('disk_free_space')) {
+        $probe = static fn(string $path): float|false => @\disk_free_space($path);
+    }
+    $raw = false;
+    if ($probe !== null) {
+        try { $raw = $probe(cache_lifecycle_project_root() . '/cache'); }
+        catch (\Throwable) { /* Hosting capacity is optional; committed writes remain mandatory. */ }
+    }
+    $known = (is_int($raw) || is_float($raw)) && is_finite((float) $raw) && $raw >= 0;
+    $bytes = $known ? ($raw >= PHP_INT_MAX ? PHP_INT_MAX : (int) $raw) : null;
+    return ['known'=>$known,'bytes'=>$bytes,'admitted'=>!$known || $bytes >= CACHE_LIFECYCLE_RESERVE_BYTES];
+}
+
+/**
  * Advance the admitted scheduler burst while its invocation lock remains held.
  * @param float $seconds Requested admission budget in seconds; external callers supply one through ten, visitor calls lower it to 40 through 600 ms.
  * @param string $source External caller source normalized before persistence.
  * @param int $maxSlices Maximum slices requested by the admitted caller; the canonical upper bound always remains enforced.
- * @return array<string,mixed> Lifecycle result with actual slices, done, progressed and elapsed_ms, or safe blocked/skipped evidence.
+ * @param callable(string):(int|float|false)|null $freeSpaceProbe Optional hosting capacity provider; ordinary visitors/cron use native discovery, and disposable fixtures can reproduce known-low or unavailable measurements.
+ * @return array<string,mixed> Lifecycle state or safe lock/failure marker. Admitted bursts add slices:int, elapsed_ms:int, done:bool, progressed:bool, id:string, free_space_known:bool and free_bytes:int|null; early lock refusals contain ok/busy/reason without implying work. Unknown capacity never represents a measured reserve.
  */
-function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES): array
+function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES, ?callable $freeSpaceProbe = null): array
 {
     // Bound request admission while preserving each owner's shorter I/O slice.
     // Type: float. Units: seconds. Scope: one external or visitor cache invocation.
@@ -399,9 +420,13 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
     $result = ['ok'=>true,'skipped'=>true,'reason'=>'cache_lifecycle_not_due'];
     $slices = 0;
     $id = '';
+    $capacity = ['known'=>false,'bytes'=>null,'admitted'=>true];
     try {
-        $free = @disk_free_space(cache_lifecycle_project_root() . '/cache');
-        if ($free === false || $free < CACHE_LIFECYCLE_RESERVE_BYTES) {
+        // The scheduler checkpoint above has already committed successfully.
+        // Unknown host capacity is not zero space: preserve bounded journals and
+        // the mandatory candidate/cursor commit before payload unlink instead.
+        $capacity = cache_lifecycle_checkpoint_capacity($freeSpaceProbe);
+        if (!$capacity['admitted']) {
             $result = ['ok'=>false,'blocked'=>true,'reason'=>'cache_checkpoint_space_unavailable'];
         } else {
             while ($slices < $maxSlices && microtime(true) + 0.02 < $deadline) {
@@ -438,6 +463,8 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
     $result['slices'] = $slices;
     $result['elapsed_ms'] = (int) round((microtime(true) - $started) * 1000);
     $result['done'] = ($result['phase'] ?? '') === 'complete';
+    $result['free_space_known'] = $capacity['known'];
+    $result['free_bytes'] = $capacity['bytes'];
     $recorded = cache_lifecycle_with_lock(static function () use ($result, $before): array {
         $control = cache_lifecycle_control_directory();
         $current = cache_lifecycle_read_json($control . '/state.json');
@@ -452,6 +479,12 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
         $record['cycle_id'] = (string) ($current['id'] ?? '');
         $record['ok'] = !empty($result['ok']);
         $record['reason'] = (string) ($result['reason'] ?? '');
+        $exceptionClass = (string) ($result['exception_class'] ?? '');
+        // Anonymous exception class identities can include their source path.
+        $record['exception_class'] = str_contains($exceptionClass, chr(0)) || str_contains($exceptionClass, '/')
+            || str_contains($exceptionClass, ':') ? 'Throwable' : $exceptionClass;
+        $record['free_space_known'] = $result['free_space_known'];
+        $record['free_bytes'] = $result['free_bytes'];
         $record['slices'] = (int) $result['slices'];
         $record['elapsed_ms'] = (int) $result['elapsed_ms'];
         $record['mode'] = $record['source'] === 'public_visit' ? 'visitor' : 'external';

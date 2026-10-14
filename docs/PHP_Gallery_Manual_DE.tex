@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.132}
-\newcommand{\manualdate}{14.~Oktober~2026}
+\newcommand{\version}{0.132.1}
+\newcommand{\manualdate}{15.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2076,6 +2076,8 @@ Verzeichnisse werden ausdrücklich als unvollständig geschützt. Ablauf bedeute
 Eignung, keine sofortige Löschung. Das bestehende ZIP-Kapazitätslimit bleibt;
 eine globale Cache-Quote wird nicht eingeführt. Aktive Inventarjournale werden
 nicht zu den gemessenen Nutzdaten gezählt.
+
+Shared-Hosting-Anbieter wie WEDOS können \codeword{disk_free_space()} sperren. Die automatische Bereinigung arbeitet mit ausdrücklich unbekannter freier Kapazität, erfolgreich geschriebenen Scheduler- und Kandidaten-Checkpoints und denselben Journalgrenzen weiter. Gemessene Kapazität unter 16~MiB blockiert neue Arbeit weiterhin; echte Checkpoint-Schreibfehler stoppen sie. Unbekannte Kapazität ist weder eine gemessene Reserve noch eine Kontingentangabe. Ein manueller Scan ist nicht erforderlich.
 
 Die automatische Cache-Bereinigung ist nach Installation und Update über die einzige Einstellung in Admin Features aktiviert; ein späteres ausdrückliches OFF bleibt bei Updates erhalten. Normale GET-Besuche der Startseite und physischer/Smart Galleries bieten kurze serverseitige Arbeitsmöglichkeiten ohne Cron, geöffnetes Admin-Dashboard oder Besucher-JavaScript. Abgeschlossene Inventare sind stündlich fällig; laufende Scans behalten ihren Prüfpunkt. Ohne eingehende Anfragen kann PHP sich nicht selbst aufwecken: Die Arbeit wartet auf den nächsten geeigneten Besuch. Es gibt keine Self-Request-Kette und keinen dauerhaften Prozess.
 

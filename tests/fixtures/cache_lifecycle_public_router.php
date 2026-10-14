@@ -47,6 +47,7 @@ namespace {
     // Consumers: cache lifecycle path guards. Rationale: the marker-verified parent fixture owns every test deletion.
     define('CACHE_LIFECYCLE_TEST_ROOT', $fixture);
     $GLOBALS['cache_lifecycle_test_now'] = (int) file_get_contents($fixture . '/clock');
+    file_put_contents($fixture . '/disk-space-capability', function_exists('disk_free_space') ? '1' : '0');
     require_once dirname(__DIR__, 2) . '/app/request_data.php';
     require_once dirname(__DIR__, 2) . '/app/services/cache_lifecycle.php';
     require_once dirname(__DIR__, 2) . '/app/services/site_maintenance.php';

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132}
-\newcommand{\manualdate}{14~oktober~2026}
+\newcommand{\version}{0.132.1}
+\newcommand{\manualdate}{15~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2067,6 +2067,8 @@ livscykel men godkänner aldrig en manuell förhandsgranskning. Täta, långsamm
 oläsbara kataloger markeras uttryckligen som ofullständiga och skyddas. Utgång
 betyder berättigande, inte omedelbar radering. Befintlig ZIP-kapacitetsgräns består;
 ingen global cachekvot införs. Aktiva inventeringsjournaler räknas inte som payload.
+
+Delade webbhotell som WEDOS kan inaktivera \codeword{disk_free_space()}. Automatisk rensning fortsätter med uttryckligen okänd ledig kapacitet, framgångsrikt skrivna kontrollpunkter för schemaläggare och kandidater samt samma journalgränser. Uppmätt kapacitet under 16~MiB blockerar fortfarande nytt arbete; faktiska skrivfel i kontrollpunkter stoppar arbetet. Okänd kapacitet är varken en uppmätt reserv eller en kontokvot. Ingen manuell skanning behövs.
 
 Automatisk cacherensning aktiveras vid installation och uppdatering genom den enda inställningen i Admin Features; ett senare uttryckligt OFF bevaras vid uppdateringar. Vanliga GET-besök på startsidan och fysiska/Smart Galleries ger korta serverbaserade arbetstillfällen utan cron, öppet Admin-dashboard eller besökarens JavaScript. Avslutad inventering förfaller varje timme; pågående skanning behåller sin kontrollpunkt. Utan inkommande anrop kan PHP inte väcka sig självt: arbetet väntar på nästa lämpliga besök. Ingen självanropskedja eller permanent process skapas.
 

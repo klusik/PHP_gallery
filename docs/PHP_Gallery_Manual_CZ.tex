@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132}
-\newcommand{\manualdate}{14.~října~2026}
+\newcommand{\version}{0.132.1}
+\newcommand{\manualdate}{15.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2065,6 +2065,8 @@ s~minutovou rezervou. Cron s~\texttt{--cache-only} pokračuje i~v~tomto nezávis
 adresáře jsou výslovně neúplné a~zachované. Expirace znamená způsobilost,
 nikoli okamžité smazání. Stávající limit spravovaných ZIPů zůstává;
 celková kvóta cache se~nezavádí. Živé inventární záznamy nejsou v~měření payloadů.
+
+Sdílený hosting, například WEDOS, může zakázat \codeword{disk_free_space()}. Automatické čištění pokračuje s~výslovně neznámou volnou kapacitou, úspěšně zapsanými checkpointy plánovače a~kandidátů a~stejnými limity žurnálů. Naměřená kapacita pod 16~MiB stále blokuje novou práci; skutečné selhání zápisu checkpointu práci zastaví. Neznámá kapacita není naměřená rezerva ani kvóta účtu. Ruční spuštění skenu není nutné.
 
 Automatické čištění cache je~zapnuté při instalaci i~aktualizaci prostřednictvím jediné volby v~Admin Features; pozdější výslovné OFF zůstane zachované. Běžné GET návštěvy hlavní stránky a~fyzických či Smart galerií poskytují krátké serverové příležitosti bez cronu, otevřené administrace nebo JavaScriptu návštěvníka. Dokončený inventář je~splatný po~hodině; rozpracovaný sken pokračuje z~checkpointu. Bez příchozích požadavků se~PHP samo neprobudí: práce počká na~další vhodnou návštěvu. Nevytváří se~řetězec self-requestů ani trvalý proces.
 
