@@ -17,6 +17,12 @@ equally to both controls. Public styles live in `public-shared.css`; the
 existing Admin CSS copies remain in sync. Floating content widgets already
 exclude both `.back-to-top-button` rectangles from their placement solver.
 
+The buttons use the existing photo-overlay palette: a translucent dark surface,
+white labels, a light border and four-pixel backdrop blur. Each button has a
+fixed-width left icon column and left-aligned text, so different translated
+label lengths do not shift the arrows. Hover and keyboard focus increase the
+surface and border contrast while preserving the two-slot layout.
+
 ## Browser behavior
 
 `public/assets/gallery-modules/back-to-top.js` owns both controls:
