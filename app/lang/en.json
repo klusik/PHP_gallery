@@ -4690,6 +4690,8 @@
     "picture_manager.share_zip_started": "Native sharing is not available here. A ZIP download was started with the selected photos.",
     "picture_manager.skipped_existing_count": "Skipped {count} already-present photo(s).",
     "picture_manager.title": "Picture manager",
+    "public.back_to_bottom_label": "Go to bottom",
+    "public.back_to_bottom_short": "Down",
     "public.back_to_top_label": "Go back to top",
     "public.back_to_top_short": "Top",
     "public.breadcrumbs": "Breadcrumbs",

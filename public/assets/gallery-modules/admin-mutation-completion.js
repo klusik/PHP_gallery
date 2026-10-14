@@ -1021,16 +1021,22 @@ export function replaceOwnedPublicGalleryFragments(parsed, options = {}) {
 }
 
 /**
- * Replace frame content without discarding the persistent back-to-top shell.
+ * Replace listing content while retaining its direct-child floating navigation shell.
  *
- * @param {*} currentFrame Current public gallery frame.
- * @param {*} freshFrame Fresh server-rendered public gallery frame.
+ * @param {HTMLElement} currentFrame Mounted public listing frame containing a grouped or legacy navigation shell.
+ * @param {HTMLElement} freshFrame Server-rendered replacement frame whose listing children are adopted.
+ * @return {void} Replaces listing children and preserves the complete mounted navigation shell when present.
  */
 function replaceOwnedPublicGalleryFrameChildren(currentFrame, freshFrame) {
     copyElementIdentity(currentFrame, freshFrame);
 
-    const currentButton = currentFrame.querySelector?.('[data-back-to-top-button]') || null;
-    const freshButton = freshFrame.querySelector?.('[data-back-to-top-button]') || null;
+    // Preserve the group as the insertion anchor; a nested Top button is not a
+    // direct child and becomes detached when its parent group is removed.
+    // The legacy button fallback supports already mounted pre-update markup.
+    const currentButton = currentFrame.querySelector?.('[data-floating-scroll-controls]')
+        || currentFrame.querySelector?.('[data-back-to-top-button]') || null;
+    const freshButton = freshFrame.querySelector?.('[data-floating-scroll-controls]')
+        || freshFrame.querySelector?.('[data-back-to-top-button]') || null;
     if (freshButton && typeof freshButton.remove === 'function') {
         freshButton.remove();
     }

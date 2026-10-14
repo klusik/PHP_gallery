@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Render the minimal HTML 503 document for protected public schema failures
- *   - Render the public back-to-top control
+ *   - Render the public floating up/down navigation controls
  *   - Render the normal public 404 panel
  *
  * Author:
@@ -56,14 +56,20 @@ function view_render_public_service_unavailable(string $title, string $message, 
 }
 
 /**
- * Render the public back-to-top control.
+ * Render the paired floating Top and Down controls on public listings.
  *
- * @param string $label Accessible translated label.
- * @param string $shortLabel Visible translated short label.
+ * @param string $label Accessible translated Top label.
+ * @param string $shortLabel Visible translated Top label.
+ * @param string $downLabel Accessible translated Down label.
+ * @param string $downShortLabel Visible translated Down label.
+ * @return void Echo two initially hidden native buttons in one floating group.
  */
-function view_render_back_to_top_button(string $label, string $shortLabel): void
+function view_render_back_to_top_button(string $label, string $shortLabel, string $downLabel = 'Go to bottom', string $downShortLabel = 'Down'): void
 {
+    echo '<div class="floating-scroll-controls" data-floating-scroll-controls>';
     echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">↑</span><span>' . e($shortLabel) . '</span></button>';
+    echo '<button type="button" class="back-to-top-button" data-scroll-to-bottom-button hidden aria-label="' . e($downLabel) . '" title="' . e($downLabel) . '"><span aria-hidden="true">↓</span><span>' . e($downShortLabel) . '</span></button>';
+    echo '</div>';
 }
 
 /**

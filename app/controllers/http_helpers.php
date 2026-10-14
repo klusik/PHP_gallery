@@ -261,13 +261,17 @@ function send_asset_cache_control(string $cacheControl): void
 }
 
 /**
- * Handles render back to top button logic for the gallery application.
+ * Prepare translated Up/Down navigation labels for the shared public view.
+ *
+ * @return void Render both page-edge controls with the active language.
  */
 function render_back_to_top_button(): void
 {
     view_render_back_to_top_button(
         t('public.back_to_top_label', 'Go back to top'),
-        t('public.back_to_top_short', 'Top')
+        t('public.back_to_top_short', 'Top'),
+        t('public.back_to_bottom_label', 'Go to bottom'),
+        t('public.back_to_bottom_short', 'Down')
     );
 }
 

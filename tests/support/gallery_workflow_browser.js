@@ -167,6 +167,10 @@ async () => {
             const isImageMutation = String(args[1]?.method || '').toUpperCase() === 'POST' && route === 'admin_bulk_images';
             if (isMutation) posts++;
             const response = await fetchWithDeadline(originalFetch, ...args);
+            if (stage.startsWith('browser recoverable gallery delete') && String(args[1]?.method || '').toUpperCase() === 'POST') {
+                const payload = await response.clone().json().catch(() => null);
+                stage = ('browser recoverable gallery delete HTTP ' + response.status + ' ok ' + Boolean(payload?.ok)).slice(0, 100);
+            }
             if (isMutation) lastMutationStatus = response.status;
             if (route === 'admin_new_gallery' && !isMutation) {
                 createPanelResponseStatus = response.status;
@@ -411,15 +415,19 @@ async () => {
             const media = await fetch('/index.php?page=media&id=' + imageId, {credentials: 'omit', cache: 'no-store'});
             expect(media.status === (visibility === 'private' ? 404 : 200));
         }
-        stage = 'browser recoverable gallery delete';
+        stage = 'browser recoverable gallery delete locate card count ' + doc.querySelectorAll('article[data-gallery-id]').length;
         const card = await until(() => doc.querySelector('article[data-gallery-id="' + galleryId + '"]'));
         const deletion = card.querySelector('[data-public-admin-delete-form][data-public-admin-delete-kind="gallery"]');
+        stage = 'browser recoverable gallery delete verify trash form';
         expect(deletion?.dataset.publicAdminDeleteMode === 'trash');
         // Accept the product's existing confirmation for this synthetic gallery only.
         win.confirm = () => true;
+        stage = 'browser recoverable gallery delete click submit';
         deletion.querySelector('[type="submit"]').click();
+        stage = 'browser recoverable gallery delete await card removal';
         await until(() => !doc.querySelector('article[data-gallery-id="' + galleryId + '"]'));
         inPlace();
+        stage = 'browser recoverable gallery delete media postcondition';
         expect((await fetch('/index.php?page=media&id=' + imageId, {credentials: 'omit', cache: 'no-store'})).status === 404);
         stage = 'browser trash fragment restore';
         const trashPanel = await openPanel('/index.php?page=admin_trash', 'create', '[data-admin-trash-panel]');

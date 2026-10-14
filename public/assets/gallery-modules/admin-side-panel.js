@@ -32,7 +32,7 @@
 
 import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261003-images-v4';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
-import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
+import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261003-scoped-i18n-v2';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
@@ -46,7 +46,7 @@ import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261014-pdf-core-cache-v1';
 import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261014-pdf-core-cache-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2';
-import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
+import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20261014-floating-shell-v1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261012-pdf-files-v1';
