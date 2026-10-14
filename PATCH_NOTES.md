@@ -1,5 +1,40 @@
 # Patch notes
 
+## Version 0.131
+
+Added a translated floating **Down** navigation control beside the existing **Top** control on public listings. Improved grouped navigation styling, accessible focus behavior, and preservation of the controls during Admin-driven listing refreshes.
+
+### Highlights
+
+#### Floating listing navigation
+- Added a **Down** control on public Home, gallery-detail, and tag listings. It appeared when meaningful document content remained below and hid at the page end or on short pages.
+- Kept the controls hidden during lightboxes and fullscreen, respected reduced-motion preferences, and moved focus to the visible counterpart when a focused control hid.
+- Preserved the grouped navigation shell and button identities during Admin-driven public listing refreshes, while retaining support for an already-mounted legacy single-Top shell.
+- Kept pages without the existing listing navigation unchanged. [#208](https://github.com/klusik/PHP_gallery/issues/208)
+
+### Technical Details
+
+#### Frontend
+- Added `public/assets/gallery-modules/back-to-top.js` behavior for paired controls, document-bottom detection, and bounded resize and body-mutation observation.
+- Added grouped responsive styling, including a safe-area-aware fixed stack on narrow screens.
+- Added English, Czech, German, and Swedish accessible labels and updated related browser-module cache identities.
+
+#### Tests and documentation
+- Added `tests/floating_scroll_controls_test.php` and registered Node scenarios in `tests/floating_scroll_controls_scenarios.mjs`.
+- Added coverage for rendering, localization, behavior and lifecycle, responsive layout, and repeated listing refreshes.
+- Documented the controls in `docs/FLOATING_SCROLL_CONTROLS.md` and updated compatibility lifecycle documentation.
+
+### User Impact
+
+#### For visitors
+- Visitors could use a floating **Down** control to move through supported listings and a **Top** control to return upward, with visibility and focus behavior adapted to the page state.
+
+#### For administrators
+- Admin-driven public listing refreshes preserved the floating navigation controls without replacing their button identities.
+
+#### For maintainers
+- Added regression coverage and documentation for floating control behavior, responsive layout, and listing refresh compatibility.
+
 ## Version 0.130.1
 
 Restored Admin Settings initialization and navigation, corrected Theme and Widgets sidebar selection, and refreshed related browser-module cache versions. Added regression coverage for Settings entry resolution, browser module linking, deep links, and sidebar selection.
