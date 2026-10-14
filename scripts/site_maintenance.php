@@ -46,7 +46,7 @@ require __DIR__ . '/../app/bootstrap_full.php';
 /**
  * Return a CLI option value from --name=value arguments.
  *
- * @param array $arguments Arguments value.
+ * @param list<string> $arguments Command-line arguments to inspect.
  * @param string $name Name value.
  * @param ?string $default Default value when no explicit value is available.
  * @return ?string Text result for the caller.
@@ -71,6 +71,7 @@ try {
     $result = site_maintenance_run([
         'source' => 'cli_cron',
         'force' => $force,
+        'cache_only' => in_array('--cache-only', $arguments, true),
         'time_budget_seconds' => $timeBudget,
     ]);
 
@@ -82,7 +83,7 @@ try {
 } catch (Throwable $exception) {
     fwrite(STDERR, json_encode([
         'ok' => false,
-        'error' => $exception->getMessage(),
+        'error' => 'maintenance_exception',
         'exception_class' => get_class($exception),
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
     exit(1);

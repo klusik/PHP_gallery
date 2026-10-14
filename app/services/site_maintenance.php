@@ -16,6 +16,7 @@
  *   - Persist progress between cron invocations so long jobs survive request limits
  *   - Protect the public cron endpoint with a dedicated secret token
  *   - Run lightweight database and cache cleanup after generated media checks finish
+ *   - Independently drain deferred updater prune trash before thumbnail scheduling gates
  *
  * Author:
  *   Rudolf Klusal
@@ -39,6 +40,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
+use function Gallery\Core\response_status_code;
 
 use Throwable;
 use function Gallery\Core\absolute_public_url;
@@ -349,13 +351,14 @@ function site_maintenance_cron_url(): string
 }
 
 /**
- * Return the cache directory used for the site-maintenance lock file.
+ * Resolve the site-maintenance coordination directory for the installation or owned disposable fixture.
  *
  * @return string Text result for the caller.
  */
 function site_maintenance_cache_dir(): string
 {
-    $dir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'site-maintenance';
+    $root = defined('CACHE_LIFECYCLE_TEST_ROOT') ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
+    $dir = $root . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'site-maintenance';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -508,12 +511,23 @@ function site_maintenance_run_cleanup_operation(string $operation, callable $cal
     $startedAt = microtime(true);
     try {
         $value = $callback();
+        if ($operation === 'cache_lifecycle' && is_array($value) && ($value['skipped'] ?? false) !== true
+            && function_exists(__NAMESPACE__ . '\\cache_cleanup_diagnostic_event')) {
+            $status = cache_lifecycle_status();
+            cache_cleanup_diagnostic_event(cache_cleanup_diagnostic_id((string) ($value['id'] ?? '')), 'lifecycle_scheduled_checkpoint',
+                ['source'=>(string) ($state['source'] ?? 'scheduled'),'ok'=>!empty($value['ok']),
+                    'phase'=>$status['phase'],'files'=>$status['files'],'bytes'=>$status['bytes'],
+                    'candidates'=>$status['candidates'],'candidate_bytes'=>$status['candidate_bytes'],
+                    'removed'=>$status['removed'],'bytes_removed'=>$status['bytes_removed'],'errors'=>$status['errors'],
+                    'blocked'=>$status['blocked'],'failure_code'=>$status['last_error']]);
+        }
+        $lifecycleOk = $operation !== 'cache_lifecycle' || !is_array($value) || !array_key_exists('ok', $value) || !empty($value['ok']);
         return [
-            'ok' => true,
+            'ok' => $lifecycleOk,
             'value' => $value,
             'diagnostic' => [
                 'operation' => $operation,
-                'status' => 'completed',
+                'status' => $lifecycleOk ? 'completed' : 'blocked',
                 'duration_ms' => max(0, (int) round((microtime(true) - $startedAt) * 1000)),
             ],
         ];
@@ -527,6 +541,11 @@ function site_maintenance_run_cleanup_operation(string $operation, callable $cal
             'exception_class' => get_class($exception),
             'duration_ms' => $durationMs,
         ];
+        if ($operation === 'updater_cache_gc' && !empty($state['cache_run_id'])) {
+            $safe = cache_cleanup_diagnostic_event((string) $state['cache_run_id'], 'failed',
+                ['reason' => 'worker_owner', 'elapsed_ms' => $durationMs], $exception);
+            $diagnostic['error_code'] = (string) ($safe['failure_code'] ?? $errorCode);
+        }
         site_maintenance_store_outcome(SITE_MAINTENANCE_LAST_FAILURE_SETTING, [
             'status' => 'failed',
             'occurred_at' => now_sql(),
@@ -851,27 +870,28 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
 
 /**
  * Finish the visible HTTP response before doing opportunistic background work when the server supports it.
+ * @return bool True after a supported primitive finishes the response; false for CLI, unsupported runtimes or explicit finishing failure. The PHP worker remains occupied.
  */
-function site_maintenance_finish_response_before_background_work(): void
+function site_maintenance_finish_response_before_background_work(): bool
 {
     static $finished = false;
     if ($finished || PHP_SAPI === 'cli') {
-        return;
+        return $finished;
     }
 
-    $finished = true;
     if (function_exists('fastcgi_finish_request')) {
         if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'called');
-        @fastcgi_finish_request();
+        $finished = @fastcgi_finish_request();
         if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'returned');
-        return;
+        return $finished;
     }
 
     if (function_exists('litespeed_finish_request')) {
         if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'called');
-        @litespeed_finish_request();
+        $finished = @litespeed_finish_request() !== false;
         if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'returned');
     }
+    return $finished;
 }
 
 /**
@@ -937,14 +957,15 @@ function site_maintenance_queue_next_chained_slice(): bool
 }
 
 /**
- * Register an after-response maintenance slice for suitable normal page requests.
+ * Register independent public cache opportunities and the existing Admin-only thumbnail maintenance fallback.
  *
  * @param string $page Canonical route identifier.
- * @param callable|null $loadDependencies Optional kernel callback for eligible shutdown work.
- * @return void Registers the existing bounded maintenance callback when eligible.
+ * @param callable(string):mixed|null $loadDependencies Optional reviewed kernel module loader for admitted shutdown work.
+ * @return void Registers bounded public cache work independently of Admin thumbnail enable/window gates; existing Admin fallback retains its eligibility.
  */
 function site_maintenance_register_request_trigger(string $page, ?callable $loadDependencies = null): void
 {
+    site_maintenance_register_cache_trigger($page, $loadDependencies);
     if (PHP_SAPI === 'cli') {
         return;
     }
@@ -994,19 +1015,78 @@ function site_maintenance_register_request_trigger(string $page, ?callable $load
 }
 
 /**
+ * Register one short cache opportunity on ordinary HTML visits independently of thumbnail scheduling.
+ * @param string $page Canonical route identity; media, POST, HEAD and cron transports are excluded.
+ * @param callable(string):mixed|null $loadDependencies Reviewed kernel loader invoked only after an admitted successful response.
+ * @return void Retains a nonblocking foreground lease until shutdown, then optionally advances the existing cache owner; failures never replace the page response.
+ */
+function site_maintenance_register_cache_trigger(string $page, ?callable $loadDependencies = null): void
+{
+    if (PHP_SAPI === 'cli' || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
+        || !feature_capability_effective_enabled('automatic_cache_cleanup')) return;
+    try {
+        // Guard the complete ancestry before touching coordination metadata.
+        $root = defined('CACHE_LIFECYCLE_TEST_ROOT') ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
+        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor.lock', true);
+        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-signal', true);
+        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-attempt', true);
+        $directory = site_maintenance_cache_dir();
+        $foreground = @fopen($directory . '/visitor.lock', 'c');
+        if (!is_resource($foreground)) return;
+        // Visitors never wait for GC. A signal also detects arrivals during a
+        // burst when its exclusive lease cannot reveal queued PHP requests.
+        @file_put_contents($directory . '/visitor-signal', (string) hrtime(true));
+        $held = flock($foreground, LOCK_SH | LOCK_NB);
+        register_shutdown_function(static function () use ($foreground, $held, $directory, $root, $loadDependencies): void {
+            if ($held) flock($foreground, LOCK_UN);
+            fclose($foreground);
+            if (response_status_code() >= 400 || error_get_last() !== null
+                && in_array(error_get_last()['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) return;
+            try {
+                application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-attempt', true);
+                clearstatcache(true, $directory . '/visitor-attempt');
+                // Throttle all visitors together; the worker repeats this check
+                // under the scheduler lock to close concurrent admission races.
+                if (is_file($directory . '/visitor-attempt') && time() - (int) filemtime($directory . '/visitor-attempt') < 60) return;
+                if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+                $detached = site_maintenance_request_trigger_can_detach_response();
+                if ($detached) {
+                    ignore_user_abort(true);
+                    $detached = site_maintenance_finish_response_before_background_work();
+                }
+                if ($loadDependencies !== null) $loadDependencies('site-maintenance-work');
+                else require_once __DIR__ . '/cache_lifecycle.php';
+                cache_lifecycle_visitor_run($detached);
+            } catch (Throwable) {
+                // Cache failure cannot replace authorized public HTML, leak a
+                // private path, or launch a compensating self-request.
+            }
+        });
+    } catch (Throwable) {
+        // Unavailable/unsafe coordination storage preserves the public response.
+    }
+}
+
+/**
  * Run one cron-safe maintenance invocation.
  *
  * The caller should invoke this often, for example every five minutes. The
  * configured UTC time only decides when a new daily cycle may start. Active work
  * continues across later calls until all phases complete.
  *
- * @param array{force?:bool,source?:string,time_budget_seconds?:int,chain?:bool} $options Optional behavior flags.
- * @return array<string,mixed>.
+ * @param array{force?:bool,source?:string,time_budget_seconds?:int,chain?:bool,cache_only?:bool,cache_run_id?:string} $options Optional flags; cache_run_id correlates explicit manual cleanup diagnostics.
+ * @return array<string,mixed> Maintenance response with boolean ok/busy/skipped/done as applicable, safe reason/status strings, optional thumbnail state and telemetry; cache_gc contains owner ok/value/diagnostic, actual removed/bytes_removed/visited, blocked/done, elapsed_ms, total_bytes_removed and next_due when GC runs.
  */
 function site_maintenance_run(array $options = []): array
 {
+    // Explicit workers load their owner; passive/public registration stays lightweight.
+    require_once __DIR__ . '/cache_lifecycle.php';
     $force = !empty($options['force']);
     $chain = array_key_exists('chain', $options) ? !empty($options['chain']) : false;
+    $cacheOnly = !empty($options['cache_only']);
+    if ($cacheOnly) $chain = false;
+    $cacheRunId = (string) ($options['cache_run_id'] ?? '');
     $source = trim((string) ($options['source'] ?? 'cron'));
     $requestedTimeBudgetSeconds = isset($options['time_budget_seconds'])
         ? max(1, min(120, (int) $options['time_budget_seconds']))
@@ -1018,8 +1098,12 @@ function site_maintenance_run(array $options = []): array
     // A durable Maintenance Center job owns the installation-wide mutation claim
     // across browser-driven requests. Scheduled/manual legacy maintenance must
     // yield before telemetry or any other mutation slice begins.
+    if ($cacheRunId !== '') {
+        cache_cleanup_diagnostic_event($cacheRunId, 'central_claim_check');
+    }
     $centralOwner = maintenance_center_model_mutation_owner();
     if (is_array($centralOwner)) {
+        if ($cacheOnly && $source !== 'admin_cache_manual') cache_lifecycle_scheduler_deferred($source, 'central_maintenance_active');
         return [
             'ok' => true,
             'busy' => true,
@@ -1033,10 +1117,40 @@ function site_maintenance_run(array $options = []): array
     // Retention has its own lock, throttle, checkpoint and failure evidence.
     // Run it even when thumbnail work is busy, failed or outside its time window.
     $telemetryStarted = microtime(true);
-    $telemetry = function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
+    $telemetry = !$cacheOnly && function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
         ? telemetry_run_scheduled_maintenance() : ['skipped' => true];
     $timeBudgetSeconds = max(1, $timeBudgetSeconds - (int) ceil(microtime(true) - $telemetryStarted));
-    $result = site_maintenance_with_lock(static function () use ($force, $source, $timeBudgetSeconds): array {
+    $cacheCleanup = null;
+    $cacheLifecycle = null;
+    $siteLockEntered = false;
+    $result = site_maintenance_with_lock(static function () use ($force, $source, $timeBudgetSeconds, $cacheOnly, $cacheRunId, &$cacheCleanup, &$cacheLifecycle, &$siteLockEntered): array {
+        $siteLockEntered = true;
+        if ($cacheRunId !== '') {
+            cache_cleanup_diagnostic_event($cacheRunId, 'lock_acquired', ['lock' => 'site_maintenance']);
+        }
+        // The central claim and this legacy worker lock also cover independent GC.
+        // Run before thumbnail enable/window/completion checks, never on a public
+        // rendering path. The owner adds its own updater-start lock and throttle.
+        $cacheAllowed = in_array($source, ['admin_manual', 'admin_cache_manual'], true)
+            || feature_capability_effective_enabled('automatic_cache_cleanup');
+        if ($cacheAllowed && function_exists(__NAMESPACE__ . '\\application_update_run_scheduled_cache_cleanup')) {
+            $cacheCleanup = site_maintenance_run_cleanup_operation(
+                'updater_cache_gc',
+                static fn (): array => application_update_run_scheduled_cache_cleanup($force, $cacheRunId),
+                ['source' => $source, 'cache_run_id' => $cacheRunId]
+            );
+        }
+        if ($cacheOnly) {
+            if ($source !== 'admin_cache_manual') {
+                $cacheLifecycle = site_maintenance_run_cleanup_operation('cache_lifecycle', static fn (): array => cache_lifecycle_scheduled_run($timeBudgetSeconds, $source), ['source'=>$source]);
+            }
+            return ['ok' => $cacheCleanup !== null || $cacheLifecycle !== null,
+                'done' => ($cacheCleanup === null || !empty($cacheCleanup['value']['done']))
+                    && ($cacheLifecycle === null || !empty($cacheLifecycle['value']['done'])),
+                'skipped' => ($cacheCleanup === null || !empty($cacheCleanup['value']['skipped']))
+                    && ($cacheLifecycle === null || ($cacheLifecycle['value']['skipped'] ?? false) === true), 'reason' => 'cache_only'];
+        }
+        $cacheLifecycle = site_maintenance_run_cleanup_operation('cache_lifecycle', static fn (): array => cache_lifecycle_scheduled_slice($force), ['source'=>$source]);
         if (!site_maintenance_enabled() && !$force) {
             return [
                 'ok' => true,
@@ -1145,7 +1259,27 @@ function site_maintenance_run(array $options = []): array
         }
     });
 
+    if ($cacheRunId !== '' && $siteLockEntered) {
+        cache_cleanup_diagnostic_event($cacheRunId, 'lock_released', ['lock' => 'site_maintenance']);
+    }
+    if ($cacheOnly && $source !== 'admin_cache_manual' && !$siteLockEntered) cache_lifecycle_scheduler_deferred($source, 'site_maintenance_busy');
+    if ($cacheRunId !== '' && $cacheCleanup === null && empty($result['busy'])) {
+        $failureCode = $siteLockEntered ? 'worker_unavailable' : 'site_lock_open_failed';
+        cache_cleanup_diagnostic_event($cacheRunId, 'failed', ['failure_code' => $failureCode]);
+        $result['ok'] = false;
+        $result['reason'] = $failureCode;
+    }
     $result['telemetry'] = $telemetry;
+    if ($cacheLifecycle !== null) {
+        $result['cache_lifecycle'] = $cacheLifecycle;
+        if (empty($cacheLifecycle['ok']) || empty($cacheLifecycle['value']['ok'])) $result['ok'] = false;
+    }
+    if ($cacheCleanup !== null) {
+        $result['cache_gc'] = $cacheCleanup;
+        if (empty($cacheCleanup['ok']) || empty($cacheCleanup['value']['ok'])) {
+            $result['ok'] = false;
+        }
+    }
     if ($chain && site_maintenance_should_chain_after_result($result)) {
         $result['continuation_queued'] = site_maintenance_queue_next_chained_slice();
     }
@@ -1585,15 +1719,17 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
 /**
  * Run lightweight cleanup tasks after thumbnail processing finishes.
  *
- * @param array<string,mixed> $state State value.
- * @param float $deadline Deadline value.
- * @return array<string,mixed>.
+ * @param array<string,mixed> $state Maintenance checkpoint with source, phase, totals and cleanup diagnostics, updated in place.
+ * @param float $deadline Caller deadline in microtime seconds; registered cleanup owners retain their own bounded admission budgets.
+ * @return array{worked:bool,phase:string,cleanup:array<string,mixed>,cleanup_diagnostics:array<string,mixed>} Completed owner outcomes and safe diagnostics; automatic OFF skips cache payload owners while explicit Admin work and unrelated maintenance remain available.
  */
 function site_maintenance_process_cleanup_step(array &$state, float $deadline): array
 {
     unset($deadline); // Cleanup callbacks own their own bounded work limits.
     $cleanup = [];
     $diagnostics = [];
+    $cacheAllowed = ($state['source'] ?? '') === 'admin_manual'
+        || feature_capability_effective_enabled('automatic_cache_cleanup');
 
     $run = static function (string $operation, callable $callback) use (&$cleanup, &$diagnostics, $state): void {
         $result = site_maintenance_run_cleanup_operation($operation, $callback, $state);
@@ -1601,15 +1737,15 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $cleanup[$operation] = !empty($result['ok']) ? $result['value'] : 'failed';
     };
 
-    if (function_exists(__NAMESPACE__ . '\cleanup_download_manifest_cache')) {
+    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\cleanup_download_manifest_cache')) {
         $run('download_manifests', static fn() => cleanup_download_manifest_cache());
     }
 
-    if (function_exists(__NAMESPACE__ . '\cleanup_legacy_download_artifact_cache')) {
+    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\cleanup_legacy_download_artifact_cache')) {
         $run('legacy_download_artifacts', static fn() => cleanup_legacy_download_artifact_cache());
     }
 
-    if (function_exists(__NAMESPACE__ . '\\cleanup_expired_zip_cache')) {
+    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\\cleanup_expired_zip_cache')) {
         $run('zip_cache', static fn() => cleanup_expired_zip_cache());
     }
 
@@ -1760,10 +1896,12 @@ function site_maintenance_public_state(array $state): array
 /**
  * Return dashboard-safe site maintenance status.
  *
- * @return array<string mixed>.
+ * @return array<string,mixed> Schedule, persisted state/results and bounded cache_cleanup evidence with available/pending/blocked booleans and actual bytes_reclaimed.
  */
 function site_maintenance_status(): array
 {
+    // Passive evidence is needed by the dashboard, not by public trigger registration.
+    require_once __DIR__ . '/cache_lifecycle_storage.php';
     $schedule = site_maintenance_schedule_due_state();
     $state = site_maintenance_state();
 
@@ -1790,7 +1928,45 @@ function site_maintenance_status(): array
         'last_result' => site_maintenance_last_result(),
         'last_success' => site_maintenance_last_success(),
         'last_failure' => site_maintenance_last_failure(),
+        'cache_cleanup' => site_maintenance_cache_cleanup_summary(),
+        'cache_lifecycle' => cache_lifecycle_status(),
     ];
+}
+
+/**
+ * Execute an explicit lifecycle preview/approval step under existing installation-wide maintenance ownership.
+ * @param string $action One of inventory_start, inventory_step, cleanup_start or cleanup_step.
+ * @param string $id Exact preview identity required for continuation and approval.
+ * @return array<string,mixed> Lifecycle state or safe busy/refusal marker; no action bypasses a central mutation claim.
+ */
+function site_maintenance_cache_lifecycle_action(string $action, string $id): array
+{
+    if (is_array(maintenance_center_model_mutation_owner())) return ['ok'=>false,'reason'=>'central_maintenance_active'];
+    $result = site_maintenance_with_lock(static function () use ($action, $id): array {
+        return match ($action) {
+            'inventory_start' => cache_lifecycle_inventory_start(),
+            'inventory_step' => $id !== '' ? cache_lifecycle_inventory_slice($id) : ['ok'=>false,'reason'=>'missing_cache_preview'],
+            'cleanup_start' => cache_lifecycle_cleanup_start($id),
+            'cleanup_step' => $id !== '' ? cache_lifecycle_cleanup_slice($id) : ['ok'=>false,'reason'=>'missing_cache_preview'],
+            default => ['ok'=>false,'reason'=>'invalid_cache_action'],
+        };
+    });
+    return !empty($result['busy']) ? array_replace($result, ['ok'=>false]) : $result;
+}
+
+/**
+ * Prepare bounded read-only cache evidence for the dashboard without scanning trees.
+ * @return array{available:bool,pending:bool,blocked:bool,bytes_reclaimed:int} Committed actual removals and queue presence; unavailable evidence is never a measured empty queue.
+ */
+function site_maintenance_cache_cleanup_summary(): array
+{
+    try {
+        $status = application_update_cache_cleanup_status();
+        return ['available' => true, 'pending' => $status['pending'],
+            'blocked' => $status['blocked'], 'bytes_reclaimed' => $status['bytes_reclaimed']];
+    } catch (Throwable) {
+        return ['available' => false, 'pending' => false, 'blocked' => false, 'bytes_reclaimed' => 0];
+    }
 }
 
 /**

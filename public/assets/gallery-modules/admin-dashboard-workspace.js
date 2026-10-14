@@ -14,6 +14,7 @@
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261002-gallery-controls-v3';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261002-gallery-controls-v3';
+import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261014-cache-cleanup-v11';
 
 /**
  * Purpose: Bound one read so a stalled connection exposes an explicit retry.
@@ -49,6 +50,7 @@ function updateGalleryCount(root, count) {
  * @return {void} Binds a single workspace and keeps successful fragments resident across tab changes.
  */
 export function setupAdminDashboardWorkspace() {
+    setupAdminCacheCleanup();
     const root = document.querySelector('[data-admin-dashboard-workspace]');
     if (!(root instanceof HTMLElement) || root.dataset.dashboardBound === '1') return;
     root.dataset.dashboardBound = '1';

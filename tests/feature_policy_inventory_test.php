@@ -119,12 +119,13 @@ namespace Gallery\Core {
         'advanced_database_maintenance',
         'media_renamer',
         'telemetry',
+        'automatic_cache_cleanup',
         'admin_test_runs',
     ];
 
     feature_policy_inventory_assert(
         $registeredKeys === $expectedKeys,
-        'Feature-policy inventory must explicitly account for the complete current 34-feature registry.'
+        'Feature-policy inventory must explicitly account for the complete current feature registry.'
     );
 
     foreach ($expectedKeys as $featureKey) {

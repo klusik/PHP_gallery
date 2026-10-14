@@ -336,13 +336,16 @@ function cms_admin_update(): void
     }
 
     if (isset($_GET['update_job_status'])) {
+        \Gallery\Core\cms_runtime_kernel()->load('updater-work');
         $requestedJobId = trim((string) ($_GET['job_id'] ?? ''));
         $job = $requestedJobId !== ''
             ? application_update_job_public_state(application_update_load_job($requestedJobId))
             : (($active = application_update_active_job()) !== null ? application_update_job_public_state($active) : []);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
-        echo json_encode(['ok' => true, 'job' => $job], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $diagnostic = $job !== [] ? \Gallery\Services\application_update_job_worker_diagnostic(
+            (string) $job['id'], (int) ($job['updated_at'] ?? 0)) : null;
+        echo json_encode(['ok' => true, 'job' => $job, 'diagnostic' => $diagnostic], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return;
     }
 

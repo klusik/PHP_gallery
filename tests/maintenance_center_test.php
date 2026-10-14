@@ -168,7 +168,7 @@ namespace {
     maintenance_center_test_assert(str_contains($executionSource, 'database_maintenance_optimize_tables([$table])'), 'OPTIMIZE orchestration must pass exactly one server-selected table per step.');
     maintenance_center_test_assert(str_contains($executionSource, 'maintenance_center_physical_table_allowed($currentTable)'), 'Physical DB execution must re-check current server-side eligibility immediately before mutation.');
     maintenance_center_test_assert(str_contains($executionSource, "['has_more']"), 'Telemetry/resumable execution must honor subsystem has_more checkpoints.');
-    maintenance_center_test_assert(str_contains($executionSource, "['download_manifests', 'legacy_download_artifacts', 'zip_cache']"), 'Download/cache cleanup must keep independent server-owned sub-operations explicit.');
+    maintenance_center_test_assert(str_contains($executionSource, "['updater_prune_trash', 'download_manifests', 'legacy_download_artifacts', 'zip_cache', 'cache_lifecycle']"), 'Download/cache cleanup must keep independent server-owned sub-operations explicit.');
     maintenance_center_test_assert(str_contains($executionSource, 'maintenance_center_run_download_cleanup_operation'), 'Download/cache owner failures must be isolated and logged with bounded diagnostics.');
     maintenance_center_test_assert(str_contains($executionSource, "'maintenance_center.task_suboperation_failed'"), 'Download/cache sub-operation failures must emit a diagnosable Admin log event.');
     maintenance_center_test_assert(str_contains($executionSource, 'current_subtask'), 'Download/cache progress must expose the current bounded sub-operation.');

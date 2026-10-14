@@ -64,6 +64,16 @@ const APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS = 10;
  */
 const APPLICATION_UPDATE_STATE_RENAME_DELAY_US = 50_000;
 
+/**
+ * Bound the independently persisted updater GC checkpoint before JSON decoding.
+ * Type: int. Units: bytes. Scope: one updater GC evidence/checkpoint file.
+ * Consumers: scheduled cache cleanup, read-only Maintenance Center evidence and
+ * bounded manual diagnostics of the blocking updater pointer/job.
+ * Rationale: 64 directory levels plus counters fit within 64 KiB; oversized
+ * existing state must require review rather than unbounded allocation.
+ */
+const APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES = 65536;
+
 // This module is split into focused part files under app/services/updates_jobs/.
 // Per-request time budget and runtime limit resolution.
 require_once __DIR__ . '/updates_jobs/budget.php';

@@ -385,13 +385,13 @@ function application_update_process_job(string $jobId, float $budgetSeconds = 8.
 /**
  * Cancel a prepared update before activation has touched application files.
  *
- * Cancellation is intentionally forbidden once the job reaches activation. At
+ * Cancellation is intentionally forbidden for unknown stages or once the job reaches activation. At
  * that point the safe choices are resume the same activation or start rollback
  * from the already-complete snapshot. Pre-activation cancellation removes bulky
  * transient artifacts but preserves the redacted job record for diagnostics.
  *
  * @param string $jobId Job identifier.
- * @return array<string,mixed> Safe cancelled job state.
+ * @return array<string,mixed> Public job state with id/operation/trigger/status/stage strings, stage_percent/attempts/timestamps integers, progress current/total/percent/message/unit fields when available, boolean can_resume/can_cancel/can_rollback/background, safe error metadata or null, result JSON fields and runtime_limits; busy locks return the unchanged public job, while unsafe cancellation throws.
  */
 function application_update_cancel_job(string $jobId): array
 {
@@ -418,7 +418,7 @@ function application_update_cancel_job(string $jobId): array
         $stageIndex = array_search((string) ($job['stage'] ?? ''), $stages, true);
         $activateIndex = array_search('activate', $stages, true);
         if (!empty($job['checkpoints']['activation_complete'])
-            || (is_int($stageIndex) && is_int($activateIndex) && $stageIndex >= $activateIndex)) {
+            || !is_int($stageIndex) || !is_int($activateIndex) || $stageIndex >= $activateIndex) {
             throw new RuntimeException('Update cannot be cancelled after activation has begun. Resume or rollback instead.');
         }
 
@@ -455,7 +455,7 @@ function application_update_cancel_job(string $jobId): array
  * the fully validated/staged/backup state and replay only the failed stage.
  *
  * @param string $jobId Job identifier.
- * @return array<string,mixed> Safe job state.
+ * @return array<string,mixed> Public job state, with result.last_failure retaining the preceding safe error message/reference, stage, at epoch and retryable flag when a retry clears the current error.
  */
 function application_update_retry_job(string $jobId): array
 {
@@ -485,6 +485,8 @@ function application_update_retry_job(string $jobId): array
             return application_update_job_public_state($job);
         }
         $stage = (string) ($job['stage'] ?? '');
+        // Retain owner-redacted failure evidence when retry clears the live error.
+        $job['result']['last_failure'] = (array) (application_update_job_public_state($job)['error'] ?? []);
         if (in_array($stage, ['download', 'archive_validate', 'extract', 'package_validate'], true)) {
             foreach ([$jobDir . '/package.zip', $jobDir . '/extract', $jobDir . '/ready'] as $path) {
                 if (is_file($path)) {

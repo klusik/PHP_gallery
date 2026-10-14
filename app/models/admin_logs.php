@@ -113,13 +113,16 @@ function admin_log_model_ensure_status_schema(): bool
  * Best-effort insert of an Admin log row using only available columns.
  *
  * @param array<string,mixed> $values Candidate values keyed by admin_logs column.
+ * @param array{failure_code?:string,exception_class?:string,sqlstate?:string,driver_code?:int,field?:string}|null $diagnostic Optional safe receipt without raw SQL/messages; field is restricted to known log-column identifiers.
  * @return bool True when an insert was executed successfully.
  */
-function admin_log_model_insert_available(array $values): bool
+function admin_log_model_insert_available(array $values, ?array &$diagnostic = null): bool
 {
+    $diagnostic = [];
     try {
         $columnsAvailable = admin_log_model_columns();
         if ($columnsAvailable === []) {
+            $diagnostic['failure_code'] = 'log_schema_unavailable';
             return false;
         }
 
@@ -135,12 +138,30 @@ function admin_log_model_insert_available(array $values): bool
             $params[] = $value;
         }
         if ($insertColumns === []) {
+            $diagnostic['failure_code'] = 'no_supported_log_fields';
             return false;
         }
 
         $stmt = db()->prepare('INSERT INTO admin_logs (' . implode(', ', $insertColumns) . ') VALUES (' . implode(', ', $placeholders) . ')');
-        return $stmt->execute($params);
-    } catch (Throwable) {
+        $ok = $stmt->execute($params);
+        if (!$ok) {
+            $diagnostic['failure_code'] = 'log_insert_refused';
+        }
+        return $ok;
+    } catch (Throwable $exception) {
+        $diagnostic = ['failure_code' => 'log_insert_exception', 'exception_class' => $exception::class];
+        if ($exception instanceof \PDOException) {
+            $state = (string) $exception->getCode();
+            if (preg_match('/^[A-Z0-9]{5}$/D', $state) === 1) {
+                $diagnostic['sqlstate'] = $state;
+            }
+            $diagnostic['driver_code'] = (int) ($exception->errorInfo[1] ?? 0);
+            if ($diagnostic['driver_code'] === 1406
+                && preg_match("/Data too long for column '([a-z_]+)'/i", $exception->getMessage(), $match) === 1
+                && in_array($match[1], ['request_id', 'event_key', 'message', 'route_name', 'subject_type', 'category', 'severity', 'level', 'context_json'], true)) {
+                $diagnostic['field'] = $match[1];
+            }
+        }
         return false;
     }
 }

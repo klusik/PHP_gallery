@@ -160,6 +160,17 @@ try {
     $expected = array_map(static fn (string $path): string => basename($path, '.php'), glob($directory . '/database/migrations/*.php') ?: []);
     sort($expected, SORT_STRING);
     check($versions === $expected, 'Installer did not record the complete migration chain exactly once.');
+    $cachePreferenceSql = "SELECT setting_value FROM app_settings WHERE setting_key = 'feature_flag.automatic_cache_cleanup.enabled'";
+    check($pdo->query($cachePreferenceSql)->fetchColumn() === '1', 'New installation did not enable automatic cache cleanup.');
+    $cacheMigration = require $source . '/database/migrations/202610140001_automatic_cache_cleanup.php';
+    // Replay the actual upgrade statements on missing and explicitly disabled
+    // preferences in this owned installation, never in the caller's database.
+    $pdo->exec("DELETE FROM app_settings WHERE setting_key = 'feature_flag.automatic_cache_cleanup.enabled'");
+    foreach ($cacheMigration as $statement) $pdo->exec($statement);
+    check($pdo->query($cachePreferenceSql)->fetchColumn() === '1', 'Upgrade did not enable an absent cache preference.');
+    $pdo->exec("UPDATE app_settings SET setting_value = '0' WHERE setting_key = 'feature_flag.automatic_cache_cleanup.enabled'");
+    foreach ($cacheMigration as $statement) $pdo->exec($statement);
+    check($pdo->query($cachePreferenceSql)->fetchColumn() === '0', 'Upgrade replay overrode explicit cache OFF.');
     $admin = $pdo->query('SELECT username, password_hash, role FROM users')->fetchAll(PDO::FETCH_ASSOC);
     check(count($admin) === 1 && $admin[0]['username'] === 'installer_admin' && $admin[0]['role'] === 'admin'
         && password_verify($password, $admin[0]['password_hash']), 'Installed administrator credentials are invalid.');

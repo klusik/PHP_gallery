@@ -8,11 +8,12 @@
  * Module Type: Core HTTP Adapter
  *
  * Purpose:
- *   Provides read-only access to PHP request input bags for MVC layers that must
- *   not read transport superglobals directly.
+ *   Provides read-only PHP request bags and response status for MVC layers that
+ *   must keep transport globals and native response calls behind Core.
  *
  * Responsibilities:
  *   - Expose normalized query, post, cookie, file, server, and request bags
+ *   - Observe the current response status without mutating its transport
  *   - Keep PHP transport globals behind one Core infrastructure boundary
  *   - Remain dependency-free so isolated service modules can load the adapter
  *
@@ -36,6 +37,15 @@
 declare(strict_types=1);
 
 namespace Gallery\Core;
+
+/**
+ * Observe the current response status through the dependency-free Core HTTP adapter.
+ * @return int Current HTTP status, or the ordinary 200 status when PHP has no explicit response code; never changes headers or status.
+ */
+function response_status_code(): int
+{
+    return http_response_code() ?: 200;
+}
 
 /**
  * Return one read-only request input bag through the Core HTTP adapter.

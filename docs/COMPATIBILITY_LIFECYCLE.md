@@ -1,5 +1,17 @@
 # Compatibility lifecycle and retirement register
 
+## Independent updater cache reclamation
+
+Owner: updater filesystem/prune cleanup and site-maintenance service.
+The existing three-argument `application_update_delete_tree_slice()` API remains
+supported with an optional relative cursor and additional result fields. Existing
+updater/CLI callers retain their `removed`, `done` and `elapsed_ms` fields. The
+protected environment is PHP 8.1+ shared hosting; cursor-free calls remain valid
+for bounded shallow updater work, while the independent GC persists depth state.
+This is permanent support for existing callers rather than a timed fallback.
+Usage is unknown. `tests/updater_cache_gc_test.php` supplies synthetic safety and
+progress coverage; hosted FULL and production acceptance are distinct gates.
+
 ## Retained Actions job inventory provider failures
 
 Owner: `.github/scripts/release-promotion.mjs`, `command()` and `fetchJobs()`.
@@ -1003,6 +1015,47 @@ compatible. The editor's explicit `existing_only=1` opt-in protects read-only
 300px preload; ordinary media loading and generation keep their current owner.
 Evidence owners and live acceptance limits are in [ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).
 
+## Manual cache diagnostic logging (#212)
+
+Updater status JSON gains an additive diagnostic field with a nonblocking probe
+of the existing worker lock and server-clock checkpoint age. Existing clients
+can keep consuming ok/job; unsupported lock probes remain explicit unavailable
+evidence and do not manufacture process activity. Usage is unknown. Status reads
+never create a missing lock or rewrite lease metadata. Retry now retains the last
+owner-redacted failure separately from the current error; legacy jobs without
+that history remain supported without reconstruction. The cache fixture covers
+metadata preservation, held/free/missing locks and retry history; the browser
+fixture covers unchanged counter observations and compact activity labels.
+
+Startup retains traffic-driven maintenance for ordinary routes/settings while
+explicit cache actions and passive updater status reads own their work. This
+permanent routing boundary prevents a status/stop request from advancing updater
+work before authorization/CSRF controller handling. Security checks remain in the
+existing dispatch path. Usage is unknown; the actual startup-dispatch fixture
+`cache_transport_maintenance_test.php` protects both the exemptions and retained
+ordinary behavior. The dashboard fixture protects failed phase counters and safe
+owner-provided error/reference presentation.
+
+The cache diagnostic copy control follows the existing Clipboard API plus legacy
+selection/copy interaction used by Admin controls. It supports HTTP hosting and
+denied Clipboard API access, reports actual copy failure and remains owned by the
+cache UI module. Usage is unknown; retain this fallback until supported hosting
+and browsers all provide accepted clipboard access. Job progress reuses the
+existing authenticated Admin Updates status endpoint; stop reuses the locked
+pre-activation cancellation service with canonical panel completion. Existing
+direct/no-JavaScript POST fallback remains supported permanently. The dashboard
+browser fixture covers copying after injection, phase counters and in-place stop.
+
+The log service preserves the existing void best-effort API and adds a safe
+insertion receipt for explicit diagnostic consumers. The cache diagnostic owner
+stores a 26-character request-ID prefix to support the installed observability
+migration while retaining the full 32-character ID in searchable JSON context.
+This is permanent support for existing installations; usage is unknown.
+Retirement requires a qualified schema migration covering every supported
+installation. `cache_cleanup_diagnostics_test.php` covers column width rejection,
+confirmed insertion, safe failure receipts and redaction. Manual internal-browser
+verification additionally checked real persisted log entries on the local install.
+
 ## Floating navigation shell refresh (#208)
 
 `admin-mutation-completion.js` preserves the grouped Top/Down shell as a direct
@@ -1014,3 +1067,67 @@ fragment-refresh journeys no longer require the old shape. The production
 Theme-width browser fixture verifies repeated grouped-shell refresh, stable
 button identities and retained gallery cards; exact-candidate hosted integration
 also owns the real application visibility/delete/restore journey.
+
+## Contextual updater and bounded cache leases (#212)
+
+Scheduled cache bursts retain the original schema-1 state/journal and approved
+manual deletion cursor. New settled counters default to zero for in-flight old
+cursors; completed legacy states expose zero pending backlog. Current cycles
+persist complete counters. Usage of old deployed cursors is unknown. This
+compatibility path remains until supported installations finish their existing
+deletion jobs; it must never reset detached debt to improve metrics. The new
+disposable scheduler fixture covers recovery after detachment before cursor
+commit and refuses corrupt state instead of creating a replacement job.
+
+The lightweight shared cache storage owner preserves all existing lifecycle
+function names, stable lease buckets and schema-1 checkpoint identities. No
+second collector is introduced. Public writers/passive registration use this
+owner, while explicit worker roots load the existing collector. The updater
+filesystem root honors the same explicit disposable-test root constant used by
+cache lifecycle; absent that fixture constant, production root validation is
+unchanged. Regression uses real updater filesystem declarations rather than
+redeclaration stubs and confines all destructive work to its random temporary
+installation.
+
+The token-protected cron retains GET-token fallback for existing provider URL-only
+schedulers, while preferring a header or POST. Owner: site maintenance controller.
+Usage is unknown. Retire the URL fallback only after supported installations have
+migrated scheduler credentials and accepted header/POST calls; do not log tokens.
+Cache-only requests disable legacy self-request chaining permanently because an
+external scheduler owns repeated admission and unattended bounded execution.
+
+Idle unapproved manual previews are explicitly superseded after fifteen minutes
+without manual inventory activity. This is a policy change, not approval of an
+old plan. The new scheduled ID is shown in status and old IDs fail closed.
+Approved cleanup and detached cursors remain protected without an idle expiry.
+Disposable regression evidence covers new-ID rejection and uninterrupted owned
+cleanup; production scheduler configuration remains a separate deployment step.
+
+Age-only legacy backup/orphaned-running-job pruning is retired because it cannot prove current/previous recovery ownership. Existing legacy payloads remain protected pending an owner migration; usage is unknown. Known terminal job pruning preserves the last successful rollback, active/source and selected beta references, and new scheduled ownership revalidates them under updater locks. Windows releases the terminal job child worker handle immediately before directory rename while retaining the start lock; terminal workers only read payloads and retries/rollback transitions use the start lock. The disposable lifecycle fixture covers contextual protection.
+
+New GitHub/consumer leases use 256 stable buckets. Reclamation also checks any full-identity lease left by an earlier live checkout of this feature, protecting still-running producers while migrating lock granularity. Usage is unknown; retirement requires proof every earlier producer has exited and no supported caller uses that lease scheme. Bucket collisions are intentionally conservative and delay reclamation rather than weaken safety. The inherited BASIC audit runner remains unchanged. Native completed reports require matching JSON and the final in-run Markdown footer with subsequent publications outside that subtree; interrupted owner-only, missing/truncated Markdown and custom in-subtree publications remain protected. The lifecycle fixture covers these refusal paths and a held consumer lease.
+
+Historical schema-1 audit reports without `source` are accepted only when recognized profile/environment/task statuses, their canonical run-directory identity and final native Markdown publication match. Downloaded exports retain the completed JSON contract because their native run Markdown may be outside the export. This protects real September audit reports observed during analysis without permitting filename-only pruning. Usage is confirmed locally; retirement requires migration/removal of these historical reports. The lifecycle fixture includes historical/current completed pairs and protected interrupted-run markers.
+
+Registered legacy browser profiles and versioned release working copies lack reliable creation markers. Their fixed 24-hour retention uses a filesystem-derived age anchor persisted once; PHP ctime is not treated as portable birth time. Native browser fixtures now write creation evidence. The fallback is owned by cache lifecycle and permanently supports explicitly registered historical disposable roots; usage is confirmed from the incident screenshots. It can retire only after those roots are migrated/removed and all supported producers record creation. Regression fixtures cover recent writes without renewed expiry, the exact 24-hour boundary, fresh/pinned roots, legacy anchor stability and preserved persistent release controls. In-progress inventories initialize newly registered category counters without rewriting already approved previews; earlier observations remain in their original categories until a new scan.
+
+### Visitor cache opportunities and strict central ownership
+
+The cache lifecycle owner permanently supports PHP webhosts without
+`fastcgi_finish_request`/`litespeed_finish_request`: a 40 ms admission opportunity
+runs at shutdown and may add to client latency. Supported response finishing still
+occupies the PHP worker and receives 120/600 ms admission; this is not a separate
+thread. Usage is unknown until deployed arrival/progress evidence is observed.
+The hosted public HTTP fixture covers the unsupported finishing path; disposable
+visitor fixtures cover both budgets, contention and resumed deletion metrics.
+No cron, provider API or incoming traffic guarantee is introduced. This fallback
+can retire only if the supported hosting contract stops including such runtimes;
+current generic PHP 8.1+ support requires it permanently.
+
+`maintenance_center_model_mutation_owner(true)` refuses unknown storage before a
+new visitor mutation. Existing nullable callers retain their historical
+observation contract; the optional strict parameter is owned by the persistence
+model and tested by the visitor unknown-claim fixture. Upgrade preference seeding
+uses insert-if-absent, never an override of explicit administrator OFF. The old
+900-second completed due marker is conservatively interpreted using the one-hour
+completion anchor; existing unfinished/approved cursors are never migrated away.

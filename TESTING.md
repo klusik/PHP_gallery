@@ -1,5 +1,50 @@
 # Testing Guide
 
+The disposable cache-GC fixture also checks held/released worker-lock observations
+without changing metadata, unknown checkpoint timestamps and retained safe failure
+history after a retry. The dashboard fixture checks worker activity distinction
+and server checkpoint-age metadata in the copied trace. These are central
+functional fixtures; BASIC validates their source only.
+
+`tests/cache_transport_maintenance_test.php` probes the actual startup hook with
+isolated updater dispatch doubles: status reads and explicit cache actions run
+no background updater, while ordinary settings retain dispatch. The dashboard
+fixture also checks a failed 100% phase, visible safe error/reference and its
+latest checkpoint in copied diagnostics.
+
+The dashboard fixture additionally checks exact diagnostic copying before/after
+dynamic replacement, real phase-counter progress, read-only status requests and
+canonical updater cancellation without navigation or closing the panel. It does
+not cancel any real installation job. The updater state-machine owner retains
+the pre-activation cancellation and lock regressions.
+The disposable cache-GC fixture additionally executes unknown-stage refusal,
+busy worker preservation and successful extract-stage cancellation with a retained
+job record and untouched user content. This evidence requires central PHP execution.
+
+`tests/cache_cleanup_diagnostics_test.php` uses the real Admin log owners with
+an isolated database double to verify the installed 26-character request-ID
+limit, retained full correlation IDs, confirmed insertions, safe MySQL rejection
+receipts, redaction and bounded traces. The dashboard fixture also verifies
+immediate request feedback and one safe invalid-JSON diagnostic report without
+retrying deletion. These regressions belong to central integration; BASIC does
+not execute them. Manual localhost verification confirmed 16 real persisted
+events for an empty queue; the MacBook installation has not been verified live.
+
+The existing dashboard browser fixture additionally verifies manual updater-cache
+POST/CSRF transport, single-flight submits, canonical completion, explicit
+continuation, busy refusal and delegation after its control is dynamically
+replaced. URL and the fixture's open panel remain unchanged. The localhost manual
+check used an empty prune queue (0 files/0 B); it does not qualify production
+reclamation or replace hosted FULL browser coverage.
+
+`tests/updater_cache_gc_test.php` exercises 10,000 disposable files, exact byte
+accounting, independent persisted continuations, short deep-tree slices, throttle,
+start-lock exclusion, corrupt active-pointer protection, path-escape refusal and
+preservation of rollback/user/unknown data. Linux additionally covers internal
+symlink targets and permission failures. This regression belongs to the central
+PHP suite; BASIC validates source only. Production inventory, before/after
+reclamation and provider acceptance remain separate incident evidence.
+
 Gallery editor Images background preparation is covered by the central PHP
 `admin_gallery_images_deferred_test.php` and the existing Node delegation owner,
 which unconditionally awaits `admin_side_panel_delegation/images_preload.mjs`.
@@ -2856,3 +2901,38 @@ lifecycle. An acknowledged attachment retry makes no duplicate request, and a
 changed conversion choice is refused on the same retry owner. Conversion remains
 an explicit upload choice inside the initially collapsed Advanced disclosure;
 existing child and append conversion scenarios retain their assertions.
+
+## Cache lifecycle (#212)
+
+`tests/cache_lifecycle_test.php` uses a disposable root and deterministic clock for preview-only scanning, stale identity rejection, producer leases, pins, journal-tail recovery, contextual version/failed-job protection and actual removed bytes. `tests/fixtures/admin_dashboard_workspace.html` adds explicit inventory/approval, repeated dynamic fragments and unchanged URL/panel checks. Transport fixtures exclude these explicit actions from implicit updater advancement. Feature BASIC validates syntax/documentation only; the central FULL integration must execute filesystem and browser regressions. The live internal browser can verify non-destructive inventory without clicking cleanup.
+
+`tests/cache_lifecycle_scheduler_test.php` exercises independent external bursts
+on 120 disposable workspaces containing over 5,000 small payload files. It checks
+cleanup before scan completion, continued inventory while cleanup is pending,
+bounded admissions, idle manual identity invalidation, scheduler outage,
+concurrent invocation refusal, corrupt-state protection and recovery after
+detachment before cursor commit. It creates no large production payload and
+installs no scheduler. Production throughput, host limits and actual recurring
+arrivals require deployment evidence; BASIC cannot substitute for runtime proof.
+
+`tests/cache_lifecycle_visitor_test.php` covers a sparse 100 MiB few-file cache in
+one small attempt, >128 MiB and many-file small backlogs across visits, hourly due
+and zero-traffic resume with unchanged checkpoint identity, 40 ms fallback, global
+throttling, foreground/central contention, unknown ownership refusal and OFF.
+`tests/support/cache_lifecycle_public_http_fixture.php` is hosted-only and runs
+as a required child of the existing serial `cli_http_boundary_test.php`: fixed
+loopback port 18812 and a random owned cache root exercise the real public request
+registration without Admin, cron, JavaScript or a response-finishing primitive,
+including refusal to advance on HEAD, POST or denied responses.
+The child must exit successfully and emit its explicit PASS before the parent
+continues. Apache availability remains the parent's separate contextual SKIP.
+The BASIC audit runner and its registry remain inherited from develop. Native
+audit-retention fixtures require the final JSON/Markdown publication and preserve
+owner-only runs, missing/truncated Markdown and custom in-subtree publications.
+Local checks use the installed Codex browser at `http://localhost/Galerie`; no
+local helper server is launched. Existing scheduler/lifecycle fixtures retain
+crash/detachment/checkpoint, leases, pins, path ancestry, ZIP and recovery proof.
+The real installer fixture executes migration/replay/opt-out in its disposable
+database. BASIC does not execute these regressions; exact prepared FULL is the
+runtime qualification. Live payload deletion and provider incident acceptance
+remain outside source verification.

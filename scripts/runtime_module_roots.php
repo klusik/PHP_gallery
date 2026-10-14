@@ -79,9 +79,19 @@ return [
         'request-maintenance' => ['Gallery\\Services\\application_autoupdate_maybe_run'],
         'archive-request-trigger' => ['Gallery\\Services\\admin_log_archive_register_request_trigger'],
         'site-request-trigger' => ['Gallery\\Services\\site_maintenance_register_request_trigger'],
-        'site-maintenance-work' => ['Gallery\\Services\\site_maintenance_run'],
+        'site-maintenance-work' => [
+            'Gallery\\Services\\cache_lifecycle_visitor_run',
+            'Gallery\\Services\\cache_lifecycle_scheduled_run',
+            'Gallery\\Services\\cache_lifecycle_scheduled_slice',
+            'Gallery\\Services\\cache_lifecycle_status',
+            'Gallery\\Services\\site_maintenance_cache_lifecycle_action',
+            'Gallery\\Services\\site_maintenance_run',
+            'Gallery\\Services\\application_update_run_scheduled_cache_cleanup',
+            'Gallery\\Services\\application_update_cache_cleanup_status',
+        ],
         'archive-maintenance-work' => ['Gallery\\Services\\admin_log_archive_maintenance_run'],
         'updater-work' => [
+            'Gallery\\Services\\application_update_job_worker_diagnostic',
             'Gallery\\Services\\application_update_continue_background_job',
             'Gallery\\Services\\application_autoupdate_dry_run',
             'Gallery\\Services\\application_autoupdate_run_installing_check',
@@ -121,6 +131,12 @@ return [
     // creates an edge only when the owner's complete historic closure is present.
     'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'gallery-pdf-documents'],
     'module_dependencies' => [
+        // Reuse the existing maintenance owner only where its complete historical
+        // closure is already present; no new root or public/dashboard fan-out.
+        'domain-admin-test-runs' => ['request-maintenance'],
+        'domain-site-maintenance' => ['request-maintenance'],
+        'domain-updates' => ['request-maintenance'],
+        'site-maintenance-work' => ['request-maintenance'],
         'updater-work' => ['request-maintenance'],
         // Rendering follows view-model preparation and reuses its shared Core dependencies.
         'breadcrumb-presentation' => ['breadcrumb-policy'],
@@ -140,6 +156,11 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // GitHub writes explicitly load the producer-lease owner immediately before
+        // acquisition; read-only public routes do not need that storage module.
+        'Gallery\\Services\\cms_github_api_write_cache' => [
+            'Gallery\\Services\\cache_lifecycle_producer_lease',
+        ],
         // Historical media&ofp=1 links select the PDF route module before its handler runs.
         'Gallery\\Controllers\\cms_media' => ['Gallery\\Controllers\\cms_gallery_ofp_pdf'],
         // Reserved PDF children and attached documents load these modules before use.
@@ -186,6 +207,9 @@ return [
         'Gallery\\Services\\site_maintenance_register_request_trigger' => [
             'Gallery\\Services\\site_maintenance_run',
             'Gallery\\Services\\admin_test_run_record_maintenance_event',
+        ],
+        'Gallery\\Services\\site_maintenance_register_cache_trigger' => [
+            'Gallery\\Services\\cache_lifecycle_visitor_run',
         ],
         'Gallery\\Services\\admin_log_archive_register_request_trigger' => [
             'Gallery\\Services\\admin_log_archive_maintenance_run',
