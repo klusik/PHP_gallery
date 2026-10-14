@@ -39,7 +39,16 @@ try {
     const slots=Array.from(document.querySelectorAll('.admin-theme-favorite-gallery-slot'));
     check(slots.length===3,'three actual shortcut rows');
     for(const slot of slots) check(slot.querySelector('[data-gallery-search-picker-value]').disabled,'initial server-rendered canonical picker ID stays disabled for no-JS fallback');
+    history.replaceState(null, '', '#admin-gallery-count-badge');
     setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupGallerySearchPickers();
+    check(!find('#admin-theme-tab-layout').hidden && !find('#admin-theme-layout-subtab-cards').hidden, 'Settings counter deep link reveals primary Layout and nested Cards tabs');
+    check(find('[name="theme_gallery_count_badge_mode"]').getClientRects().length > 0, 'Counter mode is visibly rendered after deep-link initialization');
+    check(location.hash === '#admin-gallery-count-badge', 'Revealing counter controls preserves the precise destination hash');
+    find('[data-admin-tab-target="admin-theme-tab-appearance"]').click();
+    history.replaceState(null, '', '#admin-gallery-count-badge');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    check(!find('#admin-theme-tab-layout').hidden && !find('#admin-theme-layout-subtab-cards').hidden, 'Counter hash navigation reopens containing tabs after another category was selected');
+    find('[data-admin-subtab-target="admin-theme-layout-subtab-shortcuts"]').click();
     const galleryGridForm=find('#gallery-grid-form'), gridStatus=find('[data-gallery-grid-status]'), gridColumns=find('[data-gallery-grid-columns]'), gridRows=find('[data-gallery-grid-rows]'), gridReset=find('[data-gallery-grid-reset]'), gridOverride=find('[data-gallery-grid-override-enabled]');
     check(!gridStatus.hidden && gridStatus.textContent==='Default settings' && gridColumns.value==='3' && gridRows.value==='4','gallery grid initially shows inherited dimensions and Default settings');
     edit(gridColumns,'6'); check(gridOverride.checked && gridStatus.textContent==='Custom settings','moving Columns marks the local grid custom');

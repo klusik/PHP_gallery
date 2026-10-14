@@ -1,5 +1,43 @@
 # Patch notes
 
+## Version 0.130.1
+
+Restored Admin Settings initialization and navigation, corrected Theme and Widgets sidebar selection, and refreshed related browser-module cache versions. Added regression coverage for Settings entry resolution, browser module linking, deep links, and sidebar selection.
+
+### Highlights
+
+#### Admin Settings and navigation
+- Restored Admin Settings loading and search by fixing PDF DPI setting ownership lookup.
+- Enabled Settings links to controls inside hidden Theme panels to open the containing tabs, scroll to the control, and preserve the URL hash.
+- Made the Theme and Widgets sidebar destinations select independently, with exactly one matching entry active.
+
+### Technical Details
+
+#### Backend
+- Updated PDF DPI ownership lookup to return the `gallery_pdf_settings` service without validating a submitted value. Central normalization validated values before persistence.
+
+#### Frontend
+- Refreshed cache versions for the Admin Settings tabs, side panel, uploader, and PDF module paths.
+- Aligned PDF and uploader imports with the scoped Admin helper cache identity.
+
+#### Tests and documentation
+- Added `tests/admin_settings_entry_runtime_test.php` for real Settings owner and PDF DPI entry resolution.
+- Added `tests/browser_module_link_scenarios.mjs` and expanded frontend regression coverage for production module linking, Theme deep-link navigation, and Theme/Widgets sidebar selection.
+- Updated side-panel, upload-navigation, and mutation-hardening regression contracts, along with `TESTING.md` and `docs/ADMIN_SETTINGS_INVENTORY.md`.
+- Initialized immutable release-origin and predecessor records for this version, referencing [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change.
+
+#### For administrators
+- Admin Settings loaded and its search interactions were available again.
+- Settings deep links opened the relevant Theme controls, and the sidebar clearly selected either Theme or Widgets.
+
+#### For maintainers
+- Regression tests covered real Settings entry resolution and production browser module linking rather than relying only on source-string checks or mocked imports.
+
 ## Version 0.130
 
 Added configurable gallery photo-count badges for gallery cards and opened-gallery headers, with independent icon controls and localized settings in the Theme page and Setup Wizard. Preserved access-filtered public counts for visitors and Viewer Accounts while making all-photo totals available only to authenticated Admin sessions.

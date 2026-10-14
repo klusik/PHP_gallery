@@ -386,9 +386,28 @@ export function setupAdminTabsInRoot(root) {
         if (activeHash && activeHash !== window.location.hash) {
             window.history.replaceState(null, '', activeHash);
         }
-        const initialTargetId = (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
+        // A Settings result may address a control inside a hidden primary/nested panel.
+        const hashTarget = activeHash ? panelScope.querySelector(`#${CSS.escape(activeHash.slice(1))}`) : null;
+        const hashPanel = hashTarget ? panels.find((panel) => panel === hashTarget || panel.contains(hashTarget)) : null;
+        const initialTargetId = hashPanel?.id || (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
         if (imageWidget && initialTargetId === 'admin-edit-images') imageWidget.dataset.requested = '1';
         activateTab(imageTab?.getAttribute('aria-disabled') === 'true' && initialTargetId === 'admin-edit-images' ? panels[0].id : initialTargetId);
+        const revealHashControl = (target) => {
+            if (!(target instanceof HTMLElement) || !panels.some((panel) => panel.contains(target))) return;
+            // Primary initialization runs before the page's ordinary nested-tab setup.
+            setupAdminNestedTabs(panelScope);
+            const ancestors = [];
+            for (let ancestor = target; ancestor && ancestor !== panelScope; ancestor = ancestor.parentElement) {
+                if (ancestor.hasAttribute('data-admin-subtab-panel')) ancestors.unshift(ancestor);
+            }
+            ancestors.forEach((panel) => {
+                panelScope.querySelector(`[data-admin-subtab-target="${CSS.escape(panel.id)}"]`)?.click();
+            });
+            if (ancestors.length || !panels.includes(target)) {
+                window.requestAnimationFrame(() => target.scrollIntoView({block: 'center'}));
+            }
+        };
+        revealHashControl(hashTarget);
         if (imageWidget && imagePanel) {
             imageWidget.addEventListener('php-gallery:images-loading', () => {
                 if (imageTab?.getAttribute('aria-selected') === 'true') {
@@ -490,7 +509,10 @@ export function setupAdminTabsInRoot(root) {
                 window.history.replaceState(null, '', hash);
             }
             if (imageWidget && hash === '#admin-edit-images' && imageTab?.getAttribute('aria-disabled') === 'true') imageWidget.dataset.requested = '1';
-            activateTab(hash.replace(/^#/, ''));
+            const target = panelScope.querySelector(`#${CSS.escape(hash.slice(1))}`);
+            const owner = target ? panels.find((panel) => panel === target || panel.contains(target)) : null;
+            activateTab(owner?.id || hash.replace(/^#/, ''));
+            revealHashControl(target);
         };
 
         window.addEventListener('hashchange', handleHashNavigation);

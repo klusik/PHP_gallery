@@ -47,8 +47,8 @@ use function Gallery\Services\t;
  *
  * Used by server-rendered view helpers.
  *
- * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool} $model Prepared sidebar state; missing legacy preference keeps old entries hidden.
- * @return list<array{label:string,items:list<array{label:string,page:string,url:string,feature?:string,highlight?:bool,icon?:string}>}> Navigation groups with optional feature ownership and decorative icons.
+ * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool,theme_widgets_active?:bool} $model Prepared sidebar state; missing legacy preference keeps old entries hidden and missing Widgets state selects ordinary Theme.
+ * @return list<array{label:string,items:list<array{label:string,page:string,url:string,feature?:string,highlight?:bool,icon?:string,active?:bool}>}> Navigation groups with optional feature ownership, explicit same-route selection and decorative icons.
  */
 function view_admin_menu_structure(array $model = []): array
 {
@@ -85,8 +85,8 @@ function view_admin_menu_structure(array $model = []): array
         [
             'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
-                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme'), 'icon' => 'theme'],
-                ['label' => t('admin.menu.widgets', 'Widgets'), 'page' => 'admin_theme', 'url' => url_for('admin_theme', ['widgets' => '1']), 'icon' => 'theme'],
+                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme'), 'icon' => 'theme', 'active' => empty($model['theme_widgets_active'])],
+                ['label' => t('admin.menu.widgets', 'Widgets'), 'page' => 'admin_theme', 'url' => url_for('admin_theme', ['widgets' => '1']), 'icon' => 'theme', 'active' => !empty($model['theme_widgets_active'])],
                 ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features'), 'icon' => 'features'],
             ],
         ],
@@ -115,13 +115,11 @@ function view_admin_menu_structure(array $model = []): array
 }
 
 /**
- * Handle view admin menu item is active.
+ * Select the sidebar destination for the current route and prepared surface state.
  *
- * Used by server-rendered view helpers.
- *
- * @param array $item Item value.
- * @param string $currentPage Current page value.
- * @return bool True when the condition matches.
+ * @param array{page?:string,url?:string,active?:bool,...} $item Navigation identity with optional explicit same-route selection.
+ * @param string $currentPage Current normalized Admin route.
+ * @return bool Whether this destination represents the current page or gallery editor context.
  */
 function view_admin_menu_item_is_active(array $item, string $currentPage): bool
 {
@@ -130,6 +128,9 @@ function view_admin_menu_item_is_active(array $item, string $currentPage): bool
         return false;
     }
     if ($currentPage === $itemPage) {
+        if (array_key_exists('active', $item)) {
+            return $item['active'];
+        }
         if ($itemPage === 'admin') {
             return !str_contains((string) ($item['url'] ?? ''), '#');
         }
@@ -349,7 +350,7 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
  * Used by server-rendered view helpers.
  *
  * @param string $currentPage Current page value.
- * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool} $model Controller-prepared sidebar state.
+ * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool,theme_widgets_active?:bool} $model Controller-prepared sidebar state with mutually exclusive Theme/Widgets selection.
  * @return void Outputs sidebar navigation without reading feature or setting policy.
  */
 function view_render_admin_sidebar(string $currentPage, array $model = []): void

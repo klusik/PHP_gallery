@@ -298,9 +298,9 @@ function shared_layout_language_selector_model(string $requestUri, string $scrip
 }
 
 /**
- * Prepare feature-policy and updater state consumed by the Admin sidebar View.
+ * Prepare capability, updater and request-surface state consumed by the Admin sidebar View.
  *
- * @return array{update_pending:bool,update_label:string,feature_enabled:array<string,bool>,admin_legacy_upload_navigation_enabled:bool} Prepared sidebar state.
+ * @return array{update_pending:bool,update_label:string,feature_enabled:array<string,bool>,admin_legacy_upload_navigation_enabled:bool,theme_widgets_active:bool} Prepared sidebar state, including the Theme request's Widgets surface.
  */
 function shared_layout_admin_chrome_model(): array
 {
@@ -315,6 +315,7 @@ function shared_layout_admin_chrome_model(): array
         'update_label' => application_update_nav_label($updatePending),
         'feature_enabled' => $featureEnabled,
         'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled(),
+        'theme_widgets_active' => ($_GET['widgets'] ?? null) === '1' || array_key_exists('widget_action', $_POST),
     ];
 }
 

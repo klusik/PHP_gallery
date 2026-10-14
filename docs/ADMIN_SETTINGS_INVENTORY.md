@@ -40,6 +40,12 @@ Per-gallery and per-image values are intentionally not global registry entries. 
 
 Version 0.108 also adds optional **per-administrator** gallery creation defaults. SimBrief Pilot ID/name and source-content language are stored in `user_gallery_creation_preferences` by `app/services/gallery_creation_preferences.php`, edited through the gallery create/editor controls, and kept out of the global Settings registry. These defaults belong to the authenticated administrator; they are not site-wide Theme settings and do not grant gallery or API access. An explicit Remember save requires migration `202609250001_gallery_creation_preferences.php` and verified storage.
 
+PDF page resolution (`gallery_pdf_render_dpi`) belongs to `gallery_pdf_settings`.
+Ownership lookup returns service metadata without inspecting submitted values;
+central normalization validates the selected DPI before persistence. Supported
+values are 96, 150, 200, 300, 600, 1200 and 2400 DPI. Runtime ownership and entry
+construction coverage is described in `TESTING.md`.
+
 ## Classification legend
 
 - **Edit**: safe central editing is enabled and the save delegates to the existing canonical service setter.

@@ -268,6 +268,6 @@ assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reloa
 assert.doesNotMatch(canonicalRefreshSource, /history\.(?:pushState|replaceState)\s*\(/, 'completeCoreGalleryMutationInCurrentView must not rewrite the URL');
 
 // Changing the side-panel module must also change its import cache key.
-assert.match(operationsSource, /admin-side-panel\.js\?v=20261013-images-icloud-rebase-v2/);
+assert.match(operationsSource, /admin-side-panel\.js\?v=20261014-settings-control-links-v2/);
 
 console.log('PASS admin_side_panel_gallery_refresh_test');
