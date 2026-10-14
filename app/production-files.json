@@ -2062,7 +2062,7 @@
         "tests/breadcrumb_gallery_settings_test.php",
         "tests/breadcrumb_theme_settings_test.php",
         "tests/breadcrumb_workflow_integration_test.php",
-        "tests/browser_module_link_test.mjs",
+        "tests/browser_module_link_scenarios.mjs",
         "tests/browser_upload_settings_test.php",
         "tests/browser_upload_zip_parser_safety_test.php",
         "tests/browser_upload_zip_worker/icloud_download.mjs",

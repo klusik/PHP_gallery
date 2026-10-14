@@ -1,6 +1,6 @@
 {
     "version": "0.130",
-    "generated_at": "2026-10-14T00:11:03+00:00",
+    "generated_at": "2026-10-14T00:40:04+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -236,7 +236,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:d4e99107c40dd625fc7407c13e366f0efbf58e0b96ebe28feba5cae040b8c882",
-        "app/production-files.json": "sha256:6f81aec8046240bf56300d69707efbc7dcb0cc646d4fdb744227b1c500d92ed7",
+        "app/production-files.json": "sha256:b9bd3503faf9b7a0ad2e9ab27ce55e4f7705b1e6e80f978744ab35b1b90c87b1",
         "app/release_file_policy.php": "sha256:fa464740e3b559dfd056d9cc28ff73328b430dffe33b2b1e74767f76e5fbcde5",
         "app/request_data.php": "sha256:b0236b57a40dfab623932c2fb945e3d784b603e5cf67d87199f1c534e124acff",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",
@@ -858,7 +858,7 @@
         "scripts/audit_performance_registry.php": "sha256:0ad9b8d81e74d85acbfb4b4b480cf14f2fbdb8d709e712bb0b47fd8a9c058f47",
         "scripts/audit_php_registry.php": "sha256:24229f1f63e5412c144c2685cc0118e079fa7960786eb8d003a7749c55bbc9e2",
         "scripts/audit_process.php": "sha256:42373be3b20bf69553bbd9da015290c5790478e11766dfd9bfe4117dbbade165",
-        "scripts/audit_registry.php": "sha256:83d485979cd33bfad5a5df2bb5392f5483c74564018f92e3709dcb7eea178798",
+        "scripts/audit_registry.php": "sha256:6adaa0867ab4db14f0f0be753ea7afbb8825c4a33d6553970adf95c69c078d0f",
         "scripts/audit_route_performance.php": "sha256:6e9d9de8bad9121382caf92b0602f00470598f0de1f222ec6527b860fb756bc4",
         "scripts/audit_route_probe.php": "sha256:b7965268e1c15d4b3ed44748315883fffbdd9822bda555344fa239228a68cab9",
         "scripts/audit_route_probe_registry.php": "sha256:c680b73ebab95b82e1814d3142441ec6a06b9ddf07b73b1dec5185bfc8bd0519",
