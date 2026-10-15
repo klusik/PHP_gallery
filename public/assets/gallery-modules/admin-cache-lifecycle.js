@@ -102,21 +102,30 @@ export function setupAdminCacheLifecycle() {
                     + (state.stale ? ' Observation is stale or absent.' : '') + (state.stalled ? ' No recent successful progress.' : '')
                     + (state.superseded_manual_at ? ' An idle manual preview was replaced; its old ID is invalid.' : '');
                 buttons.forEach(button => {
-                    button.hidden = button.value === 'cache_inventory_start' ? ['inventory','cleanup'].includes(state.phase)
+                    button.hidden = state.registry && state.scheduled ? button.value !== 'cache_inventory_start' : button.value === 'cache_inventory_start' ? ['inventory','cleanup'].includes(state.phase)
                         : button.value === 'cache_inventory_step' ? state.phase !== 'inventory'
                             : button.value === 'cache_cleanup_start' ? state.phase !== 'preview' : state.phase !== 'cleanup';
                 });
                 region.querySelectorAll('[data-cache-owner]').forEach(row => {
                     const total = state.totals?.[row.dataset.cacheOwner];
-                    row.querySelector('[data-cache-owner-bytes]').textContent = formatBytes(total?.bytes);
-                    row.querySelector('[data-cache-owner-eligible]').textContent = formatBytes(total?.reclaimable_bytes);
+                    row.querySelector('[data-cache-owner-bytes]').textContent = (total ? formatBytes(total.bytes) : '—');
+                    row.querySelector('[data-cache-owner-eligible]').textContent = (total ? formatBytes(total.reclaimable_bytes) : '—');
                 });
+                const regionDetails = region.querySelector('[data-cache-region-details]');
+                if (regionDetails && Array.isArray(state.regions_sample)) regionDetails.textContent = JSON.stringify(state.regions_sample, null, 2);
                 const sample = region.querySelector('[data-cache-lifecycle-sample]');
                 if (sample) sample.replaceChildren(...(state.sample || []).slice(0,16).map(item => {
                     const entry = document.createElement('li');
                     entry.textContent = `${item.path} — ${formatBytes(item.bytes)}`;
                     return entry;
                 }));
+                const evidence = region.querySelector('[data-cache-registry-evidence]');
+                if (evidence && state.registry) {
+                    const values = {done:state.regions_completed,total:state.regions_total,working:state.regions_working,
+                        oldest:formatEpoch(state.oldest_completed_at),removed:formatEpoch(state.last_removed_at)};
+                    evidence.textContent = (evidence.dataset.cacheRegistryTemplate || evidence.textContent)
+                        .replace(/\{(done|total|working|oldest|removed)\}/g, (match, key) => String(values[key] ?? '—'));
+                }
                 if (bar && state.phase === 'complete') bar.value = 100;
                 else if (bar && state.phase === 'cleanup' && state.candidate_bytes > 0) bar.value = Math.min(99, state.bytes_removed / state.candidate_bytes * 100);
                 else if (bar && state.phase === 'preview') bar.value = 100;

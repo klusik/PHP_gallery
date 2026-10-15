@@ -466,11 +466,24 @@ function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
         'cache_inventory_step'=>['Continue scan', $phase === 'inventory'],
         'cache_cleanup_start'=>['Clean eligible cache', $phase === 'preview'],
         'cache_cleanup_step'=>['Continue cleanup', $phase === 'cleanup']] as $action => [$label, $visible]) {
+        if (!empty($status['registry']) && !empty($status['scheduled'])) $visible = $action === 'cache_inventory_start';
         echo '<button type="submit" class="secondary" name="site_maintenance_action" value="' . e($action) . '"' . ($visible ? '' : ' hidden') . '>'
             . e(t('admin.cache_lifecycle.' . $action, $label)) . '</button> ';
     }
-    echo '</form></div><p role="status" data-cache-lifecycle-status>' . e(t('admin.cache_lifecycle.initial', 'Phase: {phase}. Observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
-        ['phase'=>$phase,'bytes'=>format_bytes((int) ($status['bytes'] ?? 0)), 'eligible'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
+    echo '</form></div>';
+    if (!empty($status['registry'])) {
+        $registryTemplate = t('admin.cache_lifecycle.registry',
+            'Last-known observations, not current size. Completed regions: {done}/{total}; working: {working}; oldest completed: {oldest}; last confirmed deletion: {removed}.');
+        echo '<p class="muted" data-cache-registry-evidence data-cache-registry-template="' . e($registryTemplate) . '">' . e(t('admin.cache_lifecycle.registry',
+            'Last-known observations, not current size. Completed regions: {done}/{total}; working: {working}; oldest completed: {oldest}; last confirmed deletion: {removed}.',
+            ['done'=>(string) ($status['regions_completed'] ?? 0),'total'=>(string) ($status['regions_total'] ?? 0),
+                'working'=>(string) ($status['regions_working'] ?? 0),'oldest'=>$epoch((int) ($status['oldest_completed_at'] ?? 0)),
+                'removed'=>$epoch((int) ($status['last_removed_at'] ?? 0))])) . '</p>';
+    }
+    if (!empty($status['registry_unavailable'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.unverified',
+        'Registry evidence is unavailable. This is not an empty or successfully checked cache.')) . '</p>';
+    echo '<p role="status" data-cache-lifecycle-status>' . e(t('admin.cache_lifecycle.initial', 'Phase: {phase}. Observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
+        ['phase'=>$phase,'bytes'=>!empty($status['measurement_available']) ? format_bytes((int) ($status['bytes'] ?? 0)) : '—', 'eligible'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
             'reclaimed'=>format_bytes((int) ($status['bytes_removed'] ?? 0))]))
         . (!empty($status['partial']) ? ' ' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) : '')
         . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
@@ -496,14 +509,18 @@ function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
         $seconds = $policy['seconds'] ?? null;
         $lifetime = $seconds === null ? t('admin.cache_lifecycle.context', 'Context / owner') : ($seconds >= 86400 ? ($seconds / 86400) . ' d' : ($seconds / 60) . ' min');
         echo '<tr data-cache-owner="' . e((string) $owner) . '"><td title="' . e((string) ($policy['reason'] ?? '')) . '">' . e((string) ($policy['label'] ?? $owner))
-            . '</td><td>' . e($lifetime) . '</td><td data-cache-owner-bytes>' . e(format_bytes((int) ($total['bytes'] ?? 0)))
-            . '</td><td data-cache-owner-eligible>' . e(format_bytes((int) ($total['reclaimable_bytes'] ?? 0))) . '</td></tr>';
+            . '</td><td>' . e($lifetime) . '</td><td data-cache-owner-bytes>' . (isset($total['bytes']) ? e(format_bytes((int) $total['bytes'])) : '—')
+            . '</td><td data-cache-owner-eligible>' . (isset($total['reclaimable_bytes']) ? e(format_bytes((int) $total['reclaimable_bytes'])) : '—') . '</td></tr>';
     }
     echo '</tbody></table><p>' . e(t('admin.cache_lifecycle.sample', 'Preview examples (up to 16 candidates; totals above describe the full plan):')) . '</p><ul data-cache-lifecycle-sample>';
     foreach ((array) ($status['sample'] ?? []) as $item) {
         echo '<li>' . e((string) ($item['path'] ?? '')) . ' — ' . e(format_bytes((int) ($item['bytes'] ?? 0))) . '</li>';
     }
     echo '</ul>';
+    if (!empty($status['regions_sample'])) {
+        echo '<pre data-cache-region-details>' . e(json_encode($status['regions_sample'],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . '</pre>';
+    }
     if (!empty($status['partial'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) . '</p>';
     echo '</details><details class="admin-media-details" data-cache-diagnostics hidden><summary>' . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
         . '</summary><button type="button" class="secondary" data-cache-diagnostic-copy data-copied-label="' . e(t('admin.cache_cleanup.copied', 'Log copied.'))

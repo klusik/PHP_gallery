@@ -88,6 +88,8 @@ namespace {
     define('CACHE_LIFECYCLE_TEST_ROOT', $root);
     $GLOBALS['cache_lifecycle_test_now'] = (int) file_get_contents($root . '/clock');
     require_once dirname(__DIR__) . '/support/cache_diagnostic_database.php';
+    require_once dirname(__DIR__) . '/support/cache_registry_fixture.php';
+    $GLOBALS['cache_lifecycle_test_database'] = cache_registry_fixture_database($root, false);
     $GLOBALS['cache_diagnostic_db'] = new \CacheDiagnosticDatabase();
     $GLOBALS['cache_diagnostic_rows'] = [];
     $GLOBALS['cache_diagnostic_refuse'] = false;

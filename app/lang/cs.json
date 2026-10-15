@@ -7416,5 +7416,7 @@
     "admin.cache_lifecycle.automatic": "Automatické čištění je zapnuté po instalaci/aktualizaci. Vhodná návštěva spustí serverový worker, který pokračuje bez otevřeného prohlížeče, s kontrolami každých 30 sekund a dávkami do 5 sekund. Chyby jsou uvedené výše; další návštěva může obnovit přerušený řetězec. Výslovné OFF v Admin Features přežije aktualizace.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatické čištění cache",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Zapnuté po instalaci/aktualizaci. Běžné návštěvy posouvají bezpečné čištění krátkými serverovými kroky; inventář je splatný po hodině a bez návštěv počká. OFF zachová stav cache i při dalších aktualizacích.",
-    "admin.settings.item.feature_automatic_cache_cleanup.example": "Příklad: Nechte ON pro automatické čištění při návštěvách; OFF zastaví automatickou práci a ponechá ruční ovládání."
+    "admin.settings.item.feature_automatic_cache_cleanup.example": "Příklad: Nechte ON pro automatické čištění při návštěvách; OFF zastaví automatickou práci a ponechá ruční ovládání.",
+    "admin.cache_lifecycle.registry": "Poslední známá měření, nikoli okamžitá velikost. Dokončené oblasti: {done}/{total}; rozpracované: {working}; nejstarší dokončení: {oldest}; poslední potvrzené mazání: {removed}.",
+    "admin.cache_lifecycle.unverified": "Stav registru není dostupný. Nejde o prázdnou ani úspěšně zkontrolovanou cache."
 }

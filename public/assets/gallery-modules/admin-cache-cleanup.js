@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import { completeAdminMutation } from './admin-mutation-completion.js?v=20261014-floating-shell-v1';
-import { setupAdminCacheLifecycle } from './admin-cache-lifecycle.js?v=20261014-cache-lifecycle-v6';
+import { setupAdminCacheLifecycle } from './admin-cache-lifecycle.js?v=20261015-cache-registry-v1';
 
 /**
  * Bound a stalled manual request while preserving a visible, safe retry.

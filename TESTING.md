@@ -1,5 +1,8 @@
 # Testing Guide
 
+`tests/cache_lifecycle_registry_test.php` uses the actual registry model with a disposable SQLite table derived from the migration. It covers oldest-due selection, partial-region fairness/cursors, retained completed observations, connection restart, stable row count, discovery/path reuse, legitimate size decreases, persistent removal receipts, passive status, opt-out and corrupt-checkpoint backoff. The existing required autonomous HTTP fixture shares a real disposable registry across independent worker requests, retaining actual token/header/controller transport and a single public kickoff. The existing Chromium dashboard fixture additionally checks retained registry measurements, safe round/cursor evidence and dynamically replaced controls with unchanged URL and open panel. Existing legacy scheduler/detachment/crash fixtures remain compatibility coverage. No live cache is used. Hosted central FULL remains the qualification authority; BASIC covers source only.
+
+
 The disposable cache-GC fixture also checks held/released worker-lock observations
 without changing metadata, unknown checkpoint timestamps and retained safe failure
 history after a retry. The dashboard fixture checks worker activity distinction

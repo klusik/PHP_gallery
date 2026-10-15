@@ -7416,5 +7416,7 @@
     "admin.cache_lifecycle.automatic": "Automatic cleanup is enabled after installation/update. A suitable visit starts a server worker that continues without an open browser, checking every 30 seconds in batches of up to 5 seconds. Failures are shown above; a later visit can recover an interrupted chain. Explicit OFF in Admin Features survives updates.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatic cache cleanup",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Enabled after installation/update. Ordinary visits advance verified retention in short server-side steps; inventory is due hourly and waits during zero traffic. OFF preserves cache state and survives updates.",
-    "admin.settings.item.feature_automatic_cache_cleanup.example": "Example: Keep ON for automatic cleanup during ordinary visits; choose OFF to stop automatic cache work while retaining manual controls."
+    "admin.settings.item.feature_automatic_cache_cleanup.example": "Example: Keep ON for automatic cleanup during ordinary visits; choose OFF to stop automatic cache work while retaining manual controls.",
+    "admin.cache_lifecycle.registry": "Last-known observations, not current size. Completed regions: {done}/{total}; working: {working}; oldest completed: {oldest}; last confirmed deletion: {removed}.",
+    "admin.cache_lifecycle.unverified": "Registry evidence is unavailable. This is not an empty or successfully checked cache."
 }

@@ -102,3 +102,4 @@ require_once __DIR__ . '/cache_lifecycle/reclamation.php';
 require_once __DIR__ . '/cache_lifecycle/visitor.php';
 require_once __DIR__ . '/cache_lifecycle/chain.php';
 require_once __DIR__ . '/cache_lifecycle/observability.php';
+require_once __DIR__ . '/cache_lifecycle/registry.php';

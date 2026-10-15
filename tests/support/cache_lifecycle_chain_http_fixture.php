@@ -49,6 +49,8 @@ namespace {
     file_put_contents($root . '/clock', (string) time());
     file_put_contents($root . '/cache/unregistered-original/payload', 'protected original');
     file_put_contents($root . '/cache/unregistered-original/.keep', 'pin');
+    require_once __DIR__ . '/cache_registry_fixture.php';
+    $GLOBALS['cache_lifecycle_test_database'] = cache_registry_fixture_database($root);
     $environment = getenv();
     $environment['CACHE_CHAIN_HTTP_ROOT'] = $root;
     // The real timer must have a spare worker while another request waits.
@@ -122,6 +124,7 @@ namespace {
             proc_close($process);
         }
         require_once dirname(__DIR__, 2) . '/app/services/cache_lifecycle.php';
+        unset($GLOBALS['cache_lifecycle_test_database']);
         for ($step = 0; $step < 100 && is_dir($root); $step++) \Gallery\Services\application_update_delete_tree_slice($root, 5000, 0.5);
     }
 }

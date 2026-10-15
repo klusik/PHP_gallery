@@ -7416,5 +7416,7 @@
     "admin.cache_lifecycle.automatic": "Die automatische Bereinigung ist nach Installation/Update aktiviert. Ein geeigneter Besuch startet einen Server-Worker, der ohne geöffneten Browser alle 30 Sekunden mit Batches bis zu 5 Sekunden weiterläuft. Fehler werden oben angezeigt; ein späterer Besuch kann eine unterbrochene Kette wiederherstellen. Ausdrückliches OFF in Admin Features bleibt bei Updates erhalten.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatische Cache-Bereinigung",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Nach Installation/Update aktiviert. Normale Besuche treiben sichere Aufbewahrung in kurzen serverseitigen Schritten voran; Inventar ist stündlich fällig und wartet ohne Besucher. OFF bewahrt Cache-Zustand und bleibt bei Updates erhalten.",
-    "admin.settings.item.feature_automatic_cache_cleanup.example": "Beispiel: ON für automatische Bereinigung bei normalen Besuchen beibehalten; OFF stoppt automatische Arbeit und erhält manuelle Bedienelemente."
+    "admin.settings.item.feature_automatic_cache_cleanup.example": "Beispiel: ON für automatische Bereinigung bei normalen Besuchen beibehalten; OFF stoppt automatische Arbeit und erhält manuelle Bedienelemente.",
+    "admin.cache_lifecycle.registry": "Letzte bekannte Messungen, keine aktuelle Größe. Abgeschlossene Bereiche: {done}/{total}; in Arbeit: {working}; ältester Abschluss: {oldest}; letzte bestätigte Löschung: {removed}.",
+    "admin.cache_lifecycle.unverified": "Registerdaten sind nicht verfügbar. Der Cache ist damit weder leer noch erfolgreich geprüft."
 }

@@ -134,7 +134,9 @@ return [
     'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'gallery-pdf-documents'],
     'module_dependencies' => [
         // Reuse the existing maintenance owner only where its complete historical
-        // closure is already present; no new root or public/dashboard fan-out.
+        // closure is already present, including Admin authentication. The edge
+        // replaces four duplicated files without broadening any route's closure.
+        'domain-admin-auth' => ['request-maintenance'],
         'domain-admin-test-runs' => ['request-maintenance'],
         'domain-site-maintenance' => ['request-maintenance'],
         'domain-updates' => ['request-maintenance'],

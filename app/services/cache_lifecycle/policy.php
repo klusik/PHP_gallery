@@ -63,28 +63,35 @@ function cache_lifecycle_workspace_age_path(string $relative): string
 /**
  * Record a fixed workspace age once instead of extending retention on every write.
  * @param string $relative Registered cache-relative disposable root; other directories are ignored.
- * @return void Persists producer creation evidence or a conservative legacy filesystem anchor; existing evidence is unchanged.
+ * @return void Persists fixed creation/legacy age bound to the current producer/inode identity; unchanged identities retain their anchor, replacements cannot inherit expiry.
  */
 function cache_lifecycle_workspace_observe(string $relative): void
 {
     if (!cache_lifecycle_disposable_workspace($relative)) return;
     $destination = cache_lifecycle_path(cache_lifecycle_workspace_age_path($relative));
-    if (file_exists($destination)) return;
-    $stat = @lstat(cache_lifecycle_path($relative));
+    $workspacePath = cache_lifecycle_path($relative);
+    clearstatcache(true, $workspacePath);
+    $stat = @lstat($workspacePath);
     if (!is_array($stat)) return;
     $marker = cache_lifecycle_read_json(cache_lifecycle_path($relative . '/cache-owner.json'));
     $native = !str_starts_with($relative, 'release-')
         && ($marker['schema_version'] ?? null) === 1 && ($marker['producer'] ?? '') === 'php_gallery_browser_fixture'
         && ($marker['directory'] ?? '') === $relative && is_int($marker['created_at'] ?? null)
         && $marker['created_at'] > 0 && $marker['created_at'] <= cache_lifecycle_now();
-    // PHP ctime is metadata-change time on Unix, not a portable creation epoch.
-    // Freeze the earliest root evidence once for legacy directories; subsequent
-    // writes cannot reset this migration anchor. Random profile names are unique.
-    $created = $native ? $marker['created_at'] : min((int) $stat['mtime'], (int) $stat['ctime'], cache_lifecycle_now());
+    $markerHash = $native ? hash('sha256', json_encode($marker, JSON_THROW_ON_ERROR)) : '';
+    $identity = hash('sha256', json_encode([(int) $stat['dev'], (int) $stat['ino'], $native ? $marker : null], JSON_THROW_ON_ERROR));
+    $previous = cache_lifecycle_read_json($destination);
+    if (($previous['identity'] ?? '') === $identity) return;
+    // Unix ctime is not creation time. Existing unbound legacy records receive
+    // a conservative new anchor; producer identity or inode replacement cannot
+    // inherit the preceding payload's expired permission.
+    $reusedProof = $previous !== [] && ($previous['producer_marker_hash'] ?? '') === $markerHash;
+    $created = $native && !$reusedProof ? $marker['created_at'] : ($previous !== [] ? cache_lifecycle_now()
+        : min((int) $stat['mtime'], (int) $stat['ctime'], cache_lifecycle_now()));
     if ($created <= 0) return;
     if (!is_dir(dirname($destination))) mkdir(dirname($destination), 0775, true);
-    cache_lifecycle_write_json($destination, ['schema'=>1,'directory'=>$relative,'created_at'=>$created,
-        'source'=>$native ? 'producer_creation' : 'legacy_filesystem_anchor']);
+    cache_lifecycle_write_json($destination, ['schema'=>2,'directory'=>$relative,'created_at'=>$created,
+        'identity'=>$identity,'producer_marker_hash'=>$markerHash,'source'=>$native && !$reusedProof ? 'producer_creation' : 'legacy_filesystem_anchor']);
 }
 
 /**
@@ -155,8 +162,9 @@ function cache_lifecycle_directory_candidate(string $relative, array $counts, in
 {
     if ($counts['pinned'] || $counts['unsafe'] || $counts['newest'] <= 0) return null;
     if (cache_lifecycle_disposable_workspace($relative)) {
+        cache_lifecycle_workspace_observe($relative);
         $age = cache_lifecycle_read_json(cache_lifecycle_path(cache_lifecycle_workspace_age_path($relative)));
-        return ($age['schema'] ?? null) === 1 && ($age['directory'] ?? '') === $relative
+        return ($age['schema'] ?? null) === 2 && ($age['directory'] ?? '') === $relative
             && (int) ($age['created_at'] ?? 0) > 0
             && $age['created_at'] <= $now - cache_lifecycle_policies()['workspaces']['seconds'] ? 'workspaces' : null;
     }

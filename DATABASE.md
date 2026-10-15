@@ -10,6 +10,12 @@ Version 0.104.1 introduces no schema migration, table, column, index, or stored-
 
 Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
 
+## Cache lifecycle regions
+
+Migration `202610150001_cache_lifecycle_regions.php` creates `cache_lifecycle_regions` with stable SHA-256 `region_key`, safe relative path and owner, last service/successful completion, indexed next-due/retry times, failure count, discovery generation, missing-since and drained state. Bounded JSON columns retain the authoritative working checkpoint, compact current finding and last completed measurement. Fixed discovery/root-file rows avoid per-file registration; the receipt row retains actual confirmed removals across cycles and tombstone retirement. Checkpoint and receipt writes commit in one model-owned transaction. Runtime workers never issue DDL.
+
+There are at most 4099 admitted rows, including three internal identities. A complete readable root discovery can mark drained absent directories; partial scans cannot. Seven-day tombstones are pruned in batches of at most sixteen only after their private journals have been retired. Repeated checks update the existing row. Missing or corrupt DB/checkpoint evidence is unverified and never becomes an empty successful inventory. Existing unfinished legacy JSON plans stay recoverable until drained; [cache maintenance](docs/CACHE_MAINTENANCE.md#persistent-rotating-regions) describes the authority and recovery boundary.
+
 ## Database Engine
 
 Database version status is maintained separately from schema inventory. PHP Gallery's
