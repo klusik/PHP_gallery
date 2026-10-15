@@ -13,9 +13,13 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {spawnSync} from 'node:child_process';
+import {evidenceMatrixOwners,fullMatrixOwners,requireCurrentWorkflowOwners,requireIntegrationBasicProfile} from './ci-owner-contract.mjs';
 import {createHash} from 'node:crypto';
 import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
+import {readCoverageArtifact} from './coverage-artifacts.mjs';
+import {bindTrustedBasicReport} from './trusted-basic.mjs';
 import {verifyPredecessor} from './release-origin.mjs';
 import {requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding,integrationCheckBinding} from './release-owner-authorization.mjs';
 
@@ -28,11 +32,17 @@ import {requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding,int
 /** GitHub's server-owned job identity and outcome; optional id binds real API rows to their check details, with optional workflow/run fields used for exact integration jobs.
  * @typedef {{id?:number,name:string,status:string,conclusion:string|null,html_url:string,workflow_name?:string,run_id?:number,run_attempt?:number,actual_name?:string}} ReleaseJob
  */
+/** Immutable integration artifact, source workflow and exact candidate identity.
+ * @typedef {{candidate_sha:string,candidate_tree:string,run_id:string,run_attempt:string,workflow_sha:string,workflow_path:string,check_run_id:number,artifact_id:number,artifact_sha256:string}} IntegrationIdentity
+ */
+/** One protected-develop authority transition anchored directly to a main-owned integration.
+ * @typedef {{anchor:{identity:IntegrationIdentity,evidence:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}}},inherited_basic:{schema_version:1,authority_sha:string,source_sha:string,source_tree:string,comparison_base:string,profile:'basic',suites:string[],successful:true,report_sha256:string,root_binding:'trusted-evaluator-candidate-root-v1',artifact_id:number,artifact_sha256:string}}} IntegrationAuthorityUpdate
+ */
 /** Qualification record produced by the aggregate release gate.
  * @typedef {{repository:string,branch:string,candidate_sha:string,source_base:string,version:string,run_id:string,run_attempt:string,ready:boolean,origin_commit_sha:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string,origin_blob_sha:string,previous_tag_object_sha:string,
  * previous_tag_object_type:string,previous_release_candidate_sha:string,previous_tree_sha:string,predecessor_kind:string,
  * automated_result:string,override:boolean,lifecycle_schema?:number,coverage_schema?:number,winapp_changed?:boolean,installer_required?:boolean,
- * integration?:{candidate_sha:string,candidate_tree:string,run_id:string,run_attempt:string,workflow_sha:string,workflow_path:string,check_run_id:number,artifact_id:number,artifact_sha256:string},
+ * integration?:IntegrationIdentity,
  * delta?:{base_sha:string,candidate_sha:string,profile:string,changed_paths:string[],artifact_id:number,artifact_sha256:string}}} ReleaseRecord
  */
 /** Mandatory historical publication evidence fields consumed by predecessor validation.
@@ -136,11 +146,11 @@ export function requireQualificationChecks(call,repository,request,runAttempt) {
     }
 }
 
-/** Authenticate the main-owned exact-A integration record and its immutable artifact transport.
+/** Authenticate exact-A integration through retained main history or one directly anchored protected-develop authority update.
  * @param {ReleaseRecord} record Aggregate release record containing integration identity and provider digest.
  * @param {string} repository Exact owner/repository identity.
- * @param {{api?:function(string,string=,(JsonValue|null)=):JsonValue,execute?:function(string,string[],(string|null)=):string,integrationJobs?:ReleaseJob[],integrationEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}}}} adapters Authenticated artifact reader, server job reader and read-only GitHub API adapter.
- * @returns {{candidate_sha:string,candidate_tree:string,workflow_sha:string,run_id:string,run_attempt:string}} Verified exact-A source identity; throws when transport, ancestry, checks, or owner evidence is incomplete.
+ * @param {{api?:function(string,string=,(JsonValue|null)=):JsonValue,execute?:function(string,string[],(string|null)=):string,integrationJobs?:ReleaseJob[],anchorIntegrationJobs?:ReleaseJob[],anchorArtifacts?:{download?:function(string,number):Buffer},inheritedBasicArtifacts?:{download?:function(string,number):Buffer},integrationEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}}}} adapters Authenticated artifact and server readers; anchorIntegrationJobs, anchorArtifacts and inheritedBasicArtifacts isolate original main-owned jobs and complete independent ZIP bytes in hermetic fixtures only.
+ * @returns {{candidate_sha:string,candidate_tree:string,workflow_sha:string,run_id:string,run_attempt:string}} Verified exact-A identity; incomplete transport, ancestry, checks, owner authorization or inherited BASIC proof throws. Historical authority validation never requires moving develop/source refs.
  */
 export function verifyIntegrationEvidence(record,repository,adapters={}) {
     const evidence=adapters.integrationEvidence;
@@ -167,22 +177,72 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         && sourceBranch.split('/').every(part=>part.length>0 && !part.startsWith('.') && !part.endsWith('.lock'));
     if (payload.schema_version!==1 || payload.repository!==repository || !validFeatureBranch || !sha(sourceSha)
         || !sha(developBase) || payload.source_base!==developBase
-        || JSON.stringify(payload.basic_profile)!==JSON.stringify(['php-lint','js-lint','source-documentation-changed'])
         || payload.candidate_sha!==identity.candidate_sha || payload.candidate_tree!==identity.candidate_tree
         || payload.workflow_sha!==identity.workflow_sha || payload.workflow_path!==identity.workflow_path
         || String(payload.run_id)!==identity.run_id || String(payload.run_attempt)!==identity.run_attempt
         || !Array.isArray(payload.native_owners)) {
         throw new Error('BLOCKED integration payload does not match its immutable release record.');
     }
-    const requiredLabels=[
-        'Read-only generated-state and source preflight',
-        'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-        'Positive production package (macos-latest)',
-        'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)',
-        'PHP 8.5 workflows (mariadb:11.4, Unicode)',
-        'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures',
-        'Complete required CI matrix',
-    ];
+    const call=adapters.api;
+    if (typeof call!=='function') throw new Error('BLOCKED integration server evidence reader is unavailable.');
+    const authorityMode=Object.hasOwn(payload,'authority_update');
+    if (authorityMode) {
+        const authority=payload.authority_update,anchor=authority?.anchor,basic=authority?.inherited_basic;
+        const exactFields=(value,fields)=>value!==null && typeof value==='object' && !Array.isArray(value)
+            && JSON.stringify(Object.keys(value).sort())===JSON.stringify(fields.slice().sort());
+        if (!exactFields(authority,['anchor','inherited_basic']) || !exactFields(anchor,['identity','evidence'])
+            || !exactFields(anchor.identity,['candidate_sha','candidate_tree','workflow_sha','workflow_path','run_id',
+                'run_attempt','check_run_id','artifact_id','artifact_sha256'])
+            || !exactFields(anchor.evidence,['payload','provider'])
+            || !exactFields(anchor.evidence.provider,['artifact_id','artifact_digest','run_id'])
+            || !anchor.evidence.payload || typeof anchor.evidence.payload!=='object'
+            || Object.hasOwn(anchor.evidence.payload,'authority_update')
+            || !exactFields(basic,['schema_version','authority_sha','source_sha','source_tree','comparison_base',
+                'profile','suites','successful','report_sha256','root_binding','artifact_id','artifact_sha256'])
+            || anchor.identity.candidate_sha!==identity.workflow_sha || identity.workflow_sha!==developBase
+            || basic.schema_version!==1 || basic.authority_sha!==identity.workflow_sha || basic.source_sha!==sourceSha
+            || !sha(basic.source_tree) || basic.comparison_base!==developBase || basic.profile!=='basic'
+            || JSON.stringify(basic.suites)!==JSON.stringify(['php-lint','js-lint','source-documentation-changed'])
+            || basic.successful!==true || !digest(basic.report_sha256)
+            || !Number.isSafeInteger(basic.artifact_id) || basic.artifact_id<1 || !digest(basic.artifact_sha256)
+            || basic.root_binding!=='trusted-evaluator-candidate-root-v1'
+            || JSON.stringify(payload.basic_profile)!==JSON.stringify(['php-lint-changed','js-lint-changed','source-documentation-changed'])
+            || ['recovery_mode','observed_develop_sha','ref_write','mode','override','integration_recovery','harness_installation']
+                .some(key=>Object.hasOwn(payload,key))) {
+            throw new Error('BLOCKED authority update lacks a direct main-owned anchor or exact inherited whole BASIC proof.');
+        }
+        const transport=readCoverageArtifact(repository,anchor.identity.artifact_id,anchor.identity.run_id,
+            anchor.identity.artifact_sha256,'develop-integration-record',['develop-integration.json'],
+            {...adapters.anchorArtifacts,api:call});
+        const original=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(transport.entries.get('develop-integration.json')));
+        if (!isDeepStrictEqual(original,anchor.evidence.payload) || !isDeepStrictEqual(transport.provider,anchor.evidence.provider)) {
+            throw new Error('BLOCKED embedded authority anchor differs from its authenticated original archive bytes.');
+        }
+        verifyIntegrationEvidence({lifecycle_schema:3,coverage_schema:1,selected_develop_sha:identity.workflow_sha,
+            integration:anchor.identity},repository,{api:call,execute:adapters.execute,
+            integrationEvidence:anchor.evidence,integrationJobs:adapters.anchorIntegrationJobs});
+        requireCurrentWorkflowOwners(repository,identity.workflow_sha,call);
+        const inherited=readCoverageArtifact(repository,basic.artifact_id,identity.run_id,basic.artifact_sha256,
+            'develop-integration-inherited-basic',['trusted-basic.json','trusted-basic.json.report.json'],
+            {...adapters.inheritedBasicArtifacts,api:call});
+        const originalBasic=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(inherited.entries.get('trusted-basic.json')));
+        const recordedBasic={...basic};
+        delete recordedBasic.artifact_id;delete recordedBasic.artifact_sha256;
+        if (!isDeepStrictEqual(originalBasic,recordedBasic)) {
+            throw new Error('BLOCKED inherited BASIC evidence differs from its independent native job archive.');
+        }
+        const reportBytes=inherited.entries.get('trusted-basic.json.report.json');
+        const centralReport=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(reportBytes));
+        const bound=bindTrustedBasicReport(centralReport,{authority:identity.workflow_sha,source:sourceSha,
+            tree:basic.source_tree,base:developBase},reportBytes);
+        if (!isDeepStrictEqual(bound,originalBasic)) {
+            throw new Error('BLOCKED inherited BASIC central report bytes do not reproduce the recorded successful evidence.');
+        }
+    }
+    const requiredLabels=evidenceMatrixOwners(payload.native_owners,repository,identity.workflow_sha,call);
+    if (authorityMode && JSON.stringify(requiredLabels)!==JSON.stringify(fullMatrixOwners())) {
+        throw new Error('BLOCKED authority update requires the current PHP 8.1/8.5 native FULL owners.');
+    }
     const requiredOwners=requiredLabels.map(name=>'Develop integration / '+name);
     const owners=payload.native_owners;
     if (owners.length!==requiredOwners.length || owners.some(owner=>!owner || !Number.isSafeInteger(owner.id) || owner.id<1
@@ -191,14 +251,20 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         || requiredOwners.some(name=>owners.filter(owner=>owner.name===name).length!==1)) {
         throw new Error('BLOCKED exact-A integration payload lacks one or more full native qualification owners.');
     }
-    const call=adapters.api;
-    if (typeof call!=='function') throw new Error('BLOCKED integration server evidence reader is unavailable.');
     const run=call(`repos/${repository}/actions/runs/${identity.run_id}/attempts/${identity.run_attempt}`);
     if (run?.id!==Number(identity.run_id) || run.run_attempt!==Number(identity.run_attempt)
-        || run.path!==identity.workflow_path || run.event!=='workflow_dispatch' || run.head_branch!=='main'
+        || run.path!==identity.workflow_path || run.event!=='workflow_dispatch' || run.head_branch!==(authorityMode?'develop':'main')
         || run.head_sha!==identity.workflow_sha || run.name!=='Integrate into develop'
         || run.status!=='completed' || run.conclusion!=='success') {
-        throw new Error('BLOCKED integration workflow attempt is not the successful main-owned source run.');
+        throw new Error('BLOCKED integration workflow attempt is not the successful trusted source run.');
+    }
+    if (authorityMode) {
+        const owner=repository.split('/')[0];
+        if (run.actor?.login?.toLowerCase()!==owner.toLowerCase()
+            || run.triggering_actor?.login?.toLowerCase()!==owner.toLowerCase()
+            || !['admin','maintain'].includes(call(`repos/${repository}/collaborators/${encodeURIComponent(owner)}/permission`)?.permission)) {
+            throw new Error('BLOCKED protected-develop authority update requires the repository owner with maintainer permission.');
+        }
     }
     const checkInventory=call(`repos/${repository}/commits/${identity.candidate_sha}/check-runs?per_page=100&filter=all`);
     if (!Array.isArray(checkInventory?.check_runs) || checkInventory.total_count!==checkInventory.check_runs.length
@@ -218,16 +284,19 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         }
     }
     const workflowCommit=call(`repos/${repository}/commits/${identity.workflow_sha}`);
-    const mainRef=call(`repos/${repository}/git/ref/heads/main`);
-    const mainSha=mainRef?.object?.sha;
-    if (workflowCommit?.sha!==identity.workflow_sha || mainRef?.ref!=='refs/heads/main'
-        || mainRef.object?.type!=='commit' || !sha(mainSha)) {
-        throw new Error('BLOCKED integration workflow source or current main ref is unavailable.');
+    if (workflowCommit?.sha!==identity.workflow_sha) {
+        throw new Error('BLOCKED integration workflow source is unavailable.');
     }
-    const lineage=mainSha===identity.workflow_sha ? {status:'identical',merge_base_commit:{sha:identity.workflow_sha}}
-        : call(`repos/${repository}/compare/${identity.workflow_sha}...${mainSha}`);
-    if (!['ahead','identical'].includes(lineage?.status) || lineage?.merge_base_commit?.sha!==identity.workflow_sha) {
-        throw new Error('BLOCKED integration workflow source is not in retained main history.');
+    if (!authorityMode) {
+        const mainRef=call(`repos/${repository}/git/ref/heads/main`),mainSha=mainRef?.object?.sha;
+        if (mainRef?.ref!=='refs/heads/main' || mainRef.object?.type!=='commit' || !sha(mainSha)) {
+            throw new Error('BLOCKED integration current main ref is unavailable.');
+        }
+        const lineage=mainSha===identity.workflow_sha ? {status:'identical',merge_base_commit:{sha:identity.workflow_sha}}
+            : call(`repos/${repository}/compare/${identity.workflow_sha}...${mainSha}`);
+        if (!['ahead','identical'].includes(lineage?.status) || lineage?.merge_base_commit?.sha!==identity.workflow_sha) {
+            throw new Error('BLOCKED integration workflow source is not in retained main history.');
+        }
     }
     const candidate=call(`repos/${repository}/commits/${identity.candidate_sha}`);
     if (candidate?.sha!==identity.candidate_sha || candidate.commit?.tree?.sha!==identity.candidate_tree) {
@@ -237,6 +306,10 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     if (source?.sha!==sourceSha || source.parents?.length!==1 || source.parents[0]?.sha!==developBase) {
         throw new Error('BLOCKED integration source S is not the recorded single-child develop candidate from P.');
     }
+    if (authorityMode && source.commit?.tree?.sha!==payload.authority_update.inherited_basic.source_tree) {
+        throw new Error('BLOCKED inherited BASIC source tree differs from immutable source S.');
+    }
+    requireIntegrationBasicProfile(payload.basic_profile,repository,authorityMode?sourceSha:identity.workflow_sha,call);
     if (identity.candidate_sha!==sourceSha) {
         if (candidate.parents?.length!==1 || candidate.parents[0]?.sha!==sourceSha) {
             throw new Error('BLOCKED integrated A is not the recorded generated-only child of source S.');
@@ -257,6 +330,16 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     const nonOwnerJobs=jobs.filter(job=>!requiredOwners.includes(job.name));
     const releaseAudit='Develop integration / Authoritative release audit';
     const auxiliaryNames=['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate','Publish develop integration'];
+    const inheritedJobName='Inherited BASIC authority';
+    if (authorityMode) auxiliaryNames.push(inheritedJobName);
+    else {
+        const skippedInherited=nonOwnerJobs.filter(job=>job.name===inheritedJobName);
+        if (skippedInherited.length>1 || skippedInherited.some(job=>job.workflow_name!=='Integrate into develop'
+            || job.run_id!==Number(identity.run_id) || job.run_attempt!==Number(identity.run_attempt)
+            || job.status!=='completed' || job.conclusion!=='skipped')) {
+            throw new Error('BLOCKED an ordinary integration must uniquely skip the optional inherited BASIC authority job.');
+        }
+    }
     const auxiliaryJobs=nonOwnerJobs.filter(job=>auxiliaryNames.includes(job.name));
     if (nativeJobs.length!==requiredOwners.length || ownerById.size!==requiredOwners.length || owners.some(owner=>{
         const matches=jobs.filter(job=>job.id===owner.id);
@@ -272,7 +355,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         || nonOwnerJobs.some(job=>job.name===releaseAudit
             ? job.workflow_name!=='Integrate into develop' || job.run_id!==Number(identity.run_id)
                 || job.run_attempt!==Number(identity.run_attempt) || job.status!=='completed' || job.conclusion!=='skipped'
-            : !auxiliaryNames.includes(job.name))) {
+            : !auxiliaryNames.includes(job.name) && !(job.name===inheritedJobName && !authorityMode))) {
         throw new Error('BLOCKED integration payload native owners differ from the server job/check inventory.');
     }
     return {candidate_sha:identity.candidate_sha,candidate_tree:identity.candidate_tree,
@@ -424,7 +507,7 @@ export function verifyBasicDeltaEvidence(record,version,integration,adapters={})
 
 /** Enforce coverage owners and exact attempt/candidate binding using server evidence.
  * @param {ReleaseRequest} request Authorized immutable inputs.
- * @param {{path:string,event:string,head_branch:string,status:string,conclusion:string|null,run_attempt:number}} run Server workflow attempt metadata.
+ * @param {{path:string,event:string,head_branch:string,head_sha?:string,status:string,conclusion:string|null,run_attempt:number}} run Server workflow attempt metadata; original immutable source head_sha is mandatory when authenticating historical PHP owner names.
  * @param {ReleaseJob[]} jobs Complete server job list for the current attempt.
  * @param {ReleaseRecord} record Downloaded aggregate qualification record.
  * @param {string} repository Expected owner/repository identity.
@@ -469,16 +552,13 @@ export function verifyQualification(request, run, jobs, record, repository, curr
         const selector=jobs.filter(job=>job.name==='Select release coverage owner');
         const bootstrapPlaceholder=jobs.filter(job=>job.name==='Run first-install full release lifecycle');
         const bootstrapChildren=jobs.filter(job=>job.name.startsWith(bootstrapPrefix));
+        const bootstrapMatrixOwners=evidenceMatrixOwners(bootstrapChildren,repository,run.head_sha,adapters.api ?? api,false);
         const jobIdentity=job=>Number.isSafeInteger(job.id) && job.id>0
             && job.workflow_name==='Release qualification' && job.run_id===Number(request.runId)
             && job.run_attempt===run.run_attempt;
         const skippedBootstrapSuffixes=new Set(['Prepare release candidate','Complete release matrix','Release qualification gate',
             'Prepare manual release assets','Prepare Windows companion installer','Open qualified release PR',
-            'Read-only generated-state and source preflight','Positive production package (ubuntu-24.04)',
-            'Positive production package (windows-2025)','Positive production package (macos-latest)',
-            'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)',
-            'PHP 8.5 workflows (mariadb:11.4, Unicode)','PHP 8.1 source (unicode)','PHP 8.5 source (ascii)',
-            'Required Chromium fixtures','Authoritative release audit','Complete required CI matrix']);
+            ...bootstrapMatrixOwners,'Authoritative release audit']);
         const childLeaf=job=>job.name.slice(bootstrapPrefix.length).split(' / ').at(-1);
         if (selector.length!==1 || !jobIdentity(selector[0]) || selector[0].status!=='completed'
             || selector[0].conclusion!=='success' || bootstrapPlaceholder.length!==1
@@ -504,8 +584,8 @@ export function verifyQualification(request, run, jobs, record, repository, curr
             throw new Error('BLOCKED Windows companion installer outcome differs from the strict release policy.');
         }
         const fullOnly=['Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-            'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
-            'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+            'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
+            'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
             'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Authoritative release audit'];
         if (jobs.some(job=>!bootstrapChildren.includes(job)
             && fullOnly.some(owner=>job.name===owner || job.name.endsWith(` / ${owner}`)))) {
@@ -523,14 +603,9 @@ export function verifyQualification(request, run, jobs, record, repository, curr
         if (run.conclusion!=='success' || failures.length) throw new Error('BLOCKED mandatory BASIC release CI is red.');
         return failures;
     }
-    const owners = [
-        'Prepare release candidate', 'Read-only generated-state and source preflight',
-        'Positive production package (ubuntu-24.04)', 'Positive production package (windows-2025)',
-        'Positive production package (macos-latest)', 'PHP 8.3 workflows (mysql:8.4, Unicode)',
-        'PHP 8.3 workflows (mariadb:10.11, Unicode)', 'PHP 8.5 workflows (mariadb:11.4, Unicode)',
-        'PHP 8.1 source (unicode)', 'PHP 8.5 source (ascii)', 'Required Chromium fixtures',
-        'Authoritative release audit', 'Complete required CI matrix', 'Release qualification gate',
-    ];
+    const owners = ['Prepare release candidate',
+        ...evidenceMatrixOwners(jobs,repository,run.head_sha,adapters.api ?? api,false),
+        'Authoritative release audit','Release qualification gate'];
     if (record.lifecycle_schema === 2) {
         owners.push('Prepare manual release assets','Open qualified release PR');
         if (record.winapp_changed === true) owners.push('Prepare Windows companion installer');

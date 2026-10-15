@@ -262,7 +262,9 @@ namespace {
     $realDatabaseJob = $jobBlocks['real-database-browser'] ?? '';
     check(substr_count($realDatabaseJob, 'real_browser: true') === 1
         && substr_count($realDatabaseJob, 'real_browser: false') === 2
-        && str_contains($realDatabaseJob, "database: 'mysql:8.4'\n            real_browser: true"),
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mysql:8.4'\n            real_browser: true")
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:10.11'\n            real_browser: false")
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:11.4'\n            real_browser: false"),
         'Exactly one stable MySQL matrix entry must own the real-app Chromium workflow journey.');
     check(str_contains($realDatabaseJob, 'if: matrix.real_browser')
         && str_contains($realDatabaseJob, 'Discover Chromium for the real application workflow')
@@ -274,7 +276,7 @@ namespace {
     check(str_contains($browserJob, "PHP_GALLERY_BROWSER_REQUIRED: '1'")
         && !str_contains($browserJob, 'PHP_GALLERY_BROWSER: disabled')
         && !str_contains($browserJob, 'matrix:')
-        && str_contains($browserJob, "php-version: '8.3'")
+        && str_contains($browserJob, "php-version: '8.5'")
         && str_contains($browserJob, "node-version: '22'"),
         'Exactly one stable browser job must require Chromium independently of the runtime matrix.');
     check(str_contains($browserJob, 'command -v "$candidate"')

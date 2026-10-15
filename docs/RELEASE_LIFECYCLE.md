@@ -57,16 +57,53 @@ to both main and develop; it changes no server protection or credential.
 
 ## Ownership and event handoff
 
-### Bootstrap the known broken integration installation
+### Staged CI authority update
+
+Do not install the evaluator/harness update through a release bootstrap. Stage 1
+is limited to the integration publisher, workflow, evidence readers and
+root-binding adapter; the full pinned BASIC evaluator closure remains byte for
+byte unchanged. Run the existing main-owned **Integrate into develop** FULL
+workflow and its ordinary non-force fast-forward to establish protected
+develop W*.
+
+For stage 2, the owner dispatches the same action from **develop** with
+`ci_authority_update: true`. Before every write it authenticates the retained
+stage-1 main-owned integration proof and exact current develop W*. The candidate
+S must be exactly one commit ahead of W*. Only the six approved evaluator
+transition paths may change, and the scanner closure stays unchanged. A trusted
+inherited BASIC engine performs a separate authority checkout with a strictly
+validated root binding to a clean S checkout. Candidate code is inspected
+read-only; candidate evaluator code is never trusted to qualify itself. FULL
+runs from trusted W* with PHP 8.1 and PHP 8.5 against exact S, then a leased
+non-force fast-forward publishes S.
+
+The new integration record carries explicit `authority_update` anchor and
+`inherited_basic` provenance; it does not pretend W* is in main history. Main
+review rules stay unchanged, recovery remains separate, and there is no
+arbitrary feature-publisher exception or server-ruleset bypass. Acceptance is
+**PENDING** until real hosted runs verify both stages and the exact writes.
+Manual review and release publication remain separate actions.
+
+After the optimized authority is already on develop, create a normal release
+origin from that develop SHA. Preserve the existing erroneous release 8 origin
+and all evidence unchanged; supersede it only through a later explicit release.
+Do not create a release-before-develop bootstrap to install this change.
+
+### Historical known integration digest incident and bootstrap evidence
+
+The following `0.127.3` bootstrap material records the earlier proposed path for
+run 38218271690. Preserve its pins and evidence as history; it is superseded for
+the current authority update by the staged develop-first route above. Do not use
+it to create a new release-before-develop installation.
 
 The integration run [38218271690](https://github.com/klusik/PHP_gallery/actions/runs/38218271690)
 failed before FULL because upload-action hexadecimal output did not match the
-algorithm-qualified digest required by the main-owned publisher. A feature fix
-cannot update that publisher's workflow. The owner can install the repair through
-a **new, genuinely FULL-qualified release**, using the retained schema-2 release
-bootstrap and the ordinary protected PR approval, merge, tag and draft lifecycle.
-No server rule, red override, fabricated qualification check or protected ref
-write is needed from the preparation tool.
+algorithm-qualified digest required by the main-owned publisher. The historical
+repair proposal below records its original pins and evidence. It is superseded
+for new CI-authority installation: stage 1 now repairs the publisher and proves
+it through the existing main-owned integration path, followed by the separate
+develop-dispatched stage 2. Do not use the historical release bootstrap below
+to install the current authority change.
 
 From a clean checkout containing the reviewed repair, inspect the unpublished
 `0.127.3` plan, only while its branch, tag and draft are absent:
@@ -164,17 +201,17 @@ A feature-branch implementation or green fixture run does not install this autho
 Dispatch recovery only after the reviewed workflow/helper has reached `main` through
 an authorized maintainer installation. Agents do not perform that protected write.
 
-**Bootstrap limit:** installing recovery advances main. A release origin frozen
-before that installation cannot be rebased onto the newer main: its original main
-and predecessor identities are immutable. This applies to the interrupted
-`v_0.127.3` origin if main advances before its recovery. The known-defect FULL
-bootstrap above avoids that advance: it installs the repair as the still-unpublished
-`0.127.3` release itself and retains the original origin, while all pins still
-match. If they stop matching, keep the old origin as historical evidence and use
-a genuinely new release origin. Do not reset protected refs, edit old pins, forge artifacts or
-claim that recovery retroactively authorizes an advanced-main release. Recovery is
-usable for later interrupted releases whose origins already selected main with
-this implementation installed.
+**Historical bootstrap limit:** installing recovery advances main. A release
+origin frozen before that installation cannot be rebased onto newer main because
+its original main and predecessor identities are immutable. This applies to the
+interrupted `v_0.127.3` origin. The earlier proposal to use that unpublished
+release as a full bootstrap is superseded for the current CI-authority update by
+the staged develop-first route above. Keep the old origin and all its evidence
+unchanged; if a later release must supersede it, create that release only after
+the optimized authority is already on develop. Never reset protected refs, edit
+old pins, forge artifacts or claim recovery retroactively authorizes an advanced
+main. Recovery remains available for later interrupted releases whose origins
+already selected main with the recovery implementation installed.
 
 `release-qualification.yml` reacts to a normal push. `start-new-release.mjs`
 initializes the existing release ref after verifying maintainer permission,

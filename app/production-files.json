@@ -2464,6 +2464,7 @@
         "tests/support/cache_lifecycle_chain_http_fixture.php",
         "tests/support/cache_lifecycle_public_http_fixture.php",
         "tests/support/cache_registry_fixture.php",
+        "tests/support/ci_owner_fixture.mjs",
         "tests/support/cooperative_exchange_fixture.php",
         "tests/support/coverage_artifact_fixture.mjs",
         "tests/support/dispatch_kernel.php",

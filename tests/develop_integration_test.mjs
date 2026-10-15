@@ -18,8 +18,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
-import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration} from '../.github/scripts/develop-integration.mjs';
+import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence} from '../.github/scripts/develop-integration.mjs';
+import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {verifyIntegrationEvidence} from '../.github/scripts/release-promotion.mjs';
+import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
+import {requireCurrentWorkflowOwners} from '../.github/scripts/ci-owner-contract.mjs';
 
 /** Create real isolated Git objects for the source/origin/overlay recovery ancestry contract.
  * @returns {{record:import('../.github/scripts/integration-bootstrap.mjs').BootstrapRecord,origin:{schema_version:number,version:string,release_branch:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string},git:function(string,string[],(string|null)=):string,cleanup:function():void}} Disposable tree builder and exact recovery identities; no network or user refs are used.
@@ -99,6 +102,40 @@ function bootstrapFixture() {
     } finally {f.cleanup();}
 }
 
+{
+    const original="<?php\nfunction project_root(): string\n{\n    return dirname(__DIR__);\n}\n// preserve other code\n";
+    const bound=bindTrustedBasicRoot(original,"/tmp/candidate's source");
+    assert.ok(bound.includes("return '/tmp/candidate\\'s source';"));
+    assert.ok(bound.endsWith('// preserve other code\n'));
+    assert.throws(()=>bindTrustedBasicRoot(original+original,'/tmp/source'),/BLOCKED/,'ambiguous inherited accessors fail closed');
+    assert.throws(()=>bindTrustedBasicRoot(original.replace('dirname(__DIR__)','getcwd()'),'/tmp/source'),/BLOCKED/);
+    assert.throws(()=>bindTrustedBasicRoot(original,'relative/source'),/BLOCKED/);
+    const identity={authority:'d'.repeat(40),source:'a'.repeat(40),tree:'1'.repeat(40),base:'d'.repeat(40)};
+    const report={profile:'basic',status:'PASS',source:{head_sha:identity.source,comparison_base:identity.base,worktree_dirty:false},
+        tasks:['php-lint','js-lint','source-documentation-changed'].map(id=>({id,status:'PASS'}))};
+    const bytes=Buffer.from(JSON.stringify(report));
+    const proof=bindTrustedBasicReport(report,identity,bytes);
+    const request={sourceSha:identity.source,expectedDevelopSha:identity.base};
+    const context={headSha:identity.authority};
+    assert.equal(requireTrustedBasicEvidence(proof,request,context,identity.tree),proof);
+    for (const mutate of [
+        value=>{value.source.worktree_dirty=true;},value=>{value.source.head_sha='b'.repeat(40);},
+        value=>{value.tasks[0].status='SKIP';},value=>{value.tasks.push({...value.tasks[0]});},
+    ]) {
+        const bad=structuredClone(report);mutate(bad);
+        assert.throws(()=>bindTrustedBasicReport(bad,identity,bytes),/BLOCKED/);
+    }
+    for (const mutate of [
+        value=>{value.source_tree='2'.repeat(40);},value=>{value.authority_sha='e'.repeat(40);},
+        value=>{value.report_sha256='unqualified';},value=>{value.successful=false;},
+        value=>{value.suites=['php-lint-changed','js-lint-changed','source-documentation-changed'];},
+        value=>{value.override=true;},
+    ]) {
+        const bad=structuredClone(proof);mutate(bad);
+        assert.throws(()=>requireTrustedBasicEvidence(bad,request,context,identity.tree),/BLOCKED/);
+    }
+}
+
 const repository='klusik/PHP_gallery';
 const sourceSha='a'.repeat(40),candidateSha='b'.repeat(40),developSha='d'.repeat(40);
 const workflowSha='f'.repeat(40),candidateTree='c'.repeat(40),sourceTree='1'.repeat(40),developTree='0'.repeat(40);
@@ -108,10 +145,13 @@ const context={repository,workflowPath:'.github/workflows/develop-integration.ym
     ref:'refs/heads/main',runId:901,runAttempt:2,headSha:workflowSha};
 const request={branch,sourceSha,candidateSha,expectedDevelopSha:developSha,sourceBase:developSha,
     basicRunId:801,basicRunAttempt:3};
+requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,2));
+assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,1)),/BLOCKED/,
+    'protected-develop authority cannot use historical PHP 8.3 provisioning under current owner labels');
 const ownerNames=['Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-    'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
-    'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+    'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
+    'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
     'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
 const basicAuthorityPaths=['.github/workflows/candidate-preparation.yml','scripts/audit.php','scripts/cli_guard.php',
     'scripts/audit_lib.php','scripts/audit_process.php','scripts/audit_performance.php','scripts/audit_source_evidence.php',
@@ -469,6 +509,8 @@ const recoveryRequest={...request,candidateSha:sourceSha};
         workflow_path:context.workflowPath,run_id:'901',run_attempt:'2',
         check_run_id:recovered.record.check_run_id,artifact_id:7,artifact_sha256:digest};
     const reader=(path,...args)=>{
+        const workflow=ciOwnerWorkflowResponse(path);
+        if (workflow) return workflow;
         if (path.endsWith('/actions/runs/901/attempts/2')) return {id:901,run_attempt:2,
             path:context.workflowPath,event:'workflow_dispatch',head_branch:'main',head_sha:workflowSha,
             name:'Integrate into develop',status:'completed',conclusion:'success'};

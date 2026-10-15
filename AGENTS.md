@@ -255,6 +255,21 @@ Cleanup remains optional and separately leased; never routinely prune refs.
 
 ### Qualification lifecycle target and activation status (#185)
 
+For the CI-authority evaluator update, use the staged develop-first procedure in
+`docs/CI_COVERAGE_REUSE_CONTRACT.md`; do not install it through a release
+bootstrap. Stage 1 changes only the integration publisher/workflow/readers and
+root-binding adapter while preserving the complete pinned BASIC closure, then
+uses the existing main-owned FULL integration and guarded FF to establish W*.
+Stage 2 is the owner-dispatched **Integrate into develop** action from develop
+with `ci_authority_update: true`, exact stage-1 proof and W* binding, one-commit
+candidate S, only the six approved evaluator transition paths, unchanged scanner
+closure, trusted inherited BASIC inspection, FULL from W* on exact S, and leased
+non-force FF. Record `authority_update` and `inherited_basic`; never invent W*
+main ancestry. Keep main protections and recovery distinct. This path remains
+PENDING until real hosted runs prove both stages. Only start a later release
+after the optimization is already on develop; preserve the erroneous release 8
+origin/evidence and supersede it with a later release, never by rewriting it.
+
 The latest #185 target replaces the earlier per-child coverage-inheritance
 proposal. Feature pushes and the final squash receive BASIC checks for PHP and
 JavaScript syntax plus complete named-declaration documentation only. After the
