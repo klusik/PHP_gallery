@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.132.2
+
+Automatic cache cleanup began checking for inventory work every 30 seconds and could continue through authenticated server-side timer hops after a suitable public visit.
+
+### Highlights
+
+#### Automatic cache cleanup
+- Started bounded cache-cleanup work through authenticated timer hops, allowing the chain to continue without an open browser.
+- Reclaimed verified eligible cache data during inventory, preserved partial coverage without global backoff, and coalesced actual removals in Admin log summaries.
+- Kept automatic cleanup opt-out and safeguards for protected and unregistered data.
+
+### Technical Details
+
+#### Backend
+- Added the cleanup chain and observability logic in `app/services/cache_lifecycle/chain.php` and `app/services/cache_lifecycle/observability.php`.
+- Updated cache lifecycle services, storage, maintenance routes, and runtime module roots to support leased timer hops, single-use tickets, bounded batches, and cleanup status reporting.
+- Refused timer dispatch on single-worker development servers and Windows built-in servers while retaining short visitor cleanup opportunities.
+
+#### Frontend
+- Updated the Admin dashboard to show safe cleanup-chain health and timing evidence.
+
+#### Tests
+- Added `tests/cache_lifecycle_chain_test.php` and an HTTP worker fixture for authenticated continuation, single-use tickets, recovery, partial coverage, and runtime refusals.
+- Expanded cache scheduler, visitor, diagnostics, and HTTP-boundary coverage for cleanup timing, opt-out, protected data, and coalesced log summaries.
+- Updated the public-widget browser fixture to establish its anonymous session before browser subrequests.
+
+#### Documentation
+- Updated cache-maintenance, compatibility, architecture, and testing guidance, including all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+- A suitable public visit could start bounded cleanup that continued on the server without requiring the visitor to keep a browser open. Gallery viewing behavior did not change.
+
+#### For administrators
+- Cleanup status included safe chain health and timing evidence. The existing automatic-cleanup preference and opt-out behavior remained in effect.
+
+#### For maintainers
+- Cleanup checks ran every 30 seconds, and Admin log summaries reported confirmed removals without per-file paths or empty-check entries.
+
 ## Version 0.132.1
 
 Updated automatic cache cleanup to support hosting environments where disk-capacity checks were unavailable or failed, while retaining bounded work and safeguards for protected data.
