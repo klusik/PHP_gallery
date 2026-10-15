@@ -2441,3 +2441,18 @@ body.is-navdata-updating {
 [data-cache-copy-status] { margin-inline-start: .5rem; font-size: .85rem; }
 .admin-cache-progress[data-state="failed"] { accent-color: var(--admin-danger, #b42318); }
 [data-cache-job-progress][data-state="failed"] { color: var(--admin-danger, #b42318); }
+
+/* Passive regional evidence wraps paths and stacks timing fields on narrow panels. */
+.admin-cache-regions { min-width: 0; margin-top: 8px; }
+.admin-cache-regions h3 { margin: 0; font-size: 0.9rem; }
+.admin-cache-regions .admin-cache-region-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.admin-cache-region { padding: 6px 0; border-top: 1px solid var(--admin-border); min-width: 0; overflow-wrap: anywhere; }
+.admin-cache-region-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 12px; font-size: 0.85rem; }
+.admin-cache-region-heading span { color: var(--admin-muted, #586575); }
+.admin-cache-region dl { margin: 4px 0; font-size: 0.8rem; }
+.admin-cache-region-times { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 4px 12px; }
+.admin-cache-region dt { color: var(--admin-muted, #586575); }
+.admin-cache-region dd { margin: 0; }
+.admin-cache-region summary { cursor: pointer; font-size: 0.8rem; }
+.admin-cache-region-technical > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 4px 12px; margin: 3px 0; }
+.admin-cache-region code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: inherit; }

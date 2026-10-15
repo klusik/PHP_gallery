@@ -14,7 +14,7 @@
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261002-gallery-controls-v3';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261002-gallery-controls-v3';
-import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261014-cache-cleanup-v11';
+import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261015-cache-regions-ui-v1';
 
 /**
  * Purpose: Bound one read so a stalled connection exposes an explicit retry.

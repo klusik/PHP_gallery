@@ -27,6 +27,56 @@ const CACHE_LIFECYCLE_TIMEOUT_MS = 20000;
 const CACHE_LIFECYCLE_YIELD_MS = 100;
 
 /**
+ * Replace the supplied regional sample using the server-rendered localized row template.
+ * @param {Element} scope Mounted lifecycle card containing labels, template and sample list.
+ * @param {Array<{path?:string,phase?:string,round?:number,last_serviced_at?:number,last_completed_at?:number,next_due_at?:number,retry_at?:number,failures?:number,cursor_path?:string,cursor_offset?:number}>} regions Passive API sample; absent evidence stays unknown.
+ * @returns {void} Updates presentation only, preserving open row details by relative identity.
+ */
+function renderAdminCacheRegions(scope, regions) {
+    const view = scope.querySelector('[data-cache-region-view]');
+    const template = view?.querySelector('[data-cache-region-template]');
+    const list = view?.querySelector('[data-cache-region-details]');
+    if (!(template instanceof HTMLTemplateElement) || !list) return;
+    const labels = JSON.parse(view.dataset.cacheRegionLabels);
+    const openPaths = new Set(Array.from(list.children).filter(row => row.querySelector('details')?.open)
+        .map(row => row.querySelector('[data-cache-region-field="path"]').textContent));
+    const timestamp = (target, value, missing) => {
+        target.replaceChildren();
+        const date = Number(value) > 0 ? new Date(Number(value) * 1000) : null;
+        if (!date || !Number.isFinite(date.getTime())) { target.textContent = missing; return; }
+        const time = document.createElement('time');
+        time.dateTime = date.toISOString().replace('.000Z', 'Z');
+        time.textContent = time.dateTime.slice(0,19).replace('T', ' ') + ' UTC';
+        target.append(time);
+    };
+    list.replaceChildren(...regions.map(region => {
+        const row = template.content.firstElementChild.cloneNode(true);
+        const field = name => row.querySelector(`[data-cache-region-field="${name}"]`);
+        const path = String(region.path ?? '');
+        const names = new Map([['@discovery',labels.discovery],['@files',labels.files],['@history',labels.history]]);
+        field('name').textContent = names.get(path) ?? path;
+        const phase = region.phase ?? 'unobserved';
+        field('state').textContent = ['idle','unobserved','inventory','preview','cleanup','complete'].includes(phase) ? labels[phase] : labels.unknown;
+        if (Number(region.failures) > 0) field('state').textContent += ` · ${labels.failures}: ${region.failures}`;
+        const due = Number(region.next_due_at || 0), retry = Number(region.retry_at || 0);
+        row.querySelector('[data-cache-region-next-label]').textContent = retry > 0 && retry >= due ? labels.retry : labels.next;
+        timestamp(field('last_completed_at'), region.last_completed_at, labels.missing);
+        timestamp(field('next'), Math.max(due, retry), labels.unscheduled);
+        ['path','phase','round','last_serviced_at','next_due_at','retry_at','failures','cursor_path','cursor_offset'].forEach(name => {
+            if (['last_serviced_at','next_due_at','retry_at'].includes(name)) {
+                timestamp(field(name), region[name], name === 'last_serviced_at' ? labels.missing : labels.unscheduled);
+            } else {
+                field(name).querySelector('code').textContent = region[name] === undefined || region[name] === null || region[name] === '' ? labels.missing : String(region[name]);
+            }
+        });
+        row.querySelector('details').open = openPaths.has(path);
+        return row;
+    }));
+    const empty = view.querySelector('[data-cache-region-empty]');
+    if (empty) empty.hidden = regions.length > 0;
+}
+
+/**
  * Delegate lifecycle controls for initial and dynamically replaced Admin fragments.
  * @returns {void} Installs one capture listener; every completed envelope reaches the canonical mutation completion owner.
  */
@@ -111,8 +161,7 @@ export function setupAdminCacheLifecycle() {
                     row.querySelector('[data-cache-owner-bytes]').textContent = (total ? formatBytes(total.bytes) : '—');
                     row.querySelector('[data-cache-owner-eligible]').textContent = (total ? formatBytes(total.reclaimable_bytes) : '—');
                 });
-                const regionDetails = region.querySelector('[data-cache-region-details]');
-                if (regionDetails && Array.isArray(state.regions_sample)) regionDetails.textContent = JSON.stringify(state.regions_sample, null, 2);
+                if (Array.isArray(state.regions_sample)) renderAdminCacheRegions(region, state.regions_sample);
                 const sample = region.querySelector('[data-cache-lifecycle-sample]');
                 if (sample) sample.replaceChildren(...(state.sample || []).slice(0,16).map(item => {
                     const entry = document.createElement('li');

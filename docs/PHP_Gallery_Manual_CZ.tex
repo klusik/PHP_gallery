@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132.4}
+\newcommand{\version}{0.132.5}
 \newcommand{\manualdate}{15.~října~2026}
 
 \hypersetup{
@@ -2042,6 +2042,8 @@ detailech; čištění cache stahování nadále vlastní Centrum údržby.
 
 \paragraph{Měřená životnost cache.}
 Automatická práce střídá trvalé oblasti uložené v~databázi. Poslední obsluha a~poslední úspěšně dokončená kontrola jsou samostatné údaje. Příležitosti po třiceti sekundách zpracují nejdéle čekající splatnou práci nejvýše pět sekund; rozpracovaná oblast pokračuje od kurzoru a~uvolní místo ostatním. Dokončená zdravá oblast je splatná za hodinu, chyba odloží další pokus o~patnáct minut. Objevování kořene najde nové složky bez databázového řádku pro každý soubor. Zaniklé dokončené identity se~uchovávají sedm dní a~uklízejí po malých dávkách.
+
+Ukázka oblastí zobrazuje kompaktní řádky s~oblastí, stavem, poslední úspěšně dokončenou kontrolou a~další kontrolou či~opakováním. Technické podrobnosti zachovávají relativní cestu, průchod, poslední obsluhu, oba plánované časy, chyby a~uložený kurzor. Časy výslovně používají UTC; chybějící dokončení zůstává nezaznamenané. Kurzor je~pozice, nikoli procento. Ukázka nepokrývá všechny oblasti. Aktualizace AJAX zachovávají stejné lokalizované zobrazení, otevřené podrobnosti, panel i~URL; čtení nespouští práci.
 
 Kompaktní přehled rozlišuje poslední známá měření a~jejich stáří, dokončené pokrytí, aktuální práci, známou způsobilou frontu a~poslední potvrzené mazání. Nová neúplná kontrola ponechá dokončené měření viditelné; menší dokončené měření je smí nahradit. Historické bajty nejsou okamžitá velikost a~mazání se~od nich neodečítá. Čtení stavu nic neskenuje. Kurzor vlastní DB checkpoint, názvy a~odpojené payloady soukromé diskové žurnály. Nedokončená starší práce se~bezpečně dokončí před převodem; poškozený checkpoint zůstává neověřený. OFF zachová registr i~postup. Autentizované serverové pokračování nevyžaduje otevřený prohlížeč; ukončený řetězec potřebuje další příležitost ke~spuštění.
 

@@ -1,5 +1,42 @@
 # Patch notes
 
+## Version 0.132.5
+
+Admin cache lifecycle details became easier to scan while retaining the timing, retry, and cursor evidence needed for troubleshooting.
+
+### Highlights
+
+#### Localized cache region evidence
+- Replaced raw regional JSON samples with compact, localized rows showing each region’s state, failed attempts, last successful completion, and next scheduled check or retry. [#220](https://github.com/klusik/PHP_gallery/issues/220)
+- Kept technical details available for relative paths, observation rounds, service and scheduling times, retries, and cursors. Displayed timestamps in UTC, identified unrecorded completion times, and did not present cursor positions as percentages.
+
+### Technical Details
+
+#### Backend
+- Updated `app/views/admin_dashboard_sections.php` to render localized cache region rows and escape supplied path and state text.
+- Kept PHP-rendered rows and AJAX refreshes consistent, including empty-sample messaging and preservation of open technical details.
+
+#### Frontend
+- Updated the Admin cache lifecycle refresh to preserve the panel, URL, and open details while replacing regional evidence.
+- Added mobile path wrapping and cleared stale rows when a refreshed sample was empty.
+
+#### Tests
+- Expanded `tests/admin_panel_lifecycle_browser_test.mjs` and its dashboard fixtures to cover PHP/AJAX parity, UTC and missing-time display, hostile-path escaping, refresh behavior, open-details persistence, empty samples, and mobile overflow.
+
+#### Documentation
+- Updated cache-maintenance guidance, testing instructions, authoring guidance, and all four maintained manual editions.
+
+### User Impact
+
+#### For visitors
+- Public visitor behavior did not change.
+
+#### For administrators
+- Admins could review cache region status and retry timing in localized rows, with technical scheduling and cursor evidence available on demand.
+
+#### For maintainers
+- Browser regression coverage now exercised the regional evidence display and its refresh behavior.
+
 ## Version 0.132.4
 
 Automatic cache maintenance gained a persistent, fair scheduler that resumes work across cycles and process restarts, retains confirmed findings, and reports unavailable evidence without treating it as an empty cache.

@@ -24,6 +24,9 @@ Discovery runs as another rotating task with a durable root catalog. New directo
 Passive Admin evidence retains the last completed regional measurements during later partial work and labels them as historical, with coverage and the oldest completion time. Smaller completed measurements replace larger ones directly; historical bytes are never reduced mechanically by deletion counters. Working observations, known pending debt and installation-wide confirmed removal receipts remain separate. Receipt updates and the deletion checkpoint commit share a DB transaction; filesystem deletion itself does not. Existing deterministic trash names and write fences recover a crash before/after detachment. A crash after unlink before checkpoint commit can conservatively undercount bytes, without double counting or granting permission to a replacement payload. OFF preserves all state. Status reads perform no filesystem scan and never create rows.
 
 
+The regional sample uses compact localized rows: area, stored phase with failed attempts, last successful completed check, and the later of its scheduled/retry times. Native technical details retain the relative identity, observation round, last service, both scheduling dates, failure count and saved cursor. All regional dates use explicit UTC; missing completion is not success. A cursor is a stored position, never a completion percentage. The existing API sample is not complete regional coverage. PHP and AJAX share one localized row template; refresh preserves open row details, the Admin panel and URL. Reading this presentation remains passive.
+
+
 Passive lifecycle storage and producer leases remain separate from inventory
 and reclamation workers. The reviewed runtime plan reuses the existing
 `request-maintenance` closure only across selected site-maintenance, updater,

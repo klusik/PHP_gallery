@@ -146,6 +146,10 @@ observation semantics, including directory metadata and dot entries. Assert the
 intended physical mutation before simulating interruption, using the neighboring
 fixture's established setup while retaining production caps and suite limits.
 
+Send browser harness controls such as viewport changes through the captured native fetch, outside application-request mocks. Preserve the mock's strict method and credential assertions for product requests.
+
+Use a named, typed presentation helper for reusable formatting in runtime-scanned views, so the runtime compiler can resolve each call statically. Include the actual view owner explicitly in an isolated render fixture.
+
 Always inspect complete runtime closures before adding dependency ownership.
 Reuse an existing shared owner where its entire historical closure is already
 present, then regenerate the authored plan and compare direct duplicate entries,
