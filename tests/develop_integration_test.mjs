@@ -17,6 +17,7 @@ import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {runInNewContext} from 'node:vm';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
 import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence} from '../.github/scripts/develop-integration.mjs';
 import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
@@ -412,6 +413,34 @@ for (const [label,mutate] of [
     const digest='sha256:'+uploadDigest;
     // Exercise the workflow-to-helper boundary with the actual bare upload-action output.
     const workflow=readFileSync(new URL('../.github/workflows/develop-integration.yml',import.meta.url),'utf8');
+    const fullJob=workflow.match(/^  full:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:)/m)?.[1] ?? '';
+    assert.match(fullJob,/^    needs: \[select, publish-candidate\]$/m,
+        'FULL must wait directly for both selected source and published candidate');
+    const fullCondition=fullJob.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m)?.[1] ?? '';
+    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.select.outputs.source_sha";
+    assert.equal(fullCondition,expectedFullCondition,
+        'FULL must require cancellation safety, successful direct dependencies and the selected source SHA');
+    assert.match(fullJob,/checkout_ref: \$\{\{ needs\.publish-candidate\.outputs\.candidate_sha \}\}/,
+        'FULL checkout must remain bound to the published candidate');
+    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]');
+    const fullConditionCases=[
+        {name:'ordinary integration tolerates its skipped optional BASIC ancestor',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':'skipped'},expected:true},
+        {name:'authority update retains successful optional BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':'success'},expected:true},
+        ...['failure','skipped','cancelled'].flatMap(result=>[
+            {name:'select '+result+' blocks FULL',cancelled:false,select:result,publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+            {name:'publication '+result+' blocks FULL',cancelled:false,select:'success',publish:result,candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+        ]),
+        {name:'cancelled workflow blocks FULL',cancelled:true,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+        {name:'generated child requires a new squash checkpoint',cancelled:false,select:'success',publish:'success',candidate:candidateSha,source:sourceSha,optional:{},expected:false},
+    ];
+    for (const scenario of fullConditionCases) {
+        const needs={select:{result:scenario.select,outputs:{source_sha:scenario.source}},
+            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate}},...scenario.optional};
+        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs}),scenario.expected,
+            'FULL condition evaluation: '+scenario.name);
+    }
     const expression=workflow.match(/^\s+artifact_digest: (.+)$/m)?.[1].trim();
     assert.ok(expression,'preparation exposes the archive digest');
     const dispatchedDigest=expression.replace('${{ steps.upload.outputs.artifact-digest }}',uploadDigest);
