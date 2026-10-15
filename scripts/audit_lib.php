@@ -14,6 +14,7 @@
  *   - Execute subprocesses with bounded time and captured output
  *   - Discover lint targets deterministically
  *   - Detect optional development executables across supported host platforms
+ *   - Bind split hosted audit owners to one candidate and partition PHP tests deterministically
  *   - Normalize audit status and report data
  *   - Write compact Markdown and machine-readable JSON reports
  *
@@ -31,7 +32,7 @@
  *   - This library must remain compatible with PHP 8.1 and must not require Composer.
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-10-15
  */
 
 declare(strict_types=1);
@@ -867,6 +868,108 @@ function audit_hosted_full_suite_ownership(array $profiles, string $profile, arr
 }
 
 /**
+ * Validate a hosted parallel FULL owner against the checked-out candidate identity.
+ *
+ * The profile owner and workflow candidate are explicit inputs so a shard cannot
+ * claim qualification for another checkout or run outside the intended workflow.
+ *
+ * @param array<string,string> $environment Current process environment.
+ * @param string $profile Selected central profile name.
+ * @param ?string $actualHead Immutable checked-out Git HEAD SHA, or null when unavailable.
+ * @param ?string $comparisonBase Resolved immutable comparison-base SHA, or null when unavailable.
+ * @param int $shardCount Centrally registered PHP shard count.
+ * @return array{valid:bool,index:?int,total:?int,owner:?string,candidate:?string,error:?string} Validated one-based shard coordinates and owner binding, or a diagnostic.
+ */
+function audit_hosted_parallel_owner(array $environment, string $profile, ?string $actualHead, ?string $comparisonBase, int $shardCount): array
+{
+    $owners = [
+        'source-contracts' => ['variable' => 'PHP_GALLERY_SOURCE_OWNER', 'value' => 'shared-source-contracts'],
+        'portable' => ['variable' => 'PHP_GALLERY_PORTABLE_OWNER', 'value' => 'portable-node-winapp'],
+        'hosted-full' => ['variable' => 'PHP_GALLERY_AUDIT_OWNER', 'value' => 'hosted-full'],
+    ];
+    $ownerDefinition = $owners[$profile] ?? null;
+    if (!is_array($ownerDefinition)) {
+        return ['valid' => false, 'index' => null, 'total' => null, 'owner' => null, 'candidate' => null,
+            'error' => 'Profile is not a hosted parallel owner.'];
+    }
+    $candidate = $environment['PHP_GALLERY_AUDIT_CANDIDATE'] ?? '';
+    $owner = $environment[$ownerDefinition['variable']] ?? '';
+    if (($environment['GITHUB_ACTIONS'] ?? '') !== 'true'
+        || ($environment['GITHUB_REPOSITORY'] ?? '') !== 'klusik/PHP_gallery') {
+        $error = 'Parallel owner profiles require the trusted PHP_gallery GitHub Actions repository.';
+    } elseif ($actualHead === null || preg_match('/^[a-f0-9]{40}$/D', $actualHead) !== 1
+        || $candidate !== $actualHead) {
+        $error = 'PHP_GALLERY_AUDIT_CANDIDATE must equal the checked-out immutable HEAD SHA.';
+    } elseif ($comparisonBase === null || preg_match('/^[a-f0-9]{40}$/D', $comparisonBase) !== 1
+        || $comparisonBase === $actualHead) {
+        $error = 'Parallel owner profiles require a distinct resolved immutable comparison-base SHA.';
+    } elseif ($owner !== $ownerDefinition['value']) {
+        $error = $ownerDefinition['variable'] . ' must equal ' . $ownerDefinition['value'] . '.';
+    } elseif ($profile === 'hosted-full'
+        && (($environment['PHP_GALLERY_SOURCE_OWNER'] ?? '') !== 'shared-source-contracts'
+            || ($environment['PHP_GALLERY_PORTABLE_OWNER'] ?? '') !== 'portable-node-winapp')) {
+        $error = 'Hosted FULL shards must bind the required shared source and portable owners.';
+    } else {
+        $error = null;
+    }
+    $index = null;
+    $total = null;
+    if ($profile === 'hosted-full') {
+        $indexText = $environment['PHP_GALLERY_AUDIT_SHARD_INDEX'] ?? '';
+        $totalText = $environment['PHP_GALLERY_AUDIT_SHARD_TOTAL'] ?? '';
+        if (preg_match('/^[1-9][0-9]*$/D', $indexText) !== 1
+            || preg_match('/^[1-9][0-9]*$/D', $totalText) !== 1
+            || (int) $totalText !== $shardCount
+            || (int) $indexText < 1 || (int) $indexText > $shardCount) {
+            $error ??= 'Hosted FULL shard index and total must identify one registered one-based shard.';
+        } else {
+            $index = (int) $indexText;
+            $total = (int) $totalText;
+        }
+    } elseif (isset($environment['PHP_GALLERY_AUDIT_SHARD_INDEX'])
+        || isset($environment['PHP_GALLERY_AUDIT_SHARD_TOTAL'])) {
+        $error ??= 'PHP shard coordinates are supported only by the hosted-full profile.';
+    }
+    return ['valid' => $error === null, 'index' => $index, 'total' => $total,
+        'owner' => $owner, 'candidate' => $candidate, 'error' => $error];
+}
+
+/**
+ * Assign sorted PHP regression filenames to deterministic, disjoint hosted shards.
+ *
+ * The registry remains the sole source of test membership: callers pass the
+ * discovered standalone test names and each shard receives every Nth name.
+ *
+ * @param list<string> $testNames Unique standalone PHP regression filenames.
+ * @param int $oneBasedIndex Requested shard number from one through total.
+ * @param int $total Number of registered shards.
+ * @return list<string> Sorted test filenames owned by the requested shard.
+ */
+function audit_partition_php_tests(array $testNames, int $oneBasedIndex, int $total): array
+{
+    if ($total < 1 || $oneBasedIndex < 1 || $oneBasedIndex > $total) {
+        throw new \InvalidArgumentException('PHP regression shard coordinates are outside the registered range.');
+    }
+    $names = array_values($testNames);
+    foreach ($names as $name) {
+        if (!is_string($name) || preg_match('/^[a-z0-9_]+_test[.]php$/D', $name) !== 1) {
+            throw new \InvalidArgumentException('PHP regression shard input contains an invalid test filename.');
+        }
+    }
+    if (count($names) !== count(array_unique($names))) {
+        throw new \InvalidArgumentException('PHP regression shard input contains duplicate test filenames.');
+    }
+    sort($names, SORT_STRING);
+    $selected = [];
+    foreach ($names as $offset => $name) {
+        if ($offset % $total === $oneBasedIndex - 1) {
+            $selected[] = $name;
+        }
+    }
+    return $selected;
+}
+
+/**
  * Require exactly one successful native central-audit suite result.
  *
  * An aggregate PASS must not conceal a skipped, missing, failed or duplicated
@@ -993,9 +1096,9 @@ function write_text_file(string $path, string $contents): void
 }
 
 /**
- * Return a compact Markdown report for the completed audit.
+ * Return a compact Markdown report with exact source and parallel owner bindings.
  *
- * @param array<string,mixed> $report Structured audit report.
+ * @param array{status:string,profile:string,started_at:string,duration_seconds:int|float,source?:array{head_sha:?string,comparison_base:?string,requested_base:string,worktree_dirty:?bool},parallel_owner?:array{profile:string,owner:?string,candidate:?string,comparison_base:?string,shard_index:?int,shard_total:?int},delegated_to_parallel_owners?:list<array{owner:string,profile:?string,candidate:?string,comparison_base:?string,suites:list<string>}>,environment:list<array{component:string,status:string,value:string}>,tasks:list<array{id:string,label:string,status:string,duration_seconds:int|float,summary:string,log?:?string,counts?:array<string,int>,details?:array{problems?:list<string>,gaps?:list<string>,metrics?:list<array{probe:string,included_php_files:int,peak_memory_bytes:int,wall_ms?:int,bootstrap_wall_ms?:int,limits:array{max_included_php_files:int,max_peak_memory_bytes:int}}>}}>,slowest?:list<array{name:string,duration_seconds:int|float}>,manual_review_summary?:string,source_fingerprint_before?:?string,source_fingerprint_after?:?string,report_files:array{json:string,run_directory:string}} $report Structured audit outcomes, exact source identity, and optional same-candidate parallel owner records.
  * @return string Markdown document.
  */
 function render_markdown_report(array $report): string
@@ -1021,6 +1124,29 @@ function render_markdown_report(array $report): string
         if (isset($report['report_files']['source_failures'])) {
             $lines[] = '- Complete source findings: `' . $report['report_files']['source_failures'] . '`';
         }
+        $lines[] = '';
+    }
+
+    if (is_array($report['parallel_owner'] ?? null)) {
+        $owner = $report['parallel_owner'];
+        $lines[] = '- Parallel owner: `' . ($owner['owner'] ?? 'unavailable') . '`';
+        $lines[] = '- Owner candidate: `' . ($owner['candidate'] ?? 'unavailable') . '`';
+        $lines[] = '- Owner comparison base: `' . ($owner['comparison_base'] ?? 'unavailable') . '`';
+        if (is_int($owner['shard_index'] ?? null) && is_int($owner['shard_total'] ?? null)) {
+            $lines[] = '- PHP shard: `' . $owner['shard_index'] . '/' . $owner['shard_total'] . '`';
+        }
+        $lines[] = '';
+    }
+    foreach (($report['delegated_to_parallel_owners'] ?? []) as $owner) {
+        if (!is_array($owner)) {
+            continue;
+        }
+        $suites = is_array($owner['suites'] ?? null) ? implode(', ', $owner['suites']) : '';
+        $lines[] = '- Expected separate owner: `' . ($owner['owner'] ?? 'unavailable') . '`'
+            . ' (candidate `' . ($owner['candidate'] ?? 'unavailable') . '`, base `'
+            . ($owner['comparison_base'] ?? 'unavailable') . '`, suites `' . $suites . '`)';
+    }
+    if (($report['delegated_to_parallel_owners'] ?? []) !== []) {
         $lines[] = '';
     }
 

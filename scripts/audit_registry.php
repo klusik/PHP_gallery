@@ -12,6 +12,7 @@
  *
  * Responsibilities:
  *   - Keep profile composition deterministic and reviewable
+ *   - Define shared hosted source, portable, and sharded FULL owners
  *   - Describe Node tests that require temporary output arguments or browser tooling
  *   - Declare per-test environment requirements that cannot be inferred safely
  *   - Avoid blind execution of every file matching a broad glob
@@ -30,7 +31,7 @@
  *   - Add new exceptional tests here instead of teaching the runner filename-specific hacks.
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-10-15
  */
 
 declare(strict_types=1);
@@ -61,21 +62,25 @@ $registry = [
             'mvc-boundaries',
             'mutation-contracts',
         ],
-        // Deterministic source/plan gate before any browser, database, or OS matrix.
-        // It qualifies the checked-out candidate and never repairs artifacts.
+        // Generated-artifact and workflow-integrity gate before any browser, database, or OS matrix.
+        // Whole-tree source contracts have one shared owner in source-contracts.
         'candidate-preflight' => [
-            // CI checks out a clean commit, so uncommitted-only --changed lint selects
-            // zero files. Lint the full source before allowing costly matrix jobs.
-            'php-lint',
-            'js-lint',
-            'source-documentation-changed',
-            'source-policy-changed',
-            'source-contract-inventory',
-            'python-import-policy',
-            'mvc-boundaries',
-            'mutation-contracts',
             'ci-workflow-contract',
             'manifest',
+        ],
+        // Shared environment-independent source qualification for split hosted FULL owners.
+        'source-contracts' => [
+            'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
+            'source-contract-inventory', 'python-import-policy', 'mvc-boundaries',
+            'mutation-contracts', 'ci-workflow-contract', 'version-audit',
+        ],
+        // Portable runtime suites have one exact-candidate owner across the hosted matrix.
+        'portable' => [
+            'node-full', 'winapp',
+        ],
+        // Each hosted FULL PHP owner runs the same centrally partitioned PHP regression tree.
+        'hosted-full' => [
+            'php-regression', 'runtime-performance', 'php-lint',
         ],
         'quick' => [
             'php-fast',
@@ -464,6 +469,7 @@ $registry = [
 ];
 
 $registry['php_fast_tests'] = $phpRegistry['quick_tests'];
+$registry['hosted_full_php_shard_count'] = $phpRegistry['hosted_full_php_shard_count'];
 $registry['performance_probes'] = require __DIR__ . '/audit_performance_registry.php';
 $registry['route_performance_probes'] = require __DIR__ . '/audit_route_probe_registry.php';
 foreach ($phpRegistry['serial_tests'] as $name => $reason) {
