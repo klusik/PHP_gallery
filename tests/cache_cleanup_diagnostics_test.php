@@ -32,58 +32,7 @@ namespace Gallery\Core {
 namespace {
     $GLOBALS['cache_diagnostic_rows'] = [];
     $GLOBALS['cache_diagnostic_refuse'] = false;
-    /** Supply isolated schema queries and rejecting insert statements to the real log model. */
-    class CacheDiagnosticDatabase {
-        /**
-         * Expose the installed log columns without querying a server.
-         * @param string $sql Model-owned schema query.
-         * @return CacheDiagnosticColumns Statement double whose fetchAll returns column records.
-         */
-        public function query(string $sql): CacheDiagnosticColumns {
-            return new CacheDiagnosticColumns();
-        }
-        /**
-         * Prepare a log insert double retaining its actual field order.
-         * @param string $sql Model-owned insert statement.
-         * @return CacheDiagnosticInsert Statement double with an execute method.
-         */
-        public function prepare(string $sql): CacheDiagnosticInsert {
-            $statement = new CacheDiagnosticInsert();
-            preg_match('/admin_logs \(([^)]+)\)/', $sql, $match);
-            $statement->fields = explode(', ', $match[1]);
-            return $statement;
-        }
-    }
-    /** Expose installed field names without contacting a database. */
-    class CacheDiagnosticColumns {
-        /**
-         * Return fields available in the fixture log schema.
-         * @return list<array{Field:string}> Installed log field names.
-         */
-        public function fetchAll(): array {
-            return array_map(static fn (string $field): array => ['Field' => $field],
-                ['status','user_id','level','category','severity','event_key','message','subject_type','subject_id','request_id','route_name','context_json','created_at']);
-        }
-    }
-    /** Emulate the installed request-ID width and capture successfully persisted rows. */
-    class CacheDiagnosticInsert {
-        public array $fields = [];
-        /**
-         * Capture valid rows or emulate the observed MySQL width failure.
-         * @param list<int|string|null> $params Values matching the prepared field order.
-         * @return bool True for accepted rows; throws PDOException on rejection.
-         */
-        public function execute(array $params): bool {
-            $row = array_combine($this->fields, $params);
-            if ($GLOBALS['cache_diagnostic_refuse'] || strlen((string) ($row['request_id'] ?? '')) > 26) {
-                $exception = new \PDOException("Data too long for column 'request_id'; PRIVATE_SQL_TOKEN", 22001);
-                $exception->errorInfo = ['22001', 1406, 'PRIVATE_SQL_TOKEN'];
-                throw $exception;
-            }
-            $GLOBALS['cache_diagnostic_rows'][] = $row;
-            return true;
-        }
-    }
+    require_once __DIR__ . '/support/cache_diagnostic_database.php';
     $GLOBALS['cache_diagnostic_db'] = new CacheDiagnosticDatabase();
     require_once __DIR__ . '/../app/services/cache_cleanup_diagnostics.php';
 

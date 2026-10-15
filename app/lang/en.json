@@ -7392,8 +7392,8 @@
     "admin.cache_lifecycle.cache_cleanup_start": "Clean eligible cache",
     "admin.cache_lifecycle.cache_cleanup_step": "Continue cleanup",
     "admin.features.automatic_cache_cleanup.label": "Automatic cache cleanup",
-    "admin.features.automatic_cache_cleanup.description": "Advance verified cache retention during ordinary visits. Inventory is due hourly; without visits work waits. Explicit OFF survives updates.",
-    "admin.cache_lifecycle.automatic": "Automatic cleanup is enabled after installation/update. Ordinary visits supply short server-side opportunities; inventory is due hourly. Without visits work waits. Admin Features can disable it permanently across updates.",
+    "admin.features.automatic_cache_cleanup.description": "Check cache at thirty-second intervals and reclaim verified expired data in server batches. A suitable visit starts the autonomous worker. Explicit OFF survives updates.",
+    "admin.cache_lifecycle.automatic": "Automatic cleanup is enabled after installation/update. A suitable visit starts a server worker that continues without an open browser, checking every 30 seconds in batches of up to 5 seconds. Failures are shown above; a later visit can recover an interrupted chain. Explicit OFF in Admin Features survives updates.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatic cache cleanup",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Enabled after installation/update. Ordinary visits advance verified retention in short server-side steps; inventory is due hourly and waits during zero traffic. OFF preserves cache state and survives updates.",
     "admin.settings.item.feature_automatic_cache_cleanup.example": "Example: Keep ON for automatic cleanup during ordinary visits; choose OFF to stop automatic cache work while retaining manual controls."

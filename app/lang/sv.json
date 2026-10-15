@@ -7392,8 +7392,8 @@
     "admin.cache_lifecycle.cache_cleanup_start": "Rensa berättigad cache",
     "admin.cache_lifecycle.cache_cleanup_step": "Fortsätt rensa",
     "admin.features.automatic_cache_cleanup.label": "Automatisk cacherensning",
-    "admin.features.automatic_cache_cleanup.description": "Vanliga besök driver säker cacherensning framåt. Inventering förfaller varje timme; utan besök väntar arbetet. Uttryckligt OFF bevaras vid uppdateringar.",
-    "admin.cache_lifecycle.automatic": "Automatisk rensning aktiveras efter installation/uppdatering. Vanliga besök ger korta serverbaserade arbetstillfällen; inventering förfaller varje timme. Utan besök väntar arbetet. Admin Features kan stänga av rensningen även för kommande uppdateringar.",
+    "admin.features.automatic_cache_cleanup.description": "Kontrollerar cache med trettiosekundersintervall och tar bort verifierade utgångna data i serveromgångar. Ett lämpligt besök startar den autonoma arbetaren. Uttryckligt OFF bevaras vid uppdateringar.",
+    "admin.cache_lifecycle.automatic": "Automatisk rensning aktiveras efter installation/uppdatering. Ett lämpligt besök startar en serverarbetare som fortsätter utan öppen webbläsare med kontroller var 30:e sekund och omgångar på upp till 5 sekunder. Fel visas ovan; ett senare besök kan återställa en avbruten kedja. Uttryckligt OFF i Admin Features bevaras vid uppdateringar.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatisk cacherensning",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Aktiverad efter installation/uppdatering. Vanliga besök driver säker rensning genom korta serverbaserade steg; inventering förfaller varje timme och väntar utan trafik. OFF bevarar cachetillstånd och överlever uppdateringar.",
     "admin.settings.item.feature_automatic_cache_cleanup.example": "Exempel: Behåll ON för automatisk rensning vid besök; välj OFF för att stoppa automatiskt arbete och behålla manuella kontroller."

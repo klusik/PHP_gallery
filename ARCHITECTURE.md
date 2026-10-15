@@ -599,7 +599,7 @@ contract and load order are preserved.
 | `app/models/public_search_progressive.php` | `app/models/public_search_progressive/` | `deferred.php` |
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
-| `app/services/cache_lifecycle.php` | `app/services/cache_lifecycle/` | `policy.php`, `storage.php`, `inventory.php`, `reclamation.php`, `visitor.php` |
+| `app/services/cache_lifecycle.php` | `app/services/cache_lifecycle/` | `policy.php`, `storage.php`, `inventory.php`, `reclamation.php`, `visitor.php`, `chain.php`, `observability.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
 | `app/services/custom_css.php` | `app/services/custom_css/` | `visual_background_save.php` (reviewed background attachment staged and committed through the existing CSS Save owner) |
 | `app/services/gallery_backgrounds.php` | `app/services/gallery_backgrounds/` | `visual_css_save.php` (opaque background revision, shared writer lock and private upload staging for the existing CSS Save owner) |
@@ -1779,7 +1779,7 @@ only after rendering. Thumbnail settings/windows do not gate these opportunities
 Installation/upgrade seeds one canonical Admin Features preference only if absent;
 explicit OFF remains durable and preserves manual controls and checkpoints.
 
-Inventory is due hourly, not restarted hourly while unfinished. Policy-owned
+Inventory is due every thirty seconds, without replacing unfinished cursors. Policy-owned
 committed candidates can be reclaimed before scan completion, alternating fairly.
 At <= 128 MiB measured pending debt, response-finishing hosts admit <= 600 ms / 8
 slices; larger debt <= 120 ms / 2 slices; unsupported finishing <= 40 ms / 2 slices.
@@ -1787,12 +1787,21 @@ Each visitor slice is <= 60 ms admission with <= 5000 scan observations and <= 1
 payload deletion operations, plus a bounded retired-journal sub-slice. Incremental
 memory and known PHP headroom admission are eight MiB. Blocking OS/DB/loader calls
 can exceed deadlines. Finish-response functions retain the PHP worker. Shared
-foreground leases, new-arrival signals, 60-second throttling and nonblocking
+foreground leases, new-arrival signals, 30-second throttling and nonblocking
 scheduler/site/lifecycle locks limit interference; queued worker-pool requests
 are not observable. Visitors never wait for these locks. Strict central-claim
-observation fails closed on unknown storage. With zero traffic there is no PHP
-wake-up; optional cron provides idle-time opportunities, without self-request
-chains or permanent workers. See `docs/CACHE_MAINTENANCE.md` for safety, metrics,
+observation fails closed on unknown storage. One public visit can start the
+autonomous `chain.php` owner: private single-use tickets authenticate independent
+HTTP timer hops and five-second workers without another browser request. A
+dedicated kernel lock prevents parallel chains; twenty-second maximum waits are
+reduced by the declared runtime limit. Configured-origin POST/header dispatch
+cannot use a visitor's Host header to redirect the token. A complete socket write
+does not prove worker arrival. Process termination or transport loss can interrupt
+the chain; later suitable visits recover an expired ticket, while optional external
+scheduling supplies independent recovery. No generic PHP mechanism guarantees
+restart after all hosting processes stop. `observability.php` coalesces actual
+removal counters through the existing Admin log owner at most once per five
+minutes, without per-file paths or idle messages. See `docs/CACHE_MAINTENANCE.md` for safety, metrics,
 space limits and compatibility.
 
 ## Scheduled Site Maintenance

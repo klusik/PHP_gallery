@@ -57,6 +57,7 @@ use function Gallery\Services\site_maintenance_rotate_token;
 use function Gallery\Services\site_maintenance_run;
 use function Gallery\Services\site_maintenance_time_budget_seconds;
 use function Gallery\Services\site_maintenance_token_is_valid;
+use function Gallery\Services\site_maintenance_cache_chain_run;
 use function Gallery\Services\site_maintenance_window_hours_to_minutes;
 use function Gallery\Services\t;
 use function Gallery\Services\cache_cleanup_diagnostic_id;
@@ -64,7 +65,7 @@ use function Gallery\Services\cache_cleanup_diagnostic_event;
 use function Gallery\Services\cache_cleanup_diagnostic_buffer;
 
 /**
- * Process token-protected site maintenance or one independent cache-only slice.
+ * Process token-protected site maintenance, an external cache slice or a leased autonomous timer request.
  * @return void Writes the safe cron JSON result or a forbidden response.
  */
 function cms_site_maintenance_cron(): void
@@ -87,6 +88,18 @@ function cms_site_maintenance_cron(): void
 
     $force = (string) ($_GET['force'] ?? $_POST['force'] ?? '') === '1';
     $cacheOnly = (string) ($_GET['cache_only'] ?? $_POST['cache_only'] ?? '') === '1';
+    $cacheTicket = trim((string) ($_POST['cache_ticket'] ?? ''));
+    if ($cacheTicket !== '') {
+        if (!$cacheOnly || strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+            http_response_code(400);
+            echo json_encode(['ok'=>false,'reason'=>'cache_chain_transport_refused'], JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        $result = site_maintenance_cache_chain_run($cacheTicket);
+        if (empty($result['ok'])) http_response_code(500);
+        echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
+    }
     $chain = !$cacheOnly && (string) ($_GET['chain'] ?? $_POST['chain'] ?? '1') !== '0';
     $source = preg_replace('/[^a-z0-9_]/i', '', (string) ($_GET['source'] ?? $_POST['source'] ?? 'web_cron')) ?: 'web_cron';
     $timeBudget = (int) ($_GET['time_budget'] ?? $_POST['time_budget'] ?? site_maintenance_time_budget_seconds());

@@ -67,6 +67,10 @@ file_put_contents($root . '/cache/unregistered-original/payload', 'protected ori
 file_put_contents($root . '/cache/unregistered-original/.keep', 'protected');
 $environment = getenv();
 $environment['CACHE_VISITOR_HTTP_ROOT'] = $root;
+// Keep this fallback fixture single-worker even if the runner declares a pool.
+// Type: string. Units: PHP worker count. Scope: this disposable server only.
+// Consumers: PHP built-in server. Rationale: one worker proves short visitor work remains usable when autonomous timers must be refused.
+$environment['PHP_CLI_SERVER_WORKERS'] = '1';
 $serverCommand = [PHP_BINARY];
 if ($restrictedCapacity) array_push($serverCommand, '-d', 'disable_functions=disk_free_space');
 array_push($serverCommand, '-S', '127.0.0.1:18812', dirname(__DIR__) . '/fixtures/cache_lifecycle_public_router.php');
@@ -112,7 +116,11 @@ try {
     }
     $status = \Gallery\Services\cache_lifecycle_status();
     cache_public_assert($status['phase'] === 'complete' && $status['bytes_removed'] > 0
-        && $status['scheduler_source'] === 'public_visit', 'Real public visits did not finish safe cache work without cron/Admin.');
+        && $status['scheduler_source'] === 'public_visit', 'Real public visits did not finish safe cache work without cron/Admin: '
+        . json_encode(array_diff_key($status, ['policies'=>true,'totals'=>true,'sample'=>true]), JSON_THROW_ON_ERROR));
+    $chain = \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/chain.json');
+    cache_public_assert(($chain['last_error'] ?? '') === 'cache_chain_single_worker_runtime' && empty($chain['ticket']),
+        'Single-worker HTTP fallback dispatched a timer that could block ordinary requests.');
     cache_public_assert(!is_dir($root . '/cache/map-browser-profile-Web001')
         && file_get_contents($root . '/cache/unregistered-original/payload') === 'protected original',
         'Restricted hosting cleanup did not reclaim verified expired data or deleted protected originals.');

@@ -196,6 +196,18 @@ try {
                 'Hosted cache HTTP fixture failed: ' . (string) $visitorOutput);
             echo $visitorOutput;
         }
+        $chainLog = $fixture . '/cache-chain.log';
+        $chainChild = proc_open([PHP_BINARY, __DIR__ . '/support/cache_lifecycle_chain_http_fixture.php'],
+            [0=>['pipe','r'],1=>['file',$chainLog,'w'],2=>['file',$chainLog,'a']],
+            $chainPipes, $root, getenv(), ['bypass_shell'=>true]);
+        cli_http_check(is_resource($chainChild), 'Could not start serial autonomous cache HTTP fixture.');
+        fclose($chainPipes[0]);
+        $chainExit = proc_close($chainChild);
+        $chainOutput = file_get_contents($chainLog);
+        cli_http_check($chainExit === 0 && is_string($chainOutput)
+            && str_contains($chainOutput, 'Single public kickoff; real authenticated server continuation, partial coverage, immediate reclamation, aggregate logs and OFF: PASS'),
+            'Hosted autonomous cache HTTP fixture failed: ' . (string) $chainOutput);
+        echo $chainOutput;
     }
     foreach (['app', 'scripts'] as $tree) {
         cli_http_copy_tree($root . '/' . $tree, $fixture . '/' . $tree,

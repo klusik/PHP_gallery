@@ -74,8 +74,10 @@ namespace {
         }
         $report = ['schema_version'=>1,'status'=>'PASS','started_at'=>'2026-10-01T00:00:00Z','duration_seconds'=>1,
             'source'=>[],'report_files'=>['run_directory'=>'cache/test-audit/20261001-000000-123']];
-        mkdir($root . '/cache/cache-cleaning-ci-overlap/child', 0775, true);
-        file_put_contents($root . '/cache/cache-cleaning-ci-overlap/child/latest.json', json_encode($report, JSON_THROW_ON_ERROR));
+        // Sort this producer after the large workspace queue so the initial
+        // bounded early-cleanup opportunity cannot consume the race candidate.
+        mkdir($root . '/cache/website-ci-overlap/child', 0775, true);
+        file_put_contents($root . '/cache/website-ci-overlap/child/latest.json', json_encode($report, JSON_THROW_ON_ERROR));
         $manual = \Gallery\Services\cache_lifecycle_inventory_start();
         $manualId = $manual['id'];
         scheduler_assert(\Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron', 2)['reason'] === 'manual_cache_preview_pending', 'Fresh manual scan was silently approved.');
@@ -88,9 +90,13 @@ namespace {
         if ($state['phase'] === 'preview') $state = \Gallery\Services\cache_lifecycle_cleanup_start($state['id']);
         scheduler_assert($state['phase'] === 'cleanup', 'Fixture did not reach an approved pending queue.');
         $queuedBefore = (int) $state['candidates'];
+        $overlapMarker = \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/work/queued/'
+            . hash('sha256', 'website-ci-overlap/child') . '.json');
+        scheduler_assert(is_dir($root . '/cache/website-ci-overlap/child') && isset($overlapMarker['offset'])
+            && $overlapMarker['offset'] >= $state['plan_offset'], 'Ownership-race candidate was already consumed before its producer changed.');
         // Changing producer proof between rounds must not allow a parent plan
         // to overlap the already committed child candidate.
-        file_put_contents($root . '/cache/cache-cleaning-ci-overlap/latest.json', json_encode($report, JSON_THROW_ON_ERROR));
+        file_put_contents($root . '/cache/website-ci-overlap/latest.json', json_encode($report, JSON_THROW_ON_ERROR));
         $GLOBALS['cache_lifecycle_test_now'] += 3601;
         $result = \Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron', 2);
         $state = \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/state.json');
@@ -112,9 +118,12 @@ namespace {
             scheduler_assert(!empty($result['ok']), 'Scheduled fixture failed safely instead of advancing.');
         }
         scheduler_assert($early && $scanProgress, 'Reclamation waited for full inventory or starved fresh observations.');
-        scheduler_assert($status['phase'] === 'complete' && $status['bytes_removed'] > 0 && $status['pending_bytes'] === 0 && $status['pending_candidates'] === 0, 'Completed cleanup retained a fictitious backlog.');
+        scheduler_assert($status['phase'] === 'complete' && $status['bytes_removed'] > 0 && $status['pending_bytes'] === 0 && $status['pending_candidates'] === 0,
+            'Completed cleanup retained a fictitious backlog: ' . json_encode(array_diff_key($status, ['policies'=>true,'totals'=>true,'sample'=>true]), JSON_THROW_ON_ERROR));
+        scheduler_assert($status['next_due'] === $GLOBALS['cache_lifecycle_test_now'] + \Gallery\Services\CACHE_LIFECYCLE_REFRESH_SECONDS,
+            'Completed deletion reused an already overdue inventory timestamp for its next cycle.');
         scheduler_assert($status['candidate_bytes'] > 0 && $status['superseded_manual_at'] > 0, 'Historical measurement or explicit supersession evidence was lost.');
-        scheduler_assert(is_file($root . '/cache/cache-cleaning-ci-overlap/latest.json') && is_dir($root . '/cache/cache-cleaning-ci-overlap/child') && $status['skipped'] > 0,
+        scheduler_assert(is_file($root . '/cache/website-ci-overlap/latest.json') && is_dir($root . '/cache/website-ci-overlap/child') && $status['skipped'] > 0,
             'Changed parent ownership did not preserve and refuse its previously queued child.');
         $before = file_get_contents($root . '/cache/cache-lifecycle/state.json');
         $notDue = \Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron', 2);

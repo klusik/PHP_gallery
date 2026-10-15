@@ -300,7 +300,7 @@ function feature_capability_definitions(): array
         'automatic_cache_cleanup' => [
             'group' => 'admin_tools',
             'label' => t('admin.features.automatic_cache_cleanup.label', 'Automatic cache cleanup'),
-            'description' => t('admin.features.automatic_cache_cleanup.description', 'Advance verified cache retention in short server-side steps during ordinary visits. Inventory is due hourly; without visits work waits. Explicit OFF is preserved across updates.'),
+            'description' => t('admin.features.automatic_cache_cleanup.description', 'Check cache at thirty-second intervals and reclaim verified expired data in server batches. A suitable visit starts the autonomous worker. Explicit OFF survives updates.'),
             'default_enabled' => true,
             'fresh_default_enabled' => true,
             'dependencies' => [],

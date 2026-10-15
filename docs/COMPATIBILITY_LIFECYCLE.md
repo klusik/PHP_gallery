@@ -1107,8 +1107,24 @@ The token-protected cron retains GET-token fallback for existing provider URL-on
 schedulers, while preferring a header or POST. Owner: site maintenance controller.
 Usage is unknown. Retire the URL fallback only after supported installations have
 migrated scheduler credentials and accepted header/POST calls; do not log tokens.
-Cache-only requests disable legacy self-request chaining permanently because an
-external scheduler owns repeated admission and unattended bounded execution.
+Ordinary external cache-only requests still disable legacy thumbnail chaining.
+The automatic cache owner now uses a separate authenticated POST/header chain
+with committed single-use tickets, a dedicated live lock and bounded timer hops.
+It permanently supports generic configured-origin HTTP hosting without requiring
+a provider API or browser continuation. Missing absolute `base_url`, unsupported
+network functions, loopback refusal or insufficient runtime is reported as a safe
+chain refusal; direct short visitor opportunities and optional external workers
+remain available. A socket write is not an arrival receipt. Usage is unknown
+until deployment shows independent worker arrivals. The required serial hosted
+HTTP child verifies one public kickoff followed by actual authenticated server
+requests, safe early deletion with partial coverage, aggregate logs and OFF.
+Single-worker `cli-server` refuses timer chaining while retaining short visitor
+work; Windows built-in servers are always treated as single-worker because PHP
+does not support their worker pool. Owner: lightweight cache lifecycle runtime
+policy and site maintenance transport. Usage is unknown. Permanent support is
+required while single-worker development servers remain supported. Regression
+covers the actual single-worker fallback, explicit runtime policy cases and a
+two-worker autonomous HTTP fixture with owned process-tree cleanup.
 
 Idle unapproved manual previews are explicitly superseded after fifteen minutes
 without manual inventory activity. This is a policy change, not approval of an
@@ -1159,5 +1175,10 @@ new visitor mutation. Existing nullable callers retain their historical
 observation contract; the optional strict parameter is owned by the persistence
 model and tested by the visitor unknown-claim fixture. Upgrade preference seeding
 uses insert-if-absent, never an override of explicit administrator OFF. The old
-900-second completed due marker is conservatively interpreted using the one-hour
-completion anchor; existing unfinished/approved cursors are never migrated away.
+900/3600-second deployed due markers are interpreted using the new thirty-second
+completion/observation anchor; existing unfinished/approved cursors are never
+migrated away. A numeric count of blocked inventory directories is partial
+coverage, not a boolean worker failure. Actual cleanup blocking retains its
+independent safe retry delay. Timer waiting occupies a PHP worker and cannot
+guarantee recovery after all hosting processes terminate; independent scheduling
+can provide that recovery without changing the generic cache owner.

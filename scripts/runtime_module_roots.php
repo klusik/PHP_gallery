@@ -80,6 +80,8 @@ return [
         'archive-request-trigger' => ['Gallery\\Services\\admin_log_archive_register_request_trigger'],
         'site-request-trigger' => ['Gallery\\Services\\site_maintenance_register_request_trigger'],
         'site-maintenance-work' => [
+            'Gallery\\Services\\cache_lifecycle_chain_start',
+            'Gallery\\Services\\cache_lifecycle_chain_run',
             'Gallery\\Services\\cache_lifecycle_visitor_run',
             'Gallery\\Services\\cache_lifecycle_scheduled_run',
             'Gallery\\Services\\cache_lifecycle_scheduled_slice',
@@ -209,7 +211,11 @@ return [
             'Gallery\\Services\\admin_test_run_record_maintenance_event',
         ],
         'Gallery\\Services\\site_maintenance_register_cache_trigger' => [
+            // The callback explicitly loads lightweight storage before this
+            // interval; workers follow only after the reviewed work loader.
+            'Gallery\\Services\\CACHE_LIFECYCLE_REFRESH_SECONDS',
             'Gallery\\Services\\cache_lifecycle_visitor_run',
+            'Gallery\\Services\\cache_lifecycle_chain_start',
         ],
         'Gallery\\Services\\admin_log_archive_register_request_trigger' => [
             'Gallery\\Services\\admin_log_archive_maintenance_run',
