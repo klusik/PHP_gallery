@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.132.6
+
+Admin log filtering stayed aligned with the latest search criteria, and automatic cache failures gained bounded diagnostic records without changing cache admission, traversal, deletion, or counters.
+
+### Highlights
+
+#### Current Admin log filters and cache-failure diagnostics
+- Updated live Admin log filtering so rows, counts, pagination, sorting links, and the URL reflected only the latest filter response.
+- Marked log rows whose match appeared only in collapsed JSON details, with labels localized in English, Czech, German, and Swedish. [#220](https://github.com/klusik/PHP_gallery/issues/220)
+- Recorded coalesced Admin log events for automatic cache-worker failures at visitor admission, scheduled bursts, and regional slices. [#225](https://github.com/klusik/PHP_gallery/issues/225)
+
+### Technical Details
+
+#### Backend
+- Updated `app/controllers/admin_logs.php` to keep log export selection aligned with filter criteria.
+- Added bounded `cache.automatic_failed` diagnostics in `app/services/cache_lifecycle/observability.php`, including stage and source details, exception class and source location, and validated database error codes when available.
+- Preserved exception causes for strict maintenance-owner query failures in `app/models/maintenance_center.php`.
+
+#### Frontend
+- Updated `public/assets/gallery-modules/admin-logs.js` to invalidate older requests when filters changed and apply results only from the current response.
+- Added context-only match indicators in the Admin logs view and localized labels in all four supported languages.
+
+#### Tests
+- Expanded regression coverage for stale live-filter responses, context-only match indicators and escaping, and cache-failure diagnostic redaction, coalescing, throttling, and checkpoint preservation.
+- Extended existing cache-chain, export-selection, side-panel refresh, and mutation-hardening fixtures.
+
+#### Documentation
+- Updated `TESTING.md`, cache-maintenance and authoring guidance, and all four maintained manual editions.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing gallery behavior did not change.
+
+#### For administrators
+- Admins could identify log results matched only within collapsed JSON details and received bounded records of automatic cache failures.
+
+#### For maintainers
+- Cache-failure diagnostics improved troubleshooting while omitting exception messages, SQL, private paths, and credentials; logging failures did not alter worker checkpoints or safe refusals.
+
 ## Version 0.132.5
 
 Admin cache lifecycle details became easier to scan while retaining the timing, retry, and cursor evidence needed for troubleshooting.
