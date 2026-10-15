@@ -36,6 +36,7 @@ async () => {
             throw new Error('Timed out' + (detail ? ': ' + detail : ''));
         };
         const credentials = JSON.parse(document.querySelector('#credentials').textContent);
+        expect(document.documentElement.dataset.workflowSessionEstablished === '1');
         const workflowToken = location.pathname.match(/^\/__workflow_([a-f0-9]{24})\/public-widgets$/)?.[1] || '';
         expect(workflowToken !== '');
         let adminAuthenticated = false;

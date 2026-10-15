@@ -34,17 +34,65 @@ const CACHE_LIFECYCLE_PREVIEW_SAMPLES = 16;
  * Refresh finished observations without restarting unfinished scans.
  * Type: int. Units: seconds. Scope: lifecycle observation refresh and stale evidence.
  * Consumers: scheduled admission and authenticated status.
- * Rationale: hourly due dates provide default inventory opportunities; visits or optional cron supply execution, never a wake-up guarantee.
+ * Rationale: thirty-second observations keep sparse-traffic installations responsive; the server chain supplies subsequent opportunities without another visitor.
  */
-const CACHE_LIFECYCLE_REFRESH_SECONDS = 3600;
+const CACHE_LIFECYCLE_REFRESH_SECONDS = 30;
+
+/**
+ * Allow three observation intervals before reporting missing worker evidence.
+ * Type: int. Units: seconds. Scope: authenticated scheduler health and observation age.
+ * Consumers: passive lifecycle status. Rationale: ninety seconds allows bounded work and transport latency without calling every timer boundary an outage.
+ */
+const CACHE_LIFECYCLE_HEALTH_SECONDS = 90;
+
+/**
+ * Bound one autonomous worker's admission independently of its waiting period.
+ * Type: int. Units: seconds. Scope: one token-authenticated cache-chain request.
+ * Consumers: chained worker admission. Rationale: five seconds advances sparse-traffic backlogs while retaining durable slice checkpoints and foreground priority.
+ */
+const CACHE_LIFECYCLE_CHAIN_WORK_SECONDS = 5;
+
+/**
+ * Bound a timer handoff before issuing another independent HTTP request.
+ * Type: int. Units: seconds. Scope: one autonomous timer hop.
+ * Consumers: cache-chain waiting. Rationale: at most twenty seconds of waiting plus five seconds of work leaves room within a typical thirty-second request limit; lower declared limits reduce the wait further.
+ */
+const CACHE_LIFECYCLE_CHAIN_WAIT_SECONDS = 20;
+
+/**
+ * Expire a queued request that never arrives without duplicating a live worker.
+ * Type: int. Units: seconds. Scope: one private chain ticket.
+ * Consumers: chain startup and authenticated continuation. Rationale: ninety seconds tolerates queued HTTP work; a separate kernel lock still excludes an overlapping live request after the lease expires.
+ */
+const CACHE_LIFECYCLE_CHAIN_LEASE_SECONDS = 90;
+
+/**
+ * Coalesce actual reclamation into occasional Admin log entries.
+ * Type: int. Units: seconds. Scope: one installation-wide reclamation summary.
+ * Consumers: cache log aggregation. Rationale: a five-minute minimum separates successful summaries even across thirty-second scan cycles; empty scans and individual paths are never logged.
+ */
+const CACHE_LIFECYCLE_LOG_SECONDS = 300;
 
 /**
  * Expire an abandoned manual preview without approving its original identity.
  * Type: int. Units: seconds. Scope: manual-preview idle time.
  * Consumers: scheduled lifecycle admission.
- * Rationale: preserve the existing fifteen-minute review grace independently of hourly inventory cadence.
+ * Rationale: preserve the existing fifteen-minute review grace independently of the thirty-second automatic cadence.
  */
 const CACHE_LIFECYCLE_MANUAL_IDLE_SECONDS = 900;
+
+/**
+ * Refuse timer chains on built-in servers whose only worker would block public requests.
+ * @param string $sapi PHP server interface; production defaults to the actual interface.
+ * @param string|null $workers Declared built-in server pool size, or null to read PHP_CLI_SERVER_WORKERS.
+ * @param bool $windows Whether the runtime lacks supported built-in server multiprocessing; defaults to the actual platform.
+ * @return bool False for single-worker cli-server and every Windows cli-server; true for other server interfaces or a supported pool of at least two workers. Short visitor opportunities remain available on refusal.
+ */
+function cache_lifecycle_chain_runtime_available(string $sapi = PHP_SAPI, ?string $workers = null, bool $windows = DIRECTORY_SEPARATOR === '\\'): bool
+{
+    if ($sapi !== 'cli-server') return true;
+    return !$windows && (int) ($workers ?? getenv('PHP_CLI_SERVER_WORKERS')) >= 2;
+}
 
 /**
  * Resolve the installation root with an explicit disposable-fixture override.
@@ -182,7 +230,7 @@ function cache_lifecycle_lease_path(string $relative): string
 
 /**
  * Return bounded public progress and aggregate category measurements without scanning files.
- * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,interrupted:bool,superseded_manual_at:int,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: candidate_bytes/totals/sample are historical observations, pending counters exclude settled records, scheduler arrivals differ from real progress, and absent/stale evidence never proves an active scheduler.
+ * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,chain_health:string,chain_arrival_at:int,chain_next_start_at:int,interrupted:bool,superseded_manual_at:int,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: historical observations differ from pending debt and real progress; chain fields disclose safe arrival/timing evidence but never tickets, URLs or credentials.
  */
 function cache_lifecycle_status(): array
 {
@@ -195,6 +243,7 @@ function cache_lifecycle_status(): array
         $dirs += max(0, (int) ($total['dirs'] ?? 0));
     }
     $scheduler = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/scheduler.json'));
+    $chain = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/chain.json'));
     $now = cache_lifecycle_now();
     $attempt = (int) ($scheduler['last_attempt_at'] ?? 0);
     $previous = (int) ($scheduler['previous_attempt_at'] ?? 0);
@@ -214,14 +263,17 @@ function cache_lifecycle_status(): array
         'pending_candidates'=>($state['phase'] ?? '') === 'complete' ? 0 : max(0, (int) ($state['candidates'] ?? 0) - (int) ($state['settled_candidates'] ?? 0)),
         'last_attempt_at'=>$attempt,'last_progress_at'=>$progress,
         'last_observed_at'=>(int) ($state['last_observed_at'] ?? 0),'next_due'=>($state['phase'] ?? '') === 'complete'
-            ? max((int) ($state['next_due'] ?? 0), (int) ($state['completed_at'] ?? 0) + CACHE_LIFECYCLE_REFRESH_SECONDS) : (int) ($state['next_due'] ?? 0),
-        'stale'=>empty($state['last_observed_at']) || $now - (int) $state['last_observed_at'] > CACHE_LIFECYCLE_REFRESH_SECONDS,
+            ? (int) ($state['completed_at'] ?? 0) + CACHE_LIFECYCLE_REFRESH_SECONDS : (int) ($state['next_due'] ?? 0),
+        'stale'=>empty($state['last_observed_at']) || $now - (int) $state['last_observed_at'] > CACHE_LIFECYCLE_HEALTH_SECONDS,
         'stalled'=>$attempt > 0 && !in_array($state['phase'] ?? '', ['complete','preview'], true)
-            && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_REFRESH_SECONDS,
-        'scheduler_health'=>$attempt === 0 ? 'unobserved' : ($now - $attempt > CACHE_LIFECYCLE_REFRESH_SECONDS ? 'missing'
-            : ($previous > 0 && $attempt > $previous && $attempt - $previous <= CACHE_LIFECYCLE_REFRESH_SECONDS ? 'arrivals_observed' : 'single_arrival')),
+            && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_HEALTH_SECONDS,
+        'scheduler_health'=>$attempt === 0 ? 'unobserved' : ($now - $attempt > CACHE_LIFECYCLE_HEALTH_SECONDS ? 'missing'
+            : ($previous > 0 && $attempt > $previous && $attempt - $previous <= CACHE_LIFECYCLE_HEALTH_SECONDS ? 'arrivals_observed' : 'single_arrival')),
         'scheduler_reason'=>(string) app_setting('feature_flag.automatic_cache_cleanup.enabled', '1') === '0'
-            ? 'automatic_cache_cleanup_disabled' : (string) ($scheduler['reason'] ?? ''),'scheduler_source'=>(string) ($scheduler['source'] ?? ''),
+            ? 'automatic_cache_cleanup_disabled' : ((string) ($chain['last_error'] ?? '') ?: (string) ($scheduler['reason'] ?? '')),'scheduler_source'=>(string) ($scheduler['source'] ?? ''),
+        'chain_health'=>$chain === [] ? 'unstarted' : ((int) ($chain['queued_until'] ?? 0) > $now
+            ? (!empty($chain['running']) ? 'waiting' : 'queued') : 'stalled'),
+        'chain_arrival_at'=>(int) ($chain['last_arrival_at'] ?? 0),'chain_next_start_at'=>(int) ($chain['next_start_at'] ?? 0),
         'interrupted'=>!empty($scheduler['interrupted']),
         'superseded_manual_at'=>(int) ($state['superseded_manual_at'] ?? 0),
         'sample'=>array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),

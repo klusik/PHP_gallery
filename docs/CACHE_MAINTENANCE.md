@@ -329,10 +329,14 @@ No thumbnail setting, daily window, cron setup or open Admin dashboard is needed
 Normal successful GET HTML visits to `home`, `gallery` and `smart_gallery` register
 one shutdown opportunity. Media, HEAD, POST, error responses and explicit cache
 transports do not start it. Workers load only after response rendering, through
-the reviewed existing `site-maintenance-work` root. There is no visitor JavaScript,
-self-request, daemon or separate thread. PHP cannot wake itself without incoming
-requests: during zero traffic work waits for the next suitable visit. Completed
-inventory is due after 3600 seconds; unfinished scans retain identity and cursor.
+the reviewed existing `site-maintenance-work` root. There is no visitor JavaScript
+or browser-owned continuation. One suitable visit starts a token-authenticated
+server chain, which continues across completed cycles without further visitors.
+Inventory is due after 30 seconds; unfinished scans retain identity and cursor.
+An overdue observation first serves a bounded existing cleanup slice, so sparse
+arrivals cannot repeatedly scan/approve while starving the last candidate.
+The next completed-cycle interval starts when deletion finishes; observation
+age remains available separately through `last_observed_at`.
 Unapproved manual plans retain their independent 900-second idle grace and get a
 new scheduled identity, never automatic approval of the old plan.
 
@@ -341,6 +345,50 @@ new scheduled identity, never automatic approval of the old plan.
 | Response finishing supported, measured pending <= 128 MiB (134217728 B) | 600 ms | 8 |
 | Response finishing supported, measured pending > 128 MiB | 120 ms | 2 |
 | Response finishing unavailable | 40 ms | 2 |
+| Independent authenticated server-chain worker | 5 s | 32 |
+
+`chain.php` serializes startup and timer requests with a separate kernel lock
+and single-use private tickets. Timer hops wait at most 20 seconds, reduced by
+the declared PHP execution limit while reserving eight seconds for bounded work,
+dispatch and shutdown. Long gaps are split into further requests. The worker does
+not extend the host's execution limit. Each admitted work attempt schedules its
+next start 30 seconds later; timer-only requests do not claim inventory progress.
+The existing token-protected endpoint accepts the private ticket only by POST.
+Dispatch uses the configured `base_url`, never an incoming Host header, and sends
+the maintenance token in a header. TLS verification remains enabled. A complete
+socket write is only queued evidence; authenticated arrivals prove execution.
+
+This generic PHP mechanism requires a configured absolute installation URL,
+working same-installation HTTP connections, sufficient request runtime and an
+available PHP worker. Waiting still occupies a worker. A hosting restart, killed
+request, lost dispatch or unavailable transport can break the chain; a later
+suitable visit recovers its expired lease without replacing cleanup cursors.
+Optional external scheduling can supply recovery opportunities, but no provider
+API, paid service or cron configuration is an installation prerequisite. Strict
+uninterrupted timing across host outages requires an independent scheduler; a
+PHP self-request chain cannot promise restart when every process is gone.
+
+The default single-worker `php -S` development server cannot safely host a
+waiting self-request chain. It reports `cache_chain_single_worker_runtime` and
+retains short visitor opportunities. Non-Windows built-in servers with
+`PHP_CLI_SERVER_WORKERS` of at least two can run the chain; Windows built-in
+servers lack that multiprocessing support. This protects foreground HTTP
+requests without changing the automatic capability preference or host timeouts.
+
+Verified committed candidates are reclaimed during the same alternating bounded
+worker burst, before the entire inventory finishes. Partial directory coverage
+is a count of preserved paths, not a global worker failure. Genuine write,
+ownership or capacity failures retain their safe stop/retry behavior.
+
+Actual removals produce `cache.automatic_reclaimed` in the existing Admin log.
+Each entry aggregates removed entries, bytes and the observation period; no
+individual filenames, tokens or URLs are included. Confirmed summaries are at
+least 300 seconds apart across scan cycles. Pending counters survive a failed
+log receipt and can flush during a later idle burst; empty checks do not create
+log entries. Logging failure does not undo or stop safe reclamation.
+The log-attempt rate-limit claim is committed before calling the logger. Failed
+receipts also wait for the next five-minute opportunity; a crash after insertion
+but before its receipt checkpoint can repeat one aggregate, never per-file logs.
 
 A newly discovered large queue lowers the current burst's deadline and slice cap.
 A few-file approximately 100 MB cache can finish in one small burst. Many tiny
@@ -355,7 +403,7 @@ less than eight MiB known PHP memory headroom; bounded state remains <= 1 MiB an
 private metadata <= 64 MiB. Blocking OS/database/loader/checkpoint calls can exceed
 admission deadlines: these are not hard response-latency or allocator guarantees.
 
-Finishing the response still holds a PHP worker. A global 60-second visitor
+Finishing the response still holds a PHP worker. A global 30-second visitor
 throttle, nonblocking shared scheduler/site/lifecycle locks and durable checkpoints
 limit occupancy. Foreground visits hold shared leases during rendering and never
 wait for the cleanup lock. A burst refuses existing foreground activity and yields
@@ -369,9 +417,11 @@ Optional external cache-only invocations admit at most ten seconds and 32 slices
 alternate inventory with already verified committed candidates and release the
 lifecycle lock after each checkpoint. The same installation/scheduler locks prevent
 concurrent workers. External cron is optional for idle-time opportunities, not an
-installation prerequisite; cache-only HTTP never starts a self-request chain.
+installation prerequisite. Ordinary external cache-only requests remain bounded
+and do not start legacy thumbnail chaining; only leased cache tickets continue
+the independent automatic chain.
 
-If deletion still has backlog one hour after a scan finishes, a new
+If deletion still has backlog thirty seconds after a scan finishes, a new
 observation round reuses the same cycle ID, queue and deletion cursor. Inventory
 and deletion alternate again. Compact durable exact-path and ancestor coverage
 markers fence queue membership against the committed plan offset, preventing
@@ -450,12 +500,14 @@ ordinary visits. For optional external scheduling, verify actual deployment path
 PHP limits, permissions and safe token storage, then inspect at least three arrivals
 with the browser closed. `scheduler_health` distinguishes
 unobserved, single arrival, observed successive arrivals and a gap exceeding
-one hour. Arrival does not imply successful work. `last_attempt_at`,
+90 seconds. Arrival does not imply successful work. `last_attempt_at`,
 `last_progress_at`, `last_observed_at`, `next_due`, `stale`, `stalled` and safe
 reasons show blocked/stopped operation. A stale `running` marker is recovery
 evidence on the next admitted burst, not proof of a live process. Cycle IDs
 remain stable across slices; scheduler diagnostics overwrite one bounded private
 control record, while existing Admin/PHP log owners retain their own rotation.
+`chain_health`, `chain_arrival_at` and `chain_next_start_at` disclose safe server
+continuation evidence; they never expose the ticket or maintenance credential.
 
 `candidate_bytes`, category totals and sample entries are historical measured
 observations over the scan window. `pending_bytes`/`pending_candidates` exclude

@@ -94,7 +94,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.132.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.132.2. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -2923,7 +2923,7 @@ installs no scheduler. Production throughput, host limits and actual recurring
 arrivals require deployment evidence; BASIC cannot substitute for runtime proof.
 
 `tests/cache_lifecycle_visitor_test.php` covers a sparse 100 MiB few-file cache in
-one small attempt, >128 MiB and many-file small backlogs across visits, hourly due
+one small attempt, >128 MiB and many-file small backlogs across visits, thirty-second due
 and zero-traffic resume with unchanged checkpoint identity, 40 ms fallback, global
 throttling, foreground/central contention, unknown ownership refusal and OFF.
 `tests/support/cache_lifecycle_public_http_fixture.php` is hosted-only and runs
@@ -2939,12 +2939,44 @@ the restriction, while ordinary public visits must complete expired-payload
 deletion, preserve pinned unknown originals and respect explicit OFF. Scheduler
 capacity fixtures retain known-zero/below-reserve refusal, the exact 16 MiB
 boundary, and false/throwing observations without inventing free bytes.
+
+`tests/cache_lifecycle_chain_test.php` exercises single-use timer tickets, replay
+refusal, thirty-second virtual timing, immediate eligible reclamation, preserved
+originals, opt-out, honest dispatch failure and confirmed/coalesced Admin log
+receipts. `tests/support/cache_lifecycle_chain_http_fixture.php` is another
+required child of the existing serial HTTP owner, using the same exclusive port.
+One successful public GET starts the real configured-origin POST/header transport
+and real token-protected controller. With no further public requests, actual
+worker arrivals must reclaim a subsequently published expired workspace while
+preserving pinned originals and a dense unregistered directory. Virtual wait
+time belongs solely to the marker-owned fixture; runtime limits, production
+intervals and worker budgets are not changed. Aggregate logging and OFF must
+also pass before the parent can report its separate Apache-contextual SKIP.
+Its receipts pass through the real Admin log service and model, using the same
+isolated database receiver as `cache_cleanup_diagnostics_test.php`; no logger
+declaration shadows the controller's production dependencies.
+The chain child runs a real two-worker built-in server and reuses the audit
+process owner's exact-subtree termination so forked workers cannot leak the
+serial port. The ordinary public child explicitly runs one worker, requires the
+safe timer-refusal reason and still completes visitor cleanup. Runtime policy
+cases also cover Windows built-in servers and a normal FastCGI interface.
 The BASIC audit runner and its registry remain inherited from develop. Native
 audit-retention fixtures require the final JSON/Markdown publication and preserve
 owner-only runs, missing/truncated Markdown and custom in-subtree publications.
 Local checks use the installed Codex browser at `http://localhost/Galerie`; no
 local helper server is launched. Existing scheduler/lifecycle fixtures retain
 crash/detachment/checkpoint, leases, pins, path ancestry, ZIP and recovery proof.
+The scheduler ownership-race fixture places its diagnostic producer after the
+large workspace queue and requires its committed offset still to be pending
+before changing parent proof. This makes the race precondition explicit rather
+than depending on how much unrelated early cleanup a particular filesystem fits
+into its first short opportunity.
+The shared browser harness establishes an anonymous application session and
+persists its CSRF token before serving either browser entry page. Subresource
+requests therefore start with the same cookie instead of racing the login
+GET/POST with competing first-session cookies. The widget journey requires this
+harness precondition and still authenticates through the real login form; a
+rejected CSRF token remains a failure, with no retry or security bypass.
 The real installer fixture executes migration/replay/opt-out in its disposable
 database. BASIC does not execute these regressions; exact prepared FULL is the
 runtime qualification. Live payload deletion and provider incident acceptance

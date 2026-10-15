@@ -7392,8 +7392,8 @@
     "admin.cache_lifecycle.cache_cleanup_start": "Vyčistit způsobilou cache",
     "admin.cache_lifecycle.cache_cleanup_step": "Pokračovat v čištění",
     "admin.features.automatic_cache_cleanup.label": "Automatické čištění cache",
-    "admin.features.automatic_cache_cleanup.description": "Běžné návštěvy posouvají bezpečné čištění cache. Inventář je splatný po hodině; bez návštěv práce počká. Výslovné OFF přežije aktualizace.",
-    "admin.cache_lifecycle.automatic": "Automatické čištění se zapne po instalaci/aktualizaci. Běžné návštěvy poskytují krátké serverové příležitosti; inventář je splatný po hodině. Bez návštěv práce počká. V Admin Features lze čištění vypnout i pro další aktualizace.",
+    "admin.features.automatic_cache_cleanup.description": "Kontroluje cache s třicetisekundovým intervalem a maže ověřená expirovaná data v serverových dávkách. Vhodná návštěva spustí samostatně pokračující worker. Výslovné OFF přežije aktualizace.",
+    "admin.cache_lifecycle.automatic": "Automatické čištění je zapnuté po instalaci/aktualizaci. Vhodná návštěva spustí serverový worker, který pokračuje bez otevřeného prohlížeče, s kontrolami každých 30 sekund a dávkami do 5 sekund. Chyby jsou uvedené výše; další návštěva může obnovit přerušený řetězec. Výslovné OFF v Admin Features přežije aktualizace.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatické čištění cache",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Zapnuté po instalaci/aktualizaci. Běžné návštěvy posouvají bezpečné čištění krátkými serverovými kroky; inventář je splatný po hodině a bez návštěv počká. OFF zachová stav cache i při dalších aktualizacích.",
     "admin.settings.item.feature_automatic_cache_cleanup.example": "Příklad: Nechte ON pro automatické čištění při návštěvách; OFF zastaví automatickou práci a ponechá ruční ovládání."

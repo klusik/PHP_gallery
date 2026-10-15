@@ -7392,8 +7392,8 @@
     "admin.cache_lifecycle.cache_cleanup_start": "Geeigneten Cache bereinigen",
     "admin.cache_lifecycle.cache_cleanup_step": "Bereinigung fortsetzen",
     "admin.features.automatic_cache_cleanup.label": "Automatische Cache-Bereinigung",
-    "admin.features.automatic_cache_cleanup.description": "Normale Besuche treiben die sichere Cache-Aufbewahrung voran. Inventar ist stündlich fällig; ohne Besuche wartet die Arbeit. Ausdrückliches OFF bleibt bei Updates erhalten.",
-    "admin.cache_lifecycle.automatic": "Die automatische Bereinigung ist nach Installation/Update aktiviert. Normale Besuche bieten kurze serverseitige Arbeitsmöglichkeiten; das Inventar ist stündlich fällig. Ohne Besuche wartet die Arbeit. Admin Features kann die Bereinigung auch für spätere Updates deaktivieren.",
+    "admin.features.automatic_cache_cleanup.description": "Prüft den Cache in Intervallen von dreißig Sekunden und entfernt verifizierte abgelaufene Daten in Server-Batches. Ein geeigneter Besuch startet den autonomen Worker. Ausdrückliches OFF bleibt bei Updates erhalten.",
+    "admin.cache_lifecycle.automatic": "Die automatische Bereinigung ist nach Installation/Update aktiviert. Ein geeigneter Besuch startet einen Server-Worker, der ohne geöffneten Browser alle 30 Sekunden mit Batches bis zu 5 Sekunden weiterläuft. Fehler werden oben angezeigt; ein späterer Besuch kann eine unterbrochene Kette wiederherstellen. Ausdrückliches OFF in Admin Features bleibt bei Updates erhalten.",
     "admin.settings.item.feature_automatic_cache_cleanup": "Automatische Cache-Bereinigung",
     "admin.settings.item.feature_automatic_cache_cleanup.hint": "Nach Installation/Update aktiviert. Normale Besuche treiben sichere Aufbewahrung in kurzen serverseitigen Schritten voran; Inventar ist stündlich fällig und wartet ohne Besucher. OFF bewahrt Cache-Zustand und bleibt bei Updates erhalten.",
     "admin.settings.item.feature_automatic_cache_cleanup.example": "Beispiel: ON für automatische Bereinigung bei normalen Besuchen beibehalten; OFF stoppt automatische Arbeit und erhält manuelle Bedienelemente."

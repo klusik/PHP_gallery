@@ -44,6 +44,7 @@ use function Gallery\Core\response_status_code;
 
 use Throwable;
 use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\cms_config;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\pending_migrations_exist;
 use function Gallery\Core\url_for;
@@ -869,6 +870,67 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
 }
 
 /**
+ * Write one authenticated cache timer request to the configured installation origin.
+ * @param string $ticket Single-use sixty-four-character hexadecimal ticket committed by the cache-chain owner.
+ * @return bool True only after the complete POST was written; false means unavailable configuration, transport or write. A write is not a worker-arrival receipt.
+ */
+function site_maintenance_fire_cache_chain(string $ticket): bool
+{
+    require_once __DIR__ . '/cache_lifecycle_storage.php';
+    if (!cache_lifecycle_chain_runtime_available() || preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1
+        || !function_exists('stream_socket_client')) return false;
+    // Use the persisted installation origin, never an incoming Host header or
+    // a caller-selected URL, so a public visit cannot redirect the secret.
+    $base = rtrim((string) (cms_config()['base_url'] ?? ''), '/');
+    $parts = parse_url($base);
+    if (!is_array($parts) || !in_array($parts['scheme'] ?? '', ['http','https'], true)
+        || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+        || preg_match('/[\x00-\x20\x7f]/', $base) === 1) return false;
+    $host = (string) $parts['host'];
+    $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
+    if ($port < 1 || $port > 65535) return false;
+    $body = http_build_query(['cache_only'=>1,'cache_ticket'=>$ticket], '', '&', PHP_QUERY_RFC3986);
+    $target = rtrim((string) ($parts['path'] ?? ''), '/') . '/index.php?page=site_maintenance_cron';
+    $hostHeader = $host . (($parts['scheme'] === 'https' && $port === 443) || ($parts['scheme'] === 'http' && $port === 80) ? '' : ':' . $port);
+    $context = stream_context_create(['ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false,'peer_name'=>$host]]);
+    // Bound each connection and the complete write admission.
+    // Type: int. Units: seconds. Scope: one asynchronous cache handoff.
+    // Consumers: stream connection, write timeout and write deadline. Rationale: a one-second limit prevents a stalled loopback from turning the public kickoff into a long network wait.
+    $transportSeconds = 1;
+    $socket = @stream_socket_client(($parts['scheme'] === 'https' ? 'tls://' : 'tcp://') . $host . ':' . $port,
+        $errorCode, $errorMessage, (float) $transportSeconds, STREAM_CLIENT_CONNECT, $context);
+    if (!is_resource($socket)) return false;
+    try {
+        stream_set_timeout($socket, $transportSeconds);
+        $request = 'POST ' . $target . " HTTP/1.1\r\nHost: " . $hostHeader
+            . "\r\nX-Site-Maintenance-Token: " . site_maintenance_token()
+            . "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($body)
+            . "\r\nUser-Agent: PHP-Gallery-Cache-Worker\r\nConnection: close\r\n\r\n" . $body;
+        $offset = 0;
+        $deadline = microtime(true) + $transportSeconds;
+        while ($offset < strlen($request) && microtime(true) < $deadline) {
+            $written = @fwrite($socket, substr($request, $offset));
+            if ($written === false || $written === 0) return false;
+            $offset += $written;
+        }
+        return $offset === strlen($request);
+    } finally {
+        fclose($socket);
+    }
+}
+
+/**
+ * Load the existing cache owner for one token-authenticated server continuation.
+ * @param string $ticket Exact private continuation ticket normalized by the HTTP controller.
+ * @return array{ok:bool,queued:bool,reason:string,worked:bool} Cache-chain admission/dispatch evidence without secrets, paths or invented removal counters.
+ */
+function site_maintenance_cache_chain_run(string $ticket): array
+{
+    require_once __DIR__ . '/cache_lifecycle.php';
+    return cache_lifecycle_chain_run($ticket);
+}
+
+/**
  * Finish the visible HTTP response before doing opportunistic background work when the server supports it.
  * @return bool True after a supported primitive finishes the response; false for CLI, unsupported runtimes or explicit finishing failure. The PHP worker remains occupied.
  */
@@ -1015,10 +1077,10 @@ function site_maintenance_register_request_trigger(string $page, ?callable $load
 }
 
 /**
- * Register one short cache opportunity on ordinary HTML visits independently of thumbnail scheduling.
+ * Register a short public cache opportunity and leased server-chain startup independently of thumbnail scheduling.
  * @param string $page Canonical route identity; media, POST, HEAD and cron transports are excluded.
  * @param callable(string):mixed|null $loadDependencies Reviewed kernel loader invoked only after an admitted successful response.
- * @return void Retains a nonblocking foreground lease until shutdown, then optionally advances the existing cache owner; failures never replace the page response.
+ * @return void Retains a nonblocking foreground lease until shutdown, then optionally advances the existing cache owner and writes one bounded continuation request; failures never replace the page response.
  */
 function site_maintenance_register_cache_trigger(string $page, ?callable $loadDependencies = null): void
 {
@@ -1044,11 +1106,14 @@ function site_maintenance_register_cache_trigger(string $page, ?callable $loadDe
             if (response_status_code() >= 400 || error_get_last() !== null
                 && in_array(error_get_last()['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) return;
             try {
+                // Load the shared interval only inside an admitted shutdown
+                // callback; unrelated routes and CLI probes need no cache owner.
+                require_once __DIR__ . '/cache_lifecycle_storage.php';
                 application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-attempt', true);
                 clearstatcache(true, $directory . '/visitor-attempt');
                 // Throttle all visitors together; the worker repeats this check
                 // under the scheduler lock to close concurrent admission races.
-                if (is_file($directory . '/visitor-attempt') && time() - (int) filemtime($directory . '/visitor-attempt') < 60) return;
+                if (is_file($directory . '/visitor-attempt') && time() - (int) filemtime($directory . '/visitor-attempt') < CACHE_LIFECYCLE_REFRESH_SECONDS) return;
                 if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
                 $detached = site_maintenance_request_trigger_can_detach_response();
                 if ($detached) {
@@ -1058,9 +1123,10 @@ function site_maintenance_register_cache_trigger(string $page, ?callable $loadDe
                 if ($loadDependencies !== null) $loadDependencies('site-maintenance-work');
                 else require_once __DIR__ . '/cache_lifecycle.php';
                 cache_lifecycle_visitor_run($detached);
+                cache_lifecycle_chain_start();
             } catch (Throwable) {
                 // Cache failure cannot replace authorized public HTML, leak a
-                // private path, or launch a compensating self-request.
+                // private path, or bypass the chain's committed ticket lease.
             }
         });
     } catch (Throwable) {

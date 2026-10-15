@@ -180,10 +180,20 @@ if ($path === '/__workflow_' . $token . '/preview-state') {
     return;
 }
 header("Content-Security-Policy: connect-src 'self'; img-src 'self' data: blob:; frame-src 'self'");
+if (in_array($path, ['/__workflow_' . $token, '/__workflow_' . $token . '/public-widgets'], true)) {
+    // Establish the real anonymous session before the harness starts browser
+    // subrequests. Concurrent first requests (including an automatic favicon)
+    // must not create competing cookies between login token GET and POST.
+    require_once __DIR__ . '/app/bootstrap.php';
+    \Gallery\Core\cms_start_session(\Gallery\Core\cms_config());
+    if (session_status() !== PHP_SESSION_ACTIVE) throw new RuntimeException('Workflow browser session could not start.');
+    \Gallery\Core\csrf_token();
+    session_write_close();
+}
 if ($path === '/__workflow_' . $token) {
     header('Cache-Control: no-store');
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="en"><meta charset="utf-8"><title>Isolated workflow</title><body>';
+    echo '<!doctype html><html lang="en" data-workflow-session-established="1"><meta charset="utf-8"><title>Isolated workflow</title><body>';
     echo '<script id="credentials" type="application/json">' . json_encode(json_decode((string) file_get_contents(__DIR__ . '/seed.json'), true), JSON_HEX_TAG) . '</script>';
     echo '<iframe id="application" title="Disposable gallery" style="width:1280px;height:900px"></iframe>';
     echo '<script src="/__workflow_' . $token . '.js"></script></body></html>';
@@ -197,7 +207,7 @@ if ($path === '/__workflow_' . $token . '.js') {
 if ($path === '/__workflow_' . $token . '/public-widgets') {
     header('Cache-Control: no-store');
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="en"><meta charset="utf-8"><title>Public widget persistence workflow</title><body>';
+    echo '<!doctype html><html lang="en" data-workflow-session-established="1"><meta charset="utf-8"><title>Public widget persistence workflow</title><body>';
     echo '<script id="credentials" type="application/json">' . json_encode(json_decode((string) file_get_contents(__DIR__ . '/seed.json'), true), JSON_HEX_TAG) . '</script>';
     echo '<iframe id="application" title="Disposable gallery" style="width:1280px;height:900px"></iframe>';
     echo '<script src="/__workflow_' . $token . '/public-widgets.js"></script></body></html>';

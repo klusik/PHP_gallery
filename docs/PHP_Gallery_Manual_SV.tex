@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132.1}
+\newcommand{\version}{0.132.2}
 \newcommand{\manualdate}{15~oktober~2026}
 
 \hypersetup{
@@ -2070,7 +2070,7 @@ ingen global cachekvot införs. Aktiva inventeringsjournaler räknas inte som pa
 
 Delade webbhotell som WEDOS kan inaktivera \codeword{disk_free_space()}. Automatisk rensning fortsätter med uttryckligen okänd ledig kapacitet, framgångsrikt skrivna kontrollpunkter för schemaläggare och kandidater samt samma journalgränser. Uppmätt kapacitet under 16~MiB blockerar fortfarande nytt arbete; faktiska skrivfel i kontrollpunkter stoppar arbetet. Okänd kapacitet är varken en uppmätt reserv eller en kontokvot. Ingen manuell skanning behövs.
 
-Automatisk cacherensning aktiveras vid installation och uppdatering genom den enda inställningen i Admin Features; ett senare uttryckligt OFF bevaras vid uppdateringar. Vanliga GET-besök på startsidan och fysiska/Smart Galleries ger korta serverbaserade arbetstillfällen utan cron, öppet Admin-dashboard eller besökarens JavaScript. Avslutad inventering förfaller varje timme; pågående skanning behåller sin kontrollpunkt. Utan inkommande anrop kan PHP inte väcka sig självt: arbetet väntar på nästa lämpliga besök. Ingen självanropskedja eller permanent process skapas.
+Automatisk cacherensning aktiveras vid installation och uppdatering genom den enda inställningen i Admin Features; uttryckligt OFF bevaras. Ett vanligt GET-besök kan starta en autentiserad serverkedja som fortsätter utan en öppen webbläsare. Ny inventering förfaller var 30:e sekund och oberoende arbetare får upp till 5~sekunder för återupptagbar inventering och direkt borttagning av verifierade lämpliga data. Pågående markörer, original, låsta och aktiva återställningsdata förblir skyddade. Väntan upptar en PHP-process; en konfigurerad installationsadress, HTTP-åtkomst från servern och tillräcklig körtid krävs. En avbruten process eller misslyckad överlämning kan stoppa kedjan; ett senare besök eller en valfri oberoende schemaläggare kan återställa den. Faktiska borttagningar sammanfattas i Admin-loggen högst var femte minut, utan enskilda filnamn eller tomma kontroller.
 
 En uppmätt berättigad kö på högst 128~MiB får, när svarsslutförande stöds, ett försök på högst 600~ms och åtta korta delar. Större köer får 120~ms och två delar. Utan detta stöd är antagningsbudgeten 40~ms och två delar; klienten kan vänta på det korta avslutande arbetet. Detta är antagningsgränser, inte latensgarantier för systemanrop. PHP-arbetaren förblir upptagen även efter att svaret avslutats. Gemensam 60-sekunders begränsning, icke blockerande lås, förgrundsleaser och signaler om nya besök prioriterar frontend. En del medger högst 60~ms; inventering 5000 observationer och 4096 katalognamn; radering 180 operationer. Extra minne och ledigt PHP-utrymme begränsas till åtta MiB vardera. Många små filer fortsätter därför över flera besök även under 128~MiB. Fullständigt verifierade kandidater kan tas bort under inventeringen; skanning och rensning växlar rättvist.
 

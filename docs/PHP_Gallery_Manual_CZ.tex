@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132.1}
+\newcommand{\version}{0.132.2}
 \newcommand{\manualdate}{15.~října~2026}
 
 \hypersetup{
@@ -2068,7 +2068,7 @@ celková kvóta cache se~nezavádí. Živé inventární záznamy nejsou v~měř
 
 Sdílený hosting, například WEDOS, může zakázat \codeword{disk_free_space()}. Automatické čištění pokračuje s~výslovně neznámou volnou kapacitou, úspěšně zapsanými checkpointy plánovače a~kandidátů a~stejnými limity žurnálů. Naměřená kapacita pod 16~MiB stále blokuje novou práci; skutečné selhání zápisu checkpointu práci zastaví. Neznámá kapacita není naměřená rezerva ani kvóta účtu. Ruční spuštění skenu není nutné.
 
-Automatické čištění cache je~zapnuté při instalaci i~aktualizaci prostřednictvím jediné volby v~Admin Features; pozdější výslovné OFF zůstane zachované. Běžné GET návštěvy hlavní stránky a~fyzických či Smart galerií poskytují krátké serverové příležitosti bez cronu, otevřené administrace nebo JavaScriptu návštěvníka. Dokončený inventář je~splatný po~hodině; rozpracovaný sken pokračuje z~checkpointu. Bez příchozích požadavků se~PHP samo neprobudí: práce počká na~další vhodnou návštěvu. Nevytváří se~řetězec self-requestů ani trvalý proces.
+Automatické čištění cache je~zapnuté při instalaci i~aktualizaci prostřednictvím jediné volby v~Admin Features; výslovné OFF zůstává zachované. Jedna běžná GET návštěva může spustit autentizovaný serverový řetězec, který pokračuje bez otevřeného prohlížeče. Nová inventura je~splatná každých 30~sekund a~samostatné workery dostávají až~5~sekund na~checkpointovanou inventuru a~okamžité odstranění ověřených eligible dat. Rozpracované kurzory, originály, piny a~aktivní či obnovovací data zůstávají chráněné. Čekání obsazuje PHP proces; je~nutná nastavená adresa instalace, její dostupnost ze~serveru a~dostatečný časový limit. Ukončený proces nebo neúspěšné předání může řetězec přerušit; další vhodná návštěva či volitelný nezávislý plánovač jej mohou obnovit. Skutečné odstranění se~souhrnně zapisuje do~Admin logu nejvýše jednou za~pět minut, bez názvů jednotlivých souborů a~prázdných kontrol.
 
 Naměřený eligible backlog do~128~MiB včetně dostane při podporovaném dokončení odpovědi pokus do~600~ms a~osmi krátkých částí; větší backlog do~120~ms a~dvou částí. Bez této podpory je~rozpočet přijímání práce 40~ms a~dvě části a~klient může na~tuto krátkou závěrečnou práci čekat. Jde o~limity přijímání práce, nikoli záruku latence systémových operací. PHP worker zůstává obsazený i~po~dokončení odpovědi. Společný 60sekundový throttle, neblokující zámky, leases veřejných požadavků a~signály nových návštěv dávají přednost frontendu. Jedna část připouští nejvýše 60~ms, inventář 5000 pozorování a~katalog 4096 jmen, mazání 180 operací; přírůstek paměti i~volná rezerva PHP mají hranici osm MiB. Mnoho drobných souborů proto pokračuje mezi návštěvami i~pod~128~MiB. Kompletně ověření kandidáti se~mažou už~během inventáře; sken a~mazání se~férově střídají.
 

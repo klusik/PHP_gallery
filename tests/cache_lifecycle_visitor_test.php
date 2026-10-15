@@ -5,7 +5,7 @@
  * File: tests/cache_lifecycle_visitor_test.php
  * Module Type: Regression Test
  * Purpose: Prove bounded automatic opportunities with disposable few-file and many-file backlogs.
- * Responsibilities: Exercise fallback budgets, throttling, foreground contention, opt-out, hourly due dates and resumed metrics without live cache deletion.
+ * Responsibilities: Exercise fallback budgets, throttling, foreground contention, opt-out, thirty-second due dates and resumed metrics without live cache deletion.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -90,11 +90,11 @@ namespace {
         visitor_assert($result['ok'] && $result['slices'] <= 8 && $result['elapsed_ms'] < 1800, 'Small detached opportunity exceeded admission or made no attempt.');
         visitor_assert($status['phase'] === 'complete' && $status['bytes_removed'] >= 100 * 1024 * 1024, 'Few-file 100 MiB backlog did not finish in one short opportunity.');
         visitor_assert($status['candidate_bytes'] >= $status['bytes_removed'] && $status['pending_bytes'] === 0, 'Historical bytes and real backlog were conflated.');
-        visitor_assert($status['next_due'] === $GLOBALS['cache_lifecycle_test_now'] + 3600, 'Finished inventory was not due in one hour.');
+        visitor_assert($status['next_due'] === $GLOBALS['cache_lifecycle_test_now'] + 30, 'Finished inventory was not due in thirty seconds.');
         visitor_assert(\Gallery\Services\cache_lifecycle_visitor_run(true)['reason'] === 'cache_visitor_throttled', 'Concurrent visitor bypassed installation throttle.');
         $id = $status['id'];
-        $GLOBALS['cache_lifecycle_test_now'] += 61;
-        visitor_assert(\Gallery\Services\cache_lifecycle_visitor_run(false)['reason'] === 'cache_lifecycle_not_due', 'Fallback visitor ignored hourly due date.');
+        $GLOBALS['cache_lifecycle_test_now'] += 29;
+        visitor_assert(\Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron')['reason'] === 'cache_lifecycle_not_due', 'A worker ignored the thirty-second due date.');
         visitor_assert(\Gallery\Services\cache_lifecycle_status()['id'] === $id, 'A not-due visit restarted the completed scan.');
 
         // No arrivals means no work; the next suitable arrival resumes the owner.
@@ -107,13 +107,14 @@ namespace {
         $GLOBALS['cache_lifecycle_test_now'] += 7200;
         $result = \Gallery\Services\cache_lifecycle_visitor_run(false);
         visitor_assert($result['slices'] <= 2 && $result['elapsed_ms'] < 1200, 'No-detachment fallback exceeded its short opportunity.');
-        visitor_assert(\Gallery\Services\cache_lifecycle_status()['id'] === $id, 'An hourly/outage interval discarded the unfinished scan checkpoint.');
+        visitor_assert(\Gallery\Services\cache_lifecycle_status()['id'] === $id, 'An outage interval discarded the unfinished scan checkpoint.');
         for ($run = 0; $run < 140 && \Gallery\Services\cache_lifecycle_status()['phase'] !== 'complete'; $run++) {
             $GLOBALS['cache_lifecycle_test_now'] += 61;
             $result = \Gallery\Services\cache_lifecycle_visitor_run(true);
             visitor_assert(!empty($result['ok']) && ($result['slices'] ?? 0) <= 8, 'A resumed visitor failed or exceeded slices.');
         }
-        visitor_assert(\Gallery\Services\cache_lifecycle_status()['phase'] === 'complete', 'Large backlog did not resume to completion.');
+        visitor_assert(\Gallery\Services\cache_lifecycle_status()['phase'] === 'complete',
+            'Large backlog did not resume to completion: ' . json_encode(array_diff_key(\Gallery\Services\cache_lifecycle_status(), ['policies'=>true,'totals'=>true,'sample'=>true]), JSON_THROW_ON_ERROR));
 
         $GLOBALS['cache_lifecycle_test_now'] += 3601;
         visitor_workspace($root, 'Tiny01', 1024, 1600);
@@ -141,7 +142,7 @@ namespace {
         $GLOBALS['visitor_settings']['feature_flag.automatic_cache_cleanup.enabled'] = '0';
         visitor_assert(\Gallery\Services\cache_lifecycle_visitor_run(true)['reason'] === 'automatic_cache_cleanup_disabled', 'Explicit OFF did not stop automatic work.');
         visitor_assert(\Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron')['reason'] === 'automatic_cache_cleanup_disabled', 'Optional cron ignored explicit OFF.');
-        echo "Visitor cache bounds, hourly due dates, fallback, contention, opt-out and real metrics: PASS\n";
+        echo "Visitor cache bounds, thirty-second due dates, fallback, contention, opt-out and real metrics: PASS\n";
     } finally {
         for ($step = 0; $step < 200 && is_dir($root); $step++) \Gallery\Services\application_update_delete_tree_slice($root, 5000, 0.5);
     }
