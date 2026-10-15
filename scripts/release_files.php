@@ -6,7 +6,7 @@
  * File: scripts/release_files.php
  * Module Type: CLI Package Policy Bridge
  * Purpose: List and verify package paths using the checked-in production inventory.
- * Responsibilities: Expose deterministic path lists to deployment wrappers and compare staged trees.
+ * Responsibilities: Expose production/updater path lists and compare staged membership without claiming byte integrity.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -68,8 +68,9 @@ function release_files_has_flag(string $flag): bool
 function release_files_print_usage(): void
 {
     echo "Usage:\n";
-    echo "  php scripts/release_files.php list --root=PATH [--profile=production|updater|source-review] [--include-media] [--format=json|nul]\n";
-    echo "  php scripts/release_files.php verify --root=STAGE [--source-root=SOURCE] [--profile=production|updater|source-review] [--include-media]\n";
+    echo "  php scripts/release_files.php list --root=PATH [--profile=production|updater] [--format=json|nul]\n";
+    echo "  php scripts/release_files.php verify --root=STAGE [--source-root=SOURCE] [--profile=production|updater]\n";
+    echo "Membership verification alone does not verify file bytes; use package_production.php for complete packaging.\n";
 }
 
 /**
@@ -89,11 +90,15 @@ function release_files_main(): int
     $command = (string) ($argv[1] ?? '');
     $root = release_files_root_option('root');
     $profile = release_files_option('profile') ?? 'production';
-    $includeMedia = release_files_has_flag('--include-media');
+    foreach (array_slice($argv, 2) as $argument) {
+        if (preg_match('/^--(root|source-root|profile|format)=.+$/D', $argument) !== 1) {
+            throw new RuntimeException('Unknown or empty package policy option: ' . $argument);
+        }
+    }
 
     if ($command === 'list') {
         $format = release_files_option('format') ?? 'json';
-        $paths = \Gallery\Core\release_file_policy_paths($root, $profile, $includeMedia);
+        $paths = \Gallery\Core\release_file_policy_paths($root, $profile);
         if ($format === 'nul') {
             foreach ($paths as $path) {
                 echo $path, "\0";
@@ -116,7 +121,7 @@ function release_files_main(): int
 
     if ($command === 'verify') {
         $sourceRoot = release_files_root_option('source-root');
-        $result = \Gallery\Core\release_file_policy_verify_tree($root, $sourceRoot, $profile, $includeMedia);
+        $result = \Gallery\Core\release_file_policy_verify_tree($root, $sourceRoot, $profile);
         $json = json_encode(
             ['schema_version' => 1, 'profile' => $profile, 'ok' => !$result['unexpected'] && !$result['missing']] + $result,
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE

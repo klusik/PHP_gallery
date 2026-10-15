@@ -1,5 +1,23 @@
 # Compatibility lifecycle and retirement register
 
+## Retired deploy files and installed updater ownership
+
+Owner: `app/release_file_policy.php` and the updater activation/obsolete-file
+planner. Historical deploy entrypoints are removed from the repository and new
+production inventory. Historical path recognition remains solely to read prior
+schema-1 inventory and manifest evidence on supported older installations;
+usage is **unknown**. `deploy.bat` and the two scripts under `scripts/` were
+updater-owned. Their removal uses the existing trusted installed sidecar or
+manifest, guarded activation and rollback. Unknown files must never be deleted
+based on a familiar filename. Root `deploy.sh` was outside updater ownership
+and is preserved on such installations. `deploy/.htaccess` remains a shipped
+security rule protecting historical package directories. No schema migration or
+blanket name-based deletion is introduced. This read compatibility is permanent
+until supported installed releases no longer need older ownership records;
+removal requires migration/installed-consumer evidence. Regression owners are
+`production_file_policy_test.php`, `updater_inventory_compatibility_test.php`,
+`updater_resumable_state_machine_test.php` and the compact production package test.
+
 ## Admin log clipboard and native text downloads
 
 Owner: `admin-logs.js` and the existing `admin_log_export` controller/service.

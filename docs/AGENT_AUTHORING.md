@@ -47,8 +47,12 @@ fields, document every added/defaulted parameter, and state every actual return
 variant including `void`. Review these together with the behavior edit.
 
 Always search production imports, re-export modules and every regression
-assertion for the old cache-busting module URL. Update the complete set together
-and keep every exact expectation aligned with the new real import. Always
+assertion for the old cache-busting module URL. Update the complete import chain.
+Covered Admin consumers use `scripts/admin_import_contracts.php` to validate
+actual targets, full shared URL identity and stale payload/importer invalidation
+against the immutable base; do not add a historical revision string assertion
+where this relational owner applies. Keep unrelated exact security/route checks
+strict. Always
 represent presentation choices as explicit value/label entries. Reserve literal
 `'page' => 'target'` entries for registered routes because the route-reference
 check validates those entries as route targets.

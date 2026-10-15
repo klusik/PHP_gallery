@@ -45,7 +45,7 @@ listed in the core manifest. The scope is deliberately conservative:
   `tests/`, and `winapp/`, except local/runtime state and compiler intermediates.
 - Registered root release inputs: `.htaccess`, `.gitignore`, `.gitattributes`,
   `index.php`, `install.php`, `reset.php`, `setup-gallery.php`,
-  `config.example.php`, `deploy.bat`, `README.md`, `PATCH_NOTES.md`,
+  `config.example.php`, `README.md`, `PATCH_NOTES.md`,
   `PATCH_NOTES_TEMPLATE.md`, `ARCHITECTURE.md`, `DATABASE.md`, `TESTING.md`,
   `CODEMAP.md`, `AGENTS.md`, `RELEASE.md`, `LICENSE`, and
   `release-metadata.json`, when present.

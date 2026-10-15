@@ -257,6 +257,33 @@ $assertProof = static function (array $snapshot, string $reason, string $label) 
 };
 $assertProof($proof, 'workflow-authority-not-independently-attested',
     'distinct source and candidate suites correlate but remain advisory');
+// Preserve the archived PHP 8.3 snapshot as history. The current PHP 8.5
+// maintenance workflow has a separate authority path and cannot be inferred
+// from this deliberately historical, non-authoritative correlator.
+$currentMaintenance = $proof;
+$currentMaintenance['run']['name'] = 'Basic source checks';
+$currentMaintenance['run']['event'] = 'workflow_dispatch';
+foreach ($currentMaintenance['jobs_pages'][0]['response']['jobs'] as &$currentJob) {
+    $currentJob['workflow_name'] = 'Basic source checks';
+    $currentJob['name'] = str_replace('PHP 8.3 workflows', 'PHP 8.5 workflows', $currentJob['name']);
+    if (str_contains($currentJob['name'], '/ Positive production package (')) {
+        $currentJob['steps'] = array_map(static fn(string $step): array => [
+            'name' => $step, 'status' => 'completed', 'conclusion' => 'success',
+        ], ['Central mandatory package policy, smoke and complete folder/ZIP integrity',
+            'Upload exact-candidate packaging evidence and timings']);
+    }
+}
+unset($currentJob);
+$currentMaintenance['jobs_pages'][0]['response']['jobs'][] = [
+    'id' => 3014, 'name' => 'Basic source checks', 'run_id' => 424242, 'run_attempt' => 1,
+    'head_sha' => $proofSource, 'workflow_name' => 'Basic source checks',
+    'status' => 'completed', 'conclusion' => 'success', 'steps' => [
+        ['name' => 'Central BASIC syntax and declaration checks', 'status' => 'completed', 'conclusion' => 'success'],
+    ],
+];
+$currentMaintenance['jobs_pages'][0]['response']['total_count']++;
+$assertProof($currentMaintenance, 'invalid-source-workflow-run',
+    'current PHP 8.5 maintenance shape cannot inherit historical advisory authority');
 $assertProof(array_replace_recursive($proof, ['run' => ['event' => 'pull_request']]),
     'invalid-source-workflow-run', 'wrong event');
 $assertProof(array_replace_recursive($proof, ['run' => ['head_sha' => str_repeat('f', 40)]]),

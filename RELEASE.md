@@ -188,7 +188,7 @@ Before changing version markers:
    - user-facing behavior that must be reflected in documentation and the manual.
 5. Decide whether the release is patch, feature, or larger-scope work based on the actual diff. Do not infer the version solely from the branch name.
 6. Choose the final audit path now: direct release profile or the disposable MySQL/Chromium fixture when its prerequisites are available. Run one of them in phase 7, not both.
-7. Only when packaging is explicitly requested, review the canonical positive inventory in `app/production-files.json`. Both deploy helpers consume that same exact file set; unrelated workspace files cannot enter a production artifact. New shipped paths require an explicit inventory refresh and review, followed by manifest generation. See [production file policy](docs/PRODUCTION_FILES.md).
+7. Only when packaging is explicitly requested, review the canonical positive inventory in `app/production-files.json`. `scripts/package_production.php` consumes that exact file set; unrelated workspace files cannot enter a production artifact. New shipped paths require an explicit inventory refresh and review, followed by manifest generation. The automated release asset owner invokes the same builder. See [production file policy](docs/PRODUCTION_FILES.md).
 
 If Git metadata is unavailable, record that the previous-tag comparison is a coverage gap instead of inventing history from the ZIP contents.
 
@@ -356,7 +356,7 @@ Replace HASH with the exact initialized fingerprint. An old/unbound report, a pa
 
 ### 8. Build and inspect an explicitly requested release package
 
-Skip this phase during normal release preparation. Only when the user explicitly requests packaging and the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper. The helper requires a current manifest, copies only canonical inventory members from the current source bytes, and verifies the exact staged file set. Missing required files and unexpected staged files fail packaging. An existing output must be reviewed and moved aside by its owner before another package is built; helpers do not erase it. Packaging does not refresh the inventory or repair release metadata.
+Skip this phase during normal local release preparation. The hosted release asset job creates its required `production.zip` with the canonical PHP builder. For an explicitly requested standalone artifact use `php scripts/package_production.php --root=<source> --directory=<new-directory> --zip=<new-archive.zip> --timestamp=<candidate-epoch>`; either output may be omitted. Use PHP 8.1+, ZipArchive for ZIP output and mbstring for Unicode path validation. The builder requires a current manifest, copies only canonical inventory members, and verifies exact membership and SHA-256 against the complete source bytes, including files outside the core manifest's hashing scope. It refuses existing outputs and unsafe paths and validates temporary artifacts before publication. Packaging does not refresh the inventory or repair release metadata. FTP and interactive deploy entrypoints are removed.
 
 Inspect the archive listing before publication. Confirm that it contains the intended runtime files and release artifacts, including:
 
@@ -367,7 +367,7 @@ Inspect the archive listing before publication. Confirm that it contains the int
 - current `docs/PHP_Gallery_Manual.pdf` when documentation is part of the package;
 - all new runtime scripts/files introduced by the release.
 
-Confirm that staged files agree with the positive inventory using `php scripts/release_files.php verify --root=<stage> --source-root=<source> --profile=production`. Installation-owned `config.php`, active custom CSS, caches, logs, temporary payloads, local agent state and gallery media are outside production membership. Runtime directory protection files are explicit members. Media is a separate opt-in; repository tests may be included only in an explicit local source-review profile, never FTP deployment.
+Inspect positive membership with `php scripts/release_files.php verify --root=<stage> --source-root=<source> --profile=production`. This command checks paths; the builder additionally proves content integrity. Installation-owned `config.php`, active custom CSS, caches, logs, temporary payloads, local agent state, tests and gallery media are outside production membership. Runtime directory protection files, including `deploy/.htaccess`, remain explicit members. Source archives and separately built Windows installers retain their independent ownership.
 
 The following identifiers must agree before publication:
 

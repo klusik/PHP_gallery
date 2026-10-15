@@ -8,7 +8,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20261014-floating-shell-v1';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
 import {ADMIN_ROUTE_NAVDATA_BUSY_RETRY_MS, ADMIN_ROUTE_NAVDATA_BUSY_RETRIES} from './admin-interaction-policy.js?v=20261005-route-navdata-v1';
 
 const checks = new Map();

@@ -117,7 +117,7 @@ try {
         && !str_contains($workflow, 'gh pr merge'),
         'Explicit maintenance preparation must remain serialized, SHA-bound and non-merging.');
     $assert(str_contains($workflow, 'name: Basic source checks')
-        && str_contains($workflow, 'php scripts/audit.php --profile=basic')
+        && str_contains($workflow, 'php scripts/audit.php --profile=basic --changed')
         && str_contains($workflow, 'Basic source qualification')
         && str_contains($workflow, "inputs.maintenance_full")
         && !str_contains($workflow, 'if: ${{ !inputs.maintenance_full }}')

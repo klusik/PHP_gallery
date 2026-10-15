@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20260920-admin-interaction-policy-v1';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
 
 /**
  * Capture submitted values by canonical setting identifier, excluding CSRF and routing fields.

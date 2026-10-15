@@ -15,6 +15,14 @@ PHP 8.1 remains the minimum syntax/runtime compatibility target. This does not
 mean PHP 8.1 receives upstream security fixes. Existing installations are not
 locked out, upgraded, or reconfigured by the support policy.
 
+Active GitHub CI uses PHP 8.1 for the compatibility floor and PHP 8.5 for the
+newest representative, following the maintainer's 2026-10-15 decision in
+[#223](https://github.com/klusik/PHP_gallery/issues/223#issuecomment-6194682975).
+All three database engines retain their coverage on PHP 8.5. Intermediate
+branches are not separate CI matrix entries. Historical reports and qualified
+release records retain the runtime actually used; a CI representative does not
+redefine the operator deployment policy below.
+
 Use the latest patch release of a maintained PHP branch for deployment. The
 reviewed deployment minimum is PHP 8.3; prefer PHP 8.5 for a new deployment after
 checking the application and image extensions in staging. PHP 8.4 is also a

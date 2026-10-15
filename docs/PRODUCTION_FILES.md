@@ -1,47 +1,45 @@
-# Production file policy
+# Production file policy and packaging
 
-`app/production-files.json` is the reviewed, sorted, exact positive inventory for production packaging, integrity ownership and updater activation. A file ships because its relative path is listed. Physical directory traversal and local ignore rules cannot admit additional application files. Both Bash and PowerShell deploy helpers use `scripts/release_files.php` and verify the resulting staging tree.
+`app/production-files.json` is the reviewed, sorted, exact positive inventory for production packaging, integrity ownership and updater activation. A file ships because its relative path is listed. Directory discovery and local ignore rules cannot admit extra application files. `app/release_file_policy.php` owns path, membership and updater policy; `scripts/package_production.php` is the single portable PHP implementation of copying, ZIP creation and content verification. Historical shell/PowerShell deploy entrypoints, interactive menus and FTP credential/upload code have been removed.
 
-## Updating membership
+## Preparing reviewed inputs
 
-Stage reviewed new source paths, then run:
+Stage new/deleted source membership and push the authorized working branch. Hosted candidate preparation generates runtime modules, production inventory and the core manifest in that order, then checks freshness for the exact candidate. It uses Git-index membership and approved source surfaces. Packaging does not regenerate inventory, repair metadata or discover additional source files.
+
+Local `php scripts/prepare_candidate.php` and its `--check` are exceptional maintainer recovery commands. The package builder itself works on a validated extracted source package without Git metadata.
+
+Runtime-plan freshness accepts Git's CRLF checkout transformation only; bare CR,
+content, schema, whitespace and truncation differences remain failures. The
+compiler emits canonical LF. This presentation normalization never substitutes
+for the package builder's exact source-byte SHA-256 verification.
+
+## Creating an explicitly requested artifact
 
 ```text
-php scripts/generate_production_files.php
-php scripts/generate_production_files.php --check
-php scripts/generate_manifest.php
-php scripts/generate_manifest.php --check
+php scripts/package_production.php --root=<source> --directory=<new-directory> --zip=<new-archive.zip> --timestamp=<candidate-epoch>
 ```
 
-The inventory generator uses Git-index membership and explicit approved source surfaces. Review its diff; newly tracked private or temporary files must not become release inputs. Generating membership is an explicit development step, never part of a public request, updater installation or packaging discovery. Packages can be built from approved source ZIPs without Git metadata.
+Supply either output or both. Use PHP 8.1+, ZipArchive for ZIP output and mbstring for Unicode path validation. The release pipeline passes the immutable candidate commit epoch; use the same epoch for reproducible metadata. The builder reports actual copy, archive and verification timings and complete archive SHA-256. It preserves file permissions and rejects unsafe output paths and existing artifacts.
 
-## Ownership
+Before publication it verifies the current core manifest against source bytes, copies only explicit inventory paths into private staging, and verifies exact staged and archive membership and SHA-256 of every selected file. The complete-byte comparison also covers companion binaries and PDFs outside the core manifest's historical hashing scope. Corrupt, missing or stale inputs fail closed. Symlinks and redirected ancestors are refused; Windows checks reparse points through the native platform attribute reader in one bounded batch. Temporary work is removed on failure and existing outputs are never overwritten. No external compression executable or per-file copy process is required.
 
-Production membership includes the application, public assets, timestamped migrations, approved operator/release tooling, generated runtime plan, integrity manifest, product metadata, maintained manuals and directory protection files. Required files must exist and resolve within the source tree. Unsafe relative paths, symbolic links, escaped paths and malformed or duplicate inventory entries fail validation.
+`config.php`, active custom CSS, live gallery media, cache/log/tmp payloads, persisted data, agent folders, IDE metadata and build products are outside production membership. Only explicitly listed directory protection files ship from writable trees, including `deploy/.htaccess`. Empty runtime directories remain the responsibility of the existing setup/storage owners. There is no media, source-review, FTP or interactive mode in the production builder.
 
-`config.php`, active `public/assets/custom.css`, live gallery media, cache/log/tmp payloads, persisted data, local agent folders, IDE metadata and build products are installation-owned or development state. Only explicitly listed protection files ship from writable directories. Those files retain the directory structure while empty writable directories are created by the application's existing setup/storage owners. Existing installation state is preserved during ordinary updates.
+## Inventory and updater compatibility
 
-`updater_files` is a sorted subset of the base `production_files` inventory, generated by the canonical ownership rule. It retains the existing updater activation scope: distributable manuals and preset templates may ship in a fresh-install package while installation-owned custom CSS presets remain protected during updates. The subset must never admit a path absent from base production membership. The integrity manifest hashes its existing code/text subset; distributing a PDF does not imply a new PDF integrity contract.
+Production packaging uses the sorted union of `production_files` and `companion_files`. Companion entries are approved WinApp sources and assets, disjoint from the other lists and outside updater ownership. WinApp private settings, logs, caches, tests, unlisted modules and build/dist outputs are excluded. Installers retain their independent build and version ownership.
 
-`source_review_files` is a separate exact list under `tests/`. The local source-review profile adds it explicitly; FTP refuses that profile. Media inclusion is also explicit and applies only to safely contained gallery files, rather than admitting arbitrary runtime directories. Windows installers remain independently built artifacts and are not generated by CMS packaging.
+`updater_files` is a sorted subset of `production_files`. Installed custom CSS presets remain protected. The schema-1 `source_review_files` field remains for installed-reader compatibility; it does not enable source-review packaging. The additive companion field remains readable by the frozen pre-WinApp reader, which ignores it before installing the new reader. Malformed present fields fail closed; no incoming archive PHP is executed to obtain a newer validator.
 
-Schema 1 lists the reviewed WinApp Python sources, launchers, requirements, build scripts, version file, SimConnect DLL and tray icons separately in the optional `companion_files` field. Production packaging uses the sorted union of `production_files` and `companion_files`; source-review adds `source_review_files`. Companion entries must be approved WinApp sources, disjoint from the other lists and outside updater ownership. The exact inventory excludes WinApp tests, local settings/logs, caches, unlisted modules, and `winapp/build/` or `winapp/dist/` outputs. WinApp sources ship in deploy folders/ZIPs and FTP uploads; the CMS updater retains its existing ownership scope and the independent WinApp version. Windows installers are not bundled by CMS packaging.
+Historical deploy path spellings remain parseable where necessary to read previous installed ownership evidence. They do not ship in new inventories. Updater-owned retired paths are removed only through the existing prior `updater_files`/core-manifest ownership proof and protected rollback path. Root `deploy.sh` was not updater-owned, so its name alone cannot authorize deletion. Unknown/user files are preserved. See [the compatibility register](COMPATIBILITY_LIFECYCLE.md).
 
-The additive companion field keeps incoming inventories readable by installed pre-WinApp schema-1 validators: they validate the base list before the new reader can be installed and ignore the extra field. No incoming archive PHP is executed to obtain a newer validator. New readers still accept previously published schema-1 inventories without `companion_files`, including their reviewed WinApp entries in `production_files`; a present malformed companion field fails closed. Do not raise the schema or broaden the base path surface without testing the supported installed reader first.
+The updater may receive a complete Git source archive containing development files. Only its canonical updater subset is activated. Older stable archives without the sidecar retain the bounded manifest-based compatibility path; a malformed present inventory cannot fall back. Invalid prior ownership yields an empty deletion set. Partial rollback snapshots use their server-written activation/obsolete index, preserving configuration, runtime data and media.
 
-## Inspecting an artifact
+## Inspection and required proof
 
 ```text
 php scripts/release_files.php list --root=<source> --profile=production --format=json
 php scripts/release_files.php verify --root=<stage> --source-root=<source> --profile=production
 ```
 
-Use matching profile and media options for a source-review or media artifact. Verification rejects both missing members and unexpected staged files. Canonical content membership is reproducible for the same reviewed inventory and source bytes; ZIP timestamps are not a byte-reproducibility contract.
-
-The updater may receive a complete GitHub source archive containing development files. Its activation set is still the canonical inventory's updater subset; source-only archive members are never installed merely because they appeared in that archive. Obsolete deletion uses prior owned inventory/manifest evidence, preserving unknown installation files. Archive containment, required-file checks and existing rollback protections remain mandatory.
-
-Older stable source archives without `production-files.json` retain a bounded compatibility path: activation uses safe updater-owned keys from their `core-manifest.json`, the manifest itself and known protection files present in the archive. A malformed present inventory fails instead of falling back. Invalid prior installation ownership yields an empty deletion set. This compatibility path does not restore the separately disabled incoming hash verifier or authorize unknown installation cleanup.
-
-Rollback snapshots are partial backups, so they use the server-written activation/obsolete index rather than requiring a complete release inventory. A clean reinstall may restore an indexed local file that it explicitly removed. Configuration, runtime data, uploaded media and active custom CSS remain protected, and an unindexed snapshot file is rejected. Existing source and destination ancestors must resolve to their expected installation paths; symbolic links and Windows junction aliases are refused before copying or replacing files.
-
-The central packaging regression builds and inspects real folder/ZIP artifacts from a dirty fixture. CI also stages an actual production package on Linux, Windows and macOS, verifies canonical membership, and checks that unrelated local files cannot leak into it.
+These bridge commands inspect paths. A membership PASS alone is not content integrity proof. The builder's real directory/ZIP validation owns that proof. Fast policy tests, a compact real-builder safety fixture and complete positive production packages on Ubuntu, Windows and macOS have distinct central audit owners. SQL-independent packaging is not replayed in each database profile.

@@ -39,6 +39,58 @@ const navigationPollIntervalMs = 20;
 // Consumers: the bounded protocol-timeout message, never the evaluated page result.
 // Rationale: identify which evaluation stalled without copying an entire fixture expression into logs.
 const protocolFailureContextLength = 120;
+// Purpose: Retain the existing independent deadline for one DevTools command.
+// Type: integer.
+// Units: milliseconds.
+// Scope: a single owned browser protocol request.
+// Consumers: command() request timer.
+// Rationale: distinguish transport stalls from the longer fixture state deadline.
+const protocolRequestTimeoutMs = 5000;
+// Purpose: Pace passive fixture-result observations without delaying successful state.
+// Type: integer.
+// Units: milliseconds.
+// Scope: owned browser completion polling.
+// Consumers: result marker read loop.
+// Rationale: preserve the established 100ms cadence while making its owner explicit.
+const fixtureResultPollMs = 100;
+
+/**
+ * Classify a concrete browser failure while retaining its original error and stack.
+ * @param {unknown} error Original failure object from the dependency, browser or fixture.
+ * @param {'startup'|'protocol'|'application'|'result'} phase Active owning phase when the error escaped.
+ * @returns {'dependency'|'startup'|'protocol'|'protocol-timeout'|'application'|'timeout'} Stable diagnostic category, never a success/skip conversion.
+ */
+export function browserFailureCategory(error, phase) {
+    if (error?.code === 'ENOENT' || /Native WebSocket support/.test(String(error?.message))) return 'dependency';
+    if (error?.browserFailureCategory === 'application') return 'application';
+    if (/protocol timeout/.test(String(error?.message))) return 'protocol-timeout';
+    if (error?.protocolCode !== undefined || /DevTools|debugging socket|protocol/.test(String(error?.message))) return 'protocol';
+    if (phase === 'startup') return 'startup';
+    if (phase === 'result') return 'timeout';
+    if (phase === 'protocol') return 'protocol';
+    return 'application';
+}
+
+/**
+ * Return a by-value page result or surface the real evaluated exception immediately.
+ * @param {{result?:{value?:BrowserJsonValue},exceptionDetails?:{text?:string,exception?:{description?:string},stackTrace?:{callFrames?:Array<{functionName:string,lineNumber:number,columnNumber:number}>}}}} response DevTools Runtime.evaluate response.
+ * @returns {BrowserJsonValue|undefined} JSON-compatible value, or undefined if the successful expression has no value; evaluation exceptions always throw.
+ */
+export function browserEvaluationResult(response) {
+    if (response.exceptionDetails) {
+        const details = response.exceptionDetails;
+        const reason = String(details.exception?.description || details.text || 'Unspecified page exception').split('\n')[0]
+            .replace(/https?:\/\/[^\s)]+/g, 'owned-fixture').slice(0, 240);
+        const failure = new Error('Owned Chromium application evaluation failed: ' + reason);
+        failure.browserFailureCategory = 'application';
+        const frames = (details.stackTrace?.callFrames || []).slice(0, 8).map(frame =>
+            '    at ' + String(frame.functionName || 'anonymous').replace(/[^a-zA-Z0-9_.$<>-]/g, '').slice(0, 80)
+            + ' (owned-fixture:' + (frame.lineNumber + 1) + ':' + (frame.columnNumber + 1) + ')');
+        if (frames.length) failure.stack += '\nPage stack:\n' + frames.join('\n');
+        throw failure;
+    }
+    return response.result?.value;
+}
 
 /**
  * A JSON-compatible value returned by a DevTools expression serialized by value.
@@ -67,7 +119,7 @@ const protocolFailureContextLength = 120;
  * @return {Promise<{result:string, exitCode:number|null, timeoutDetail:string}>} Fixture marker, owned process exit code and optional bounded timeout diagnostic.
  */
 export async function runHeadlessBrowserFixture(executable, url, profilePrefix, options = {}) {
-    if (typeof WebSocket !== 'function') throw new Error('Native WebSocket support (Node 22+) is required for browser fixtures');
+    if (typeof WebSocket !== 'function') throw new Error('[dependency] Native WebSocket support (Node 22+) is required for browser fixtures');
     if (!/^[-a-z0-9]+-$/.test(profilePrefix)) throw new Error('Browser fixture profile prefix must be a simple local name');
     const fixtureUrl = new URL(url);
     if (fixtureUrl.protocol !== 'http:' || fixtureUrl.hostname !== '127.0.0.1') {
@@ -95,6 +147,8 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
     let browserExit;
     let output = '';
     let errors = '';
+    let phase = 'startup';
+    let startupFailure = null;
 
     try {
         // Record actual creation before Chromium writes mutable profile contents.
@@ -113,13 +167,17 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 browser.on('error', reject);
                 browser.on('close', resolve);
             });
+        // Observe spawn rejection immediately even while endpoint discovery waits;
+        // otherwise a missing executable can produce an unhandled promise failure.
+        browserExit.catch(error => { startupFailure = error; });
 
-        const endpoint = await waitForOwnedEndpoint(profile);
+        const endpoint = await waitForOwnedEndpoint(profile, () => startupFailure);
         debuggingSocket = new WebSocket(endpoint);
         await new Promise((resolve, reject) => {
             debuggingSocket.addEventListener('open', resolve, {once: true});
             debuggingSocket.addEventListener('error', reject, {once: true});
         });
+        phase = 'protocol';
         let sequence = 0;
         const requests = new Map();
         debuggingSocket.addEventListener('message', event => {
@@ -158,7 +216,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                             ? 'native ' + String(params.type || 'input') + ' input'
                             : 'browser command';
                     reject(new Error('Owned Chromium protocol timeout during ' + context + ' (' + method + ')'));
-                }, 5000);
+                }, protocolRequestTimeoutMs);
                 requests.set(id, {resolve, reject, timer, method});
                 debuggingSocket.send(JSON.stringify({id, method, params, sessionId}));
             });
@@ -224,7 +282,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
              */
             function evaluate(expression) {
                 return command('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}, sessionId)
-                    .then(response => response.result?.value);
+                    .then(browserEvaluationResult);
             }
 
             /**
@@ -377,11 +435,13 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 return command('Emulation.setPageScaleFactor', {pageScaleFactor: scale}, sessionId).then(() => {});
             }
 
+            phase = 'application';
             await options.interact({evaluate, captureScreenshot, mouse, wheel, key, setViewport, setVisualViewportScale,
                 ...(options.touchEmulation ? {touch} : {})});
         }
         // Bound fixture completion independently from browser startup and protocol request deadlines.
         const deadline = Date.now() + Math.max(1000, Math.min(maximumFixtureTimeoutMs, options.timeoutMs ?? fixtureTimeoutMs));
+        phase = 'result';
         let result = '';
         while (Date.now() < deadline) {
             if (options.readResult) {
@@ -390,10 +450,10 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 const response = await command('Runtime.evaluate', {
                     expression: 'document.getElementById("results")?.textContent || ""', returnByValue: true,
                 }, sessionId);
-                result = String(response.result.value || '');
+                result = String(browserEvaluationResult(response) || '');
             }
             if (/^BROWSER (PASS|FAIL)/.test(result)) break;
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, fixtureResultPollMs));
         }
         if (!/^BROWSER (PASS|FAIL)/.test(result)) {
             if (options.readResult) {
@@ -402,7 +462,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 const response = await command('Runtime.evaluate', {
                     expression: 'document.getElementById("results")?.textContent || ""', returnByValue: true,
                 }, sessionId);
-                result = String(response.result.value || '');
+                result = String(browserEvaluationResult(response) || '');
             }
         }
         let timeoutDetail = '';
@@ -411,7 +471,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
                 expression: options.timeoutExpression,
                 returnByValue: true,
             }, sessionId);
-            const value = response.result?.value;
+            const value = browserEvaluationResult(response);
             timeoutDetail = typeof value === 'string' ? value.slice(0, 500) : '';
         }
         // Close the browser over its private DevTools socket before removing its profile.
@@ -419,6 +479,7 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         const exitCode = await browserExit;
         return {result, exitCode, timeoutDetail};
     } catch (error) {
+        if (error instanceof Error) error.message = '[' + browserFailureCategory(error, phase) + '] ' + error.message;
         if (browser && browser.exitCode === null) browser.kill();
         if (browserExit) await browserExit.catch(() => {});
         const diagnostic = errors.slice(-1500) || output.slice(-1500);
@@ -440,16 +501,19 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
 /**
  * Wait for DevToolsActivePort inside the exact newly-created profile.
  * @param {string} profile Exact disposable profile path.
+ * @param {function():Error|null} startupError Original spawn failure, if one occurred while endpoint discovery was pending.
  * @return {Promise<string>} WebSocket endpoint for its owned browser process.
  */
-async function waitForOwnedEndpoint(profile) {
+async function waitForOwnedEndpoint(profile, startupError) {
     const deadline = Date.now() + startupTimeoutMs;
     while (Date.now() < deadline) {
+        const failure = startupError();
+        if (failure) throw failure;
         try {
             const [port, socketPath] = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).trim().split(/\r?\n/);
             if (/^[0-9]+$/.test(port) && socketPath.startsWith('/devtools/browser/')) return `ws://127.0.0.1:${port}${socketPath}`;
         } catch { /* The owned browser is still starting. */ }
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise(resolve => setTimeout(resolve, navigationPollIntervalMs));
     }
     throw new Error('Owned Chromium debugging endpoint unavailable');
 }

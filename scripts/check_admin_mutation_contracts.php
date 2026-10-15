@@ -41,10 +41,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/cli_guard.php';
 gallery_require_cli_sapi();
+require_once __DIR__ . '/admin_import_contracts.php';
 
 $root = dirname(__DIR__);
 $failures = [];
 $checks = 0;
+$importFailures = \Gallery\Tools\AdminImports\admin_import_repository_failures($root);
+$checks++;
+$failures = array_merge($failures, $importFailures);
 
 /**
  * Read one repository file or record a failure.
@@ -162,7 +166,6 @@ $navigationController = contract_file($root, 'app/controllers/navigation_data.ph
 
 // Background route freshness uses the shared public completion coordinator and never owns editor navigation.
 contract_require($routeNavdata, 'await completeAdminMutation(payload)', 'Route navigation-data completion bypasses the canonical mutation coordinator.', $failures, $checks);
-contract_require($routeNavdata, "./admin-mutation-completion.js?v=20261014-floating-shell-v1", 'Route completion must share the active gallery editor coordinator instance for stale-response suppression.', $failures, $checks);
 contract_require($routeNavdata, "'php-gallery:side-panel-success'", 'Route navigation-data refresh no longer completes routes saved during an active import.', $failures, $checks);
 contract_forbid($routeNavdata, 'window.location.reload', 'Background route freshness must not reload the page.', $failures, $checks);
 contract_forbid($routeNavdata, 'window.location.href =', 'Background route freshness must not navigate the editor.', $failures, $checks);
@@ -257,7 +260,6 @@ contract_require($galleryEditActions, "admin_mutation_postcondition('gallery_vis
 contract_require($galleryEditActions, "'visibility' => \$galleryVisibility", 'Gallery visibility postcondition no longer carries the persisted effective visibility.', $failures, $checks);
 contract_require($galleryEditActions, "'gallery_visibility_changed' => \$visibilityChanged", 'Gallery save response no longer exposes whether a visibility transition actually occurred.', $failures, $checks);
 contract_require($sidePanel, 'updatePublicGalleryCardVisibilityFromResult(result);', 'Gallery edit no longer performs the bounded immediate visibility reflection before canonical refresh.', $failures, $checks);
-contract_require($sidePanel, "./admin-mutation-completion.js?v=20261014-floating-shell-v1", 'Side-panel mutation coordinator cache-busting import was not advanced with the create/delete refresh fix.', $failures, $checks);
 
 // Classic one-file batching must carry the same canonical metadata as browser-assisted
 // ZIP batching. Stable image IDs must survive aggregation for mutation.entity_ids.

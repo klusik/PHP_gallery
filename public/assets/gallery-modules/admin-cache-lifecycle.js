@@ -8,7 +8,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import { completeAdminMutation } from './admin-mutation-completion.js?v=20261014-floating-shell-v1';
+import { completeAdminMutation } from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
 
 /**
  * Bound each lifecycle request while preserving restartable server state.

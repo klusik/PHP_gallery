@@ -22,6 +22,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/module_source.php';
+require_once dirname(__DIR__) . '/scripts/admin_import_contracts.php';
 
 /**
  * Focused Stage 4 source-boundary contracts for mutation synchronization hardening.
@@ -34,7 +35,11 @@ require_once __DIR__ . '/support/module_source.php';
 
 $root = dirname(__DIR__);
 
-/** Read one repository source file or fail with a concise diagnostic. */
+/**
+ * Read one repository source file or fail with a concise diagnostic.
+ * @param string $relative Repository-relative source module path.
+ * @return string Complete module source including owned part files.
+ */
 function stage4_source(string $relative): string
 {
     global $root;
@@ -46,7 +51,12 @@ function stage4_source(string $relative): string
     return $source;
 }
 
-/** Throw a concise exception when one Stage 4 boundary is absent. */
+/**
+ * Throw a concise exception when one Stage 4 boundary is absent.
+ * @param bool $condition Observed contract result.
+ * @param string $message Safe assertion label describing the protected boundary.
+ * @return void Returns normally for a satisfied contract, otherwise throws.
+ */
 function stage4_expect(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -129,11 +139,50 @@ foreach ([
 $sidePanel = stage4_source('public/assets/gallery-modules/admin-side-panel.js');
 stage4_expect(str_contains($sidePanel, 'completionGuard?.signal || undefined'), 'Side-panel refresh fetches must participate in coordinator aborts.');
 stage4_expect(str_contains($sidePanel, 'completionGuard.isCurrent()'), 'Side-panel replacements must reject superseded operation generations.');
-stage4_expect(str_contains($sidePanel, 'admin-mutation-completion.js?v=20261014-floating-shell-v1'), 'Side-panel module must load the current coordinator cache version.');
+stage4_expect(\Gallery\Tools\AdminImports\admin_import_repository_failures($root) === [],
+    'Active Admin module consumers must share valid target identities and invalidate every changed payload/importer chain.');
 
-$operations = stage4_source('public/assets/gallery-modules/admin-operations.js');
-stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20261014-floating-shell-v1'), 'Admin operations must load the current side-panel cache version.');
-$galleryJs = stage4_source('public/assets/gallery.js');
-stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20261015-cache-worker-log-filters-v1'), 'Gallery entrypoint must load the current admin-operations cache version.');
+// Exercise the actual evaluator with inert source records. Historical revision
+// spelling and harmless quote/spacing choices carry no expected value here.
+$importGroups = ['fixture/coordinator.js' => ['fixture/first.js', 'fixture/second.js'],
+    'fixture/first.js' => ['fixture/entry.js']];
+$importBase = ['fixture/coordinator.js' => 'export const value = 1;',
+    'fixture/first.js' => "import {value} from './coordinator.js?v=one';",
+    'fixture/second.js' => 'import { value } from "./coordinator.js?v=one";',
+    'fixture/entry.js' => "export {value} from './first.js?v=one';"];
+$evaluateImports = static fn(array $sources, ?array $base = null): array =>
+    \Gallery\Tools\AdminImports\admin_import_contract_failures($sources, $importGroups, $base ?? $importBase);
+stage4_expect($evaluateImports($importBase) === [], 'Existing valid consumer relationships must pass.');
+$coordinated = $importBase;
+$coordinated['fixture/coordinator.js'] = 'export const value = 2;';
+$coordinated['fixture/first.js'] = "import /* supported formatting */ { value } from \"./coordinator.js?v=two\";";
+$coordinated['fixture/second.js'] = "import {value} from './coordinator.js?v=two';";
+$coordinated['fixture/entry.js'] = "export {value} from './first.js?v=two';";
+stage4_expect($evaluateImports($coordinated) === [], 'A coordinated revision bump and supported equivalent formatting must pass.');
+$negativeImports = [];
+$negativeImports['different module URL identities'] = array_replace($importBase,
+    ['fixture/second.js' => "import {value} from './coordinator.js?v=other';"]);
+$negativeImports['missing, empty or duplicate cache revision'] = array_replace($importBase,
+    ['fixture/first.js' => "import {value} from './coordinator.js?v=';"]);
+$negativeImports['wrong resolved module target'] = array_replace($importBase,
+    ['fixture/first.js' => "import {value} from '../wrong/coordinator.js?v=one';"]);
+$negativeImports['missing required module target'] = array_diff_key($importBase, ['fixture/coordinator.js' => true]);
+$negativeImports['missing or duplicate required import'] = array_replace($importBase,
+    ['fixture/first.js' => $importBase['fixture/first.js'] . $importBase['fixture/first.js']]);
+$negativeImports['changed payload has unchanged cache identity'] = array_replace($importBase,
+    ['fixture/coordinator.js' => 'export const value = 2;']);
+$negativeImports['upstream chain'] = array_replace($coordinated,
+    ['fixture/entry.js' => $importBase['fixture/entry.js']]);
+$negativeImports['unsupported dynamic import syntax'] = array_replace($importBase,
+    ['fixture/first.js' => "const url = './coordinator.js?v=one'; import(url);"]);
+$negativeImports['unsupported import attributes'] = array_replace($importBase,
+    ['fixture/first.js' => "import {value} from './coordinator.js?v=one' with {type: 'json'};"]);
+foreach ($negativeImports as $reason => $sources) {
+    $failures = $evaluateImports($sources);
+    stage4_expect($failures !== [] && str_contains(implode(' ', $failures), $reason),
+        'Import evaluator must reject the named regression: ' . $reason);
+}
+stage4_expect(\Gallery\Tools\AdminImports\admin_import_contract_failures($importBase, $importGroups, null) !== [],
+    'An unavailable immutable import comparison must never pass.');
 
 echo "Stage 4 mutation hardening contracts passed.\n";

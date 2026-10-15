@@ -41,15 +41,14 @@ command('php',['scripts/prepare_candidate.php','--check']);
 command('php',['scripts/check_release.php',process.env.RELEASE_VERSION]);
 mkdirSync(assets,{recursive:true});
 const packageDirectory = resolve(assets,'../production-stage');
-command('bash',['scripts/deploy.sh','--mode','local','--deploy-folder',packageDirectory,
-    '--upload-media','false','--include-tests','false','--make-zip-deploy','false']);
 const epoch = Number(command('git',['show','-s','--format=%ct',process.env.CANDIDATE_SHA]));
-normalizeArchiveTimes(packageDirectory,epoch);
-process.env.TZ = 'UTC';
-process.chdir(packageDirectory);
-command('zip',['-Xqr',resolve(assets,'production.zip'),'.']);
-command('unzip',['-tq',resolve(assets,'production.zip')]);
-process.chdir(workspace);
+// The shared builder verifies both exact membership and complete source bytes
+// before publishing either output; a readable ZIP alone is not integrity proof.
+const packageReport = command('php',['scripts/package_production.php','--root='+workspace,
+    '--directory='+packageDirectory,'--zip='+resolve(assets,'production.zip'),
+    '--timestamp='+String(epoch)]);
+mkdirSync(evidence,{recursive:true});
+writeFileSync(resolve(evidence,'production-package.json'),packageReport+'\n');
 for (const name of ['core-manifest.json','production-files.json']) copyFileSync(resolve('app',name),resolve(assets,name));
 copyFileSync('release-metadata.json',resolve(assets,'release-metadata.json'));
 for (const edition of ['', '_CZ', '_DE', '_SV']) {

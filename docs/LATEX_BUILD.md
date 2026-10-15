@@ -4,6 +4,15 @@ During ordinary development, treat all four TeX manual sources as living documen
 
 The GitHub-hosted release workflow compiles all four manuals together after the final release source/metadata edits and before the final manifest and exact-candidate audit. It uses the locked TinyTeX/TeX Live toolchain documented in `RELEASE.md`.
 
+The `manual-toolchain-cache.yml` workflow warms the exact existing TinyTeX key
+only from reviewed `main`, on toolchain-input changes or explicit dispatch.
+Release branches can restore an eligible default-branch cache; sibling release
+branch caches cannot provide that shared owner. A hit is verified with the
+existing locked provenance/package checks. A miss uses the unchanged frozen
+install/provision path. No workspace, credentials, PDFs or qualification results
+are cached. The workflow needs maintainer-controlled installation before it can
+improve cross-release reuse; a feature run does not establish a warm release.
+
 For an explicitly requested local build or diagnosis of a concrete compiler/layout failure, the manual also supports a standard MiKTeX or TeX Live installation with `pdflatex` and `makeindex`. Run the commands from the `docs/` directory:
 
 ```text

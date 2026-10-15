@@ -855,15 +855,19 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
 }
 
 /**
- * Build the static PHP source inventory under app and scripts.
+ * Build the static PHP source inventory under the selected application/tooling roots.
  *
  * @param string $root Absolute repository root.
+ * @param list<'app'|'scripts'> $directories Reviewed source roots; defaults to the complete historical inventory.
  * @return array<string,array<string,mixed>> Parsed PHP file metadata keyed by repository-relative path.
  */
-function scan_files(string $root): array
+function scan_files(string $root, array $directories = ['app', 'scripts']): array
 {
     $files = [];
-    foreach (['app', 'scripts'] as $directory) {
+    foreach ($directories as $directory) {
+        if (!in_array($directory, ['app', 'scripts'], true)) {
+            throw new \InvalidArgumentException('Unknown runtime source inventory root.');
+        }
         $absoluteDirectory = $root . DIRECTORY_SEPARATOR . $directory;
         if (!is_dir($absoluteDirectory)) {
             continue;

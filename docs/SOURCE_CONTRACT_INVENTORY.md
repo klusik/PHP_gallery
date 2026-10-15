@@ -510,7 +510,7 @@ paths. Executable behavior changes belong to their other active owners:
 - tests/admin_side_panel_gallery_mutation_test.php
 - tests/browser_upload_zip_worker_test.mjs
 - tests/content_localization_model_test.php
-- tests/deploy_app_packaging_test.php
+- tests/production_package_test.php
 - tests/fixtures/admin_gallery_title_completion.html
 - tests/fixtures/admin_panel_lifecycle.html
 - tests/fixtures/early_runtime_probe.php

@@ -238,7 +238,7 @@ SITES;
  */
 function runtime_dynamic_dependency_sites(string $root): array
 {
-    $files = array_filter(scan_files($root), static fn(array $file): bool => str_starts_with($file['path'], 'app/'));
+    $files = scan_files($root, ['app']);
     $indexed = build_symbol_index($files);
     $symbols = $indexed['symbols'];
     $policy = require __DIR__ . '/runtime_module_roots.php';
@@ -265,6 +265,24 @@ function runtime_dynamic_dependency_sites(string $root): array
         }
     }
 
+    return runtime_dynamic_dependency_sites_from_graph($root, $files, $symbols, $dependencies, $policy['modules']);
+}
+
+/**
+ * Review every route/lifecycle root against an already analyzed application dependency graph.
+ *
+ * The compiler supplies its own complete graph so freshness checking does not tokenize
+ * and analyze the same application twice. Standalone review builds that graph above.
+ *
+ * @param string $root Absolute source checkout root.
+ * @param array<string,array<string,mixed>> $files Parsed application file metadata keyed by repository-relative path.
+ * @param array<string,array<string,mixed>> $symbols Complete indexed declarations keyed by normalized symbol identity.
+ * @param array<string,array{edges:list<array<string,mixed>>,unresolved:list<array<string,mixed>>}> $dependencies Analyzed function/method edges and unresolved sites keyed by symbol identity.
+ * @param array<string,list<string>> $moduleRoots Reviewed lifecycle module names mapped to declaration roots.
+ * @return list<array{caller:string,kind:string,expression:string,line:int}> All reachable unresolved sites with stable ordering and diagnostic source lines.
+ */
+function runtime_dynamic_dependency_sites_from_graph(string $root, array $files, array $symbols, array $dependencies, array $moduleRoots): array
+{
     $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
     if (preg_match('/\$routes\s*=\s*\[(.*?)\n\s*\];/s', $dispatch, $routeBlock) !== 1) {
         throw new \RuntimeException('Canonical route table is unavailable to the dynamic-site review.');
@@ -275,7 +293,7 @@ function runtime_dynamic_dependency_sites(string $root): array
         $roots[] = ltrim(str_replace('\\\\', '\\', $pair[2]), '\\');
     }
     $roots[] = 'Gallery\\Controllers\\cms_not_found';
-    foreach ($policy['modules'] as $entrypoints) {
+    foreach ($moduleRoots as $entrypoints) {
         foreach ($entrypoints as $entrypoint) {
             $roots[] = ltrim($entrypoint, '\\');
         }
@@ -331,7 +349,7 @@ function runtime_dynamic_dependency_policy_drift(array $sites): array
  */
 function runtime_dynamic_dependency_missing_targets(string $root): array
 {
-    $files = array_filter(scan_files($root), static fn(array $file): bool => str_starts_with($file['path'], 'app/'));
+    $files = scan_files($root, ['app']);
     $symbols = build_symbol_index($files)['symbols'];
     $missing = [];
     foreach (runtime_dynamic_dependency_callback_targets() as $caller => $targets) {

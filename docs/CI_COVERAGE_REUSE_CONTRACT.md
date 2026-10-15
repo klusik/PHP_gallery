@@ -12,8 +12,12 @@ The maintainer's 2026-10-12 clarification replaces the earlier full-feature,
 post-push-develop and per-child release-reuse proposal. The approved entry point
 is **Integrate into develop** in GitHub Actions. The earlier workflow/input
 approval question is superseded by this explicitly requested execution policy.
-These source changes are not installation on protected main; hosted fixtures do
-not demonstrate an executed protected integration or release.
+The installed cadence is evidenced by integration
+[38741037506](https://github.com/klusik/PHP_gallery/actions/runs/38741037506) and
+release delta [38742234930](https://github.com/klusik/PHP_gallery/actions/runs/38742234930).
+Proposed changes to CI authority on a working branch still require maintenance
+qualification and maintainer-controlled installation; branch fixtures alone do
+not activate changed protected publishers or authorize integration.
 
 ## Staged CI authority update
 
@@ -57,12 +61,24 @@ write guards. Human review and release publication remain distinct.
 `scripts/audit.php` remains the sole test orchestrator. BASIC has exactly
 `php-lint`, `js-lint`, `source-documentation-changed`; `--changed` uses
 `php-lint-changed`, `js-lint-changed`, `source-documentation-changed` and requires
-a readable literal ancestor SHA. BASIC needs PHP, Node and Git; it does not
+a readable literal ancestor SHA. Ordinary feature BASIC uses this immutable
+base-to-candidate selection of complete files, including multi-commit, rename,
+addition and deletion deltas. Evaluator/parser/configuration changes expand
+syntax to a real whole-tree run. Missing baseline evidence blocks. Reports show
+PHP, JS and MJS counts separately. FULL retains whole-tree syntax even if a
+caller supplies `--changed`. BASIC needs PHP, Node and Git; it does not
 discover Python, GD, databases or Chromium. `quick` remains a separate diagnostic.
 
 FULL retains preflight, two PHP compatibility/source profiles, three disposable
 DB/HTTP/security/race profiles, required Chromium, three OS packages and the native
 aggregate: eleven owners. The release-only audit is expected skipped in FULL.
+The three existing OS package owners invoke the central `production-package`
+suite: generated-state freshness, fast policy, compact real-builder negative
+cases and complete production folder/ZIP membership and raw-byte SHA-256 proof.
+Database/source profiles explicitly delegate SQL-independent packaging to those
+same-candidate owners. The aggregate still requires all three actual OS jobs;
+delegation is reported and is never a local packaging PASS. The expensive
+historical deploy fixture and interactive/FTP implementation are removed.
 No required capability is removed. CI infrastructure can be explicitly qualified
 through `maintenance_full` dispatch on the candidate workflow; this deliberate
 hosted maintenance operation never automatically runs on ordinary feature pushes
@@ -87,6 +103,12 @@ The native run suite and the REST-created custom check suite are authenticated
 separately: GitHub can group a new custom check into an earlier suite for the same
 commit/App. Exact native run/attempt/job evidence remains the execution authority;
 suite grouping alone must not reject a valid newer run or accept a foreign one.
+Current native matrix owners use PHP 8.1 and PHP 8.5. Historical PHP 8.3 owner
+labels may be read only with the exact recorded workflow source, verified Git
+blob bytes and inherited main-history proof; mixed, missing or duplicate owner
+sets fail. Current publishers emit the current contract exclusively. The same
+rule binds historical versus changed-file BASIC profile labels to their real
+trusted evaluator installation, preserving older immutable release records.
 The BASIC workflow and its complete executable audit/documentation input closure
 must be inherited byte-for-byte from protected P. A feature cannot qualify its
 own changed evaluator. The staged authority update above is the only route for

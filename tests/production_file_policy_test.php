@@ -139,16 +139,27 @@ try {
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 
     production_file_policy_assert(release_file_policy_paths($source) === $packagePaths, 'Production profile omitted canonical CMS or companion inventory.');
-    $reviewPaths = array_merge($packagePaths, $sourceReview);
-    sort($reviewPaths, SORT_STRING);
-    production_file_policy_assert(release_file_policy_paths($source, 'source-review') === $reviewPaths,
-        'Source-review profile omitted companion or test files.');
+    production_file_policy_assert(release_file_policy_read($source)['source_review_files'] === $sourceReview,
+        'Schema-1 source-review metadata is no longer readable by compatible installed updater clients.');
+    production_file_policy_expect_refusal(static function () use ($source): void {
+        release_file_policy_paths($source, 'source-review');
+    }, 'The retired deploy-only source-review packaging profile remained active.');
     production_file_policy_assert(release_file_policy_is_integrity_path('app/example.json'), 'Integrity selector rejected an application JSON file.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('docs/manual.pdf'), 'Integrity selector accepted a distribution PDF.');
     production_file_policy_assert(!release_file_policy_is_integrity_path('custom_css/preset.css'), 'Integrity selector accepted a user CSS preset.');
     production_file_policy_assert(!\Gallery\Core\release_file_policy_is_updater_path('winapp/uploader/media.py'), 'CMS updater claimed independently owned WinApp sources.');
     production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/CON.txt'), 'Windows device path was accepted.');
     production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/unsafe. '), 'Trailing-dot/space alias was accepted.');
+    foreach (['app/../config.php', '/etc/passwd', 'app\\file.php', 'app/a:b.php', 'app/a?b.php', 'app/a*b.php',
+        'app/a|b.php', 'app/<bad>.php', 'app/CONIN$', 'app/LPT¹.log', "app/line\nbreak.php", 'app//file.php'] as $unsafe) {
+        production_file_policy_assert(!release_file_policy_is_safe_relative_path($unsafe), 'Unsafe portable path was accepted: ' . $unsafe);
+    }
+    foreach ([['app/A.php', 'app/a.php'], ['app/Dir/a.php', 'app/dir/b.php'], ['app/file.php', 'app/file.php/child'],
+        ['app/a.php', 'app/a.php'], ['app/z.php', 'app/a.php']] as $invalidPaths) {
+        production_file_policy_expect_refusal(static function () use ($invalidPaths): void {
+            release_file_policy_validate_path_list($invalidPaths);
+        }, 'Invalid portable inventory collision or ordering was accepted.');
+    }
 
     $unicodeCollisionRejected = false;
     try {
@@ -178,6 +189,22 @@ try {
     $inventoryBytes = file_get_contents($inventoryPath);
     production_file_policy_assert(is_string($inventoryBytes), 'Fixture inventory bytes are unavailable.');
     $original = json_decode($inventoryBytes, true, 512, JSON_THROW_ON_ERROR);
+    // Retired updater-owned wrappers are removed only when the installed positive ownership list proves them.
+    // The historical root deploy.sh was distributed but never updater-owned and must remain user-preserved.
+    $retired = $original;
+    $retired['production_files'] = array_merge($retired['production_files'],
+        ['deploy.bat', 'deploy.sh', 'deploy/.htaccess', 'scripts/deploy.ps1', 'scripts/deploy.sh']);
+    $retired['updater_files'] = array_merge($retired['updater_files'],
+        ['deploy.bat', 'deploy/.htaccess', 'scripts/deploy.ps1', 'scripts/deploy.sh']);
+    sort($retired['production_files'], SORT_STRING);
+    sort($retired['updater_files'], SORT_STRING);
+    file_put_contents($inventoryPath, json_encode($retired, JSON_THROW_ON_ERROR));
+    $previousOwned = release_file_policy_prior_updater_paths($source);
+    foreach (['deploy.bat', 'scripts/deploy.ps1', 'scripts/deploy.sh', 'deploy/.htaccess'] as $owned) {
+        production_file_policy_assert(in_array($owned, $previousOwned, true), 'Installed positive wrapper/server-guard ownership was lost: ' . $owned);
+    }
+    production_file_policy_assert(!in_array('deploy.sh', $previousOwned, true), 'Historical name alone promoted an unowned root wrapper into deletion ownership.');
+    file_put_contents($inventoryPath, $inventoryBytes);
     $oldInventory = $original;
     unset($oldInventory['companion_files']);
     $oldInventory['production_files'] = $packagePaths;

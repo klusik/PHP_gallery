@@ -20,6 +20,7 @@ require_once dirname(__DIR__) . '/scripts/generate_runtime_modules.php';
 
 use function Gallery\Tools\RuntimeModules\compile_runtime_modules;
 use function Gallery\Tools\RuntimeModules\render_runtime_modules;
+use function Gallery\Tools\RuntimeModules\runtime_module_source_is_current;
 use function PhpGallery\Audit\run_process_pool;
 
 /**
@@ -39,11 +40,25 @@ function assert_contract(bool $condition, string $message): void
 
 $root = dirname(__DIR__);
 $target = $root . '/app/runtime/modules.php';
+$lineEndingFixture = "<?php\nreturn ['route' => 'module'];\n";
+assert_contract(runtime_module_source_is_current($lineEndingFixture, $lineEndingFixture),
+    'Canonical LF plan source must remain current.');
+assert_contract(runtime_module_source_is_current(str_replace("\n", "\r\n", $lineEndingFixture), $lineEndingFixture),
+    'A Git CRLF checkout must retain the exact canonical generated-plan contract.');
+assert_contract(!runtime_module_source_is_current(str_replace("\n", "\r", $lineEndingFixture), $lineEndingFixture),
+    'Unsupported bare-CR source must not become a fresh generated plan.');
+assert_contract(!runtime_module_source_is_current(str_replace('module', 'other-module', $lineEndingFixture), $lineEndingFixture),
+    'Real module content drift must remain stale independently from checkout line endings.');
+assert_contract(!runtime_module_source_is_current(null, $lineEndingFixture)
+    && !runtime_module_source_is_current(substr($lineEndingFixture, 0, -1), $lineEndingFixture),
+    'Missing or truncated generated source must remain stale.');
+$testStarted = hrtime(true);
 $plans = compile_runtime_modules($root);
 $rendered = render_runtime_modules($plans);
+$compileSeconds = (hrtime(true) - $testStarted) / 1e9;
 $checkedIn = file_get_contents($target);
-assert_contract(is_string($checkedIn) && hash_equals(hash('sha256', $rendered), hash('sha256', $checkedIn)),
-    'Checked-in runtime module plans must byte-match compiler output.');
+assert_contract(runtime_module_source_is_current(is_string($checkedIn) ? $checkedIn : null, $rendered),
+    'Checked-in runtime module plans must byte-match canonical compiler output after Git CRLF conversion only.');
 assert_contract(($plans['schema_version'] ?? null) === 2 && is_array($plans['file_order'] ?? null)
     && array_is_list($plans['file_order']), 'Runtime module plan must use the validated composed schema.');
 assert_contract(count($plans['file_order']) === count(array_unique($plans['file_order'])),
@@ -76,13 +91,15 @@ foreach ($modules as $module) {
         $jobMap[] = ['module' => $module, 'mode' => $mode];
     }
 }
+$childrenStarted = hrtime(true);
 $results = run_process_pool($jobs, $root, 4);
+$childrenSeconds = (hrtime(true) - $childrenStarted) / 1e9;
 $preparedRoutes = [];
 foreach ($results as $index => $result) {
     $module = $jobMap[$index]['module'];
     $mode = $jobMap[$index]['mode'];
-    assert_contract(!$result['timed_out'], 'Isolated module preparation timed out: ' . $module);
-    assert_contract($result['exit_code'] === 0, 'Isolated module preparation failed for ' . $module . ': ' . trim($result['stdout'] . ' ' . $result['stderr']));
+    assert_contract(!$result['timed_out'], 'Isolated module preparation timed out: ' . $module . ' / ' . $mode);
+    assert_contract($result['exit_code'] === 0, 'Isolated module preparation failed for ' . $module . ' / ' . $mode . ': ' . trim($result['stdout'] . ' ' . $result['stderr']));
     $decoded = json_decode($result['stdout'], true);
     assert_contract(is_array($decoded) && ($decoded['ok'] ?? false) === true, 'Fixture output was invalid for ' . $module . '.');
     $observed = $decoded['result'] ?? [];
@@ -125,3 +142,13 @@ assert_contract(count($unknownDynamic['unexpected']) === 1, 'A new unresolved ca
 
 fwrite(STDOUT, 'PASS: runtime module plan byte freshness and ' . count($preparedRoutes)
     . ' route handlers across ' . count($modules) . ' modules / ' . (count($modules) * 2) . " isolated comparison children\n");
+// Retained stdout separates source analysis from process startup/module loading;
+// no scenario is omitted or combined into a previously contaminated process.
+fwrite(STDOUT, 'AUDIT_METRICS ' . json_encode([
+    'compile_seconds' => round($compileSeconds, 4),
+    'isolated_children_wall_seconds' => round($childrenSeconds, 4),
+    'isolated_children_runner_seconds' => round(array_sum(array_column($results, 'duration')), 4),
+    'children' => count($results),
+    'workers' => 4,
+    'total_seconds' => round((hrtime(true) - $testStarted) / 1e9, 4),
+], JSON_THROW_ON_ERROR) . "\n");

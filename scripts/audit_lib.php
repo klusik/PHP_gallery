@@ -44,6 +44,56 @@ const STATUS_SKIP = 'SKIP';
 const STATUS_BLOCKED = 'BLOCKED';
 
 /**
+ * Extract one optional, bounded numeric metric record from a PHP regression child's stdout.
+ *
+ * The AUDIT_METRICS convention accepts at most 32 simple ASCII keys and a
+ * 4096-byte record. Values must be finite nonnegative integers or floats; no
+ * strings, paths, nested values or duplicate fields enter retained metrics.
+ *
+ * @param string $stdout Complete captured child stdout, with ordinary diagnostic lines allowed around the optional record.
+ * @return array{present:bool,valid:bool,metrics:array<string,int|float>,error:?string} Valid numeric measurements, an absent-record success, or an explicit fixed error code for malformed emitted evidence.
+ */
+function parse_php_audit_metrics(string $stdout): array
+{
+    $result = ['present'=>false,'valid'=>true,'metrics'=>[],'error'=>null];
+    $records = [];
+    foreach (preg_split('/\r\n|\n|\r/', $stdout) ?: [] as $line) {
+        if (str_starts_with($line, 'AUDIT_METRICS')) $records[] = $line;
+    }
+    if ($records === []) return $result;
+    $result['present'] = true;
+    $error = null;
+    if (count($records) !== 1) $error = 'multiple-records';
+    elseif (strlen($records[0]) > 4096) $error = 'record-too-large';
+    elseif (!str_starts_with($records[0], 'AUDIT_METRICS ')) $error = 'invalid-prefix';
+    if ($error !== null) return array_replace($result, ['valid'=>false,'error'=>$error]);
+    $payload = substr($records[0], strlen('AUDIT_METRICS '));
+    try {
+        $metrics = json_decode($payload, true, 3, JSON_THROW_ON_ERROR);
+    } catch (\JsonException) {
+        return array_replace($result, ['valid'=>false,'error'=>'invalid-json']);
+    }
+    if (!is_array($metrics) || $metrics === [] || array_is_list($metrics)
+        || count($metrics) > 32 || !str_starts_with(ltrim($payload), '{')) {
+        return array_replace($result, ['valid'=>false,'error'=>'invalid-object']);
+    }
+    foreach ($metrics as $key => $value) {
+        if (!is_string($key) || preg_match('/^[a-z][a-z0-9_]{0,63}$/D', $key) !== 1
+            || !(is_int($value) || is_float($value)) || !is_finite((float) $value) || $value < 0) {
+            return array_replace($result, ['valid'=>false,'error'=>'invalid-field']);
+        }
+    }
+    // Only plain keys are allowed; comparing their raw count also rejects JSON
+    // duplicate fields that json_decode would otherwise silently overwrite.
+    preg_match_all('/"([a-z][a-z0-9_]{0,63})"\s*:/', $payload, $keys);
+    if (count($keys[1]) !== count($metrics) || count(array_unique($keys[1])) !== count($keys[1])) {
+        return array_replace($result, ['valid'=>false,'error'=>'duplicate-or-escaped-field']);
+    }
+    $result['metrics'] = $metrics;
+    return $result;
+}
+
+/**
  * Extract a bounded, single-line failure reason from a Node fixture's output.
  *
  * @param string $output Captured stdout and stderr from the owned child.
@@ -584,7 +634,8 @@ function git_changed_paths(string $rootPath, ?string $baseSha = null): ?array
     $paths = [];
     foreach ([$committed['stdout'], $tracked['stdout'], $untracked['stdout']] as $output) {
         foreach (explode("\0", $output) as $path) {
-            $path = str_replace('\\', '/', trim($path));
+            // Git's NUL-delimited paths already use repository separators;
+            // whitespace belongs to the filename and must survive selection.
             if ($path !== '') {
                 $paths[] = $path;
             }
@@ -592,6 +643,81 @@ function git_changed_paths(string $rootPath, ?string $baseSha = null): ?array
     }
 
     return array_values(array_unique($paths));
+}
+
+/**
+ * Select complete lint inputs, expanding evaluator/configuration changes to the whole source tree.
+ *
+ * @param string $rootPath Repository or isolated fixture root.
+ * @param list<string> $extensions Source extensions without leading dots.
+ * @param bool $changedOnly Whether the caller requested immutable-delta selection.
+ * @param ?string $baseSha Immutable ancestor commit, or null for local working-tree feedback.
+ * @param bool $requireGitEvidence Whether absent baseline evidence must block.
+ * @return array{files:list<string>,fallback:bool,blocked:bool,reason:string} Complete source paths and explicit selection evidence.
+ */
+function select_lint_targets(string $rootPath, array $extensions, bool $changedOnly, ?string $baseSha, bool $requireGitEvidence): array
+{
+    $reason = 'whole-tree';
+    if ($changedOnly) {
+        $changed = $requireGitEvidence && $baseSha === null ? null : git_changed_paths($rootPath, $baseSha);
+        if ($changed === null && $requireGitEvidence) {
+            return ['files' => [], 'fallback' => false, 'blocked' => true, 'reason' => 'immutable-baseline-unavailable'];
+        }
+        $reason = $changed === null ? 'git-unavailable-full-tree' : 'immutable-delta';
+        $authorityChanged = $changed === null ? [] : array_values(array_filter($changed,
+            static fn(string $path): bool => preg_match('~^(?:scripts/(?:audit[^/]*|cli_guard[.]php|check_source_documentation[.]php|source_contract_debt_baseline[.]json|source_contracts/.*)|[.]github/workflows/.*[.]ya?ml|[.]gitattributes|[.]node-version|[.]nvmrc|[.]user[.]ini|php[.]ini|package[.]json)$~D', $path) === 1));
+        if ($authorityChanged !== []) {
+            $reason = 'evaluator-or-configuration-change: ' . implode(', ', $authorityChanged);
+        } elseif ($changed !== null) {
+            $extensionMap = array_fill_keys(array_map('strtolower', $extensions), true);
+            $files = [];
+            foreach ($changed as $relative) {
+                $absolute = $rootPath . '/' . $relative;
+                if (isset($extensionMap[strtolower(pathinfo($relative, PATHINFO_EXTENSION))]) && is_file($absolute)) {
+                    $files[] = $absolute;
+                }
+            }
+            sort($files, SORT_STRING);
+            return ['files' => array_values(array_unique($files)), 'fallback' => false, 'blocked' => false, 'reason' => $reason];
+        }
+    }
+    return [
+        'files' => discover_files($rootPath, $extensions, ['.git', '.idea', '.vscode', 'cache', 'data', 'galleries', 'deploy', 'node_modules', 'vendor', '__pycache__', '.pytest_cache', '.venv', 'venv']),
+        'fallback' => $changedOnly,
+        'blocked' => false,
+        'reason' => $reason,
+    ];
+}
+
+/**
+ * Delegate the packaging suite only to the required native three-platform same-candidate owner.
+ *
+ * This reports delegation, never a local PASS or authorization to change protected
+ * refs. The installed integration harness continues to reject branch-authored
+ * authority changes; maintenance_full qualifies proposed changes separately.
+ *
+ * @param list<string> $suites Selected central suites before ownership delegation.
+ * @param string $profile Central full or release profile being executed.
+ * @param array<string,string> $environment Current Actions process identity.
+ * @param ?string $actualHead Checked-out immutable candidate SHA.
+ * @return array{suites:list<string>,delegated_to_packaging:list<string>} Executed suites and explicit required-owner delegation.
+ */
+function audit_hosted_packaging_ownership(array $suites, string $profile, array $environment, ?string $actualHead): array
+{
+    $result = ['suites' => $suites, 'delegated_to_packaging' => []];
+    if (!in_array($profile, ['full', 'release'], true)
+        || ($environment['GITHUB_ACTIONS'] ?? '') !== 'true'
+        || ($environment['GITHUB_REPOSITORY'] ?? '') !== 'klusik/PHP_gallery'
+        || !in_array($environment['GITHUB_JOB'] ?? '', ['real-database-browser', 'runtime-compatibility', 'release-audit'], true)
+        || ($environment['PHP_GALLERY_PACKAGING_OWNER'] ?? '') !== 'production-package'
+        || !is_string($actualHead) || preg_match('/^[a-f0-9]{40}$/D', $actualHead) !== 1
+        || ($environment['PHP_GALLERY_PACKAGING_CANDIDATE'] ?? '') !== $actualHead
+        || count(array_keys($suites, 'packaging', true)) !== 1) {
+        return $result;
+    }
+    $result['suites'] = array_values(array_diff($suites, ['packaging']));
+    $result['delegated_to_packaging'] = ['packaging'];
+    return $result;
 }
 
 /**
@@ -637,7 +763,7 @@ function task_result(
  * Required disposable-database coverage must instead have an individual PASS,
  * a zero child exit code, and no timeout in the structured report.
  *
- * @param array<string,mixed> $regression Normalized php-fast or php-regression task.
+ * @param array{id?:string,status?:string,counts?:array<string,int>,details?:array{tests?:list<array{name?:string,status?:string,exit_code?:int,timed_out?:bool}>}} $regression Structured PHP regression, fast-feedback or packaging evidence; incomplete/malformed evidence is rejected.
  * @param list<string> $requiredTests Mandatory standalone PHP test basenames.
  * @return list<string> Names without verified PASS, or all required names for malformed evidence.
  */
@@ -645,7 +771,7 @@ function missing_required_php_test_passes(array $regression, array $requiredTest
 {
     $tests = $regression['details']['tests'] ?? null;
     $reportedCounts = $regression['counts'] ?? null;
-    if (!in_array($regression['id'] ?? null, ['php-fast', 'php-regression'], true)
+    if (!in_array($regression['id'] ?? null, ['php-fast', 'php-regression', 'packaging'], true)
         || ($regression['status'] ?? null) !== STATUS_PASS
         || !is_array($tests) || !array_is_list($tests)
         || !is_array($reportedCounts)

@@ -28,7 +28,7 @@ use function Gallery\Tools\RuntimeDependencies\collect_symbol_dependencies;
 use function Gallery\Tools\RuntimeDependencies\module_owner;
 use function Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_callback_targets;
 use function Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_policy_drift;
-use function Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_sites;
+use function Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_sites_from_graph;
 
 /**
  * Compile domain roots and the canonical handler inventory without executing application code.
@@ -38,34 +38,38 @@ use function Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency
  */
 function compile_runtime_modules(string $root): array
 {
-    $files = array_filter(scan_files($root), static fn(array $file): bool => str_starts_with($file['path'], 'app/'));
+    $files = scan_files($root, ['app']);
     $indexed = build_symbol_index($files);
     $symbols = $indexed['symbols'];
     $policy = require __DIR__ . '/runtime_module_roots.php';
     $dynamicTargets = runtime_dynamic_dependency_callback_targets();
-    $drift = runtime_dynamic_dependency_policy_drift(runtime_dynamic_dependency_sites($root));
-    if ($drift['unexpected'] !== [] || $drift['stale'] !== []) {
-        throw new \RuntimeException('Dynamic runtime dependencies need review: '
-            . implode(', ', array_merge($drift['unexpected'], $drift['stale'])));
-    }
     $dependencies = [];
+    $dynamicDependencies = [];
     foreach ($indexed['perFile'] as $path => $declarations) {
         if ($declarations === []) {
             continue;
         }
         $parsed = read_source_file($root . '/' . $path, $root);
         foreach ($declarations as $symbol) {
-            if (!in_array($symbol['kind'], ['function', 'method', 'T_CLASS', 'T_INTERFACE', 'T_TRAIT', 'T_ENUM'], true)
-                || str_starts_with($symbol['file'], 'app/runtime/')) {
+            if (!in_array($symbol['kind'], ['function', 'method', 'T_CLASS', 'T_INTERFACE', 'T_TRAIT', 'T_ENUM'], true)) {
                 continue;
             }
             $analysis = collect_symbol_dependencies($parsed, $symbol, $symbols);
             $deferred = array_map('strtolower', $policy['deferred_calls'][$symbol['name']] ?? []);
+            $edges = array_values(array_filter($analysis['edges'], static fn(array $edge): bool => !in_array(strtolower($edge['target']), $deferred, true)));
+            if (in_array($symbol['kind'], ['function', 'method'], true)) {
+                $dynamicDependencies[$symbol['id']] = ['edges' => $edges, 'unresolved' => $analysis['unresolved']];
+            }
+            // Dynamic-site review retains runtime method edges even though the
+            // production autoloader owns runtime classes outside module plans.
+            if (str_starts_with($symbol['file'], 'app/runtime/')) {
+                continue;
+            }
             $symbolKey = in_array($symbol['kind'], ['T_CLASS', 'T_INTERFACE', 'T_TRAIT', 'T_ENUM'], true)
                 ? 'class:' . $symbol['id'] : $symbol['id'];
             $dependencies[$symbolKey] = array_values(array_unique(array_map(
                 static fn(array $edge): string => $edge['target_id'],
-                array_filter($analysis['edges'], static fn(array $edge): bool => !in_array(strtolower($edge['target']), $deferred, true))
+                $edges
             )));
             // Reviewed composed callback arrays are concrete caller dependencies,
             // including callers reached from a different route-owned module.
@@ -77,6 +81,14 @@ function compile_runtime_modules(string $root): array
                 $dependencies[$symbolKey][] = $targetId;
             }
         }
+    }
+
+    $drift = runtime_dynamic_dependency_policy_drift(runtime_dynamic_dependency_sites_from_graph(
+        $root, $files, $symbols, $dynamicDependencies, $policy['modules']
+    ));
+    if ($drift['unexpected'] !== [] || $drift['stale'] !== []) {
+        throw new \RuntimeException('Dynamic runtime dependencies need review: '
+            . implode(', ', array_merge($drift['unexpected'], $drift['stale'])));
     }
 
     // The literal handler map remains the route authority. This parser reads its
@@ -387,8 +399,8 @@ function runtime_module_transitive_closure(array $plan, string $module): array
 /**
  * Render the shipped plain-PHP loading plan with a deterministic attribution header.
  *
- * @param array<string,mixed> $plans Compiled module metadata.
- * @return string Complete PHP source for the checked-in loading plans.
+ * @param array{schema_version:int,route_modules:array<string,string>,file_order:list<string>,modules:array<string,array{depends:list<string>,files:list<string>}>} $plans Complete compiled module metadata with reviewed routes, dependency edges and canonical source paths.
+ * @return string Complete PHP source with canonical LF line endings for the checked-in loading plans.
  */
 function render_runtime_modules(array $plans): string
 {
@@ -398,7 +410,26 @@ function render_runtime_modules(array $plans): string
         . " * Responsibilities: Own deterministic route-to-module and module-to-file dependency metadata.\n"
         . " * Author: Rudolf Klusal\n * License: MIT License (see LICENSE file in repository)\n"
         . " * Generated by: php scripts/generate_runtime_modules.php\n */\n\ndeclare(strict_types=1);\n\n"
-        . 'return ' . preg_replace('/[\t ]+$/m', '', var_export($plans, true)) . ";\n";
+        . 'return ' . preg_replace('/[\t ]+$/m', '', str_replace("\r\n", "\n", var_export($plans, true))) . ";\n";
+}
+
+/**
+ * Compare the generated PHP plan after Git's supported CRLF checkout transformation only.
+ *
+ * The generated schema contains identifiers and paths, never multiline payload
+ * strings. Checkout CRLF therefore changes source presentation only. Bare CR,
+ * missing bytes, whitespace changes and every route/module/content change remain
+ * different; this comparison does not re-render or evaluate the checked-in file.
+ *
+ * @param string|null $checkedIn Complete checked-in source bytes, or null when the source is missing or unreadable.
+ * @param string $rendered Complete canonical compiler rendering to compare against.
+ * @return bool True only for identical canonical bytes after converting CRLF pairs to LF; false for unavailable source or any other difference.
+ */
+function runtime_module_source_is_current(?string $checkedIn, string $rendered): bool
+{
+    return $checkedIn !== null
+        && hash_equals(hash('sha256', str_replace("\r\n", "\n", $rendered)),
+            hash('sha256', str_replace("\r\n", "\n", $checkedIn)));
 }
 
 /**
@@ -417,12 +448,14 @@ function main(array $arguments): int
     $target = $root . '/app/runtime/modules.php';
     $plans = compile_runtime_modules($root);
     $source = render_runtime_modules($plans);
+    $checkedIn = is_file($target) ? file_get_contents($target) : false;
+    $current = runtime_module_source_is_current(is_string($checkedIn) ? $checkedIn : null, $source);
     if ($arguments === ['--check']) {
-        if (!is_file($target) || file_get_contents($target) !== $source) {
+        if (!$current) {
             fwrite(STDERR, "Runtime module plans are stale; regenerate after dependency/route changes.\n");
             return 1;
         }
-    } elseif (!is_file($target) || file_get_contents($target) !== $source) {
+    } elseif (!$current) {
         if (is_link($target) || file_put_contents($target, $source, LOCK_EX) === false) {
             throw new \RuntimeException('Could not save runtime module plans.');
         }

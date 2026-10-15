@@ -384,8 +384,6 @@ $migrationSource = (string) file_get_contents($root . '/app/migrations.php');
 $statusSource = (string) file_get_contents($root . '/app/services/updates_status.php');
 $patchNotesSource = (string) file_get_contents($root . '/app/services/updates_patch_notes.php');
 $cliSource = (string) file_get_contents($root . '/scripts/application_update.php');
-$deployShellSource = (string) file_get_contents($root . '/scripts/deploy.sh');
-$deployPowerShellSource = (string) file_get_contents($root . '/scripts/deploy.ps1');
 assert_updater_resumable(str_contains($jobsSource, "'download',") && str_contains($jobsSource, "'activate',") && str_contains($jobsSource, "'completed',"), 'Durable state-machine stages are no longer explicit.');
 assert_updater_resumable(str_contains($jobsSource, 'flock($handle, LOCK_EX | LOCK_NB)'), 'Updater worker serialization no longer uses a non-blocking OS file lock.');
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_clear_active_job_if') && str_contains($jobsSource, 'A non-active job must never mutate application files concurrently'), 'Global active-job ownership protection disappeared.');
@@ -414,17 +412,6 @@ $autoStartEnd = strpos($installSource, 'function application_update_beta_backup_
 $autoStartSource = substr($installSource, (int) $autoStartPosition, (int) $autoStartEnd - (int) $autoStartPosition);
 assert_updater_resumable(!str_contains($autoStartSource, 'application_update_process_job('), 'Automatic discovery and package processing were recombined into one request.');
 assert_updater_resumable(str_contains($cliSource, 'Discovery already consumed this invocation') && str_contains($cliSource, 'application_update_continue_background_job($budgetSeconds)'), 'CLI background continuation/discovery no longer uses the bounded safe retry path.');
-assert_updater_resumable(str_contains($deployShellSource, 'scripts/release_files.php')
-    && str_contains($deployShellSource, 'release_files.php" list')
-    && str_contains($deployShellSource, 'release_files.php" verify'),
-    'Shell deployment must list and verify staged paths through the canonical PHP package-policy bridge.');
-assert_updater_resumable(str_contains($deployPowerShellSource, 'scripts/release_files.php')
-    && str_contains($deployPowerShellSource, "'list',")
-    && str_contains($deployPowerShellSource, "'verify',"),
-    'PowerShell deployment must list and verify staged paths through the canonical PHP package-policy bridge.');
-assert_updater_resumable(str_contains($deployShellSource, 'generate_manifest.php') && str_contains($deployShellSource, '--check')
-    && str_contains($deployPowerShellSource, 'generate_manifest.php') && str_contains($deployPowerShellSource, '--check'),
-    'Deploy wrappers must verify the release manifest before staging or publishing files.');
 assert_updater_resumable(str_contains($jobsSource, "version_compare(\$validatedVersion, \$targetVersion, '<')"), 'Stable package validation no longer enforces the selected target-version floor.');
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_cancel_job') && str_contains($jobsSource, 'Update cannot be cancelled after activation has begun.'), 'Pre-activation cancellation boundary disappeared.');
 assert_updater_resumable(str_contains($jobsSource, 'Caught failures require application_update_retry_job()') && str_contains($jobsSource, "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))"), 'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.');

@@ -1,0 +1,70 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/manual-toolchain-cache.yml
+# Module Type: Release Toolchain Cache Workflow
+# Purpose: Populate the exact frozen manual toolchain cache on the default branch for sibling releases.
+# Responsibilities:
+#   - Accept only main-owned immutable toolchain inputs and verify their provenance
+#   - Save one reusable default-branch cache without building or publishing a release
+# Author: Rudolf Klusal
+name: Warm locked manual toolchain
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/texlive-lock.json'
+      - '.github/texlive-packages.txt'
+      - '.github/scripts/provision_tinytex.sh'
+      - '.github/workflows/manual-toolchain-cache.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-manual-toolchain-cache
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'klusik/PHP_gallery' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - id: tinytex-cache
+        name: Restore exact default-branch manual toolchain
+        uses: actions/cache/restore@v6.1.0
+        timeout-minutes: 3
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '2'
+        with:
+          path: ~/.TinyTeX
+          key: tinytex-v2-ubuntu24.04-x86_64-${{ hashFiles('.github/texlive-lock.json', '.github/texlive-packages.txt', '.github/scripts/provision_tinytex.sh') }}
+      - name: Install locked TinyTeX bundle on cache miss
+        if: ${{ steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        timeout-minutes: 6
+        run: timeout --kill-after=15s 300 bash .github/scripts/provision_tinytex.sh install
+      - name: Provision frozen TeX Live packages on cache miss
+        if: ${{ steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        timeout-minutes: 11
+        run: timeout --kill-after=15s 600 bash .github/scripts/provision_tinytex.sh provision
+      - name: Verify complete locked toolchain provenance
+        run: bash .github/scripts/provision_tinytex.sh verify
+      - name: Save verified default-branch toolchain
+        if: ${{ success() && steps.tinytex-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6.1.0
+        timeout-minutes: 3
+        with:
+          path: ~/.TinyTeX
+          key: ${{ steps.tinytex-cache.outputs.cache-primary-key }}

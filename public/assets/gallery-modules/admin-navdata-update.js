@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS} from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1';
-import {completeAdminMutation} from './admin-mutation-completion.js';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
 
 /** Run an owned navdata refresh. @param {HTMLFormElement} form Current import form. @param {boolean} periodic Whether this is the weekly age check. @return {Promise<void>} Refreshes the owned card without changing the URL. */
 async function refreshNavdata(form, periodic = false) {

@@ -59,8 +59,8 @@ jobs:
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: zip
+          php-version: '8.5'
+          extensions: zip, mbstring
           coverage: none
       - uses: actions/setup-node@v7.0.0
         with:
@@ -612,8 +612,8 @@ jobs:
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: zip
+          php-version: '8.5'
+          extensions: zip, mbstring
           coverage: none
       - uses: actions/setup-node@v7.0.0
         with:

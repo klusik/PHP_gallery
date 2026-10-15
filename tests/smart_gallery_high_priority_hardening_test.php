@@ -28,6 +28,7 @@
  */
 
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/scripts/admin_import_contracts.php';
 
 /** Fail this standalone test with one concise contract message. */
 function smart_gallery_high_priority_assert(bool $condition, string $message): void
@@ -48,18 +49,8 @@ $galleryJs = (string) file_get_contents($root . '/public/assets/gallery.js');
 $adminOperations = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-operations.js');
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');
 
-smart_gallery_high_priority_assert(
-    str_contains($galleryJs, 'admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2')
-    && str_contains($galleryJs, 'admin-operations.js?v=20261015-cache-worker-log-filters-v1')
-    && str_contains($adminOperations, 'admin-side-panel.js?v=20261014-floating-shell-v1')
-    && str_contains($sidePanel, 'admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2'),
-    'Every Admin import edge uses the current cache-busting revision of the module it imports.'
-);
-smart_gallery_high_priority_assert(
-    !str_contains($galleryJs, 'admin-smart-galleries.js?v=20260814-smart-galleries-v6')
-    && !str_contains($adminOperations, 'admin-side-panel.js?v=20260815-upload-zip-import-v1'),
-    'Known stale Smart Gallery and side-panel import revisions are no longer reachable.'
-);
+smart_gallery_high_priority_assert(\Gallery\Tools\AdminImports\admin_import_repository_failures($root) === [],
+    'Smart Gallery and Admin import consumers must resolve coherent revisioned targets and invalidate changed module chains.');
 
 smart_gallery_high_priority_assert(
     str_contains($model, 'function smart_gallery_model_bounded_rows')

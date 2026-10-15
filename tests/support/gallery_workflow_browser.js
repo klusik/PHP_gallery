@@ -15,6 +15,10 @@
 /** Run the complete same-origin browser journey. @return {Promise<void>} Writes a bounded fixture result. */
 async () => {
     let stage = 'browser login';
+    let assertions = 0;
+    let lastHttpStatus = null;
+    let diagnosticDocument = null;
+    const workflowStarted = performance.now();
     Object.defineProperty(window, '__galleryWorkflowStage', {
         configurable: false,
         enumerable: false,
@@ -35,11 +39,15 @@ async () => {
         const timeoutSignal = AbortSignal.timeout(workflowFetchTimeoutMs);
         const signal = existingSignal ? AbortSignal.any([existingSignal, timeoutSignal]) : timeoutSignal;
         try {
-            return await fetchFunction(request, {...requestOptions, signal});
+            const response = await fetchFunction(request, {...requestOptions, signal});
+            lastHttpStatus = response.status;
+            return response;
         } catch (error) {
             if (timeoutSignal.aborted) {
                 const safeStage = stage.replace(/[^a-zA-Z0-9 ._-]/g, ' ').replace(/\s+/g, ' ').trim();
-                stage = ('fetch timeout ' + safeStage).slice(0, 100);
+                const failure = new Error('HTTP deadline at ' + safeStage, {cause: error});
+                failure.fixtureCategory = 'http-timeout';
+                throw failure;
             }
             throw error;
         }
@@ -59,20 +67,82 @@ async () => {
     // Consumers: the two-frame Admin panel settle point.
     // Rationale: a suspended iframe must report its active stage instead of holding the full browser result poll.
     const workflowFrameSettleTimeoutMs = 2000;
+    // Purpose: Preserve the established passive browser state deadline and polling cadence.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: one observed UI postcondition in this disposable browser journey.
+    // Consumers: until() only, never mutation retries.
+    // Rationale: synchronization follows application state without increasing the historical 20-second bound.
+    const workflowStateTimeoutMs = 20000;
+    // Purpose: Yield between passive state reads while browser/network callbacks progress.
+    // Type: integer.
+    // Units: milliseconds.
+    // Scope: browser workflow state waits.
+    // Consumers: until() polling delay.
+    // Rationale: retain the existing cadence without adding unconditional settling sleeps.
+    const workflowStatePollMs = 50;
+    /**
+     * Read only bounded synthetic state flags useful for the current assertion.
+     * @returns {{assertions:number,elapsedMs:number,lastHttpStatus:number|null,panelOpen:boolean|null,galleryCards:number|null}} Allowlisted counts and flags without form values, content, tokens or URLs.
+     */
+    function workflowObservedState() {
+        const panel = diagnosticDocument?.querySelector('[data-admin-side-panel]');
+        return {assertions, elapsedMs: Math.round(performance.now() - workflowStarted), lastHttpStatus,
+            panelOpen: panel ? !panel.hidden : null,
+            galleryCards: diagnosticDocument ? Math.min(9999, diagnosticDocument.querySelectorAll('article[data-gallery-id]').length) : null};
+    }
+    /**
+     * Preserve a concrete failure category and safe fixture stack without retaining unrestricted URLs.
+     * @param {unknown} error Original assertion, passive deadline, HTTP or browser-side exception.
+     * @returns {{category:string,reason:string,stack:string,observed:{assertions:number,elapsedMs:number,lastHttpStatus:number|null,panelOpen:boolean|null,galleryCards:number|null}}} Bounded diagnostic record containing no page HTML or private form values.
+     */
+    function workflowFailureDetails(error) {
+        const category = ['assertion', 'state-timeout', 'http-timeout'].includes(error?.fixtureCategory)
+            ? error.fixtureCategory : error?.name === 'SyntaxError' ? 'json' : 'application';
+        const reason = String(error?.message || 'Unknown browser application error')
+            .replace(/https?:\/\/[^\s)]+/g, '[url]').replace(/[^a-zA-Z0-9 ._:,=()\[\]-]/g, ' ').slice(0, 240);
+        const stack = String(error?.stack || '').split('\n').slice(1, 9)
+            .map(line => line.replace(/https?:\/\/[^\s)]+/g, url => {
+                const location = /:(\d+):(\d+)$/.exec(url);
+                return 'owned-fixture' + (location ? ':' + location[1] + ':' + location[2] : '');
+            }).replace(/[^a-zA-Z0-9 ._:,=()\[\]-]/g, ' ').trim().slice(0, 140)).join('\n');
+        return {category, reason, stack, observed: workflowObservedState()};
+    }
     /** Yield briefly while actual HTTP and rendering work completes. */
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    /** Wait for an observable application postcondition without assuming request duration. */
-    async function until(predicate) {
-        const deadline = Date.now() + 20000;
+    /**
+     * Wait passively for one named application postcondition without assuming request duration.
+     * @param {function():(boolean|number|string|Element|Document|null|undefined)} predicate Read-only probe returning its successful result or a falsy pending state.
+     * @param {string} [expectation=stage] Stable scenario/expectation label without user content.
+     * @returns {Promise<boolean|number|string|Element|Document>} Truthy observed result, or a categorized bounded state deadline failure.
+     */
+    async function until(predicate, expectation = stage) {
+        const started = performance.now();
+        const deadline = Date.now() + workflowStateTimeoutMs;
         while (Date.now() < deadline) {
             const value = predicate();
             if (value) return value;
-            await delay(50);
+            await delay(workflowStatePollMs);
         }
-        throw new Error('Timed out');
+        const failure = new Error('Expected ' + expectation + '; passive deadline ' + workflowStateTimeoutMs
+            + 'ms; observed after ' + Math.round(performance.now() - started) + 'ms');
+        failure.fixtureCategory = 'state-timeout';
+        throw failure;
     }
-    /** Fail with a bounded label, never with HTML or response details. */
-    function expect(value) { if (!value) throw new Error('Assertion failed'); }
+    /**
+     * Assert a named observable browser result and retain its assertion identity.
+     * @param {boolean|number|string|Element|Document|null|undefined} value Truthy result required by the scenario.
+     * @param {string} [expectation=stage] Safe scenario expectation label.
+     * @returns {void} Advances the assertion counter or throws a categorized assertion mismatch.
+     */
+    function expect(value, expectation = stage) {
+        assertions++;
+        if (!value) {
+            const failure = new Error('Assertion ' + assertions + ': ' + expectation);
+            failure.fixtureCategory = 'assertion';
+            throw failure;
+        }
+    }
     let savedPublicFrame = null;
     try {
         const safeRoute = value => {
@@ -147,6 +217,7 @@ async () => {
         }
         const win = frame.contentWindow;
         const doc = frame.contentDocument;
+        diagnosticDocument = doc;
         const initialUrl = win.location.href;
         const initialDocument = doc;
         let posts = 0;
@@ -191,8 +262,6 @@ async () => {
                 heldEditorReturned = true;
                 return snapshot;
             }
-            // Hold successful mutation responses long enough for the second button click.
-            if (isMutation) await delay(180);
             return response;
         };
         stage = 'open actual create panel';
@@ -1896,8 +1965,9 @@ async () => {
             && backgroundRevision.value !== removeBackgroundRevision && cssRevision.value === removeCssRevision);
         stage = 'browser gallery workflows CSS and authenticated widget draft iframe';
         await fetch(location.pathname + '/result', {method: 'POST', body: JSON.stringify({ok: true, stage, imageHash})});
-    } catch {
+    } catch (error) {
         savedPublicFrame?.remove();
-        await fetch(location.pathname + '/result', {method: 'POST', body: JSON.stringify({ok: false, stage})});
+        await fetch(location.pathname + '/result', {method: 'POST',
+            body: JSON.stringify({ok: false, stage, failure: workflowFailureDetails(error)})});
     }
 })();

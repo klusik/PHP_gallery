@@ -255,6 +255,13 @@ Cleanup remains optional and separately leased; never routinely prune refs.
 
 ### Qualification lifecycle target and activation status (#185)
 
+Current installed cadence was verified by hosted integration `38741037506` and
+release delta `38742234930` on 2026-10-15: BASIC feature pushes, one exact-candidate
+FULL before guarded develop integration, then release-owned BASIC delta. The
+historical activation caveats below do not reset that installed behavior.
+Changes to inherited CI authority require explicit maintenance qualification
+and maintainer-controlled installation; feature edits cannot authorize themselves.
+
 For the CI-authority evaluator update, use the staged develop-first procedure in
 `docs/CI_COVERAGE_REUSE_CONTRACT.md`; do not install it through a release
 bootstrap. Stage 1 changes only the integration publisher/workflow/readers and
@@ -266,9 +273,16 @@ candidate S, only the six approved evaluator transition paths, unchanged scanner
 closure, trusted inherited BASIC inspection, FULL from W* on exact S, and leased
 non-force FF. Record `authority_update` and `inherited_basic`; never invent W*
 main ancestry. Keep main protections and recovery distinct. This path remains
-PENDING until real hosted runs prove both stages. Only start a later release
-after the optimization is already on develop; preserve the erroneous release 8
-origin/evidence and supersede it with a later release, never by rewriting it.
+unqualified until real hosted runs prove both stages. Stage 1 was installed on
+develop by main-owned run `38774538606`; record subsequent acceptance in #223.
+Only create a release origin after the optimization is already on develop.
+Preserve an erroneous unpublished attempt and its source in explicit archive refs
+before replacing its leased release branch; never rewrite its origin or evidence.
+
+When changing a CI runtime or owner matrix, update every corresponding literal
+fixture expectation in the same batch while preserving strict assertions. Retain
+each failed preflight child's referenced log in the hosted artifact; an exit code
+without its diagnostic is insufficient handoff evidence.
 
 The latest #185 target replaces the earlier per-child coverage-inheritance
 proposal. Feature pushes and the final squash receive BASIC checks for PHP and
@@ -354,7 +368,7 @@ GitHub branch protections/rulesets are separate server controls. Repository
 instructions alone are not access control. Follow `RELEASE.md` for the recommended
 protected-branch and release-environment setup; never enable bypass for agents.
 
-The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Deployment packages exclude `tests/` by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
+The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Production packages exclude tests, gallery media and installation state. `scripts/package_production.php` is the canonical PHP folder/ZIP builder. Historical shell deploy entrypoints, FTP credentials/uploads and interactive packaging are removed; do not reintroduce them. `scripts/release_files.php` remains a policy inspection bridge; membership verification alone does not prove content integrity.
 
 `quick` uses `php-fast`, the curated `quick_tests` registry in `scripts/audit_php_registry.php`; it does not execute the complete PHP regression tree, whole-tree source inventory/category budgets, WinApp suite, slow Node fixtures, or Chromium. `full` and `release` retain complete PHP regression, enforced reliable inventory budgets, and WinApp coverage. A quick PASS cannot prove the inventory budgets pass. The quick/full/release profiles retain strict changed-source documentation/policy checks, the whole-tree Python import policy, MVC/mutation contracts, clean-child include-phase probes, and the registered runtime-performance route suite. Include probes enforce ceilings of 1 file/16 MiB for early runtime and 40 files/16 MiB for application bootstrap (24-file baseline). Route probes measure nine routes against an owned disposable workflow fixture; without that fixture the suite reports an explicit SKIP. Route ceilings range from 160–300 files and 32–48 MiB by route. Wall time is observational. A quick PASS is edit-cycle feedback, not full handoff evidence.
 
@@ -497,7 +511,7 @@ Release preparation must not create deployment folders, release ZIPs, clean pack
 The only normally needed distributable build artifact is the Windows installer in `winapp/dist/`, and rebuild it only when shipped WinApp code, assets, dependencies, runtime binaries or installer/build behavior changed since the previous installer. CMS-only release markers, documentation changes and test-only fixes do not require a new installer. Preserve the independent WinApp version unless the user requests its change; when no installer change is needed, leave `winapp/dist/` untouched. This default overrides packaging suggestions in `RELEASE.md`; release metadata, all four manual editions/PDFs, manifest freshness and the authoritative release audit remain required.
 
 ## Release Manifest Handoff Requirement
-Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Hosted candidate preparation runs the canonical `php scripts/prepare_candidate.php` after the source commit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
+Every change to an updater-managed release file must refresh `app/core-manifest.json` before a production archive, affected-files ZIP, release commit, or handoff is created. Hosted candidate preparation runs the canonical `php scripts/prepare_candidate.php` after the source commit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The production builder refuses stale integrity data before staging and verifies every selected file against its actual source bytes before publication. It does not repair generated state. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
 
 ## GitHub Issue Language
 
