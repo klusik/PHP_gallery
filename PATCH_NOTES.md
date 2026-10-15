@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.132.3
+
+Admin log browsing became more compact and responsive, with accessible, localized copy and TXT export actions for individual entries, groups, selections, and filtered results.
+
+### Highlights
+
+#### Admin log browsing and exports
+- Redesigned the log table to keep key event details visible and place expanded metadata and structured context in disclosures.
+- Added copy and download actions for log rows and groups, plus exports for selected entries, the current page, or all events matching the active filters. [#219](https://github.com/klusik/PHP_gallery/issues/219)
+- Added authenticated TXT downloads for selected and filtered logs while retaining the existing full CSV/JSON ZIP export.
+- Localized new controls and feedback in English, Czech, German, and Swedish.
+
+### Technical Details
+
+#### Backend
+- Added bounded, timestamp-and-ID keyset batching for filtered TXT exports and expanded selected-group exports to include unloaded events.
+- Added selection identity validation and deduplication for overlapping or duplicate selections.
+
+#### Frontend
+- Added clipboard copying with an asynchronous fallback and a selectable-text dialog when clipboard access was unavailable.
+- Added delegated handling for dynamically rendered export controls and preserved native file downloads when JavaScript was unavailable.
+- Updated the Admin operations cache-busting revision for the changed browser behavior.
+
+#### Tests
+- Added coverage for group expansion and deduplication, invalid selection identities, filtered export batch boundaries and timestamp ties, Unicode and context retention, escaped markup, and accessible controls.
+- Added browser contract coverage for clipboard behavior, delegated controls, native downloads, and export failures.
+
+#### Documentation
+- Updated the English, Czech, German, and Swedish manuals and related authoring and compatibility guidance.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Admins could browse log details in a more compact layout and copy or download individual, grouped, selected, or filtered log events. TXT exports remained available without JavaScript.
+
+#### For maintainers
+- Regression coverage was added for export selection, server-side batching, and browser download and clipboard behavior.
+
 ## Version 0.132.2
 
 Automatic cache cleanup began checking for inventory work every 30 seconds and could continue through authenticated server-side timer hops after a suitable public visit.
