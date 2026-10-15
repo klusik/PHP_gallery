@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.132.5}
+\newcommand{\version}{0.132.6}
 \newcommand{\manualdate}{15 October 2026}
 
 \hypersetup{
@@ -2125,6 +2125,8 @@ Routine maintenance can~run in~bounded slices instead of~one long request. The~m
 \index{log archive}
 
 The~compact log table keeps event names, messages, severity, timestamps and~instance counts visible. Open the~event name for~IDs, request/route metadata, the~first and~latest occurrence, and~individual group members; the~code icon beside a~message reveals its structured context. Copy and~download icons have descriptive tooltips and~accessible names. Row actions export one event or~the~entire group indicated by~that row; inside group details you can~also copy, save or~select individual members. Every export includes the~full diagnostic text and~context.
+
+Search includes event names, messages, JSON context and~request/route metadata. A~row marked \ui{Match in~details} matches inside its collapsed context. Live filtering commits only the~newest request, keeping rows, counts and~the~URL tied to~the~same result even during rapid typing. For~automatic cache failures, \codeword{cache.automatic\_failed} records the~entry point, failure stage, exception class, source filename/line and~validated SQLSTATE/driver codes when available. It~omits raw messages, SQL, private paths and~credentials. Repeated failures are~coalesced for~five minutes; changed diagnostics retain a~thirty-second minimum. Logging failure preserves the~worker checkpoint and~safe refusal. Complete pending migrations when schema diagnostics require them; observe automatic progress through ordinary visits and~passive status without starting a~manual scan.
 
 Use the~checkboxes and~the~header checkbox to~select entries on~the~current page. The~toolbar offers \ui{Selected}, \ui{This page} and~\ui{All filtered} for~both copying and~saving a~UTF-8 TXT file. Selecting a~group includes all its instances, including those not~yet loaded; overlapping individual selections appear only once. \ui{All filtered} exports matching raw events across all pages in~the~chosen time order. Selection clears when filters or~pagination replace the~rows. PHP reads large exports in~batches; copying still needs the~complete chosen text in~browser memory, so~prefer saving for~very large histories. If~clipboard access is~unavailable, a~dialog selects the~complete text for~manual copying. TXT downloads also work without JavaScript; the~existing full CSV/JSON ZIP export remains available.
 

@@ -2361,6 +2361,7 @@
     "admin.logs.category.upload": "Uppladdning",
     "admin.logs.clear": "Rensa",
     "admin.logs.created_at": "Skapad",
+    "admin.logs.context_match": "Träff i detaljerna",
     "admin.logs.details": "Detaljer",
     "admin.logs.entries": "Poster",
     "admin.logs.event": "Händelse",

@@ -2361,6 +2361,7 @@
     "admin.logs.category.upload": "Upload",
     "admin.logs.clear": "Leeren",
     "admin.logs.created_at": "Erstellt am",
+    "admin.logs.context_match": "Treffer in den Details",
     "admin.logs.details": "Details",
     "admin.logs.entries": "Einträge",
     "admin.logs.event": "Ereignis",

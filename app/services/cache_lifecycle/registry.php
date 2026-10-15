@@ -184,7 +184,8 @@ function cache_lifecycle_registry_slice(float $seconds, bool $force = false): ar
             if (($before[$field] ?? null) !== ($after[$field] ?? null)) $progressed = true;
         }
         return ['registry'=>true,'registry_progressed'=>$progressed,'region_key'=>$row['region_key']] + $state;
-    } catch (\Throwable) {
+    } catch (\Throwable $exception) {
+        cache_lifecycle_log_failure('region_slice', 'region_worker', $exception);
         // Preserve the exact checkpoint and apply retry metadata without interpreting corruption as completion.
         cache_lifecycle_with_lock(static function () use ($row): array {
             $current = \Gallery\Models\cache_registry_model_find((string) $row['region_key']);

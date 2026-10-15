@@ -408,7 +408,7 @@ function cache_lifecycle_checkpoint_capacity(?callable $probe = null): array
  * @param string $source External caller source normalized before persistence.
  * @param int $maxSlices Maximum slices requested by the admitted caller; the canonical upper bound always remains enforced.
  * @param callable(string):(int|float|false)|null $freeSpaceProbe Optional hosting capacity provider; ordinary visitors/cron use native discovery, and disposable fixtures can reproduce known-low or unavailable measurements.
- * @return array<string,mixed> Lifecycle state or safe lock/failure marker. Admitted bursts add slices:int, elapsed_ms:int, done:bool, progressed:bool, id:string, free_space_known:bool and free_bytes:int|null; early lock refusals contain ok/busy/reason without implying work. Unknown capacity never represents a measured reserve.
+ * @return CacheLifecycleCheckpoint|array{ok:bool,blocked?:bool,busy?:bool,skipped?:bool,reason?:string,exception_class?:string,slices?:int,elapsed_ms?:int,done?:bool,progressed?:bool,id?:string,free_space_known?:bool,free_bytes?:int|null} Lifecycle checkpoint or safe admission/failure marker. Admitted results add actual slice/timing/progress and capacity evidence; early lock refusals never imply work and unknown capacity is not a measured reserve.
  */
 function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES, ?callable $freeSpaceProbe = null): array
 {
@@ -493,6 +493,7 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
         }
     } catch (\Throwable $exception) {
         // Retain the exception type without exporting messages, paths or credentials.
+        cache_lifecycle_log_failure('scheduled_burst', $source, $exception);
         $result = ['ok'=>false,'blocked'=>true,'reason'=>'cache_worker_exception','exception_class'=>$exception::class];
     }
     $result['slices'] = $slices;

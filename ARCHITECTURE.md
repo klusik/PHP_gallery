@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.132.5';
+const CMS_VERSION = '0.132.6';
 ```
 
 Update-related code uses:

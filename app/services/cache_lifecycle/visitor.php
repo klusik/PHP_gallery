@@ -16,7 +16,7 @@ namespace Gallery\Services;
  * Admit one visitor burst with foreground priority and shared scheduler exclusion.
  * @param bool $detached Whether a direct visitor's response was finished; false retains a 40 ms direct admission budget. Independent chained requests use their own budget without implying this primitive exists.
  * @param bool $chained Whether an authenticated independent HTTP worker owns this invocation; true admits up to five seconds without making a browser wait.
- * @return array<string,mixed> Canonical progress/skip/block evidence with slices, elapsed_ms and actual counters; no live installation data is substituted by test fixtures.
+ * @return CacheLifecycleCheckpoint|array{ok:bool,blocked?:bool,busy?:bool,skipped?:bool,reason?:string,slices?:int,elapsed_ms?:int,done?:bool,progressed?:bool,id?:string,free_space_known?:bool,free_bytes?:int|null,exception_class?:string} Canonical checkpoint or admission outcome; admitted bursts report actual counters and timing without substituting fixture data.
  */
 function cache_lifecycle_visitor_run(bool $detached, bool $chained = false): array
 {
@@ -63,8 +63,9 @@ function cache_lifecycle_visitor_run(bool $detached, bool $chained = false): arr
         } finally {
             if (is_resource($siteLock)) { flock($siteLock, LOCK_UN); fclose($siteLock); }
         }
-    } catch (\Throwable) {
-        try { cache_lifecycle_scheduler_deferred('public_visit', 'cache_visitor_exception'); } catch (\Throwable) {}
+    } catch (\Throwable $exception) {
+        cache_lifecycle_log_failure('visitor_admission', $chained ? 'cache_chain' : 'public_visit', $exception);
+        try { cache_lifecycle_scheduler_deferred($chained ? 'cache_chain' : 'public_visit', 'cache_visitor_exception'); } catch (\Throwable) {}
         return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_exception'];
     } finally {
         foreach ([$foreground, $scheduler] as $handle) if (is_resource($handle)) { flock($handle, LOCK_UN); fclose($handle); }

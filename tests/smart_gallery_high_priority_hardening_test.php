@@ -50,7 +50,7 @@ $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/
 
 smart_gallery_high_priority_assert(
     str_contains($galleryJs, 'admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2')
-    && str_contains($galleryJs, 'admin-operations.js?v=20261015-compact-log-export-v4')
+    && str_contains($galleryJs, 'admin-operations.js?v=20261015-cache-worker-log-filters-v1')
     && str_contains($adminOperations, 'admin-side-panel.js?v=20261014-floating-shell-v1')
     && str_contains($sidePanel, 'admin-smart-galleries.js?v=20261002-smart-gallery-editor-v2'),
     'Every Admin import edge uses the current cache-busting revision of the module it imports.'

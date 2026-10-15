@@ -50,7 +50,7 @@ namespace Gallery\Services {
      * @param string $level Safe event level.
      * @param string $eventKey Stable cache event identity.
      * @param string $message Safe human-readable explanation.
-     * @param array{removed_entries?:int,bytes_removed?:int,from_at?:int,to_at?:int} $context Optional coalesced real counters without filenames.
+     * @param array{removed_entries?:int,bytes_removed?:int,from_at?:int,to_at?:int,stage?:string,source?:string,exception_class?:string,source_file?:string,source_line?:int,sqlstate?:string,driver_code?:int} $context Coalesced real counters or bounded automatic-failure metadata, without private paths or messages.
      * @param array{category?:string,severity?:string,subject_type?:string,route_name?:string} $options Optional Admin presentation metadata.
      * @return array{ok:bool} Confirmed receipt or the explicit log-storage failure.
      */
@@ -162,7 +162,27 @@ namespace {
         $GLOBALS['chain_off'] = false;
         $GLOBALS['chain_transport_failed'] = true;
         chain_assert(!\Gallery\Services\cache_lifecycle_chain_start()['queued'] && \Gallery\Services\cache_lifecycle_status()['chain_health'] === 'stalled', 'Failed transport was reported as an active chain.');
-        echo "Autonomous cache tickets, thirty-second timers, immediate safe removal, opt-out and coalesced log receipts: PASS\n";
+        $databaseFailure = new \PDOException('private SQL and credentials must never be logged');
+        $databaseFailure->errorInfo = ['42S02', 1146, 'private SQL and credentials'];
+        $failure = new \RuntimeException('private wrapper message', 0, $databaseFailure);
+        $logCount = count($GLOBALS['chain_logs']);
+        \Gallery\Services\cache_lifecycle_log_failure('visitor_admission', 'cache_chain', $failure);
+        \Gallery\Services\cache_lifecycle_log_failure('visitor_admission', 'cache_chain', $failure);
+        chain_assert(count($GLOBALS['chain_logs']) === $logCount + 1, 'Repeated worker failure bypassed the existing logging interval.');
+        $diagnostic = $GLOBALS['chain_logs'][$logCount];
+        chain_assert($diagnostic['key'] === 'cache.automatic_failed' && $diagnostic['context']['source'] === 'cache_chain'
+            && $diagnostic['context']['sqlstate'] === '42S02' && $diagnostic['context']['driver_code'] === 1146,
+            'Automatic failure diagnostics lost entry-point or safe underlying database evidence.');
+        chain_assert(!str_contains(json_encode($diagnostic, JSON_THROW_ON_ERROR), 'private')
+            && !str_contains(json_encode($diagnostic, JSON_THROW_ON_ERROR), str_replace('\\', '/', $root)), 'Failure diagnostics exposed exception messages or private paths.');
+        $GLOBALS['cache_lifecycle_test_now'] += 301;
+        $GLOBALS['chain_log_failed'] = true;
+        \Gallery\Services\cache_lifecycle_log_failure('visitor_admission', 'cache_chain', $failure);
+        $GLOBALS['chain_log_failed'] = false;
+        \Gallery\Services\cache_lifecycle_log_failure('visitor_admission', 'cache_chain', $failure);
+        chain_assert(count($GLOBALS['chain_logs']) === $logCount + 1, 'A failed diagnostic insertion caused an immediate retry storm.');
+        chain_assert(file_get_contents($root . '/cache/cache-lifecycle/state.json') === $checkpoint, 'Failure diagnostics changed the protected worker checkpoint.');
+        echo "Autonomous cache tickets, thirty-second timers, immediate safe removal, opt-out and bounded log receipts: PASS\n";
     } finally {
         for ($step = 0; $step < 100 && is_dir($root); $step++) \Gallery\Services\application_update_delete_tree_slice($root, 5000, 0.5);
     }

@@ -323,11 +323,12 @@ function view_render_admin_log_group_member_rows(array $members, string $request
 /**
  * Render Admin log table rows for full-page and live-search responses.
  *
- * @param array<int, array<string, mixed>> $logs Controller-prepared visible log row models.
+ * @param list<array{id?:int|string,selection_value?:string,export_token?:string,group_count?:int|string,first_created_at?:string,latest_created_at?:string,created_at?:string,severity?:string,level?:string,category?:string,event_key?:string,single_export_url?:string,route_name?:string,request_id?:string,members_url?:string,subject_type?:string,subject_id?:int|string|null,message?:string,context_pretty_json?:string,username?:string|null,export_url?:string}> $logs Controller-prepared visible log row models and escaped-at-output text.
  * @param array<string, string> $labels Localized presentation labels.
+ * @param string $query Active text query supplied by the controller; empty disables the context-match hint.
  * @return string Rendered table rows.
  */
-function view_render_admin_log_table_rows(array $logs, array $labels): string
+function view_render_admin_log_table_rows(array $logs, array $labels, string $query = ''): string
 {
     ob_start();
     foreach ($logs as $entry) {
@@ -372,6 +373,11 @@ function view_render_admin_log_table_rows(array $logs, array $labels): string
         }
         echo '</div></details></td>';
         echo '<td><span class="admin-log-message">' . e((string) ($entry['message'] ?? '')) . '</span>';
+        if ($query !== '' && stripos((string) ($entry['context_pretty_json'] ?? ''), $query) !== false
+            && stripos((string) ($entry['event_key'] ?? ''), $query) === false
+            && stripos((string) ($entry['message'] ?? ''), $query) === false) {
+            echo '<div class="muted" data-admin-log-context-match>' . e($labels['context_match'] ?? 'Match in details') . '</div>';
+        }
         if (!empty($entry['context_pretty_json'])) {
             echo '<details class="log-context admin-log-context"><summary title="' . e((string) ($labels['details'] ?? 'Details')) . '" aria-label="' . e((string) ($labels['details'] ?? 'Details')) . '">' . view_render_admin_log_icon('details') . '</summary><div class="admin-log-detail-body"><pre>' . e((string) $entry['context_pretty_json']) . '</pre></div></details>';
         }

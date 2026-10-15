@@ -406,6 +406,10 @@ The log-attempt rate-limit claim is committed before calling the logger. Failed
 receipts also wait for the next five-minute opportunity; a crash after insertion
 but before its receipt checkpoint can repeat one aggregate, never per-file logs.
 
+Automatic failures at visitor admission, the scheduled burst or a regional slice emit `cache.automatic_failed` through the existing Admin log owner. The bounded context distinguishes the actual entry point, failure stage, exception class, source basename/line and validated SQLSTATE/driver codes, including a retained underlying ownership-query cause. It omits raw exception messages, SQL, private paths, tickets and credentials. Repeated identical failures at one boundary are coalesced for five minutes; changed diagnostics still wait at least thirty seconds. The rate claim precedes insertion, and unavailable logging never alters a worker checkpoint or turns a safe refusal into success. A schema-related code calls for completing the normal migration workflow, not resetting or manually scanning the cache.
+
+For local diagnosis, start with one normal public visit and observe the existing passive status and Admin log while the server chain continues. Keep historical/completed measurements, live cursors, pending debt and confirmed removal receipts distinct. Do not press Scan cache to demonstrate automatic admission. A snapshot can predate migration completion; refresh the passive evidence before concluding a current worker is stalled.
+
 A newly discovered large queue lowers the current burst's deadline and slice cap.
 A few-file approximately 100 MB cache can finish in one small burst. Many tiny
 files still obey operation budgets and resume across visits. Each visitor slice

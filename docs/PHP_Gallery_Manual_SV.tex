@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132.5}
+\newcommand{\version}{0.132.6}
 \newcommand{\manualdate}{15~oktober~2026}
 
 \hypersetup{
@@ -2108,6 +2108,8 @@ Vanligt underhåll kan köras i begränsade delar i stället för en lång begä
 \index{l00153@loggarkiv}
 
 Den kompakta tabellen visar händelsenamn, meddelanden, allvarlighetsgrad, tidsstämplar och antal förekomster. Öppna händelsenamnet för ID, begärans-/ruttmetadata, första och senaste förekomst samt enskilda gruppmedlemmar; kodikonen vid meddelandet visar strukturerad kontext. Ikonerna för kopiering och nedladdning har beskrivande verktygstips och tillgängliga namn. Radåtgärder exporterar en post eller hela gruppen på raden; inne i gruppen kan enskilda medlemmar kopieras, sparas och markeras. Varje export innehåller fullständig diagnostiktext och kontext.
+
+Sökning omfattar händelsenamn, meddelanden, JSON-kontext och~begärans-/ruttmetadata. En~rad med~\ui{Träff i~detaljerna} matchar i~den infällda kontexten. Livefiltrering godtar endast den senaste begäran; rader, antal och~URL hör till samma resultat även vid snabb inmatning. Vid automatiska cachefel registrerar \codeword{cache.automatic\_failed} ingång, fas, undantagsklass, källfilens namn/rad och~tillgängliga validerade SQLSTATE-/drivrutinskoder. Råa meddelanden, SQL, privata sökvägar och~inloggningsuppgifter utelämnas. Upprepade fel samlas i~fem minuter; ändrad diagnostik behåller minst trettio sekunders mellanrum. Loggningsfel bevarar kontrollpunkten och~säker vägran. Slutför nödvändiga migreringar normalt; observera automatiskt arbete efter vanliga besök genom passiv status utan manuell skanning.
 
 Kryssrutorna, inklusive rutan i tabellhuvudet, markerar poster på aktuell sida. Verktygsfältet erbjuder \ui{Markerade}, \ui{Denna sida} och \ui{Alla filtrerade} för både kopiering och sparande av en UTF-8-TXT-fil. En markerad grupp omfattar alla förekomster, även de som ännu inte laddats; överlappande enskilda markeringar förekommer bara en gång. \ui{Alla filtrerade} exporterar matchande råhändelser från alla sidor i vald tidsordning. Markeringar rensas när filtrering eller sidbyte ersätter raderna. PHP läser stora exporter i omgångar; kopiering behöver hela den valda texten i webbläsarminnet, så välj sparande för stora historiker. Om urklipp inte är tillgängligt markerar en dialog hela texten för manuell kopiering. TXT-nedladdning fungerar även utan JavaScript; den befintliga fullständiga CSV/JSON-ZIP-exporten finns kvar.
 
