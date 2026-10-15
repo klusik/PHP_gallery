@@ -451,8 +451,92 @@ function view_render_admin_dashboard_media_tools(array $model): void
 }
 
 /**
+ * Render the supplied regional sample and a shared inert row template without reading storage.
+ * @param list<array{path?:string,phase?:string,round?:int,last_serviced_at?:int,last_completed_at?:int,next_due_at?:int,retry_at?:int,failures?:int,cursor_path?:string,cursor_offset?:int}> $regions Existing passive regional evidence; omitted fields remain explicitly unknown.
+ * @return void Emits localized compact rows and the identical template used by AJAX updates.
+ */
+function view_render_admin_dashboard_cache_regions(array $regions): void
+{
+    $labels = [];
+    foreach ([
+        'title'=>'Regional checks (sample)', 'empty'=>'No regional evidence recorded.',
+        'sample'=>'Only the supplied sample is shown; it does not describe every region.',
+        'details'=>'Technical details', 'path'=>'Relative path', 'phase'=>'Stored state',
+        'last_completed_at'=>'Last successful completed check', 'next'=>'Next check', 'retry'=>'Retry after',
+        'last_serviced_at'=>'Last serviced', 'next_due_at'=>'Scheduled check', 'retry_at'=>'Retry after',
+        'round'=>'Observation round', 'failures'=>'Failed attempts', 'cursor_path'=>'Saved cursor path',
+        'cursor_offset'=>'Saved cursor offset', 'missing'=>'Not recorded', 'unscheduled'=>'Not scheduled',
+        'idle'=>'Idle', 'unobserved'=>'Not yet observed', 'inventory'=>'Checking',
+        'preview'=>'Check finished; cleanup pending', 'cleanup'=>'Cleaning', 'complete'=>'Pass finished',
+        'unknown'=>'Other state', 'discovery'=>'Discover cache areas', 'files'=>'Files in cache root',
+        'history'=>'Confirmed deletion receipts',
+    ] as $key => $fallback) {
+        $labels[$key] = t('admin.cache_lifecycle.region.' . $key, $fallback);
+    }
+    echo '<div class="admin-cache-regions" data-cache-region-view data-cache-region-labels="'
+        . e(json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . '"><h3>' . e($labels['title'])
+        . '</h3><p class="muted">' . e($labels['sample']) . '</p><p data-cache-region-empty' . ($regions === [] ? '' : ' hidden') . '>'
+        . e($labels['empty']) . '</p><ul class="admin-cache-region-list" role="list" data-cache-region-details>';
+    foreach ($regions as $region) view_render_admin_dashboard_cache_region_row($region, $labels);
+    echo '</ul><template data-cache-region-template>';
+    view_render_admin_dashboard_cache_region_row([], $labels);
+    echo '</template></div>';
+}
+
+/**
+ * Format supplied regional time evidence as escaped UTC markup without inventing a missing date.
+ * @param int $value Stored Unix timestamp in seconds, with zero or negative values meaning no recorded time.
+ * @param string $missing Localized missing-evidence or unscheduled label.
+ * @return string Time element with an explicit UTC display, or an escaped missing label.
+ */
+function view_admin_dashboard_cache_region_timestamp(int $value, string $missing): string
+{
+    return $value > 0 ? '<time datetime="' . e(gmdate('Y-m-d\TH:i:s\Z', $value)) . '">'
+        . e(gmdate('Y-m-d H:i:s', $value) . ' UTC') . '</time>' : e($missing);
+}
+
+/**
+ * Render one regional evidence row using only supplied values and presentation labels.
+ * @param array{path?:string,phase?:string,round?:int,last_serviced_at?:int,last_completed_at?:int,next_due_at?:int,retry_at?:int,failures?:int,cursor_path?:string,cursor_offset?:int} $region Passive regional sample row, or empty template values.
+ * @param array<string,string> $labels Localized regional field, phase, identity and missing-value labels.
+ * @return void Emits an escaped list item; service time never stands in for a successful completion.
+ */
+function view_render_admin_dashboard_cache_region_row(array $region, array $labels): void
+{
+    $path = (string) ($region['path'] ?? '');
+    $name = match ($path) {
+        '@discovery' => $labels['discovery'], '@files' => $labels['files'], '@history' => $labels['history'],
+        default => $path,
+    };
+    $phase = (string) ($region['phase'] ?? 'unobserved');
+    $phaseLabel = in_array($phase, ['idle','unobserved','inventory','preview','cleanup','complete'], true) ? $labels[$phase] : $labels['unknown'];
+    if ((int) ($region['failures'] ?? 0) > 0) $phaseLabel .= ' · ' . $labels['failures'] . ': ' . (string) $region['failures'];
+    $due = (int) ($region['next_due_at'] ?? 0);
+    $retry = (int) ($region['retry_at'] ?? 0);
+    $nextLabel = $retry > 0 && $retry >= $due ? $labels['retry'] : $labels['next'];
+    echo '<li class="admin-cache-region"><div class="admin-cache-region-heading"><strong data-cache-region-field="name">' . e($name)
+        . '</strong><span data-cache-region-field="state">' . e($phaseLabel) . '</span></div><dl class="admin-cache-region-times"><div><dt>'
+        . e($labels['last_completed_at']) . '</dt><dd data-cache-region-field="last_completed_at">'
+        . view_admin_dashboard_cache_region_timestamp((int) ($region['last_completed_at'] ?? 0), $labels['missing'])
+        . '</dd></div><div><dt data-cache-region-next-label>' . e($nextLabel) . '</dt><dd data-cache-region-field="next">'
+        . view_admin_dashboard_cache_region_timestamp(max($due, $retry), $labels['unscheduled']) . '</dd></div></dl><details><summary>' . e($labels['details'])
+        . '</summary><dl class="admin-cache-region-technical">';
+    foreach (['path','phase','round','last_serviced_at','next_due_at','retry_at','failures','cursor_path','cursor_offset'] as $field) {
+        $value = $region[$field] ?? null;
+        echo '<div><dt>' . e($labels[$field]) . '</dt><dd data-cache-region-field="' . e($field) . '">';
+        if (in_array($field, ['last_serviced_at','next_due_at','retry_at'], true)) {
+            echo view_admin_dashboard_cache_region_timestamp((int) $value, $field === 'last_serviced_at' ? $labels['missing'] : $labels['unscheduled']);
+        } else {
+            echo '<code>' . e($value === null || $value === '' ? $labels['missing'] : (string) $value) . '</code>';
+        }
+        echo '</dd></div>';
+    }
+    echo '</dl></details></li>';
+}
+
+/**
  * Render measured cache ownership and explicit preview/approval controls from prepared state.
- * @param array<string,mixed> $status Prepared lifecycle id/phase, aggregate totals and policies; an empty state remains explicitly unmeasured.
+ * @param array{id?:string,phase?:string,scheduled?:bool,registry?:bool,registry_unavailable?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,regions_completed?:int,regions_total?:int,regions_working?:int,oldest_completed_at?:int,last_removed_at?:int,measurement_available?:bool,bytes?:int,pending_bytes?:int,bytes_removed?:int,partial?:bool,scheduler_health?:string,last_attempt_at?:int,last_progress_at?:int,last_observed_at?:int,next_due?:int,scheduler_reason?:string,stale?:bool,stalled?:bool,superseded_manual_at?:int,policies?:array<string,array{seconds?:int|null,reason?:string,label?:string}>,totals?:array<string,array{bytes?:int,reclaimable_bytes?:int}>,sample?:list<array{path:string,bytes:int}>} $status Prepared passive lifecycle evidence and retention labels; omitted measurements remain unknown.
  * @return void Emits one compact control row and status line; operational evidence and producer policies stay in native details without domain service calls.
  */
 function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
@@ -517,10 +601,7 @@ function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
         echo '<li>' . e((string) ($item['path'] ?? '')) . ' — ' . e(format_bytes((int) ($item['bytes'] ?? 0))) . '</li>';
     }
     echo '</ul>';
-    if (!empty($status['regions_sample'])) {
-        echo '<pre data-cache-region-details>' . e(json_encode($status['regions_sample'],
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . '</pre>';
-    }
+    view_render_admin_dashboard_cache_regions((array) ($status['regions_sample'] ?? []));
     if (!empty($status['partial'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) . '</p>';
     echo '</details><details class="admin-media-details" data-cache-diagnostics hidden><summary>' . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
         . '</summary><button type="button" class="secondary" data-cache-diagnostic-copy data-copied-label="' . e(t('admin.cache_cleanup.copied', 'Log copied.'))

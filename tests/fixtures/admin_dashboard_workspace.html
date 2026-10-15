@@ -28,6 +28,7 @@ License: MIT
 <section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry">Loading galleries</div></section>
 <section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>Maintenance fixture</section>
 </div></main><pre id="results">BROWSER PENDING</pre>
+<div id="cache-region-fixtures" hidden><!-- PRODUCTION_CACHE_REGIONS_MARKUP --></div>
 <script type="module">
 import {setupAdminDashboardWorkspace} from '/public/assets/gallery-modules/admin-dashboard-workspace.js';
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js';
@@ -253,14 +254,16 @@ try {
     if (priorClipboard) Object.defineProperty(navigator, 'clipboard', priorClipboard); else delete navigator.clipboard;
     window.fetch = priorFetch;
     cacheHost.remove();
-    const lifecycleMarkup = '<form action="/fixture-lifecycle" data-cache-lifecycle-form><input name="preview_id" value=""><input name="csrf_token" value="fixture"><button type="submit" name="site_maintenance_action" value="cache_inventory_start">Scan</button><button type="submit" name="site_maintenance_action" value="cache_inventory_step" hidden>Continue scan</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_start" hidden>Approve</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_step" hidden>Continue cleanup</button></form><p data-cache-registry-evidence data-cache-registry-template="{done}/{total}; {working}; {oldest}; {removed}"></p><pre data-cache-region-details></pre><p data-cache-lifecycle-status></p><progress data-cache-lifecycle-progress max="100" hidden></progress><table><tr data-cache-owner="audits"><td data-cache-owner-bytes></td><td data-cache-owner-eligible></td></tr></table><ul data-cache-lifecycle-sample></ul><details data-cache-diagnostics hidden><summary>Diagnostics</summary><pre data-cache-diagnostic-events></pre></details>';
+    const regionFixtures = document.querySelector('#cache-region-fixtures');
+    const regionMarkup = regionFixtures.querySelector('#cache-regions-en').innerHTML;
+    const lifecycleMarkup = '<form action="/fixture-lifecycle" data-cache-lifecycle-form><input name="preview_id" value=""><input name="csrf_token" value="fixture"><button type="submit" name="site_maintenance_action" value="cache_inventory_start">Scan</button><button type="submit" name="site_maintenance_action" value="cache_inventory_step" hidden>Continue scan</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_start" hidden>Approve</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_step" hidden>Continue cleanup</button></form><p data-cache-registry-evidence data-cache-registry-template="{done}/{total}; {working}; {oldest}; {removed}"></p><p data-cache-lifecycle-status></p><progress data-cache-lifecycle-progress max="100" hidden></progress><table><tr data-cache-owner="audits"><td data-cache-owner-bytes></td><td data-cache-owner-eligible></td></tr></table><ul data-cache-lifecycle-sample></ul><details data-cache-diagnostics hidden><summary>Diagnostics</summary><pre data-cache-diagnostic-events></pre></details>';
     const lifecycleHost = document.createElement('section');
     lifecycleHost.setAttribute('data-admin-cache-lifecycle','');
     lifecycleHost.dataset.panelOpen = '1';
-    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.innerHTML = lifecycleMarkup + regionMarkup;
     document.body.append(lifecycleHost);
     const lifecycleActions = [];
-    let registryMode = false;
+    let registryMode = false, emptyRegions = false;
     window.fetch = async (url, options) => {
         if (new URL(url,location.href).pathname !== '/fixture-lifecycle') return priorFetch(url,options);
         const action = options.body.get('site_maintenance_action');
@@ -270,7 +273,11 @@ try {
             skipped:0,errors:0,blocked:0,partial:false,totals:{audits:{bytes:200,reclaimable_bytes:200}},sample:[{path:'test-audit/example',owner:'audits',bytes:200}]};
         if (registryMode) Object.assign(state, {registry:true,scheduled:true,regions_completed:1,regions_total:2,regions_working:1,
             oldest_completed_at:1700000000,last_removed_at:1700000030,working_bytes:1,pending_bytes:50,bytes:1048576000,totals:{audits:{bytes:1048576000,reclaimable_bytes:50}},
-            regions_sample:[{path:'test-audit',phase:'inventory',round:2,cursor_path:'test-audit/next',cursor_offset:24}]});
+            regions_sample:[
+                {path:'test-audit',phase:'inventory',round:2,last_serviced_at:1700000060,last_completed_at:1700000000,next_due_at:1700000300,retry_at:1700000900,failures:2,cursor_path:'test-audit/<img src=x onerror=alert(1)> & "žluťoučký"',cursor_offset:24},
+                {path:'@discovery',phase:'complete',round:1,last_serviced_at:1700000060,last_completed_at:0,next_due_at:0,retry_at:0,failures:0,cursor_path:'',cursor_offset:0},
+                {path:'constructor',phase:'unfamiliar <state>'},{path:'@files',phase:'cleanup'}]});
+        if (emptyRegions) state.regions_sample = [];
         if (action !== 'cache_inventory_start') check(options.body.get('preview_id')===state.id,'Lifecycle continuation preserves exact preview identity');
         return new Response(JSON.stringify({ok:true,message:'Lifecycle '+phase,mutation:{type:'cache.lifecycle',entity:'cache',action:'maintenance',entity_ids:[]},
             panel:null,contexts:[],fallback:{redirect_url:'/must-not-navigate'},cache_lifecycle:state}));
@@ -281,27 +288,63 @@ try {
     lifecycleHost.querySelector('[value="cache_cleanup_start"]').click();
     await until(() => lifecycleActions.length===4 && !lifecycleHost.querySelector('button').disabled);
     check(lifecycleHost.querySelector('[data-cache-lifecycle-progress]').value===100 && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1','Approved lifecycle completes in place and retains panel/URL');
-    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.innerHTML = lifecycleMarkup + regionMarkup;
     lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
     await until(() => lifecycleActions.length===6 && !lifecycleHost.querySelector('button').disabled);
     check(!lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden && location.href===cacheUrl,'Dynamically rerendered lifecycle controls retain capture delegation without rebinding');
+    check(!regionMarkup.includes('<pre') && !regionMarkup.includes('1970-') && regionMarkup.includes('UTC')
+        && regionMarkup.includes('&lt;img') && regionMarkup.includes('Not recorded') && regionMarkup.includes('Retry after'),
+        'Initial production PHP rows show readable UTC timing, honest missing completion and escaped paths');
     registryMode = true;
-    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.innerHTML = lifecycleMarkup + regionMarkup;
     lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
     await until(() => lifecycleActions.length===7 && !lifecycleHost.querySelector('button').disabled);
     check(lifecycleHost.querySelector('[data-cache-owner-bytes]').textContent === '1000.00 MiB'
-        && lifecycleHost.querySelector('[data-cache-region-details]').textContent.includes('"round": 2')
+        && lifecycleHost.querySelector('[data-cache-region-details]').querySelector('[data-cache-region-field="round"]').textContent === '2'
         && lifecycleHost.querySelector('[data-cache-registry-evidence]').textContent.startsWith('1/2; 1;'),
         'Registry response keeps retained measurements and exposes safe current round/cursor evidence');
     check(lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden && lifecycleHost.querySelector('[value="cache_inventory_step"]').hidden
         && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1',
         'Automatic registry evidence does not approve deletion, continue a manual identity, navigate or close the panel');
-    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.innerHTML = lifecycleMarkup + regionMarkup;
     lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
     await until(() => lifecycleActions.length===8 && !lifecycleHost.querySelector('button').disabled);
-    check(lifecycleHost.querySelector('[data-cache-region-details]').textContent.includes('test-audit/next')
+    check(lifecycleHost.querySelector('[data-cache-region-details]').textContent.includes('test-audit/<img src=x onerror=alert(1)>')
         && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1',
         'Dynamically replaced registry controls retain delegated interception and in-place refresh');
+    check(lifecycleHost.querySelector('[data-cache-region-details]').innerHTML === regionFixtures.querySelector('#cache-regions-en [data-cache-region-details]').innerHTML,
+        'PHP first paint and AJAX render identical supplied regional evidence');
+    check(!lifecycleHost.querySelector('[data-cache-region-details] img')
+        && lifecycleHost.querySelectorAll('[data-cache-region-details] time')[0].dateTime === '2023-11-14T22:13:20Z',
+        'AJAX paths remain inert text and completed time is separate from later service');
+    for (const language of ['cs','de','sv']) {
+        const source = regionFixtures.querySelector('#cache-regions-' + language);
+        lifecycleHost.innerHTML = lifecycleMarkup + source.innerHTML;
+        const before = lifecycleActions.length;
+        lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+        await until(() => lifecycleActions.length === before + 1 && !lifecycleHost.querySelector('button').disabled);
+        check(lifecycleHost.querySelector('[data-cache-region-details]').innerHTML === source.querySelector('[data-cache-region-details]').innerHTML,
+            language + ' localized phases, identities, missing values and timestamps match PHP after AJAX');
+    }
+    const detail = lifecycleHost.querySelector('[data-cache-region-details] details');
+    detail.open = true;
+    const beforeRepeat = lifecycleActions.length;
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length === beforeRepeat + 1 && !lifecycleHost.querySelector('button').disabled);
+    check(lifecycleHost.querySelector('[data-cache-region-details] details').open && location.href === cacheUrl && lifecycleHost.dataset.panelOpen === '1',
+        'Refresh preserves open technical details, panel and URL');
+    await originalFetch('/__viewport?width=390');
+    const regionBounds = lifecycleHost.querySelector('[data-cache-region-view]').getBoundingClientRect();
+    check(regionBounds.width <= 390 && lifecycleHost.querySelector('[data-cache-region-view]').scrollWidth <= Math.ceil(regionBounds.width),
+        'Mobile regional rows wrap long paths without horizontal overflow');
+    await originalFetch('/__viewport?width=1280');
+    emptyRegions = true;
+    const beforeEmpty = lifecycleActions.length;
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length === beforeEmpty + 1 && !lifecycleHost.querySelector('button').disabled);
+    check(!lifecycleHost.querySelector('[data-cache-region-empty]').hidden && lifecycleHost.querySelector('[data-cache-region-details]').children.length === 0,
+        'An empty sample clears stale rows and exposes an explicit missing-evidence message');
+    registryMode = false;
     lifecycleHost.remove();
     window.fetch = priorFetch;
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;

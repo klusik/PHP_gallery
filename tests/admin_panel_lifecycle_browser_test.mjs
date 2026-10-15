@@ -55,6 +55,9 @@ const creationMarkup = fixtureName === 'gallery_creation.html'
 /** Actual public gallery-tag card output from the isolated production view renderer. */
 const galleryTagsMarkup = fixtureName === 'gallery_tags.html'
     ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/gallery_tags_render_fixture.php')], {encoding: 'utf8', windowsHide: true}) : '';
+/** Actual passive regional rows and localized templates from the existing presentation fixture. */
+const cacheRegionMarkup = fixtureName === 'admin_dashboard_workspace.html'
+    ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/admin_gallery_tree_render_fixture.php'), '--cache-regions'], {encoding: 'utf8', windowsHide: true}) : '';
 /** @type {WebSocket|null} Owned Chromium debugging socket, never a user browser connection. */
 let debuggingSocket = null;
 /** @type {Promise<void>} Setup barrier for fixture keyboard requests. */
@@ -221,7 +224,7 @@ async function serveFixture(request, response) {
     if (pathname === '/__public_cards' && fixtureName === 'theme_appearance.html') {
         response.setHeader('Content-Type','text/html; charset=utf-8'); response.end(publicCardMarkup); return;
     }
-    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'admin_settings_workspace.html', 'admin_panel_lifecycle.html'].includes(fixtureName)) {
+    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'admin_settings_workspace.html', 'admin_dashboard_workspace.html', 'admin_panel_lifecycle.html'].includes(fixtureName)) {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
         if (![390, 1280].includes(width) && !(fixtureName === 'admin_panel_lifecycle.html' && width === 320)) { response.writeHead(400).end(); return; }
         try { await browserReady; await setFixtureWidth(width); response.end('ok'); }
@@ -256,7 +259,7 @@ async function serveFixture(request, response) {
     try {
         response.setHeader('Content-Type', relative.endsWith('.html') ? 'text/html; charset=utf-8' : (relative.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8'));
         const bytes = await readFile(path.join(root, relative));
-        response.end(pathname === '/' && (galleryMarkup || themeMarkup || creationMarkup || galleryTagsMarkup) ? bytes.toString().replace('<!-- PRODUCTION_GALLERY_MARKUP -->', galleryMarkup).replace('<!-- PRODUCTION_THEME_MARKUP -->', themeMarkup).replace('<!-- PRODUCTION_CREATION_MARKUP -->', creationMarkup).replace('<!-- PRODUCTION_GALLERY_TAGS_MARKUP -->', galleryTagsMarkup) : bytes);
+        response.end(pathname === '/' && (galleryMarkup || themeMarkup || creationMarkup || galleryTagsMarkup || cacheRegionMarkup) ? bytes.toString().replace('<!-- PRODUCTION_GALLERY_MARKUP -->', galleryMarkup).replace('<!-- PRODUCTION_THEME_MARKUP -->', themeMarkup).replace('<!-- PRODUCTION_CREATION_MARKUP -->', creationMarkup).replace('<!-- PRODUCTION_GALLERY_TAGS_MARKUP -->', galleryTagsMarkup).replace('<!-- PRODUCTION_CACHE_REGIONS_MARKUP -->', cacheRegionMarkup) : bytes);
     } catch { response.writeHead(500).end(); }
 }
 

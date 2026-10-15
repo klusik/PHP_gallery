@@ -38,17 +38,34 @@ namespace Gallery\Core {
     function gallery_public_url(array $gallery): string { return '/gallery/' . $gallery['folder_path'] . '/'; }
 }
 namespace Gallery\Services {
-    /** Resolve fallback labels without loading translation services.
+    /** Resolve fixture labels from local language data when requested, without service reads.
      * @param string $key Translation identifier.
      * @param string $fallback English label.
      * @param array<string,string|int> $parameters Optional interpolation values.
-     * @return string Prepared label.
+     * @return string Localized fixture label or English fallback.
      */
-    function t(string $key, string $fallback = '', array $parameters = []): string { return $fallback; }
+    function t(string $key, string $fallback = '', array $parameters = []): string { return $GLOBALS['cache_region_fixture_labels'][$key] ?? $fallback; }
 }
 namespace {
     require_once dirname(__DIR__, 2) . '/app/views/admin_ui.php';
     require_once dirname(__DIR__, 2) . '/app/views/admin_dashboard.php';
+    if (($argv[1] ?? '') === '--cache-regions') {
+        require_once dirname(__DIR__, 2) . '/app/views/admin_dashboard_sections.php';
+        $regions = [
+            ['path'=>'test-audit','phase'=>'inventory','round'=>2,'last_serviced_at'=>1700000060,'last_completed_at'=>1700000000,
+                'next_due_at'=>1700000300,'retry_at'=>1700000900,'failures'=>2,'cursor_path'=>'test-audit/<img src=x onerror=alert(1)> & "žluťoučký"','cursor_offset'=>24],
+            ['path'=>'@discovery','phase'=>'complete','round'=>1,'last_serviced_at'=>1700000060,'last_completed_at'=>0,
+                'next_due_at'=>0,'retry_at'=>0,'failures'=>0,'cursor_path'=>'','cursor_offset'=>0],
+            ['path'=>'constructor','phase'=>'unfamiliar <state>'], ['path'=>'@files','phase'=>'cleanup'],
+        ];
+        foreach (['en','cs','de','sv'] as $language) {
+            $GLOBALS['cache_region_fixture_labels'] = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
+            echo '<section id="cache-regions-' . $language . '" lang="' . $language . '">';
+            \Gallery\Views\view_render_admin_dashboard_cache_regions($regions);
+            echo '</section>';
+        }
+        exit;
+    }
     $rows = [];
     foreach ([[1, 0, 'alpha'], [2, 1, 'alpha/child'], [3, 2, 'alpha/child/leaf'], [4, 0, 'beta'], [5, 4, 'beta/child'], [6, 0, 'gamma']] as [$id, $parent, $folder]) {
         $rows[] = ['id' => $id, 'parent_id' => $parent, 'folder_path' => $folder,
