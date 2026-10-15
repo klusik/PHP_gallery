@@ -300,6 +300,8 @@ jobs:
   full:
     name: Develop integration
     needs: [select, publish-candidate]
+    # Optional ancestor skips must not suppress a valid FULL; newly generated children require a fresh squash/BASIC checkpoint.
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.select.outputs.source_sha }}
     uses: ./.github/workflows/gallery-workflows.yml
     with:
       audit_profile: full
