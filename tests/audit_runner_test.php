@@ -59,9 +59,12 @@ use function PhpGallery\Audit\worker_count;
 use function PhpGallery\Audit\node_failure_detail;
 use function PhpGallery\Audit\missing_required_php_test_passes;
 use function PhpGallery\Audit\audit_hosted_full_suite_ownership;
+use function PhpGallery\Audit\audit_hosted_parallel_owner;
+use function PhpGallery\Audit\audit_partition_php_tests;
 use function PhpGallery\Audit\audit_required_suite_pass;
 use function PhpGallery\Audit\audit_delegated_checkout_integrity;
 use function PhpGallery\Audit\render_console_problems;
+use function PhpGallery\Audit\render_markdown_report;
 
 /**
  * Throw when an audit-runner contract is not satisfied.
@@ -96,6 +99,42 @@ foreach ($registry['website_tests'] as $websiteDefinition) {
 }
 
 $profiles = $registry['profiles'] ?? [];
+$runnerSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'));
+$auditLibrarySource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit_lib.php'));
+$legacyCandidatePreflight = [
+    'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
+    'source-contract-inventory', 'python-import-policy', 'mvc-boundaries',
+    'mutation-contracts', 'ci-workflow-contract', 'manifest',
+];
+$parallelCandidatePreflight = ['ci-workflow-contract', 'manifest'];
+$parallelSourceProfile = [
+    'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed', 'source-contract-inventory',
+    'python-import-policy', 'mvc-boundaries', 'mutation-contracts', 'ci-workflow-contract', 'version-audit',
+];
+$parallelHostedFullProfile = ['php-regression', 'runtime-performance', 'php-lint'];
+$hasParallelProfileKeys = array_key_exists('source-contracts', $profiles)
+    || array_key_exists('portable', $profiles)
+    || array_key_exists('hosted-full', $profiles)
+    || array_key_exists('hosted_full_php_shard_count', $registry);
+$parallelImplementationPresent = function_exists('PhpGallery\\Audit\\audit_hosted_parallel_owner')
+    && function_exists('PhpGallery\\Audit\\audit_partition_php_tests')
+    && str_contains($runnerSource, "\$profileLabel === 'hosted-full' ? \$phpShard : null")
+    && str_contains($auditLibrarySource, 'function audit_partition_php_tests(');
+$parallelProfileFingerprint = ($profiles['candidate-preflight'] ?? null) === $parallelCandidatePreflight
+    && ($profiles['source-contracts'] ?? null) === $parallelSourceProfile
+    && ($profiles['portable'] ?? null) === ['node-full', 'winapp']
+    && ($profiles['hosted-full'] ?? null) === $parallelHostedFullProfile
+    && ($registry['hosted_full_php_shard_count'] ?? null) === 4;
+$legacyProfileFingerprint = ($profiles['candidate-preflight'] ?? null) === $legacyCandidatePreflight
+    && !$hasParallelProfileKeys;
+$legacyImplementationPresent = !function_exists('PhpGallery\\Audit\\audit_hosted_parallel_owner')
+    && !function_exists('PhpGallery\\Audit\\audit_partition_php_tests')
+    && !str_contains($runnerSource, 'hosted-full')
+    && !str_contains($auditLibrarySource, 'function audit_partition_php_tests(');
+$isParallelAuditContract = $parallelProfileFingerprint && $parallelImplementationPresent;
+$isLegacyAuditContract = $legacyProfileFingerprint && $legacyImplementationPresent;
+audit_test_assert($isParallelAuditContract !== $isLegacyAuditContract,
+    'Audit runner fixture must recognize exactly the complete installed legacy contract or the complete parallel contract; partial or mixed ownership is unsupported.');
 audit_test_assert(($profiles['basic'] ?? null) === [
     'php-lint', 'js-lint', 'source-documentation-changed',
 ], 'Basic must run only PHP/JavaScript syntax and changed named-declaration documentation.');
@@ -118,18 +157,27 @@ audit_test_assert(count(array_intersect($profiles['release-stage-b'], [
     'manifest', 'release-consistency', 'version-audit', 'php-regression', 'node-full', 'browser-map',
 ])) === 0, 'Stage B must not depend on generated release artifacts or replace final qualification.');
 audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['release']), 'Audit registry must retain quick, full, and release profiles.');
-audit_test_assert(($profiles['candidate-preflight'] ?? []) === [
-    'php-lint', 'js-lint', 'source-documentation-changed',
-    'source-policy-changed', 'source-contract-inventory', 'python-import-policy',
-    'mvc-boundaries', 'mutation-contracts', 'ci-workflow-contract', 'manifest',
-], 'Candidate preflight must enforce deterministic source and generated-artifact blockers without heavy CI jobs.');
+if ($isParallelAuditContract) {
+    audit_test_assert(($profiles['candidate-preflight'] ?? null) === $parallelCandidatePreflight
+        && ($profiles['source-contracts'] ?? null) === $parallelSourceProfile
+        && ($profiles['portable'] ?? null) === ['node-full', 'winapp']
+        && ($profiles['hosted-full'] ?? null) === $parallelHostedFullProfile
+        && ($registry['hosted_full_php_shard_count'] ?? null) === 4,
+        'Parallel candidate-preflight, source, portable and PHP shard profiles must match their exact contract.');
+    audit_test_assert(str_contains($runnerSource,
+        "\$phpShard['index'] !== 1 || PHP_VERSION_ID >= 80500"),
+        'PHP 8.1 syntax coverage must remain on shard one while the shared source owner lints on PHP 8.5.');
+} else {
+    audit_test_assert(($profiles['candidate-preflight'] ?? null) === $legacyCandidatePreflight
+        && !$hasParallelProfileKeys,
+        'Installed BASIC must retain the complete original candidate-preflight source and manifest gate.');
+}
 audit_test_assert(in_array('manifest', $profiles['full'], true),
     'Authoritative full handoff must refuse stale runtime plans, production inventory and manifest.');
 audit_test_assert(str_contains((string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'),
     "'scripts/prepare_candidate.php', ['--check']"),
     'Central manifest suite must use the common read-only candidate preparation contract.');
 // Source spelling contracts use canonical newlines across Windows and hosted checkouts.
-$runnerSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php'));
 audit_test_assert(str_contains($runnerSource,
     "'website' => audit_run_node_suite('website', 'Static project website', \$registry['website_tests'], \$node, \$browser)"),
     'The central website suite must execute only its explicitly owned registry.');
@@ -147,9 +195,17 @@ audit_test_assert(str_contains($runnerSource, "'php-lint-changed' => audit_run_p
     && str_contains($runnerSource, "if (\$suiteId === 'source-documentation-changed' && \$basicChangedLintRequiresBase && \$basicChangedLintBase === null)")
     && str_contains($supportSource, "'--no-renames', \$baseSha, 'HEAD', '--'")
     && str_contains($supportSource, "'merge-base', '--is-ancestor', \$baseSha, 'HEAD'")
-    && str_contains($supportSource, "'reason' => 'immutable-baseline-unavailable'")
-    && str_contains($runnerSource, "!in_array(\$profileLabel, ['full', 'release'], true)"),
+    && str_contains($supportSource, "'reason' => 'immutable-baseline-unavailable'"),
     'Basic --changed syntax checks must cover the immutable comparison-base delta and block if its Git evidence is unavailable.');
+
+if ($isParallelAuditContract) {
+    audit_test_assert(str_contains($runnerSource,
+        "!in_array(\$profileLabel, ['full', 'release', 'source-contracts', 'portable', 'hosted-full'], true)"),
+        'Parallel profiles must preserve full-tree lint selection instead of converting it to changed-only checks.');
+    audit_test_assert(str_contains($runnerSource,
+        "putenv('PHP_GALLERY_SOURCE_BASE=' . \$sourceIdentity['comparison_base'])"),
+        'Independent contract children must consume the exact resolved report base, including manual HEAD-parent requests.');
+}
 
 $hostedDatabase = [
     'GITHUB_ACTIONS' => 'true',
@@ -162,6 +218,101 @@ $hostedDatabase = [
     'GALLERY_RUNTIME_NORMALIZATION' => 'unicode',
     'GALLERY_SESSION_REQUIRED' => '1',
 ];
+if ($isParallelAuditContract) {
+    $parallelCandidate = str_repeat('a', 40);
+    $parallelBase = str_repeat('b', 40);
+    $parallelBaseEnvironment = [
+        'GITHUB_ACTIONS' => 'true',
+        'GITHUB_REPOSITORY' => 'klusik/PHP_gallery',
+        'PHP_GALLERY_AUDIT_CANDIDATE' => $parallelCandidate,
+    ];
+    $sourceOwner = audit_hosted_parallel_owner(
+        array_replace($parallelBaseEnvironment, ['PHP_GALLERY_SOURCE_OWNER' => 'shared-source-contracts']),
+        'source-contracts', $parallelCandidate, $parallelBase, 4
+    );
+    $portableOwner = audit_hosted_parallel_owner(
+        array_replace($parallelBaseEnvironment, ['PHP_GALLERY_PORTABLE_OWNER' => 'portable-node-winapp']),
+        'portable', $parallelCandidate, $parallelBase, 4
+    );
+    audit_test_assert($sourceOwner['valid'] && $sourceOwner['owner'] === 'shared-source-contracts'
+        && $portableOwner['valid'] && $portableOwner['owner'] === 'portable-node-winapp',
+        'Shared source and portable profiles must require their explicit trusted exact-candidate owner bindings.');
+    $shardEnvironment = array_replace($parallelBaseEnvironment, [
+        'PHP_GALLERY_AUDIT_OWNER' => 'hosted-full',
+        'PHP_GALLERY_SOURCE_OWNER' => 'shared-source-contracts',
+        'PHP_GALLERY_PORTABLE_OWNER' => 'portable-node-winapp',
+        'PHP_GALLERY_AUDIT_SHARD_INDEX' => '2',
+        'PHP_GALLERY_AUDIT_SHARD_TOTAL' => '4',
+    ]);
+    $validShard = audit_hosted_parallel_owner($shardEnvironment, 'hosted-full', $parallelCandidate, $parallelBase, 4);
+    audit_test_assert($validShard['valid'] && $validShard['index'] === 2 && $validShard['total'] === 4,
+        'Hosted PHP shard coordinates must be one-based and bound to the exact checked-out candidate.');
+    $sameBaseOwner = audit_hosted_parallel_owner($shardEnvironment, 'hosted-full', $parallelCandidate, $parallelCandidate, 4);
+    audit_test_assert(!$sameBaseOwner['valid'],
+        'Hosted split owners must reject a missing-delta base equal to the candidate HEAD.');
+    $ownerMarkdown = render_markdown_report([
+        'status' => 'PASS',
+        'profile' => 'hosted-full',
+        'started_at' => '2026-10-15T00:00:00+00:00',
+        'duration_seconds' => 1.0,
+        'source' => ['head_sha' => $parallelCandidate, 'comparison_base' => $parallelBase, 'worktree_dirty' => false],
+        'parallel_owner' => [
+            'owner' => 'hosted-full', 'candidate' => $parallelCandidate, 'comparison_base' => $parallelBase,
+            'shard_index' => 2, 'shard_total' => 4,
+        ],
+        'delegated_to_parallel_owners' => [[
+            'owner' => 'portable-node-winapp', 'profile' => 'portable', 'candidate' => $parallelCandidate,
+            'comparison_base' => $parallelBase, 'suites' => ['node-full', 'winapp'],
+        ]],
+        'environment' => [], 'tasks' => [], 'slowest' => [],
+        'report_files' => ['json' => 'cache/test-audit/report.json', 'run_directory' => 'cache/test-audit/run'],
+    ]);
+    audit_test_assert(str_contains($ownerMarkdown, '- Owner candidate: `' . $parallelCandidate . '`')
+        && str_contains($ownerMarkdown, '- Owner comparison base: `' . $parallelBase . '`')
+        && str_contains($ownerMarkdown, '- PHP shard: `2/4`')
+        && str_contains($ownerMarkdown, 'Expected separate owner: `portable-node-winapp`')
+        && str_contains($ownerMarkdown, 'suites `node-full, winapp`'),
+        'Split-owner handoff Markdown must expose exact candidate/base, shard identity, and delegated owner coverage.');
+    foreach ([
+        ['PHP_GALLERY_AUDIT_CANDIDATE' => str_repeat('b', 40)],
+        ['PHP_GALLERY_AUDIT_OWNER' => 'source-contracts'],
+        ['PHP_GALLERY_SOURCE_OWNER' => 'unowned-source'],
+        ['PHP_GALLERY_PORTABLE_OWNER' => 'unowned-portable'],
+        ['PHP_GALLERY_AUDIT_SHARD_INDEX' => '0'],
+        ['PHP_GALLERY_AUDIT_SHARD_INDEX' => '5'],
+        ['PHP_GALLERY_AUDIT_SHARD_TOTAL' => '3'],
+        ['GITHUB_ACTIONS' => 'false'],
+    ] as $invalidShardOverride) {
+        $invalidShard = audit_hosted_parallel_owner(
+            array_replace($shardEnvironment, $invalidShardOverride), 'hosted-full', $parallelCandidate, $parallelBase, 4
+        );
+        audit_test_assert(!$invalidShard['valid'], 'Hosted PHP shard must reject a mismatched owner or candidate binding.');
+    }
+    $shardNames = ['z_test.php', 'a_test.php', 'm_test.php', 'b_test.php', 'q_test.php', 'c_test.php', 'd_test.php'];
+    $shards = [];
+    for ($shardIndex = 1; $shardIndex <= 4; $shardIndex++) {
+        $shards[$shardIndex] = audit_partition_php_tests($shardNames, $shardIndex, 4);
+    }
+    $flattenedShards = array_merge(...array_values($shards));
+    $sortedShardNames = $shardNames;
+    sort($sortedShardNames, SORT_STRING);
+    $flattenedSorted = $flattenedShards;
+    sort($flattenedSorted, SORT_STRING);
+    audit_test_assert($flattenedSorted === $sortedShardNames
+        && count($flattenedShards) === count(array_unique($flattenedShards)),
+        'Hosted PHP shards must form a deterministic complete disjoint partition of the registry-discovered test names.');
+    foreach ($shards as $shardIndex => $shardNamesForIndex) {
+        audit_test_assert($shardNamesForIndex === audit_partition_php_tests($shardNames, $shardIndex, 4),
+            'Repeated hosted PHP partition selection must remain deterministic.');
+    }
+    $badPartitionBlocked = false;
+    try {
+        audit_partition_php_tests($shardNames, 5, 4);
+    } catch (InvalidArgumentException) {
+        $badPartitionBlocked = true;
+    }
+    audit_test_assert($badPartitionBlocked, 'Hosted PHP partition selection must reject unknown shard coordinates.');
+    }
 $delegated = audit_hosted_full_suite_ownership($profiles, 'full', $hostedDatabase);
 audit_test_assert($delegated['delegated_to_preflight'] === ['manifest']
     && !in_array('manifest', $delegated['suites'], true)
@@ -369,8 +520,16 @@ audit_test_assert(missing_required_php_test_passes($zeroExitLie, $generalRequire
 $runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php');
 audit_test_assert(str_contains($runnerSource, "getenv('GITHUB_ACTIONS') === 'true'")
     && str_contains($runnerSource, "'hosted_full_required_php_tests'")
-    && str_contains($runnerSource, 'missing_required_php_test_passes($task, $required)'),
+    && str_contains($runnerSource, $isParallelAuditContract
+        ? 'missing_required_php_test_passes($task, $ownedRequired)'
+        : 'missing_required_php_test_passes($task, $required)'),
     'The existing central hosted full PHP runner must enforce structured required general child PASS.');
+if ($isParallelAuditContract) {
+    audit_test_assert(str_contains($runnerSource,
+        '? array_values(array_intersect($required, array_map(\'basename\', $files)))')
+        && str_contains($runnerSource, ': $required;'),
+        'The owning shard must enforce its exact required children while unsharded audits retain every required child.');
+}
 
 $packagingNames = $registry['packaging_tests'] ?? [];
 audit_test_assert($packagingNames === ['production_file_policy_test.php', 'production_package_test.php']

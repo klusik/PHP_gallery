@@ -2600,6 +2600,24 @@ Isolieren Sie vor Öffnen einer wiederhergestellten Installation E-Mail, geplant
 \index{v00254@Veröffentlichungsqualifikation}
 \index{t00241@Tests!v00258@verwerfbare Abläufe}
 
+Der~parallele FULL-Vertrag hat~28 erforderliche native Verantwortliche. Jede
+der~fünf PHP-/Datenbankumgebungen nutzt vier getrennte GitHub-Jobs mit jeweils
+vier lokalen Prozessen, eigenem Checkout und~bei Bedarf eigener Datenbank-/HTTP-Fixture.
+Die~zentralen Profile \codeword{source-contracts} und~\codeword{portable} führen
+vollständige Quellprüfungen und~Node-/WinApp-Tests einmal pro~Kandidat parallel
+zum~Sicherheits-Preflight aus. Aufwendige Laufzeitjobs benötigen weiterhin die
+Prüfung der~generierten Daten. Exklusive Barrieren bleiben innerhalb jedes Shards.
+Alle Shards und~gemeinsamen Verantwortlichen müssen für~dieselbe SHA erfolgreich
+sein; nachfolgende Prüfungen sichern die~unveränderte saubere Checkout-Identität.
+Ein grüner Feature-Lauf installiert die~Matrix nicht in~geschützten Workflows.
+Die~gestufte Installation beschreibt \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md}.
+
+Nur Release~\codeword{0.132.9} unterscheidet den~menschlich geprüften
+Wartungs-Merge der~Dispatcher-Reparatur vom~unveränderten stabilen Tag~\codeword{0.132.8}.
+Die~Ursprungsprüfung authentifiziert PR, Freigabe, Merge, Workflow-Objekte und~die
+vollständige Wartungsqualifikation. Aktuelles main und~die~normale menschliche
+PR-Freigabe bleiben erforderlich; andere Versionen benötigen den~Tag direkt auf~main.
+
 Das~zentrale Audit bewahrt benannte WinApp-unittest-Ergebnisse, Laufzeiten und
 Überspringgründe zusammen mit~dem~tatsächlichen Prozessergebnis in~JSON.
 Fehlende, unvollständige oder~widersprüchliche Datensätze belegen kein PASS.

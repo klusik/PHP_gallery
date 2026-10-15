@@ -12,7 +12,9 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import assert from 'node:assert/strict';
-import {originPath,validateOriginRecord,verifyReleaseOrigin,verifyPredecessor,peelReleaseTag} from '../.github/scripts/release-origin.mjs';
+import {originPath,validateOriginRecord,verifyReleaseOrigin,verifyPredecessor,peelReleaseTag,
+    isMaintenanceMainBridge,verifyMaintenanceMainBridge} from '../.github/scripts/release-origin.mjs';
+import {maintenanceBridgeFixture} from './support/coverage_artifact_fixture.mjs';
 
 const stable='a'.repeat(40);
 const selected='b'.repeat(40);
@@ -113,6 +115,54 @@ function fixture() {
     assert.throws(()=>verifyReleaseOrigin(original,version,'HEAD',repo,f),/BLOCKED/);
 }
 process.stdout.write('PASS explicit release origin monotonicity, blob immutability and ancestry\n');
+
+{
+    const f=maintenanceBridgeFixture();
+    assert.ok(isMaintenanceMainBridge(f.record));
+    assert.doesNotThrow(()=>validateOriginRecord(f.record,'0.132.9'));
+    assert.doesNotThrow(()=>verifyMaintenanceMainBridge(f.record,'klusik/PHP_gallery',f));
+    assert.throws(()=>verifyMaintenanceMainBridge(f.record,'foreign/gallery',f),/BLOCKED/);
+    for (const changed of [{version:'0.132.10'},{initial_main_sha:'f'.repeat(40)},
+        {previous_stable_sha:'f'.repeat(40)},{previous_stable_tag:'v_0.132.7'}]) {
+        assert.equal(isMaintenanceMainBridge({...f.record,...changed}),false);
+        assert.throws(()=>validateOriginRecord({...f.record,...changed},changed.version??'0.132.9'),/BLOCKED/);
+        assert.throws(()=>verifyMaintenanceMainBridge({...f.record,...changed},'klusik/PHP_gallery',f),/BLOCKED/);
+    }
+    const adverse=[
+        ['moved stable tag',path=>path.includes('/git/ref/tags/'),value=>{value.object.sha=f.record.initial_main_sha;}],
+        ['wrong workflow blob',path=>path.includes('/contents/'),value=>{value.sha='f'.repeat(40);} ],
+        ['different merge parent',path=>path.endsWith('/commits/'+f.record.initial_main_sha),value=>{value.parents.reverse();}],
+        ['different merge tree',path=>path.endsWith('/commits/'+f.record.initial_main_sha),value=>{value.commit.tree.sha='f'.repeat(40);} ],
+        ['human-authored PR',path=>path.endsWith('/pulls/230'),value=>{value.user.login='klusik';}],
+        ['wrong reviewed commit',path=>path.includes('/reviews?'),value=>{value[0].commit_id='f'.repeat(40);} ],
+        ['dismissed approval',path=>path.includes('/reviews?'),value=>{value[0].state='DISMISSED';}],
+        ['wrong approval identity',path=>path.includes('/reviews?'),value=>{value[0].id++;}],
+        ['failed maintenance run',path=>path.endsWith('/attempts/2'),value=>{value.conclusion='failure';}],
+        ['wrong maintenance attempt',path=>path.endsWith('/attempts/2'),value=>{value.run_attempt=1;}],
+        ['expired artifact',path=>path.includes('/actions/artifacts/'),value=>{value.expired=true;}],
+        ['wrong archive digest',path=>path.includes('/actions/artifacts/'),value=>{value.digest='sha256:'+'f'.repeat(64);} ],
+        ['foreign artifact run',path=>path.includes('/actions/artifacts/'),value=>{value.workflow_run.id++;}],
+        ['skipped required owner',path=>path.includes('/jobs?'),value=>{value.jobs[0].conclusion='skipped';}],
+        ['wrong job candidate',path=>path.includes('/jobs?'),value=>{value.jobs[0].head_sha='f'.repeat(40);} ],
+        ['wrong job attempt',path=>path.includes('/jobs?'),value=>{value.jobs[0].run_attempt=1;}],
+        ['missing required owner',path=>path.includes('/jobs?'),value=>{value.jobs.pop();value.total_count--;}],
+        ['duplicate required owner',path=>path.includes('/jobs?'),value=>{value.jobs.push(value.jobs[0]);value.total_count++;}],
+        ['wrong check App',path=>path.includes('/check-runs/'),value=>{value.app.id=1;}],
+        ['unbound maintenance check',path=>path.includes('/check-runs/'),value=>{value.external_id='release:1:1:'+'f'.repeat(40);} ],
+    ];
+    for (const [label,match,mutate] of adverse) {
+        const api=path=>{
+            const value=structuredClone(f.api(path));
+            if (match(path)) mutate(value);
+            return value;
+        };
+        assert.throws(()=>verifyMaintenanceMainBridge(f.record,'klusik/PHP_gallery',{...f,api}),/BLOCKED/,label);
+    }
+    const corrupt=Buffer.from(f.archive);corrupt[60]^=1;
+    assert.throws(()=>verifyMaintenanceMainBridge(f.record,'klusik/PHP_gallery',{...f,download:()=>corrupt}),/BLOCKED|digest|integrity/i);
+    assert.doesNotThrow(()=>verifyMaintenanceMainBridge(original,repo,{api:()=>assert.fail('ordinary releases need no maintenance exception')}));
+}
+process.stdout.write('PASS finite reviewed maintenance main bridge: immutable archive, owner review, exact 12 native owners and adverse evidence\n');
 
 // Peel the actual annotated predecessor; legacy evidence is explicitly not a fabricated qualification.
 {

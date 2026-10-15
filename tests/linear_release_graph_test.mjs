@@ -20,9 +20,12 @@ import {peelReleaseTag,verifyPredecessor,verifyReleaseOrigin} from '../.github/s
 import {linearMergeTree,verifyLinearContent,verifyFastForwardHistory} from '../.github/scripts/release-reconciliation.mjs';
 
 const directory=mkdtempSync(join(tmpdir(),'gallery-linear-graph-'));
+// Keep Git's optional background writers out of the owned disposable tree.
+const isolatedGitOptions=['-c','gc.auto=0','-c','maintenance.auto=false'];
+const cleanupRetryDelayMs=100;
 const execute=(executable,args)=>{
     assert.equal(executable,'git');
-    const child=spawnSync('git',['-C',directory,...args],{encoding:'utf8',timeout:10000});
+    const child=spawnSync('git',[...isolatedGitOptions,'-C',directory,...args],{encoding:'utf8',timeout:10000});
     assert.ok(!child.error && (child.status===0 || (args[0]==='merge-tree' && child.status===1)),child.stderr);
     return args.includes('-z') || args[0]==='diff' ? child.stdout : child.stdout.trim();
 };
@@ -106,6 +109,7 @@ try {
     const legacy=JSON.parse(readFileSync(new URL('../.github/release-legacy/v_0.125.json',import.meta.url),'utf8'));
     assert.equal(legacy.qualification,'UNKNOWN_LEGACY');
 } finally {
-    rmSync(directory,{recursive:true,force:true});
+    // ENOTEMPTY from a transient filesystem observer must not mask graph assertions.
+    rmSync(directory,{recursive:true,force:true,maxRetries:3,retryDelay:cleanupRetryDelayMs});
 }
 process.stdout.write('PASS real annotated two-release graph, immutable v1 origin, linear replay, retained features and conflicts\n');

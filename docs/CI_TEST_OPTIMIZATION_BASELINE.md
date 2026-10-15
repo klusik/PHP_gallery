@@ -1010,3 +1010,86 @@ pre-expensive/`ci-gate` consumer remain unimplemented and activation-blocked.
 No workflow, required context, selector, matrix owner or #101 completion changes;
 no real lifecycle matrix is removed. Current JSON plus native records identify
 outcomes, but do not independently approve the transitive execution inputs.
+
+## Parallel matrix follow-up, 2026-10-15
+
+The new source contract is documented in `CI_COVERAGE_REUSE_CONTRACT.md` and
+`../TESTING.md`. Protected installation is pending; feature maintenance evidence
+must not be described as integrated execution.
+
+The refreshed baseline is integration
+[38776503559](https://github.com/klusik/PHP_gallery/actions/runs/38776503559),
+candidate `24a8fefb9a4d1060e8227e8d2a370450556d5108`, base
+`bd84446ee25062c7f47a44e43d6384d1a6ee61f8`. Workflow lifetime was 400 s,
+and eleven FULL owners consumed 1,027 runner-seconds. MySQL's job was 209 s;
+its central audit was 170.6014 s, including PHP 123.1000 s, Node 14.88 s and
+WinApp 2.83 s. The 196-second audit step also includes disposable application
+fixture setup/teardown. Preflight took 45 s before sibling eligibility.
+Created-to-start gaps were generally 2–3 s, macOS 11 s and aggregate 10 s;
+those gaps can include scheduling/provisioning and do not isolate queue time.
+
+The real-browser journey, runtime plan and route contention children measured
+20.2386, 16.9809 and 12.2828 s respectively. Runtime compilation is already
+performed once; each independent loader child is part of the isolation proof.
+Session setup already shares its application/database fixture. Browser waits
+observe actual state transitions. None of those assertions or timing windows
+was shortened. Four private runners per environment narrow the serial barriers
+while preserving their complete semantics inside each shard.
+
+The proposed 28-owner matrix executes portable Node/WinApp once rather than in
+five environment profiles, and central source contracts once rather than in
+each profile. All PHP/environment combinations remain. Round-robin partitioning
+is deterministic and complete; its observed balance and total elapsed savings
+must be assessed from hosted runs rather than adding the long-child durations.
+
+Repository visibility and Actions enablement were verified through GitHub's
+API. The account token does not expose its billing plan; no Free/Pro account
+limit is inferred. GitHub's current
+[limits](https://docs.github.com/en/actions/reference/limits) document 20/40
+standard concurrent jobs for Free/Pro, with five macOS jobs for either plan;
+support-adjusted limits may differ. Public standard Linux runners are documented
+as four CPUs and 16 GB RAM in the
+[runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The workflow records actual CPU/memory and start timestamps, keeps four local
+workers, and leaves eligible-job concurrency to GitHub without `max-parallel`.
+These published capacities are not proof of this account's effective maximum.
+
+The baseline's complete eleven-owner FULL subgraph, measured from preflight
+start through aggregate completion, lasted 272 s within the 400 s integration
+workflow. Its observed peak was nine simultaneous native jobs. Diagnostic
+maintenance run
+[38788473557](https://github.com/klusik/PHP_gallery/actions/runs/38788473557)
+completed the new 28-owner subgraph in 152 s, with an observed peak of twenty
+and 1,361 summed owner runner-seconds. Its complete maintenance workflow took
+268 s. That run failed a historical Node fixture, so these numbers are
+diagnostic observations rather than an accepted optimization benchmark; its
+maintenance caller is also different from the baseline's integration caller.
+A sampled native runner reported four online CPUs and 15,988 MiB total RAM.
+Queue/provisioning gaps and within-job setup remain separate from suite walls.
+
+The retained qualification source is
+`ebde37ae7bd5c80ad1cb8733b7fb8fd2acb6cac1`, tree
+`4f01e2e5bf24bd5b34137a515075b4105889f87c`. Maintenance run
+[38790736942](https://github.com/klusik/PHP_gallery/actions/runs/38790736942)
+attempt 1 passed portable, shared source, Chromium, packaging and nineteen PHP
+shards. MySQL shard 4/4 failed during owned Chromium endpoint startup before
+application assertions; its existing exclusive scheduling remained active.
+The complete same-SHA attempt 2 retains every original startup deadline and
+assertion. Its exact successful retained proof is required before the finite
+installation seal is usable. Issue #223 records installation acceptance and
+the final integration/release identities separately from this authoring record.
+
+Attempt 2 completed successfully with unchanged source/candidate SHA and all
+28 required native nodes. Its FULL window was 19:10:30–19:12:32 UTC, **122 s**,
+versus the baseline's 272 s: an observed 150 s (55.1%) reduction. Summed owner
+time increased to **1,320 runner-seconds** (1,316 plus the four-second aggregate),
+293 s (28.5%) above baseline. Peak overlap was twenty jobs. Downstream eligibility
+began when preflight finished at 19:10:56; actual job starts spanned
+19:10:56–19:11:36. This forty-second range includes queue/provisioning effects
+and is not test execution. A successful runner sample reported four CPUs and
+15,989 MiB total RAM. The retry attempt's API start-to-final-update span was
+224 s; the run's original creation time includes its failed first attempt and
+must not be used as the successful attempt's duration. The maintenance and
+integration callers differ, so the 224 s maintenance span is not a controlled
+comparison with the 400 s historical integration. Protected integration remains
+the acceptance boundary, recorded in issue #223.

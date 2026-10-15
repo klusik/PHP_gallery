@@ -1,5 +1,22 @@
 # Compatibility lifecycle and retirement register
 
+## Reviewed untagged dispatcher maintenance merge before 0.132.9
+
+Owner: `release-origin.mjs`, `start-new-release.mjs` and the shared release
+promotion readers. PR #230 advanced main through normal human-reviewed protected
+merge while the existing `v_0.132.8` tag stayed immutable. The old origin equality
+assumption would reject the next release. The finite `0.132.9` bridge preserves
+both truthful identities and authenticates the exact maintenance merge, human
+review, immutable caller/matrix blobs, twelve native CI owners, exact-SHA check
+and complete archive/provider digest. No arbitrary main advance or other version
+is admitted. Usage is one observed maintenance installation; future usage is
+unknown. Registered origin, initialization and hosted-policy fixtures cover
+positive selection, archive/provider corruption, altered PR/review/workflow,
+missing/skipped/duplicate native owners and changed check identity. Retire the
+exception only after `0.132.9` is published with permanent provenance and no
+supported origin, qualification or historical completion consumer needs it;
+preserve the tagged release evidence. Other releases retain ordinary equality.
+
 ## Retired deploy files and installed updater ownership
 
 Owner: `app/release_file_policy.php` and the updater activation/obsolete-file

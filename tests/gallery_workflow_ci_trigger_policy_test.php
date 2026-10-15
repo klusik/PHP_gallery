@@ -241,6 +241,7 @@ namespace {
         && str_contains($workflowHeader, 'source_base:')
         && str_contains($workflowHeader, 'default: full'),
         'The central CI workflow must remain reusable with full as its safe default profile and explicit release SHA/base inputs.');
+    $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     $jobBlocks = [];
     preg_match_all('/^  ([a-z][a-z0-9-]+):\s*\n(.*?)(?=^  [a-z][a-z0-9-]+:\s*\n|\z)/ms', $workflow, $jobMatches, PREG_SET_ORDER);
     foreach ($jobMatches as $jobMatch) {
@@ -251,6 +252,8 @@ namespace {
     $preflightOwner = $jobBlocks['preflight'] ?? '';
     $databaseOwner = $jobBlocks['real-database-browser'] ?? '';
     $sourceOwner = $jobBlocks['runtime-compatibility'] ?? '';
+    $sourceContractsOwner = $jobBlocks['source-contracts'] ?? '';
+    $portableOwner = $jobBlocks['portable'] ?? '';
     $nativeGate = $jobBlocks['ci-gate'] ?? '';
     check(str_contains($preflightOwner, 'Verify exact candidate checkout')
         && str_contains($preflightOwner, 'git rev-parse HEAD')
@@ -260,8 +263,18 @@ namespace {
         && str_contains($databaseOwner, 'checkout_ref || github.sha')
         && str_contains($sourceOwner, 'needs: preflight')
         && str_contains($sourceOwner, 'checkout_ref || github.sha')
-        && str_contains($nativeGate, "const required = ['preflight'"),
-        'Manifest delegation requires required same-candidate preflight and the unchanged native aggregate gate.');
+        && !str_contains($sourceContractsOwner, 'needs:')
+        && str_contains($sourceContractsOwner, 'name: Shared source contracts')
+        && str_contains($sourceContractsOwner, 'PHP_GALLERY_AUDIT_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}')
+        && str_contains($sourceContractsOwner, 'PHP_GALLERY_SOURCE_OWNER: shared-source-contracts')
+        && str_contains($sourceContractsOwner, 'php scripts/audit.php --profile=source-contracts')
+        && !str_contains($portableOwner, 'needs:')
+        && str_contains($portableOwner, 'name: Portable Node and WinApp')
+        && str_contains($portableOwner, 'PHP_GALLERY_AUDIT_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}')
+        && str_contains($portableOwner, 'PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp')
+        && str_contains($portableOwner, 'php scripts/audit.php --profile=portable')
+        && str_contains($nativeGate, "const required = ['preflight','source-contracts','portable'"),
+        'Manifest delegation requires same-candidate preflight, shared source and portable owners, and the native aggregate gate.');
     $packageOwner = $jobBlocks['production-package'] ?? '';
     check(str_contains($packageOwner, "os: ubuntu-24.04\n            php: '8.1'")
         && str_contains($packageOwner, "os: windows-2025\n            php: '8.5'")
@@ -290,10 +303,20 @@ namespace {
     $realDatabaseJob = $jobBlocks['real-database-browser'] ?? '';
     check(substr_count($realDatabaseJob, 'real_browser: true') === 1
         && substr_count($realDatabaseJob, 'real_browser: false') === 2
+        && str_contains($realDatabaseJob, "database: ['mysql:8.4', 'mariadb:10.11', 'mariadb:11.4']")
+        && str_contains($realDatabaseJob, 'shard: [1, 2, 3, 4]')
         && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mysql:8.4'\n            real_browser: true")
         && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:10.11'\n            real_browser: false")
-        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:11.4'\n            real_browser: false"),
-        'Exactly one stable MySQL matrix entry must own the real-app Chromium workflow journey.');
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:11.4'\n            real_browser: false")
+        && str_contains($realDatabaseJob, 'PHP_GALLERY_AUDIT_OWNER: hosted-full')
+        && str_contains($realDatabaseJob, 'PHP_GALLERY_AUDIT_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}')
+        && str_contains($realDatabaseJob, 'PHP_GALLERY_AUDIT_SHARD_INDEX: ${{ matrix.shard }}')
+        && str_contains($realDatabaseJob, "PHP_GALLERY_AUDIT_SHARD_TOTAL: '4'")
+        && str_contains($realDatabaseJob, 'PHP_GALLERY_SOURCE_OWNER: shared-source-contracts')
+        && str_contains($realDatabaseJob, 'PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp')
+        && str_contains($realDatabaseJob, 'run: php scripts/gallery_workflow_ci.php')
+        && str_contains($realDatabaseJob, 'name: PHP ${{ matrix.php }} workflows (${{ matrix.database }}, Unicode, shard ${{ matrix.shard }}/4)'),
+        'All database variants must run four exact-candidate shards and retain one stable real-app Chromium owner.');
     check(str_contains($realDatabaseJob, 'if: matrix.real_browser')
         && str_contains($realDatabaseJob, 'Discover Chromium for the real application workflow')
         && str_contains($realDatabaseJob, 'browser_path=%s')
@@ -315,8 +338,25 @@ namespace {
         && !str_contains($browserJob, '--no-report')
         && substr_count($workflow, 'php scripts/audit.php --suite=browser-map') === 1,
         'Required Chromium discovery must fail on absence and execute the central browser registry once.');
+    check(str_contains($sourceOwner, "php: ['8.1', '8.5']")
+        && str_contains($sourceOwner, 'shard: [1, 2, 3, 4]')
+        && str_contains($sourceOwner, 'PHP_GALLERY_AUDIT_OWNER: hosted-full')
+        && str_contains($sourceOwner, 'PHP_GALLERY_AUDIT_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}')
+        && str_contains($sourceOwner, 'PHP_GALLERY_AUDIT_SHARD_INDEX: ${{ matrix.shard }}')
+        && str_contains($sourceOwner, "PHP_GALLERY_AUDIT_SHARD_TOTAL: '4'")
+        && str_contains($sourceOwner, 'PHP_GALLERY_SOURCE_OWNER: shared-source-contracts')
+        && str_contains($sourceOwner, 'PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp')
+        && str_contains($sourceOwner, 'run: php scripts/audit.php --profile=hosted-full')
+        && str_contains($sourceOwner, 'name: PHP ${{ matrix.php }} source (${{ matrix.normalization }}, shard ${{ matrix.shard }}/4)'),
+        'Both PHP source environments must execute four strictly bound hosted-full shards.');
+    check(substr_count($workflow, 'php scripts/audit.php --profile=source-contracts') === 1
+        && substr_count($workflow, 'php scripts/audit.php --profile=portable') === 1
+        && substr_count($workflow, 'php scripts/audit.php --profile=hosted-full') === 1
+        && str_contains($workflow, "needs: [preflight, source-contracts, portable, production-package, real-database-browser, runtime-compatibility, browser-tests, release-audit]"),
+        'The central workflow must retain distinct new owners and require all four sharded matrix families.');
     check(str_contains($workflow, 'php scripts/gallery_workflow_ci.php')
-        && str_contains($workflow, 'php scripts/audit.php --profile=full')
+        && str_contains($workflow, 'php scripts/audit.php --profile=hosted-full')
+        && str_contains($runner, "getenv('PHP_GALLERY_AUDIT_OWNER') === 'hosted-full' ? 'hosted-full' : 'full'")
         && !str_contains($browserJob, '--no-sandbox')
         && !str_contains($browserJob, 'npm install'),
         'Browser CI must preserve full database/source coverage, sandboxing and the existing dependency-free fixtures.');
@@ -477,7 +517,6 @@ namespace {
         && !str_contains($patchNotesAi, 'COPILOT_GITHUB_TOKEN'),
         'AI patch-note boundary must provide bounded evidence, reject unsafe output and remain independent of authentication secrets.');
 
-    $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
     $workflowBrowserTest = (string) file_get_contents(dirname(__DIR__) . '/tests/gallery_workflow_browser_test.php');
     $widgetBrowserTest = (string) file_get_contents(dirname(__DIR__) . '/tests/public_widget_persistence_browser_test.php');
     check(str_contains($runner, 'GALLERY_WORKFLOW_BROWSER_REQUIRED')

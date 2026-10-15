@@ -68,7 +68,7 @@ try {
         $profile = match ($mode) {
             '--audit-quick' => 'quick',
             '--release' => 'release',
-            default => 'full',
+            default => getenv('PHP_GALLERY_AUDIT_OWNER') === 'hosted-full' ? 'hosted-full' : 'full',
         };
         $workflowBrowserRequired = getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') === '1';
         check(!$workflowBrowserRequired || (string) getenv('GALLERY_WORKFLOW_BROWSER') !== ''
@@ -112,6 +112,19 @@ try {
                 $requiredTests[] = 'gallery_workflow_browser_test.php';
                 $requiredTests[] = 'public_widget_persistence_browser_test.php';
             }
+        }
+        if ($profile === 'hosted-full') {
+            // The central selector owns the complete disjoint partition. Each
+            // private database runner must prove every required child assigned
+            // to it; the native aggregate requires all four successful shards.
+            $registry = require __DIR__ . '/audit_registry.php';
+            $names = array_map(static fn(string $path): string => basename($path),
+                glob(dirname(__DIR__) . '/tests/*_test.php') ?: []);
+            $names = array_values(array_diff($names, $registry['packaging_tests']));
+            $owned = \PhpGallery\Audit\audit_partition_php_tests($names,
+                (int) getenv('PHP_GALLERY_AUDIT_SHARD_INDEX'),
+                (int) getenv('PHP_GALLERY_AUDIT_SHARD_TOTAL'));
+            $requiredTests = array_values(array_intersect($requiredTests, $owned));
         }
         $missingRequired = missing_required_php_test_passes($regression, $requiredTests);
         check($missingRequired === [],

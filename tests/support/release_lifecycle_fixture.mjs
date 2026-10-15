@@ -17,6 +17,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {verifyReleaseOrigin} from '../../.github/scripts/release-origin.mjs';
+import {ciOwnerWorkflowResponse} from './ci_owner_fixture.mjs';
+
+// Fixture Git commands must leave no optional background writer racing cleanup.
+const isolatedGitOptions=['-c','gc.auto=0','-c','maintenance.auto=false'];
+const cleanupRetryDelayMs=100;
 
 /** Gate-owned exact candidate and predecessor identities used by this real-Git fixture.
  * @typedef {import('../../.github/scripts/release-promotion.mjs').ReleaseRecord} FixtureRecord
@@ -49,17 +54,24 @@ export function lifecycleFixture(version='1.2.1') {
     const checkout=join(directory,'checkout'),remote=join(directory,'remote.git');
     mkdirSync(checkout);
     const raw=(cwd,args,input=null)=>{
-        const result=spawnSync('git',['-C',cwd,...args],{input,encoding:'utf8',timeout:10000});
+        const result=spawnSync('git',[...isolatedGitOptions,'-C',cwd,...args],{input,encoding:'utf8',timeout:10000});
         assert.equal(result.status,0,result.stderr || result.stdout);
         return args.includes('-z') || args[0]==='diff' ? result.stdout : result.stdout.trim();
     };
     const git=(...args)=>raw(checkout,args);
+    const repository='fixture/gallery';
     raw(directory,['init','--bare','-q',remote]);
     git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.test');
     git('remote','add','origin',remote);
     const save=(name,text)=>writeFileSync(join(checkout,name),text);
     const commit=message=>{git('add','-A');git('commit','-qm',message);return git('rev-parse','HEAD');};
+    const workflowPath='.github/workflows/gallery-workflows.yml';
+    const workflowFixture=ciOwnerWorkflowResponse('repos/'+repository+'/contents/'+workflowPath+'?ref='+'a'.repeat(40),2);
+    assert.ok(workflowFixture,'Historical owner fixture must supply complete workflow bytes.');
+    mkdirSync(join(checkout,'.github/workflows'),{recursive:true});
+    save(workflowPath,Buffer.from(workflowFixture.content,'base64').toString('utf8'));
     save('content.txt','old\n');const oldMain=commit('Original baseline');
+    const workflowSha=oldMain;
     save('content.txt','previous release\n');const previousQ=commit('Previous Q');
     const previousTree=git('rev-parse',previousQ+'^{tree}');
     const previousMain=git('commit-tree',previousTree,'-p',oldMain,'-p',previousQ,'-m','Previous release M');
@@ -68,7 +80,6 @@ export function lifecycleFixture(version='1.2.1') {
     save('feature.txt','retained feature\n');const selected=commit('Single-parent feature');
     let branch='release/v_'+version;
     git('switch','-qc',branch);git('push','-q','origin','main','develop',branch,'--tags');
-    const repository='fixture/gallery';
     const evidence={repository,version:'1.2',final_main_sha:previousMain,final_tree:previousTree,
         candidate_sha:previousQ,ready:true,automated_result:'success',override:false,run_id:'99'};
     const state={writes:[],pr:null,checks:[],record:null,records:{},runId:123,review:true,ci:true,tagFailOnce:false,wrongTree:false,
@@ -94,6 +105,8 @@ export function lifecycleFixture(version='1.2.1') {
     };
     const call=(path,method='GET',payload=null)=>{
         if (method!=='GET') state.writes.push({path,method,payload});
+        const ownerWorkflow=ciOwnerWorkflowResponse(path,2);
+        if (ownerWorkflow) return ownerWorkflow;
         const tail=path.replace('repos/'+repository+'/','');
         if (/^collaborators\/[\w.-]+\/permission$/.test(tail)) return {permission:state.permission};
         if (tail==='rulesets?per_page=100') return rules.map(rule=>({id:rule.id,name:rule.name,enforcement:rule.enforcement}));
@@ -103,7 +116,10 @@ export function lifecycleFixture(version='1.2.1') {
             return rule;
         }
         if (tail.startsWith('rules/branches/')) return rules[tail.endsWith('main')?0:1].rules;
-        if (tail.startsWith('git/ref/heads/')) return {object:{type:'commit',sha:ref('refs/'+tail.slice('git/ref/'.length))}};
+        if (tail.startsWith('git/ref/heads/')) {
+            const name='refs/'+tail.slice('git/ref/'.length);
+            return {ref:name,object:{type:'commit',sha:ref(name)}};
+        }
         if (tail.startsWith('git/matching-refs/')) {
             const name='refs/'+tail.slice('git/matching-refs/'.length);
             return exists(name)?[{ref:name,object:{type:'commit',sha:ref(name)}}]:[];
@@ -115,7 +131,12 @@ export function lifecycleFixture(version='1.2.1') {
         if (tail.startsWith('releases/tags/')) throw new Error('BLOCKED_API_NOT_FOUND: no manual GitHub Release yet.');
         if (tail.startsWith('compare/')) {
             const [left,right]=tail.slice('compare/'.length).split('...');
-            return {behind_by:spawnSync('git',['-C',checkout,'merge-base','--is-ancestor',left,right]).status===0?0:1};
+            const ancestry=spawnSync('git',['-C',checkout,'merge-base','--is-ancestor',left,right]).status===0;
+            const comparison={behind_by:ancestry?0:1};
+            if (left===workflowSha && right===ref('refs/heads/main')) {
+                comparison.merge_base_commit={sha:git('merge-base',left,right)};
+            }
+            return comparison;
         }
         if (tail==='git/blobs' && method==='POST') return {sha:raw(checkout,['hash-object','-w','--stdin'],payload.content)};
         if (tail==='git/trees' && method==='POST') {
@@ -143,7 +164,7 @@ export function lifecycleFixture(version='1.2.1') {
         if (/^actions\/runs\/\d+$/.test(tail)) {
             const id=Number(tail.split('/').at(-1));const record=state.records[id];
             return {id,path:'.github/workflows/release-qualification.yml',event:'push',head_branch:record?.branch ?? branch,
-                status:'completed',conclusion:state.ci?'success':'failure',run_attempt:1};
+                head_sha:workflowSha,status:'completed',conclusion:state.ci?'success':'failure',run_attempt:1};
         }
         if (tail.startsWith('pulls?')) {
             if (!state.pr || tail.includes('state=closed') && !state.pr.merged) return [];
@@ -200,7 +221,7 @@ export function lifecycleFixture(version='1.2.1') {
     const fixture={repository,selected,previousMain,previousQ,state,evidence,api:call,git:transport,jobs,prepare,
         predecessorRecord:null,predecessorJobs:jobs,
         context:{GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/'+branch,GITHUB_SHA:selected,GITHUB_ACTOR:'fixture'},
-        cleanup:()=>rmSync(directory,{recursive:true,force:true}),next:nextVersion=>{
+        cleanup:()=>rmSync(directory,{recursive:true,force:true,maxRetries:3,retryDelay:cleanupRetryDelayMs}),next:nextVersion=>{
             fixture.predecessorRecord=state.record;
             git('fetch','-q','origin','--tags');
             git('checkout','-qf','--detach',ref('refs/heads/develop'));

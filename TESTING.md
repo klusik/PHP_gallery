@@ -296,19 +296,23 @@ a recursive bot-triggered push. A source-only PASS is feedback, not handoff.
 | Mandatory hosted owner | Registered coverage and environment | Failure boundary |
 | --- | --- | --- |
 | `candidate-preparation:prepare` | Central `release-preflight`, authored dependency/inventory generation, complete-file manifest and branch-head lease | A source-policy or preparation failure prevents qualification; generated files are committed only on the working branch |
-| `gallery-workflows:preflight` | Read-only central `candidate-preflight`: PHP/JS syntax, declaration/policy and debt budgets, Python imports, MVC, mutation, CI contracts and manifest | Full matrix jobs depend on this PASS; stale/unprepared source cannot proceed |
-| `runtime-compatibility` | PHP 8.1 with Unicode/intl, PHP 8.5 with ASCII/no intl; central `full` includes PHP/Node/WinApp regression, runtime probes, source/MVC/mutation contracts, PHP/JS syntax, manifest and packaging-negative regressions | Both matrix variants required, not interchangeable with real DB workflows |
-| `real-database-browser` | Central `full` in a disposable migrated HTTP+database fixture: PHP 8.5/MySQL 8.4 with real-app Chromium; PHP 8.5/MariaDB 10.11; PHP 8.5/MariaDB 11.4. Includes database concurrency, nine actual route lifecycles and registered integration regressions | Every database variant must PASS, including required real browser on the MySQL case |
+| `gallery-workflows:preflight` | Read-only central `candidate-preflight`: workflow integrity and canonical generated-state freshness | Stale/unprepared source cannot enter expensive jobs |
+| `source-contracts` | Central `source-contracts`: whole-tree PHP 8.5/JS syntax, documentation/policy inventories and unchanged debt budgets, strict changed-source gates, Python imports, MVC, mutation and version contracts | Required same-candidate owner; starts beside safety preflight because it does not consume generated artifacts |
+| `portable` | Central `portable`: every registered non-browser Node fixture, including ZIP64, and structured WinApp unittest outcomes | Required once for the candidate, starts beside preflight; never reported as execution inside a PHP shard |
+| `runtime-compatibility` | Four central `hosted-full` PHP shards in each PHP 8.1 Unicode/intl and PHP 8.5 ASCII/no-intl environment; runtime probes remain per shard; floor shard 1 also owns whole-tree PHP 8.1 syntax | All eight native jobs required; no environment compatibility case removed |
+| `real-database-browser` | Four central `hosted-full` PHP shards for each PHP 8.5/MySQL 8.4, MariaDB 10.11 and MariaDB 11.4 environment. Each runner provisions a private database and application. The MySQL shards that own the two real-browser fixtures must execute them | All twelve native jobs required, with individual required DB/HTTP/race/browser PASS evidence in each owning shard |
 | `browser-tests` | Required Chromium `browser-map` fixtures via `scripts/audit.php --suite=browser-map` | Missing browser or fixture failures block the matrix |
-| `production-package` | Positive production-folder membership and integrity on Ubuntu, Windows and macOS; negative packaging assertions stay in the complete central PHP regression until #95 reassigns ownership | All three OS jobs required; a positive package build alone does not replace negative cases |
+| `production-package` | Compact real-builder negative scenarios and complete production folder/ZIP membership and raw-byte integrity on Ubuntu, Windows and macOS | All three OS jobs required with zero missing mandatory package cases |
 | `gallery-workflows:ci-gate` and `candidate-preparation:gate` | Aggregate required jobs, exact prepared SHA, immutable source base and current remote branch HEAD | FAIL, BLOCKED, missing, skipped, cancelled, superseded or stale required evidence refuses green handoff |
 | `release-audit` (release only) | Central `release` profile and mandatory sibling matrix after final hosted manual PDFs/metadata/manifest | Full release qualification of the exact prepared release candidate |
 
-Some `full` suites run in multiple PHP/database variants to prove compatibility,
-which presently repeats general PHP, Node, WinApp and packaging work. #95 owns
-reducing that duplication without weakening negative tests or platform coverage;
-#101 owns release fail-fast ordering. This table describes **verified workflow
-ownership**, not proof that any particular run passed. For live acceptance record
+This table describes source contract 3, with 28 required native owners. Its
+protected installation remains separate from feature maintenance qualification;
+see `docs/CI_COVERAGE_REUSE_CONTRACT.md`. The five PHP/environment combinations
+retain their complete regression trees, partitioned deterministically rather
+than selected from changed files. The shared Node/WinApp suites and source
+contracts are executed once on the same candidate. Legacy standalone `full`
+and `release` remain complete, unsharded interfaces. For live acceptance record
 the workflow URL, source event SHA, generated candidate SHA, immutable base, all
 required job outcomes and remote-head check. Measure step/job wall time and
 runner cost separately; avoid inferring savings from a static ownership map.
@@ -406,6 +410,24 @@ include-time output, headers, sessions or umbrella loading.
 The registered 240-second limit covers full graph compilation and both clean-child loaders; the measured Windows run took 72 seconds. The complete `runtime_module_plan_test.php` compiler/freshness and composed-versus-legacy clean-child matrix belongs to `full`/`release`. `quick` retains `runtime_dependencies_test.php`, `runtime_plan_ratchet_test.php`, runtime kernel/route contracts and fresh-process include probes, without starting every logical module in both loaders on each edit. This changes feedback scope only; full release coverage is unchanged.
 
 ### PHP worker scheduling
+
+Hosted `hosted-full` partitions the sorted, discovered PHP regression basenames
+into four disjoint round-robin shards through `audit_partition_php_tests()`.
+Packaging membership remains separately owned. The registry fixes the shard
+count; YAML contains environment axes, never a second test list. Invalid,
+missing or mismatched owner/candidate/shard coordinates block before execution.
+Every shard retains its existing exclusive-test barriers and private workspace,
+DB service, HTTP server and fixture identity. The aggregate and downstream
+evidence readers require every exact native shard label, shared owner and
+candidate SHA. Each split owner verifies the tracked checkout, HEAD and
+comparison base remained clean after its tests.
+
+Four local process workers share one runner's CPU and RAM; the twenty PHP
+shard jobs receive independent GitHub runners. No `max-parallel` cap assumes an
+account plan. GitHub queues eligible jobs according to the actual account
+capacity; created/start/end timestamps and runner resource logs describe the
+observed run. Runtime-plan child isolation, measured session contention windows
+and real-browser assertions are unchanged.
 
 Both `php-fast` and `php-regression` use the same portable `proc_open` worker scheduler. The default is four workers; set `PHP_GALLERY_AUDIT_WORKERS` to an integer from `1` through `8` to override it. Invalid values produce BLOCKED coverage. Parallel-safe tests run within this bound. Explicit `serial_tests` entries in `scripts/audit_php_registry.php` include their reason and are merged into central PHP requirement metadata as `serial`/`serial_reason`. Before each exclusive test, all active workers finish; no other test starts until that exclusive test finishes. Tests with contention, shared resources, servers or their own child processes must be reviewed for this policy when registered.
 

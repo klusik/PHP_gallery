@@ -183,6 +183,16 @@ new/deleted production membership in the source commit because the canonical
 inventory reads Git's index. Edit authored runtime roots/dependencies rather
 than generated `app/runtime/modules.php`.
 
+Always account for new development and documentation paths in the source-review
+inventory, even when production packaging excludes them. Use hosted preparation
+when membership changes; an unchanged production file set alone does not prove
+the complete inventory is fresh.
+
+Always inspect release-origin and promotion predecessor assumptions before a
+maintenance-only main installation. Preserve the existing stable tag and bind
+any required finite compatibility bridge to the real human-reviewed merge and
+complete hosted evidence before resuming integration or creating an origin.
+
 The default sequence is **edit -> commit -> exact working-branch push -> hosted
 preparation -> exact candidate CI -> inspect/fix -> handoff**. The stable
 `.github/workflows/candidate-preparation.yml` prepares runtime modules, production
@@ -275,6 +285,11 @@ non-force FF. Record `authority_update` and `inherited_basic`; never invent W*
 main ancestry. Keep main protections and recovery distinct. This path remains
 unqualified until real hosted runs prove both stages. Stage 1 was installed on
 develop by main-owned run `38774538606`; record subsequent acceptance in #223.
+For the finite parallel-CI transition, retain the six executable evaluator
+pins and authenticate the one exact `app/core-manifest.json` companion against
+the sealed successful maintenance source/tree/run. Compare complete source/base
+leaf identities before selection, publication and final integration; admit only
+those exact regular blobs and preserve every other inherited path.
 Only create a release origin after the optimization is already on develop.
 Preserve an erroneous unpublished attempt and its source in explicit archive refs
 before replacing its leased release branch; never rewrite its origin or evidence.
@@ -283,6 +298,25 @@ When changing a CI runtime or owner matrix, update every corresponding literal
 fixture expectation in the same batch while preserving strict assertions. Retain
 each failed preflight child's referenced log in the hosted artifact; an exit code
 without its diagnostic is insufficient handoff evidence.
+
+Always give a reusable FULL job below optional ancestors an explicit status
+function and direct dependency success conditions. Require the published SHA to
+equal the selected one-commit source before FULL; a generated child needs a new
+squash and fresh BASIC. Cover both skipped optional ancestors and adverse direct
+dependencies in the workflow's existing contract fixture.
+
+Always load a fixture's actual source owner before its first source assertion;
+keep shared source reads above all consumers when adding earlier contract checks.
+Always import or fully qualify native PHP exception classes inside namespaces,
+including invalid-input branches exercised by negative fixtures.
+
+Always bind delegated suites and every PHP shard to the same exact candidate,
+require all native owners in the aggregate and authenticated evidence readers,
+and prove the shard partition is complete and disjoint. Retain each shard's
+exclusive-test barriers and private DB/HTTP/workspace resources. Distinguish
+independent GitHub runner jobs from processes sharing one runner. Qualify a
+changed CI matrix through explicit hosted maintenance, then verify its protected
+installation separately before using it as integration authority.
 
 The latest #185 target replaces the earlier per-child coverage-inheritance
 proposal. Feature pushes and the final squash receive BASIC checks for PHP and

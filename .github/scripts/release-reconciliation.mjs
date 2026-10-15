@@ -381,7 +381,7 @@ function completeQualificationRows(call,path,key) {
  * @param {GithubReader} call GitHub read-only API.
  * @param {string} repository Exact repository.
  * @param {string} sha Result SHA that must be green before a protected FF.
- * @returns {string|null} Exact completed run URL, or null for absent/red/pending/stale qualification; unreadable, ambiguous or raced server evidence throws. This historical check reader does not authenticate per-child reuse or discover unpublished newer workflow runs.
+ * @returns {string|null} Exact completed run URL, or null for absent/red/pending/stale qualification or incomplete/duplicate native owners; malformed API identities, conflicting pages or raced server evidence throw. This historical check reader does not authenticate per-child reuse or discover unpublished newer workflow runs.
  */
 export function qualifiedLinearCandidate(call,repository,sha) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(sha)) {
@@ -419,7 +419,10 @@ export function qualifiedLinearCandidate(call,repository,sha) {
     const jobPath='repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100';
     const jobs=completeQualificationRows(call,jobPath,'jobs');
     const coverage=workflowCoverageJobs(jobs,repository,binding.runId,binding.attempt,sha,binding.kind,call);
-    const requiredNames=evidenceMatrixOwners(coverage,repository,run.head_sha,call);
+    // Resolve the authenticated contract before the explicit per-owner check
+    // below. Incomplete or duplicate coverage returns null, preserving this
+    // historical inspector's result contract; malformed transport still throws.
+    const requiredNames=evidenceMatrixOwners(coverage,repository,run.head_sha,call,false);
     if (!requiredNames.every(name=>{
         const owners=coverage.filter(job=>job.name===name || job.name.endsWith(' / '+name));
         return owners.length===1 && owners[0].status==='completed' && owners[0].conclusion==='success';

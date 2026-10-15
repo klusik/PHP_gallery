@@ -2591,6 +2591,23 @@ Innan en återställd installation öppnas isolerar du e-post, schemalagda jobb,
 \index{u00260@utgåvekvalificering}
 \index{t00246@testning!t00247@tillfälliga arbetsflöden}
 
+Det~parallella FULL-kontraktet har~28 obligatoriska inbyggda ägare. Var~och~en
+av~de~fem PHP-/databasmiljöerna använder fyra separata GitHub-jobb med~fyra lokala
+processer, egen checkout och~vid behov egen databas-/HTTP-fixtur.
+Profilerna \codeword{source-contracts} och~\codeword{portable} kör fullständiga
+källkontroller och~Node-/WinApp-tester en~gång per~kandidat parallellt med
+säkerhetskontrollen. Dyra körmiljöjobb kräver fortfarande verifierade genererade data.
+Exklusiva barriärer behålls inom varje shard. Alla shardar och~gemensamma ägare
+måste lyckas för~samma SHA; efterkontroller bevarar checkoutens rena identitet.
+En~grön funktionskörning installerar inte matrisen i~skyddade arbetsflöden.
+Den~stegvisa installationen beskrivs i~\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md}.
+
+Endast utgåva~\codeword{0.132.9} skiljer den~mänskligt granskade underhållsmergen
+för~dispatcherreparationen från den~oförändrade stabila taggen~\codeword{0.132.8}.
+Ursprungsgranskningen autentiserar PR, godkännande, merge, arbetsflödesobjekt och~hela
+underhållskvalificeringen. Aktuellt main och~vanligt mänskligt PR-godkännande krävs
+fortfarande; andra versioner behöver den~stabila taggen direkt på~main.
+
 Den~centrala granskningen sparar namngivna WinApp-unittest-resultat, körtider
 och~orsaker till~överhoppning i~JSON tillsammans med~processens faktiska resultat.
 Saknade, ofullständiga eller~motstridiga poster kan~inte styrka PASS.

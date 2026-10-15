@@ -2631,6 +2631,23 @@ procedure. Updater file rollback still does~not~reverse database migrations.
 \index{release qualification}
 \index{testing!disposable workflows}
 
+The~parallel FULL contract has~28 required native owners. Each~of~the~five
+PHP/database environments uses four isolated GitHub jobs, each with four local
+processes and~its~own checkout and, where required, database/HTTP fixture.
+The~central \codeword{source-contracts} and~\codeword{portable} profiles run
+whole-tree source checks and~Node/WinApp coverage once per~candidate beside
+safety preflight. Expensive runtime jobs still require generated-state preflight.
+Exclusive test barriers remain within each shard. Every shard and~shared owner
+must succeed for~the~same SHA; post-test checks preserve clean checkout identity.
+A~feature-only green run does~not~install the~matrix in~protected workflows.
+See~\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} for~the~staged authority proof.
+
+Release~\codeword{0.132.9} alone recognizes the~human-reviewed dispatcher
+maintenance merge separately from the~unchanged stable~\codeword{0.132.8} tag.
+The~origin verifier authenticates the~exact PR, owner review, merge, workflow
+blobs and~complete maintenance qualification. The~release still leases actual
+main and~requires normal human PR approval; other versions retain tag-on-main selection.
+
 The~central audit retains named WinApp unittest outcomes, durations and~skip reasons
 in~JSON alongside the~actual process result. Missing, incomplete or~inconsistent
 records cannot establish PASS. Native Windows smoke may~remain explicitly skipped;

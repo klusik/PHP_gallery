@@ -19,7 +19,115 @@ import {api,command,output,verifyQualification,fetchJobs,requireQualificationChe
 import {loadQualification,qualificationRequest} from './release-completion.mjs';
 import {requireBotPullRequest,effectiveOwnerReview} from './release-owner-authorization.mjs';
 import {isAncestor,downloadReleaseEvidence,verifyLinearContent,qualifiedLinearCandidate} from './release-reconciliation.mjs';
-import {loadReleaseCoverage} from './coverage-artifacts.mjs';
+import {loadReleaseCoverage,readCoverageArtifact} from './coverage-artifacts.mjs';
+import {fullMatrixOwners} from './ci-owner-contract.mjs';
+
+/** Bind the sole untagged main repair approved before release 0.132.9.
+ * Type: Readonly<{repository:string,version:string,main:string,stable:string,tag:string,repair:string,tree:string,transport:string,run:string,attempt:number,artifact:number,digest:string,pr:number,review:number,check:number}>.
+ * Units: immutable Git, Actions, artifact and PR identities. Scope: release 0.132.9 only.
+ * Consumers: origin initialization, qualification and protected promotion readers.
+ * Rationale: the reviewed dispatcher repair advanced main without moving the existing stable tag; arbitrary untagged main commits remain ineligible.
+ */
+export const MAINTENANCE_MAIN_BRIDGE=Object.freeze({repository:'klusik/PHP_gallery',version:'0.132.9',
+    main:'66cbe28d345f27ca90827028381e1a458e6f89f9',stable:'d38443c355a2b2e14cbfaa1757e9fde4448f8fbb',tag:'v_0.132.8',
+    repair:'6aa5e3a8ccd4cd70f3f49ea83c9906a4086c1862',tree:'45cec56401a1b88c62b10f2d2f3a0d617b631dab',
+    transport:'6d087733e59175cbc5197d72f490ad8e2fb9e485',run:'38801060282',attempt:2,artifact:12005310526,
+    digest:'sha256:19c224811fab989bbc26a26044f2370ee0cb0eaeceae3b12e506b8946aa22cbe',pr:230,review:5539494509,check:116654815797});
+
+/** Recognize the exact finite maintenance main/stable identity without claiming authentication.
+ * @param {{version:string,initial_main_sha:string,previous_stable_sha:string,previous_stable_tag:string}} record Origin or release record projection.
+ * @returns {boolean} True only for the exact approved 0.132.9 bridge tuple; provider authentication is separate.
+ */
+export function isMaintenanceMainBridge(record) {
+    const pin=MAINTENANCE_MAIN_BRIDGE;
+    return record?.version===pin.version && record.initial_main_sha===pin.main
+        && record.previous_stable_sha===pin.stable && record.previous_stable_tag===pin.tag;
+}
+
+/** Select the stable predecessor without treating arbitrary untagged main commits as releases.
+ * @param {string} version Intended canonical release version.
+ * @param {string} main Observed current main commit.
+ * @param {string} repository Exact owner/repository.
+ * @param {import('./coverage-artifacts.mjs').ArtifactAdapters} adapters Optional isolated provider/archive readers; defaults to real read-only GitHub transports.
+ * @returns {string} The observed main for normal releases, or the authenticated original stable commit for this finite maintenance bridge.
+ */
+export function releaseStableMain(version,main,repository,adapters={}) {
+    const pin=MAINTENANCE_MAIN_BRIDGE;
+    const record={version,initial_main_sha:main,previous_stable_sha:pin.stable,previous_stable_tag:pin.tag};
+    if (!isMaintenanceMainBridge(record)) return main;
+    verifyMaintenanceMainBridge(record,repository,adapters);
+    return pin.stable;
+}
+
+/** Authenticate the human-reviewed maintenance merge and its complete independently pinned qualification.
+ * @param {{version:string,initial_main_sha:string,previous_stable_sha:string,previous_stable_tag:string}} record Checked origin or qualification projection; ordinary equal main/stable needs no exception.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {import('./coverage-artifacts.mjs').ArtifactAdapters} adapters Independent provider and complete raw-archive readers; production defaults remain read-only.
+ * @returns {void} Returns only for an ordinary identical main/stable or the fully authenticated finite bridge; never writes a ref, tag or check.
+ */
+export function verifyMaintenanceMainBridge(record,repository,adapters={}) {
+    if (record.initial_main_sha===record.previous_stable_sha) return;
+    const pin=MAINTENANCE_MAIN_BRIDGE,call=adapters.api ?? api;
+    const fail=()=>{throw new Error('BLOCKED unqualified maintenance main-to-stable bridge.');};
+    if (repository!==pin.repository || !isMaintenanceMainBridge(record)) fail();
+    if (peelReleaseTag(call,repository,pin.tag).commit_sha!==pin.stable) fail();
+    // Compare provider-owned Git object identities of the complete reviewed caller and main matrix.
+    // These are pinned blob identities, not hashes computed from potentially truncated Contents text.
+    for (const [commit,path,blob] of [[pin.transport,'.github/workflows/maintenance-workflow-repair.yml','86b1608293cac4ed7c56314cf4379c06d062643e'],
+        [pin.stable,'.github/workflows/gallery-workflows.yml','8aa6760e62da2ec44847002add26a8f4c2cd32da']]) {
+        const source=call(`repos/${repository}/contents/${path}?ref=${commit}`);
+        if (source?.type!=='file' || source.path!==path || source.sha!==blob) fail();
+    }
+    const merge=call(`repos/${repository}/commits/${pin.main}`);
+    if (merge?.sha!==pin.main || merge.parents?.length!==2 || merge.parents[0]?.sha!==pin.stable
+        || merge.parents[1]?.sha!==pin.repair || merge.commit?.tree?.sha!==pin.tree) fail();
+    const repair=call(`repos/${repository}/commits/${pin.repair}`);
+    if (repair?.sha!==pin.repair || repair.commit?.tree?.sha!==pin.tree) fail();
+    const pr=call(`repos/${repository}/pulls/${pin.pr}`);
+    requireBotPullRequest(pr,repository,pin.repair,'main');
+    if (pr.number!==pin.pr || pr.state!=='closed' || pr.merged!==true || pr.merge_commit_sha!==pin.main
+        || pr.base?.sha!==pin.stable || pr.base?.repo?.full_name!==repository
+        || !['klusik','github-actions[bot]'].includes(pr.merged_by?.login)) fail();
+    const review=effectiveOwnerReview(call(`repos/${repository}/pulls/${pin.pr}/reviews?per_page=100`),pr,'klusik',pin.repair);
+    if (review?.id!==pin.review) fail();
+    const run=call(`repos/${repository}/actions/runs/${pin.run}/attempts/${pin.attempt}`);
+    if (run?.id!==Number(pin.run) || run.run_attempt!==pin.attempt || run.head_sha!==pin.transport
+        || run.head_branch!=='feature/ci_main_workflow_qualification' || run.path!=='.github/workflows/maintenance-workflow-repair.yml'
+        || run.event!=='push' || run.status!=='completed' || run.conclusion!=='success'
+        || run.actor?.login!=='klusik' || run.triggering_actor?.login!=='klusik') fail();
+    const transport=readCoverageArtifact(repository,pin.artifact,pin.run,pin.digest,'maintenance-qualification-record',
+        ['maintenance-qualification.json'],adapters);
+    const proof=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(transport.entries.get('maintenance-qualification.json')));
+    if (proof.schema_version!==1 || proof.kind!=='maintenance-workflow-repair' || proof.repository!==repository
+        || proof.candidate_sha!==pin.repair || proof.candidate_tree!==pin.tree || proof.comparison_base!==pin.stable
+        || proof.authority_sha!==pin.stable || proof.transport_sha!==pin.transport || proof.run_id!==pin.run
+        || proof.run_attempt!==pin.attempt || proof.audit_profile!=='release') fail();
+    const jobs=[];let total=null;
+    for (let page=1;page<=20;page++) {
+        const response=call(`repos/${repository}/actions/runs/${pin.run}/attempts/${pin.attempt}/jobs?per_page=100&page=${page}`);
+        if (!Number.isSafeInteger(response?.total_count) || !Array.isArray(response.jobs)
+            || total!==null && response.total_count!==total) fail();
+        total=response.total_count;jobs.push(...response.jobs);
+        if (jobs.length===total) break;
+        if (!response.jobs.length || jobs.length>total) fail();
+    }
+    if (jobs.length!==total || new Set(jobs.map(job=>job.id)).size!==total) fail();
+    const prefix='Pinned main FULL and release audit / ',required=[...fullMatrixOwners(2),'Authoritative release audit'];
+    const native=jobs.filter(job=>job.name?.startsWith(prefix));
+    if (native.length!==required.length || !Array.isArray(proof.native_owners) || proof.native_owners.length!==required.length) fail();
+    for (const name of required) {
+        const matches=native.filter(job=>job.name===prefix+name);
+        if (matches.length!==1) fail();
+        const job=matches[0],retained=proof.native_owners.filter(item=>item.id===job.id&&item.name===job.name);
+        if (job.status!=='completed' || job.conclusion!=='success' || job.head_sha!==pin.transport
+            || job.run_id!==Number(pin.run) || job.run_attempt!==pin.attempt
+            || retained.length!==1 || retained[0].status!=='completed' || retained[0].conclusion!=='success') fail();
+    }
+    const check=call(`repos/${repository}/check-runs/${pin.check}`);
+    if (check?.id!==pin.check || check.app?.id!==15368 || check.name!=='Release qualification' || check.head_sha!==pin.repair
+        || check.status!=='completed' || check.conclusion!=='success'
+        || check.external_id!==`maintenance:${pin.run}:${pin.attempt}:${pin.repair}`) fail();
+}
 
 /** Explicit origin chosen by the maintainer before stabilizing a release branch.
  * @typedef {{schema_version:number,version:string,release_branch:string,selected_develop_sha:string,
@@ -58,7 +166,7 @@ export function validateOriginRecord(record,version) {
         || !/^v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(record.previous_stable_tag)
         || ![record.selected_develop_sha,record.initial_main_sha,record.previous_stable_sha].every(
             sha => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha))
-        || record.initial_main_sha !== record.previous_stable_sha) {
+        || record.initial_main_sha !== record.previous_stable_sha && !isMaintenanceMainBridge(record)) {
         throw new Error('BLOCKED malformed, inconsistent or unanchored release origin.');
     }
     // BigInt avoids rounding even when a valid numeric version segment is large.
@@ -81,11 +189,12 @@ export function validateOriginRecord(record,version) {
  * @param {string} version Canonical release version.
  * @param {string} candidateSha Exact checkout/release head SHA being qualified.
  * @param {string} repository GitHub owner/repo identity.
- * @param {PredecessorAdapters & {api?:GithubReader,publishedMainSha?:string,reconciliation?:Record<string,unknown>}} adapters Hermetic origin/predecessor readers or the real GitHub/Git and authenticated archive transports.
+ * @param {PredecessorAdapters & import('./coverage-artifacts.mjs').ArtifactAdapters & {publishedMainSha?:string,reconciliation?:Record<string,unknown>}} adapters Hermetic origin/predecessor and complete maintenance archive readers, or the real read-only GitHub/Git transports.
  * @returns {Record<string,string>} Server-checked origin, blob and predecessor identities.
  */
 export function verifyReleaseOrigin(record, version, candidateSha, repository, adapters = {}) {
     validateOriginRecord(record,version);
+    verifyMaintenanceMainBridge(record,repository,adapters);
     if (!/^[a-f0-9]{40}$/.test(candidateSha) || !/^[\w.-]+\/[\w.-]+$/.test(repository)) {
         throw new Error('BLOCKED exact candidate or repository identity is unavailable.');
     }

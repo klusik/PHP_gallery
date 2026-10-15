@@ -3,8 +3,8 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: .github/scripts/ci-owner-contract.mjs
  * Module Type: Authenticated CI Owner Contract
- * Purpose: Keep current PHP 8.1/8.5 owners strict while reading immutable historical qualification.
- * Responsibilities: Bind the legacy database owner mapping to verified workflow bytes inherited from main history.
+ * Purpose: Keep current sharded PHP 8.1/8.5 owners strict while reading immutable historical qualification.
+ * Responsibilities: Bind current and historical FULL owner mappings to exact reviewed workflow bytes.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -12,20 +12,32 @@ import {createHash} from 'node:crypto';
 
 /**
  * Return one complete native FULL owner contract without consulting candidate-authored metadata.
- * @param {1|2} [version=2] Contract 1 is historical PHP 8.3 database coverage; contract 2 is current PHP 8.5 database coverage.
+ * @param {1|2|3} [version=3] Contract 1 is historical PHP 8.3 coverage, contract 2 is the prior unsharded matrix, and contract 3 is the current sharded matrix.
  * @returns {string[]} Exact required owner labels, including unchanged databases, runtimes and aggregate gate.
  */
-export function fullMatrixOwners(version=2) {
-    if (![1,2].includes(version)) throw new Error('BLOCKED unknown CI owner contract version.');
-    const databasePhp=version===1?'8.3':'8.5';
-    return ['Read-only generated-state and source preflight',
+export function fullMatrixOwners(version=3) {
+    if (![1,2,3].includes(version)) throw new Error('BLOCKED unknown CI owner contract version.');
+    const owners=['Read-only generated-state and source preflight',
         'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-        'Positive production package (macos-latest)',
-        `PHP ${databasePhp} workflows (mysql:8.4, Unicode)`,
-        `PHP ${databasePhp} workflows (mariadb:10.11, Unicode)`,
-        'PHP 8.5 workflows (mariadb:11.4, Unicode)',
-        'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)',
-        'Required Chromium fixtures','Complete required CI matrix'];
+        'Positive production package (macos-latest)'];
+    if (version===3) {
+        owners.push('Shared source contracts','Portable Node and WinApp');
+        for (const database of ['mysql:8.4','mariadb:10.11','mariadb:11.4']) {
+            for (let shard=1;shard<=4;shard++) {
+                owners.push(`PHP 8.5 workflows (${database}, Unicode, shard ${shard}/4)`);
+            }
+        }
+        for (let shard=1;shard<=4;shard++) owners.push(`PHP 8.1 source (unicode, shard ${shard}/4)`);
+        for (let shard=1;shard<=4;shard++) owners.push(`PHP 8.5 source (ascii, shard ${shard}/4)`);
+    } else {
+        const databasePhp=version===1?'8.3':'8.5';
+        owners.push(`PHP ${databasePhp} workflows (mysql:8.4, Unicode)`,
+            `PHP ${databasePhp} workflows (mariadb:10.11, Unicode)`,
+            'PHP 8.5 workflows (mariadb:11.4, Unicode)',
+            'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)');
+    }
+    owners.push('Required Chromium fixtures','Complete required CI matrix');
+    return owners;
 }
 
 /**
@@ -81,17 +93,49 @@ export function requireIntegrationBasicProfile(profile,repository,workflowSha,ca
 }
 
 /**
- * Recognize only the two reviewed native database/runtime matrix contracts in complete workflow source.
+ * Recognize only the reviewed historical or four-shard native database/runtime matrices.
  * @param {string} source Verified workflow source text.
- * @returns {1|2} Reviewed contract version; unknown, partial or mixed matrices always throw.
+ * @returns {1|2|3} Reviewed contract version; unknown, partial or mixed matrices always throw.
  */
 export function workflowOwnerVersion(source) {
     const block=name=>new RegExp('^  '+name+':\\n([\\s\\S]*?)(?=^  [a-z][a-z0-9-]*:|$(?![\\s\\S]))','m').exec(source)?.[1] || '';
-    const databases=[...block('real-database-browser').matchAll(/^          - php: ['"](8\.[0-9]+)['"]\n            database: ['"]([^'"]+)['"]\n            real_browser: (true|false)$/gm)]
+    const databaseBlock=block('real-database-browser');
+    const runtimeBlock=block('runtime-compatibility');
+    const matrix=job=>/^      matrix:\n([\s\S]*?)(?=^    [a-z][a-z0-9-]*:|$(?![\s\S]))/m.exec(job)?.[1] || '';
+    const databaseMatrix=matrix(databaseBlock);
+    const runtimeMatrix=matrix(runtimeBlock);
+    const databases=[...databaseMatrix.matchAll(/^          - php: ['"](8\.[0-9]+)['"]\n            database: ['"]([^'"]+)['"]\n            real_browser: (true|false)$/gm)]
         .map(match=>[match[1],match[2],match[3]]);
-    const runtimes=[...block('runtime-compatibility').matchAll(/^          - php: ['"](8\.[0-9]+)['"]\n            normalization: (unicode|ascii)$/gm)]
+    const runtimes=[...runtimeMatrix.matchAll(/^          - php: ['"](8\.[0-9]+)['"]\n            normalization: (unicode|ascii)$/gm)]
         .map(match=>[match[1],match[2]]);
-    if (JSON.stringify(runtimes)!==JSON.stringify([['8.1','unicode'],['8.5','ascii']])) {
+    const readAxis=(matrixSource,key)=>[...matrixSource.matchAll(new RegExp('^        '+key+': \\[([^\\]]+)\\]$','gm'))].map(match=>match[1]);
+    const databaseShards=readAxis(databaseMatrix,'shard');
+    const runtimeShards=readAxis(runtimeMatrix,'shard');
+    const databaseAxis=readAxis(databaseMatrix,'database');
+    const phpAxis=readAxis(runtimeMatrix,'php');
+    const readAxisKeys=matrixSource=>[...matrixSource.matchAll(/^        ([a-z][a-z0-9_-]*):/gm)]
+        .map(match=>match[1]).filter(key=>key!=='include');
+    const databaseAxisKeys=readAxisKeys(databaseMatrix);
+    const runtimeAxisKeys=readAxisKeys(runtimeMatrix);
+    const expectedRuntimes=[['8.1','unicode'],['8.5','ascii']];
+    const expectedDatabases=[['8.5','mysql:8.4','true'],['8.5','mariadb:10.11','false'],['8.5','mariadb:11.4','false']];
+    if (databaseShards.length+runtimeShards.length+databaseAxis.length+phpAxis.length>0) {
+        if (JSON.stringify(databaseShards)!==JSON.stringify(['1, 2, 3, 4'])
+            || JSON.stringify(runtimeShards)!==JSON.stringify(['1, 2, 3, 4'])
+            || JSON.stringify(databaseAxis)!==JSON.stringify(["'mysql:8.4', 'mariadb:10.11', 'mariadb:11.4'"])
+            || JSON.stringify(phpAxis)!==JSON.stringify(["'8.1', '8.5'"])
+            || JSON.stringify([...databaseAxisKeys].sort())!==JSON.stringify(['database','shard'])
+            || JSON.stringify([...runtimeAxisKeys].sort())!==JSON.stringify(['php','shard'])
+            || JSON.stringify(databases)!==JSON.stringify(expectedDatabases)
+            || JSON.stringify(runtimes)!==JSON.stringify(expectedRuntimes)) {
+            throw new Error('BLOCKED sharded workflow W owner matrix is unsupported or incomplete.');
+        }
+        return 3;
+    }
+    if (databaseAxisKeys.length!==0 || runtimeAxisKeys.length!==0) {
+        throw new Error('BLOCKED historical workflow W contains an unsupported matrix axis.');
+    }
+    if (JSON.stringify(runtimes)!==JSON.stringify(expectedRuntimes)) {
         throw new Error('BLOCKED historical workflow W runtime matrix is unsupported or incomplete.');
     }
     for (const version of [1,2]) {
@@ -107,15 +151,24 @@ export function workflowOwnerVersion(source) {
  * @param {string} repository Exact owner/repository identity.
  * @param {string} workflowSha Previously authenticated protected workflow commit W.
  * @param {function(string):unknown} call Independent immutable GitHub source reader.
- * @returns {void} Returns only for the complete current PHP 8.1/8.5 matrix; altered or historical definitions throw.
+ * @param {2|3} [expectedVersion=3] Exact installed owner contract; version 2 is allowed only for authenticated retained authority evidence.
+ * @returns {void} Returns only for the exact reviewed installed owner matrix; altered or historical definitions throw.
  */
-export function requireCurrentWorkflowOwners(repository,workflowSha,call) {
+export function requireCurrentWorkflowOwners(repository,workflowSha,call,expectedVersion=3) {
     const source=workflowSource(call,repository,workflowSha).text;
-    if (workflowOwnerVersion(source)!==2) {
-        throw new Error('BLOCKED protected-develop workflow does not define the current PHP 8.1/8.5 matrix.');
+    const version=workflowOwnerVersion(source);
+    if (![2,3].includes(expectedVersion) || version!==expectedVersion) {
+        throw new Error('BLOCKED protected workflow does not define the exact requested owner matrix.');
     }
-    if (!/php-version: \$\{\{ matrix\.php \}\}/.test(source)
-        || !/name: PHP \$\{\{ matrix\.php \}\} workflows \(\$\{\{ matrix\.database \}\}, Unicode\)/.test(source)
+    const php='$'+'{{ matrix.php }}';
+    const database='$'+'{{ matrix.database }}';
+    const normalization='$'+'{{ matrix.normalization }}';
+    const shard='$'+'{{ matrix.shard }}';
+    const databaseLabel='name: PHP '+php+' workflows ('+database+', Unicode'+(version===3?', shard '+shard+'/4':'')+')';
+    const runtimeLabel='name: PHP '+php+' source ('+normalization+(version===3?', shard '+shard+'/4':'')+')';
+    if (!source.includes('php-version: '+php)
+        || !source.includes(databaseLabel) || !source.includes(runtimeLabel)
+        || version===3 && (!source.includes('name: Shared source contracts') || !source.includes('name: Portable Node and WinApp'))
         || !source.includes('extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl')) {
         throw new Error('BLOCKED protected-develop runtime provisioning differs from its declared native owner matrix.');
     }
@@ -124,9 +177,9 @@ export function requireCurrentWorkflowOwners(repository,workflowSha,call) {
 /**
  * Select historical owners only with immutable workflow and inherited main-history proof.
  *
- * Fresh publishers use fullMatrixOwners() directly and can emit only contract 2.
- * Readers may accept contract 1 when W's verified workflow is identical to its
- * authenticated common-main ancestor. Existing records and their schema remain intact.
+ * Fresh publishers use fullMatrixOwners() directly and can emit only contract 3.
+ * Readers accept contracts 1 and 2 only when W's verified workflow is identical
+ * to its authenticated common-main ancestor. Existing records remain intact.
  *
  * @param {Array<{name:string}>} jobs Actual retained native job/evidence rows.
  * @param {string} repository Exact owner/repository.
@@ -136,9 +189,19 @@ export function requireCurrentWorkflowOwners(repository,workflowSha,call) {
  * @returns {string[]} Exactly one reviewed owner set; unavailable W, unsupported matrices or mixed/missing native rows throw.
  */
 export function evidenceMatrixOwners(jobs,repository,workflowSha,call,complete=true) {
-    const rows=jobs.map(job=>job.name.split(' / ').at(-1)).filter(name=>/^PHP \d+\.\d+ (workflows|source) \(/.test(name));
-    let version=2;
-    if (rows.some(name=>name.startsWith('PHP 8.3 '))) {
+    const observed=jobs.map(job=>job.name.split(' / ').at(-1));
+    const rows=observed.filter(name=>/^PHP \d+\.\d+ (workflows|source) \(/.test(name));
+    const hasShardedRows=rows.some(name=>/shard \d+\/4\)$/.test(name));
+    const hasLegacyPhp83=rows.some(name=>name.startsWith('PHP 8.3 '));
+    if (hasShardedRows && hasLegacyPhp83) throw new Error('BLOCKED mixed historical and sharded native owner rows.');
+    let version=hasShardedRows ? 3 : (hasLegacyPhp83 ? 1 : 2);
+    if (rows.length===0 && !complete) {
+        if (typeof call!=='function' || typeof workflowSha!=='string') {
+            throw new Error('BLOCKED partial native owner evidence has no immutable workflow source.');
+        }
+        version=workflowOwnerVersion(workflowSource(call,repository,workflowSha).text);
+    }
+    if (version===1 || version===2) {
         if (typeof call!=='function') throw new Error('BLOCKED historical workflow W reader is unavailable.');
         const workflow=workflowSource(call,repository,workflowSha);
         const main=call(`repos/${repository}/git/ref/heads/main`);
@@ -148,16 +211,24 @@ export function evidenceMatrixOwners(jobs,repository,workflowSha,call,complete=t
         const ancestor=workflowSha===main.object.sha ? workflowSha
             : call(`repos/${repository}/compare/${workflowSha}...${main.object.sha}`)?.merge_base_commit?.sha;
         const inherited=ancestor===workflowSha ? workflow : workflowSource(call,repository,ancestor);
-        if (workflow.sha!==inherited.sha || workflowOwnerVersion(workflow.text)!==1) {
+        const authenticatedVersion=workflowOwnerVersion(workflow.text);
+        if (workflow.sha!==inherited.sha || workflowOwnerVersion(inherited.text)!==authenticatedVersion
+            || authenticatedVersion!==version || authenticatedVersion===3) {
             throw new Error('BLOCKED legacy PHP owner names do not match workflow W inherited from main history.');
         }
-        version=1;
+    } else {
+        if (typeof workflowSha!=='string' || typeof call!=='function') {
+            throw new Error('BLOCKED sharded native owner rows lack their immutable workflow W reader.');
+        }
+        requireCurrentWorkflowOwners(repository,workflowSha,call);
     }
     const owners=fullMatrixOwners(version);
     const matrixOwners=owners.filter(name=>name.startsWith('PHP '));
     if (rows.some(name=>!matrixOwners.includes(name)) || new Set(rows).size!==rows.length
-        || complete && matrixOwners.some(name=>!rows.includes(name))) {
-        throw new Error('BLOCKED runtime/database native owners are mixed, missing or duplicated.');
+        || complete && (matrixOwners.some(name=>!rows.includes(name))
+            || owners.some(name=>!observed.includes(name))
+            || owners.some(name=>observed.filter(value=>value===name).length!==1))) {
+        throw new Error('BLOCKED native FULL owners are mixed, missing or duplicated.');
     }
     return owners;
 }

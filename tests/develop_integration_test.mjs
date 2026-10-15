@@ -17,12 +17,14 @@ import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {runInNewContext} from 'node:vm';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
-import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence} from '../.github/scripts/develop-integration.mjs';
+import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence,
+    requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths} from '../.github/scripts/develop-integration.mjs';
 import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {verifyIntegrationEvidence} from '../.github/scripts/release-promotion.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
-import {requireCurrentWorkflowOwners} from '../.github/scripts/ci-owner-contract.mjs';
+import {fullMatrixOwners,requireCurrentWorkflowOwners} from '../.github/scripts/ci-owner-contract.mjs';
 
 /** Create real isolated Git objects for the source/origin/overlay recovery ancestry contract.
  * @returns {{record:import('../.github/scripts/integration-bootstrap.mjs').BootstrapRecord,origin:{schema_version:number,version:string,release_branch:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string},git:function(string,string[],(string|null)=):string,cleanup:function():void}} Disposable tree builder and exact recovery identities; no network or user refs are used.
@@ -145,14 +147,109 @@ const context={repository,workflowPath:'.github/workflows/develop-integration.ym
     ref:'refs/heads/main',runId:901,runAttempt:2,headSha:workflowSha};
 const request={branch,sourceSha,candidateSha,expectedDevelopSha:developSha,sourceBase:developSha,
     basicRunId:801,basicRunAttempt:3};
-requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,2));
+requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,3));
+assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,2)),/BLOCKED/,
+    'protected-develop authority cannot accept the prior unsharded matrix');
 assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,1)),/BLOCKED/,
-    'protected-develop authority cannot use historical PHP 8.3 provisioning under current owner labels');
-const ownerNames=['Read-only generated-state and source preflight',
+    'protected-develop authority cannot accept historical PHP 8.3 provisioning');
+const ownerNames=fullMatrixOwners();
+assert.deepEqual(ownerNames,[
+    'Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-    'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
-    'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
-    'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+    'Positive production package (macos-latest)','Shared source contracts','Portable Node and WinApp',
+    ...['mysql:8.4','mariadb:10.11','mariadb:11.4'].flatMap(database=>
+        [1,2,3,4].map(shard=>`PHP 8.5 workflows (${database}, Unicode, shard ${shard}/4)`)),
+    ...[1,2,3,4].map(shard=>`PHP 8.1 source (unicode, shard ${shard}/4)`),
+    ...[1,2,3,4].map(shard=>`PHP 8.5 source (ascii, shard ${shard}/4)`),
+    'Required Chromium fixtures','Complete required CI matrix',
+],'fresh integration evidence must preserve all exact current native owner labels and shard identities');
+
+{
+    const source='ebde37ae7bd5c80ad1cb8733b7fb8fd2acb6cac1',tree='4f01e2e5bf24bd5b34137a515075b4105889f87c';
+    const runId=38790736942,attempt=2,expectedBranch='feature/ci_parallelization';
+    const sealed=new Map([
+        ['.github/workflows/candidate-preparation.yml','fd4d95e7ad7d8a4494c29016b17b7c6b65ae82de'],
+        ['scripts/audit.php','b09c00f41800de806f91a86477999921966e4419'],
+        ['scripts/audit_lib.php','10fa4f72de1a624125221f8c4a05db6e8908b8c5'],
+        ['scripts/audit_source_evidence.php','3881cc132866ccecc83cca1059f32b0070cd54f4'],
+        ['scripts/audit_registry.php','4fb229c0be42dfd5d086c948a47f1b7e25dca398'],
+        ['scripts/audit_php_registry.php','783544714d6f918b35e2c09c3a7016bd7a26b82d'],
+    ]);
+    const generated=new Map([
+        ['app/core-manifest.json','42a26c98cb69a39406fb34e7183343c0d65b8d09'],
+    ]);
+    const jobs=fullMatrixOwners(3).map((name,index)=>({id:4000+index,
+        name:'Full CI for the published prepared SHA / '+name,run_id:runId,run_attempt:attempt,
+        status:'completed',conclusion:'success'}));
+    const checks=['Candidate qualification','Complete required CI matrix'].map((name,index)=>({id:4100+index,name,
+        head_sha:source,external_id:`candidate:${runId}:${attempt}:${source}`,app:{id:15368},status:'completed',conclusion:'success'}));
+    const provider=(path,branch=expectedBranch)=>{
+        if (path.endsWith('/commits/'+source)) return {sha:source,commit:{tree:{sha:tree}}};
+        if (path.endsWith('/actions/runs/'+runId+'/attempts/'+attempt)) return {id:runId,run_attempt:attempt,
+            head_sha:source,head_branch:branch,path:'.github/workflows/candidate-preparation.yml',event:'workflow_dispatch',
+            status:'completed',conclusion:'success',actor:{login:'klusik'}};
+        if (path.endsWith('/git/trees/'+tree+'?recursive=1')) return {sha:tree,truncated:false,tree:[...sealed,...generated].map(([path,sha])=>
+            ({path,mode:'100644',type:'blob',sha}))};
+        if (path.endsWith('/attempts/'+attempt+'/jobs?per_page=100&page=1')) return {total_count:jobs.length,jobs};
+        if (path.endsWith('/commits/'+source+'/check-runs?filter=all&per_page=100&page=1')) {
+            return {total_count:checks.length,check_runs:checks};
+        }
+        assert.fail('Unexpected finite evaluator qualification fixture GET '+path);
+    };
+    assert.doesNotThrow(()=>requireAuthorityUpdateSource(repository,provider),
+        'the exact maintenance FULL must prove all 28 v3 owner jobs and sealed source blobs');
+    assert.throws(()=>requireAuthorityUpdateSource(repository,path=>provider(path,'feature/other')),/missing or inconsistent/,
+        'a maintenance run from any other source branch cannot own the evaluator map');
+    const alteredManifestProvider=path=>{
+        const response=provider(path);
+        if (path.endsWith('/git/trees/'+tree+'?recursive=1')) {
+            return {...response,tree:response.tree.map(entry=>entry.path==='app/core-manifest.json'
+                ? {...entry,sha:'c'.repeat(40)} : entry)};
+        }
+        return response;
+    };
+    assert.throws(()=>requireAuthorityUpdateSource(repository,alteredManifestProvider),/generated companion differs/,
+        'the maintenance tree must authenticate the exact generated manifest blob');
+    const missingManifestProvider=path=>{
+        const response=provider(path);
+        if (path.endsWith('/git/trees/'+tree+'?recursive=1')) {
+            return {...response,tree:response.tree.filter(entry=>entry.path!=='app/core-manifest.json')};
+        }
+        return response;
+    };
+    assert.throws(()=>requireAuthorityUpdateSource(repository,missingManifestProvider),/generated companion differs/,
+        'the maintenance source must contain the generated companion path');
+
+    const prior=new Map([...sealed,...generated].map(([path])=>[path,'100644:blob:'+'a'.repeat(40)]));
+    const qualified=new Map([...sealed,...generated].map(([path,sha])=>[path,'100644:blob:'+sha]));
+    assert.doesNotThrow(()=>requireAuthorityUpdateSourcePaths(qualified,prior),
+        'stage 2 may replace only sealed evaluator files and the exact qualified generated manifest');
+    const unowned=new Map(qualified);unowned.set('app/unreviewed.php','100644:blob:'+'b'.repeat(40));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(unowned,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'an unrelated stage-2 path is rejected before the publisher can write checks or refs');
+    const unknownJson=new Map(qualified);unknownJson.set('app/other-generated.json','100644:blob:'+'b'.repeat(40));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(unknownJson,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'an arbitrary generated JSON input is not admitted with the manifest companion');
+    const changedSeal=new Map(qualified);changedSeal.set('scripts/audit.php','100644:blob:'+'b'.repeat(40));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(changedSeal,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'an approved path must still match its independently qualified blob');
+    const deletedSeal=new Map(qualified);deletedSeal.delete('scripts/audit_registry.php');
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(deletedSeal,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'deleting an approved evaluator input is not a permitted transition');
+    const changedManifest=new Map(qualified);changedManifest.set('app/core-manifest.json','100644:blob:'+'c'.repeat(40));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(changedManifest,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'the generated manifest must match the exact independently qualified blob');
+    const deletedManifest=new Map(qualified);deletedManifest.delete('app/core-manifest.json');
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(deletedManifest,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'the stage-2 candidate cannot omit its qualified generated manifest companion');
+    const alternateManifest=new Map(qualified);alternateManifest.set('app/production-files.json','100644:blob:'+'d'.repeat(40));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(alternateManifest,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'another manifest-like JSON path is never an approved generated companion');
+    const missingManifest=new Map([...qualified].filter(([path])=>path!=='app/core-manifest.json'));
+    assert.throws(()=>requireAuthorityUpdateSourcePaths(missingManifest,prior),/outside its exact sealed evaluator and manifest blobs/,
+        'the authenticated maintenance source must include the exact core manifest');
+}
+
 const basicAuthorityPaths=['.github/workflows/candidate-preparation.yml','scripts/audit.php','scripts/cli_guard.php',
     'scripts/audit_lib.php','scripts/audit_process.php','scripts/audit_performance.php','scripts/audit_source_evidence.php',
     'scripts/audit_route_performance.php','scripts/audit_winapp.php','scripts/runtime_plan_metrics.php','scripts/audit_registry.php','scripts/audit_php_registry.php',
@@ -238,9 +335,10 @@ function fixture(sourceHead=candidateSha) {
         check_suite:{id:7001},external_id:'basic:801:3:'+sourceSha,status:'completed',conclusion:'success'};
     const jobs=ownerNames.map((name,index)=>({id:2000+index,name:'Develop integration / '+name,run_id:901,
         run_attempt:2,workflow_name:'Integrate into develop',status:'completed',conclusion:'success'}));
+    const workflowStepId=2000+ownerNames.length;
     for (const [index,name] of ['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate'].entries())
-        jobs.push({id:2011+index,name,run_id:901,run_attempt:2,workflow_name:'Integrate into develop',status:'completed',conclusion:'success'});
-    jobs.push({id:2014,name:'Publish develop integration',run_id:901,
+        jobs.push({id:workflowStepId+index,name,run_id:901,run_attempt:2,workflow_name:'Integrate into develop',status:'completed',conclusion:'success'});
+    jobs.push({id:workflowStepId+3,name:'Publish develop integration',run_id:901,
         run_attempt:2,workflow_name:'Integrate into develop',status:'in_progress',conclusion:null});
     const call=(path,method='GET',payload=null)=>{
         if (path==='repos/'+repository+'/git/ref/heads/'+encodeURIComponent(branch).replace(/%2F/gi,'/'))
@@ -311,7 +409,7 @@ for (const [label,patch] of [
     const f=fixture();
     const checked=validateDevelopIntegration(request,context,repository,f.call);
     assert.deepEqual(checked.plan,{branch:'develop',oldSha:developSha,newSha:candidateSha});
-    assert.equal(checked.record.native_owners.length,11);
+    assert.equal(checked.record.native_owners.length,28);
     assert.equal(checked.record.source_sha,sourceSha);
     assert.equal(checked.record.candidate_sha,candidateSha);
 }
@@ -412,6 +510,34 @@ for (const [label,mutate] of [
     const digest='sha256:'+uploadDigest;
     // Exercise the workflow-to-helper boundary with the actual bare upload-action output.
     const workflow=readFileSync(new URL('../.github/workflows/develop-integration.yml',import.meta.url),'utf8');
+    const fullJob=workflow.match(/^  full:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:)/m)?.[1] ?? '';
+    assert.match(fullJob,/^    needs: \[select, publish-candidate\]$/m,
+        'FULL must wait directly for both selected source and published candidate');
+    const fullCondition=fullJob.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m)?.[1] ?? '';
+    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.select.outputs.source_sha";
+    assert.equal(fullCondition,expectedFullCondition,
+        'FULL must require cancellation safety, successful direct dependencies and the selected source SHA');
+    assert.match(fullJob,/checkout_ref: \$\{\{ needs\.publish-candidate\.outputs\.candidate_sha \}\}/,
+        'FULL checkout must remain bound to the published candidate');
+    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]');
+    const fullConditionCases=[
+        {name:'ordinary integration tolerates its skipped optional BASIC ancestor',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':'skipped'},expected:true},
+        {name:'authority update retains successful optional BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':'success'},expected:true},
+        ...['failure','skipped','cancelled'].flatMap(result=>[
+            {name:'select '+result+' blocks FULL',cancelled:false,select:result,publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+            {name:'publication '+result+' blocks FULL',cancelled:false,select:'success',publish:result,candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+        ]),
+        {name:'cancelled workflow blocks FULL',cancelled:true,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
+        {name:'generated child requires a new squash checkpoint',cancelled:false,select:'success',publish:'success',candidate:candidateSha,source:sourceSha,optional:{},expected:false},
+    ];
+    for (const scenario of fullConditionCases) {
+        const needs={select:{result:scenario.select,outputs:{source_sha:scenario.source}},
+            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate}},...scenario.optional};
+        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs}),scenario.expected,
+            'FULL condition evaluation: '+scenario.name);
+    }
     const expression=workflow.match(/^\s+artifact_digest: (.+)$/m)?.[1].trim();
     assert.ok(expression,'preparation exposes the archive digest');
     const dispatchedDigest=expression.replace('${{ steps.upload.outputs.artifact-digest }}',uploadDigest);
@@ -498,7 +624,7 @@ const recoveryRequest={...request,candidateSha:sourceSha};
     assert.equal(recovered.record.schema_version,1,'retain the artifact protocol accepted by existing release origins');
     assert.equal(recovered.record.recovery_mode,'existing-develop');
     assert.equal(recovered.record.ref_write,false);
-    assert.equal(recovered.record.native_owners.length,11,'fresh actual main-run owners, never old job IDs');
+    assert.equal(recovered.record.native_owners.length,28,'fresh actual main-run owners, never old job IDs');
     assert.equal(recovered.record.expected_develop_sha,developSha,'retain true historical source parent');
     assert.equal(f.state.updates.length,0,'recovery must never write any Git ref');
     assert.equal(f.state.develop,sourceSha);

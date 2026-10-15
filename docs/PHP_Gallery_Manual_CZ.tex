@@ -2588,6 +2588,23 @@ Před otevřením obnovené instalace izolujte e-mail, plánované úlohy, integ
 \index{k00072@kvalifikace vydání}
 \index{t00234@testování!d00031@dočasné postupy}
 
+Paralelní kontrakt FULL má 28 povinných vlastníků. Každé z~pěti prostředí
+PHP/databáze používá čtyři samostatné úlohy GitHubu, každou se~čtyřmi místními
+procesy, vlastním checkoutem a~podle potřeby vlastní databázovou/HTTP instalací.
+Profily \codeword{source-contracts} a~\codeword{portable} provádějí úplné zdrojové
+kontroly a~testy Node/WinApp jednou pro~kandidáta souběžně s~bezpečnostním
+preflightem. Drahé běhové úlohy nadále vyžadují ověření generovaných dat.
+Výhradní bariéry zůstávají uvnitř shardu. Všechny shardy a~sdílení vlastníci
+musí uspět pro~stejné SHA; následná kontrola zachovává čistou identitu checkoutu.
+Zelený běh pouze ve~feature větvi matici do~chráněných workflow neinstaluje.
+Důkazy etapové instalace popisuje \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md}.
+
+Pouze vydání~\codeword{0.132.9} rozlišuje lidsky schválený maintenance merge
+opravy dispatcheru a~nezměněný stabilní tag~\codeword{0.132.8}. Ověření původu
+autentizuje přesný PR, lidské review, merge, objekty workflow a~úplnou maintenance
+kvalifikaci. Release nadále ověřuje aktuální main a~vyžaduje běžné lidské
+schválení PR; ostatní verze vybírají stabilní tag přímo na~main.
+
 Centrální audit uchovává v~JSON jednotlivé pojmenované výsledky unittest testů
 WinApp, doby běhu a~důvody přeskočení spolu se~skutečným výsledkem procesu.
 Chybějící, neúplné nebo nekonzistentní záznamy nemohou doložit PASS.

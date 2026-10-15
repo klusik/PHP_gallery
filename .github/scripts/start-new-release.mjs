@@ -14,7 +14,8 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {api,command,output} from './release-promotion.mjs';
-import {originPath,validateOriginRecord,verifyPredecessor,verifyPredecessorLineage,verifyReleaseOrigin} from './release-origin.mjs';
+import {originPath,validateOriginRecord,verifyPredecessor,verifyPredecessorLineage,verifyReleaseOrigin,
+    releaseStableMain} from './release-origin.mjs';
 import {isAncestor,matchingBranchSha} from './release-reconciliation.mjs';
 
 /** Recursive JSON transport values narrowed by the origin and predecessor validators.
@@ -60,10 +61,12 @@ export function startNewRelease(request,repository,adapters={}) {
     if (head!==request.selected) throw new Error('BLOCKED release branch advanced before initialization.');
     const main=call('repos/'+repository+'/git/ref/heads/main').object?.sha;
     const develop=call('repos/'+repository+'/git/ref/heads/develop').object?.sha;
-    // Select the stable tag on current main, never releases/latest or an ancestral git describe.
+    // A single owner-reviewed maintenance merge may separate actual main from its unchanged stable tag.
+    const stable=releaseStableMain(request.version,main,repository,adapters);
+    // Select the exact stable identity, never releases/latest or an unverified ancestral git describe.
     const tags=JSON.parse(git('gh',['api','repos/'+repository+'/git/matching-refs/tags/v_','--paginate','--slurp'])).flat();
     const matching=tags.filter(ref=>/^refs\/tags\/v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(ref.ref))
-        .filter(ref=>git('git',['rev-parse',ref.ref+'^{commit}'])===main);
+        .filter(ref=>git('git',['rev-parse',ref.ref+'^{commit}'])===stable);
     if (matching.length!==1) throw new Error('BLOCKED current main must have one unambiguous stable tag.');
     const predecessor=verifyPredecessor(call,repository,matching[0].ref.slice('refs/tags/'.length),adapters);
     if (!isAncestor(call,repository,request.selected,develop)) throw new Error('BLOCKED pushed source is not retained on develop.');
@@ -71,7 +74,7 @@ export function startNewRelease(request,repository,adapters={}) {
     const supplement='.github/release-predecessors/v_'+request.version+'.json';
     if (git('git',['ls-tree',request.selected,'--',path,supplement])) throw new Error('BLOCKED origin paths already exist.');
     const record={schema_version:1,version:request.version,release_branch:branch,selected_develop_sha:request.selected,
-        initial_main_sha:main,previous_stable_tag:predecessor.previous_stable_tag,previous_stable_sha:main};
+        initial_main_sha:main,previous_stable_tag:predecessor.previous_stable_tag,previous_stable_sha:predecessor.previous_stable_sha};
     validateOriginRecord(record,request.version);
     const source=call('repos/'+repository+'/git/commits/'+request.selected);
     if (source.sha!==request.selected || !/^[a-f0-9]{40}$/.test(source.tree?.sha ?? '')) throw new Error('BLOCKED source tree unavailable.');
@@ -95,7 +98,7 @@ export function startNewRelease(request,repository,adapters={}) {
     git('git',['push','origin',commit.sha+':refs/heads/'+branch]);
     if (matchingBranchSha(call,repository,branch)!==commit.sha) throw new Error('BLOCKED origin publication raced.');
     return {state:'INITIALIZED',branch,origin_sha:commit.sha,candidate_sha:commit.sha,
-        selected_develop_sha:request.selected,previous_stable_sha:main};
+        selected_develop_sha:request.selected,previous_stable_sha:predecessor.previous_stable_sha};
 }
 
 /** Initialize the pushed branch and emit the checkout for the same preparation run.
