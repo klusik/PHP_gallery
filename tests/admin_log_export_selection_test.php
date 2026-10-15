@@ -135,5 +135,12 @@ namespace {
     assert_log_export(str_contains($html, '&lt;script&gt;') && !str_contains($html, '<script>'), 'Diagnostic messages must stay escaped in compact rows.');
     assert_log_export(str_contains($html, 'aria-label="Copy entire group"') && str_contains($html, 'form="admin-log-bulk-form"'), 'Compact controls must preserve accessible scope and native form ownership.');
     assert_log_export(str_contains($html, 'download target="_blank" rel="noopener"'), 'Row exports must retain an authenticated native HTTP download path.');
+    $contextRow = array_merge($row, ['event_key'=>'migrations.ran','message'=>'Admin ran migrations.',
+        'context_pretty_json'=>'{"migration":"cache_regions","unsafe":"<img src=x>"}']);
+    $contextHtml = \Gallery\Views\view_render_admin_log_table_rows([$contextRow], $labels, 'cache');
+    assert_log_export(str_contains($contextHtml, 'data-admin-log-context-match') && str_contains($contextHtml, 'Match in details')
+        && str_contains($contextHtml, '&lt;img src=x&gt;') && !str_contains($contextHtml, '<img'), 'A context-only search match must be explained while its JSON remains escaped.');
+    assert_log_export(!str_contains(\Gallery\Views\view_render_admin_log_table_rows([$contextRow], $labels, 'migrations'), 'data-admin-log-context-match'),
+        'A visible event-name match needs no hidden-context explanation.');
     fwrite(STDOUT, "Admin log scoped export tests passed.\n");
 }

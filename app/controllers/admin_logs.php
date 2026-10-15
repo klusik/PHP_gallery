@@ -592,6 +592,7 @@ function admin_log_table_row_labels(): array
         'load_more_instances' => admin_log_english_t('admin.logs.load_more_instances', 'Load more instances'),
         'grouped_row_note' => admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.'),
         'details' => admin_log_english_t('admin.logs.details', 'Details'),
+        'context_match' => admin_log_english_t('admin.logs.context_match', 'Match in details'),
         'request_prefix' => admin_log_english_t('admin.logs.request_prefix', 'Request'),
     ]);
 }
@@ -666,12 +667,13 @@ function admin_log_table_row_view_models(array $logs): array
 /**
  * Render the admin log table rows for normal page loads and live search responses.
  *
- * @param array $logs Logs value.
- * @return string Text result for the caller.
+ * @param list<array<string,int|string|null>> $logs Raw or grouped log rows with id, event_key, message, context_json and optional category, timing and transport metadata.
+ * @param string $query Active controller-normalized search text, empty for an unfiltered listing.
+ * @return string Escaped table-row markup with an optional indication of a match inside collapsed details.
  */
-function render_admin_log_table_rows(array $logs): string
+function render_admin_log_table_rows(array $logs, string $query = ''): string
 {
-    return view_render_admin_log_table_rows(admin_log_table_row_view_models($logs), admin_log_table_row_labels());
+    return view_render_admin_log_table_rows(admin_log_table_row_view_models($logs), admin_log_table_row_labels(), $query);
 }
 
 /**
@@ -1032,7 +1034,7 @@ function cms_admin_logs(): void
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'ok' => true,
-            'rows_html' => render_admin_log_table_rows($logs),
+            'rows_html' => render_admin_log_table_rows($logs, $query),
             'count' => count($logs),
             'total' => $totalRows,
             'count_text' => $countText,
@@ -1063,7 +1065,7 @@ function cms_admin_logs(): void
         'count_text' => $countText,
         'has_logs' => $logs !== [],
         'pagination_html' => $paginationHtml,
-        'rows_html' => render_admin_log_table_rows($logs),
+        'rows_html' => render_admin_log_table_rows($logs, $query),
         'export_tokens' => array_column(admin_log_table_row_view_models($logs), 'export_token', 'selection_value'),
         'severity_summary' => admin_log_severity_filter_summary($selectedSeverities),
         'category_options' => admin_log_category_options(),

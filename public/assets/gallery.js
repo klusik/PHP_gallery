@@ -115,7 +115,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261015-compact-log-export-v4';
+} from './gallery-modules/admin-operations.js?v=20261015-cache-worker-log-filters-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

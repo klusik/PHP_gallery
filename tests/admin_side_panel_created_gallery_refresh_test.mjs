@@ -180,7 +180,7 @@ assert.match(
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20261015-compact-log-export-v4/,
+    /admin-operations\.js\?v=20261015-cache-worker-log-filters-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

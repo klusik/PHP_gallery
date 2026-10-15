@@ -376,9 +376,7 @@ function setupAdminLogGroupMembers(root = document) {
 
 // Function `setupAdminLogLiveFilters` executes this focused behavior.
 /**
- * Handle setup admin log live filters.
- *
- * Used by browser-side gallery behavior.
+ * Keep visible log rows, filter controls and URL bound to the newest requested filter state.
  *
  * @returns {void} Binds live filtering and delegates export controls to the log workspace.
  */
@@ -408,6 +406,8 @@ export function setupAdminLogLiveFilters() {
     let debounceHandle = 0;
     // Variable `activeRequest` stores this steps working value.
     let activeRequest = null;
+    // Each input change invalidates older responses before the typing debounce expires.
+    let filterGeneration = 0;
 
     // Variable `liveText` stores translated labels passed from the server-rendered form.
     const liveText = {
@@ -530,23 +530,30 @@ export function setupAdminLogLiveFilters() {
      * Used by browser-side gallery behavior.
      */
     const refreshLogs = async () => {
+        window.clearTimeout(debounceHandle);
         if (activeRequest) {
             activeRequest.abort();
         }
-        activeRequest = new AbortController();
+        const request = new AbortController();
+        activeRequest = request;
+        const generation = ++filterGeneration;
+        const requestUrl = buildUrl(true);
         setLiveState(liveText.searching);
         try {
             // Variable `response` stores this steps working value.
-            const response = await fetch(buildUrl(true), {
+            const response = await fetch(requestUrl, {
                 headers: {'Accept': 'application/json'},
-                signal: activeRequest.signal,
+                credentials: 'same-origin',
+                signal: request.signal,
             });
+            if (generation !== filterGeneration || request.signal.aborted) return;
             if (!response.ok) {
                 setLiveState(liveText.failed);
                 return;
             }
             // Variable `result` stores this steps working value.
             const result = await response.json();
+            if (generation !== filterGeneration || request.signal.aborted) return;
             if (!result.ok) {
                 setLiveState(liveText.failed);
                 return;
@@ -556,6 +563,9 @@ export function setupAdminLogLiveFilters() {
             setupAdminLogGroupMembers(tbody);
             setupAdminLogExports();
             setPage(result.log_page || 1);
+            const resultUrl = new URL(requestUrl, window.location.href);
+            resultUrl.searchParams.delete('ajax');
+            resultUrl.searchParams.set('log_page', String(result.log_page || 1));
             if (countLabel) {
                 countLabel.textContent = `(${result.count_text || `${Number(result.count || 0)} ${liveText.shown}`})`;
             }
@@ -572,17 +582,19 @@ export function setupAdminLogLiveFilters() {
                 const nextSort = currentSort === 'desc' ? 'asc' : 'desc';
                 timeSortLink.dataset.nextSort = nextSort;
                 timeSortLink.textContent = `${liveText.when} ${currentSort === 'desc' ? '↓' : '↑'}`;
-                const linkUrl = new URL(buildUrl(false), window.location.href);
+                const linkUrl = new URL(resultUrl);
                 linkUrl.searchParams.set('time_sort', nextSort);
                 linkUrl.searchParams.set('log_page', '1');
                 timeSortLink.href = linkUrl.toString();
             }
-            window.history.replaceState(null, '', buildUrl(false));
+            window.history.replaceState(null, '', resultUrl.toString());
             setLiveState(liveText.updated);
         } catch (error) {
-            if (error.name !== 'AbortError') {
+            if (generation === filterGeneration && error.name !== 'AbortError') {
                 setLiveState(liveText.failed);
             }
+        } finally {
+            if (generation === filterGeneration) activeRequest = null;
         }
     };
 
@@ -594,6 +606,9 @@ export function setupAdminLogLiveFilters() {
      */
     const scheduleRefresh = () => {
         window.clearTimeout(debounceHandle);
+        filterGeneration++;
+        if (activeRequest) activeRequest.abort();
+        setLiveState(liveText.searching);
         debounceHandle = window.setTimeout(refreshLogs, 250);
     };
 

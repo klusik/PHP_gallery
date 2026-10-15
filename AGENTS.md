@@ -146,6 +146,8 @@ observation semantics, including directory metadata and dot entries. Assert the
 intended physical mutation before simulating interruption, using the neighboring
 fixture's established setup while retaining production caps and suite limits.
 
+For live filtering, invalidate older requests as soon as inputs change, before debounce admission. Capture the request URL and commit rows, counts and history only for that same current response; exercise delayed response and delayed JSON completion in the existing fixture.
+
 Send browser harness controls such as viewport changes through the captured native fetch, outside application-request mocks. Preserve the mock's strict method and credential assertions for product requests.
 
 Use a named, typed presentation helper for reusable formatting in runtime-scanned views, so the runtime compiler can resolve each call statically. Include the actual view owner explicitly in an isolated render fixture.

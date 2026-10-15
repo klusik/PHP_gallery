@@ -2361,6 +2361,7 @@
     "admin.logs.category.upload": "Upload",
     "admin.logs.clear": "Clear",
     "admin.logs.created_at": "Created at",
+    "admin.logs.context_match": "Match in details",
     "admin.logs.details": "Details",
     "admin.logs.entries": "Entries",
     "admin.logs.event": "Event",

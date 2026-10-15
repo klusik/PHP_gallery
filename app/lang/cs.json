@@ -2361,6 +2361,7 @@
     "admin.logs.category.upload": "Nahrávání",
     "admin.logs.clear": "Vyčistit",
     "admin.logs.created_at": "Vytvořeno",
+    "admin.logs.context_match": "Shoda v podrobnostech",
     "admin.logs.details": "Detaily",
     "admin.logs.entries": "Záznamy",
     "admin.logs.event": "Událost",

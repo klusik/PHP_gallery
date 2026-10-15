@@ -2914,6 +2914,9 @@ existing child and append conversion scenarios retain their assertions.
 
 ## Cache lifecycle (#212)
 
+The existing chain fixture also verifies stage/source attribution, safe nested PDO codes, repeated-failure coalescing, failed-insert throttling and unchanged worker checkpoints. The existing Admin log export fixture verifies that an older response cannot overwrite a changed input during debounce or restore stale rows after a newer empty result; PHP rendering explains context-only matches without exposing unescaped diagnostic text. Real localhost diagnosis uses ordinary visits and passive status, with no manual Scan cache action.
+
+
 `tests/cache_lifecycle_test.php` uses a disposable root and deterministic clock for preview-only scanning, stale identity rejection, producer leases, pins, journal-tail recovery, contextual version/failed-job protection and actual removed bytes. `tests/fixtures/admin_dashboard_workspace.html` adds explicit inventory/approval, repeated dynamic fragments and unchanged URL/panel checks. Transport fixtures exclude these explicit actions from implicit updater advancement. Feature BASIC validates syntax/documentation only; the central FULL integration must execute filesystem and browser regressions. The live internal browser can verify non-destructive inventory without clicking cleanup.
 
 `tests/cache_lifecycle_scheduler_test.php` exercises independent external bursts

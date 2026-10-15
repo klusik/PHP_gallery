@@ -4,13 +4,57 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/cache_lifecycle/observability.php
  * Module Type: Service Part
- * Purpose: Coalesce real automatic cache removals through the existing Admin log owner.
- * Responsibilities: Retain bounded counters across cycles, rate-limit confirmed summaries and omit file paths, secrets and idle checks.
+ * Purpose: Report bounded automatic cache failures and coalesced removals through the Admin log owner.
+ * Responsibilities: Preserve confirmed counters, rate-limit failure and removal receipts, and omit private paths, messages, secrets and idle checks.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
 namespace Gallery\Services;
+
+/**
+ * Record a bounded automatic-worker failure through the existing Admin log owner.
+ * @param string $stage Fixed visitor_admission, scheduled_burst or region_slice failure boundary.
+ * @param string $source Entry-point enum identifying the admitted visitor, timer, external scheduler or regional worker.
+ * @param \Throwable $exception Caught failure; only class, application source position and validated database codes are retained.
+ * @return void Best-effort, rate-limited diagnostics preserve the original refusal and never expose messages, SQL, paths, tickets or credentials.
+ */
+function cache_lifecycle_log_failure(string $stage, string $source, \Throwable $exception): void
+{
+    if (!function_exists(__NAMESPACE__ . '\\admin_log_event_result')
+        || !in_array($stage, ['visitor_admission','scheduled_burst','region_slice'], true)) return;
+    try {
+        $source = in_array($source, ['public_visit','cache_chain','cli_cron','web_cron','windows_task','scheduled','region_worker'], true) ? $source : 'scheduled';
+        $class = $exception::class;
+        $context = ['stage'=>$stage,'source'=>$source,
+            'exception_class'=>str_contains($class, chr(0)) || str_contains($class, '/') || str_contains($class, ':') ? 'Throwable' : $class,
+            'source_file'=>basename($exception->getFile()),'source_line'=>$exception->getLine()];
+        $cause = $exception instanceof \PDOException ? $exception : $exception->getPrevious();
+        if ($cause instanceof \PDOException) {
+            $sqlstate = (string) ($cause->errorInfo[0] ?? $cause->getCode());
+            if (preg_match('/^[A-Z0-9]{5}$/', $sqlstate) === 1) $context['sqlstate'] = $sqlstate;
+            if (isset($cause->errorInfo[1]) && is_numeric($cause->errorInfo[1])) $context['driver_code'] = (int) $cause->errorInfo[1];
+        }
+        $signature = hash('sha256', json_encode($context, JSON_THROW_ON_ERROR));
+        $claim = cache_lifecycle_with_lock(static function () use ($stage, $signature): array {
+            $path = cache_lifecycle_control_directory() . '/failure-summary.json';
+            $record = cache_lifecycle_read_json($path);
+            $previous = is_array($record[$stage] ?? null) ? $record[$stage] : [];
+            $age = cache_lifecycle_now() - (int) ($previous['attempted_at'] ?? 0);
+            if ($age < CACHE_LIFECYCLE_REFRESH_SECONDS
+                || ($previous['signature'] ?? '') === $signature && $age < CACHE_LIFECYCLE_LOG_SECONDS) return ['ok'=>false];
+            // Claim before insertion so unavailable logging cannot create a retry storm.
+            $record[$stage] = ['signature'=>$signature,'attempted_at'=>cache_lifecycle_now()];
+            cache_lifecycle_write_json($path, $record);
+            return ['ok'=>true];
+        });
+        if (!empty($claim['ok'])) admin_log_event_result('warning', 'cache.automatic_failed',
+            'Automatic cache work stopped safely; diagnostic codes identify the failing stage.', $context,
+            ['category'=>'system','severity'=>'warning','subject_type'=>'cache','route_name'=>'site_maintenance_cron']);
+    } catch (\Throwable) {
+        // Diagnostics must neither conceal the worker outcome nor affect its checkpoint.
+    }
+}
 
 /**
  * Aggregate committed removals and occasionally publish one confirmed Admin log event.

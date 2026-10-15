@@ -84,6 +84,8 @@ Reuse that setup and assert a real removal before discarding the uncommitted
 cursor. This establishes the intended crash boundary while preserving the
 production worker cap, time budget and suite limits.
 
+For live filters, invalidate active requests at the input event rather than waiting for the debounce. Capture each request URL once, suppress superseded responses before and after JSON parsing, and derive visible history from the committed response. Extend the existing asynchronous fixture with an older response arriving during debounce and an older body completing after a newer empty result.
+
 For browser harness controls such as `/__viewport`, use the captured native `fetch` directly. Keep those controls outside the mock that validates application reads/writes, retaining its strict credential and method assertions. This lets viewport tests reach the owned harness without impersonating a dashboard request.
 
 For reusable formatting in runtime-scanned views, call a named typed presentation helper directly. This lets the compiler resolve the owner without an unreviewed variable-call dependency. An isolated render fixture must explicitly require that view module before calling it.
