@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.132.2}
+\newcommand{\version}{0.132.3}
 \newcommand{\manualdate}{15.~Oktober~2026}
 
 \hypersetup{
@@ -2109,6 +2109,10 @@ Regelmäßige Wartung kann in begrenzten Teilabschnitten statt einer langen Anfr
 \subsection{Administrationsprotokollverlauf und Archive}
 \index{a00006@Administrationsprotokolle}
 \index{p00197@Protokollarchiv}
+
+Die kompakte Tabelle zeigt Ereignisnamen, Meldungen, Schweregrad, Zeitstempel und Anzahl der Vorkommen. Der aufgeklappte Ereignisname enthält IDs, Anfrage-/Routenmetadaten, erstes und letztes Vorkommen sowie einzelne Gruppenmitglieder; das Codesymbol neben einer Meldung öffnet den strukturierten Kontext. Kopier- und Downloadsymbole besitzen beschreibende Tooltips und zugängliche Namen. Zeilenaktionen exportieren einen Eintrag oder die gesamte angezeigte Gruppe; innerhalb der Gruppe lassen sich einzelne Mitglieder kopieren, speichern und auswählen. Jeder Export enthält den vollständigen Diagnosetext und Kontext.
+
+Kontrollkästchen einschließlich des Kästchens im Tabellenkopf wählen Einträge der aktuellen Seite aus. Die Werkzeugleiste bietet \ui{Ausgewählte}, \ui{Diese Seite} und \ui{Alle gefilterten} zum Kopieren oder Speichern einer UTF-8-TXT-Datei. Eine ausgewählte Gruppe umfasst alle Vorkommen, auch noch nicht geladene; zusätzlich ausgewählte Mitglieder erscheinen nur einmal. \ui{Alle gefilterten} exportiert passende Rohereignisse aller Seiten in der gewählten Zeitreihenfolge. Filterung oder Seitenwechsel löschen die Auswahl beim Ersetzen der Zeilen. PHP liest große Exporte stapelweise; Kopieren benötigt den vollständigen gewählten Text im Browserspeicher, daher empfiehlt sich für umfangreiche Verläufe das Speichern. Ohne Zwischenablagezugriff markiert ein Dialog den vollständigen Text zum manuellen Kopieren. TXT-Downloads funktionieren auch ohne JavaScript; der bisherige vollständige CSV/JSON-ZIP-Export bleibt verfügbar.
 
 Alltägliche Verwaltungsarbeit erzeugt einen nützlichen Verlauf: Uploads, Galerieänderungen, Sicherheitsentscheidungen, Wartungsergebnisse, Warnungen und andere Betriebsereignisse können im Administrationsprotokoll vermerkt werden. Dieser Verlauf hilft zu verstehen, was wann geschah und welches Konto oder welche Anfrage beteiligt war. Auf einer aktiven Installation wächst die Tabelle normalerweise stark. Version~\version{} behandelt Protokollpflege daher als eigene ausdrückliche Wartungsaufgabe, statt allgemeine Datenbankbereinigung unerwartet Auditverlauf entfernen zu lassen.
 

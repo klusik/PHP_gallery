@@ -1,5 +1,26 @@
 # Compatibility lifecycle and retirement register
 
+## Admin log clipboard and native text downloads
+
+Owner: `admin-logs.js` and the existing `admin_log_export` controller/service.
+The native selected-text copy command is attempted first because the embedded
+browser's asynchronous Clipboard API acknowledged writes to its browser-session
+clipboard without updating the user's Windows clipboard during #219 acceptance.
+The standard asynchronous API remains the fallback when native copying is absent.
+HTTP installations or browsers denying asynchronous Clipboard API access retain
+the full diagnostic text in a selectable modal; no successful copy is reported
+when clipboard writing fails. Native authenticated TXT links and scoped POST
+downloads remain supported without JavaScript. This is permanent support for
+ordinary hosting and browser permission policies; usage is **unknown**. Retiring
+the manual-copy alternative requires acceptance evidence for supported HTTP and
+permission-denied environments. Regression evidence belongs to
+`tests/admin_log_export_selection_test.php`, `tests/fixtures/admin_log_exports.mjs`
+and the browser verification in #219. Native HTTP downloads are retained because
+Blob URL downloads did not produce a file in the embedded browser; acceptance
+verified actual UTF-8 files containing six group events and eleven selected
+events in Windows Downloads. Ordinary clipboard and HTTP download support remains
+permanent until supported-browser acceptance proves an equivalent replacement.
+
 ## Independent updater cache reclamation
 
 Owner: updater filesystem/prune cleanup and site-maintenance service.

@@ -32,6 +32,194 @@
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
+/**
+ * Bind delegated copy, scoped TXT downloads and page selection for live log fragments.
+ * @returns {void} Installs one workspace listener set and refreshes current controls.
+ */
+function setupAdminLogExports() {
+    const toolbar = document.querySelector('[data-admin-log-export-toolbar]');
+    const results = document.querySelector('[data-admin-log-results]');
+    const bulkForm = document.getElementById('admin-log-bulk-form');
+    if (!toolbar || !results || !bulkForm) {
+        return;
+    }
+    const labels = JSON.parse(toolbar.dataset.labels || '{}');
+    const choices = Array.from(results.querySelectorAll('[data-admin-log-export-choice]'));
+    results.querySelectorAll('[data-admin-log-copy-url], [data-admin-log-copy-selection]').forEach(button => {
+        button.hidden = false;
+    });
+    const pageSelector = results.querySelector('[data-admin-log-select-page]');
+    const pageChoices = Array.from(results.querySelectorAll('[data-admin-log-row] > td > [data-admin-log-export-choice]'));
+    const checkedCount = choices.filter(choice => choice.checked).length;
+    const count = results.querySelector('[data-admin-log-selection-count]');
+    if (count) {
+        count.textContent = (labels.selection_count || '{count} selected').replace('{count}', String(checkedCount));
+    }
+    if (pageSelector) {
+        pageSelector.disabled = pageChoices.length === 0;
+        pageSelector.checked = pageChoices.length > 0 && pageChoices.every(choice => choice.checked);
+        pageSelector.indeterminate = !pageSelector.checked && pageChoices.some(choice => choice.checked);
+    }
+    const scope = toolbar.querySelector('[data-admin-log-export-scope]');
+    const unavailable = scope?.value === 'selected' ? checkedCount === 0 : pageChoices.length === 0;
+    toolbar.querySelectorAll('[data-admin-log-copy-selection], [data-admin-log-save-selection]').forEach(button => {
+        button.disabled = unavailable || button.getAttribute('aria-busy') === 'true';
+        button.title = unavailable ? labels.select_first : button.getAttribute('aria-label');
+    });
+    // Keep one serialized mapping so 500-row pages do not exceed PHP's input-variable limit.
+    let mappingInput = bulkForm.querySelector('[name="export_tokens_json"]');
+    if (!mappingInput) {
+        mappingInput = document.createElement('input');
+        mappingInput.type = 'hidden';
+        mappingInput.name = 'export_tokens_json';
+        bulkForm.append(mappingInput);
+    }
+    mappingInput.value = JSON.stringify(Object.fromEntries(pageChoices.map(choice => [choice.value, choice.dataset.exportToken || choice.value])));
+    if (toolbar.dataset.ready === '1') {
+        return;
+    }
+    toolbar.dataset.ready = '1';
+    const detailRows = new WeakMap();
+    results.addEventListener('toggle', event => {
+        const details = event.target;
+        if (!details.matches('.log-entry-details, .admin-log-context')) return;
+        if (details.open) {
+            const body = details.querySelector(':scope > .admin-log-detail-body');
+            const ownerRow = details.closest('[data-admin-log-row]');
+            if (!body || !ownerRow) return;
+            const expandedRow = document.createElement('tr');
+            expandedRow.className = 'admin-log-expanded-row';
+            const cell = document.createElement('td');
+            cell.colSpan = 9;
+            cell.append(body);
+            expandedRow.append(cell);
+            ownerRow.after(expandedRow);
+            detailRows.set(details, {row: expandedRow, body});
+        } else {
+            const expanded = detailRows.get(details);
+            if (expanded) {
+                details.append(expanded.body);
+                expanded.row.remove();
+                detailRows.delete(details);
+            }
+        }
+    }, true);
+    results.addEventListener('change', event => {
+        if (event.target.matches('[data-admin-log-select-page]')) {
+            results.querySelectorAll('[data-admin-log-export-choice]').forEach(choice => {
+                choice.checked = event.target.checked;
+            });
+        }
+        if (event.target.matches('[data-admin-log-export-choice], [data-admin-log-select-page], [data-admin-log-export-scope]')) {
+            const feedback = toolbar.querySelector('[data-admin-log-export-state]');
+            if (feedback) feedback.textContent = '';
+            setupAdminLogExports();
+        }
+    });
+    const status = toolbar.querySelector('[data-admin-log-export-state]');
+    const setStatus = message => {
+        if (status) status.textContent = message;
+    };
+    const syncFilters = () => {
+        results.querySelectorAll('[data-admin-log-export-filter]').forEach(input => input.remove());
+        const filters = document.querySelector('[data-admin-log-filter-form]');
+        if (!filters) return;
+        for (const [name, value] of new FormData(filters)) {
+            if (!['category', 'q', 'time_sort', 'severities[]'].includes(name)) continue;
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = String(value);
+            input.dataset.adminLogExportFilter = '';
+            bulkForm.append(input);
+        }
+    };
+    const exportLogs = async button => {
+        if (!button || button.disabled) return;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        setStatus(labels.copying);
+        try {
+            let response;
+            const rowUrl = button.dataset.adminLogCopyUrl;
+            if (rowUrl) {
+                response = await fetch(rowUrl, {headers: {'Accept': 'text/plain'}});
+            } else {
+                syncFilters();
+                response = await fetch(toolbar.dataset.exportUrl, {method: 'POST', body: new FormData(bulkForm), headers: {'Accept': 'text/plain'}});
+            }
+            if (!response.ok || !response.headers.get('content-type')?.startsWith('text/plain')) {
+                throw new Error('Log export failed.');
+            }
+            const text = await response.text();
+            try {
+                const previousFocus = document.activeElement;
+                const transfer = document.createElement('textarea');
+                transfer.value = text;
+                transfer.readOnly = true;
+                transfer.className = 'admin-log-clipboard-transfer';
+                document.body.append(transfer);
+                transfer.focus({preventScroll: true});
+                transfer.select();
+                let copied = false;
+                try {
+                    copied = document.execCommand('copy');
+                } finally {
+                    transfer.remove();
+                    if (previousFocus instanceof HTMLElement && !previousFocus.disabled) previousFocus.focus({preventScroll: true});
+                }
+                if (!copied) await navigator.clipboard.writeText(text);
+                setStatus(labels.copied);
+            } catch {
+                // Clipboard permissions and HTTP hosting vary; retain the complete text for manual copying.
+                const dialog = document.createElement('dialog');
+                dialog.className = 'admin-log-copy-dialog';
+                const heading = document.createElement('h2');
+                heading.textContent = labels.copy_logs;
+                const hint = document.createElement('p');
+                hint.textContent = labels.manual_copy;
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.readOnly = true;
+                textarea.setAttribute('aria-label', labels.copy_logs);
+                const close = document.createElement('button');
+                close.type = 'button';
+                close.textContent = labels.close;
+                close.addEventListener('click', () => dialog.close());
+                dialog.addEventListener('close', () => dialog.remove());
+                dialog.append(heading, hint, textarea, close);
+                document.body.append(dialog);
+                dialog.showModal();
+                textarea.focus();
+                textarea.select();
+                setStatus(labels.manual_copy);
+            }
+        } catch {
+            setStatus(labels.export_failed);
+        } finally {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+            setupAdminLogExports();
+        }
+    };
+    bulkForm.addEventListener('submit', event => {
+        if (!event.submitter?.matches('[data-admin-log-save-selection]')) return;
+        syncFilters();
+        setStatus(labels.preparing);
+    });
+    results.addEventListener('click', event => {
+        const download = event.target.closest('[data-admin-log-save-url]');
+        if (download) {
+            setStatus(labels.preparing);
+            return;
+        }
+        const button = event.target.closest('[data-admin-log-copy-url], [data-admin-log-copy-selection]');
+        if (!button) return;
+        event.preventDefault();
+        exportLogs(button);
+    });
+}
+
 // Function `setupAdminLogStatusForms` executes this focused behavior.
 /**
  * Handle setup admin log status forms.
@@ -97,6 +285,7 @@ export function setupAdminLogStatusForms() {
  * group in memory.
  *
  * @param {ParentNode} root Root node containing newly rendered log rows.
+ * @returns {void} Binds lazy loading to previously uninitialized group disclosures.
  */
 function setupAdminLogGroupMembers(root = document) {
     root.querySelectorAll('[data-admin-log-group-members]').forEach((details) => {
@@ -153,6 +342,7 @@ function setupAdminLogGroupMembers(root = document) {
                 if (result.html) {
                     list.insertAdjacentHTML('beforeend', result.html);
                 }
+                setupAdminLogExports();
                 nextOffset = Math.max(nextOffset, Number(result.next_offset) || 0);
                 loadedOnce = true;
                 if (moreButton) {
@@ -190,7 +380,7 @@ function setupAdminLogGroupMembers(root = document) {
  *
  * Used by browser-side gallery behavior.
  *
- * @return {string} Text result for the caller.
+ * @returns {void} Binds live filtering and delegates export controls to the log workspace.
  */
 export function setupAdminLogLiveFilters() {
     // Variable `form` stores this steps working value.
@@ -201,6 +391,7 @@ export function setupAdminLogLiveFilters() {
         return;
     }
     setupAdminLogGroupMembers(tbody);
+    setupAdminLogExports();
     // Variable `countLabel` stores this steps working value.
     const countLabel = document.querySelector('[data-admin-log-count]');
     // Variable `stateLabel` stores this steps working value.
@@ -363,6 +554,7 @@ export function setupAdminLogLiveFilters() {
             tbody.innerHTML = result.rows_html || '';
             setupAdminLogStatusForms();
             setupAdminLogGroupMembers(tbody);
+            setupAdminLogExports();
             setPage(result.log_page || 1);
             if (countLabel) {
                 countLabel.textContent = `(${result.count_text || `${Number(result.count || 0)} ${liveText.shown}`})`;

@@ -115,7 +115,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261014-floating-shell-v1';
+} from './gallery-modules/admin-operations.js?v=20261015-compact-log-export-v4';
 
 /**
  * Runs a setup callback after the DOM is ready.

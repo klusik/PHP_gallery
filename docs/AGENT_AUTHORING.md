@@ -29,6 +29,30 @@ no declaration docstring. Variables and properties have the same exemption.
 Named functions or classes nested inside callbacks remain checked. Do not create
 a named helper solely to satisfy documentation or put a docblock in call arguments.
 
+### Authoring steps learned from CI findings
+
+Always add explicit native parameter types to PHP callback signatures,
+including arrow callbacks used in `array_map()`. Apply the anonymous-callback
+exemption to the declaration docstring requirement only.
+
+Always attach a factual purpose docblock immediately to each class-like
+declaration, including anonymous classes inside JavaScript object literals or
+test fixtures. Reuse an existing suitable fixture type when it already provides
+the required behavior; document every newly introduced class, including an
+empty anonymous class.
+
+Always complete the entire declaration contract when changing a function body.
+Describe structured `array` parameters with actual collection elements/row
+fields, document every added/defaulted parameter, and state every actual return
+variant including `void`. Review these together with the behavior edit.
+
+Always search production imports, re-export modules and every regression
+assertion for the old cache-busting module URL. Update the complete set together
+and keep every exact expectation aligned with the new real import. Always
+represent presentation choices as explicit value/label entries. Reserve literal
+`'page' => 'target'` entries for registered routes because the route-reference
+check validates those entries as route targets.
+
 ### PHP: added optional parameter and structured result
 
 The boolean parameter is documented even though it has a default. The documented
@@ -193,6 +217,15 @@ agent execution. Verify branch identity, HEAD, remote head and explicit push
 authorization before writes. Commit authored source, tests and documentation;
 push only the exact authorized working ref. Never directly mutate develop/main.
 Missing access means BLOCKED, before writes.
+
+Always verify one final integration commit above current develop after generated
+candidate preparation, including bot-authored artifacts. When preparation adds
+a commit, cancel the in-flight integration before expensive FULL execution,
+fetch that head and perform the authorized feature-only squash with an exact
+remote-head lease. Preserve and compare the prepared tree, verify one commit and
+the exact develop parent, and obtain fresh BASIC on the rewritten SHA. Dispatch
+integration again once idempotent preparation can retain that SHA, then complete
+FULL on the final candidate that the workflow will integrate.
 
 Hosted candidate preparation resolves `git merge-base HEAD origin/main` once and
 retains its immutable SHA through preparation and qualification. Release workflows

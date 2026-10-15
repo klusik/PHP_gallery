@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132.2}
+\newcommand{\version}{0.132.3}
 \newcommand{\manualdate}{15.~října~2026}
 
 \hypersetup{
@@ -2097,6 +2097,10 @@ Běžná údržba může probíhat v~omezených částech místo jediného dlouh
 \subsection{Historie a~archivy protokolů administrace}
 \index{p00163@protokoly administrace}
 \index{a00008@archiv protokolů}
+
+Kompaktní tabulka ponechává viditelné názvy událostí, zprávy, závažnost, časy a~počty výskytů. Rozbalení názvu události ukáže ID, údaje požadavku a~routy, první a~poslední výskyt i~jednotlivé členy skupiny; ikona kódu u~zprávy zobrazí strukturovaný kontext. Ikony kopírování a~stažení mají popisné nápovědy a~přístupné názvy. Akce řádku exportují jeden záznam nebo celou skupinu uvedenou v~řádku; uvnitř skupiny lze také kopírovat, ukládat a~označovat jednotlivé členy. Export vždy obsahuje úplný diagnostický text a~kontext.
+
+Zaškrtávací políčka včetně políčka v~záhlaví označují záznamy aktuální stránky. Panel nabízí rozsahy \ui{Označené}, \ui{Tato stránka} a~\ui{Vše dle filtrů} pro kopírování i~uložení souboru TXT v~UTF-8. Výběr skupiny zahrne všechny její výskyty včetně dosud nenačtených; souběžně označený jednotlivý člen se neopakuje. \ui{Vše dle filtrů} exportuje odpovídající jednotlivé události ze všech stránek ve zvoleném časovém pořadí. Výběr se vymaže při nahrazení řádků filtrováním nebo stránkováním. PHP čte velké exporty po dávkách; kopírování potřebuje celý zvolený text v~paměti prohlížeče, proto pro rozsáhlou historii upřednostněte uložení. Při nedostupné schránce dialog označí úplný text pro ruční kopírování. Stahování TXT funguje i~bez JavaScriptu; původní úplný export ZIP s~CSV/JSON zůstává dostupný.
 
 Každodenní správa vytváří užitečnou historii: nahrávání, změny galerií, bezpečnostní rozhodnutí, výsledky údržby, upozornění a~další provozní události mohou zanechat záznam v~protokolu administrace. Historie je cenná, když chcete pochopit, co se stalo, kdy se to stalo a~který účet nebo požadavek byl zapojen. Na aktivní instalaci je také běžné, že se tabulka značně zvětší. Verze~\version{} proto zachází s~péčí o~protokoly jako se samostatným výslovným úkolem údržby místo umožnění neočekávaného odstranění auditní historie obecným úklidem databáze.
 
