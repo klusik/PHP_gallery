@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.132.9
+
+Updated hosted CI qualification to use a complete, sharded owner matrix and recorded the reviewed maintenance path for this release while preserving `v_0.132.8` as the previous stable tag.
+
+### Highlights
+
+#### Sharded hosted qualification
+- Split FULL qualification across 28 required owners, including shared source and portable checks, PHP-test shards across five existing environments, browser fixtures, package jobs, preflight, and an aggregate gate.
+- Required all owners and shards to qualify the same candidate SHA, with deterministic, complete, disjoint PHP-test partitions.
+- Tightened integration FULL conditions to require successful candidate publication and an exact match between the published candidate and selected source. Generated children require a fresh squash and BASIC checkpoint before FULL qualification.
+
+#### Release maintenance bridge
+- Recorded the reviewed maintenance merge as a finite release bridge for `0.132.9`, while retaining `v_0.132.8` as the previous stable tag. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+- Bound the bridge to the reviewed merge, PR #230, owner approval, workflow objects, maintenance qualification owners, check, and artifact digest. Other releases continued to require the stable tag directly on `main`.
+
+### Technical Details
+
+#### Backend
+- Updated `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_php_registry.php`, and `scripts/audit_registry.php` with hosted source-contract, portable, and FULL profiles and shard-aware audit execution.
+- Updated CI and release evidence readers to recognize the sharded owner contract while retaining authenticated historical owner contracts.
+- Restricted authority-transition checks to the sealed evaluator blobs and the exact generated manifest companion.
+
+#### Tests
+- Expanded CI and release-policy fixtures to cover owner completeness, shard partitioning, exact candidate and comparison-base binding, workflow versions, and integration dependency conditions.
+- Added adverse-case coverage for the finite maintenance bridge, including mismatched tags, merge identity, approvals, workflow objects, qualification runs, artifacts, owners, and checks.
+
+#### Documentation
+- Updated maintainer guidance, release lifecycle and CI contracts, testing instructions, compatibility notes, and all four maintained TeX manual sources for the sharded owner matrix and finite release bridge.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Administrator-facing behavior did not change.
+
+#### For maintainers
+- Hosted qualification required a consistent candidate across all required owners and shards. Release evidence readers and documentation covered the finite, review-bound maintenance path for this release.
+
 ## Version 0.132.8
 
 Production packaging moved to a verified PHP builder, while CI qualification and release evidence were strengthened for candidate, develop-integration, and release workflows.

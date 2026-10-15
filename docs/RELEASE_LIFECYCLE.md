@@ -20,6 +20,15 @@ No normal step asks for a SHA, run ID, operation mode or deployment approval.
 
 ## Git and authorization contract
 
+For the single reviewed dispatcher maintenance merge before `0.132.9`, actual
+initial main and the previous stable tagged commit differ. The finite,
+provider-authenticated bridge in `release-origin.mjs` binds PR #230, its human
+approval, immutable workflow blobs and twelve-owner maintenance qualification.
+The previous `v_0.132.8` tag remains on its real release merge; `0.132.9` leases
+the newer reviewed main and merges `[initial_main_sha,Q]`. Every other version
+retains the ordinary tag-on-main requirement. No maintenance tag or release
+bootstrap is introduced; see the exact identities in the coverage contract.
+
 - D0 is the exact develop commit pushed as the new release branch.
 - O introduces the origin and predecessor pin in one single-parent commit after D0.
 - Q is the final prepared release head B, with BASIC changed-source and
@@ -70,7 +79,14 @@ For stage 2, the owner dispatches the same action from **develop** with
 `ci_authority_update: true`. Before every write it authenticates the retained
 stage-1 main-owned integration proof and exact current develop W*. The candidate
 S must be exactly one commit ahead of W*. Only the six approved evaluator
-transition paths may change, and the scanner closure stays unchanged. A trusted
+transition paths may change, and the scanner closure stays unchanged. The
+parallel-CI follow-up additionally seals the single generated
+`app/core-manifest.json` regular-file blob from its exact successful maintenance
+source/tree/run. Its complete leaf comparison permits that byte-identical data
+companion and rejects all other generated or source changes; this does not
+expand the six executable evaluator inputs. See the finite identities in
+[the coverage contract](CI_COVERAGE_REUSE_CONTRACT.md#parallel-full-owner-contract-3).
+A trusted
 inherited BASIC engine performs a separate authority checkout with a strictly
 validated root binding to a clean S checkout. Candidate code is inspected
 read-only; candidate evaluator code is never trusted to qualify itself. FULL

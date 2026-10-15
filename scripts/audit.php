@@ -16,6 +16,7 @@
  *   - Distinguish PASS, FAIL, SKIP, and BLOCKED coverage
  *   - Apply bounded subprocess timeouts and continue after individual failures
  *   - Produce Markdown, JSON, and per-suite logs under cache/test-audit
+ *   - Qualify split hosted owners against one candidate and a complete PHP shard partition
  *
  * Author:
  *   Rudolf Klusal
@@ -31,13 +32,13 @@
  *   - The source test tree is intentionally absent from normal production deployment packages.
  *   - CI-first agents qualify the prepared SHA through hosted GitHub Actions; local profiles are exceptional diagnostics.
  *
- * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>}
+ * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>,hosted_full_php_shard_count:int}
  * @phpstan-type AuditPhpChild array{name:string,status:string,exit_code:?int,timed_out:bool,duration_seconds:float,serial:bool,metrics?:array<string,int|float>,metrics_error?:string}
- * @phpstan-type AuditPhpTask array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems?:list<string>,gaps?:list<string>,workers?:int,serial_tests?:int,tests?:list<AuditPhpChild>}}
+ * @phpstan-type AuditPhpTask array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems?:list<string>,gaps?:list<string>,workers?:int,serial_tests?:int,tests?:list<AuditPhpChild>,shard?:array{index:int,total:int,selected_tests:int}}}
  * @phpstan-type AuditBuilderReport array{schema_version:int,file_count:int,directory:?string,zip:?string,archive_sha256:?string,timestamp:int,timings:array{source_validation_seconds:float,copy_seconds:float,zip_seconds:float,verification_seconds:float,total_seconds:float}}
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-10-15
  */
 
 declare(strict_types=1);
@@ -104,7 +105,7 @@ if ($options['help']) {
 PHP Gallery central audit
 
 Usage:
-  php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight]
+  php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
   php scripts/audit.php --suite <suite-id>
   php scripts/audit.php --profile basic --changed
 
@@ -129,7 +130,10 @@ Profiles:
   release  Full audit plus release consistency, manifest freshness, and Git validation.
   release-preflight  Cheap source-only authoring feedback, including debt budgets; no release actions.
   release-stage-b    Medium-cost source-only MVC and mutation contracts before release generation.
-  candidate-preflight  Read-only source, runtime plan, inventory and manifest gate before heavy CI.
+  candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
+  source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
+  portable  Shared full Node and WinApp owners.
+  hosted-full  One exact-candidate PHP/runtime shard (hosted shard environment required).
   basic --changed  Lint the immutable PHP_GALLERY_SOURCE_BASE delta; evaluator/config changes expand to full tree, missing base blocks.
 TEXT
     );
@@ -150,7 +154,6 @@ if ($options['suite'] !== null) {
     $suiteIds = array_values($profiles[$profile]);
     $profileLabel = $profile;
 }
-
 $delegatedToPreflight = [];
 if ($options['suite'] === null) {
     // The existing central selector delegates only manifest freshness in the
@@ -160,7 +163,7 @@ if ($options['suite'] === null) {
     $delegatedToPreflight = $ownership['delegated_to_preflight'];
 }
 
-if ($options['changed'] && !in_array($profileLabel, ['full', 'release'], true)) {
+if ($options['changed'] && !in_array($profileLabel, ['full', 'release', 'source-contracts', 'portable', 'hosted-full'], true)) {
     $suiteIds = array_map(
         static fn(string $suite): string => $suite === 'php-lint' ? 'php-lint-changed' : ($suite === 'js-lint' ? 'js-lint-changed' : $suite),
         $suiteIds
@@ -222,6 +225,36 @@ $browser = $isMinimalProfile ? null : resolve_browser_executable();
 $requestedSourceBase = trim((string) getenv('PHP_GALLERY_SOURCE_BASE'));
 $sourceIdentity = PhpGallery\Audit\audit_source_identity($root, $git,
     $requestedSourceBase !== '' ? $requestedSourceBase : 'HEAD');
+// Child contract tools consume the same resolved immutable base as this report.
+// Manual workflow callers may supply HEAD^; retain that request in the report,
+// while passing its exact resolved identity across independent child processes.
+if (is_string($sourceIdentity['comparison_base'] ?? null)
+    && preg_match('/^[a-f0-9]{40}$/D', $sourceIdentity['comparison_base']) === 1) {
+    putenv('PHP_GALLERY_SOURCE_BASE=' . $sourceIdentity['comparison_base']);
+}
+$phpShard = null;
+if (in_array($profileLabel, ['source-contracts', 'portable', 'hosted-full'], true)) {
+    $phpShardCount = (int) ($registry['hosted_full_php_shard_count'] ?? 0);
+    $phpShard = PhpGallery\Audit\audit_hosted_parallel_owner(
+        getenv() ?: [], $profileLabel, $sourceIdentity['head_sha'] ?? null,
+        $sourceIdentity['comparison_base'] ?? null, $phpShardCount
+    );
+    if (!$phpShard['valid']) {
+        fwrite(STDERR, 'Hosted parallel owner is not bound to this exact candidate: '
+            . ($phpShard['error'] ?? 'invalid owner context') . "\n");
+        @rmdir($runDirectory);
+        exit(2);
+    }
+    // Purpose: Assign the supported PHP 8.1 grammar parse to one hosted shard while PHP 8.5 owns shared source checks.
+    // Type: integer PHP_VERSION_ID threshold.
+    // Units: PHP_VERSION_ID integer.
+    // Scope: hosted-full shard one on runtimes below PHP 8.5.
+    // Consumers: Central audit suite selector and the source-contracts owner.
+    // Rationale: The shared source owner runs on PHP 8.5; shard one on PHP 8.1 preserves the minimum-parser syntax gate without repeating it across shards.
+    if ($profileLabel === 'hosted-full' && ($phpShard['index'] !== 1 || PHP_VERSION_ID >= 80500)) {
+        $suiteIds = array_values(array_diff($suiteIds, ['php-lint']));
+    }
+}
 $basicChangedLintBase = $profileLabel === 'basic' && $options['changed']
     && preg_match('/^[a-f0-9]{40}$/D', $requestedSourceBase) === 1
     && ($sourceIdentity['comparison_base'] ?? null) === $requestedSourceBase
@@ -233,6 +266,30 @@ $packagingOwnership = \PhpGallery\Audit\audit_hosted_packaging_ownership(
 );
 $suiteIds = $packagingOwnership['suites'];
 $delegatedToPackaging = $packagingOwnership['delegated_to_packaging'];
+$delegatedToParallelOwners = [];
+if ($profileLabel === 'hosted-full') {
+    foreach (['candidate-preflight', 'source-contracts', 'portable'] as $ownerProfile) {
+        $ownerName = match ($ownerProfile) {
+            'candidate-preflight' => 'candidate-preflight',
+            'source-contracts' => 'shared-source-contracts',
+            default => 'portable-node-winapp',
+        };
+        $delegatedToParallelOwners[] = [
+            'owner' => $ownerName,
+            'profile' => $ownerProfile,
+            'candidate' => $sourceIdentity['head_sha'],
+            'comparison_base' => $sourceIdentity['comparison_base'],
+            'suites' => $profiles[$ownerProfile] ?? [],
+        ];
+    }
+    $delegatedToParallelOwners[] = [
+        'owner' => 'production-package',
+        'profile' => null,
+        'candidate' => $sourceIdentity['head_sha'],
+        'comparison_base' => $sourceIdentity['comparison_base'],
+        'suites' => ['production-package'],
+    ];
+}
 
 /**
  * Return a concise executable version string without exposing noisy tool output.
@@ -330,9 +387,10 @@ function audit_process_output(array $process): string
  *
  * @param AuditPhpRegistry $registry Central child registries, extension requirements, isolation settings and mandatory child names.
  * @param string $suiteId Complete regression, explicit fast feedback or database-independent packaging owner; defaults to complete regression.
+ * @param array{valid:bool,index:?int,total:?int,owner:?string,candidate:?string,error:?string}|null $shard Validated hosted FULL shard context, or null for an unsharded suite.
  * @return AuditPhpTask Normalized child counts, individual timed outcomes and actionable failures; missing requirements block the suite.
  */
-function audit_run_php_regression(array $registry, string $suiteId = 'php-regression'): array
+function audit_run_php_regression(array $registry, string $suiteId = 'php-regression', ?array $shard = null): array
 {
     global $root;
     $started = microtime(true);
@@ -349,6 +407,16 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
         default => array_values(array_filter(glob($testDirectory . '/*_test.php') ?: [],
             static fn(string $path): bool => !in_array(basename($path), $packagingNames, true))),
     };
+    if ($suiteId === 'php-regression' && $shard !== null) {
+        if (($shard['valid'] ?? false) !== true || !is_int($shard['index'] ?? null)
+            || !is_int($shard['total'] ?? null)) {
+            return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'Hosted PHP shard context is invalid.');
+        }
+        $selectedNames = PhpGallery\Audit\audit_partition_php_tests(
+            array_map('basename', $files), $shard['index'], $shard['total']
+        );
+        $files = array_map(static fn(string $name): string => $testDirectory . '/' . $name, $selectedNames);
+    }
     sort($files, SORT_STRING);
     if ($files === []) {
         return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No PHP tests were selected.');
@@ -439,8 +507,12 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
     $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
     $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
     $logPath = audit_write_log($suiteId, $log);
-    $task = task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
-        ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers, 'serial_tests' => $serialCount, 'tests' => $testResults]);
+    $details = ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers,
+        'serial_tests' => $serialCount, 'tests' => $testResults];
+    if ($shard !== null) {
+        $details['shard'] = ['index' => $shard['index'], 'total' => $shard['total'], 'selected_tests' => count($files)];
+    }
+    $task = task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath, $details);
 
     // Packaging is mandatory even outside Actions; unrelated optional PHP SKIPs
     // cannot hide missing smoke coverage or PHP_BINARY module-loader proofs.
@@ -459,9 +531,12 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
                 $seenRequired[$testName] = true;
             }
         }
-        $missing = $validRequired
-            ? missing_required_php_test_passes($task, $required)
-            : ['invalid hosted_full_required_php_tests registry'];
+        $ownedRequired = $validRequired && $suiteId === 'php-regression' && $shard !== null
+            ? array_values(array_intersect($required, array_map('basename', $files)))
+            : $required;
+        $missing = !$validRequired
+            ? ['invalid hosted_full_required_php_tests registry']
+            : ($ownedRequired === [] ? [] : missing_required_php_test_passes($task, $ownedRequired));
         if ($missing !== []) {
             $reason = 'Missing mandatory hosted PHP child PASS: ' . implode(', ', $missing) . '.';
             $task['status'] = STATUS_BLOCKED;
@@ -1122,7 +1197,7 @@ function audit_run_source_contract(string $suiteId, string $label, string $scrip
         } else {
             $summary = $counts['finding_count'] . ' findings; '
                 . ($changedOnly ? $counts['added'] . ' added / ' . $counts['changed'] . ' changed sites; '
-                    : $counts['source_files'] . ' Python files; ')
+                    : $counts['source_files'] . ' source files; ')
                 . count($report['blocked'] ?? []) . ' coverage blockers';
         }
     }
@@ -1348,6 +1423,10 @@ if ($delegatedToPreflight !== []) {
 if ($delegatedToPackaging !== []) {
     fwrite(STDOUT, 'Delegated to required exact-candidate three-platform production-package owner (not a local PASS): packaging' . "\n");
 }
+if ($delegatedToParallelOwners !== []) {
+    fwrite(STDOUT, 'Expected separate same-candidate owners (each provides its own evidence): '
+        . implode(', ', array_column($delegatedToParallelOwners, 'owner')) . "\n");
+}
 
 foreach ($suiteIds as $suiteIndex => $suiteId) {
     $position = $suiteIndex + 1;
@@ -1356,7 +1435,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
     fflush(STDOUT);
 
     $task = match ($suiteId) {
-        'php-regression' => audit_run_php_regression($registry),
+        'php-regression' => audit_run_php_regression($registry, 'php-regression', $profileLabel === 'hosted-full' ? $phpShard : null),
         'php-fast' => audit_run_php_regression($registry, 'php-fast'),
         'packaging' => audit_run_php_regression($registry, 'packaging'),
         'production-package' => audit_run_production_package($registry),
@@ -1416,6 +1495,28 @@ if ($delegatedToPreflight !== []) {
     fwrite(STDOUT, '[post-test] ' . $integrityTask['status'] . ' ' . $integritySummary . "\n");
 }
 
+// Each split hosted owner proves it left the exact candidate and comparison base clean.
+if ($phpShard !== null) {
+    $integrityStarted = microtime(true);
+    $finalSourceIdentity = PhpGallery\Audit\audit_source_identity(
+        $root, $git, (string) $sourceIdentity['requested_base']
+    );
+    $integrity = audit_delegated_checkout_integrity($sourceIdentity, $finalSourceIdentity);
+    $integrityPassed = $integrity['status'] === STATUS_PASS;
+    $integritySummary = $integrityPassed
+        ? 'Parallel owner preserved the exact clean candidate and comparison base.'
+        : 'Parallel owner checkout integrity is not qualified: ' . $integrity['reason'];
+    $integrityTask = task_result('parallel-owner-checkout-integrity', 'Parallel owner checkout integrity',
+        $integrity['status'], microtime(true) - $integrityStarted, [], $integritySummary, null, [
+            'owner' => $phpShard['owner'],
+            'candidate' => $phpShard['candidate'],
+            'source_after' => $finalSourceIdentity,
+            'problems' => $integrityPassed ? [] : [$integritySummary],
+        ]);
+    $tasks[] = $integrityTask;
+    fwrite(STDOUT, '[post-test] ' . $integrityTask['status'] . ' ' . $integritySummary . "\n");
+}
+
 if ($profileLabel === 'candidate-preflight' && !audit_required_suite_pass($tasks, 'manifest')) {
     $tasks[] = task_result('candidate-preflight-manifest-owner', 'Mandatory generated-artifact freshness owner',
         STATUS_BLOCKED, 0.0, [], 'The candidate preflight requires exactly one individual manifest PASS.',
@@ -1466,6 +1567,15 @@ $report = [
     'profile' => $profileLabel,
     'delegated_to_preflight' => $delegatedToPreflight,
     'delegated_to_packaging' => $delegatedToPackaging,
+    'delegated_to_parallel_owners' => $delegatedToParallelOwners,
+    'parallel_owner' => $phpShard === null ? null : [
+        'profile' => $profileLabel,
+        'owner' => $phpShard['owner'],
+        'candidate' => $phpShard['candidate'],
+        'comparison_base' => $sourceIdentity['comparison_base'],
+        'shard_index' => $phpShard['index'],
+        'shard_total' => $phpShard['total'],
+    ],
     'started_at' => $startedAt->format(DATE_ATOM),
     'duration_seconds' => round($duration, 4),
     'source' => $sourceIdentity,

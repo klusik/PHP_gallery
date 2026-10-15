@@ -45,26 +45,34 @@ const BASIC_AUTHORITY_PATHS=[
     'scripts/source_contracts/python.php','scripts/source_contracts/scripts.php',
     'scripts/source_contracts/changes.php','scripts/source_contracts/python_scan.py',
 ];
-/** Limit the initial evaluator transition while all actual scanner implementations remain inherited.
+/** Limit the finite parallel-CI evaluator transition while all actual scanner implementations remain inherited.
  * Type: Map<string,string>. Units: exact repository-relative paths and regular-file Git blob SHAs. Scope: owner-dispatched protected-develop installation.
  * Consumers: inherited authority comparison after the workflow installation is independently authenticated.
- * Rationale: the reviewed transition changes selection/orchestration only; candidate-authored scanners cannot approve themselves.
+ * Rationale: the evaluator transition is bound to independently qualified blobs while scanner implementations remain inherited.
  */
 const AUTHORITY_UPDATE_PATHS=new Map([
     [PREPARATION_PATH,'fd4d95e7ad7d8a4494c29016b17b7c6b65ae82de'],
-    ['scripts/audit.php','f2cd6b09da73fcbec39550e5a95e306056761e00'],
-    ['scripts/audit_lib.php','03d84b2d6a86409ec75224d69b40d364b7f53152'],
+    ['scripts/audit.php','b09c00f41800de806f91a86477999921966e4419'],
+    ['scripts/audit_lib.php','10fa4f72de1a624125221f8c4a05db6e8908b8c5'],
     ['scripts/audit_source_evidence.php','3881cc132866ccecc83cca1059f32b0070cd54f4'],
-    ['scripts/audit_registry.php','bc6d3068c6cfe852341647c0b167c0c6b07cc5bc'],
-    ['scripts/audit_php_registry.php','1566f93aa21ea34f96073de230a8aab6a4bad767'],
+    ['scripts/audit_registry.php','4fb229c0be42dfd5d086c948a47f1b7e25dca398'],
+    ['scripts/audit_php_registry.php','783544714d6f918b35e2c09c3a7016bd7a26b82d'],
 ]);
-/** Retain the exact reviewed source and successful hosted run that own the approved evaluator bytes.
- * Type: Readonly<{source:string,tree:string,run:string,attempt:number}>. Units: immutable Git and Actions identities.
- * Scope: the initial CI authority transition only. Consumers: protected installation authentication.
+/** Seal the one generated companion already present in the exact qualified source tree.
+ * Type: Map<string,string>. Units: one repository-relative regular-file path and Git blob SHA.
+ * Scope: this finite parallel-CI transition only. Consumers: source-tree authentication and stage-2 leaf allowlist.
+ * Rationale: the prepared manifest must remain byte-identical after the evaluator is restored, while other generated inputs stay inherited.
+ */
+const AUTHORITY_UPDATE_GENERATED=new Map([
+    ['app/core-manifest.json','42a26c98cb69a39406fb34e7183343c0d65b8d09'],
+]);
+/** Retain the exact reviewed source and successful hosted run that own this finite evaluator update.
+ * Type: Readonly<{source:string,tree:string,run:string,attempt:number,branch:string}>. Units: immutable Git, Actions and source-branch identities.
+ * Scope: the single qualified parallel-CI authority transition. Consumers: protected installation authentication.
  * Rationale: the new FULL evaluator must be an independently retained qualified toolchain, not candidate-selected code.
  */
-const AUTHORITY_UPDATE_SOURCE=Object.freeze({source:'baa436b5e170d5e3d57ca32190527463c3080734',
-    tree:'aa20710da67dae48492cb392696d85b44efaaabd',run:'38760542513',attempt:1});
+const AUTHORITY_UPDATE_SOURCE=Object.freeze({source:'ebde37ae7bd5c80ad1cb8733b7fb8fd2acb6cac1',
+    tree:'4f01e2e5bf24bd5b34137a515075b4105889f87c',run:'38790736942',attempt:2,branch:'feature/ci_parallelization'});
 /** Map the three generated artifact entry names to the only permitted candidate-owned paths.
  * Type: Map<string,string>. Units: artifact entry names and repository-relative file paths.
  * Scope: read-only preparation transport and generated-only candidate publication.
@@ -243,6 +251,11 @@ function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recove
     }
     const base=call('repos/'+repository+'/commits/'+developSha);
     if (base?.sha!==developSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED develop P tree is unavailable.');
+    if (authorityUpdate) {
+        const sourceTree=completeTree(call,repository,source.commit.tree.sha);
+        const baseTree=completeTree(call,repository,base.commit.tree.sha);
+        requireAuthorityUpdateSourcePaths(sourceTree,baseTree);
+    }
     // Recovery trusts only the exact already-protected candidate, not a new feature's authority edits.
     requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,authorityUpdate);
     if (candidateSha!==sourceSha) {
@@ -263,6 +276,22 @@ function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recove
         throw new Error('BLOCKED candidate commit tree is unavailable.');
     }
     return {tree:candidate.commit.tree.sha};
+}
+
+/** Reject every stage-2 source delta outside the exact sealed evaluator and manifest blobs.
+ * @param {Map<string,string>} source Complete leaf path identities for S, including mode, object type and SHA.
+ * @param {Map<string,string>} base Complete leaf path identities for protected develop P.
+ * @returns {void} Returns only when every changed path is an approved regular-file blob with its sealed identity.
+ */
+export function requireAuthorityUpdateSourcePaths(source,base) {
+    if (!(source instanceof Map) || !(base instanceof Map)) throw new Error('BLOCKED complete authority-update source trees are required.');
+    const allowed=new Map([...AUTHORITY_UPDATE_PATHS,...AUTHORITY_UPDATE_GENERATED]);
+    for (const path of new Set([...source.keys(),...base.keys()])) {
+        if (source.get(path)===base.get(path)) continue;
+        if (!allowed.has(path) || !base.has(path) || source.get(path)!=='100644:blob:'+allowed.get(path)) {
+            throw new Error('BLOCKED authority-update source changes a path outside its exact sealed evaluator and manifest blobs: '+path);
+        }
+    }
 }
 
 /** Resolve exact native check runs without accepting duplicate or hidden red owners.
@@ -356,19 +385,19 @@ function requireAuthorityUpdateInstallation(context,repository,call) {
     return anchor;
 }
 
-/** Authenticate the original successful maintenance FULL that owns the sealed evaluator input map.
+/** Authenticate the exact successful maintenance FULL that owns the sealed evaluator input map.
  * @param {string} repository Exact configured repository identity.
  * @param {GithubApi} call Independent GitHub provider reader.
  * @returns {void} Returns only for complete retained exact-source qualification and its immutable evaluator blobs.
  */
-function requireAuthorityUpdateSource(repository,call) {
+export function requireAuthorityUpdateSource(repository,call) {
     if (repository!=='klusik/PHP_gallery') throw new Error('BLOCKED evaluator transition belongs to its original repository only.');
     const selected=AUTHORITY_UPDATE_SOURCE;
     const source=call(`repos/${repository}/commits/${selected.source}`);
     const run=call(`repos/${repository}/actions/runs/${selected.run}/attempts/${selected.attempt}`);
     if (source?.sha!==selected.source || source.commit?.tree?.sha!==selected.tree
         || run?.id!==Number(selected.run) || run.run_attempt!==selected.attempt || run.head_sha!==selected.source
-        || run.path!==PREPARATION_PATH || run.event!=='workflow_dispatch' || run.head_branch!=='feature/ci_optimization'
+        || run.path!==PREPARATION_PATH || run.event!=='workflow_dispatch' || run.head_branch!==selected.branch
         || run.status!=='completed' || run.conclusion!=='success'
         || run.actor?.login?.toLowerCase()!==repository.split('/')[0].toLowerCase()) {
         throw new Error('BLOCKED sealed evaluator source qualification is missing or inconsistent.');
@@ -377,8 +406,11 @@ function requireAuthorityUpdateSource(repository,call) {
     for (const [path,blob] of AUTHORITY_UPDATE_PATHS) {
         if (tree.get(path)!=='100644:blob:'+blob) throw new Error('BLOCKED sealed evaluator blob differs from its qualified source.');
     }
+    for (const [path,blob] of AUTHORITY_UPDATE_GENERATED) {
+        if (tree.get(path)!=='100644:blob:'+blob) throw new Error('BLOCKED generated companion differs from its qualified source tree.');
+    }
     const jobs=completeRows(call,`repos/${repository}/actions/runs/${selected.run}/attempts/${selected.attempt}/jobs`,'jobs');
-    for (const name of FULL_OWNERS.map(label=>'Full CI for the published prepared SHA / '+label)) {
+    for (const name of fullMatrixOwners(3).map(label=>'Full CI for the published prepared SHA / '+label)) {
         const matches=jobs.filter(job=>job.name===name && job.run_id===Number(selected.run) && job.run_attempt===selected.attempt);
         if (matches.length!==1 || matches[0].status!=='completed' || matches[0].conclusion!=='success') {
             throw new Error('BLOCKED sealed evaluator source has a missing or unsuccessful native FULL owner: '+name);
@@ -465,6 +497,8 @@ export function selectDevelopIntegration(branch,context,repository,call,recovery
     }
     const base=call('repos/'+repository+'/commits/'+expectedDevelopSha);
     if (base?.sha!==expectedDevelopSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED current develop P tree is unavailable.');
+    if (context.authorityUpdate) requireAuthorityUpdateSourcePaths(
+        completeTree(call,repository,source.commit.tree.sha),completeTree(call,repository,base.commit.tree.sha));
     requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,context.authorityUpdate);
     const runs=completeRows(call,'repos/'+repository+'/actions/workflows/candidate-preparation.yml/runs?branch='
         +encodeURIComponent(branch)+'&head_sha='+sourceSha,'workflow_runs');
@@ -480,7 +514,7 @@ export function selectDevelopIntegration(branch,context,repository,call,recovery
         basicRunId:String(latest.id),basicRunAttempt:String(latest.run_attempt)};
 }
 
-/** Check exact protected-workflow execution context and all eleven actual matrix owners.
+/** Check exact protected-workflow execution context and every required native matrix owner.
  * @param {IntegrationRequest} request Selected source and candidate identity.
  * @param {WorkflowContext} context Current GitHub Actions identity.
  * @param {string} repository Configured repository identity.
@@ -706,6 +740,10 @@ export function publishPreparedCandidate(request,context,call,adapters={}) {
     if (typeof baseTree!=='string') throw new Error('BLOCKED source tree unavailable.');
     if (context.authorityUpdate) {
         const base=call(`repos/${repository}/commits/${request.expectedDevelopSha}`);
+        if (base?.sha!==request.expectedDevelopSha || typeof base.commit?.tree?.sha!=='string') {
+            throw new Error('BLOCKED authority-update develop base tree is unavailable.');
+        }
+        requireAuthorityUpdateSourcePaths(completeTree(call,repository,baseTree),completeTree(call,repository,base.commit.tree.sha));
         requireInheritedBasicAuthority(call,repository,baseTree,base.commit.tree.sha,true);
         loadTrustedBasicEvidence({...request},context,call);
     }

@@ -24,6 +24,13 @@ Strict MVC is part of release qualification. The release audit invokes `scripts/
 
 ## GitHub-hosted release qualification
 
+The owner-reviewed dispatcher maintenance PR #230 advanced main without a new
+production tag. Only `0.132.9` may use the exact authenticated maintenance bridge
+described in `docs/CI_COVERAGE_REUSE_CONTRACT.md`: its origin records the actual
+reviewed main separately from unchanged stable tag `v_0.132.8`. Existing tag,
+qualification, review and main/head leases remain mandatory; no maintenance tag
+or release-before-develop bootstrap is used. Later releases retain normal tag-on-main selection.
+
 Use the [maintainer feature-to-release checklist](docs/MAINTAINER_RELEASE_CHECKLIST.md)
 for exact Actions names, selected refs/inputs, PR approval, automatic verified draft filling,
 Pages activation and separately approved retirement. Permanent `release-evidence.json`

@@ -12,9 +12,11 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import assert from 'node:assert/strict';
+import {maintenanceBridgeFixture} from './support/coverage_artifact_fixture.mjs';
+import {requireCurrentMainBase} from '../.github/scripts/release-promotion.mjs';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {validateRequest,verifyQualification,verifyIntegrationEvidence,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
+import {validateRequest,verifyQualification as verifyQualificationWithAdapters,verifyIntegrationEvidence,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
 import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,integrationCheckBinding} from '../.github/scripts/release-owner-authorization.mjs';
 import {dispatchPublishedWebsite} from '../.github/scripts/project-website-dispatch.mjs';
 import {verifyAutomaticCompletion} from '../.github/scripts/release-reconciliation.mjs';
@@ -22,12 +24,44 @@ import {verifyPredecessor} from '../.github/scripts/release-origin.mjs';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {coverageFixtureZip} from './support/coverage_artifact_fixture.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
-import {evidenceMatrixOwners,fullMatrixOwners,requireIntegrationBasicProfile} from '../.github/scripts/ci-owner-contract.mjs';
+import {evidenceMatrixOwners,fullMatrixOwners,requireCurrentWorkflowOwners,requireIntegrationBasicProfile} from '../.github/scripts/ci-owner-contract.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+/** Supply immutable synthetic workflow sources by retained lifecycle version to every release verification call.
+ * @param {string} path Exact read-only source endpoint.
+ * @param {number} version Historical owner contract selected from the retained record.
+ * @param {string} workflowSha Exact synthetic workflow identity used by the run fixture.
+ * @returns {object} Git-hashed workflow contents or main-history proof; unknown endpoints fail instead of using live network access.
+ */
+const releaseWorkflowFixture=(path,version,workflowSha)=>{
+    const workflow=ciOwnerWorkflowResponse(path,version);
+    if (workflow) return workflow;
+    if (path.endsWith('/git/ref/heads/main')) return {ref:'refs/heads/main',object:{type:'commit',sha:workflowSha}};
+    throw new Error('BLOCKED unexpected inert release workflow fixture GET '+path);
+};
+/** Route every release qualification through an inert workflow source unless the caller supplies its own explicit provider.
+ * @param {object} request Authorized immutable release inputs.
+ * @param {object} run Server-owned workflow attempt fixture.
+ * @param {object[]} jobs Complete inert job inventory.
+ * @param {object} record Retained release qualification record.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {string} currentHead Observed release branch head.
+ * @param {object} [adapters={}] Explicit artifact and provider fixtures; an explicit API provider overrides the default inert one.
+ * @returns {object[]} Qualification result from the real release verifier.
+ */
+const verifyQualification=(request,run,jobs,record,repository,currentHead,adapters={})=>{
+    const observed=new Set(jobs.map(job=>job.name?.split(' / ').at(-1)));
+    const ownerVersion=record.lifecycle_schema===1?1:(record.lifecycle_schema===2?2:
+        observed.has('Shared source contracts') || [...observed].some(name=>/shard \d+\/4\)$/.test(name))?3:
+            ([...observed].some(name=>name.startsWith('PHP 8.3 '))?1:2));
+    const workflowSha=run.head_sha ?? currentHead;
+    const api=path=>releaseWorkflowFixture(path,ownerVersion,workflowSha);
+    return verifyQualificationWithAdapters(request,run,jobs,record,repository,currentHead,{api,...adapters});
+};
 {
     const workflowSha='5'.repeat(40),mainSha='7'.repeat(40),repository='owner/gallery';
     const current=fullMatrixOwners().map(name=>({name}));
-    const historical=fullMatrixOwners(1).map(name=>({name}));
+    const historicalV1=fullMatrixOwners(1).map(name=>({name}));
+    const historicalV2=fullMatrixOwners(2).map(name=>({name}));
     const provider=(path,version=1)=>{
         const workflow=ciOwnerWorkflowResponse(path,version);
         if (workflow) return workflow;
@@ -35,25 +69,38 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
         if (path.endsWith(`/compare/${workflowSha}...${mainSha}`)) return {merge_base_commit:{sha:workflowSha}};
         assert.fail('Unexpected owner-contract fixture GET '+path);
     };
-    assert.deepEqual(evidenceMatrixOwners(current,repository,workflowSha,()=>assert.fail('Current owners need no historical fallback')),
+    assert.deepEqual(evidenceMatrixOwners(current,repository,workflowSha,path=>provider(path,3)),
         fullMatrixOwners());
-    assert.deepEqual(evidenceMatrixOwners(historical,repository,workflowSha,provider),fullMatrixOwners(1),
-        'Historical native owners remain valid only with complete Git-hashed W inherited from main.');
-    for (const rows of [current.slice(1,8),[...current,current[4]],
-        current.map((job,index)=>index===4?historical[index]:job)]) {
-        assert.throws(()=>evidenceMatrixOwners(rows,repository,workflowSha,provider),/BLOCKED/,
-            'Missing, duplicated and mixed native owner contracts never pass.');
+    requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,3));
+    requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,2),2);
+    assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,2)),/exact requested owner matrix/,
+        'A retained v2 source cannot silently satisfy the default live v3 owner contract.');
+    assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,1),2),/exact requested owner matrix/);
+    assert.deepEqual(evidenceMatrixOwners(historicalV1,repository,workflowSha,provider),fullMatrixOwners(1),
+        'Historical PHP 8.3 owners remain valid only with complete Git-hashed W inherited from main.');
+    assert.deepEqual(evidenceMatrixOwners(historicalV2,repository,workflowSha,path=>provider(path,2)),fullMatrixOwners(2),
+        'Historical unsharded PHP 8.5 owners remain valid only with complete Git-hashed W inherited from main.');
+    for (const rows of [
+        current.filter(job=>job.name!=='PHP 8.5 workflows (mysql:8.4, Unicode, shard 2/4)'),
+        current.filter(job=>job.name!=='Shared source contracts'),
+        current.filter(job=>job.name!=='Portable Node and WinApp'),
+        [...current,current[4]],
+        current.map((job,index)=>index===8?historicalV2[4]:job)]) {
+        assert.throws(()=>evidenceMatrixOwners(rows,repository,workflowSha,path=>provider(path,3)),/BLOCKED/,
+            'Missing, duplicated and mixed shard/source/portable owner contracts never pass.');
     }
-    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>provider(path,2)),/workflow W/,
-        'Current W cannot authenticate legacy job names.');
-    assert.throws(()=>evidenceMatrixOwners(historical,repository,undefined,provider),/workflow W/);
-    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>{
-        const value=provider(path);
+    assert.throws(()=>evidenceMatrixOwners(historicalV1,repository,workflowSha,path=>provider(path,3)),/workflow W/,
+        'Current v3 W cannot authenticate historical v1 job names.');
+    assert.throws(()=>evidenceMatrixOwners(historicalV2,repository,workflowSha,path=>provider(path,3)),/workflow W/,
+        'Current v3 W cannot authenticate historical v2 job names.');
+    assert.throws(()=>evidenceMatrixOwners(historicalV2,repository,undefined,path=>provider(path,2)),/workflow W/);
+    assert.throws(()=>evidenceMatrixOwners(historicalV2,repository,workflowSha,path=>{
+        const value=provider(path,2);
         return path.includes('/contents/')?{...value,content:Buffer.from('truncated').toString('base64')}:value;
     }),/Git object identity/);
-    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>
+    assert.throws(()=>evidenceMatrixOwners(historicalV2,repository,workflowSha,path=>
         path.includes('/compare/')?{merge_base_commit:{sha:'8'.repeat(40)}}:
-            ciOwnerWorkflowResponse(path,path.endsWith('ref='+'8'.repeat(40))?2:1) || provider(path)),/inherited from main history/);
+            ciOwnerWorkflowResponse(path,path.endsWith('ref='+'8'.repeat(40))?1:2) || provider(path)),/inherited from main history/);
     requireIntegrationBasicProfile(['php-lint','js-lint','source-documentation-changed'],repository,workflowSha,provider);
     requireIntegrationBasicProfile(['php-lint-changed','js-lint-changed','source-documentation-changed'],repository,workflowSha,
         path=>provider(path,2));
@@ -99,7 +146,8 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 }
 const candidate = 'a'.repeat(40);
 const request = {runId:'123',candidate,branch:'release/v_1.2.3',mode:'plan',override:false,reason:'',acceptedFailures:[],manualReview:''};
-const run = {path:'.github/workflows/release-qualification.yml',event:'push',head_branch:request.branch,status:'completed',conclusion:'success',run_attempt:1};
+const run = {path:'.github/workflows/release-qualification.yml',event:'push',head_branch:request.branch,head_sha:candidate,
+    status:'completed',conclusion:'success',run_attempt:1};
 const record = {repository:'owner/gallery',branch:request.branch,candidate_sha:candidate,
     source_base:'b'.repeat(40),version:'1.2.3',run_id:'123',run_attempt:'1',ready:true,automated_result:'success',override:false,
     origin_commit_sha:'e'.repeat(40),selected_develop_sha:'f'.repeat(40),
@@ -117,19 +165,23 @@ assert.throws(() => verifyFinalContent('c'.repeat(40),candidate,'b'.repeat(40),'
 assert.throws(() => verifyFinalContent(candidate,candidate,'c'.repeat(40),'b'.repeat(40)),/tree differs/);
 assert.deepEqual(verifyQualification(request,run,jobs,record,record.repository,candidate),[]);
 {
-    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
-        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
-    const historicalJobs=jobs.map(job=>({...job,name:historicalName(job.name)}));
-    const historicalRun={...run,head_sha:'5'.repeat(40)};
-    const provider=path=>ciOwnerWorkflowResponse(path,1) || (path.endsWith('/git/ref/heads/main')
-        ? {ref:'refs/heads/main',object:{type:'commit',sha:'5'.repeat(40)}} : assert.fail('Unexpected historical fixture '+path));
     for (const lifecycle_schema of [1,2]) {
+        const ownerVersion=lifecycle_schema===1?1:2;
+        const workflowSha=(ownerVersion===1?'5':'6').repeat(40);
+        const historicalOwners=fullMatrixOwners(ownerVersion);
+        const currentOwnerSet=new Set([1,2,3].flatMap(version=>fullMatrixOwners(version)));
+        const historicalJobs=[...jobs.filter(job=>!currentOwnerSet.has(job.name)),
+            ...historicalOwners.map(name=>({name,status:'completed',conclusion:'success',
+                html_url:'https://github.com/owner/gallery/actions/runs/123'}))];
+        const historicalRun={...run,head_sha:workflowSha};
+        const provider=path=>ciOwnerWorkflowResponse(path,ownerVersion) || (path.endsWith('/git/ref/heads/main')
+            ? {ref:'refs/heads/main',object:{type:'commit',sha:workflowSha}} : assert.fail('Unexpected historical fixture '+path));
         const historicalRecord=lifecycle_schema===1?{...record,lifecycle_schema}:
             {...record,lifecycle_schema,winapp_changed:false};
         const owners=lifecycle_schema===1?historicalJobs:[...historicalJobs,
             ...['Prepare manual release assets','Open qualified release PR'].map(name=>({name,status:'completed',conclusion:'success'}))];
         assert.deepEqual(verifyQualification(request,historicalRun,owners,historicalRecord,record.repository,candidate,{api:provider}),[],
-            'Retained lifecycle schema '+lifecycle_schema+' keeps its authenticated original PHP owner mapping.');
+            'Retained lifecycle schema '+lifecycle_schema+' keeps its authenticated historical owner mapping.');
     }
 }
 for (const branch of ['main','develop','feature/example','release/v_01.2.3','release/v_1.2.3;command']) {
@@ -186,11 +238,16 @@ const schema3Record={...record,lifecycle_schema:3,coverage_schema:1,winapp_chang
         artifact_id:501,artifact_sha256:'sha256:'+'a'.repeat(64)},
     delta:{base_sha:releaseA,candidate_sha:candidate,profile:'basic',artifact_id:502,
         artifact_sha256:'sha256:'+'b'.repeat(64)}};
-const fullOwnerNames=['Read-only generated-state and source preflight',
-    'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-    'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
-    'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
-    'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+const fullOwnerNames=fullMatrixOwners();
+const allMatrixOwnerNames=new Set([1,2,3].flatMap(version=>fullMatrixOwners(version)));
+const integrationOwnerRows=(version,idStart)=>fullMatrixOwners(version).map((name,index)=>({
+    id:idStart+index,name:'Develop integration / '+name,status:'completed',conclusion:'success'}));
+const replaceIntegrationOwnerRows=(jobs,version,idStart)=>{
+    const template=jobs.find(job=>allMatrixOwnerNames.has(job.name.split(' / ').at(-1)));
+    assert.ok(template,'Historical server rows require their original workflow/run/attempt metadata.');
+    return [...jobs.filter(job=>!allMatrixOwnerNames.has(job.name.split(' / ').at(-1))),
+        ...integrationOwnerRows(version,idStart).map(owner=>({...template,...owner}))];
+};
 const manualDeltaPaths=['docs/PHP_Gallery_Manual.tex','docs/PHP_Gallery_Manual.pdf',
     'docs/PHP_Gallery_Manual_CZ.tex','docs/PHP_Gallery_Manual_CZ.pdf',
     'docs/PHP_Gallery_Manual_DE.tex','docs/PHP_Gallery_Manual_DE.pdf',
@@ -268,6 +325,21 @@ const basicJobs=[workflowJob('Select release coverage owner',800),
         'Complete release matrix / Complete required CI matrix']
         .map((name,index)=>workflowJob(bootstrapPrefix+name,900+index,'completed','skipped'))];
 assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,schema3Adapters),[]);
+for (const label of [
+    'Develop integration / PHP 8.5 workflows (mysql:8.4, Unicode, shard 1/4)',
+    'Develop integration / Shared source contracts',
+    'Develop integration / Portable Node and WinApp']) {
+    const owner=schema3Adapters.integrationJobs.find(job=>job.name===label);
+    assert.ok(owner,'The exact v3 fixture must contain required owner '+label);
+    assert.throws(()=>verifyIntegrationEvidence(schema3Record,record.repository,{...schema3Adapters,
+        integrationJobs:schema3Adapters.integrationJobs.filter(job=>job!==owner)}),/BLOCKED/,
+        'A missing shard/source/portable owner cannot qualify the exact candidate.');
+    for (const conclusion of ['skipped','cancelled']) {
+        assert.throws(()=>verifyIntegrationEvidence(schema3Record,record.repository,{...schema3Adapters,
+            integrationJobs:schema3Adapters.integrationJobs.map(job=>job===owner?{...job,conclusion}:job)}),/BLOCKED/,
+            'A '+conclusion+' shard/source/portable owner cannot qualify the exact candidate.');
+    }
+}
 {
     const skipped={id:711,name:'Inherited BASIC authority',workflow_name:'Integrate into develop',run_id:456,
         run_attempt:1,status:'completed',conclusion:'skipped'};
@@ -282,28 +354,41 @@ assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.
         integrationJobs:[...schema3Adapters.integrationJobs,skipped,{...skipped,id:712}]}),/BLOCKED/);
 }
 {
-    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
-        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
-    const historicalPayload={...integrationPayload,basic_profile:['php-lint','js-lint','source-documentation-changed'],
-        native_owners:integrationPayload.native_owners.map(owner=>({...owner,name:historicalName(owner.name)}))};
-    const historical={...schema3Adapters,
-        api:path=>ciOwnerWorkflowResponse(path,1) || schema3Call(path),
-        integrationEvidence:{...schema3Adapters.integrationEvidence,payload:historicalPayload},
-        integrationJobs:schema3Adapters.integrationJobs.map(job=>({...job,name:historicalName(job.name)}))};
-    assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,historical),[],
-        'Schema 3 consumes immutable historical FULL evidence and its original BASIC profile without rewriting the record.');
-    assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,
-        {...historical,api:schema3Call}),/workflow W/,
-        'Historical PHP names cannot be authenticated by a current PHP 8.5 workflow.');
+    for (const version of [1,2]) {
+        const historicalWorkflowSha=(version===1?'91':'a2').repeat(20);
+        const historicalRun={...run,head_sha:historicalWorkflowSha};
+        const historicalApi=path=>{
+            const workflow=ciOwnerWorkflowResponse(path,path.includes('/candidate-preparation.yml')?1:version);
+            if (workflow) return workflow;
+            if (path.endsWith(`/compare/${historicalWorkflowSha}...${'7'.repeat(40)}`)) {
+                return {status:'ahead',merge_base_commit:{sha:historicalWorkflowSha}};
+            }
+            if (path.endsWith('/commits/'+historicalWorkflowSha)) return {sha:historicalWorkflowSha};
+            if (path.endsWith('/actions/runs/456/attempts/1')) return {...schema3Call(path),head_sha:historicalWorkflowSha};
+            return schema3Call(path);
+        };
+        const currentWorkflowApi=path=>ciOwnerWorkflowResponse(path)??historicalApi(path);
+        const historicalIntegrationSha=historicalWorkflowSha;
+        const historicalRecord={...schema3Record,integration:{...schema3Record.integration,workflow_sha:historicalIntegrationSha}};
+        const historicalPayload={...integrationPayload,basic_profile:['php-lint','js-lint','source-documentation-changed'],
+            workflow_sha:historicalIntegrationSha,native_owners:integrationOwnerRows(version,600)};
+        const historical={...schema3Adapters,
+            api:historicalApi,
+            integrationEvidence:{...schema3Adapters.integrationEvidence,payload:historicalPayload},
+            integrationJobs:replaceIntegrationOwnerRows(schema3Adapters.integrationJobs,version,600)};
+        assert.deepEqual(verifyQualification(request,historicalRun,basicJobs,historicalRecord,record.repository,candidate,historical),[],
+            'Schema 3 consumes authenticated historical FULL contract '+version+' without rewriting owner IDs or the source record.');
+        assert.throws(()=>verifyQualification(request,historicalRun,basicJobs,historicalRecord,record.repository,candidate,
+            {...historical,api:currentWorkflowApi}),/workflow W/,
+            'Current v3 workflow bytes cannot authenticate historical FULL contract '+version+'.');
+    }
 }
 // A protected-develop authority update terminates at one authentic original main-owned FULL archive.
-{
+for (const currentVersion of [2,3]) {
     const authority=releaseA,source='2'.repeat(40),integrated='1'.repeat(40),sourceTree='0'.repeat(40),integratedTree='e'.repeat(40);
     const checksum=bytes=>'sha256:'+createHash('sha256').update(bytes).digest('hex');
-    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
-        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
     const anchorPayload={...integrationPayload,basic_profile:['php-lint','js-lint','source-documentation-changed'],
-        native_owners:integrationPayload.native_owners.map(owner=>({...owner,name:historicalName(owner.name)}))};
+        native_owners:integrationOwnerRows(2,600)};
     const originalArchive=coverageFixtureZip([['develop-integration.json',Buffer.from(JSON.stringify(anchorPayload))]]);
     const anchorIdentity={...schema3Record.integration,artifact_sha256:checksum(originalArchive)};
     const anchorEvidence={payload:anchorPayload,provider:{artifact_id:501,artifact_digest:checksum(originalArchive),run_id:'456'}};
@@ -320,8 +405,7 @@ assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.
         ['trusted-basic.json.report.json',basicReport]]);
     const payload={...integrationPayload,source_sha:source,candidate_sha:integrated,candidate_tree:integratedTree,
         expected_develop_sha:authority,source_base:authority,workflow_sha:authority,run_id:'789',
-        native_owners:fullOwnerNames.map((name,index)=>({id:1200+index,name:'Develop integration / '+name,
-            status:'completed',conclusion:'success'})),authority_update:{anchor:{identity:anchorIdentity,evidence:anchorEvidence},
+        native_owners:integrationOwnerRows(currentVersion,1200),authority_update:{anchor:{identity:anchorIdentity,evidence:anchorEvidence},
             inherited_basic:{...originalBasic,artifact_id:504,artifact_sha256:checksum(inheritedArchive)}}};
     const currentRun={id:789,run_attempt:1,name:'Integrate into develop',path:identity.workflow_path,event:'workflow_dispatch',
         head_branch:'develop',head_sha:authority,status:'completed',conclusion:'success',
@@ -345,11 +429,14 @@ assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.
         if (path.endsWith('/commits/'+integrated+'/check-runs?per_page=100&filter=all')) return {total_count:checks.length,check_runs:checks};
         if (path.endsWith('/commits/'+source)) return {sha:source,parents:[{sha:authority}],commit:{tree:{sha:sourceTree}}};
         if (path.endsWith('/commits/'+integrated)) return {sha:integrated,parents:[{sha:source}],commit:{tree:{sha:integratedTree}}};
+        if (path.endsWith('/compare/'+authority+'...'+ '7'.repeat(40))) return {base_commit:{sha:authority},
+            merge_base_commit:{sha:authority},status:'ahead',ahead_by:1,behind_by:0};
         if (path.endsWith('/compare/'+source+'...'+integrated)) return {base_commit:{sha:source},merge_base_commit:{sha:source},
             status:'ahead',ahead_by:1,behind_by:0,files:[{filename:'app/runtime/modules.php',status:'modified'}]};
         const currentSource=path.includes('?ref='+source);
-        const currentMatrix=path.includes('/gallery-workflows.yml?ref='+authority);
-        const workflow=ciOwnerWorkflowResponse(path,currentSource || currentMatrix?2:1);
+        const workflowVersion=path.includes('/gallery-workflows.yml')
+            ?(path.includes('?ref='+authority)?currentVersion:2):(currentSource?2:1);
+        const workflow=ciOwnerWorkflowResponse(path,workflowVersion);
         if (workflow) {
             if (!workflow.path.endsWith('/candidate-preparation.yml')) return workflow;
             const text=Buffer.from(workflow.content,'base64').toString('utf8').replace(/php scripts\/audit\.php --profile=basic(?: --changed)?/g,
@@ -362,7 +449,7 @@ assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.
     const authorityRecord={lifecycle_schema:3,coverage_schema:1,selected_develop_sha:integrated,integration:identity};
     const authorityAdapters={api:provider,integrationEvidence:{payload,provider:{artifact_id:503,
         artifact_digest:identity.artifact_sha256,run_id:'789'}},integrationJobs:currentJobs,
-        anchorIntegrationJobs:schema3Adapters.integrationJobs.map(job=>({...job,name:historicalName(job.name)})),
+        anchorIntegrationJobs:replaceIntegrationOwnerRows(schema3Adapters.integrationJobs,2,600),
         anchorArtifacts:{download:(repository,id)=>{assert.equal(repository,record.repository);assert.equal(id,501);return originalArchive;}},
         inheritedBasicArtifacts:{download:(repository,id)=>{assert.equal(repository,record.repository);assert.equal(id,504);return inheritedArchive;}}};
     assert.deepEqual(verifyIntegrationEvidence(authorityRecord,record.repository,authorityAdapters),{
@@ -835,5 +922,17 @@ assert.doesNotMatch(read('.github/scripts/release-completion.mjs'),/release','cr
     assert.equal(verifyAutomaticCompletion(receipt,ownerRepo,provider,adapters),'https://github.com/owner/gallery/actions/runs/123');
     assert.throws(()=>verifyAutomaticCompletion(receipt,ownerRepo,provider,{...adapters,
         deltaEvidence:{...adapters.deltaEvidence,payload:{...deltaPayload,profile:'full'}}}),/BLOCKED/);
+}
+{
+    const f=maintenanceBridgeFixture(),repository='klusik/PHP_gallery';
+    const predecessor=verifyPredecessor(f.api,repository,'v_0.132.8',f);
+    const bridgeRecord={...f.record,...predecessor};
+    const request={runId:'1',candidate:f.record.selected_develop_sha,branch:f.record.release_branch,
+        mode:'complete',override:false,reason:'',acceptedFailures:[],manualReview:''};
+    assert.equal(requireCurrentMainBase(request,repository,{...f,record:bridgeRecord}),f.record.initial_main_sha,
+        'promotion leases actual reviewed maintenance main while preserving the real previous stable tag');
+    assert.notEqual(bridgeRecord.initial_main_sha,bridgeRecord.previous_stable_sha);
+    assert.throws(()=>requireCurrentMainBase(request,repository,{...f,record:{...bridgeRecord,previous_stable_tag:'v_0.132.7'}}),/BLOCKED/,
+        'an arbitrary predecessor cannot reuse the finite bridge');
 }
 process.stdout.write('PASS exact qualification identities, complete coverage, no overrides, active policy and manual publication contracts\n');

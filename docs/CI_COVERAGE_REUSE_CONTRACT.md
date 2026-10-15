@@ -1,6 +1,26 @@
 # Develop integration and BASIC release delta contract
 
-For the initial CI authority transition, the protected publisher seals the six
+## Release after the reviewed maintenance dispatcher repair
+
+The owner-approved PR #230 installed the dispatcher fix as main merge
+`66cbe28d345f27ca90827028381e1a458e6f89f9`, with the prior stable
+`v_0.132.8` still immutably on `d38443c355a2b2e14cbfaa1757e9fde4448f8fbb`.
+Release `0.132.9` therefore records actual `initial_main_sha` as that reviewed
+maintenance merge and `previous_stable_sha` as the unchanged stable tag commit.
+The finite bridge authenticates the exact merge parents/tree, bot PR, effective
+owner review, pinned caller/main workflow Git objects, all twelve native owners
+of maintenance run `38801060282` attempt 2, the exact-SHA check and the complete
+provider-digest-verified artifact. It cannot select another repository, release,
+untagged main commit or predecessor. Ordinary releases retain tag/main equality.
+
+The release PR still merges `[initial_main_sha,Q]` with tree(Q), current-main and
+release-head leases stay unchanged, and the stable predecessor's publication and
+linear-develop evidence remain independently verified. No tag is moved or made
+for the maintenance merge. Stage 1 run `38802822564` was cancelled before develop
+FF when this old initializer assumption was found; the reader correction is
+included before fresh stage-1 BASIC/FULL and the bounded evaluator transition.
+
+For the initial CI authority transition, the protected publisher sealed the six
 approved evaluator blobs from `baa436b5e170d5e3d57ca32190527463c3080734`, tree
 `aa20710da67dae48492cb392696d85b44efaaabd`, qualified by maintenance FULL
 `38760542513` attempt 1. A selected candidate cannot substitute different audit
@@ -46,6 +66,89 @@ Acceptance is PENDING until real hosted runs establish both stages and their
 write guards. Human review and release publication remain distinct.
 
 ## Required cadence
+
+### Parallel FULL owner contract 3
+
+The `feature/ci_parallelization` follow-up defines a 28-owner matrix: the safety
+preflight, three OS package jobs, one shared source-contract job, one portable
+Node/WinApp job, twenty PHP shards (four in each of the existing five runtime/DB
+combinations), required Chromium and the aggregate. Independent shared work
+starts beside generated-state/workflow-integrity preflight; expensive PHP/DB,
+browser and package jobs still require that preflight. PHP 8.1 whole-tree
+syntax additionally executes in the floor environment's first shard; PHP 8.5
+syntax remains shared. Whole-tree documentation/policy inventory and debt
+ratchets remain distinct from strict changed-declaration/policy enforcement.
+
+The central registry and audit own selection. Each environment retains all PHP
+regressions, existing serial barriers and runtime probes; each DB shard has its
+own service, migrated fixture and HTTP server. Same-candidate delegation names
+the required source, portable and packaging owners and never creates a local
+PASS for work executed elsewhere. All split owners retain post-test tracked
+checkout/HEAD/base integrity. Native labels, complete shard axes and all owners
+are mandatory; missing, duplicated, mixed-version, skipped or red owners fail.
+
+Historical owner contracts 1 and 2 are read only with complete Git-blob-verified
+workflow bytes inherited from authenticated main history. Fresh publishers emit
+contract 3. The original sealed evaluator qualification remains contract 2; its
+immutable run does not acquire the new shard labels.
+
+**Installation evidence.** Feature `maintenance_full` qualifies the selected
+candidate/workflow combination but cannot install its evaluator or matrix. The
+ordinary main-owned integration executes its own local reusable workflow and
+refuses changed inherited BASIC authority. The earlier transition remains
+sealed to its original immutable source; it is not generic upgrade permission.
+
+This follow-up uses a second finite staged transition. A concrete successful
+maintenance source/tree/run and its six exact evaluator blobs are sealed in the
+stage-1 publisher. The seal also includes exactly the `app/core-manifest.json`
+regular-file blob from that qualified tree. Stage 1 keeps the entire installed
+BASIC closure unchanged; the existing main-owned FULL and guarded FF establish
+the new W*. Stage 2 may change only those six sealed evaluator paths and that
+single exact generated manifest blob, with complete source/base leaf comparison
+rejecting every other change. The four changed audit files restore the qualified
+parallel evaluator; the scanner closure remains unchanged. All future-facing
+tests and workflow/readers are already present in W*, and the audit fixture
+independently requires an exact legacy or exact parallel contract.
+Protected-develop owner dispatch authenticates W*'s original main-owned anchor,
+the retained exact maintenance proof, independent inherited BASIC and all 28
+native owners before its normal leased FF. No feature workflow authorizes itself.
+
+The evaluator and manifest map is sealed to source
+`ebde37ae7bd5c80ad1cb8733b7fb8fd2acb6cac1`, tree
+`4f01e2e5bf24bd5b34137a515075b4105889f87c`, maintenance FULL
+[38790736942](https://github.com/klusik/PHP_gallery/actions/runs/38790736942)
+attempt 2. It is usable only after that run is completed-success and the
+manifest matches the blob in its authenticated source tree; a failed or
+superseded source needs fresh qualification and a new explicit seal.
+Keep develop/main writes, release origin creation, human approval and publication
+behind their existing guards. Only actual completed runs accept installation;
+issue #223 retains the exact stage-1 and stage-2 acceptance runs and SHA identities.
+
+### Installed ordinary-integration blocker observed 2026-10-15
+
+Main `d38443c355a2b2e14cbfaa1757e9fde4448f8fbb` carries integration workflow blob
+`cdf9548af2b59c9499e07e5156adcd6f76a77a5c`. In ordinary mode its optional
+`inherited-basic` ancestor is skipped. The reusable `full` job has no explicit
+status condition, so GitHub propagates that skip through the dependency chain;
+FULL and the protected publisher never run. This occurred in
+[38792897295](https://github.com/klusik/PHP_gallery/actions/runs/38792897295)
+with prepared source/candidate `7b5f18b665e7ac0c1eb123fc5d787a63f7778b32`
+unchanged. The workflow's overall success is not FULL qualification or integration.
+
+The working-branch repair adds `!cancelled()` plus explicit success of both
+direct dependencies to `full`. Exact published/source SHA equality also stops
+new generated children before FULL until the squash/BASIC checkpoint is repeated.
+GitHub documents the underlying
+[dependency skip propagation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idneeds)
+and [default status checks](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions).
+The existing publisher's strict FULL requirement is preserved. A feature repair
+cannot install itself into main; the staged route remains blocked until a
+maintainer-controlled supported installation repairs that main-owned entry point.
+The historical release bootstrap is sealed to a different defective installation
+and does not authorize this repair. Do not create a release origin while blocked.
+
+The eleven-owner descriptions below document the installed prior contract and
+its retained historical evidence until that installation is accepted.
 
 | Stage | Execution and immutable identity |
 | --- | --- |
@@ -165,6 +268,14 @@ provider mismatch, newest red evidence, release path/mode refusals, version-only
 projection and legacy schema compatibility. Only hosted execution on the exact
 prepared SHA qualifies the source change. Installed Windows/UAC/restart/live
 SimConnect and live installation/manual acceptance remain explicit gaps.
+
+Real-Git release graph fixtures disable automatic Git maintenance inside their
+owned disposable repositories and use bounded filesystem cleanup retries. Hosted
+integration `38804990803` reported `ENOTEMPTY` while removing the temporary `.git`
+directory; the cleanup error can mask an earlier assertion, so fresh hosted graph
+evidence is required. These fixture-only controls keep
+optional background writers and transient cleanup races separate from the graph
+contract. Assertion results and the final cleanup failure still remain fatal.
 
 The reviewed integration workflow must be installed through the maintainer's
 protected process before its button is available. A branch-local green check

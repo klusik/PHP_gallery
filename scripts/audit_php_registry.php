@@ -8,16 +8,25 @@
  * Purpose: Defines curated PHP feedback and exclusive regression exceptions.
  * Responsibilities:
  *   - Keep development coverage explicit and independent of historical timings
+ *   - Define deterministic hosted FULL PHP shard count centrally
  *   - Document shared-resource and timing-sensitive process isolation
  * Author: Rudolf Klusal
  * Contact: https://github.com/klusik
  * License: MIT License (see LICENSE file in repository)
- * Last Updated: 2026-10-05
+ * Last Updated: 2026-10-15
  */
 
 declare(strict_types=1);
 
 return [
+    // Purpose: Bound the deterministic hosted FULL PHP regression partition.
+    // Type: integer.
+    // Units: shards.
+    // Scope: Hosted FULL PHP regression owners only; accepted one-based indices are 1 through this count.
+    // Consumers: scripts/audit.php and scripts/gallery_workflow_run.php.
+    // Rationale: Four isolated owners preserve bounded per-run process pools while splitting the complete central test registry.
+    'hosted_full_php_shard_count' => 4,
+
     // Exercise orchestration, fail-closed storage, mutation and authorized media paths.
     // Full/release still discover every standalone PHP regression test.
     'quick_tests' => [

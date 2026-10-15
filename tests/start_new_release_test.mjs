@@ -14,6 +14,17 @@
 import assert from 'node:assert/strict';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {lifecycleFixture} from './support/release_lifecycle_fixture.mjs';
+import {releaseStableMain} from '../.github/scripts/release-origin.mjs';
+import {maintenanceBridgeFixture} from './support/coverage_artifact_fixture.mjs';
+{
+    const f=maintenanceBridgeFixture();
+    assert.equal(releaseStableMain('0.132.9',f.record.initial_main_sha,'klusik/PHP_gallery',f),f.record.previous_stable_sha,
+        'the reviewed maintenance main resolves to the unchanged real predecessor tag');
+    assert.throws(()=>releaseStableMain('0.132.9',f.record.initial_main_sha,'foreign/gallery',f),/BLOCKED/);
+    assert.equal(releaseStableMain('0.132.10',f.record.initial_main_sha,'klusik/PHP_gallery',f),f.record.initial_main_sha,
+        'another version cannot select the maintenance exception and still needs its normal tag on main');
+    assert.equal(releaseStableMain('1.2.1','a'.repeat(40),'fixture/gallery',{api:()=>assert.fail('normal selection is unchanged')}),'a'.repeat(40));
+}
 for (const version of ['1.3','1.2.1']) {
     const f=lifecycleFixture(version);
     try {

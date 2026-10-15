@@ -20,7 +20,7 @@ import {resolve} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {readCoverageArtifact} from './coverage-artifacts.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
-import {verifyPredecessor} from './release-origin.mjs';
+import {verifyPredecessor,isMaintenanceMainBridge,verifyMaintenanceMainBridge} from './release-origin.mjs';
 import {requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding,integrationCheckBinding} from './release-owner-authorization.mjs';
 
 /** Recursive JSON transport values; domain validators narrow the fields they consume.
@@ -185,6 +185,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     }
     const call=adapters.api;
     if (typeof call!=='function') throw new Error('BLOCKED integration server evidence reader is unavailable.');
+    const requiredLabels=evidenceMatrixOwners(payload.native_owners,repository,identity.workflow_sha,call);
     const authorityMode=Object.hasOwn(payload,'authority_update');
     if (authorityMode) {
         const authority=payload.authority_update,anchor=authority?.anchor,basic=authority?.inherited_basic;
@@ -221,7 +222,10 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         verifyIntegrationEvidence({lifecycle_schema:3,coverage_schema:1,selected_develop_sha:identity.workflow_sha,
             integration:anchor.identity},repository,{api:call,execute:adapters.execute,
             integrationEvidence:anchor.evidence,integrationJobs:adapters.anchorIntegrationJobs});
-        requireCurrentWorkflowOwners(repository,identity.workflow_sha,call);
+        // Immutable earlier installations retain their authenticated unsharded
+        // PHP 8.1/8.5 workflow. This read path cannot authorize a live publisher.
+        const ownerVersion=JSON.stringify(requiredLabels)===JSON.stringify(fullMatrixOwners(2))?2:3;
+        requireCurrentWorkflowOwners(repository,identity.workflow_sha,call,ownerVersion);
         const inherited=readCoverageArtifact(repository,basic.artifact_id,identity.run_id,basic.artifact_sha256,
             'develop-integration-inherited-basic',['trusted-basic.json','trusted-basic.json.report.json'],
             {...adapters.inheritedBasicArtifacts,api:call});
@@ -239,8 +243,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
             throw new Error('BLOCKED inherited BASIC central report bytes do not reproduce the recorded successful evidence.');
         }
     }
-    const requiredLabels=evidenceMatrixOwners(payload.native_owners,repository,identity.workflow_sha,call);
-    if (authorityMode && JSON.stringify(requiredLabels)!==JSON.stringify(fullMatrixOwners())) {
+    if (authorityMode && ![2,3].some(version=>JSON.stringify(requiredLabels)===JSON.stringify(fullMatrixOwners(version)))) {
         throw new Error('BLOCKED authority update requires the current PHP 8.1/8.5 native FULL owners.');
     }
     const requiredOwners=requiredLabels.map(name=>'Develop integration / '+name);
@@ -512,7 +515,7 @@ export function verifyBasicDeltaEvidence(record,version,integration,adapters={})
  * @param {ReleaseRecord} record Downloaded aggregate qualification record.
  * @param {string} repository Expected owner/repository identity.
  * @param {string} currentHead Current release branch head observed from GitHub.
- * @param {{api?:function(string,string=,(JsonValue|null)=):JsonValue,execute?:function(string,string[],(string|null)=):string,integrationJobs?:ReleaseJob[],integrationEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}},deltaEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}}}} adapters Authenticated provider artifacts and read-only server evidence readers.
+ * @param {{api?:function(string,string=,(JsonValue|null)=):JsonValue,execute?:function(string,string[],(string|null)=):string,download?:function(string,number):Buffer,integrationJobs?:ReleaseJob[],integrationEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}},deltaEvidence?:{payload:JsonValue,provider:{artifact_id:number,artifact_digest:string,run_id:string}}}} adapters Authenticated integration/delta evidence, complete maintenance archive transport and read-only server readers.
  * @returns {ReleaseJob[]} Empty collection after complete successful qualification; throws for any mandatory failure or missing coverage.
  */
 export function verifyQualification(request, run, jobs, record, repository, currentHead, adapters={}) {
@@ -535,12 +538,13 @@ export function verifyQualification(request, run, jobs, record, repository, curr
     if (![record.origin_commit_sha,record.selected_develop_sha,record.initial_main_sha,
         record.previous_stable_sha].every(value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value))
         || record.source_base!==record.previous_release_candidate_sha
-        || record.previous_stable_sha !== record.initial_main_sha
+        || record.previous_stable_sha !== record.initial_main_sha && !isMaintenanceMainBridge(record)
         || ![record.previous_tag_object_sha,record.previous_tree_sha,record.previous_release_candidate_sha,record.origin_blob_sha].every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))
         || typeof record.previous_stable_tag !== 'string'
         || !/^v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(record.previous_stable_tag)) {
         throw new Error('BLOCKED qualification lacks immutable selected-develop and prior-main provenance.');
     }
+    verifyMaintenanceMainBridge(record,repository,adapters ?? {});
     if (record.lifecycle_schema===3) {
         if (record.coverage_schema!==1) throw new Error('BLOCKED unsupported release coverage schema.');
         const integration=verifyIntegrationEvidence(record,repository,adapters);
@@ -583,10 +587,9 @@ export function verifyQualification(request, run, jobs, record, repository, curr
         if (installer.conclusion!==(record.installer_required?'success':'skipped')) {
             throw new Error('BLOCKED Windows companion installer outcome differs from the strict release policy.');
         }
-        const fullOnly=['Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-            'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
-            'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
-            'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Authoritative release audit'];
+        const fullOnly=[...new Set([1,2,3].flatMap(version=>fullMatrixOwners(version)))]
+            .filter(name=>!['Read-only generated-state and source preflight','Complete required CI matrix'].includes(name));
+        fullOnly.push('Authoritative release audit');
         if (jobs.some(job=>!bootstrapChildren.includes(job)
             && fullOnly.some(owner=>job.name===owner || job.name.endsWith(` / ${owner}`)))) {
             throw new Error('BLOCKED full functional qualification owners must run only on integrated develop A.');
@@ -817,7 +820,7 @@ export function refuseAdvancedMain(request,repository,mainSha,reason,call=api) {
 /** Inspect main lineage before claiming a qualified candidate can still be promoted.
  * @param {ReleaseRequest} request Explicit qualified candidate.
  * @param {string} repository Owner/repository.
- * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,record?:ReleaseRecord,evidence?:Record<string,unknown>}|null} adapters Inert test server adapter when supplied.
+ * @param {{api:function(string,string=,(JsonValue|null)=):JsonValue,download?:function(string,number):Buffer,record?:ReleaseRecord,evidence?:Record<string,unknown>}|null} adapters Inert server, complete maintenance archive and predecessor adapters when supplied; defaults to real read-only providers.
  * @returns {string} Exact selected predecessor main SHA; candidate ancestry is independent.
  */
 export function requireCurrentMainBase(request, repository, adapters = null) {
@@ -825,9 +828,10 @@ export function requireCurrentMainBase(request, repository, adapters = null) {
     const sha = call(`repos/${repository}/git/ref/heads/main`).object?.sha;
     if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('BLOCKED_MAIN_ADVANCED: current main SHA is unavailable.');
     const record = adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
-    if (sha !== record.initial_main_sha || record.previous_stable_sha !== sha) {
+    if (sha !== record.initial_main_sha || record.previous_stable_sha !== sha && !isMaintenanceMainBridge(record)) {
         refuseAdvancedMain(request,repository,sha,'current main differs from the exact selected published predecessor',call);
     }
+    verifyMaintenanceMainBridge(record,repository,adapters ?? {});
     const predecessor = verifyPredecessor(call,repository,record.previous_stable_tag,adapters ?? {});
     for (const [key,value] of Object.entries(predecessor)) {
         if (record[key] !== value) throw new Error('BLOCKED qualification predecessor evidence differs: '+key);

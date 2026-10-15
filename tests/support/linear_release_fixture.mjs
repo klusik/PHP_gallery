@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {ciOwnerWorkflowResponse} from './ci_owner_fixture.mjs';
 
 /** Recursive inert API payload and response values; no transport accesses GitHub.
  * @typedef {null|boolean|number|string|FixtureJson[]|{[key:string]:FixtureJson}} FixtureJson
@@ -34,7 +35,7 @@ export function linearFixture() {
     const repository='fixture/gallery';
     const sha = value=>value.repeat(40);
     const selected=sha('b'),candidate=sha('c'),published=sha('a'),prior=sha('d'),develop=sha('e'),result=sha('f');
-    const tree=sha('1'),linearTree=sha('2'),origin=sha('3'),blob=sha('4'),priorCandidate=sha('5');
+    const tree=sha('1'),linearTree=sha('2'),origin=sha('3'),blob=sha('4'),priorCandidate=sha('5'),workflowSha=prior;
     const state={developSha:develop,mainSha:published,resultSha:result,releaseSha:candidate,
         protected:true,published:true,changed:[],conflicts:[],parents:[result,develop],
         expectedTree:linearTree,resultTree:linearTree,ci:true,redJob:null,ownerRun:true,
@@ -61,13 +62,15 @@ export function linearFixture() {
         'Required Chromium fixtures','Complete required CI matrix'];
     const api=(path,method='GET',payload=null)=>{
         if (method!=='GET') state.writes.push({path,method,payload});
+        const ownerWorkflow=ciOwnerWorkflowResponse(path,2);
+        if (ownerWorkflow) return ownerWorkflow;
         if (path.endsWith('/git/ref/tags/v_1.2.3')) return {object:{type:'commit',sha:state.movedTag ? develop : published}};
         if (path.endsWith('/releases/tags/v_1.2.3')) return {tag_name:'v_1.2.3',draft:!state.published,
             prerelease:false,assets:[{name:'release-evidence.json'}]};
         if (path.endsWith('/commits/'+published)) return {sha:published,commit:{tree:{sha:tree}},parents:[{sha:prior},{sha:candidate}]};
         if (path.endsWith('/commits/'+candidate)) return {sha:candidate,commit:{tree:{sha:tree}}};
         if (path.endsWith('/commits/'+develop)) return {sha:develop,commit:{tree:{sha:linearTree}}};
-        if (path.endsWith('/git/ref/heads/main')) return {object:{sha:state.mainSha}};
+        if (path.endsWith('/git/ref/heads/main')) return {ref:'refs/heads/main',object:{type:'commit',sha:state.mainSha}};
         if (path.endsWith('/git/ref/heads/develop')) return {object:{sha:state.race ? selected : state.developSha}};
         if (path.includes('/git/matching-refs/heads/')) {
             const branch=path.split('/git/matching-refs/heads/')[1];
@@ -76,6 +79,8 @@ export function linearFixture() {
         }
         if (path.includes('/compare/')) {
             const pair=path.split('/compare/')[1];
+            if (pair===workflowSha+'...'+state.mainSha) return {behind_by:state.lostHistory?1:0,
+                merge_base_commit:{sha:state.lostHistory?state.mainSha:workflowSha}};
             const known=[selected+'...'+develop,selected+'...'+candidate,develop+'...'+result,
                 result+'...'+state.developSha,published+'...'+state.mainSha];
             return {behind_by:state.lostHistory ? 1 : known.includes(pair)?0:1};
@@ -90,7 +95,7 @@ export function linearFixture() {
         if (path.endsWith('/actions/runs/900/attempts/1')) return {path:'.github/workflows/release-reconciliation.yml',
             event:'workflow_dispatch',head_branch:'main',run_attempt:1,actor:{login:'fixture'},status:'completed',
             conclusion:state.ownerRun?'success':'failure'};
-        if (path.endsWith('/actions/runs/1234')) return {id:1234,path:'.github/workflows/candidate-preparation.yml',
+        if (path.endsWith('/actions/runs/1234')) return {id:1234,path:'.github/workflows/candidate-preparation.yml',head_sha:workflowSha,
             event:'push',head_branch:'feature/reconcile',status:'completed',conclusion:state.ci?'success':'failure',run_attempt:1};
         if (path.includes('/actions/runs/1234/attempts/1/jobs?')) return {total_count:mandatory.length,
             jobs:mandatory.map((name,index)=>({id:1001+index,name:'Full CI / '+name,status:'completed',conclusion:state.redJob===name?'failure':'success'}))};
