@@ -19,18 +19,39 @@ require_once __DIR__ . '/updates_filesystem.php';
 require_once __DIR__ . '/image_decode_policy.php';
 
 /**
- * Bound one directory-name catalog before retaining its durable enumeration.
+ * Bound one streamed directory-name catalog before retaining its durable enumeration.
  * Type: int. Units: names. Scope: one private inventory directory.
  * Consumers: cache lifecycle inventory catalog creation.
- * Rationale: 4096 names fit shared-hosting memory; denser directories are explicitly blocked instead of unbounded enumeration or quadratic replay.
+ * Rationale: 262144 names cover dense producer stores without retaining names in memory; independent byte and deadline guards preserve bounded admission without prefix replay.
  */
-const CACHE_LIFECYCLE_DIRECTORY_NAMES = 4096;
+const CACHE_LIFECYCLE_DIRECTORY_NAMES = 262144;
+
+/**
+ * Buffer catalog writes independently of directory population.
+ * Type: int. Units: bytes. Scope: one streamed directory catalog.
+ * Consumers: inventory catalog writer. Rationale: a 64 KiB buffer amortizes writes without materializing a dense directory in PHP memory.
+ */
+const CACHE_LIFECYCLE_CATALOG_BUFFER_BYTES = 65536;
+
+/**
+ * Admit one dense name catalog inside an already bounded background burst.
+ * Type: float. Units: seconds. Scope: catalog construction only.
+ * Consumers: scheduled inventory. Rationale: up to one second of the existing burst permits linear enumeration; direct visits retain their shorter deadline and partial catalogs never authorize deletion.
+ */
+const CACHE_LIFECYCLE_CATALOG_SECONDS = 1.0;
+
+/**
+ * Reserve the historical small-catalog allowance before starting another directory.
+ * Type: int. Units: names. Scope: one inventory slice's remaining observation admission.
+ * Consumers: catalog startup. Rationale: 4097 preserves the existing small-directory batching threshold; a dense catalog uses its separate streamed bound and yields payload work afterward.
+ */
+const CACHE_LIFECYCLE_CATALOG_RESERVE = 4097;
 
 /**
  * Bound filesystem observations admitted by a single inventory/cleanup call.
  * Type: int. Units: operations. Scope: one lifecycle slice.
  * Consumers: inventory and cleanup workers.
- * Rationale: at most 5000 name/metadata observations and 180 ms admission keep shared-hosting requests bounded; blocking OS calls can overrun admission.
+ * Rationale: at most 5000 payload metadata observations and 180 ms admission keep shared-hosting slices bounded; streamed catalogs have separate name/byte bounds and background burst admission. Blocking OS calls can overrun admission.
  */
 const CACHE_LIFECYCLE_SLICE_ENTRIES = 5000;
 /**
@@ -45,7 +66,7 @@ const CACHE_LIFECYCLE_SLICE_SECONDS = 0.18;
  * Bound the combined retirement and payload admission of a scheduled tick.
  * Type: float. Units: seconds. Scope: one scheduled lifecycle slice.
  * Consumers: scheduled slice default and burst admission.
- * Rationale: two canonical 180 ms owners permit at most 360 ms combined admission; visitor opportunities lower the same bound.
+ * Rationale: retirement and payload owners normally share at most 360 ms admission; a background catalog can borrow up to one second inside the enclosing five-second burst. Visitor opportunities retain their shorter bound.
  */
 const CACHE_LIFECYCLE_COMBINED_SECONDS = CACHE_LIFECYCLE_SLICE_SECONDS * 2;
 
@@ -94,6 +115,25 @@ const CACHE_LIFECYCLE_RESERVE_BYTES = 16777216;
  * Rationale: sixty-four MiB bounds checkpoint disk pressure independently of payload size; exceeding it preserves unseen data and reports partial coverage.
  */
 const CACHE_LIFECYCLE_METADATA_BYTES = 67108864;
+
+/**
+ * Retain a small recovery window alongside the installed application.
+ * Type: int. Units: historical copies. Scope: verified legacy updater archives.
+ * Consumers: contextual archive retention. Rationale: two copies include the latest job rollback and selected legacy recovery before spare historical archives; active references remain protected independently.
+ */
+const CACHE_LIFECYCLE_UPDATE_RECOVERY_COPIES = 2;
+/**
+ * Bound historical archive-name discovery without a whole-cache traversal.
+ * Type: int. Units: names. Scope: updater root and backups in one retention decision.
+ * Consumers: legacy archive retention. Rationale: 4096 names covers historical flat archives while incomplete or larger catalogs fail closed.
+ */
+const CACHE_LIFECYCLE_UPDATE_ARCHIVE_NAMES = 4096;
+/**
+ * Bound ZIP proof probes while choosing retained recovery copies.
+ * Type: int. Units: archives. Scope: one historical retention decision.
+ * Consumers: legacy archive retention. Rationale: sixteen newest candidates normally establish two copies; excessive invalid proof preserves older content instead of extending admission.
+ */
+const CACHE_LIFECYCLE_UPDATE_ARCHIVE_PROBES = 16;
 
 require_once __DIR__ . '/cache_lifecycle/policy.php';
 require_once __DIR__ . '/cache_lifecycle/storage.php';

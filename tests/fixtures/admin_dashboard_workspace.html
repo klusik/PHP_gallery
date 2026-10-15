@@ -32,6 +32,7 @@ License: MIT
 <script type="module">
 import {setupAdminDashboardWorkspace} from '/public/assets/gallery-modules/admin-dashboard-workspace.js';
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js';
 const originalFetch = window.fetch.bind(window);
 let assertions = 0, summaryReads = 0, galleryReads = 0, releaseSummary = null, releaseGalleries = null, primaryClicks = 0;
@@ -345,8 +346,132 @@ try {
     check(!lifecycleHost.querySelector('[data-cache-region-empty]').hidden && lifecycleHost.querySelector('[data-cache-region-details]').children.length === 0,
         'An empty sample clears stale rows and exposes an explicit missing-evidence message');
     registryMode = false;
+    const statusMarkup = regionFixtures.querySelector('#cache-status-en').innerHTML;
+    lifecycleHost.innerHTML = statusMarkup;
+    const passiveCard = lifecycleHost.querySelector('[data-admin-cache-lifecycle]');
+    const retainedForm = passiveCard.querySelector('form');
+    const retainedDetails = passiveCard.querySelector('.admin-media-details');
+    retainedDetails.open = true;
+    let passiveReads = 0, refusePassive = false;
+    const passiveActions = lifecycleActions.length;
+    const refreshedMarkup = statusMarkup.replace('858993459200 B', '123 B');
+    window.fetch = async (url, options) => {
+        const target = new URL(url, location.href);
+        if (target.searchParams.get('page') !== 'admin_dashboard_fragment' || target.searchParams.get('surface') !== 'cache') return priorFetch(url, options);
+        passiveReads++;
+        check(!options.method && !options.body && options.credentials === 'same-origin', 'Cache status uses an authenticated passive GET without a mutation body');
+        return new Response(JSON.stringify(refusePassive ? {ok:false} : {ok:true,html:refreshedMarkup,cache_lifecycle:{regions_sample:[]}}), {status:refusePassive?503:200});
+    };
+    passiveCard.querySelector('[data-cache-status-refresh]').click();
+    await until(() => passiveCard.querySelector('[data-cache-overview]').textContent.includes('123 B'));
+    const expectedSnapshot = document.createElement('template');
+    expectedSnapshot.innerHTML = refreshedMarkup;
+    check(passiveCard.querySelector('[data-cache-metrics]').innerHTML === expectedSnapshot.content.querySelector('[data-cache-metrics]').innerHTML
+        && passiveCard.querySelector('[data-cache-help] > div').innerHTML === expectedSnapshot.content.querySelector('[data-cache-help] > div').innerHTML,
+        'Passive AJAX overview exactly matches shared PHP markup, including cumulative receipts and incomplete size');
+    check(retainedForm === passiveCard.querySelector('form') && retainedDetails.open && location.href === cacheUrl
+        && lifecycleHost.dataset.panelOpen === '1' && lifecycleActions.length === passiveActions,
+        'Passive status preserves controls, disclosure, panel and URL without invoking scan or cleanup');
+    check(!passiveCard.querySelector('[data-cache-overview] img') && !passiveCard.querySelector('[data-cache-overview]').innerHTML.includes('1970-')
+        && passiveCard.querySelector('[data-cache-overview]').textContent.includes('Whole-cache size is unknown'),
+        'Incomplete size, missing timestamps and hostile problem paths remain honest and inert');
+    check(passiveCard.querySelector('[data-cache-wait]').max === 100 && passiveCard.querySelector('[data-cache-wait]').getAttribute('aria-valuetext'),
+        'Compact waiting bar exposes its scheduled UTC time independently of scan completion');
+    passiveCard.querySelector('[data-cache-help]').open = true;
+    refusePassive = true;
+    passiveCard.querySelector('[data-cache-status-refresh]').click();
+    await until(() => passiveCard.querySelector('[data-cache-status-feedback]').textContent.includes('failed'));
+    check(passiveCard.querySelector('[data-cache-overview]').textContent.includes('123 B'), 'Failed status read retains the last visible snapshot');
+    refusePassive = false;
+    passiveCard.querySelector('[data-cache-status-refresh]').click();
+    await until(() => passiveReads >= 3 && passiveCard.querySelector('[data-cache-status-feedback]').textContent === '');
+    check(passiveCard.querySelector('[data-cache-help]').open, 'Passive refresh preserves open keyboard-accessible help');
+    passiveCard.querySelector('[data-cache-help]').open = false;
+    await originalFetch('/__viewport?width=390');
+    check(passiveCard.querySelector('[data-cache-overview]').scrollWidth <= passiveCard.clientWidth, 'Mobile overview wraps totals and unverified paths');
+    await originalFetch('/__viewport?width=1280');
+    check(passiveCard.querySelectorAll('[data-cache-help] > div > section > h3').length === 5
+        && passiveCard.querySelector('[data-cache-timing] time') && !passiveCard.querySelector('[data-cache-scheduler-status]'),
+        'Help has labeled sections and operational timing uses structured UTC fields');
+    check(passiveCard.querySelector('[data-cache-lifecycle-status]').parentElement === passiveCard
+        && passiveCard.querySelector('[data-cache-lifecycle-status]').textContent.includes('42')
+        && passiveCard.querySelector('[data-cache-lifecycle-status]').textContent.includes('Incomplete check'),
+        'Initial manual counters remain visible outside collapsed details');
+    const pool = passiveCard.querySelector('[data-cache-owner="fixture"]');
+    check(pool.querySelector('[data-cache-owner-meter]').style.getPropertyValue('--cache-eligible-share') === '25%'
+        && getComputedStyle(pool.querySelector('[data-cache-owner-meter]')).height === '2px'
+        && passiveCard.querySelector('[data-cache-owner="empty"] [data-cache-owner-meter]').style.getPropertyValue('--cache-eligible-share') === '0%'
+        && passiveCard.querySelector('[data-cache-owner="unknown"] [data-cache-owner-bytes]').textContent === '—',
+        'Owner graphic shows eligible share of recorded bytes with honest zero and unknown values');
+    const scanIcon = retainedForm.querySelector('[value="cache_inventory_start"]');
+    const refreshIcon = passiveCard.querySelector('[data-cache-status-refresh]');
+    check(scanIcon.getAttribute('aria-label') === 'Scan cache' && scanIcon.title === 'Scan cache'
+        && scanIcon.querySelector('svg') && refreshIcon.querySelector('svg')
+        && scanIcon.getBoundingClientRect().y === refreshIcon.getBoundingClientRect().y,
+        'Localized icon actions remain accessible and share one aligned action row');
+    let releaseManual = null, releaseAfterManualRead = null;
+    const passiveFetch = window.fetch;
+    retainedForm.action = '/fixture-lifecycle';
+    window.fetch = async (url, options) => {
+        const target = new URL(url, location.href);
+        if (target.searchParams.get('surface') === 'cache') return new Promise(resolve => { releaseAfterManualRead = resolve; });
+        if (target.pathname !== '/fixture-lifecycle') return passiveFetch(url, options);
+        check(options.method === 'POST' && options.credentials === 'same-origin', 'Manual fixture retains authenticated mutation contract');
+        if (options.body.get('site_maintenance_action') === 'cache_diagnostic') return new Response('{}');
+        return new Promise(resolve => { releaseManual = resolve; });
+    };
+    retainedDetails.open = false;
+    scanIcon.click();
+    await until(() => releaseManual !== null);
+    check(passiveCard.getAttribute('aria-busy') === 'true'
+        && !passiveCard.querySelector('[data-cache-lifecycle-status]').hidden
+        && getComputedStyle(scanIcon.querySelector('.admin-cache-idle-label')).display === 'none'
+        && getComputedStyle(scanIcon, '::before').animationName === 'admin-cache-busy-spin',
+        'A held manual scan exposes visible status and a CSS-only busy animation outside details');
+    releaseManual(new Response(JSON.stringify({ok:false,message:'Maintenance busy'}), {status:409}));
+    await until(() => !scanIcon.disabled);
+    check(!passiveCard.hasAttribute('aria-busy') && passiveCard.querySelector('[data-cache-lifecycle-status]').textContent.includes('Maintenance busy')
+        && location.href === cacheUrl && !retainedDetails.open,
+        'A refused manual operation restores icons and retains its visible error, URL and disclosure');
+    releaseManual = null;
+    scanIcon.click();
+    await until(() => releaseManual !== null);
+    releaseManual(new Response(JSON.stringify({ok:true,message:'Scan ready',cache_operation_label:'Scan ready · 7 files · Incomplete check',
+        mutation:{type:'cache.lifecycle',entity:'cache',action:'maintenance',entity_ids:[]},panel:null,contexts:[],fallback:{redirect_url:'/must-not-navigate'},
+        cache_owner_labels:{fixture:{bytes:'1000 B',eligible:'500 B'}},
+        cache_lifecycle:{id:'fixture-manual',phase:'preview',files:7,candidates:1,skipped:0,partial:true,blocked:1,errors:0,totals:{fixture:{bytes:1000,reclaimable_bytes:500}},
+            last_progress_at:1700000090,regions_completed:14,regions_total:15,regions_working:1,sample:[]}})));
+    await until(() => !scanIcon.disabled);
+    check(pool.querySelector('[data-cache-owner-meter]').style.getPropertyValue('--cache-eligible-share') === '50%'
+        && pool.querySelector('[data-cache-owner-eligible]').textContent === '500 B'
+        && passiveCard.querySelector('[data-cache-status-field="last_progress_at"] time').textContent === '2023-11-14 22:14:50 UTC'
+        && passiveCard.querySelector('[data-cache-lifecycle-status]').textContent.includes('Incomplete check'),
+        'Manual AJAX preserves server byte formatting and updates owner shares and UTC timing from supplied counters');
     lifecycleHost.remove();
+    releaseAfterManualRead?.(new Response(JSON.stringify({ok:true,html:refreshedMarkup,cache_lifecycle:{regions_sample:[]}})));
+    window.fetch = passiveFetch;
     window.fetch = priorFetch;
+    const maintenance = document.querySelector('#admin-tab-maintenance');
+    const values = ['content','media','navigation','trash','system'];
+    maintenance.innerHTML = '<div class="admin-dashboard-maintenance-scope" data-admin-subtab-scope><nav data-admin-subtabs>'
+        + values.map((value,index) => `<button role="tab" data-admin-subtab-target="admin-maintenance-${value}" aria-selected="${index===0}">${value}</button>`).join('')
+        + '</nav>' + values.map(value => `<section id="admin-maintenance-${value}" data-admin-subtab-panel>${value}</section>`).join('') + '</div>';
+    setupAdminNestedTabs(maintenance);
+    tab('maintenance');
+    maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-media"]').click();
+    check(new URL(location.href).searchParams.get('maintenance_tab') === 'media'
+        && location.hash === '#admin-tab-maintenance'
+        && document.querySelector('[data-admin-tab-target="admin-tab-maintenance"]').href === location.href,
+        'Maintenance selection persists its allowlisted query and primary tab link for reload');
+    maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-system"]').click();
+    history.back();
+    await until(() => maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-media"]').getAttribute('aria-selected') === 'true');
+    history.forward();
+    await until(() => maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-system"]').getAttribute('aria-selected') === 'true');
+    maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-system"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+    check(new URL(location.href).searchParams.get('maintenance_tab') === 'content'
+        && maintenance.querySelector('[data-admin-subtab-target="admin-maintenance-content"]').getAttribute('aria-selected') === 'true',
+        'Maintenance keyboard and history restore the same query-addressed panel');
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
 } catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
 </script></body></html>

@@ -256,7 +256,7 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
         $isActive = $tabId === $resolvedActiveId;
         $controlId = $tabId . '-control';
         echo '<button type="button" class="admin-subtab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-subtab-target="' . e($tabId) . '">';
-        echo '<span>' . (($tab['icon'] ?? '') === 'trash' ? view_admin_trash_icon() : '') . e($tabLabel) . '</span>';
+        echo '<span>' . view_admin_menu_icon((string) ($tab['icon'] ?? '')) . e($tabLabel) . '</span>';
         if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
             echo '<span class="admin-subtab-badge">' . e((string) $tab['badge']) . '</span>';
         }

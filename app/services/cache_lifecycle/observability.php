@@ -13,6 +13,40 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
+ * Report actual automatic progress or a safe deferral without per-file or idle log noise.
+ * @param array{phase?:string,bytes?:int,removed?:int,bytes_removed?:int,pending_bytes?:int,errors?:int,blocked?:int|bool,regions_total?:int,regions_completed?:int,regions_working?:int} $state Committed aggregate evidence; omitted fields stay absent for an admission refusal.
+ * @param bool $progressed Whether this burst changed a durable cursor, observation, phase or removal receipt.
+ * @param string $reason Owner-controlled outcome enum, never an exception message or request value.
+ * @return void Publishes at most one status attempt per five minutes; logging cannot alter the worker outcome or authorize deletion.
+ */
+function cache_lifecycle_log_activity(array $state, bool $progressed, string $reason = ''): void
+{
+    if (!function_exists(__NAMESPACE__ . '\\admin_log_event_result')
+        || !$progressed && empty($state['errors']) && empty($state['blocked']) && in_array($reason, ['', 'cache_lifecycle_not_due', 'cache_visitor_throttled'], true)) return;
+    try {
+        $claim = cache_lifecycle_with_lock(static function (): array {
+            $path = cache_lifecycle_control_directory() . '/activity-summary.json';
+            $record = cache_lifecycle_read_json($path);
+            if (cache_lifecycle_now() - (int) ($record['attempted_at'] ?? 0) < CACHE_LIFECYCLE_LOG_SECONDS) return ['ok'=>false];
+            cache_lifecycle_write_json($path, ['attempted_at'=>cache_lifecycle_now()]);
+            return ['ok'=>true];
+        });
+        if (empty($claim['ok'])) return;
+        $context = ['progressed'=>$progressed,'phase'=>(string) ($state['phase'] ?? 'unobserved'),
+            'reason'=>preg_match('/^[a-z0-9_]*$/D', $reason) === 1 ? $reason : 'cache_worker_refused'];
+        foreach (['bytes','removed','bytes_removed','pending_bytes','errors','blocked','regions_total','regions_completed','regions_working'] as $field) {
+            if (isset($state[$field])) $context[$field] = (int) $state[$field];
+        }
+        $level = !empty($state['errors']) || !empty($state['blocked']) ? 'warning' : 'info';
+        admin_log_event_result($level, 'cache.automatic_status',
+            'Automatic cache worker status; progress and confirmed removals are separate evidence.', $context,
+            ['category'=>'system','severity'=>$level,'subject_type'=>'cache','route_name'=>'site_maintenance_cron']);
+    } catch (\Throwable) {
+        // A missing receipt cannot change work, retry, admission or checkpoint state.
+    }
+}
+
+/**
  * Record a bounded automatic-worker failure through the existing Admin log owner.
  * @param string $stage Fixed visitor_admission, scheduled_burst or region_slice failure boundary.
  * @param string $source Entry-point enum identifying the admitted visitor, timer, external scheduler or regional worker.

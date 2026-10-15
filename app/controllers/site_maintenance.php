@@ -226,18 +226,24 @@ function cms_admin_site_cache_lifecycle(string $action): void
         cms_runtime_kernel()->load('site-maintenance-work');
         $result = \Gallery\Services\site_maintenance_cache_lifecycle_action(substr($action, 6), (string) ($_POST['preview_id'] ?? ''));
         $status = \Gallery\Services\cache_lifecycle_status();
+        $operation = $status['operation'] ?? $status;
         $ok = !empty($result['ok']);
         $message = $ok ? t('admin.cache_lifecycle.progress', 'Cache {phase}: observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
-            ['phase'=>$status['phase'],'bytes'=>format_bytes($status['bytes']),'eligible'=>format_bytes($status['pending_bytes']),'reclaimed'=>format_bytes($status['bytes_removed'])])
+            ['phase'=>$operation['phase'],'bytes'=>format_bytes($operation['bytes']),'eligible'=>format_bytes($operation['pending_bytes']),'reclaimed'=>format_bytes($operation['bytes_removed'])])
             : t('admin.cache_lifecycle.refused', 'Cache action stopped safely: {reason}.', ['reason'=>(string) ($result['reason'] ?? 'maintenance_busy')]);
         $payload = $ok ? admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
             : admin_mutation_error_envelope($message, 'cache_lifecycle_refused', $mutation, $fallback);
         $payload['cache_lifecycle'] = $status;
+        $payload['cache_operation_label'] = \Gallery\Views\view_admin_dashboard_cache_operation_label($operation);
+        $payload['cache_owner_labels'] = array_map(static fn(array $total): array => [
+            'bytes'=>isset($total['bytes']) ? format_bytes((int) $total['bytes']) : '—',
+            'eligible'=>isset($total['reclaimable_bytes']) ? format_bytes((int) $total['reclaimable_bytes']) : '—',
+        ], $status['totals']);
         cache_cleanup_diagnostic_event($runId, $ok ? 'lifecycle_checkpoint' : 'skipped',
-            ['ok'=>$ok,'phase'=>$status['phase'],'files'=>$status['files'],'bytes'=>$status['bytes'],
-                'candidates'=>$status['candidates'],'candidate_bytes'=>$status['candidate_bytes'],
-                'removed'=>$status['removed'],'bytes_removed'=>$status['bytes_removed'],'errors'=>$status['errors'],
-                'blocked'=>$status['blocked'],'skipped'=>$status['skipped'],'failure_code'=>(string) ($result['last_error'] ?? ''),
+            ['ok'=>$ok,'phase'=>$operation['phase'],'files'=>$operation['files'],'bytes'=>$operation['bytes'],
+                'candidates'=>$operation['candidates'],'candidate_bytes'=>$operation['candidate_bytes'],
+                'removed'=>$operation['removed'],'bytes_removed'=>$operation['bytes_removed'],'errors'=>$operation['errors'],
+                'blocked'=>$operation['blocked'],'skipped'=>$operation['skipped'],'failure_code'=>(string) ($result['last_error'] ?? ''),
                 'reason'=>!empty($result['reason']) ? (string) $result['reason'] : (string) ($result['last_skip_reason'] ?? ''),
                 'elapsed_total_ms'=>(microtime(true)-$started)*1000]);
     } catch (\Throwable $exception) {

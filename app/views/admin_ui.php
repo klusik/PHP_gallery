@@ -63,6 +63,8 @@ function view_admin_menu_icon(string $icon): string
     }
     // Keep the same view box, stroke, and text color as the existing Trash symbol.
     $symbols = [
+        'search' => '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
+        'clean' => '<path d="m15 3-4 9m-5 0 9 4-3 6-9-4 3-6m-1 4 8 4M18 7l3 1m-3 4 2 2"/>',
         'overview' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
         'settings' => '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
         'galleries' => '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="m3 16 5-5 5 5 3-3 5 5"/><circle cx="16" cy="9" r="1"/>',

@@ -134,11 +134,11 @@ drivers receive the same numeric contract. See the practical checks in
 Always give an independent-process fixture its own explicit minimal dependency
 bootstrap, including Core path-policy dependencies used by passive services.
 Verify persisted evidence through the child process's actual exit status and
-output, because the child starts with its own loaded-function set.
+output, because the child starts with its own loaded-function set. Keep the parent’s exact success marker synchronized with changed child coverage text.
 
 Always define counters relative to their owning identity: initialize a fresh
 manual cycle independently, advance a regional observation round within that
-region, and retain confirmed lifetime receipts separately. Cover both new-cycle
+region, and retain confirmed lifetime receipts separately. Keep the current manual incomplete-check marker visible with its counters. Cover both new-cycle
 and continuation semantics in the existing behavioral fixture.
 
 Always size a crash fixture's admission input according to the existing worker's
@@ -146,11 +146,30 @@ observation semantics, including directory metadata and dot entries. Assert the
 intended physical mutation before simulating interruption, using the neighboring
 fixture's established setup while retaining production caps and suite limits.
 
+For retained cache evidence, carry current manual-operation counters separately
+through status, controller messages, diagnostics and browser progress. Keep the
+historical regional observations and installation-wide removal receipts intact.
+For historical ZIP expiry, use producer creation/payload modification evidence;
+retain ctime for replacement checks without treating permission changes as birth
+or renewed content. Recognize a legacy producer through positive format proof and
+its shared construction/serving lease before admitting reclamation.
+
+Pass a named interval constant to each new timer or sleep, including fixtures.
+Document runtime constants
+with explicit `Type:`, `Units:`, `Scope:`, `Consumers:` and `Rationale:` lines
+so both changed-source and whole-tree checks recognize the contract.
+
+Assert short-opportunity caps and durable progress across bounded continuations;
+cover admission exhausting the deadline without requiring a first-attempt slice.
+
+Hold a follow-up passive read while asserting a mutation response in a browser
+fixture; then release it separately to verify refresh without racing snapshots.
+
 For live filtering, invalidate older requests as soon as inputs change, before debounce admission. Capture the request URL and commit rows, counts and history only for that same current response; exercise delayed response and delayed JSON completion in the existing fixture.
 
 Send browser harness controls such as viewport changes through the captured native fetch, outside application-request mocks. Preserve the mock's strict method and credential assertions for product requests.
 
-Use a named, typed presentation helper for reusable formatting in runtime-scanned views, so the runtime compiler can resolve each call statically. Include the actual view owner explicitly in an isolated render fixture.
+Use a named, typed presentation helper for reusable formatting in runtime-scanned views, so the runtime compiler can resolve each call statically. Include the actual view owner explicitly in an isolated render fixture. Remove the retired dynamic-call review entry when replacing its callback.
 
 Always inspect complete runtime closures before adding dependency ownership.
 Reuse an existing shared owner where its entire historical closure is already

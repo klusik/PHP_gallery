@@ -224,13 +224,157 @@ function cache_lifecycle_update_disposable(string $jobId): bool
 }
 
 /**
- * Recognize expired regenerable JSON only through its producer's identity and timestamps.
+ * Validate the inherited flat download producer without reading archive payloads.
+ * @param string $relative Exact cache-relative historical archive or native temporary output.
+ * @return array{base:string,partial:bool,bytes:int,mtime:int,ctime:int,header_hash:string,entries:int}|null Physical identity, positive ZIP header and completed-directory evidence, or null for unknown, empty or unreadable content; temporary output needs a native name and local ZIP header.
+ */
+function cache_lifecycle_flat_download_proof(string $relative): ?array
+{
+    $identity = cache_lifecycle_flat_download_identity($relative);
+    if ($identity === null) return null;
+    $path = cache_lifecycle_path($relative);
+    $stat = @lstat($path);
+    if (!is_array($stat) || !is_file($path) || $stat['size'] < 30 || $stat['mtime'] <= 0) return null;
+    $header = @file_get_contents($path, false, null, 0, 30);
+    if (!is_string($header) || strlen($header) !== 30 || !str_starts_with($header, "PK\x03\x04")) return null;
+    // Validate the native ZIP local-header contract before accepting abandoned output.
+    // Type: array<string,int>. Units: ZIP version tenths, flags/method enums and filename/extra bytes.
+    // Scope: one historical download proof. Consumers: native completed/temporary ZIP eligibility.
+    // Rationale: versions 1.0-6.3, Store/Deflate and names up to 4096 bytes cover this producer while rejecting encrypted, malformed and unbounded headers without reading payload data.
+    $fields = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vcompressed/Vuncompressed/vname/vextra', substr($header, 4));
+    if (!is_array($fields) || $fields['version'] < 10 || $fields['version'] > 63 || ($fields['flags'] & 1) !== 0
+        || !in_array($fields['method'], [0,8], true) || $fields['name'] < 1 || $fields['name'] > 4096
+        || $stat['size'] < 30 + $fields['name'] + $fields['extra']) return null;
+    $name = @file_get_contents($path, false, null, 30, $fields['name']);
+    if (!is_string($name) || strlen($name) !== $fields['name'] || str_contains($name, "\0") || str_contains($name, '\\')
+        || str_contains($name, ':') || str_starts_with($name, '/') || in_array('..', explode('/', $name), true)) return null;
+    $entries = 0;
+    if (!$identity['partial']) {
+        if (!class_exists(\ZipArchive::class)) return null;
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::RDONLY) !== true) return null;
+        try {
+            $entries = $zip->numFiles;
+            if ($entries <= 0 || $entries > CACHE_LIFECYCLE_DIRECTORY_NAMES) return null;
+        } finally { $zip->close(); }
+    }
+    return $identity + ['bytes'=>(int) $stat['size'],'mtime'=>(int) $stat['mtime'],'ctime'=>(int) $stat['ctime'],
+        'header_hash'=>hash('sha256', $header . $name),'entries'=>$entries];
+}
+
+/**
+ * Recognize a historical updater ZIP through its native path and bounded source contents.
+ * @param string $relative Cache-relative archive in the historical updater root or backups directory.
+ * @return array{version:string,bootstrap_hash:string,bytes:int,mtime:int,ctime:int}|null Source identity and physical metadata, or null for unknown, partial, oversized or unreadable proof; no archive is extracted or executed.
+ */
+function cache_lifecycle_update_archive_proof(string $relative): ?array
+{
+    if (preg_match('#^updates/(?:(?:beta|update|stable-restore|rollback)-[0-9]{8}-[0-9]{6}|backups/before-(?:beta|update)-[0-9]{8}-[0-9]{6})\.zip$#D', $relative) !== 1
+        || !class_exists(\ZipArchive::class)) return null;
+    $path = cache_lifecycle_path($relative);
+    $stat = @lstat($path);
+    if (!is_array($stat) || !is_file($path) || $stat['size'] <= 0) return null;
+    $zip = new \ZipArchive();
+    if ($zip->open($path, \ZipArchive::RDONLY) !== true) return null;
+    try {
+        if ($zip->numFiles < 4 || $zip->numFiles > CACHE_LIFECYCLE_DIRECTORY_NAMES) return null;
+        $first = (string) $zip->getNameIndex(0);
+        $prefix = preg_match('#^(PHP_gallery-[a-zA-Z0-9._-]+)/#D', $first, $match) === 1 ? $match[1] . '/' : '';
+        foreach (['index.php','public/index.php','app/bootstrap.php','app/services/updates.php'] as $required) {
+            $entry = $zip->statName($prefix . $required);
+            if (!is_array($entry) || $entry['size'] <= 0 || $entry['size'] > CACHE_LIFECYCLE_STATE_BYTES) return null;
+        }
+        $bootstrap = $zip->getFromName($prefix . 'app/bootstrap.php', CACHE_LIFECYCLE_STATE_BYTES + 1);
+        if (!is_string($bootstrap) || !str_starts_with($bootstrap, '<?php')
+            || preg_match('/const\s+CMS_VERSION\s*=\s*[\'\"]([0-9]+\.[0-9]+(?:\.[0-9]+)?)[\'\"]\s*;/', $bootstrap, $match) !== 1) return null;
+        return ['version'=>$match[1],'bootstrap_hash'=>hash('sha256', $bootstrap),'bytes'=>(int) $stat['size'],
+            'mtime'=>(int) $stat['mtime'],'ctime'=>(int) $stat['ctime']];
+    } finally { $zip->close(); }
+}
+
+/**
+ * Retain at most two historical recovery copies, counting the current job rollback and selected legacy backup first.
+ * @param string $relative Producer-verified historical updater archive proposed for reclamation.
+ * @return bool True only outside the retained set after complete bounded name discovery and recovery validation; active, unknown or incomplete evidence preserves every archive.
+ */
+function cache_lifecycle_update_archive_disposable(string $relative): bool
+{
+    if (cache_lifecycle_update_archive_proof($relative) === null || !function_exists(__NAMESPACE__ . '\\app_setting')
+        || file_exists(cache_lifecycle_path('updates/active-job.json'))
+        || (int) app_setting('application_autoupdate_lock_until', '0') > cache_lifecycle_now()) return false;
+    $selected = str_replace('\\', '/', (string) app_setting('application_update_beta_backup_path', ''));
+    if ($selected !== '' && !str_starts_with($selected, 'cache/updates/')) return false;
+    if ($selected === 'cache/' . $relative || file_exists(cache_lifecycle_path($relative . '.keep'))) return false;
+    $last = cache_lifecycle_read_json(cache_lifecycle_path('updates/last-job.json'));
+    $lastId = (string) ($last['job_id'] ?? '');
+    if (file_exists(cache_lifecycle_path('updates/last-job.json')) && $last === []) return false;
+    $retained = [];
+    $remaining = CACHE_LIFECYCLE_UPDATE_RECOVERY_COPIES;
+    if ($last !== []) {
+        if (preg_match('/^[0-9]{14}-[a-f0-9]{12}$/D', $lastId) !== 1) return false;
+        $job = cache_lifecycle_read_json(cache_lifecycle_path('updates/jobs/' . $lastId . '/job.json'));
+        if (($job['id'] ?? '') !== $lastId || ($job['status'] ?? '') !== 'completed') return false;
+        if (is_dir(cache_lifecycle_path('updates/jobs/' . $lastId . '/rollback'))) $remaining--;
+    }
+    if (str_starts_with($selected, 'cache/updates/jobs/')) {
+        if (preg_match('#^cache/updates/jobs/([0-9]{14}-[a-f0-9]{12})/rollback/?$#D', $selected, $selectedJob) !== 1
+            || !is_dir(cache_lifecycle_path(substr($selected, 6)))) return false;
+        $selectedState = cache_lifecycle_read_json(cache_lifecycle_path('updates/jobs/' . $selectedJob[1] . '/job.json'));
+        if (($selectedState['id'] ?? '') !== $selectedJob[1]) return false;
+        if ($selectedJob[1] !== $lastId) $remaining--;
+    }
+    if ($selected !== '' && !str_starts_with($selected, 'cache/updates/jobs/')) {
+        if (cache_lifecycle_update_archive_proof(substr($selected, 6)) === null) return false;
+        $retained[] = substr($selected, 6);
+        $remaining--;
+    }
+    $names = [];
+    $deadline = microtime(true) + CACHE_LIFECYCLE_SLICE_SECONDS;
+    foreach (['updates','updates/backups'] as $directory) {
+        $path = cache_lifecycle_path($directory);
+        if (!is_dir($path)) continue;
+        $stream = @opendir($path);
+        if ($stream === false) return false;
+        $complete = false;
+        try {
+            while (count($names) <= CACHE_LIFECYCLE_UPDATE_ARCHIVE_NAMES && microtime(true) < $deadline) {
+                $name = readdir($stream);
+                if ($name === false) { $complete = true; break; }
+                if (preg_match('/^(?:(?:beta|update|stable-restore|rollback)|before-(?:beta|update))-([0-9]{8}-[0-9]{6})\.zip$/D', $name, $match) === 1) {
+                    $names[$directory . '/' . $name] = $match[1];
+                }
+            }
+        } finally { closedir($stream); }
+        if (!$complete || count($names) > CACHE_LIFECYCLE_UPDATE_ARCHIVE_NAMES) return false;
+    }
+    arsort($names, SORT_STRING);
+    $probes = 0;
+    foreach ($names as $path => $stamp) {
+        if ($remaining <= 0) break;
+        if (microtime(true) >= $deadline || ++$probes > CACHE_LIFECYCLE_UPDATE_ARCHIVE_PROBES) return false;
+        if (in_array($path, $retained, true) || cache_lifecycle_update_archive_proof($path) === null) continue;
+        $retained[] = $path;
+        $remaining--;
+    }
+    return !in_array($relative, $retained, true);
+}
+
+/**
+ * Recognize expired native download payloads, historical updater copies and regenerable JSON through positive producer proof.
  * @param string $relative Cache-relative file path.
  * @param int $now Current Unix timestamp in seconds.
- * @return string|null Eligible managed ZIP/GitHub/draft producer key, or null for fresh, oversized or unproven content.
+ * @return string|null Eligible downloads, partials, updates, GitHub or drafts owner key, or null for fresh, retained, oversized, unknown or unproven content.
  */
 function cache_lifecycle_file_candidate(string $relative, int $now): ?string
 {
+    $flat = cache_lifecycle_flat_download_proof($relative);
+    if ($flat !== null) {
+        $owner = $flat['partial'] ? 'partials' : 'downloads';
+        return $flat['mtime'] < $now - cache_lifecycle_policies()[$owner]['seconds'] ? $owner : null;
+    }
+    if (str_starts_with($relative, 'updates/') && str_ends_with($relative, '.zip')) {
+        return cache_lifecycle_update_archive_disposable($relative) ? 'updates' : null;
+    }
     if (preg_match('#^zips/legacy-artifacts/(gallery|smart_gallery)/([1-9][0-9]*)/([a-f0-9]{64})/([a-f0-9]{64})/archive\.zip$#D', $relative, $match) === 1) {
         $record = cache_lifecycle_read_json(cache_lifecycle_path(dirname($relative) . '/metadata.json'));
         $stat = @lstat(cache_lifecycle_path($relative));
@@ -238,7 +382,8 @@ function cache_lifecycle_file_candidate(string $relative, int $now): ?string
             || (int) ($record['resource_id'] ?? 0) !== (int) $match[2] || ($record['resource_revision'] ?? '') !== $match[3]
             || ($record['build_key'] ?? '') !== $match[4] || (int) ($record['archive_size'] ?? 0) !== (int) $stat['size']
             || (int) ($record['expected_file_count'] ?? -1) < 0 || (int) ($record['created_at'] ?? 0) <= 0) return null;
-        return max((int) $record['created_at'], (int) $stat['mtime'], (int) $stat['ctime'])
+        // Metadata changes (including chmod) do not renew producer expiry; ctime remains a deletion identity guard.
+        return max((int) $record['created_at'], (int) $stat['mtime'])
             < $now - cache_lifecycle_policies()['downloads']['seconds'] ? 'downloads' : null;
     }
     if (preg_match('#^(?:github-api/[a-f0-9]{40}|simbrief-drafts/[a-f0-9]{48})\.json$#D', $relative) !== 1) return null;

@@ -197,7 +197,6 @@ Gallery\Services\weighted_tag_suggestions_for_gallery|variable_callable|$addRows
 Gallery\Services\navigation_data_navigraph_exchange_code|variable_callable|$postForm()
 Gallery\Views\admin_gallery_report_table|dynamic_callback_argument|is_callable($column)
 Gallery\Views\view_telemetry_export_table|dynamic_callback_argument|is_callable($column)
-Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card|variable_callable|$epoch()
 SITES;
 
     $reviewed = [];
@@ -225,7 +224,6 @@ SITES;
             str_contains($signature, 'navigation_data_navigraph_exchange_code|') => 'injected-oauth-transport:default-http-post-remains-static',
             str_contains($signature, 'application_update_cache_blocking_job_diagnostic|') => 'updater-gc:local-bounded-json-reader-no-module-edge',
             str_contains($signature, 'cache_lifecycle_with_lock|') => 'cache-lifecycle:caller-owned-static-operation-closure',
-            str_contains($signature, 'view_render_admin_dashboard_cache_lifecycle_card|') => 'cache-lifecycle-view:local-utc-formatter-no-module-edge',
             default => 'caller-owned-or-local-callback:no-module-edge',
         };
     }

@@ -1209,3 +1209,24 @@ can provide that recovery without changing the generic cache owner.
 The cache lifecycle service preserves pre-registry JSON manual/automatic plans, committed queue fences and detached deletion payloads until their original owner drains them. Usage is unknown. The DB registry starts afterwards and retains the last legacy observation as historical until regional coverage is available. Invalid legacy state fails closed. Explicit manual previews and database-free standalone fixture consumers keep the historical API; production automatic workers require the migrated registry and refuse unavailable evidence. Removal requires proof that no deployed unfinished legacy jobs remain and supported standalone consumers have migrated. Regression owners: `cache_lifecycle_scheduler_test.php`, `cache_lifecycle_registry_test.php` and the real autonomous HTTP fixture. New regional work never restarts its root scan merely because a work opportunity or process restart occurred.
 
 Workspace age records now bind their fixed anchor to the current producer marker and filesystem device/inode identity. An unbound historical age record is re-anchored conservatively, and changed identity is revalidated under the exclusive deletion lease before detachment. This protects a replacement at the same path from inheriting expiry. Producer-free legacy workspace usage is unknown; retain the conservative path while supported legacy roots remain.
+
+
+## Historical flat download and updater archive ownership (#212, #220)
+
+Owners: cache lifecycle policy/storage, the existing download producer and HTTP
+stream boundary. Production screenshots confirm native flat gallery ZIPs with
+40/64-hex signatures and older updater ZIP snapshot names remain deployed; exact
+installation-wide adoption is unknown. Older cleanup only classified these bytes,
+while positive eligibility covered newer metadata-backed artifacts. Permanent
+historical support now requires native path plus ZIP/header or source-snapshot
+proof, stable physical identity and producer/serving leases. Completed download
+ZIPs keep the existing seven-day lifetime from payload modification, independent
+of permission-change ctime. Native abandoned partials retain six-hour inactivity.
+The updater keeps current installed code and a two-copy recovery window, with
+active/selected/unknown recovery protected independently. No age-only general
+backup/original deletion is restored. Retire this recognition only after deployed
+historical payloads are migrated/drained and all supported producers use explicit
+metadata. `cache_lifecycle_test.php` covers real ZIP shapes, expiry, active leases,
+unknown content and retained copies; exact hosted FULL and production acceptance
+remain separate gates. Existing API fields retain their meanings; the optional
+manual `operation` evidence separates current progress from historical totals.

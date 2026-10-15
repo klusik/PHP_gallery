@@ -50,7 +50,7 @@ namespace Gallery\Services {
      * @param string $level Safe event level.
      * @param string $eventKey Stable cache event identity.
      * @param string $message Safe human-readable explanation.
-     * @param array{removed_entries?:int,bytes_removed?:int,from_at?:int,to_at?:int,stage?:string,source?:string,exception_class?:string,source_file?:string,source_line?:int,sqlstate?:string,driver_code?:int} $context Coalesced real counters or bounded automatic-failure metadata, without private paths or messages.
+     * @param array{removed_entries?:int,bytes_removed?:int,from_at?:int,to_at?:int,progressed?:bool,phase?:string,reason?:string,bytes?:int,removed?:int,pending_bytes?:int,errors?:int,blocked?:int,regions_total?:int,regions_completed?:int,regions_working?:int,stage?:string,source?:string,exception_class?:string,source_file?:string,source_line?:int,sqlstate?:string,driver_code?:int} $context Coalesced real counters or bounded automatic-failure metadata, without private paths or messages.
      * @param array{category?:string,severity?:string,subject_type?:string,route_name?:string} $options Optional Admin presentation metadata.
      * @return array{ok:bool} Confirmed receipt or the explicit log-storage failure.
      */
@@ -121,7 +121,9 @@ namespace {
         chain_assert(file_get_contents($root . '/cache/unregistered-original/payload') === 'protected', 'Autonomous deletion touched unproven originals.');
         chain_assert(\Gallery\Services\cache_lifecycle_status()['scheduler_source'] === 'cache_chain', 'Actual autonomous worker identity was lost.');
         chain_assert(\Gallery\Services\cache_lifecycle_chain_run($ticket)['reason'] === 'cache_chain_ticket_refused', 'A consumed ticket was replayable.');
-        chain_assert(count($GLOBALS['chain_logs']) === 1 && $GLOBALS['chain_logs'][0]['context']['bytes_removed'] > 0, 'Real reclamation did not produce one confirmed summary.');
+        chain_assert(count($GLOBALS['chain_logs']) === 2 && $GLOBALS['chain_logs'][0]['key'] === 'cache.automatic_reclaimed'
+            && $GLOBALS['chain_logs'][0]['context']['bytes_removed'] > 0 && $GLOBALS['chain_logs'][1]['key'] === 'cache.automatic_status'
+            && $GLOBALS['chain_logs'][1]['context']['progressed'], 'Reclamation and durable progress did not produce their distinct bounded receipts.');
         $second = chain_workspace($root, 'Later1');
         $next = end($GLOBALS['chain_deliveries']);
         $wait = \Gallery\Services\cache_lifecycle_chain_run($next);
@@ -130,7 +132,7 @@ namespace {
         $work = \Gallery\Services\cache_lifecycle_chain_run($next);
         chain_assert($work['worked'] && $work['queued'] && !is_dir($root . '/cache/' . $second), 'Work failed to resume without another visitor.');
         chain_assert(array_sum($GLOBALS['chain_waits']) === 30 && max($GLOBALS['chain_waits']) <= 20, 'Declared timer hops did not preserve the interval or wait bound.');
-        chain_assert(count($GLOBALS['chain_logs']) === 1, 'Each thirty-second cycle flooded the Admin log.');
+        chain_assert(count($GLOBALS['chain_logs']) === 2, 'Each thirty-second cycle flooded the Admin log.');
         $pendingLog = \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/log-summary.json');
         chain_assert($pendingLog['bytes_removed'] > 0, 'Coalesced removals were discarded.');
         $stoppedPayload = chain_workspace($root, 'Stop02');
@@ -148,8 +150,8 @@ namespace {
         $GLOBALS['chain_log_failed'] = false;
         $GLOBALS['cache_lifecycle_test_now'] += 301;
         \Gallery\Services\cache_lifecycle_log_reclamation([], []);
-        chain_assert(count($GLOBALS['chain_logs']) === 2, 'Pending summaries were not flushed after the quiet logging interval.');
-        chain_assert(array_keys($GLOBALS['chain_logs'][1]['context']) === ['removed_entries','bytes_removed','from_at','to_at'], 'A summary disclosed individual paths or credentials.');
+        chain_assert(count($GLOBALS['chain_logs']) === 3, 'Pending summaries were not flushed after the quiet logging interval.');
+        chain_assert(array_keys($GLOBALS['chain_logs'][2]['context']) === ['removed_entries','bytes_removed','from_at','to_at'], 'A summary disclosed individual paths or credentials.');
         $third = chain_workspace($root, 'Stop01');
         $checkpoint = file_get_contents($root . '/cache/cache-lifecycle/state.json');
         $GLOBALS['chain_off'] = true;

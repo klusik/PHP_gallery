@@ -45,6 +45,13 @@ namespace Gallery\Models {
 }
 namespace {
     /**
+     * Consume admission headroom deterministically without changing worker budgets.
+     * Type: int. Units: microseconds. Scope: this isolated visitor fixture.
+     * Consumers: the injected capacity probe for the exhausted-admission assertion.
+     * Rationale: 30000 microseconds leaves less than the required 20 ms headroom in a 40 ms opportunity.
+     */
+    const VISITOR_EXHAUST_ADMISSION_US = 30000;
+    /**
      * Require one lifecycle invariant with useful failure context.
      * @param bool $condition Expected invariant.
      * @param string $message Failure description.
@@ -129,6 +136,28 @@ namespace {
         $foreground = fopen($root . '/cache/site-maintenance/visitor.lock', 'c');
         flock($foreground, LOCK_SH);
         visitor_assert(\Gallery\Services\cache_lifecycle_visitor_run(true)['reason'] === 'foreground_requests_active', 'Worker did not yield to another foreground visitor.');
+        $GLOBALS['cache_lifecycle_test_now'] += 91;
+        visitor_workspace($root, 'Starv1', 1024);
+        // Slow admission may consume a forty-millisecond opportunity before a slice can start.
+        // The existing capacity seam makes that boundary deterministic without widening production budgets.
+        $beforeStarved = \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/state.json');
+        $exhausted = \Gallery\Services\cache_lifecycle_scheduled_burst(0.04, 'cache_chain', 1, static function (string $path): int {
+            usleep(VISITOR_EXHAUST_ADMISSION_US);
+            return 1073741824;
+        }, true);
+        visitor_assert(!empty($exhausted['ok']) && $exhausted['slices'] === 0 && empty($exhausted['progressed'])
+            && $exhausted['elapsed_ms'] < 1200
+            && \Gallery\Services\cache_lifecycle_read_json($root . '/cache/cache-lifecycle/state.json') === $beforeStarved,
+            'Exhausted admission invented progress, changed a checkpoint or exceeded its short opportunity.');
+        $starvedProgress = false;
+        for ($opportunity = 0; $opportunity < 8; $opportunity++) {
+            $starved = \Gallery\Services\cache_lifecycle_visitor_run(true, true);
+            visitor_assert(!empty($starved['ok']) && ($starved['slices'] ?? 0) <= 1 && $starved['elapsed_ms'] < 1200,
+                'A starved opportunity exceeded one short slice: ' . json_encode($starved, JSON_THROW_ON_ERROR));
+            if (!empty($starved['progressed'])) { $starvedProgress = true; break; }
+            $GLOBALS['cache_lifecycle_test_now'] += 61;
+        }
+        visitor_assert($starvedProgress, 'Bounded starved opportunities never advanced a durable checkpoint.');
         flock($foreground, LOCK_UN);
         fclose($foreground);
         $GLOBALS['cache_lifecycle_test_now'] += 61;

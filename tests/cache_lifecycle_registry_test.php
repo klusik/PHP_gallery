@@ -215,6 +215,31 @@ namespace {
         $GLOBALS['cache_registry_test_off'] = true;
         cache_registry_assert(\Gallery\Services\cache_lifecycle_scheduled_slice()['reason'] === 'automatic_cache_cleanup_disabled', 'OFF admitted automatic work.');
         $GLOBALS['cache_registry_test_off'] = false;
+        // Reproduce a production-sized flat directory without allocating a large payload.
+        // Its contents are unproven and must be measured, never removed.
+        mkdir($root . '/cache/dense');
+        for ($entry = 0; $entry < 4097; $entry++) file_put_contents($root . '/cache/dense/name-' . $entry, 'x');
+        $denseKey = hash('sha256', 'region:dense');
+        $database->prepare('UPDATE cache_lifecycle_regions SET next_due_at = ?')->execute([\Gallery\Services\cache_lifecycle_now() + 3600]);
+        \Gallery\Models\cache_registry_model_register($denseKey, 'dense', 'unknown', 'dense', \Gallery\Services\cache_lifecycle_now());
+        $denseRun = \Gallery\Services\cache_lifecycle_scheduled_run(2, 'cli_cron', 8);
+        $denseRow = \Gallery\Models\cache_registry_model_find($denseKey);
+        $denseState = \Gallery\Services\cache_lifecycle_registry_decode($denseRow['checkpoint_json']);
+        cache_registry_assert($denseRun['slices'] > 1 && $denseRun['slices'] <= 8
+            && $denseState['totals']['unknown']['files'] > 0 && empty($denseState['blocked']) && empty($denseState['errors']),
+            'One admitted dense region did not continue within the existing bounded burst.');
+        // Filesystem latency varies; prove exact completion across bounded opportunities.
+        for ($attempt = 0; $attempt < 8 && $denseState['phase'] !== 'complete'; $attempt++) {
+            $GLOBALS['cache_lifecycle_test_now'] += 30;
+            \Gallery\Services\cache_lifecycle_scheduled_run(2, 'cli_cron', 8);
+            $denseRow = \Gallery\Models\cache_registry_model_find($denseKey);
+            $denseState = \Gallery\Services\cache_lifecycle_registry_decode($denseRow['checkpoint_json']);
+        }
+        cache_registry_assert($denseState['phase'] === 'complete' && empty($denseState['blocked']) && empty($denseState['errors'])
+            && $denseState['totals']['unknown']['files'] === 4097 && $denseState['totals']['unknown']['bytes'] === 4097
+            && is_file($root . '/cache/dense/name-4096'),
+            'Dense streamed catalog did not finish its exact protected measurement.');
+        $GLOBALS['cache_lifecycle_test_now'] += 3601;
         foreach (['retire-old'=>[true,604801],'retain-recent'=>[true,60],'retain-pending'=>[false,604801]] as $path => [$drained,$age]) {
             $key = hash('sha256', $path);
             \Gallery\Models\cache_registry_model_register($key, $path, 'unknown', 'absent', \Gallery\Services\cache_lifecycle_now());
@@ -252,6 +277,14 @@ namespace {
         $failedStatus = \Gallery\Services\cache_lifecycle_status();
         cache_registry_assert(!$result['ok'] && $failedStatus['partial'] && $failedStatus['errors'] >= 2,
             'An earlier complete discovery concealed a newer failed discovery attempt.');
+        $retainedBytes = $failedStatus['bytes'];
+        \Gallery\Services\cache_lifecycle_inventory_start();
+        \Gallery\Services\cache_lifecycle_inventory_slice();
+        $manualStatus = \Gallery\Services\cache_lifecycle_status();
+        cache_registry_assert(isset($manualStatus['operation']) && $manualStatus['operation']['phase'] === 'inventory'
+            && $manualStatus['operation']['bytes_removed'] === 0 && $manualStatus['bytes'] === $retainedBytes
+            && $manualStatus['bytes_removed'] > 0,
+            'Current manual-cycle progress was replaced with retained regional observations or lifetime removal receipts.');
         echo "Persistent rotating cache registry scheduling, checkpoints, findings, discovery and safe retry: PASS\n";
     } finally {
         unset($GLOBALS['cache_lifecycle_registry_context'], $GLOBALS['cache_lifecycle_test_database']);

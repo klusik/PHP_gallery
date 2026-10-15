@@ -110,8 +110,12 @@ function view_render_admin_dashboard(array $model): void
     echo '<div id="admin-dashboard-thumbnail-progress" class="admin-dashboard-progress-slot" aria-live="polite"></div>';
 
     foreach ($adminTabs as &$tab) {
-        $tab['href'] = url_for('admin', ['dashboard_tab' => substr($tab['id'], strlen('admin-tab-'))])
-            . ($tab['id'] === 'admin-tab-overview' ? '' : '#' . $tab['id']);
+        $tabParams = ['dashboard_tab' => substr($tab['id'], strlen('admin-tab-'))];
+        $maintenanceTab = (string) ($model['requested_maintenance_tab'] ?? '');
+        if ($tab['id'] === 'admin-tab-maintenance' && in_array($maintenanceTab, ['content','media','navigation','trash','system'], true)) {
+            $tabParams['maintenance_tab'] = $maintenanceTab;
+        }
+        $tab['href'] = url_for('admin', $tabParams) . ($tab['id'] === 'admin-tab-overview' ? '' : '#' . $tab['id']);
     }
     unset($tab);
     $activeTab = 'admin-tab-' . (string) ($model['active_tab'] ?? 'overview');

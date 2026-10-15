@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.132.7
+
+Cache cleanup handled dense directories and historical download and updater ZIPs more safely, while the Admin dashboard gained live, read-only cache status and clearer cleanup progress.
+
+### Highlights
+
+#### Bounded cache cleanup and live Admin status
+- Continued measuring dense cache regions across bounded work opportunities instead of treating unfinished regions as globally failed coverage.
+- Reclaimed expired historical download ZIPs and obsolete verified updater archives while preserving active, recent, unverified, and selected recovery files. [#212](https://github.com/klusik/PHP_gallery/issues/212)
+- Added passive Admin cache-status refresh and a local waiting countdown, with current manual progress shown separately from retained measurements and confirmed removals. [#220](https://github.com/klusik/PHP_gallery/issues/220)
+- Preserved the selected maintenance subtab in the URL and browser history.
+
+### Technical Details
+
+#### Backend
+- Updated cache inventory and reclamation services to stream bounded directory catalogs, continue unfinished regions within existing worker limits, and verify historical archive formats and paths before admitting cleanup.
+- Used shared producer and serving leases to protect archive creation, publication, and streaming from reclamation.
+- Expired completed download archives seven days after payload modification and native partial outputs after six hours of inactivity; permission changes and reads did not renew expiry.
+- Retained the installed updater application and up to two prior verified recovery copies, while protecting active and selected recovery material.
+- Recorded immutable origin and predecessor metadata for `v_0.132.7`. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+#### Frontend
+- Updated the Admin cache card to distinguish regional measurements, completed coverage, eligible queued work, confirmed removals, and current manual-operation counters.
+- Added authenticated passive status refresh every 15 seconds and on request; refreshes did not start scans or cleanup, and failed reads preserved the last snapshot.
+- Updated maintenance-tab URL/history handling and cache-status translations in English, Czech, German, and Swedish.
+
+#### Tests
+- Extended coverage for bounded dense-directory processing, worker continuation, foreground contention, historical ZIP expiry, updater recovery retention, and download-serving leases.
+- Added dashboard interaction coverage for passive refresh, manual progress, and maintenance-tab history behavior.
+
+#### Documentation
+- Updated cache-maintenance, compatibility, authoring, and testing guidance, along with all four maintained manual editions.
+
+### User Impact
+
+#### For visitors
+- Gallery viewing behavior did not change. Active download ZIP streaming remained protected from cache reclamation.
+
+#### For administrators
+- Admins could inspect cache status without starting cleanup, see current manual progress separately from historical totals, and keep their selected maintenance tab across navigation and reloads.
+
+#### For maintainers
+- Bounded continuation improved cache inventory progress for dense directories. Archive expiry and updater recovery retention were documented and covered by regression tests.
+
 ## Version 0.132.6
 
 Admin log filtering stayed aligned with the latest search criteria, and automatic cache failures gained bounded diagnostic records without changing cache admission, traversal, deletion, or counters.

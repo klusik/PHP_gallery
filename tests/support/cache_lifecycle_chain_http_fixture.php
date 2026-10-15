@@ -78,8 +78,7 @@ namespace {
         file_put_contents($root . '/cache/' . $relative . '/cache-owner.json', json_encode(['schema_version'=>1,
             'producer'=>'php_gallery_browser_fixture','directory'=>$relative,
             'created_at'=>time()-86401], JSON_THROW_ON_ERROR));
-        // An unrelated unregistered dense directory must be preserved and must
-        // not turn partial coverage into a global worker failure/backoff.
+        // An unrelated dense directory must be fully measurable and remain protected.
         mkdir($root . '/cache/dense-unregistered');
         for ($index = 0; $index <= 4096; $index++) file_put_contents($root . '/cache/dense-unregistered/name-' . $index, '');
         require_once dirname(__DIR__, 2) . '/app/services/cache_lifecycle.php';
@@ -87,11 +86,12 @@ namespace {
         for ($probe = 0; $probe < 240; $probe++) {
             clearstatcache();
             $status = \Gallery\Services\cache_lifecycle_status();
-            if (!is_dir($root . '/cache/' . $relative) && $status['partial'] && is_file($root . '/events.jsonl')) { $finished = true; break; }
+            if (!is_dir($root . '/cache/' . $relative) && !$status['partial'] && $status['totals']['unknown']['files'] >= 4097
+                && is_file($root . '/events.jsonl')) { $finished = true; break; }
             usleep(CACHE_CHAIN_HTTP_POLL_US);
         }
         chain_http_assert($finished && $status['scheduler_source'] === 'cache_chain',
-            'Autonomous HTTP requests did not reclaim newly published eligible data with partial coverage: '
+            'Autonomous HTTP requests did not reclaim eligible data and measure protected dense storage: '
             . json_encode(array_diff_key($status, ['policies'=>true,'totals'=>true,'sample'=>true]), JSON_THROW_ON_ERROR)
             . '\nOwned server log: ' . file_get_contents($root . '/server.log'));
         chain_http_assert(file_get_contents($root . '/cache/unregistered-original/payload') === 'protected original'
@@ -101,6 +101,7 @@ namespace {
             && count(array_filter($arrivals, static fn(string $kind): bool => $kind === 'worker')) >= 2,
             'The server chain needed another public visit or never recorded real worker requests.');
         $events = array_map(static fn(string $line): array => json_decode($line, true, 16, JSON_THROW_ON_ERROR), file($root . '/events.jsonl', FILE_IGNORE_NEW_LINES));
+        $events = array_values(array_filter($events, static fn(array $event): bool => $event['key'] === 'cache.automatic_reclaimed'));
         chain_http_assert(count($events) >= 1 && $events[0]['key'] === 'cache.automatic_reclaimed'
             && $events[0]['context']['bytes_removed'] >= 4096
             && array_keys($events[0]['context']) === ['removed_entries','bytes_removed','from_at','to_at'], 'Actual removal lacked a safe aggregate Admin log receipt.');
@@ -112,7 +113,7 @@ namespace {
             usleep(CACHE_CHAIN_HTTP_POLL_US);
         }
         chain_http_assert($stopped, 'Explicit OFF did not stop subsequent autonomous HTTP dispatches.');
-        echo "Single public kickoff; real authenticated server continuation, partial coverage, immediate reclamation, aggregate logs and OFF: PASS\n";
+        echo "Single public kickoff; real authenticated server continuation, dense coverage, immediate reclamation, aggregate logs and OFF: PASS\n";
     } finally {
         file_put_contents($root . '/off', '0');
         if (is_resource($process)) {
