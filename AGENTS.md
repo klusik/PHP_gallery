@@ -79,6 +79,22 @@ Document structured parameters/results with concrete fields and collection eleme
 
 Anonymous functions, closures, arrow functions, and inline or variable-bound callbacks do not require docstrings, even when assigned to a named variable or object member. Variables, constants, and class properties do not require declaration docstrings either. Use ordinary comments for local reasoning when useful. Do not insert a docblock inside a call's argument list or extract a named helper solely to satisfy documentation checks. If an anonymous function contains a named function or class, that nested declaration still follows the named-declaration rule.
 
+Always add a native signature type to every explicit PHP callback parameter,
+including arrow callbacks. Apply the callback exemption to declaration
+docstrings only. Always attach a factual purpose docblock immediately to every
+class-like declaration, including anonymous classes inside fixtures or object
+properties. When changing an existing declaration, complete its entire
+parameter/return contract in the same edit: describe collection elements and
+row fields, every added/defaulted parameter, and every return variant including
+`void`.
+
+When changing a browser module's cache-busting revision, always search the
+complete import chain and all source/test assertions for the previous revision.
+Update every affected exact expectation together with the real import, keeping
+the checks equally strict. Always represent presentation options as explicit
+value/label entries. Reserve literal `'page' => 'target'` maps for registered
+routes, as required by the route-reference integrity contract.
+
 File attribution headers, native signature typing, operational-policy comments, and parser coverage checks remain separate requirements. `scripts/check_source_documentation.php` and the historical named-function presence test must apply the same anonymous-function exemption.
 
 ### Runtime Policy Explanations
@@ -127,6 +143,26 @@ non-forced writes. A later fix repeats hosted preparation and qualification.
 Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
 explicitly requested or hosted preparation is unavailable; agents do not routinely
 duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
+
+### Squash checkpoint after generated candidate commits
+
+Always verify exactly one integration-candidate commit above the observed
+current `develop` after preparation, including every generated bot commit.
+Run FULL qualification on this final squashed SHA so its evidence remains bound
+to the candidate that integration will fast-forward.
+
+When hosted preparation publishes another commit, stop/cancel the integration
+before its expensive matrix proceeds. Fetch the published head, preserve all
+generated files, and squash the entire feature delta onto the same observed
+develop base. Verify the resulting tree equals the prepared tree plus any
+explicitly reviewed source/documentation fixes, the parent equals that base,
+the commit count is one, and the working tree is clean. Push the authorized
+feature ref with an exact old-head `--force-with-lease` when the user authorized
+the squash; leave protected-branch updates to the approved integration workflow.
+Obtain fresh BASIC for the rewritten SHA before dispatching integration again.
+Verify that idempotent preparation keeps the fresh generated files and candidate
+SHA unchanged. Repeat this checkpoint whenever preparation adds another commit,
+and proceed to FULL once the complete prepared history is one final commit.
 
 ### Automatic reviewed release lifecycle (#101)
 
@@ -217,8 +253,10 @@ test orchestrator inside CI; no YAML-maintained parallel test registry is allowe
    pushes and the final squash, then commit focused batches and push only the
    authorized branch with an exact ref, for example
    `git push origin HEAD:refs/heads/feature/example`. Check the remote head before
-   each write, use non-forced pushes, and integrate concurrent candidate-bot
-   commits before adding fixes. Never overwrite another writer.
+   each write, use non-forced pushes for ordinary updates, and integrate concurrent
+   candidate-bot commits before adding fixes. An explicitly authorized feature
+   squash uses the exact old-head lease in the squash checkpoint above. Never
+   overwrite another writer.
 4. Use the hosted sequence above: BASIC feature/squash checks, the approved
    **Integrate into develop** Actions button, then FULL on exact A before its
    automatic fast-forward. Release B receives only BASIC changed-source and

@@ -290,6 +290,33 @@ function admin_log_model_count(?string $status, array $filters, array $validStat
     return max(0, (int) $stmt->fetchColumn());
 }
 
+/**
+ * Read a chronological keyset batch of raw logs matching the export filters.
+ * @param array{category:string,severities:array<int,string>,q:string,time_sort:string} $filters Validated semantic filters.
+ * @param string|null $cursorTime Last emitted timestamp, or null for the first batch.
+ * @param int $cursorId Last emitted ID paired with the timestamp.
+ * @param int $limit Maximum rows retained in one batch.
+ * @param array<int,string> $categories Supported category keys.
+ * @param array<int,string> $severities Supported severity keys.
+ * @return array<int,array<string,int|string|null>> Raw log rows including usernames.
+ */
+function admin_log_model_filtered_export_batch(array $filters, ?string $cursorTime, int $cursorId, int $limit, array $categories, array $severities): array
+{
+    $filter = admin_log_model_filter_sql(null, $filters, [], $categories, $severities);
+    $order = admin_log_model_time_sort($filters);
+    $comparison = $order === 'ASC' ? '>' : '<';
+    $where = $filter['where_sql'];
+    $params = $filter['params'];
+    if ($cursorTime !== null) {
+        $where .= ($where === '' ? ' WHERE ' : ' AND ') . '(l.created_at ' . $comparison . ' ? OR (l.created_at = ? AND l.id ' . $comparison . ' ?))';
+        array_push($params, $cursorTime, $cursorTime, $cursorId);
+    }
+    $statement = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+        . $where . ' ORDER BY l.created_at ' . $order . ', l.id ' . $order . ' LIMIT ' . max(1, $limit));
+    $statement->execute($params);
+    return $statement->fetchAll();
+}
+
 /** Return grouped Admin log rows. */
 function admin_log_model_grouped_list(?string $status, int $limit, array $filters, int $offset, array $validStatuses, array $validCategories, array $validSeverities): array
 {

@@ -49,6 +49,7 @@ use function Gallery\Models\admin_log_model_ensure_status_schema;
 use function Gallery\Models\admin_log_model_export_row_batch;
 use function Gallery\Models\admin_log_model_export_rows;
 use function Gallery\Models\admin_log_model_filter_sql;
+use function Gallery\Models\admin_log_model_filtered_export_batch;
 use function Gallery\Models\admin_log_model_find;
 use function Gallery\Models\admin_log_model_group_columns;
 use function Gallery\Models\admin_log_model_group_hash_sql;
@@ -1115,6 +1116,103 @@ function admin_log_export_text(array $entry): string
         '',
     ];
     return implode("\n", $lines);
+}
+
+/**
+ * Validate and deduplicate export selections before any response bytes are sent.
+ * @param array<int,string> $tokens Row IDs optionally followed by a colon and group hash.
+ * @return array<int,array{entry:array<string,int|string|null>,group:bool}> Resolved entries with overlapping individual rows removed.
+ * @throws RuntimeException When a row disappeared or its group identity is invalid.
+ */
+function admin_log_export_selection(array $tokens): array
+{
+    $resolved = [];
+    $groups = [];
+    foreach (array_unique($tokens) as $token) {
+        if (preg_match('/^([1-9][0-9]*)(?::([a-f0-9]{64}))?$/D', $token, $match) !== 1) {
+            throw new RuntimeException('Invalid log selection.');
+        }
+        $entry = admin_log_find((int) $match[1]);
+        if ($entry === null) {
+            throw new RuntimeException('A selected log is no longer available.');
+        }
+        $group = isset($match[2]);
+        $hash = admin_log_group_hash_for_entry($entry);
+        if ($group && !hash_equals($hash, $match[2])) {
+            throw new RuntimeException('The selected log group does not match its representative.');
+        }
+        if ($group) {
+            $groups[$hash] = true;
+        }
+        $resolved[] = ['entry' => $entry, 'group' => $group];
+    }
+    $emittedGroups = [];
+    return array_values(array_filter($resolved, static function (array $item) use ($groups, &$emittedGroups): bool {
+        $hash = admin_log_group_hash_for_entry($item['entry']);
+        if (!$item['group']) {
+            return !isset($groups[$hash]);
+        }
+        if (isset($emittedGroups[$hash])) {
+            return false;
+        }
+        $emittedGroups[$hash] = true;
+        return true;
+    }));
+}
+
+/**
+ * Yield complete diagnostic text for selected rows and entire selected groups.
+ * @param array<int,array{entry:array<string,int|string|null>,group:bool}> $selection Validated, deduplicated selection.
+ * @return \Generator<int,string> Complete text chunks using bounded group reads.
+ */
+function admin_log_selection_text_chunks(array $selection): \Generator
+{
+    foreach ($selection as $item) {
+        $entry = $item['entry'];
+        if (!$item['group']) {
+            yield admin_log_export_text($entry) . "\n";
+            continue;
+        }
+        $summary = admin_log_group_member_summary($entry);
+        $entry = array_merge($entry, $summary);
+        yield admin_log_export_group_header_text($entry, (int) $summary['group_count']);
+        $cursorTime = null;
+        $cursorId = 0;
+        $written = 0;
+        do {
+            $batch = admin_log_group_member_export_batch($entry, $cursorTime, $cursorId);
+            foreach ($batch as $member) {
+                $written++;
+                yield '[' . $written . '/' . (int) $summary['group_count'] . "]\n";
+                yield admin_log_export_text($member) . "\n";
+                $cursorTime = (string) $member['created_at'];
+                $cursorId = (int) $member['id'];
+            }
+        } while (count($batch) === ADMIN_LOG_EXPORT_BATCH_SIZE);
+    }
+}
+
+/**
+ * Yield every raw log matching the filters in the requested chronological order.
+ * @param array{category:string,severities:array<int,string>,q:string,time_sort:string} $filters Validated semantic filters, independent of pagination.
+ * @return \Generator<int,string> Complete diagnostic text chunks; no display-page truncation.
+ */
+function admin_log_filtered_text_chunks(array $filters): \Generator
+{
+    if (!admin_log_schema_ready()) {
+        return;
+    }
+    $cursorTime = null;
+    $cursorId = 0;
+    do {
+        $batch = admin_log_model_filtered_export_batch($filters, $cursorTime, $cursorId, ADMIN_LOG_EXPORT_BATCH_SIZE,
+            array_keys(admin_log_category_options()), array_keys(admin_log_severity_options()));
+        foreach ($batch as $entry) {
+            yield admin_log_export_text($entry) . "\n";
+            $cursorTime = (string) $entry['created_at'];
+            $cursorId = (int) $entry['id'];
+        }
+    } while (count($batch) === ADMIN_LOG_EXPORT_BATCH_SIZE);
 }
 
 /**

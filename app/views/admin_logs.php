@@ -215,18 +215,65 @@ function view_render_admin_logs_live(array $viewModel): void
     echo '<section class="panel" data-admin-log-results><div class="admin-log-results-header"><h2>' . e((string) ($labels['entries'] ?? 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
     echo $paginationHtml;
     echo '</div>';
+    echo '<div class="admin-log-export-toolbar" data-admin-log-export-toolbar data-export-url="' . e((string) ($urls['export_text'] ?? '')) . '" data-labels="' . e((string) json_encode($labels, JSON_UNESCAPED_UNICODE)) . '">';
+    echo '<label class="admin-log-export-scope"><span class="admin-log-sr-only">' . e($labels['export_scope']) . '</span><select name="export_scope" form="admin-log-bulk-form" data-admin-log-export-scope>';
+    foreach ([['selected', 'selected'], ['page', 'this_page'], ['filtered', 'all_filtered']] as [$value, $label]) {
+        echo '<option value="' . $value . '">' . e($labels[$label]) . '</option>';
+    }
+    echo '</select></label><span class="admin-log-selection-count" data-admin-log-selection-count aria-live="polite"></span>';
+    echo '<button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-selection hidden title="' . e($labels['copy_logs']) . '" aria-label="' . e($labels['copy_logs']) . '">' . view_render_admin_log_icon('copy') . '</button>';
+    echo '<button type="submit" form="admin-log-bulk-form" formaction="' . e((string) ($urls['export_text'] ?? '')) . '" formtarget="_blank" class="admin-log-icon-button secondary" data-admin-log-save-selection title="' . e($labels['save_logs']) . '" aria-label="' . e($labels['save_logs']) . '">' . view_render_admin_log_icon('save') . '</button>';
+    echo '<span class="admin-log-export-state" data-admin-log-export-state role="status"></span>';
+    foreach (['category' => $category, 'q' => $query, 'time_sort' => $timeSort] as $name => $value) {
+        echo '<input type="hidden" name="' . $name . '" value="' . e($value) . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
+    }
+    foreach ($selectedSeverities as $value) {
+        echo '<input type="hidden" name="severities[]" value="' . e((string) $value) . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
+    }
+    echo '</div>';
     if (!$hasLogs) {
         echo '<div data-admin-log-empty>' . view_render_admin_log_empty((string) ($labels['no_entries_match'] ?? 'No log entries match the current filters.')) . '</div>';
     }
     echo '<div class="admin-log-table-wrap">';
-    echo '<table class="admin-log-table"><thead><tr><th>' . e((string) ($labels['select'] ?? 'Select')) . '</th><th><a href="' . e((string) ($urls['time_sort'] ?? '')) . '" data-admin-log-time-sort-link data-next-sort="' . e((string) ($viewModel['next_time_sort'] ?? 'asc')) . '">' . e((string) ($labels['when'] ?? 'When')) . ' ' . e((string) ($viewModel['time_sort_symbol'] ?? '↓')) . '</a></th><th>' . e((string) ($labels['instances'] ?? 'Instances')) . '</th><th>' . e((string) ($labels['severity'] ?? 'Severity')) . '</th><th>' . e((string) ($labels['category'] ?? 'Category')) . '</th><th>' . e((string) ($labels['event'] ?? 'Event')) . '</th><th>' . e((string) ($labels['message'] ?? 'Message')) . '</th><th>' . e((string) ($labels['by'] ?? 'By')) . '</th></tr></thead><tbody data-admin-log-tbody>';
+    echo '<table class="admin-log-table"><thead><tr><th><input type="checkbox" data-admin-log-select-page disabled aria-label="' . e($labels['select_page']) . '" title="' . e($labels['select_page']) . '"></th><th><a href="' . e((string) ($urls['time_sort'] ?? '')) . '" data-admin-log-time-sort-link data-next-sort="' . e((string) ($viewModel['next_time_sort'] ?? 'asc')) . '">' . e((string) ($labels['when'] ?? 'When')) . ' ' . e((string) ($viewModel['time_sort_symbol'] ?? '↓')) . '</a></th><th>' . e((string) ($labels['instances'] ?? 'Instances')) . '</th><th>' . e((string) ($labels['severity'] ?? 'Severity')) . '</th><th>' . e((string) ($labels['category'] ?? 'Category')) . '</th><th>' . e((string) ($labels['event'] ?? 'Event')) . '</th><th>' . e((string) ($labels['message'] ?? 'Message')) . '</th><th>' . e((string) ($labels['by'] ?? 'By')) . '</th><th><span class="admin-log-sr-only">' . e($labels['export_scope']) . '</span></th></tr></thead><tbody data-admin-log-tbody>';
     echo $rowsHtml;
     echo '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="' . e((string) ($urls['update'] ?? '')) . '">' . $csrfHtml;
+    echo '<input type="hidden" name="export_tokens_json" value="' . e((string) json_encode($viewModel['export_tokens'] ?? new \stdClass())) . '">';
     echo '<div class="bulk-row"><label>' . e((string) ($labels['bulk_set_selected'] ?? 'Bulk set selected')) . '<select name="status">';
     foreach ($statusOptions as $value => $label) {
         echo '<option value="' . e((string) $value) . '">' . e((string) $label) . '</option>';
     }
-    echo '</select></label><button type="submit" name="action" value="bulk">' . e((string) ($labels['apply_to_selected'] ?? 'Apply to selected')) . '</button><span class="muted">' . e((string) ($labels['bulk_grouping_hint'] ?? '')) . '</span></div></form></section>';
+    echo '</select></label><button type="submit" name="action" value="bulk" title="' . e((string) ($labels['bulk_grouping_hint'] ?? '')) . '">' . e((string) ($labels['apply_to_selected'] ?? 'Apply to selected')) . '</button></div></form></section>';
+}
+
+/**
+ * Render a decorative local SVG icon for an accessible log control.
+ * @param string $name Supported copy, save or details icon name.
+ * @return string SVG markup hidden from assistive technology.
+ */
+function view_render_admin_log_icon(string $name): string
+{
+    $paths = [
+        'copy' => '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/>',
+        'save' => '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+        'details' => '<path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/>',
+    ];
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? '') . '</svg>';
+}
+
+/**
+ * Render compact copy and native TXT-download controls for one row or group.
+ * @param string $url Authenticated text export URL.
+ * @param array<string,string> $labels Localized action labels.
+ * @param bool $group Whether the URL exports an entire group instead of one event.
+ * @return string Accessible icon controls; copy is enabled by the browser module.
+ */
+function view_render_admin_log_export_actions(string $url, array $labels, bool $group = false): string
+{
+    $copy = $labels[$group ? 'copy_group' : 'copy'] ?? 'Copy log';
+    $save = $labels[$group ? 'save_group' : 'save'] ?? 'Save log';
+    return '<span class="admin-log-row-actions"><button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-url="' . e($url) . '" hidden title="' . e($copy) . '" aria-label="' . e($copy) . '">' . view_render_admin_log_icon('copy') . '</button>'
+        . '<a class="admin-log-icon-button secondary" href="' . e($url) . '" download target="_blank" rel="noopener" data-admin-log-save-url="' . e($url) . '" title="' . e($save) . '" aria-label="' . e($save) . '">' . view_render_admin_log_icon('save') . '</a></span>';
 }
 
 /**
@@ -234,13 +281,15 @@ function view_render_admin_logs_live(array $viewModel): void
  *
  * @param array<int, array<string, mixed>> $members Controller-prepared member presentation rows.
  * @param string $requestPrefix Localized request label.
+ * @param array<string,string> $labels Localized selection and export labels.
  * @return string Rendered grouped member rows.
  */
-function view_render_admin_log_group_member_rows(array $members, string $requestPrefix): string
+function view_render_admin_log_group_member_rows(array $members, string $requestPrefix, array $labels = []): string
 {
     ob_start();
     foreach ($members as $member) {
         echo '<div class="admin-log-group-instance">';
+        echo '<div class="admin-log-instance-heading"><input type="checkbox" name="log_ids[]" value="' . (int) ($member['id'] ?? 0) . '" form="admin-log-bulk-form" data-admin-log-export-choice aria-label="' . e(($labels['select_log'] ?? 'Select log') . ' ' . (string) ($member['id'] ?? '')) . '">';
         echo '<strong>#' . e((string) ($member['display_index'] ?? '')) . '</strong> ';
         echo e((string) ($member['created_at'] ?? ''));
         echo ' | ID ' . e((string) ($member['id'] ?? '0'));
@@ -254,6 +303,7 @@ function view_render_admin_log_group_member_rows(array $members, string $request
         if (!empty($member['route_name'])) {
             echo ' | ' . e((string) $member['route_name']);
         }
+        echo view_render_admin_log_export_actions((string) ($member['export_url'] ?? ''), $labels) . '</div>';
         $message = (string) ($member['message'] ?? '');
         $contextJson = (string) ($member['context_compact_json'] ?? '');
         if ($message !== '') {
@@ -288,17 +338,13 @@ function view_render_admin_log_table_rows(array $logs, array $labels): string
         $severity = (string) ($entry['severity'] ?? $entry['level'] ?? 'info');
 
         echo '<tr data-admin-log-row>';
-        echo '<td><input type="checkbox" name="log_ids[]" value="' . e((string) ($entry['selection_value'] ?? '')) . '" form="admin-log-bulk-form"></td>';
-        echo '<td data-admin-log-created-at>' . e($createdAtLabel);
-        if ($groupCount > 1 && $firstCreatedAt !== $latestCreatedAt) {
-            echo '<div class="muted">' . e($firstCreatedAt) . ' - ' . e($latestCreatedAt) . '</div>';
-        }
-        echo '</td>';
-        echo '<td><strong>' . e((string) $groupCount) . '</strong><div class="muted">' . e($groupCount === 1 ? (string) ($labels['group_count_one'] ?? 'entry') : (string) ($labels['group_count_many'] ?? 'entries')) . '</div></td>';
+        echo '<td><input type="checkbox" name="log_ids[]" value="' . e((string) ($entry['selection_value'] ?? '')) . '" form="admin-log-bulk-form" data-export-token="' . e((string) ($entry['export_token'] ?? '')) . '" data-admin-log-export-choice aria-label="' . e(($labels['select_log'] ?? 'Select log') . ' ' . (string) ($entry['id'] ?? '')) . '"></td>';
+        echo '<td data-admin-log-created-at title="' . e($firstCreatedAt . ' – ' . $latestCreatedAt) . '">' . e($createdAtLabel) . '</td>';
+        echo '<td><span class="admin-log-instance-count" title="' . e((string) ($labels['group_count'] ?? 'Grouped entries')) . '">' . $groupCount . '</span></td>';
         echo '<td><span class="log-severity log-severity-' . e($severity) . '">' . e($severity) . '</span></td>';
         echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
         echo '<td><details class="log-entry-details"><summary><code>' . e((string) ($entry['event_key'] ?? '')) . '</code></summary>';
-        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e((string) ($entry['export_url'] ?? '')) . '">' . e((string) ($labels['save_details_txt'] ?? 'Save details as TXT')) . '</a></div>';
+        echo '<div class="admin-log-detail-body"><div class="log-detail-actions">' . view_render_admin_log_export_actions((string) ($entry['single_export_url'] ?? ''), $labels) . '</div>';
         echo '<dl class="log-detail-list">';
         echo '<dt>' . e((string) ($labels['log_id'] ?? 'Log ID')) . '</dt><dd>' . (int) ($entry['id'] ?? 0) . '</dd>';
         echo '<dt>' . e((string) ($labels['group_count'] ?? 'Grouped entries')) . '</dt><dd>' . e((string) $groupCount) . '</dd>';
@@ -324,19 +370,14 @@ function view_render_admin_log_table_rows(array $logs, array $labels): string
         if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
             echo '<div class="muted">' . e((string) ($entry['subject_type'] ?? '')) . ' #' . e((string) ($entry['subject_id'] ?? '')) . '</div>';
         }
-        echo '</details></td>';
-        echo '<td>' . e((string) ($entry['message'] ?? ''));
-        if ($groupCount > 1) {
-            echo '<div class="muted">' . e((string) ($labels['grouped_row_note'] ?? '')) . '</div>';
-        }
+        echo '</div></details></td>';
+        echo '<td><span class="admin-log-message">' . e((string) ($entry['message'] ?? '')) . '</span>';
         if (!empty($entry['context_pretty_json'])) {
-            echo '<details class="log-context"><summary>' . e((string) ($labels['details'] ?? 'Details')) . '</summary><pre>' . e((string) $entry['context_pretty_json']) . '</pre></details>';
-        }
-        if (!empty($entry['request_id'])) {
-            echo '<div class="muted">' . e((string) ($labels['request_prefix'] ?? 'Request')) . ' ' . e((string) $entry['request_id']) . '</div>';
+            echo '<details class="log-context admin-log-context"><summary title="' . e((string) ($labels['details'] ?? 'Details')) . '" aria-label="' . e((string) ($labels['details'] ?? 'Details')) . '">' . view_render_admin_log_icon('details') . '</summary><div class="admin-log-detail-body"><pre>' . e((string) $entry['context_pretty_json']) . '</pre></div></details>';
         }
         echo '</td>';
         echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
+        echo '<td>' . view_render_admin_log_export_actions((string) ($entry['export_url'] ?? ''), $labels, $groupCount > 1) . '</td>';
         echo '</tr>';
     }
     return (string) ob_get_clean();

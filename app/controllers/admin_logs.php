@@ -87,6 +87,9 @@ use function Gallery\Services\admin_log_create_export_zip_streamed;
 use function Gallery\Services\admin_log_export_group_header_text;
 use function Gallery\Services\admin_log_export_temp_path;
 use function Gallery\Services\admin_log_export_text;
+use function Gallery\Services\admin_log_export_selection;
+use function Gallery\Services\admin_log_selection_text_chunks;
+use function Gallery\Services\admin_log_filtered_text_chunks;
 use function Gallery\Services\admin_log_export_zip_filename;
 use function Gallery\Services\admin_log_find;
 use function Gallery\Services\admin_log_group_hash_for_entry;
@@ -525,9 +528,9 @@ function admin_log_filter_url(array $overrides = []): string
 /**
  * Prepare one bounded chunk of raw grouped Admin log instances for the view.
  *
- * @param array $members Group member rows.
+ * @param array<int,array<string,int|string|null>> $members Raw group rows with scalar database fields.
  * @param int $startIndex Zero-based index of the first rendered member.
- * @return array<int, array<string, mixed>> Presentation-only member rows.
+ * @return array<int,array<string,int|string|null>> Member rows with export URLs, indexes and serialized contexts.
  */
 function admin_log_group_member_view_models(array $members, int $startIndex = 0): array
 {
@@ -538,6 +541,7 @@ function admin_log_group_member_view_models(array $members, int $startIndex = 0)
         }
         $context = admin_log_context_array($member);
         $member['display_index'] = max(0, $startIndex) + $index + 1;
+        $member['export_url'] = url_for('admin_log_export', ['id' => (int) ($member['id'] ?? 0)]);
         $member['context_compact_json'] = $context !== []
             ? (string) json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
             : '';
@@ -549,7 +553,7 @@ function admin_log_group_member_view_models(array $members, int $startIndex = 0)
 /**
  * Render one bounded chunk of raw grouped admin log instances.
  *
- * @param array $members Group member rows.
+ * @param array<int,array<string,int|string|null>> $members Raw group rows with scalar database fields.
  * @param int $startIndex Zero-based index of the first rendered member.
  * @return string Text result for the caller.
  */
@@ -557,7 +561,8 @@ function render_admin_log_group_member_rows(array $members, int $startIndex = 0)
 {
     return view_render_admin_log_group_member_rows(
         admin_log_group_member_view_models($members, $startIndex),
-        admin_log_english_t('admin.logs.request_prefix', 'Request')
+        admin_log_english_t('admin.logs.request_prefix', 'Request'),
+        admin_log_export_labels()
     );
 }
 
@@ -568,7 +573,7 @@ function render_admin_log_group_member_rows(array $members, int $startIndex = 0)
  */
 function admin_log_table_row_labels(): array
 {
-    return [
+    return array_merge(admin_log_export_labels(), [
         'group_count_one' => admin_log_english_t('admin.logs.group_count_one', 'entry'),
         'group_count_many' => admin_log_english_t('admin.logs.group_count_many', 'entries'),
         'save_details_txt' => admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT'),
@@ -588,14 +593,37 @@ function admin_log_table_row_labels(): array
         'grouped_row_note' => admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.'),
         'details' => admin_log_english_t('admin.logs.details', 'Details'),
         'request_prefix' => admin_log_english_t('admin.logs.request_prefix', 'Request'),
+    ]);
+}
+
+/**
+ * Prepare localized labels for compact log export controls and feedback.
+ * @return array<string,string> Labels shared by live and lazy-rendered controls.
+ */
+function admin_log_export_labels(): array
+{
+    $defaults = [
+        'copy' => 'Copy log', 'save' => 'Save log', 'copy_group' => 'Copy entire group',
+        'save_group' => 'Save entire group', 'copy_logs' => 'Copy logs', 'save_logs' => 'Save logs',
+        'selected' => 'Selected', 'this_page' => 'This page', 'all_filtered' => 'All filtered',
+        'select_page' => 'Select this page', 'select_log' => 'Select log', 'export_scope' => 'Export scope',
+        'selection_count' => '{count} selected', 'copying' => 'Copying…', 'copied' => 'Copied.',
+        'export_failed' => 'Unable to export logs. Please try again.', 'select_first' => 'Select at least one log.',
+        'manual_copy' => 'Copy the text below with Ctrl+C or ⌘C.', 'close' => 'Close',
+        'preparing' => 'TXT download started.',
     ];
+    $labels = [];
+    foreach ($defaults as $key => $fallback) {
+        $labels[$key] = admin_log_english_t('admin.logs.actions.' . $key, $fallback);
+    }
+    return $labels;
 }
 
 /**
  * Prepare Admin log entries for presentation without leaking service calls into the view.
  *
- * @param array $logs Raw or grouped Admin log rows.
- * @return array<int, array<string, mixed>> Presentation-only row models.
+ * @param array<int,array<string,int|string|null>> $logs Raw or grouped database rows with scalar fields.
+ * @return array<int,array<string,int|string|null>> Rows with selection tokens, export URLs and serialized presentation contexts.
  */
 function admin_log_table_row_view_models(array $logs): array
 {
@@ -618,6 +646,9 @@ function admin_log_table_row_view_models(array $logs): array
             $exportParams['group'] = (string) $entry['group_hash'];
         }
         $entry['export_url'] = url_for('admin_log_export', $exportParams);
+        $entry['export_token'] = (string) ((int) ($entry['id'] ?? 0))
+            . (isset($exportParams['group']) ? ':' . $exportParams['group'] : '');
+        $entry['single_export_url'] = url_for('admin_log_export', ['id' => (int) ($entry['id'] ?? 0)]);
         $entry['members_url'] = $groupCount > 1 && !empty($entry['group_hash'])
             ? url_for('admin_log_group_members', [
                 'id' => (int) ($entry['id'] ?? 0),
@@ -927,7 +958,8 @@ function render_admin_log_page_heading(string $activeSection): void
 }
 
 /**
- * Handles cms admin logs logic for the gallery application.
+ * Render the authenticated log workspace or return filtered rows for live updates.
+ * @return void Sends the selected log section or its JSON row response.
  */
 function cms_admin_logs(): void
 {
@@ -1032,6 +1064,7 @@ function cms_admin_logs(): void
         'has_logs' => $logs !== [],
         'pagination_html' => $paginationHtml,
         'rows_html' => render_admin_log_table_rows($logs),
+        'export_tokens' => array_column(admin_log_table_row_view_models($logs), 'export_token', 'selection_value'),
         'severity_summary' => admin_log_severity_filter_summary($selectedSeverities),
         'category_options' => admin_log_category_options(),
         'severity_options' => admin_log_severity_options(),
@@ -1041,11 +1074,12 @@ function cms_admin_logs(): void
             'index' => base_url('index.php'),
             'live' => url_for('admin_logs'),
             'export_all_zip' => url_for('admin_logs_export_zip'),
+            'export_text' => url_for('admin_log_export'),
             'reset_severity' => url_for('admin_logs', ['reset_severity' => '1']),
             'time_sort' => admin_log_filter_url(['time_sort' => $nextTimeSort, 'log_page' => 1]),
             'update' => url_for('admin_log_update'),
         ],
-        'labels' => [
+        'labels' => array_merge(admin_log_export_labels(), [
             'filters' => admin_log_english_t('admin.logs.filters', 'Filters'),
             'filters_intro' => admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.'),
             'export_all_zip' => admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP'),
@@ -1082,7 +1116,7 @@ function cms_admin_logs(): void
             'bulk_set_selected' => admin_log_english_t('admin.logs.bulk_set_selected', 'Bulk set selected'),
             'apply_to_selected' => admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected'),
             'bulk_grouping_hint' => admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.'),
-        ],
+        ]),
     ];
 
     render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
@@ -1356,11 +1390,16 @@ function cms_admin_log_update(): void
 
 
 /**
- * Export the full details of one admin log event as a plain text diagnostic file.
+ * Export one event, an entire group, or a submitted selection as diagnostic text.
+ * @return void Sends an authenticated text response or a missing-entry response.
  */
 function cms_admin_log_export(): void
 {
     require_admin();
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        cms_admin_log_export_selection();
+        return;
+    }
     // $logId stores the requested admin log identifier from the query string.
     $logId = max(0, (int) ($_GET['id'] ?? 0));
     // $groupHash stores the optional grouped admin log hash from the query string.
@@ -1440,6 +1479,73 @@ function cms_admin_log_export(): void
     }
 }
 
+
+/**
+ * Stream the selected logs or all filtered raw records through the existing export route.
+ * @return void Sends complete text, or a localized validation error before streaming.
+ */
+function cms_admin_log_export_selection(): void
+{
+    verify_csrf();
+    $scope = (string) ($_POST['export_scope'] ?? 'selected');
+    $tokens = [];
+    $selection = [];
+    try {
+        if (!in_array($scope, ['selected', 'page', 'filtered'], true)) {
+            throw new RuntimeException('Invalid export scope.');
+        }
+        if ($scope !== 'filtered') {
+            $decodedMapping = json_decode(is_string($_POST['export_tokens_json'] ?? null) ? $_POST['export_tokens_json'] : '{}', true);
+            $mapping = is_array($decodedMapping) ? $decodedMapping : [];
+            $values = $scope === 'page' ? array_values($mapping) : [];
+            if ($scope === 'selected') {
+                foreach ((array) ($_POST['log_ids'] ?? []) as $selectedValue) {
+                    if (!is_string($selectedValue)) {
+                        throw new RuntimeException('Invalid export selection.');
+                    }
+                    $values[] = $mapping[$selectedValue] ?? $selectedValue;
+                }
+                array_push($values, ...(array) ($_POST['export_members'] ?? []));
+            }
+            foreach ($values as $value) {
+                if (!is_string($value)) {
+                    throw new RuntimeException('Invalid export selection.');
+                }
+                $tokens[] = $value;
+            }
+            if ($tokens === []) {
+                throw new RuntimeException('Empty export selection.');
+            }
+            $selection = admin_log_export_selection($tokens);
+        }
+    } catch (RuntimeException $exception) {
+        http_response_code(422);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo admin_log_english_t('admin.logs.actions.export_failed', 'Unable to export logs. Please try again.');
+        return;
+    }
+    $filters = [
+        'category' => is_string($_POST['category'] ?? null) ? $_POST['category'] : '',
+        'severities' => admin_log_normalize_severity_filter($_POST['severities'] ?? []),
+        'q' => is_string($_POST['q'] ?? null) ? trim($_POST['q']) : '',
+        'time_sort' => admin_log_normalize_time_sort(is_string($_POST['time_sort'] ?? null) ? $_POST['time_sort'] : null),
+    ];
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Content-Disposition: attachment; filename="php-gallery-logs-' . $scope . '.txt"');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
+    $chunks = $scope === 'filtered' ? admin_log_filtered_text_chunks($filters) : admin_log_selection_text_chunks($selection);
+    foreach ($chunks as $chunk) {
+        echo $chunk;
+        if (connection_aborted()) {
+            break;
+        }
+    }
+}
 
 /**
  * Export all admin logs as a ZIP containing matching CSV and JSON data files.

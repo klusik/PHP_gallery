@@ -20,6 +20,7 @@
 .admin-page .admin-log-table-wrap {
     min-width: 0;
     max-width: 100%;
+    overflow-x: auto;
 }
 
 .admin-page .site-main:has(.admin-log-section-tabs) > .hero,
@@ -302,7 +303,7 @@
 .admin-page .admin-log-table {
     table-layout: fixed;
     width: 100%;
-    min-width: 65rem;
+    min-width: 57rem;
     font-size: .8rem;
     line-height: 1.4;
 }
@@ -314,13 +315,128 @@
     overflow-wrap: anywhere;
 }
 
-.admin-page .admin-log-table th:nth-child(1) { width: 3.5rem; }
-.admin-page .admin-log-table th:nth-child(2) { width: 12rem; }
-.admin-page .admin-log-table th:nth-child(3) { width: 4.5rem; }
+.admin-page .admin-log-table th:nth-child(1) { width: 2rem; }
+.admin-page .admin-log-table th:nth-child(2) { width: 9rem; }
+.admin-page .admin-log-table th:nth-child(3) { width: 4rem; }
 .admin-page .admin-log-table th:nth-child(4) { width: 5.25rem; }
 .admin-page .admin-log-table th:nth-child(5) { width: 5.5rem; }
-.admin-page .admin-log-table th:nth-child(6) { width: 14rem; }
+.admin-page .admin-log-table th:nth-child(6) { width: 13rem; }
 .admin-page .admin-log-table th:nth-child(8) { width: 4rem; }
+.admin-page .admin-log-table th:nth-child(9) { width: 4.75rem; }
+
+/* Scoped exports stay adjacent to selection while details remain native disclosures. */
+.admin-log-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-page .admin-log-export-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+    padding: .35rem .5rem;
+    margin-bottom: .5rem;
+    border: 1px solid var(--admin-border, #dce4ee);
+    border-radius: .5rem;
+    background: var(--admin-surface-soft, #f7f9fc);
+    font-size: .8rem;
+}
+
+.admin-page .admin-log-export-scope { margin: 0; }
+.admin-page .admin-log-export-scope select { min-height: 1.9rem; padding: .2rem 1.5rem .2rem .5rem; border: 0; background-color: transparent; font-size: .8rem; font-weight: 650; }
+.admin-page .admin-log-selection-count { color: var(--muted, #526174); margin-right: .3rem; }
+.admin-page .admin-log-export-state { margin-left: .4rem; color: var(--muted, #526174); }
+.admin-page .admin-log-row-actions { display: inline-flex; align-items: center; gap: .15rem; }
+
+.admin-page [data-admin-log-results] .admin-log-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    min-height: 1.8rem;
+    padding: .25rem;
+    border: 1px solid transparent;
+    border-radius: .35rem;
+    background: var(--admin-surface-soft, #f1f5fa);
+    color: var(--accent, #365fab);
+    text-decoration: none;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.admin-page .admin-log-icon-button[hidden] { display: none; }
+.admin-page .admin-log-icon-button:hover { background: #eaf1fa; border-color: #c8d7e9; }
+.admin-page .admin-log-icon-button:focus-visible { outline: 2px solid var(--accent, #365fab); outline-offset: 2px; }
+.admin-page .admin-log-icon-button:disabled { opacity: .35; cursor: default; }
+.admin-page .admin-log-table tr:has(> td > input:checked) { background: #eef5ff; }
+.admin-page .admin-log-table td { border-bottom: 1px solid var(--border, #e4e9ef); padding-top: .45rem; padding-bottom: .45rem; }
+.admin-page .admin-log-table th { font-weight: 650; color: var(--admin-muted, #64748b); background: #f7f9fc; }
+.admin-page .admin-log-table tr[data-admin-log-row]:hover { background-color: #f7faff; }
+.admin-page .admin-log-table td:nth-child(2),
+.admin-page .admin-log-table td:nth-child(5),
+.admin-page .admin-log-table td:nth-child(8) { color: var(--admin-muted, #64748b); }
+.admin-page .admin-log-instance-count { display: inline-block; padding: .05rem .35rem; border-radius: .3rem; background: #edf2f8; font-variant-numeric: tabular-nums; font-weight: 650; color: #44556c; }
+.admin-page .admin-log-context { display: inline-block; vertical-align: middle; margin: 0 0 0 .25rem; }
+.admin-page .admin-log-context > summary { display: inline-flex; cursor: pointer; padding: .15rem; margin: 0; color: var(--muted, #526174); list-style: none; }
+.admin-page .admin-log-context > summary::-webkit-details-marker { display: none; }
+.admin-page .admin-log-context[open] > summary { color: var(--accent, #365fab); }
+.admin-page .admin-log-table .log-entry-details > summary { cursor: pointer; display: flex; gap: .3rem; align-items: baseline; }
+.admin-page .admin-log-table .log-entry-details > summary::before { content: '▸'; flex: 0 0 auto; }
+.admin-page .admin-log-table .log-entry-details[open] > summary::before { content: '▾'; }
+.admin-page .admin-log-table .log-entry-details > summary::-webkit-details-marker { display: none; }
+.admin-page .admin-log-table th:nth-child(3) { white-space: nowrap; font-size: .72rem; }
+.admin-page .admin-log-instance-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
+.admin-page .admin-log-instance-heading .admin-log-row-actions { margin-left: auto; }
+.admin-page .admin-log-expanded-row > td { padding: .5rem 1rem .75rem; background: #f6f9fd; }
+.admin-page .admin-log-expanded-row .log-detail-list { grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr); margin: .5rem 0; }
+.admin-page .admin-log-expanded-row pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+.admin-page .admin-log-expanded-row .log-detail-actions { margin: 0; }
+.admin-page .admin-log-expanded-row .log-detail-list { grid-template-columns: max-content minmax(8rem, 1fr) max-content minmax(8rem, 1fr); gap: .3rem .75rem; }
+.admin-page [data-admin-log-results] .bulk-row { padding-top: .6rem; margin-top: .3rem; font-size: .8rem; }
+
+.admin-log-copy-dialog {
+    width: min(48rem, calc(100vw - 2rem));
+    max-height: 85vh;
+    padding: 1rem;
+    border: 1px solid #ccd7e3;
+    border-radius: .6rem;
+}
+.admin-log-copy-dialog::backdrop { background: #13243c66; }
+.admin-log-copy-dialog h2 { margin: 0; font-size: 1rem; }
+.admin-log-copy-dialog textarea { display: block; width: 100%; height: 45vh; margin: .75rem 0; font-family: monospace; }
+.admin-log-clipboard-transfer { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; }
+
+@media (max-width: 700px) {
+    .admin-page .admin-log-export-toolbar { gap: .3rem; }
+    .admin-page .admin-log-export-state { flex-basis: 100%; margin-left: 0; }
+    .admin-page .admin-log-table { display: block; min-width: 0; border: 0; }
+    .admin-page .admin-log-table thead,
+    .admin-page .admin-log-table tbody { display: block; }
+    .admin-page .admin-log-table thead tr { display: block; }
+    .admin-page .admin-log-table thead th { display: none; }
+    .admin-page .admin-log-table thead th:first-child { display: block; width: auto; padding: .3rem .5rem; }
+    .admin-page .admin-log-table tr[data-admin-log-row] { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; gap: .2rem .4rem; margin: .4rem 0; padding: .5rem; border: 1px solid var(--admin-border, #dce4ee); border-radius: .5rem; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td { width: auto; min-width: 0; padding: 0; border: 0; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(1) { grid-column: 1; grid-row: 1 / 6; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(2) { grid-column: 2; grid-row: 1; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(3) { grid-column: 3; grid-row: 1; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(4) { grid-column: 2; grid-row: 2; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(5) { grid-column: 3; grid-row: 2; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(6) { grid-column: 2 / 4; grid-row: 3; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(7) { grid-column: 2 / 4; grid-row: 4; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(8) { grid-column: 2; grid-row: 5; align-self: center; }
+    .admin-page .admin-log-table tr[data-admin-log-row] > td:nth-child(9) { grid-column: 3; grid-row: 5; }
+    .admin-page .admin-log-table .admin-log-expanded-row,
+    .admin-page .admin-log-table .admin-log-expanded-row > td { display: block; }
+    .admin-page .admin-log-expanded-row .log-detail-list { grid-template-columns: max-content minmax(0, 1fr); }
+    .admin-page .admin-log-instance-heading .admin-log-row-actions { margin-left: 0; }
+}
 
 .admin-page .admin-log-table td:nth-child(3) {
     text-align: center;

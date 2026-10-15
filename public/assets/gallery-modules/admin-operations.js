@@ -37,7 +37,7 @@ export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260925-gallery-scope-fix-v1';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
-export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20260810-admin-log-scaling-v1';
+export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20261015-compact-log-export-v4';
 export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260902-mutation-stage3-v1';
