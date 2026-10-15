@@ -31,6 +31,11 @@ namespace Gallery\Core {
      * @return string Fixture token.
      */
     function csrf_token(): string { return 'tree-fixture'; }
+    /** Format supplied fixture bytes without reading storage.
+     * @param int $bytes Prepared nonnegative byte count.
+     * @return string Deterministic byte label for PHP/AJAX presentation parity.
+     */
+    function format_bytes(int $bytes): string { return $bytes . ' B'; }
     /** Preserve canonical public path structure without configuration reads.
      * @param array<string,mixed> $gallery Prepared row.
      * @return string Synthetic public URL.
@@ -44,7 +49,11 @@ namespace Gallery\Services {
      * @param array<string,string|int> $parameters Optional interpolation values.
      * @return string Localized fixture label or English fallback.
      */
-    function t(string $key, string $fallback = '', array $parameters = []): string { return $GLOBALS['cache_region_fixture_labels'][$key] ?? $fallback; }
+    function t(string $key, string $fallback = '', array $parameters = []): string {
+        $text = $GLOBALS['cache_region_fixture_labels'][$key] ?? $fallback;
+        foreach ($parameters as $name => $value) $text = str_replace('{' . $name . '}', (string) $value, $text);
+        return $text;
+    }
 }
 namespace {
     require_once dirname(__DIR__, 2) . '/app/views/admin_ui.php';
@@ -62,6 +71,18 @@ namespace {
             $GLOBALS['cache_region_fixture_labels'] = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
             echo '<section id="cache-regions-' . $language . '" lang="' . $language . '">';
             \Gallery\Views\view_render_admin_dashboard_cache_regions($regions);
+            echo '</section>';
+            echo '<section id="cache-status-' . $language . '">';
+            \Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card(['registry'=>true,'scheduled'=>true,'phase'=>'preview',
+                'measurement_available'=>true,'bytes'=>858993459200,'bytes_removed'=>1073741824,'removed'=>12345,
+                'pending_bytes'=>0,'pending_candidates'=>0,'partial'=>true,'legacy_measurement'=>true,
+                'worker_state'=>'partial','next_due'=>1700000120,'last_attempt_at'=>1700000090,'snapshot_at'=>1700000090,'last_progress_at'=>1700000060,
+                'regions_completed'=>14,'regions_total'=>15,'regions_working'=>2,'regions_unverified'=>1,
+                'unverified_paths'=>[['path'=>'zips/<img src=x onerror=alert(1)>','reason'=>'directory_catalog_density']],
+                'policies'=>['fixture'=>['seconds'=>604800,'label'=>'Download ZIPs'],'empty'=>['seconds'=>null,'label'=>'Empty'],'unknown'=>['seconds'=>null,'label'=>'Unknown']],
+                'totals'=>['fixture'=>['bytes'=>1000,'reclaimable_bytes'=>250],'empty'=>['bytes'=>0,'reclaimable_bytes'=>0]],
+                'operation'=>['id'=>'fixture-manual','phase'=>'inventory','files'=>42,'bytes'=>2048,'partial'=>true],
+                'regions_sample'=>$regions]);
             echo '</section>';
         }
         exit;

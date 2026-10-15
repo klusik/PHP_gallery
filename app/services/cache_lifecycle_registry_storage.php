@@ -20,7 +20,7 @@ require_once dirname(__DIR__) . '/models/cache_lifecycle_registry.php';
  * @phpstan-type CacheLifecycleFrame array{path:string,offset:int,catalog:string,catalog_ok:bool,catalog_attempts:int,bytes:int,files:int,dirs:int,newest:int,pinned:bool,unsafe:bool}
  * @phpstan-type CacheLifecycleCheckpoint array{schema?:int,id?:string,phase?:string,started_at?:int,completed_at?:int,scheduled?:bool,observation_round?:int,stack?:list<CacheLifecycleFrame>,totals?:array<string,CacheRegistryOwnerTotals>,errors?:int,blocked?:int|bool,candidates?:int,candidate_bytes?:int,plan_offset?:int,plan_write_offset?:int,current?:array{target:string,next_offset:int,bytes:int,removed_before:int,workspace_age:string,workspace_path:string}|null,cursor?:list<string>,removed?:int,bytes_removed?:int,last_removed_at?:int,skipped?:int|bool,settled_bytes?:int,settled_candidates?:int,last_manual_at?:int,last_observed_at?:int,metadata_bytes?:int,queue_index_ready?:bool,cleanup_blocked?:bool,last_error?:string,last_skip_reason?:string,superseded_manual_id?:string,superseded_manual_at?:int,next_due?:int,turn?:string,sample?:list<array{path:string,owner:string,bytes:int}>,offset?:int,catalog_ready?:bool,region_count?:int,ok?:bool,busy?:bool,reason?:string,registry?:bool,registry_progressed?:bool,region_key?:string,pending?:bool,slice_observations?:int}
  * @phpstan-type CacheRegistryRegionEvidence array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}
- * @phpstan-type CacheRegistrySummary array{id:string,phase:string,scheduled:bool,registry:bool,measurement_available:bool,totals:array<string,CacheRegistryOwnerTotals>,regions_total:int,regions_completed:int,regions_working:int,regions_unverified:int,oldest_completed_at:int,last_observed_at:int,pending_bytes:int,pending_candidates:int,removed:int,bytes_removed:int,last_removed_at:int,errors:int,blocked:int,sample:list<array{path:string,owner:string,bytes:int}>,next_due:int,complete:bool,partial:bool,working_bytes:int,regions_sample:list<CacheRegistryRegionEvidence>,legacy_measurement:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int}
+ * @phpstan-type CacheRegistrySummary array{id:string,phase:string,scheduled:bool,registry:bool,measurement_available:bool,totals:array<string,CacheRegistryOwnerTotals>,regions_total:int,regions_completed:int,regions_working:int,regions_unverified:int,oldest_completed_at:int,last_observed_at:int,pending_bytes:int,pending_candidates:int,removed:int,bytes_removed:int,last_removed_at:int,errors:int,blocked:int,sample:list<array{path:string,owner:string,bytes:int}>,next_due:int,complete:bool,partial:bool,working_bytes:int,regions_sample:list<CacheRegistryRegionEvidence>,unverified_paths:list<array{path:string,reason:string}>,legacy_measurement:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int}
  */
 
 /**
@@ -152,6 +152,7 @@ function cache_lifecycle_registry_store(array $state): void
         'removed'=>(int) ($state['removed'] ?? 0),'bytes_removed'=>(int) ($state['bytes_removed'] ?? 0),
         'errors'=>(int) ($state['errors'] ?? 0),'blocked'=>(int) ($state['blocked'] ?? 0),
         'round'=>(int) ($state['observation_round'] ?? 1),
+        'last_error'=>(string) ($state['last_error'] ?? ''),
         'cursor_path'=>(string) ($state['stack'][count($state['stack'] ?? []) - 1]['path'] ?? ''),
         'cursor_offset'=>(int) ($state['stack'][count($state['stack'] ?? []) - 1]['offset'] ?? $state['offset'] ?? 0),'sample'=>$state['sample'] ?? [],
     ];
@@ -196,7 +197,8 @@ function cache_lifecycle_registry_summary(): array
     $result = ['id'=>'registry','phase'=>'idle','scheduled'=>true,'registry'=>true,'totals'=>[],'measurement_available'=>false,'regions_total'=>0,
         'regions_completed'=>0,'regions_working'=>0,'regions_unverified'=>0,'oldest_completed_at'=>0,'last_observed_at'=>0,
         'pending_bytes'=>0,'pending_candidates'=>0,'removed'=>0,'bytes_removed'=>0,'last_removed_at'=>0,
-        'errors'=>0,'blocked'=>0,'sample'=>[],'next_due'=>0,'complete'=>false,'partial'=>true,'working_bytes'=>0,'regions_sample'=>[]];
+        'errors'=>0,'blocked'=>0,'sample'=>[],'next_due'=>0,'complete'=>false,'partial'=>true,'working_bytes'=>0,'regions_sample'=>[],
+        'unverified_paths'=>[]];
     $discoveryComplete = false;
     $discoveryWorking = false;
     $legacy = [];
@@ -213,6 +215,12 @@ function cache_lifecycle_registry_summary(): array
         // Exception paths preserve the checkpoint verbatim and record indexed failures.
         $result['errors'] += max((int) ($finding['errors'] ?? 0), (int) $row['failures'] > 0 ? 1 : 0);
         $result['blocked'] += (int) ($finding['blocked'] ?? 0);
+        if ((empty($completed['coverage_complete']) && $row['kind'] !== 'discovery'
+            || !empty($finding['partial']) || (int) $row['failures'] > 0) && count($result['unverified_paths']) < CACHE_LIFECYCLE_PREVIEW_SAMPLES) {
+            $reason = (string) ($finding['last_error'] ?? '');
+            $result['unverified_paths'][] = ['path'=>$row['relative_path'],
+                'reason'=>preg_match('/^[a-z0-9_]*$/D', $reason) === 1 ? $reason : 'cache_registry_region_unverified'];
+        }
         if ($row['kind'] === 'discovery' && count($result['regions_sample']) >= CACHE_LIFECYCLE_PREVIEW_SAMPLES) array_pop($result['regions_sample']);
         if (count($result['regions_sample']) < CACHE_LIFECYCLE_PREVIEW_SAMPLES) $result['regions_sample'][] = [
             'path'=>$row['relative_path'],'phase'=>$finding['phase'] ?? 'unobserved','round'=>(int) ($finding['round'] ?? 0),

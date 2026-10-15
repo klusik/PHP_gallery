@@ -34,32 +34,37 @@ function cache_lifecycle_visitor_run(bool $detached, bool $chained = false): arr
         clearstatcache(true, $directory . '/visitor-attempt');
         if (is_file($directory . '/visitor-attempt') && cache_lifecycle_now() - (int) filemtime($directory . '/visitor-attempt') < CACHE_LIFECYCLE_REFRESH_SECONDS) return ['ok'=>true,'skipped'=>true,'reason'=>'cache_visitor_throttled'];
         if (!@touch($directory . '/visitor-attempt', cache_lifecycle_now())) return ['ok'=>false,'blocked'=>true,'reason'=>'cache_visitor_checkpoint_unavailable'];
-        if (!flock($foreground, LOCK_EX | LOCK_NB)) {
-            cache_lifecycle_scheduler_deferred('public_visit', 'foreground_requests_active');
-            return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'foreground_requests_active'];
+        $foregroundLimited = !flock($foreground, LOCK_EX | LOCK_NB);
+        if ($foregroundLimited) {
+            $record = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/scheduler.json'));
+            $lastProgress = (int) ($record['last_progress_at'] ?? 0) ?: (int) ($record['first_attempt_at'] ?? cache_lifecycle_now());
+            if (!$chained || cache_lifecycle_now() - $lastProgress < CACHE_LIFECYCLE_HEALTH_SECONDS) {
+                cache_lifecycle_scheduler_deferred($chained ? 'cache_chain' : 'public_visit', 'foreground_requests_active');
+                return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'foreground_requests_active'];
+            }
         }
         if (is_array(\Gallery\Models\maintenance_center_model_mutation_owner(true))) {
-            cache_lifecycle_scheduler_deferred('public_visit', 'central_maintenance_active');
+            cache_lifecycle_scheduler_deferred($chained ? 'cache_chain' : 'public_visit', 'central_maintenance_active');
             return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'central_maintenance_active'];
         }
         cache_lifecycle_assert_path($directory . '/worker.lock');
         $siteLock = @fopen($directory . '/worker.lock', 'c');
         try {
             if (!is_resource($siteLock) || !flock($siteLock, LOCK_EX | LOCK_NB)) {
-                cache_lifecycle_scheduler_deferred('public_visit', 'maintenance_already_running');
+                cache_lifecycle_scheduler_deferred($chained ? 'cache_chain' : 'public_visit', 'maintenance_already_running');
                 return ['ok'=>true,'busy'=>true,'skipped'=>true,'reason'=>'maintenance_already_running'];
             }
             $state = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
             $pending = max(0, (int) ($state['candidate_bytes'] ?? 0) - (int) ($state['settled_bytes'] ?? 0));
             // Bound worker occupancy independently of payload bytes.
             // Type: float. Units: seconds. Scope: one automatic invocation.
-            // Consumers: canonical burst deadline. Rationale: independent workers get five seconds; direct visits retain 600/120 ms after response finishing or 40 ms otherwise. Blocking OS calls can overrun admission.
-            $seconds = $chained ? (float) CACHE_LIFECYCLE_CHAIN_WORK_SECONDS : (!$detached ? 0.04 : ($pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 0.60 : 0.12));
+            // Consumers: canonical burst deadline. Rationale: independent workers get five seconds; after ninety seconds without progress a foreground-contended chain gets only forty milliseconds. Direct visits retain 600/120 ms after response finishing or forty ms otherwise; blocking I/O can overrun admission.
+            $seconds = $foregroundLimited ? 0.04 : ($chained ? (float) CACHE_LIFECYCLE_CHAIN_WORK_SECONDS : (!$detached ? 0.04 : ($pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 0.60 : 0.12)));
             // Cap admissions even on a very fast filesystem.
             // Type: int. Units: slices. Scope: one automatic invocation.
-            // Consumers: canonical burst loop. Rationale: independent workers retain the canonical thirty-two-slice cap; direct small visits get eight and large/fallback visits two.
-            $slices = $chained ? CACHE_LIFECYCLE_RUN_SLICES : ($detached && $pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 8 : 2);
-            return cache_lifecycle_scheduled_burst($seconds, $chained ? 'cache_chain' : 'public_visit', $slices);
+            // Consumers: canonical burst loop. Rationale: independent workers retain thirty-two slices, but the starved foreground fallback gets at most one within its deadline. Direct small visits get eight and large/fallback visits two.
+            $slices = $foregroundLimited ? 1 : ($chained ? CACHE_LIFECYCLE_RUN_SLICES : ($detached && $pending <= CACHE_LIFECYCLE_SMALL_BYTES ? 8 : 2));
+            return cache_lifecycle_scheduled_burst($seconds, $chained ? 'cache_chain' : 'public_visit', $slices, null, $foregroundLimited);
         } finally {
             if (is_resource($siteLock)) { flock($siteLock, LOCK_UN); fclose($siteLock); }
         }

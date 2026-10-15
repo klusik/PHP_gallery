@@ -50,10 +50,13 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
     $stat = @lstat($path);
     if (!is_array($stat) || is_file($path . '/.keep')
         || (int) $stat['mtime'] !== $record['root_mtime'] || (int) $stat['ctime'] !== $record['root_ctime']) return false;
-    $proof = cache_lifecycle_read_json(cache_lifecycle_path($record['proof']));
-    if ($proof === [] || !hash_equals($record['proof_hash'], hash('sha256', json_encode($proof, JSON_THROW_ON_ERROR)))) return false;
+    $flat = in_array($record['owner'], ['downloads','partials'], true) && $record['proof'] === $record['path'];
+    $archive = $record['owner'] === 'updates' && $record['proof'] === $record['path'];
+    $proof = $flat ? cache_lifecycle_flat_download_proof($record['path'])
+        : ($archive ? cache_lifecycle_update_archive_proof($record['path']) : cache_lifecycle_read_json(cache_lifecycle_path($record['proof'])));
+    if ($proof === [] || $proof === null || !hash_equals($record['proof_hash'], hash('sha256', json_encode($proof, JSON_THROW_ON_ERROR)))) return false;
     $counts = ['bytes'=>$record['bytes'],'files'=>$record['files'],'dirs'=>0,'newest'=>$record['newest'],'pinned'=>false,'unsafe'=>false];
-    $singleFile = in_array($record['owner'], ['github','drafts','downloads'], true);
+    $singleFile = $flat || $archive || in_array($record['owner'], ['github','drafts','downloads'], true);
     if (($singleFile ? cache_lifecycle_file_candidate($record['path'], cache_lifecycle_now())
         : cache_lifecycle_directory_candidate($record['path'], $counts, cache_lifecycle_now())) !== $record['owner']) return false;
     $control = cache_lifecycle_control_directory();
@@ -62,7 +65,7 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
     $leasePath = cache_lifecycle_lease_path($record['path']);
     $lease = @fopen($leasePath, 'c');
     if ($lease === false) { $reason = 'producer_lease_unavailable'; return false; }
-    $startLock = $workerLock = $downloadLease = $legacyLease = null;
+    $startLock = $workerLock = $downloadLease = $legacyLease = $flatLease = null;
     try {
         if (!flock($lease, LOCK_EX | LOCK_NB)) { $reason = 'producer_lease_busy'; return false; }
         // Preserve an in-flight lease from an earlier live checkout of this
@@ -74,23 +77,43 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
             $legacyLease = @fopen($legacyPath, 'rb');
             if (!is_resource($legacyLease) || !flock($legacyLease, LOCK_EX | LOCK_NB)) return false;
         }
-        if ($record['owner'] === 'downloads') {
+        if ($flat) {
+            $identity = cache_lifecycle_flat_download_identity($record['path']);
+            $base = $identity['base'];
+            if (file_exists(cache_lifecycle_path($base . '.keep'))) return false;
+            $baseLeasePath = cache_lifecycle_lease_path($base);
+            if ($baseLeasePath !== $leasePath) {
+                $flatLease = @fopen($baseLeasePath, 'c');
+                if (!is_resource($flatLease) || !flock($flatLease, LOCK_EX | LOCK_NB)) { $reason = 'download_lease_busy_or_unavailable'; return false; }
+            }
+            $lock = cache_lifecycle_path($base . '.lock');
+            if (is_file($lock)) {
+                $downloadLease = @fopen($lock, 'rb');
+                if (!is_resource($downloadLease) || !flock($downloadLease, LOCK_EX | LOCK_NB)) { $reason = 'download_lease_busy_or_unavailable'; return false; }
+            }
+            if (cache_lifecycle_file_candidate($record['path'], cache_lifecycle_now()) !== $record['owner']) return false;
+        } elseif ($record['owner'] === 'downloads') {
             $downloadLease = @fopen(cache_lifecycle_path(dirname($record['path']) . '/artifact.lock'), 'rb');
             if (!is_resource($downloadLease) || !flock($downloadLease, LOCK_EX | LOCK_NB)) { $reason = 'download_lease_busy_or_unavailable'; return false; }
         }
         if ($record['owner'] === 'updates') {
             $startLock = @fopen(cache_lifecycle_path('updates/start.lock'), 'c');
             if (!is_resource($startLock) || !flock($startLock, LOCK_EX | LOCK_NB)) { $reason = 'updater_start_busy_or_unavailable'; return false; }
-            $workerLock = @fopen(cache_lifecycle_path($record['path'] . '/worker.lock'), 'c');
-            if (!is_resource($workerLock) || !flock($workerLock, LOCK_EX | LOCK_NB)) { $reason = 'updater_worker_busy_or_unavailable'; return false; }
-            if (!cache_lifecycle_update_disposable(basename($record['path']))) return false;
+            if ($archive) {
+                if (!cache_lifecycle_update_archive_disposable($record['path'])) return false;
+            } else {
+                $workerLock = @fopen(cache_lifecycle_path($record['path'] . '/worker.lock'), 'c');
+                if (!is_resource($workerLock) || !flock($workerLock, LOCK_EX | LOCK_NB)) { $reason = 'updater_worker_busy_or_unavailable'; return false; }
+                if (!cache_lifecycle_update_disposable(basename($record['path']))) return false;
+            }
         }
         clearstatcache(true, $path);
         if (is_file($path . '/.keep') || ($singleFile ? !is_file($path) : !is_dir($path))) return false;
         $stat = @lstat($path);
         if (!is_array($stat) || (int) $stat['mtime'] !== $record['root_mtime'] || (int) $stat['ctime'] !== $record['root_ctime']) return false;
         if ($record['owner'] === 'workspaces') cache_lifecycle_workspace_observe($record['path']);
-        $proof = cache_lifecycle_read_json(cache_lifecycle_path($record['proof']));
+        $proof = $flat ? cache_lifecycle_flat_download_proof($record['path'])
+            : ($archive ? cache_lifecycle_update_archive_proof($record['path']) : cache_lifecycle_read_json(cache_lifecycle_path($record['proof'])));
         if (!hash_equals($record['proof_hash'], hash('sha256', json_encode($proof, JSON_THROW_ON_ERROR)))) return false;
         if (!is_dir(dirname($destination))) mkdir(dirname($destination), 0775, true);
         // Windows cannot rename a directory with an open child lock. Completed/
@@ -101,7 +124,7 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
         $reason = $moved ? '' : 'candidate_detach_failed';
         return $moved;
     } finally {
-        foreach ([$workerLock, $startLock, $downloadLease, $legacyLease] as $handle) {
+        foreach ([$workerLock, $startLock, $downloadLease, $legacyLease, $flatLease] as $handle) {
             if (is_resource($handle)) { flock($handle, LOCK_UN); fclose($handle); }
         }
         flock($lease, LOCK_UN);
@@ -218,16 +241,18 @@ function cache_lifecycle_cleanup_slice(string $expectedId = '', float $maxSecond
  * @param bool $force Whether an explicit maintainer call bypasses the thirty-second throttle.
  * @param string $burstId Exact cycle admitted by the bounded runner; only matching unfinished work may continue inside that invocation.
  * @param float $maxSeconds Combined retirement/payload admission seconds; each inner owner remains capped independently.
- * @return array<string,mixed> Actual lifecycle state/summary or a safe throttle/busy marker; scheduling remains independent of thumbnail work.
+ * @param list<string> $continuations Already admitted unfinished region keys in fair turn order; retry and completed-region due dates remain enforced.
+ * @param float $catalogDeadline Absolute microtime deadline admitted by the background burst, zero for the normal slice deadline.
+ * @return CacheLifecycleCheckpoint Actual lifecycle state or safe throttle/busy marker; scheduling remains independent of thumbnail work.
  */
-function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = '', float $maxSeconds = CACHE_LIFECYCLE_COMBINED_SECONDS): array
+function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = '', float $maxSeconds = CACHE_LIFECYCLE_COMBINED_SECONDS, array $continuations = [], float $catalogDeadline = 0.0): array
 {
     if (!feature_capability_effective_enabled('automatic_cache_cleanup')) return ['ok'=>true,'skipped'=>true,'reason'=>'automatic_cache_cleanup_disabled'];
     $deadline = microtime(true) + max(0.02, min(CACHE_LIFECYCLE_COMBINED_SECONDS, $maxSeconds));
     $state = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
     if (cache_lifecycle_registry_enabled() && ($state === [] || ($state['phase'] ?? '') === 'complete')) {
         cache_lifecycle_registry_initialize($state);
-        return cache_lifecycle_registry_slice($maxSeconds, $force);
+        return cache_lifecycle_registry_slice($maxSeconds, $force, $continuations, $catalogDeadline);
     }
     if (($state['phase'] ?? '') === 'complete') {
         // A completed deployed checkpoint may retain the former hourly marker.
@@ -298,7 +323,7 @@ function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = 
     if (($state['phase'] ?? '') === 'inventory') {
         if ((!empty($state['current']) || (int) $state['plan_offset'] < (int) $state['plan_write_offset']) && ($state['turn'] ?? 'scan') === 'cleanup') {
             $state = cache_lifecycle_cleanup_slice('', $remaining);
-        } else $state = cache_lifecycle_inventory_slice('', $remaining);
+        } else $state = cache_lifecycle_inventory_slice('', $remaining, CACHE_LIFECYCLE_SLICE_ENTRIES, $catalogDeadline);
     }
     elseif (($state['phase'] ?? '') === 'preview') $state = cache_lifecycle_cleanup_start((string) $state['id']);
     elseif (($state['phase'] ?? '') === 'cleanup') $state = cache_lifecycle_cleanup_slice('', $remaining);
@@ -345,7 +370,7 @@ function cache_lifecycle_retired_slice(float $maxSeconds = CACHE_LIFECYCLE_SLICE
  */
 function cache_lifecycle_scheduler_deferred(string $source, string $reason): array
 {
-    return cache_lifecycle_with_lock(static function () use ($source, $reason): array {
+    $result = cache_lifecycle_with_lock(static function () use ($source, $reason): array {
         $path = cache_lifecycle_control_directory() . '/scheduler.json';
         $record = cache_lifecycle_read_json($path);
         if ((int) ($record['last_attempt_at'] ?? 0) < cache_lifecycle_now()) $record['previous_attempt_at'] = (int) ($record['last_attempt_at'] ?? 0);
@@ -358,6 +383,8 @@ function cache_lifecycle_scheduler_deferred(string $source, string $reason): arr
         cache_lifecycle_write_json($path, $record);
         return ['ok'=>true];
     });
+    if (!empty($result['ok'])) cache_lifecycle_log_activity(['phase'=>'deferred'], false, $reason);
+    return $result;
 }
 
 /**
@@ -408,17 +435,18 @@ function cache_lifecycle_checkpoint_capacity(?callable $probe = null): array
  * @param string $source External caller source normalized before persistence.
  * @param int $maxSlices Maximum slices requested by the admitted caller; the canonical upper bound always remains enforced.
  * @param callable(string):(int|float|false)|null $freeSpaceProbe Optional hosting capacity provider; ordinary visitors/cron use native discovery, and disposable fixtures can reproduce known-low or unavailable measurements.
+ * @param bool $foregroundLimited Whether a starved autonomous caller admits only its single forty-millisecond fallback slice despite foreground activity.
  * @return CacheLifecycleCheckpoint|array{ok:bool,blocked?:bool,busy?:bool,skipped?:bool,reason?:string,exception_class?:string,slices?:int,elapsed_ms?:int,done?:bool,progressed?:bool,id?:string,free_space_known?:bool,free_bytes?:int|null} Lifecycle checkpoint or safe admission/failure marker. Admitted results add actual slice/timing/progress and capacity evidence; early lock refusals never imply work and unknown capacity is not a measured reserve.
  */
-function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES, ?callable $freeSpaceProbe = null): array
+function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES, ?callable $freeSpaceProbe = null, bool $foregroundLimited = false): array
 {
     // Bound request admission while preserving each owner's shorter I/O slice.
     // Type: float. Units: seconds. Scope: one external or visitor cache invocation.
     // Consumers: burst deadline. Rationale: external work is at most five seconds; visitors use shorter 40-600 ms admission and never extend the parent's execution time.
-    $budget = max(0.04, min((float) CACHE_LIFECYCLE_CHAIN_WORK_SECONDS, $seconds));
+    $budget = $foregroundLimited ? 0.04 : max(0.04, min((float) CACHE_LIFECYCLE_CHAIN_WORK_SECONDS, $seconds));
     $started = microtime(true);
     $deadline = $started + $budget;
-    $maxSlices = max(1, min(CACHE_LIFECYCLE_RUN_SLICES, $maxSlices));
+    $maxSlices = $foregroundLimited ? 1 : max(1, min(CACHE_LIFECYCLE_RUN_SLICES, $maxSlices));
     $source = in_array($source, ['cli_cron','web_cron','windows_task','public_visit','cache_chain'], true) ? $source : 'scheduled';
     $visitor = $source === 'public_visit';
     $signalPath = cache_lifecycle_path('site-maintenance/visitor-signal');
@@ -449,6 +477,7 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
     $result = ['ok'=>true,'skipped'=>true,'reason'=>'cache_lifecycle_not_due'];
     $slices = 0;
     $registryProgressed = false;
+    $continuations = [];
     $id = '';
     $capacity = ['known'=>false,'bytes'=>null,'admitted'=>true];
     try {
@@ -460,7 +489,7 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
             $result = ['ok'=>false,'blocked'=>true,'reason'=>'cache_checkpoint_space_unavailable'];
         } else {
             while ($slices < $maxSlices && microtime(true) + 0.02 < $deadline) {
-                if ($foregroundAware && @file_get_contents($signalPath, false, null, 0, 64) !== $signal) {
+                if ($foregroundAware && (!$foregroundLimited || $slices > 0) && @file_get_contents($signalPath, false, null, 0, 64) !== $signal) {
                     $result = ['ok'=>true,'skipped'=>true,'reason'=>'foreground_request_arrived'];
                     break;
                 }
@@ -474,11 +503,17 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
                     break;
                 }
                 $remaining = $deadline - microtime(true);
-                $result = cache_lifecycle_scheduled_slice(false, $id, min($visitor ? 0.06 : CACHE_LIFECYCLE_COMBINED_SECONDS, $remaining));
+                $result = cache_lifecycle_scheduled_slice(false, $id, min($visitor ? 0.06 : CACHE_LIFECYCLE_COMBINED_SECONDS, $remaining),
+                    $continuations, $visitor || $foregroundLimited ? 0.0 : min($deadline, microtime(true) + CACHE_LIFECYCLE_CATALOG_SECONDS));
                 $slices++;
                 if (!empty($result['registry'])) {
                     $registryProgressed = $registryProgressed || !empty($result['registry_progressed']);
                     if (empty($result['ok']) || !empty($result['skipped'])) break;
+                    $key = (string) ($result['region_key'] ?? '');
+                    if ($key !== '') {
+                        $continuations = array_values(array_filter($continuations, static fn(string $prior): bool => $prior !== $key));
+                        $continuations[] = $key;
+                    }
                     continue;
                 }
                 if (empty($result['ok']) || !empty($result['busy']) || ($result['skipped'] ?? false) === true
@@ -539,5 +574,6 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
     $after = cache_lifecycle_registry_enabled() && !empty($before['registry'])
         ? cache_lifecycle_registry_summary() : cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
     cache_lifecycle_log_reclamation($before, $after);
+    cache_lifecycle_log_activity($after, $result['progressed'], (string) ($result['reason'] ?? ''));
     return $result;
 }

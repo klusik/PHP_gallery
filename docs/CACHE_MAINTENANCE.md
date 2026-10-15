@@ -15,16 +15,85 @@ Issue: [#212](https://github.com/klusik/PHP_gallery/issues/212).
 
 ## Persistent rotating regions
 
-The automatic cache worker uses a persistent rotating registry in `cache_lifecycle_regions`. One row owns each safe top-level managed directory, plus fixed discovery, root-file and receipt identities; there is no row per file or per check. The model owns SQL and the migration owns schema. The service owns producer policy, paths, discovery and scheduling. Indexed due/retry times select the oldest due work; each committed partial slice yields for thirty seconds, completed healthy regions wait one hour, and failed regions back off for fifteen minutes. Last service and last successful completed check remain separate.
+The automatic cache worker uses a persistent rotating registry in `cache_lifecycle_regions`. One row owns each safe top-level managed directory, plus fixed discovery, root-file and receipt identities; there is no row per file or per check. The model owns SQL and the migration owns schema. The service owns producer policy, paths, discovery and scheduling. Indexed due/retry times select the oldest due work; partial work waits thirty seconds between worker opportunities, while already admitted unfinished regions can fairly reuse the remaining bounded burst after all independently due areas have had their turn; completed healthy regions wait one hour, and failed regions back off for fifteen minutes. Last service and last successful completed check remain separate.
 
 DB checkpoints are the only authority for regional stacks, catalog offsets, plan write/read fences and detached deletion cursors. Private filesystem journals hold catalog names, queued proof records and detached payloads. They do not contain a second independently updated checkpoint. A restart resumes the existing cursor; incomplete inventory never returns to its beginning merely because another opportunity arrived. Existing JSON manual/upgrade work is drained in its original location before registry initialization, including detached payloads; unreadable state blocks. The historical worker API remains for standalone database-free consumers and explicit manual previews. Retire this compatibility only after deployed unfinished legacy jobs and those consumers are migrated; usage is unknown.
 
-Discovery runs as another rotating task with a durable root catalog. New directories update/insert stable SHA-256 path identities; root files share one bounded region. A complete readable discovery may mark a drained missing region absent; a partial/unreadable catalog cannot prove absence. Seven-day drained tombstones and their private journals are retired in bounded batches. The 4096-name catalog limit and 4099-row bound include three reserved identities; capacity overflow is visible and preserves unseen content. Reused paths receive fresh producer validation, never inherited deletion authority.
+Discovery runs as another rotating task with a durable root catalog. New directories update/insert stable SHA-256 path identities; root files share one bounded region. A complete readable discovery may mark a drained missing region absent; a partial/unreadable catalog cannot prove absence. Seven-day drained tombstones and their private journals are retired in bounded batches. Root discovery retains its 4096-name catalog limit; the 4099-row registry bound includes three reserved identities; capacity overflow is visible and preserves unseen content. Reused paths receive fresh producer validation, never inherited deletion authority.
 
 Passive Admin evidence retains the last completed regional measurements during later partial work and labels them as historical, with coverage and the oldest completion time. Smaller completed measurements replace larger ones directly; historical bytes are never reduced mechanically by deletion counters. Working observations, known pending debt and installation-wide confirmed removal receipts remain separate. Receipt updates and the deletion checkpoint commit share a DB transaction; filesystem deletion itself does not. Existing deterministic trash names and write fences recover a crash before/after detachment. A crash after unlink before checkpoint commit can conservatively undercount bytes, without double counting or granting permission to a replacement payload. OFF preserves all state. Status reads perform no filesystem scan and never create rows.
 
 
 The regional sample uses compact localized rows: area, stored phase with failed attempts, last successful completed check, and the later of its scheduled/retry times. Native technical details retain the relative identity, observation round, last service, both scheduling dates, failure count and saved cursor. All regional dates use explicit UTC; missing completion is not success. A cursor is a stored position, never a completion percentage. The existing API sample is not complete regional coverage. PHP and AJAX share one localized row template; refresh preserves open row details, the Admin panel and URL. Reading this presentation remains passive.
+
+
+The main card shows only worker state, recorded size, confirmed cumulative removal,
+verified queue and a compact waiting bar. Keyboard/touch-accessible question-mark
+help holds coverage, timestamps, receipt scope and incomplete-size explanations;
+the existing disclosure retains operational and regional details. The bar measures
+elapsed waiting time until the next queued autonomous worker arrival, falling back
+to regional scheduling when idle; the oldest regional due time is labeled separately
+in details. It never represents cursor/scan completion. Unknown
+waiting bounds stay indeterminate; overdue work is labelled due, not completed.
+A local monotonic timer redraws it four times per second without network traffic.
+An authenticated passive `admin_dashboard_fragment&surface=cache` GET refreshes
+visible evidence every fifteen seconds or on **Refresh status**; it neither scans
+nor starts/approves work. Shared PHP markup supplies initial and refreshed metrics,
+and open help/details, forms, panel and URL survive replacement. Failed reads
+retain the snapshot and require an explicit status retry. A manual operation's
+current counters are separately exposed as `operation`; regional measurements
+and lifetime receipts keep their existing meaning in the outer summary and logs
+use the current operation instead of repeating retained totals.
+
+A short opportunity may spend its admission budget before starting a slice; a
+later opportunity resumes the durable checkpoint without inventing progress.
+
+The manual operation line and its localized incomplete-check marker stay outside
+collapsed details. CSS alone switches the
+busy outline icon to a spinner, with reduced-motion support; a refused request
+retains its visible error until explicit status recovery. Search, cleanup and
+refresh share one icon row with localized accessible names and tooltips. Help is
+split into labeled measurement, receipt, queue, coverage and safety sections.
+Operational details use labeled UTC fields. Each 2 px owner bar represents that
+owner's measured eligible bytes divided by recorded bytes, clamped for display;
+zero or unknown pools have no filled share. It changes no measurement or queue.
+Maintenance subtab choices use the allowlisted `maintenance_tab` query, including
+the primary tab href, keyboard and history navigation. Reload aligns the explicit
+Maintenance anchor once after load and deferred content; passive polling never
+scrolls or changes the URL.
+
+### Historical ZIP and update archives
+
+The historical flat `cache/zips` producer is explicitly recognized: `gallery-`,
+`smart-gallery-`, `selected-` plus numeric owner and 40/64-hex signature, or `all-`
+plus signature. A native name alone is insufficient: a regular guarded file must
+have a ZIP local header and a completed archive must have a readable nonempty ZIP
+central directory. No archive is extracted or its payload read to measure it.
+Completed archives expire after **seven days** from payload mtime; chmod/ctime,
+reads and directory permission repairs do not renew that lifetime. The existing
+metadata-backed producer uses the later of its creation timestamp and payload
+mtime, with ctime still retained as a replacement guard during detachment.
+Native `.partial-<16 hex>` and libzip `.<6 alphanumeric>[.part]` temporary outputs
+need their ZIP local header, six hours of payload inactivity and the same base
+identity's exclusive lease. Unknown names, malformed complete ZIPs, pins and
+unsafe paths stay protected. libzip's native temporary suffix is documented in
+its [upstream writer](https://github.com/nih-at/libzip/blob/main/lib/zip_source_file_stdio_named.c).
+Download construction holds a shared base lease through publication; HTTP output
+holds it through streaming. Reclamation revalidates proof and physical identity
+under the exclusive lease and any existing Smart Gallery publication lock.
+
+Historical updater ZIPs (`beta-`, `update-`, `stable-restore-`, `rollback-`, and
+`backups/before-beta-`/`before-update-`, each with the original timestamp format)
+need a readable native Gallery source snapshot containing the original bootstrap
+version and required entry points. Current installed code remains outside cache.
+Keep at most two historical copies in the ordinary case, counting the latest
+successful job's rollback and a selected legacy beta backup before spare newest
+verified archives. Active jobs, selected recovery references, pins, unreadable
+state and unknown exports retain their independent protection. Root/backups name
+discovery is limited to 4096 matching archives and 180 ms; selecting retained
+copies probes at most sixteen newest archives. Incomplete selection preserves
+all candidates. This is contextual retention, not age-only backup deletion.
+Unversioned/unknown legacy extraction trees still require separate owner proof.
 
 
 Passive lifecycle storage and producer leases remain separate from inventory
@@ -231,7 +300,7 @@ delegated forms, progress regions and in-place diagnostic controls.
 | GitHub response JSON | 24 hours since the verified cached response timestamp, matching URL/key/response shape; writers hold a shared producer lease. |
 | SimBrief preview drafts | Existing 30-minute expiry plus 60-second grace, matching draft shape. Oversized/unproven JSON is preserved by the bounded proof reader. |
 | Download manifests and partials | Existing owners: physical manifests one day, smart manifests fifteen minutes, inactive managed build partials six hours. Existing build/reservation/serving policies remain authoritative. |
-| Updater work | Contextual, **no TTL**. Retain the latest successful job's rollback (the previous installed version), active jobs, rollback source and selected beta recovery references. Only older verified completed/cancelled job payloads are eligible. Failed/running/unreadable state and legacy unversioned backups/extractions are preserved. |
+| Updater work | Contextual, **no TTL**. Retain the latest successful job's rollback (the previous installed version), active jobs, rollback source and selected beta recovery references. Only older verified completed/cancelled job payloads are eligible. Failed/running/unreadable state and unknown/unversioned backups or extractions are preserved. Verified historical ZIP snapshots use the bounded two-copy recovery window described above. |
 | Upload resume state, originals, themes/branding, Gallery Trash, selected assets, unknown exports | Protected; no blanket age expiry. Derivatives use their existing source/version owners. |
 
 The current installed application and the last successful job's rollback represent
@@ -283,8 +352,11 @@ module's own storage part. Explicit CLI/HTTP worker calls load the lifecycle
 owner; passive display never advances a slice.
 Inventory admits at most 5000 observations and 180 ms per slice; physical deletion
 admits 180 observations/attempts and 180 ms. Blocking filesystem calls can overrun
-admission. Each directory catalog retains at most 4096 names; a late deadline can
-retry at most three bounded catalog attempts. Dense, persistently slow/unreadable
+admission. Private directory catalogs stream at most 262144 names with a 64 KiB
+buffer and the existing 64 MiB metadata allowance. Root discovery remains capped
+at 4096 names. Background catalogs may borrow at most one second from the existing
+five-second burst; direct visitor/foreground fallback slices retain their short
+deadlines. Late catalogs retry at most three bounded attempts. Over-limit, persistently slow/unreadable
 or deeper-than-64 directories are explicitly **partial/blocked**, preserved and
 not included in measured byte totals. No successful partial scan is described as
 an exact complete cache inventory. Ordinary runtime does not run the diagnostic
@@ -414,7 +486,7 @@ A newly discovered large queue lowers the current burst's deadline and slice cap
 A few-file approximately 100 MB cache can finish in one small burst. Many tiny
 files still obey operation budgets and resume across visits. Each visitor slice
 has at most 60 ms combined admission, 5000 inventory observations, a complete
-catalog of at most 4096 names, and at most 180 deletion observations/attempts.
+streamed catalog bounded independently by names/bytes/deadline, and at most 180 deletion observations/attempts.
 Catalog admission reserves its bounded operation allowance instead of labeling
 an ordinary directory unsafe merely because the current slice ran out of work.
 Retired journals get a separate <= 180-operation sub-slice inside that deadline.
@@ -426,8 +498,10 @@ admission deadlines: these are not hard response-latency or allocator guarantees
 Finishing the response still holds a PHP worker. A global 30-second visitor
 throttle, nonblocking shared scheduler/site/lifecycle locks and durable checkpoints
 limit occupancy. Foreground visits hold shared leases during rendering and never
-wait for the cleanup lock. A burst refuses existing foreground activity and yields
-between slices when a new arrival changes its bounded signal. This cannot observe
+wait for the cleanup lock. Ordinary visits refuse existing foreground activity; an autonomous chain with
+no progress for ninety seconds can admit exactly at most one forty-millisecond slice
+while retaining central ownership, scheduler/site locks and all producer guards.
+Otherwise a burst yields between slices when a new arrival changes its signal. This cannot observe
 requests still queued in the hosting worker pool; short deadlines are essential
 on a small pool. Without response finishing the short shutdown work may add to
 the triggering client's latency. No execution-time extension is requested.
@@ -574,7 +648,7 @@ are reclaimed in short slices alongside ongoing work; a new completed cycle
 waits for old journal debt to drain, preventing indefinite accumulation. Keep at
 least 80 MiB available for metadata/control headroom, plus normal producer writes
 and filesystem inode headroom. This is a planning reserve, not a disk quota.
-Directories above 4096 names, depth 64, unreadable paths or metadata budget
+Directories above 262144 names (4096 for root discovery), depth 64, unreadable paths or metadata budget
 exhaustion are explicitly partial and preserved; inspect these boundaries before
 claiming complete coverage of a large production installation. With insufficient
 space, free separately approved storage first; the worker never deletes unproven
@@ -589,3 +663,13 @@ requires exact-candidate hosted FULL. Target filesystem throughput, scheduler
 configuration and production before/after sizes remain deployment checks.
 
 Workspace age records now bind their fixed anchor to the current producer marker and filesystem device/inode identity. An unbound historical age record is re-anchored conservatively, and changed identity is revalidated under the exclusive deletion lease before detachment. This protects a replacement at the same path from inheriting expiry. Producer-free legacy workspace usage is unknown; retain the conservative path while supported legacy roots remain.
+
+Automatic `cache.automatic_status` events report committed scan progress or a safe
+deferral at most once per five minutes. Their bounded enum/counter context omits
+paths, credentials, tickets and raw errors; confirmed deletion remains the separate
+`cache.automatic_reclaimed` receipt. Idle healthy checks add no log noise. Local
+fixtures cover a 4097-entry protected region across bounded opportunities,
+continuation within a burst, foreground starvation, genuine legacy ZIP/update
+archives, permission changes without TTL renewal, active leases and actual removal.
+Production confirmation still needs an independently measured before/after size;
+this source change alone does not close incident #212.

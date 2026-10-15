@@ -304,11 +304,11 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     $trashProblemCount = (int) ($trashSummary['problem_count'] ?? 0);
 
     $maintenanceSubtabs = [
-        ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display')],
-        ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
-        ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata')],
+        ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display'), 'icon' => 'settings'],
+        ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'icon' => 'galleries', 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
+        ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata'), 'icon' => 'navigation'],
         ['id' => 'admin-maintenance-trash', 'label' => t('admin.trash.title', 'Trash'), 'icon' => 'trash', 'badge' => $trashCount > 0 ? (string) $trashCount : ($trashProblemCount > 0 ? t('admin.dashboard.badge_action', 'Action') : null)],
-        ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
+        ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'icon' => 'integrity', 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
     view_render_admin_tab_intro([
@@ -535,66 +535,192 @@ function view_render_admin_dashboard_cache_region_row(array $region, array $labe
 }
 
 /**
+ * Render readable scheduler times and coverage from already supplied evidence.
+ * @param array{last_attempt_at?:int,last_progress_at?:int,last_removed_at?:int,oldest_completed_at?:int,next_due?:int,regions_completed?:int,regions_total?:int,regions_working?:int,scheduler_health?:string,scheduler_reason?:string,registry_unavailable?:bool} $status Passive scheduler and regional findings, with absent timestamps left unknown.
+ * @return void Emits compact labelled rows with UTC dates and localized status/reason names; raw safe enums remain available in code labels.
+ */
+function view_render_admin_dashboard_cache_timing(array $status): void
+{
+    $missing = t('admin.cache_lifecycle.region.missing', 'Not recorded');
+    $fields = [
+        ['field'=>'last_attempt_at','label'=>t('admin.cache_lifecycle.timing.attempt', 'Last worker arrival')],
+        ['field'=>'last_progress_at','label'=>t('admin.cache_lifecycle.overview.progress', 'Last worker progress')],
+        ['field'=>'next_due','label'=>t('admin.cache_lifecycle.timing.oldest_due', 'Oldest regional due time')],
+        ['field'=>'oldest_completed_at','label'=>t('admin.cache_lifecycle.overview.oldest', 'Oldest completed check')],
+        ['field'=>'last_removed_at','label'=>t('admin.cache_lifecycle.timing.removed', 'Last confirmed deletion')],
+    ];
+    $healthLabels = [
+        'arrivals_observed'=>t('admin.cache_lifecycle.timing.arrivals', 'Recent worker arrivals'),
+        'single_arrival'=>t('admin.cache_lifecycle.timing.single', 'One worker arrival'),
+        'missing'=>t('admin.cache_lifecycle.overview.worker_missing', 'Worker not observed'), 'unobserved'=>$missing,
+    ];
+    $reasonLabels = [
+        'cache_lifecycle_not_due'=>t('admin.cache_lifecycle.timing.not_due', 'Waiting for due work'),
+        'manual_cache_preview_pending'=>t('admin.cache_lifecycle.timing.manual', 'Manual preview awaits review'),
+        'foreground_requests_active'=>t('admin.cache_lifecycle.timing.foreground', 'Giving priority to visitors'),
+        'foreground_request_arrived'=>t('admin.cache_lifecycle.timing.foreground', 'Giving priority to visitors'),
+        'automatic_cache_cleanup_disabled'=>t('admin.cache_lifecycle.overview.worker_disabled', 'Automatic cleanup is OFF'),
+        'central_maintenance_active'=>t('admin.cache_lifecycle.timing.maintenance', 'Maintenance owns the worker'),
+        'maintenance_already_running'=>t('admin.cache_lifecycle.timing.maintenance', 'Maintenance owns the worker'),
+    ];
+    echo '<dl class="admin-cache-timing" data-cache-timing>';
+    foreach ([['field'=>'scheduler_health','label'=>t('admin.cache_lifecycle.timing.scheduler', 'Scheduler'),'labels'=>$healthLabels],
+        ['field'=>'scheduler_reason','label'=>t('admin.cache_lifecycle.timing.reason', 'Current reason'),'labels'=>$reasonLabels]] as $item) {
+        $value = (string) ($status[$item['field']] ?? '');
+        echo '<div><dt>' . e($item['label']) . '</dt><dd data-cache-status-field="' . e($item['field']) . '" data-cache-status-format="enum" data-missing="'
+            . e($missing) . '" data-cache-status-labels="' . e(json_encode($item['labels'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) . '"><span>'
+            . e($item['labels'][$value] ?? $missing) . '</span> <code>' . e($value) . '</code></dd></div>';
+    }
+    foreach ($fields as $item) {
+        echo '<div><dt>' . e($item['label']) . '</dt><dd data-cache-status-field="' . e($item['field']) . '" data-cache-status-format="time" data-missing="'
+            . e($missing) . '">' . view_admin_dashboard_cache_region_timestamp((int) ($status[$item['field']] ?? 0), $missing) . '</dd></div>';
+    }
+    echo '<div><dt>' . e(t('admin.cache_lifecycle.timing.coverage', 'Completed areas')) . '</dt><dd><span data-cache-status-field="regions_completed">'
+        . e((string) ($status['regions_completed'] ?? 0)) . '</span> / <span data-cache-status-field="regions_total">' . e((string) ($status['regions_total'] ?? 0))
+        . '</span></dd></div><div><dt>' . e(t('admin.cache_lifecycle.timing.working', 'Working areas')) . '</dt><dd data-cache-status-field="regions_working">'
+        . e((string) ($status['regions_working'] ?? 0)) . '</dd></div></dl>';
+    if (!empty($status['registry_unavailable'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.unverified',
+        'Registry evidence is unavailable. This is not an empty or successfully checked cache.')) . '</p>';
+}
+
+/**
+ * Format current manual-operation progress independently of retained regional totals.
+ * @param array{phase?:string,files?:int,bytes?:int,partial?:bool} $operation Current manual cycle's prepared phase and actual observed counters.
+ * @return string Localized plain text for escaped HTML or a JSON text-content sink; no historical or lifetime counters are substituted.
+ */
+function view_admin_dashboard_cache_operation_label(array $operation): string
+{
+    $phase = (string) ($operation['phase'] ?? 'inventory');
+    $fallback = match ($phase) {
+        'preview' => 'Scan ready for review', 'cleanup' => 'Manual cleanup', 'complete' => 'Manual cycle finished', default => 'Manual scan',
+    };
+    return t('admin.cache_lifecycle.operation.progress', '{phase} · {files} files · {bytes}',
+        ['phase'=>t('admin.cache_lifecycle.operation.' . $phase, $fallback),
+            'files'=>(string) ($operation['files'] ?? 0),'bytes'=>format_bytes((int) ($operation['bytes'] ?? 0))])
+        . (!empty($operation['partial']) ? ' · ' . t('admin.cache_lifecycle.operation.partial', 'Incomplete check') : '');
+}
+
+/**
+ * Render recorded cache size, confirmed lifetime receipts and worker health from passive evidence.
+ * @param array{measurement_available?:bool,bytes?:int,bytes_removed?:int,removed?:int,pending_bytes?:int,pending_candidates?:int,last_removed_at?:int,snapshot_at?:int,last_attempt_at?:int,next_due?:int,chain_health?:string,chain_next_start_at?:int,chain_arrival_at?:int,last_progress_at?:int,oldest_completed_at?:int,registry?:bool,regions_completed?:int,regions_total?:int,partial?:bool,legacy_measurement?:bool,worker_state?:string,regions_unverified?:int,regions_working?:int,unverified_paths?:list<array{path:string,reason:string}>} $status Prepared observations and cumulative receipts; missing evidence never means a measured zero.
+ * @return void Emits compact localized totals, explicit incomplete-size warnings and safe relative problem paths.
+ */
+function view_render_admin_dashboard_cache_overview(array $status): void
+{
+    $missing = t('admin.cache_lifecycle.region.missing', 'Not recorded');
+    $worker = (string) ($status['worker_state'] ?? 'missing');
+    $workerLabels = ['disabled'=>'Automatic cleanup is OFF', 'unavailable'=>'Status unavailable',
+        'missing'=>'No recent automatic worker arrival', 'stalled'=>'Worker arriving without recent progress',
+        'partial'=>'Working with incomplete coverage', 'working'=>'Checking or cleaning', 'waiting'=>'Waiting for the next regional check'];
+    $now = (int) ($status['snapshot_at'] ?? 0);
+    $regionalDue = (int) ($status['next_due'] ?? 0);
+    $chainDue = (int) ($status['chain_next_start_at'] ?? 0);
+    $chainAvailable = in_array((string) ($status['chain_health'] ?? ''), ['queued','waiting'], true);
+    $inProgress = (int) ($status['regions_working'] ?? 0) > 0 || $worker === 'working';
+    $due = $chainAvailable && $chainDue > $now ? $chainDue : ($inProgress ? 0 : $regionalDue);
+    $from = $chainAvailable ? (int) ($status['chain_arrival_at'] ?? 0) : (int) ($status['last_attempt_at'] ?? 0);
+    $waitLabel = $chainAvailable ? t('admin.cache_lifecycle.overview.next_worker', 'Next worker check') : t('admin.cache_lifecycle.overview.next', 'Next check');
+    $seconds = max(0, $due - $now);
+    $wait = $due <= 0 && $inProgress ? t('admin.cache_lifecycle.operation.working', 'Working…') : ($due <= 0 || $now <= 0 ? $missing : ($seconds === 0 ? t('admin.cache_lifecycle.overview.due', 'Due') : intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT)));
+    $dueTitle = $due > 0 ? gmdate('Y-m-d H:i:s', $due) . ' UTC' : $missing;
+    echo '<div data-cache-overview><div class="admin-cache-worker-row"><strong data-cache-worker-state="' . e($worker) . '">'
+        . '<span class="admin-cache-idle-label">' . e(t('admin.cache_lifecycle.overview.worker_' . $worker, $workerLabels[$worker] ?? $missing))
+        . '</span><span class="admin-cache-busy-label">' . e(t('admin.cache_lifecycle.operation.working', 'Working…')) . '</span></strong>'
+        . '<details class="admin-cache-help" data-cache-help><summary aria-label="' . e(t('admin.cache_lifecycle.overview.help', 'Cache status help')) . '">?</summary><div>';
+    echo '<section><h3>' . e(t('admin.cache_lifecycle.overview.size', 'Recorded cache payload')) . '</h3><p>' . e(!empty($status['partial']) ? t('admin.cache_lifecycle.overview.incomplete', 'Whole-cache size is unknown: some areas are not fully measured.')
+        : t('admin.cache_lifecycle.overview.recorded', 'Last-known regional observations; live journals excluded.')) . '</p><p>'
+        . e(t('admin.cache_lifecycle.overview.oldest', 'Oldest completed check')) . ': '
+        . view_admin_dashboard_cache_region_timestamp((int) ($status['oldest_completed_at'] ?? 0), $missing) . '</p></section><section><h3>'
+        . e(t('admin.cache_lifecycle.overview.removed', 'Confirmed cumulative removal')) . '</h3><p>'
+        . e(t('admin.cache_lifecycle.overview.receipts', 'Persisted removal receipts; older releases may be absent.')) . ' '
+        . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', ['count'=>(string) ($status['removed'] ?? 0)])) . ' · '
+        . view_admin_dashboard_cache_region_timestamp((int) ($status['last_removed_at'] ?? 0), $missing) . '</p></section><section><h3>'
+        . e(t('admin.cache_lifecycle.overview.pending', 'Verified cleanup queue')) . '</h3><p>'
+        . e(t('admin.cache_lifecycle.overview.queue_hint', 'An empty queue does not prove that all cache areas were checked.')) . ' '
+        . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', ['count'=>(string) ($status['pending_candidates'] ?? 0)])) . '</p><p>'
+        . e(t('admin.cache_lifecycle.overview.progress', 'Last worker progress')) . ': '
+        . view_admin_dashboard_cache_region_timestamp((int) ($status['last_progress_at'] ?? 0), $missing) . '</p></section><section><h3>'
+        . e(t('admin.cache_lifecycle.overview.help_coverage', 'Coverage and timing')) . '</h3>';
+    if (!empty($status['legacy_measurement'])) echo '<p>' . e(t('admin.cache_lifecycle.overview.legacy',
+        'The displayed size is a retained whole-cache snapshot while regional coverage is incomplete.')) . '</p>';
+    if (!empty($status['unverified_paths'])) {
+        echo '<details data-cache-unverified><summary>' . e(t('admin.cache_lifecycle.overview.unverified', 'Areas needing a complete check (sample)')) . '</summary><ul>';
+        foreach ($status['unverified_paths'] as $area) {
+            echo '<li><code>' . e($area['path']) . '</code> · ' . e(t('admin.cache_lifecycle.overview.reason_' . $area['reason'],
+                $area['reason'] !== '' ? $area['reason'] : $missing)) . '</li>';
+        }
+        echo '</ul></details>';
+    }
+    echo '<p>' . e(t('admin.cache_lifecycle.overview.coverage', 'Completed areas: {done}/{total}; working: {working}.',
+        ['done'=>(string) ($status['regions_completed'] ?? 0),'total'=>(string) ($status['regions_total'] ?? 0),'working'=>(string) ($status['regions_working'] ?? 0)])) . '</p>';
+    echo '<p>' . e(t('admin.cache_lifecycle.overview.updated', 'Status read')) . ': '
+        . view_admin_dashboard_cache_region_timestamp($now, $missing) . '</p><p>'
+        . e(t('admin.cache_lifecycle.overview.wait_help', 'The bar measures elapsed waiting time until the scheduled check, not scan completion. Due work can wait for worker admission.')) . '</p><p>'
+        . e(t('admin.cache_lifecycle.automatic')) . '</p></section><section><h3>' . e(t('admin.cache_lifecycle.overview.help_safety', 'What can be removed'))
+        . '</h3><p>' . e(t('admin.cache_lifecycle.scope')) . '</p><p>'
+        . e(t('admin.cache_lifecycle.overview.owner_bar', 'Each owner bar shows measured eligible bytes as a share of its recorded size; it is not scan progress or the current queue.')) . '</p></section></div></details></div>';
+    echo '<dl class="admin-cache-overview-grid" data-cache-metrics><div><dt>' . e(t('admin.cache_lifecycle.overview.size', 'Recorded cache payload')) . '</dt><dd><strong>'
+        . e(!empty($status['measurement_available']) ? format_bytes((int) ($status['bytes'] ?? 0)) : $missing) . '</strong></dd></div><div><dt>'
+        . e(!empty($status['registry']) ? t('admin.cache_lifecycle.overview.removed', 'Confirmed cumulative removal') : t('admin.cache_lifecycle.overview.cycle_removed', 'Confirmed removal in this cycle'))
+        . '</dt><dd><strong>' . e(format_bytes((int) ($status['bytes_removed'] ?? 0))) . '</strong></dd></div><div><dt>'
+        . e(t('admin.cache_lifecycle.overview.pending', 'Verified cleanup queue')) . '</dt><dd><strong>'
+        . e(format_bytes((int) ($status['pending_bytes'] ?? 0))) . '</strong></dd></div></dl>';
+    echo '<div class="admin-cache-wait"><span>' . e($waitLabel) . '</span><progress max="100"'
+        . ($due > 0 && $now > 0 && ($due <= $now || $from > 0 && $due > $from) ? ' value="' . e((string) ($due <= $now ? 100 : ($due > $from && $from > 0 ? round(max(0, min(100, 100 * ($now - $from) / ($due - $from))), 2) : 0))) . '"' : '')
+        . ' data-cache-wait data-start="' . e((string) $from) . '" data-due="' . e((string) $due) . '" data-observed="' . e((string) $now)
+        . '" data-due-label="' . e(t('admin.cache_lifecycle.overview.due', 'Due')) . '" aria-label="' . e(t('admin.cache_lifecycle.overview.next', 'Next check'))
+        . '" aria-valuetext="' . e($dueTitle) . '" title="' . e($dueTitle) . '"' . ($worker === 'disabled' ? ' hidden' : '') . '></progress><span data-cache-wait-label title="'
+        . e($dueTitle) . '">' . e($worker === 'disabled' ? '—' : $wait) . '</span></div></div>';
+
+}
+
+/**
  * Render measured cache ownership and explicit preview/approval controls from prepared state.
- * @param array{id?:string,phase?:string,scheduled?:bool,registry?:bool,registry_unavailable?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,regions_completed?:int,regions_total?:int,regions_working?:int,oldest_completed_at?:int,last_removed_at?:int,measurement_available?:bool,bytes?:int,pending_bytes?:int,bytes_removed?:int,partial?:bool,scheduler_health?:string,last_attempt_at?:int,last_progress_at?:int,last_observed_at?:int,next_due?:int,scheduler_reason?:string,stale?:bool,stalled?:bool,superseded_manual_at?:int,policies?:array<string,array{seconds?:int|null,reason?:string,label?:string}>,totals?:array<string,array{bytes?:int,reclaimable_bytes?:int}>,sample?:list<array{path:string,bytes:int}>} $status Prepared passive lifecycle evidence and retention labels; omitted measurements remain unknown.
+ * @param array{id?:string,phase?:string,scheduled?:bool,registry?:bool,registry_unavailable?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,snapshot_at?:int,worker_state?:string,removed?:int,pending_candidates?:int,regions_unverified?:int,legacy_measurement?:bool,unverified_paths?:list<array{path:string,reason:string}>,regions_completed?:int,regions_total?:int,regions_working?:int,oldest_completed_at?:int,last_removed_at?:int,measurement_available?:bool,bytes?:int,pending_bytes?:int,bytes_removed?:int,partial?:bool,scheduler_health?:string,last_attempt_at?:int,last_progress_at?:int,last_observed_at?:int,next_due?:int,scheduler_reason?:string,stale?:bool,stalled?:bool,superseded_manual_at?:int,operation?:array{phase?:string,files?:int,bytes?:int,partial?:bool},policies?:array<string,array{seconds?:int|null,reason?:string,label?:string}>,totals?:array<string,array{bytes?:int,reclaimable_bytes?:int}>,sample?:list<array{path:string,bytes:int}>} $status Prepared passive lifecycle evidence and retention labels; omitted measurements remain unknown.
  * @return void Emits one compact control row and status line; operational evidence and producer policies stay in native details without domain service calls.
  */
 function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
 {
     $phase = (string) ($status['phase'] ?? 'idle');
-    $epoch = static fn (int $value): string => $value > 0 ? gmdate('Y-m-d H:i:s\Z', $value) : '—';
-    echo '<section class="admin-maintenance-card admin-cache-lifecycle" data-admin-cache-lifecycle data-admin-cache-cleanup><div class="admin-cache-cleanup-header"><h2>'
-        . e(t('admin.cache_lifecycle.title', 'Cache inventory and retention')) . '</h2><form method="post" action="' . e(url_for('admin_site_maintenance_settings'))
+    echo '<section class="admin-maintenance-card admin-cache-lifecycle" data-admin-cache-lifecycle data-admin-cache-cleanup data-cache-status-url="'
+        . e(url_for('admin_dashboard_fragment', ['surface'=>'cache'])) . '"><div class="admin-cache-cleanup-header"><h2>'
+        . e(t('admin.cache_lifecycle.title', 'Cache inventory and retention')) . '</h2><div class="admin-cache-actions"><form method="post" action="' . e(url_for('admin_site_maintenance_settings'))
         . '" data-cache-lifecycle-form>' . csrf_field() . '<input type="hidden" name="preview_id" value="' . e((string) ($status['id'] ?? '')) . '">';
     foreach (['cache_inventory_start'=>['Scan cache', !in_array($phase, ['inventory','cleanup'], true)],
         'cache_inventory_step'=>['Continue scan', $phase === 'inventory'],
         'cache_cleanup_start'=>['Clean eligible cache', $phase === 'preview'],
         'cache_cleanup_step'=>['Continue cleanup', $phase === 'cleanup']] as $action => [$label, $visible]) {
         if (!empty($status['registry']) && !empty($status['scheduled'])) $visible = $action === 'cache_inventory_start';
-        echo '<button type="submit" class="secondary" name="site_maintenance_action" value="' . e($action) . '"' . ($visible ? '' : ' hidden') . '>'
-            . e(t('admin.cache_lifecycle.' . $action, $label)) . '</button> ';
+        $actionLabel = t('admin.cache_lifecycle.' . $action, $label);
+        echo '<button type="submit" class="secondary admin-cache-action-icon" name="site_maintenance_action" value="' . e($action)
+            . '" aria-label="' . e($actionLabel) . '" title="' . e($actionLabel) . '"' . ($visible ? '' : ' hidden') . '>'
+            . '<span class="admin-cache-idle-label" aria-hidden="true">' . view_admin_menu_icon(str_starts_with($action, 'cache_inventory') ? 'search' : 'clean') . '</span><span class="admin-cache-busy-label visually-hidden">'
+            . e(str_starts_with($action, 'cache_inventory') ? t('admin.cache_lifecycle.operation.scanning', 'Scanning…') : t('admin.cache_lifecycle.operation.cleaning', 'Cleaning…')) . '</span></button> ';
     }
-    echo '</form></div>';
-    if (!empty($status['registry'])) {
-        $registryTemplate = t('admin.cache_lifecycle.registry',
-            'Last-known observations, not current size. Completed regions: {done}/{total}; working: {working}; oldest completed: {oldest}; last confirmed deletion: {removed}.');
-        echo '<p class="muted" data-cache-registry-evidence data-cache-registry-template="' . e($registryTemplate) . '">' . e(t('admin.cache_lifecycle.registry',
-            'Last-known observations, not current size. Completed regions: {done}/{total}; working: {working}; oldest completed: {oldest}; last confirmed deletion: {removed}.',
-            ['done'=>(string) ($status['regions_completed'] ?? 0),'total'=>(string) ($status['regions_total'] ?? 0),
-                'working'=>(string) ($status['regions_working'] ?? 0),'oldest'=>$epoch((int) ($status['oldest_completed_at'] ?? 0)),
-                'removed'=>$epoch((int) ($status['last_removed_at'] ?? 0))])) . '</p>';
-    }
-    if (!empty($status['registry_unavailable'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.unverified',
-        'Registry evidence is unavailable. This is not an empty or successfully checked cache.')) . '</p>';
-    echo '<p role="status" data-cache-lifecycle-status>' . e(t('admin.cache_lifecycle.initial', 'Phase: {phase}. Observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
-        ['phase'=>$phase,'bytes'=>!empty($status['measurement_available']) ? format_bytes((int) ($status['bytes'] ?? 0)) : '—', 'eligible'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
-            'reclaimed'=>format_bytes((int) ($status['bytes_removed'] ?? 0))]))
-        . (!empty($status['partial']) ? ' ' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) : '')
-        . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
-        . e(t('admin.cache_lifecycle.progress_label', 'Cache action progress')) . '" style="width:100%;height:4px"></progress>'
-        . '<details class="admin-media-details"><summary>' . e(t('admin.cache_lifecycle.policies', 'Sizes and retention by owner'))
-        . ' · <span data-cache-scheduler-summary>' . e(t('admin.cache_lifecycle.scheduler_short', 'Scheduler: {health}', ['health'=>(string) ($status['scheduler_health'] ?? 'unobserved')]))
-        . '</span></summary><p class="muted" data-cache-scheduler-status>' . e(t('admin.cache_lifecycle.scheduler',
-            'Scheduler: {health}; last attempt {attempt}; last progress {progress}; observed {observed}; next due {due}; pending {pending}; reason {reason}.',
-            ['health'=>(string) ($status['scheduler_health'] ?? 'unobserved'),
-                'attempt'=>$epoch((int) ($status['last_attempt_at'] ?? 0)),'progress'=>$epoch((int) ($status['last_progress_at'] ?? 0)),
-                'observed'=>$epoch((int) ($status['last_observed_at'] ?? 0)),'due'=>$epoch((int) ($status['next_due'] ?? 0)),
-                'pending'=>format_bytes((int) ($status['pending_bytes'] ?? 0)),
-                'reason'=>(string) ($status['scheduler_reason'] ?? '')]))
-        . (!empty($status['stale']) ? ' ' . e(t('admin.cache_lifecycle.stale', 'Observation is stale or absent.')) : '')
-        . (!empty($status['stalled']) ? ' ' . e(t('admin.cache_lifecycle.stalled', 'No recent successful progress.')) : '')
-        . (!empty($status['superseded_manual_at']) ? ' ' . e(t('admin.cache_lifecycle.superseded', 'An idle manual preview was replaced; its old ID is invalid.')) : '')
-        . '</p><p class="muted">' . e(t('admin.cache_lifecycle.automatic', 'Automatic cleanup is enabled after installation/update. A suitable visit starts a server worker that continues without an open browser, checking every 30 seconds in batches of up to 5 seconds. Failures are shown above; a later visit can recover an interrupted chain. Explicit OFF in Admin Features survives updates.')) . '</p><p class="muted">'
-        . e(t('admin.cache_lifecycle.scope', 'Only verified expired producer data and obsolete terminal update work are eligible. Originals, active leases, recovery references, .keep pins and unknown entries are preserved. Measurements exclude live inventory journals.'))
-        . '</p><table><thead><tr><th>' . e(t('admin.cache_lifecycle.owner', 'Owner')) . '</th><th>' . e(t('admin.cache_lifecycle.lifetime', 'Lifetime'))
+    echo '</form><button type="button" class="secondary admin-cache-refresh-icon" data-cache-status-refresh aria-label="'
+        . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status')) . '" title="' . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status'))
+        . '">' . view_admin_menu_icon('update') . '</button></div></div><span role="status" data-cache-status-feedback data-failed-label="'
+        . e(t('admin.cache_lifecycle.overview.refresh_failed', 'Status refresh failed. Use Refresh status to retry.')) . '"></span>';
+    view_render_admin_dashboard_cache_overview($status);
+    $operation = $status['operation'] ?? [];
+    echo '<p class="admin-cache-operation-status" role="status" data-cache-lifecycle-status data-working-label="'
+        . e(t('admin.cache_lifecycle.operation.working', 'Working…')) . '"' . ($operation === [] ? ' hidden' : '') . '>'
+        . ($operation !== [] ? e(view_admin_dashboard_cache_operation_label($operation)) : '') . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
+        . e(t('admin.cache_lifecycle.progress_label', 'Cache action progress')) . '" style="width:100%;height:4px"></progress>';
+
+    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_lifecycle.policies', 'Sizes and retention by owner')) . '</summary>';
+    view_render_admin_dashboard_cache_timing($status);
+    echo '<table class="admin-cache-owners"><thead><tr><th scope="col">' . e(t('admin.cache_lifecycle.owner', 'Owner')) . '</th><th>' . e(t('admin.cache_lifecycle.lifetime', 'Lifetime'))
         . '</th><th>' . e(t('admin.cache_lifecycle.observed', 'Observed')) . '</th><th>' . e(t('admin.cache_lifecycle.eligible', 'Eligible')) . '</th></tr></thead><tbody>';
     foreach ((array) ($status['policies'] ?? []) as $owner => $policy) {
         $total = $status['totals'][$owner] ?? [];
         $seconds = $policy['seconds'] ?? null;
         $lifetime = $seconds === null ? t('admin.cache_lifecycle.context', 'Context / owner') : ($seconds >= 86400 ? ($seconds / 86400) . ' d' : ($seconds / 60) . ' min');
+        $observed = max(0, (int) ($total['bytes'] ?? 0));
+        $eligibleShare = $observed > 0 ? round(max(0, min(100, 100 * (int) ($total['reclaimable_bytes'] ?? 0) / $observed)), 2) : 0;
         echo '<tr data-cache-owner="' . e((string) $owner) . '"><td title="' . e((string) ($policy['reason'] ?? '')) . '">' . e((string) ($policy['label'] ?? $owner))
-            . '</td><td>' . e($lifetime) . '</td><td data-cache-owner-bytes>' . (isset($total['bytes']) ? e(format_bytes((int) $total['bytes'])) : '—')
-            . '</td><td data-cache-owner-eligible>' . (isset($total['reclaimable_bytes']) ? e(format_bytes((int) $total['reclaimable_bytes'])) : '—') . '</td></tr>';
+            . '</td><td>' . e($lifetime) . '</td><td colspan="2" class="admin-cache-owner-values"><span data-cache-owner-meter aria-hidden="true" style="--cache-eligible-share:' . e((string) $eligibleShare) . '%"></span><div class="admin-cache-owner-numbers"><span><span class="admin-cache-owner-caption">' . e(t('admin.cache_lifecycle.observed', 'Observed')) . ': </span><span data-cache-owner-bytes>' . (isset($total['bytes']) ? e(format_bytes((int) $total['bytes'])) : '—')
+            . '</span></span><span><span class="admin-cache-owner-caption">' . e(t('admin.cache_lifecycle.eligible', 'Eligible')) . ': </span><span data-cache-owner-eligible>' . (isset($total['reclaimable_bytes']) ? e(format_bytes((int) $total['reclaimable_bytes'])) : '—') . '</span></span></div></td></tr>';
     }
     echo '</tbody></table><p>' . e(t('admin.cache_lifecycle.sample', 'Preview examples (up to 16 candidates; totals above describe the full plan):')) . '</p><ul data-cache-lifecycle-sample>';
     foreach ((array) ($status['sample'] ?? []) as $item) {

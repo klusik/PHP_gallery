@@ -205,7 +205,7 @@ try {
         $chainExit = proc_close($chainChild);
         $chainOutput = file_get_contents($chainLog);
         cli_http_check($chainExit === 0 && is_string($chainOutput)
-            && str_contains($chainOutput, 'Single public kickoff; real authenticated server continuation, partial coverage, immediate reclamation, aggregate logs and OFF: PASS'),
+            && str_contains($chainOutput, 'Single public kickoff; real authenticated server continuation, dense coverage, immediate reclamation, aggregate logs and OFF: PASS'),
             'Hosted autonomous cache HTTP fixture failed: ' . (string) $chainOutput);
         echo $chainOutput;
     }

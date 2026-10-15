@@ -662,7 +662,12 @@ function cms_download_emit_manifest_profile_headers(): void
     }
 }
 
-/** Stream one validated ZIP descriptor at the HTTP boundary. */
+/**
+ * Stream a validated ZIP while retaining its shared cache lease through HTTP output.
+ * @param string $filePath Authorized generated archive path.
+ * @param string $downloadName Download filename selected by the authorized route.
+ * @return never Emits a successful ZIP or error descriptor and exits after releasing any lease.
+ */
 function cms_download_send_zip_file(string $filePath, string $downloadName): never
 {
     $stream = download_stream_descriptor($filePath, $downloadName);
@@ -676,7 +681,9 @@ function cms_download_send_zip_file(string $filePath, string $downloadName): nev
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: attachment; filename="' . addcslashes((string) ($stream['filename'] ?? 'download.zip'), "\"\\") . '"');
     header('Content-Length: ' . (int) ($stream['length'] ?? 0));
-    readfile((string) ($stream['path'] ?? ''));
+    $lease = $stream['lease_handle'] ?? null;
+    try { readfile((string) ($stream['path'] ?? '')); }
+    finally { if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); } }
     exit;
 }
 

@@ -59,7 +59,7 @@ function cache_lifecycle_registry_discover(float $seconds): array
         $deadline = microtime(true) + max(0.01, min(CACHE_LIFECYCLE_SLICE_SECONDS, $seconds));
         $catalogPath = $directory . '/discovery.jsonl';
         if (!$state['catalog_ready']) {
-            $catalog = cache_lifecycle_catalog('', $catalogPath, $deadline);
+            $catalog = cache_lifecycle_catalog('', $catalogPath, $deadline, CACHE_LIFECYCLE_METADATA_BYTES, CACHE_REGISTRY_REGION_LIMIT - 3);
             if (!$catalog['ok']) throw new \RuntimeException('Cache root discovery is incomplete.');
             $state['catalog_ready'] = true;
             cache_lifecycle_registry_store($state);
@@ -137,13 +137,27 @@ function cache_lifecycle_registry_discover(float $seconds): array
  * Run one due region while preserving its independent checkpoint between fair turns.
  * @param float $seconds Combined filesystem admission available to this opportunity.
  * @param bool $force Whether an explicit maintainer call bypasses due timestamps while retaining retry backoff and all deletion guards.
+ * @param list<string> $continuations Region keys already admitted by this burst, oldest turn first; only unfinished, nonfailed work can continue before its next inter-burst date.
+ * @param float $catalogDeadline Absolute microtime deadline admitted by the background burst, zero for the ordinary slice deadline.
  * @return CacheLifecycleCheckpoint Safe inventory/discovery outcome, busy/not-due marker or blocked failure; corrupt state never means an empty cache.
  */
-function cache_lifecycle_registry_slice(float $seconds, bool $force = false): array
+function cache_lifecycle_registry_slice(float $seconds, bool $force = false, array $continuations = [], float $catalogDeadline = 0.0): array
 {
     $retired = cache_lifecycle_retired_slice(min(CACHE_LIFECYCLE_SLICE_SECONDS, $seconds / 4));
     if (empty($retired['ok'])) return $retired;
     $row = \Gallery\Models\cache_registry_model_due(cache_lifecycle_now(), $force);
+    // Serve independently due regions before lending spare burst time to an
+    // admitted unfinished region. Retry and hourly completion dates still win.
+    if ($row === null) foreach ($continuations as $key) {
+        $candidate = \Gallery\Models\cache_registry_model_find($key);
+        if ($candidate === null || (int) $candidate['missing_since'] > 0 || (int) $candidate['failures'] > 0
+            || (int) $candidate['retry_at'] > cache_lifecycle_now()
+            || (int) $candidate['next_due_at'] > cache_lifecycle_now() + CACHE_LIFECYCLE_REFRESH_SECONDS) continue;
+        $checkpoint = cache_lifecycle_registry_decode((string) $candidate['checkpoint_json']);
+        if (!in_array($checkpoint['phase'] ?? '', ['inventory','preview','cleanup'], true)) continue;
+        $row = $candidate;
+        break;
+    }
     if ($row === null) return ['ok'=>true,'skipped'=>true,'registry'=>true,'reason'=>'cache_lifecycle_not_due'];
     $GLOBALS['cache_lifecycle_registry_context'] = $row;
     try {
@@ -157,7 +171,7 @@ function cache_lifecycle_registry_slice(float $seconds, bool $force = false): ar
         if ($state['phase'] === 'inventory') {
             $debt = !empty($state['current']) || (int) $state['plan_offset'] < (int) $state['plan_write_offset'];
             $state = $debt && ($state['turn'] ?? 'scan') === 'cleanup'
-                ? cache_lifecycle_cleanup_slice('', $seconds) : cache_lifecycle_inventory_slice('', $seconds);
+                ? cache_lifecycle_cleanup_slice('', $seconds) : cache_lifecycle_inventory_slice('', $seconds, CACHE_LIFECYCLE_SLICE_ENTRIES, $catalogDeadline);
         } elseif ($state['phase'] === 'preview') $state = cache_lifecycle_cleanup_start((string) $state['id']);
         elseif ($state['phase'] === 'cleanup') $state = cache_lifecycle_cleanup_slice('', $seconds);
         cache_lifecycle_with_lock(static function (): array {

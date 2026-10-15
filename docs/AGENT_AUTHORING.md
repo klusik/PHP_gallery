@@ -69,7 +69,7 @@ For an independent PHP process fixture, list and require the minimal Core and
 service dependencies inside the child bootstrap. A passive cache-status reader
 needs the safe-relative-path policy as well as its storage entry point. Read the
 real child exit code, stderr and serialized persisted evidence; the parent
-process's loaded functions do not establish the child's include contract.
+process's loaded functions do not establish the child's include contract. Keep the parent’s exact success marker synchronized with changed child coverage text.
 
 For resumable work, identify the owner of every counter before initializing it.
 A newly created manual identity starts its own observation round, an existing
@@ -84,11 +84,30 @@ Reuse that setup and assert a real removal before discarding the uncommitted
 cursor. This establishes the intended crash boundary while preserving the
 production worker cap, time budget and suite limits.
 
+For retained cache measurements, keep a current manual operation's counters
+separate from regional last-known observations and lifetime deletion receipts. Keep the current manual incomplete-check marker visible with its counters.
+Pass that distinction through controller messages, diagnostic events and browser
+progress; a repeatedly displayed retained total cannot prove a stuck cursor.
+For historical ZIP expiry, use positive native-format proof and producer/payload
+age. Use ctime to detect replacement at detachment, not to renew TTL after chmod.
+Retain the shared base lease across archive creation, publication and HTTP output.
+
+Pass a named interval constant to each new timer or sleep, including fixtures.
+Document runtime constants
+with explicit `Type:`, `Units:`, `Scope:`, `Consumers:` and `Rationale:` lines
+so both changed-source and whole-tree checks recognize the contract.
+
+Assert short-opportunity caps and durable progress across bounded continuations;
+cover admission exhausting the deadline without requiring a first-attempt slice.
+
+Hold a follow-up passive read while asserting a mutation response in a browser
+fixture; then release it separately to verify refresh without racing snapshots.
+
 For live filters, invalidate active requests at the input event rather than waiting for the debounce. Capture each request URL once, suppress superseded responses before and after JSON parsing, and derive visible history from the committed response. Extend the existing asynchronous fixture with an older response arriving during debounce and an older body completing after a newer empty result.
 
 For browser harness controls such as `/__viewport`, use the captured native `fetch` directly. Keep those controls outside the mock that validates application reads/writes, retaining its strict credential and method assertions. This lets viewport tests reach the owned harness without impersonating a dashboard request.
 
-For reusable formatting in runtime-scanned views, call a named typed presentation helper directly. This lets the compiler resolve the owner without an unreviewed variable-call dependency. An isolated render fixture must explicitly require that view module before calling it.
+For reusable formatting in runtime-scanned views, call a named typed presentation helper directly. This lets the compiler resolve the owner without an unreviewed variable-call dependency. An isolated render fixture must explicitly require that view module before calling it. Remove the retired dynamic-call review entry when replacing its callback.
 
 For runtime-plan ownership, inspect the full historical closure before adding a
 shared dependency edge. Reuse an existing logical owner only when all of its

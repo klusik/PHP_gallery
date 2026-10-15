@@ -232,8 +232,36 @@ function cache_lifecycle_lease_path(string $relative): string
 }
 
 /**
+ * Recognize the native historical flat ZIP and temporary-output namespaces.
+ * @param string $relative Cache-relative payload path.
+ * @return array{base:string,partial:bool}|null Completed archive identity and partial flag, or null outside the exact historical producer formats; this classification alone never permits deletion.
+ */
+function cache_lifecycle_flat_download_identity(string $relative): ?array
+{
+    if (preg_match('#^(zips/(?:(?:gallery|smart-gallery|selected)-[1-9][0-9]*-|all-)(?:[a-f0-9]{40}|[a-f0-9]{64})\.zip)(?:(\.partial-[a-f0-9]{16}|\.[a-zA-Z0-9]{6}(?:\.part)?))?$#D', $relative, $match) !== 1) return null;
+    return ['base'=>$match[1],'partial'=>isset($match[2]) && $match[2] !== ''];
+}
+
+/**
+ * Protect a historical flat ZIP while its existing producer writes or serves it.
+ * @param string $path Absolute archive or native temporary-output path selected by the download owner.
+ * @return resource|null Shared base-identity lease, or null outside the guarded installation cache; throws when reclamation owns that identity.
+ */
+function cache_lifecycle_download_lease(string $path): mixed
+{
+    $prefix = str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
+    $normalized = str_replace('\\', '/', $path);
+    if (!str_starts_with($normalized, $prefix)) return null;
+    $identity = cache_lifecycle_flat_download_identity(substr($normalized, strlen($prefix)));
+    if ($identity === null) return null;
+    $lease = cache_lifecycle_producer_lease($identity['base']);
+    if (!is_resource($lease)) throw new \RuntimeException('Download cache reclamation owns this archive.');
+    return $lease;
+}
+
+/**
  * Return bounded public progress and aggregate category measurements without scanning files.
- * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,chain_health:string,chain_arrival_at:int,chain_next_start_at:int,interrupted:bool,superseded_manual_at:int,measurement_available:bool,registry?:bool,registry_unavailable?:bool,regions_total?:int,regions_completed?:int,regions_working?:int,regions_unverified?:int,oldest_completed_at?:int,last_removed_at?:int,working_bytes?:int,legacy_measurement?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: historical observations differ from pending debt and real progress; chain fields disclose safe arrival/timing evidence but never tickets, URLs or credentials.
+ * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,chain_health:string,chain_arrival_at:int,chain_next_start_at:int,snapshot_at?:int,worker_state?:string,operation?:array{id:string,phase:string,files:int,bytes:int,candidates:int,candidate_bytes:int,pending_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,partial:bool},unverified_paths?:list<array{path:string,reason:string}>,interrupted:bool,superseded_manual_at:int,measurement_available:bool,registry?:bool,registry_unavailable?:bool,regions_total?:int,regions_completed?:int,regions_working?:int,regions_unverified?:int,oldest_completed_at?:int,last_removed_at?:int,working_bytes?:int,legacy_measurement?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: historical observations differ from pending debt and real progress; chain fields disclose safe arrival/timing evidence but never tickets, URLs or credentials.
  */
 function cache_lifecycle_status(): array
 {
@@ -281,6 +309,10 @@ function cache_lifecycle_status(): array
         'superseded_manual_at'=>(int) ($state['superseded_manual_at'] ?? 0),
         'sample'=>array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),
         'policies'=>cache_lifecycle_policies(),'totals'=>$totals,'measurement_available'=>(int) ($state['last_observed_at'] ?? 0) > 0];
+    if (!$scheduled && ($state['id'] ?? '') !== '') {
+        // Keep manual-cycle progress separate from retained regional/lifetime measurements.
+        $summary['operation'] = array_intersect_key($summary, array_flip(['id','phase','files','bytes','candidates','candidate_bytes','pending_bytes','removed','bytes_removed','skipped','errors','blocked','partial']));
+    }
     if (cache_lifecycle_registry_enabled()) {
         try { $registry = cache_lifecycle_registry_summary(); }
         catch (\Throwable) {
@@ -295,6 +327,18 @@ function cache_lifecycle_status(): array
                 || $now - $registry['oldest_completed_at'] > CACHE_REGISTRY_RECHECK_SECONDS;
         }
     }
+    $summary['snapshot_at'] = $now;
+    $summary['stalled'] = empty($summary['registry']) ? $summary['stalled'] : $attempt > 0 && (int) ($summary['regions_working'] ?? 0) > 0
+        && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_HEALTH_SECONDS;
+    $summary['worker_state'] = match (true) {
+        $summary['scheduler_reason'] === 'automatic_cache_cleanup_disabled' => 'disabled',
+        empty($summary['ok']) => 'unavailable',
+        $summary['scheduler_health'] === 'missing' || $summary['scheduler_health'] === 'unobserved' => 'missing',
+        $summary['stalled'] => 'stalled',
+        !empty($summary['partial']) => 'partial',
+        (int) ($summary['regions_working'] ?? 0) > 0 || $summary['phase'] === 'inventory' => 'working',
+        default => 'waiting',
+    };
     return $summary;
 }
 

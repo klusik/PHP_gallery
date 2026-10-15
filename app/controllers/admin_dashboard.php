@@ -158,7 +158,7 @@ function cms_admin_dashboard_fragment(): void
         return;
     }
     $surface = (string) ($_GET['surface'] ?? '');
-    if (!in_array($surface, ['overview', 'galleries'], true)) {
+    if (!in_array($surface, ['overview', 'galleries', 'cache'], true)) {
         http_response_code(400);
         echo json_encode(['ok' => false]);
         return;
@@ -170,6 +170,15 @@ function cms_admin_dashboard_fragment(): void
     }
     $bufferLevel = ob_get_level();
     try {
+        if ($surface === 'cache') {
+            // This surface reads persisted evidence only; it cannot admit a worker.
+            $status = \Gallery\Services\cache_lifecycle_status();
+            ob_start();
+            \Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card($status);
+            echo json_encode(['ok'=>true,'html'=>(string) ob_get_clean(),'cache_lifecycle'=>$status],
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            return;
+        }
         $model = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(false, $surface));
         ob_start();
         if ($surface === 'galleries') {

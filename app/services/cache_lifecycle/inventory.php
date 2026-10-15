@@ -68,53 +68,57 @@ function cache_lifecycle_inventory_start(bool $scheduled = false): array
 }
 
 /**
- * Persist a directory-name catalog once, refusing dense/slow directories rather than replaying their prefix.
+ * Stream a complete bounded directory-name catalog without retaining its names in memory.
  * @param string $relative Guarded cache-relative directory.
  * @param string $destination Private catalog destination under the current work directory.
  * @param float $deadline Admission deadline in microtime(true) seconds.
  * @param int $maxBytes Remaining private metadata allowance in bytes; refused catalogs never consume committed budget.
+ * @param int $maxNames Maximum names admitted for this catalog; discovery retains its narrower root-name bound.
  * @return array{ok:bool,observations:int,reason:string} Complete stable name journal or density/deadline/unreadable refusal; never persists a half-catalog as complete.
  */
-function cache_lifecycle_catalog(string $relative, string $destination, float $deadline, int $maxBytes = CACHE_LIFECYCLE_METADATA_BYTES): array
+function cache_lifecycle_catalog(string $relative, string $destination, float $deadline, int $maxBytes = CACHE_LIFECYCLE_METADATA_BYTES, int $maxNames = CACHE_LIFECYCLE_DIRECTORY_NAMES): array
 {
     cache_lifecycle_assert_path($destination);
     cache_lifecycle_assert_path($destination . '.tmp');
+    $maxNames = max(1, min(CACHE_LIFECYCLE_DIRECTORY_NAMES, $maxNames));
     $handle = @opendir(cache_lifecycle_path($relative));
     if ($handle === false) return ['ok'=>false,'observations'=>0,'reason'=>'unreadable'];
-    $names = [];
+    $stream = @fopen($destination . '.tmp', 'wb');
+    if ($stream === false) { closedir($handle); throw new \RuntimeException('Cache inventory catalog is unavailable.'); }
+    $names = 0;
+    $buffer = '';
     $bytes = 0;
     $ok = false;
     try {
-        while (count($names) <= CACHE_LIFECYCLE_DIRECTORY_NAMES && microtime(true) < $deadline) {
+        while ($names <= $maxNames && microtime(true) < $deadline) {
             $name = readdir($handle);
             if ($name === false) { $ok = true; break; }
             if ($name === '.' || $name === '..') continue;
-            $bytes += strlen(json_encode($name, JSON_THROW_ON_ERROR)) + 1;
-            if ($bytes > $maxBytes) return ['ok'=>false,'observations'=>count($names)+1,'reason'=>'metadata_limit'];
-            $names[] = $name;
+            $names++;
+            $line = json_encode($name, JSON_THROW_ON_ERROR) . "\n";
+            $bytes += strlen($line);
+            if ($bytes > $maxBytes) return ['ok'=>false,'observations'=>$names,'reason'=>'metadata_limit'];
+            $buffer .= $line;
+            if (strlen($buffer) >= CACHE_LIFECYCLE_CATALOG_BUFFER_BYTES) {
+                if (fwrite($stream, $buffer) !== strlen($buffer)) throw new \RuntimeException('Cache inventory catalog write failed.');
+                $buffer = '';
+            }
         }
+        if ($buffer !== '' && fwrite($stream, $buffer) !== strlen($buffer)) throw new \RuntimeException('Cache inventory catalog write failed.');
     } finally {
         closedir($handle);
-    }
-    if (!$ok || count($names) > CACHE_LIFECYCLE_DIRECTORY_NAMES) return ['ok'=>false,'observations'=>count($names),
-        'reason'=>count($names) > CACHE_LIFECYCLE_DIRECTORY_NAMES ? 'density' : 'deadline'];
-    $stream = fopen($destination . '.tmp', 'wb');
-    if ($stream === false) throw new \RuntimeException('Cache inventory catalog is unavailable.');
-    try {
-        foreach ($names as $name) {
-            $line = json_encode($name, JSON_THROW_ON_ERROR) . "\n";
-            if (fwrite($stream, $line) !== strlen($line)) throw new \RuntimeException('Cache inventory catalog write failed.');
-        }
-    } finally {
         fclose($stream);
+        if (!$ok || $names > $maxNames) @unlink($destination . '.tmp');
     }
+    if (!$ok || $names > $maxNames) return ['ok'=>false,'observations'=>$names,
+        'reason'=>$names > $maxNames ? 'density' : 'deadline'];
     if (!rename($destination . '.tmp', $destination)) throw new \RuntimeException('Cache inventory catalog commit failed.');
-    return ['ok'=>true,'observations'=>count($names),'reason'=>''];
+    return ['ok'=>true,'observations'=>$names,'reason'=>''];
 }
 
 /**
  * Append one whole-subtree producer-approved preview without retaining an unbounded candidate list in memory.
- * @param array<string,mixed> $state Current lifecycle schema, updated candidate counts and category reclaimable bytes.
+ * @param CacheLifecycleCheckpoint $state Current lifecycle schema, updated candidate counts and category reclaimable bytes.
  * @param array{path:string,offset:int,catalog:string,catalog_ok:bool,catalog_attempts:int,bytes:int,files:int,dirs:int,newest:int,pinned:bool,unsafe:bool} $frame Fully measured traversal frame.
  * @param string $owner Validated producer policy key.
  * @return void Appends a private plan record with path/owner, measured bytes/files, proof hash and root metadata identity.
@@ -139,10 +143,14 @@ function cache_lifecycle_record_candidate(array &$state, array $frame, string $o
     $proof = in_array($owner, ['github','drafts'], true) ? $frame['path']
         : $frame['path'] . '/' . ($owner === 'ci_diagnostics' ? 'latest.json' : ($owner === 'updates' ? 'job.json' : 'report.json'));
     if ($owner === 'downloads') $proof = dirname($frame['path']) . '/metadata.json';
+    $flat = in_array($owner, ['downloads','partials'], true) && cache_lifecycle_flat_download_identity($frame['path']) !== null;
+    if ($flat) $proof = $frame['path'];
+    if ($owner === 'updates' && is_file(cache_lifecycle_path($frame['path']))) $proof = $frame['path'];
     if ($owner === 'workspaces') $proof = cache_lifecycle_workspace_age_path($frame['path']);
     $record = ['path'=>$frame['path'],'owner'=>$owner,'bytes'=>$frame['bytes'],'files'=>$frame['files'],
         'newest'=>$frame['newest'],'root_mtime'=>(int) $stat['mtime'],'root_ctime'=>(int) $stat['ctime'],
-        'proof'=>$proof,'proof_hash'=>hash('sha256', json_encode(cache_lifecycle_read_json(cache_lifecycle_path($proof)), JSON_THROW_ON_ERROR))];
+        'proof'=>$proof,'proof_hash'=>hash('sha256', json_encode($flat ? cache_lifecycle_flat_download_proof($proof) : ($owner === 'updates' && $proof === $frame['path']
+            ? cache_lifecycle_update_archive_proof($proof) : cache_lifecycle_read_json(cache_lifecycle_path($proof))), JSON_THROW_ON_ERROR))];
     $line = json_encode($record, JSON_THROW_ON_ERROR) . "\n";
     $identityRecord = ['id'=>$state['id'],'offset'=>(int) $state['plan_write_offset']];
     $identityBytes = strlen(json_encode($identityRecord, JSON_THROW_ON_ERROR)) * (count($parents) + 1);
@@ -198,12 +206,13 @@ function cache_lifecycle_queue_contains(string $path, array $state): bool
  * Continue a bounded, non-destructive scan using durable catalog offsets.
  * @param string $expectedId Optional exact scan identity; scheduled calls omit it, browser continuation must match it.
  * @param float $maxSeconds Admission time in seconds, capped by the canonical slice limit; visitor calls lower it.
- * @param int $maxEntries Maximum observations, capped by the canonical slice limit; catalogs reserve their complete bounded name allowance.
- * @return array<string,mixed> Lifecycle state with measured totals, candidate counts and explicit errors/blocked directories; preview phase means traversal ended, not that partial data became exact.
+ * @param int $maxEntries Maximum payload observations, capped by the canonical slice limit; one streamed catalog has its separate bounded name allowance.
+ * @param float $catalogDeadline Absolute microtime deadline admitted by the background burst, zero for the ordinary slice deadline; one catalog remains capped at one second.
+ * @return CacheLifecycleCheckpoint Lifecycle state with actual totals and explicit partial coverage; preview means traversal ended, not that incomplete data became exact.
  */
-function cache_lifecycle_inventory_slice(string $expectedId = '', float $maxSeconds = CACHE_LIFECYCLE_SLICE_SECONDS, int $maxEntries = CACHE_LIFECYCLE_SLICE_ENTRIES): array
+function cache_lifecycle_inventory_slice(string $expectedId = '', float $maxSeconds = CACHE_LIFECYCLE_SLICE_SECONDS, int $maxEntries = CACHE_LIFECYCLE_SLICE_ENTRIES, float $catalogDeadline = 0.0): array
 {
-    return cache_lifecycle_with_lock(static function () use ($expectedId, $maxSeconds, $maxEntries): array {
+    return cache_lifecycle_with_lock(static function () use ($expectedId, $maxSeconds, $maxEntries, $catalogDeadline): array {
         $control = cache_lifecycle_job_directory();
         $state = cache_lifecycle_read_json($control . '/state.json');
         if ($expectedId !== '' && !hash_equals((string) ($state['id'] ?? ''), $expectedId)) return ['ok'=>false,'reason'=>'stale_cache_preview'];
@@ -233,21 +242,23 @@ function cache_lifecycle_inventory_slice(string $expectedId = '', float $maxSeco
         $maxSeconds = max(0.01, min(CACHE_LIFECYCLE_SLICE_SECONDS, $maxSeconds));
         $maxEntries = max(1, min(CACHE_LIFECYCLE_SLICE_ENTRIES, $maxEntries));
         $deadline = microtime(true) + $maxSeconds;
+        $catalogDeadline = $catalogDeadline > 0 ? min($catalogDeadline, microtime(true) + CACHE_LIFECYCLE_CATALOG_SECONDS) : $deadline;
         $observations = 0;
         while ($state['stack'] !== [] && $observations < $maxEntries && microtime(true) < $deadline) {
             $index = count($state['stack']) - 1;
             $frame = $state['stack'][$index];
             try {
                 if ($frame['catalog'] === '') {
-                    // Reserve the entire bounded catalog before starting it. A
-                    // narrow remaining operation budget must not falsely mark a
-                    // directory unsafe or repeatedly replay an admitted prefix.
-                    if ($maxEntries - $observations < CACHE_LIFECYCLE_DIRECTORY_NAMES + 1
-                        || $deadline - microtime(true) < min(CACHE_LIFECYCLE_CATALOG_MIN_SECONDS, $maxSeconds / 3)) break;
+                    // Reserve admission before starting a separately bounded catalog.
+                    // A background caller can lend remaining burst admission;
+                    // metadata/payload work still resumes from a durable offset.
+                    if ($maxEntries - $observations < CACHE_LIFECYCLE_CATALOG_RESERVE
+                        || min($deadline, $catalogDeadline) - microtime(true) < min(CACHE_LIFECYCLE_CATALOG_MIN_SECONDS, $maxSeconds / 3)) break;
                     $frame['catalog'] = hash('sha256', $frame['path']) . '.jsonl';
                     $catalog = (int) ($state['metadata_bytes'] ?? 0) >= CACHE_LIFECYCLE_METADATA_BYTES
                         ? ['ok'=>false,'observations'=>0,'reason'=>'metadata_limit']
-                        : cache_lifecycle_catalog($frame['path'], $control . '/work/catalogs/' . $frame['catalog'], $deadline,
+                        : cache_lifecycle_catalog($frame['path'], $control . '/work/catalogs/' . $frame['catalog'],
+                            $catalogDeadline,
                             CACHE_LIFECYCLE_METADATA_BYTES - (int) ($state['metadata_bytes'] ?? 0));
                     if ($catalog['ok']) $state['metadata_bytes'] = (int) ($state['metadata_bytes'] ?? 0)
                         + (int) filesize($control . '/work/catalogs/' . $frame['catalog']);

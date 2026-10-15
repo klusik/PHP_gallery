@@ -51,6 +51,24 @@ namespace {
         if (!is_dir(dirname($path))) mkdir(dirname($path),0775,true);
         file_put_contents($path,json_encode($record,JSON_THROW_ON_ERROR));
     }
+    /**
+     * Create a small genuine archive shaped like its historical native producer.
+     * @param string $relative Cache-relative archive filename below the disposable root.
+     * @param bool $updater Whether to emit the historical Gallery source snapshot rather than a photo ZIP.
+     * @return void Writes a closed ZIP with positive producer contents and no production data.
+     */
+    function lifecycle_archive(string $relative, bool $updater = false): void
+    {
+        $path = CACHE_LIFECYCLE_TEST_ROOT . '/cache/' . $relative;
+        if (!is_dir(dirname($path))) mkdir(dirname($path), 0775, true);
+        $zip = new \ZipArchive();
+        lifecycle_assert($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, 'Could not create archive fixture.');
+        if ($updater) {
+            foreach (['index.php','public/index.php','app/services/updates.php'] as $name) $zip->addFromString('PHP_gallery-native/' . $name, '<?php // Native Gallery source');
+            $zip->addFromString('PHP_gallery-native/app/bootstrap.php', "<?php const CMS_VERSION = '0.100';");
+        } else $zip->addFromString('Gallery/photo.jpg', 'native disposable download payload');
+        $zip->close();
+    }
     $root = sys_get_temp_dir() . '/gallery-cache-lifecycle-' . bin2hex(random_bytes(8));
     // Confine lifecycle retention and deletion to this fixture's temporary root.
     // Type: string. Units: absolute directory path. Scope: this disposable test.
@@ -62,7 +80,7 @@ namespace {
     define('CACHE_LIFECYCLE_TEST_NOW',time()+8*86400+3600);
     mkdir($root . '/cache',0775,true);
     require_once __DIR__ . '/../app/services/cache_lifecycle.php';
-    $held = null;
+    $held = $flatLease = null;
     try {
         lifecycle_assert(\Gallery\Services\cache_lifecycle_status()['phase']==='idle' && !is_dir($root.'/cache/cache-lifecycle'),'Status wrote runtime state.');
         foreach ([123,124,125] as $run) {
@@ -136,20 +154,46 @@ namespace {
             file_put_contents($root.'/cache/updates/jobs/'.$id.'/worker.lock','');
             file_put_contents($root.'/cache/updates/jobs/'.$id.'/package.zip',str_repeat('z',128));
         }
+        foreach (['20260801-000000','20260802-000000','20260803-000000'] as $stamp) lifecycle_archive('updates/beta-' . $stamp . '.zip', true);
+        lifecycle_assert(\Gallery\Services\cache_lifecycle_update_archive_disposable('updates/beta-20260801-000000.zip')
+            && !\Gallery\Services\cache_lifecycle_update_archive_disposable('updates/beta-20260802-000000.zip')
+            && !\Gallery\Services\cache_lifecycle_update_archive_disposable('updates/beta-20260803-000000.zip'),
+            'Historical archive retention did not preserve the two newest verified copies.');
+        lifecycle_json('updates/active-job.json', ['job_id'=>'unreadable-active-identity']);
+        lifecycle_assert(!\Gallery\Services\cache_lifecycle_update_archive_disposable('updates/beta-20260801-000000.zip'), 'An active updater admitted old archives.');
+        unlink($root . '/cache/updates/active-job.json');
+        $flat = 'zips/gallery-11-' . str_repeat('a', 40) . '.zip';
+        $freshFlat = 'zips/gallery-12-' . str_repeat('b', 64) . '.zip';
+        $leasedFlat = 'zips/gallery-13-' . str_repeat('c', 40) . '.zip';
+        $partialFlat = $flat . '.partial-' . str_repeat('d', 16);
+        $libzipFlat = $flat . '.Ab1cD2.part';
+        foreach ([$flat,$freshFlat,$leasedFlat,$partialFlat,'zips/unregistered-original.zip'] as $path) lifecycle_archive($path);
+        $zipBytes = file_get_contents($root . '/cache/' . $flat);
+        file_put_contents($root . '/cache/' . $libzipFlat, substr($zipBytes, 0, strpos($zipBytes, "PK\x01\x02")));
+        file_put_contents($root . '/cache/zips/gallery-14-' . str_repeat('e', 40) . '.zip', 'An unproven original, not a ZIP.');
+        touch($root . '/cache/' . $freshFlat, CACHE_LIFECYCLE_TEST_NOW - 6 * 86400);
+        $flatLease = \Gallery\Services\cache_lifecycle_producer_lease($leasedFlat);
         $zipSuffix = '/'.str_repeat('d',64).'/'.str_repeat('e',64);
-        foreach ([1=>time(),2=>CACHE_LIFECYCLE_TEST_NOW-6*86400] as $resource=>$created) {
+        foreach ([1=>time(),2=>CACHE_LIFECYCLE_TEST_NOW-6*86400,3=>time()-8*86400] as $resource=>$created) {
             $path = 'zips/legacy-artifacts/gallery/'.$resource.$zipSuffix;
             lifecycle_json($path.'/metadata.json',['format_version'=>1,'resource_type'=>'gallery','resource_id'=>$resource,
                 'resource_revision'=>str_repeat('d',64),'build_key'=>str_repeat('e',64),'created_at'=>$created,'archive_size'=>128,'expected_file_count'=>1]);
             file_put_contents($root.'/cache/'.$path.'/archive.zip',str_repeat('z',128));
             file_put_contents($root.'/cache/'.$path.'/artifact.lock','');
+            if ($resource === 3) {
+                touch($root.'/cache/'.$path.'/archive.zip', $created);
+                chmod($root.'/cache/'.$path.'/archive.zip', 0644);
+                clearstatcache();
+                lifecycle_assert(\Gallery\Services\cache_lifecycle_file_candidate($path.'/archive.zip', time()) === 'downloads',
+                    'Changing permissions incorrectly renewed the seven-day producer expiry.');
+            }
         }
         $state = \Gallery\Services\cache_lifecycle_inventory_start();
         $id = $state['id'];
         lifecycle_assert(!\Gallery\Services\cache_lifecycle_inventory_slice('wrong-id')['ok'],'Stale inventory accepted.');
         file_put_contents($root.'/cache/cache-lifecycle/work/plan.jsonl',"uncommitted crash tail\n",FILE_APPEND);
         for ($step=0;$step<200 && $state['phase']==='inventory';$step++) $state = \Gallery\Services\cache_lifecycle_inventory_slice($id);
-        lifecycle_assert($state['phase']==='preview' && $state['candidates']===13,'Eligibility did not preserve protected owners or recognize fixed-age workspaces and historical/nested CI proof.');
+        lifecycle_assert($state['phase']==='preview' && $state['candidates']===19,'Eligibility did not preserve protected owners or recognize fixed-age workspaces and historical/nested CI proof.');
         lifecycle_assert(is_dir($root.'/cache/test-audit/20261001-000000-123'),'Inventory deleted payload.');
         lifecycle_assert(\Gallery\Services\cache_lifecycle_scheduled_slice(true)['reason']==='manual_cache_preview_pending','Cron approved a manual preview.');
         lifecycle_assert(!\Gallery\Services\cache_lifecycle_cleanup_start('wrong-id')['ok'],'Stale approval accepted.');
@@ -159,7 +203,7 @@ namespace {
         file_put_contents($reportPath,json_encode($changed,JSON_THROW_ON_ERROR));
         $state = \Gallery\Services\cache_lifecycle_cleanup_start($id);
         for ($step=0;$step<200 && $state['phase']==='cleanup';$step++) $state = \Gallery\Services\cache_lifecycle_cleanup_slice($id);
-        lifecycle_assert($state['phase']==='complete' && $state['bytes_removed']>=4096 && $state['skipped']===2,'Reclamation ignored lease/changed proof or failed to finish.');
+        lifecycle_assert($state['phase']==='complete' && $state['bytes_removed']>=4096 && $state['skipped']===3,'Reclamation ignored lease/changed proof or failed to finish.');
         lifecycle_assert(!is_dir($root.'/cache/updates/jobs/'.$old),'Older terminal job was not reclaimed.');
         foreach (['test-audit/20261001-000000-124','test-audit/20261001-000000-125','codex-ci-pinned','codex-ci-unknown','theme-background','updates/jobs/'.$last,'updates/jobs/'.$failed] as $path) {
             lifecycle_assert(is_dir($root.'/cache/'.$path),'Protected owner was deleted: '.$path);
@@ -176,8 +220,16 @@ namespace {
         foreach (['map-browser-profile-Fr3sh1','map-browser-profile-P1nned','release-preparation','release-qualification','map-browser-profile-not-a-random-suffix','release-custom-original'] as $workspace) {
             lifecycle_assert(is_dir($root.'/cache/'.$workspace),'Fresh, pinned or unregistered workspace was deleted: '.$workspace);
         }
+        lifecycle_assert(!is_file($root . '/cache/' . $flat) && !is_file($root . '/cache/' . $partialFlat)
+            && !is_file($root . '/cache/' . $libzipFlat) && is_file($root . '/cache/' . $freshFlat)
+            && is_file($root . '/cache/' . $leasedFlat) && is_file($root . '/cache/zips/unregistered-original.zip'),
+            'Flat ZIP expiry, native orphan recovery or active serving protection failed.');
+        lifecycle_assert(!is_file($root . '/cache/updates/beta-20260801-000000.zip')
+            && is_file($root . '/cache/updates/beta-20260802-000000.zip') && is_file($root . '/cache/updates/beta-20260803-000000.zip'),
+            'Contextual legacy update archive retention did not reclaim only obsolete verified copies.');
         echo "Cache lifecycle retention, preview, leases, pins, rollback and journal recovery: PASS\n";
     } finally {
+        if (is_resource($flatLease)) { flock($flatLease,LOCK_UN); fclose($flatLease); }
         if (is_resource($held)) { flock($held,LOCK_UN); fclose($held); }
         // This exact random disposable root is the only fixture deletion target.
         for ($step=0;$step<200 && is_dir($root);$step++) \Gallery\Services\application_update_delete_tree_slice($root,5000,0.5);

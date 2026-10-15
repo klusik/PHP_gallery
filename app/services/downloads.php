@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/cache_lifecycle_storage.php';
+
 use RuntimeException;
 use Throwable;
 use DirectoryIterator;
@@ -1196,34 +1198,40 @@ function all_zip_signature(): string
  * Build one physical-gallery ZIP to a unique partial path and publish it atomically.
  *
  * @param string $filePath Final cache path.
- * @param array<int,array<string,mixed>> $entries Archive entries accepted by create_zip().
+ * @param list<array{type?:string,zip_path?:string,absolute?:string}> $entries Native directory/file entries accepted by create_zip().
+ * @return void Publishes one complete archive while retaining its base lease across temporary creation and rename, or throws.
  */
 function gallery_zip_create_atomically(string $filePath, array $entries): void
 {
-    if (zip_cache_file_is_fresh($filePath)) {
-        return;
-    }
-
-    $partialPath = $filePath . '.partial-' . bin2hex(random_bytes(8));
+    $lease = cache_lifecycle_download_lease($filePath);
     try {
-        create_zip($partialPath, $entries);
-
-        // A concurrent non-legacy caller may have published the same deterministic
-        // signature while this request was writing its unique partial file.
         if (zip_cache_file_is_fresh($filePath)) {
             return;
         }
-        if (is_file($filePath) && !@unlink($filePath)) {
-            throw new GalleryZipBuildException('stale_archive_remove_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+
+        $partialPath = $filePath . '.partial-' . bin2hex(random_bytes(8));
+        try {
+            create_zip($partialPath, $entries);
+
+            // A concurrent non-legacy caller may have published the same deterministic
+            // signature while this request was writing its unique partial file.
+            if (zip_cache_file_is_fresh($filePath)) {
+                return;
+            }
+            if (is_file($filePath) && !@unlink($filePath)) {
+                throw new GalleryZipBuildException('stale_archive_remove_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+            }
+            if (!@rename($partialPath, $filePath)) {
+                throw new GalleryZipBuildException('archive_publish_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+            }
+            $partialPath = '';
+        } finally {
+            if ($partialPath !== '' && is_file($partialPath)) {
+                @unlink($partialPath);
+            }
         }
-        if (!@rename($partialPath, $filePath)) {
-            throw new GalleryZipBuildException('archive_publish_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
-        }
-        $partialPath = '';
     } finally {
-        if ($partialPath !== '' && is_file($partialPath)) {
-            @unlink($partialPath);
-        }
+        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
     }
 }
 
@@ -1981,66 +1989,72 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
  * Write a ZIP archive to disk.
  *
  * @param string $filePath File path filesystem path.
- * @param array $entries Entries value.
+ * @param list<array{type?:string,zip_path?:string,absolute?:string}> $entries Native directory/file records; file payloads reference existing absolute paths.
+ * @return void Publishes the completed archive or throws after closing its ZIP and shared cache lease.
  */
 function create_zip(string $filePath, array $entries): void
 {
-    if (!class_exists(ZipArchive::class)) {
-        throw new GalleryZipBuildException('zip_unavailable', t('download.error.zip_unavailable', 'ZipArchive is not available.'));
-    }
-    // Variable $zip stores this steps working value.
-    $zip = new ZipArchive();
-    if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        if (is_file($filePath)) {
-            @unlink($filePath);
-        }
-        throw new GalleryZipBuildException('zip_create_failed', t('download.error.zip_create_failed', 'Unable to create ZIP archive.'));
-    }
-
-    $zipIsOpen = true;
+    $lease = cache_lifecycle_download_lease($filePath);
     try {
-        foreach ($entries as $entry) {
-            // Variable $zipPath stores this steps working value.
-            $zipPath = normalize_relative_path((string) ($entry['zip_path'] ?? ''));
-            if ($zipPath === '') {
-                continue;
+        if (!class_exists(ZipArchive::class)) {
+            throw new GalleryZipBuildException('zip_unavailable', t('download.error.zip_unavailable', 'ZipArchive is not available.'));
+        }
+        // Variable $zip stores this steps working value.
+        $zip = new ZipArchive();
+        if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            if (is_file($filePath)) {
+                @unlink($filePath);
             }
-            if (($entry['type'] ?? 'file') === 'directory') {
-                if (!$zip->addEmptyDir(rtrim($zipPath, '/') . '/')) {
-                    throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
-                }
-                continue;
-            }
-            // Variable $absolute stores this steps working value.
-            $absolute = (string) ($entry['absolute'] ?? '');
-            if ($absolute !== '' && is_file($absolute)) {
-                if (!$zip->addFile($absolute, $zipPath)) {
-                    throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
-                }
-                if (!$zip->setCompressionName($zipPath, ZipArchive::CM_STORE)) {
-                    throw new GalleryZipBuildException('zip_entry_compression_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
-                }
-            }
+            throw new GalleryZipBuildException('zip_create_failed', t('download.error.zip_create_failed', 'Unable to create ZIP archive.'));
         }
 
-        if (!$zip->close()) {
+        $zipIsOpen = true;
+        try {
+            foreach ($entries as $entry) {
+                // Variable $zipPath stores this steps working value.
+                $zipPath = normalize_relative_path((string) ($entry['zip_path'] ?? ''));
+                if ($zipPath === '') {
+                    continue;
+                }
+                if (($entry['type'] ?? 'file') === 'directory') {
+                    if (!$zip->addEmptyDir(rtrim($zipPath, '/') . '/')) {
+                        throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                    }
+                    continue;
+                }
+                // Variable $absolute stores this steps working value.
+                $absolute = (string) ($entry['absolute'] ?? '');
+                if ($absolute !== '' && is_file($absolute)) {
+                    if (!$zip->addFile($absolute, $zipPath)) {
+                        throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                    }
+                    if (!$zip->setCompressionName($zipPath, ZipArchive::CM_STORE)) {
+                        throw new GalleryZipBuildException('zip_entry_compression_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                    }
+                }
+            }
+
+            if (!$zip->close()) {
+                $zipIsOpen = false;
+                throw new GalleryZipBuildException('zip_close_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+            }
             $zipIsOpen = false;
-            throw new GalleryZipBuildException('zip_close_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
-        }
-        $zipIsOpen = false;
 
-        $size = is_file($filePath) ? filesize($filePath) : false;
-        if ($size === false || $size <= 0) {
-            throw new GalleryZipBuildException('zip_finalize_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+            $size = is_file($filePath) ? filesize($filePath) : false;
+            if ($size === false || $size <= 0) {
+                throw new GalleryZipBuildException('zip_finalize_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+            }
+        } catch (Throwable $exception) {
+            if ($zipIsOpen) {
+                @$zip->close();
+            }
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+            throw $exception;
         }
-    } catch (Throwable $exception) {
-        if ($zipIsOpen) {
-            @$zip->close();
-        }
-        if (is_file($filePath)) {
-            @unlink($filePath);
-        }
-        throw $exception;
+    } finally {
+        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
     }
 }
 
@@ -2049,11 +2063,13 @@ function create_zip(string $filePath, array $entries): void
  *
  * @param string $filePath ZIP filesystem path.
  * @param string $downloadName Download filename.
- * @return array{status:int,path:string,filename:string,mime:string,length:int,message:string} Stream descriptor.
+ * @return array{status:int,path:string,filename:string,mime:string,length:int,message:string,lease_handle?:resource|null} Stream descriptor; a successful cache lease must be retained through output and closed by the controller.
  */
 function download_stream_descriptor(string $filePath, string $downloadName): array
 {
+    $lease = cache_lifecycle_download_lease($filePath);
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
+        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
         return [
             'status' => 404,
             'path' => '',
@@ -2065,6 +2081,7 @@ function download_stream_descriptor(string $filePath, string $downloadName): arr
     }
     return [
         'status' => 200,
+        'lease_handle' => $lease,
         'path' => $filePath,
         'filename' => str_replace('"', '', $downloadName),
         'mime' => 'application/zip',

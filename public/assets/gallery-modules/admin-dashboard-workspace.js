@@ -14,7 +14,7 @@
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261002-gallery-controls-v3';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261002-gallery-controls-v3';
-import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261015-cache-regions-ui-v1';
+import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261015-cache-throughput-status-v5';
 
 /**
  * Purpose: Bound one read so a stalled connection exposes an explicit retry.
@@ -22,6 +22,7 @@ import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261015-cach
  * Scope: one Overview or Galleries read request.
  * Consumers: setupAdminDashboardWorkspace/load.
  * Rationale: twenty seconds tolerates a cold installation while keeping page actions usable.
+ * Type: number.
  * @type {number}
  */
 const DASHBOARD_READ_TIMEOUT_MS = 20000;
@@ -54,6 +55,59 @@ export function setupAdminDashboardWorkspace() {
     const root = document.querySelector('[data-admin-dashboard-workspace]');
     if (!(root instanceof HTMLElement) || root.dataset.dashboardBound === '1') return;
     root.dataset.dashboardBound = '1';
+    // Maintenance owns an explicit, allowlisted query while generic nested tabs remain local.
+    const maintenanceIds = new Map(['content','media','navigation','trash','system'].map(value => ['admin-maintenance-' + value,value]));
+    let restoringMaintenance = false;
+    const rememberMaintenance = event => {
+        if (restoringMaintenance || !(event.target instanceof Element)) return;
+        const scope = event.target.closest('.admin-dashboard-maintenance-scope');
+        if (!scope || !event.target.closest('[data-admin-subtab-target]')) return;
+        if (event.type === 'keydown' && !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Enter',' '].includes(event.key)) return;
+        const selected = scope.querySelector('[data-admin-subtab-target][aria-selected="true"]');
+        const value = maintenanceIds.get(selected?.dataset.adminSubtabTarget);
+        if (!value) return;
+        const url = new URL(location.href);
+        url.searchParams.set('dashboard_tab', 'maintenance');
+        url.searchParams.set('maintenance_tab', value);
+        url.hash = 'admin-tab-maintenance';
+        const primary = root.querySelector('[data-admin-tab-target="admin-tab-maintenance"]');
+        if (primary instanceof HTMLAnchorElement) primary.href = url.href;
+        if (url.href !== location.href) history.pushState(null, '', url);
+    };
+    root.addEventListener('click', rememberMaintenance);
+    root.addEventListener('keydown', rememberMaintenance);
+    window.addEventListener('popstate', () => {
+        const value = new URL(location.href).searchParams.get('maintenance_tab') || 'content';
+        const primary = root.querySelector('[data-admin-tab-target="admin-tab-maintenance"]');
+        if (primary instanceof HTMLAnchorElement && location.hash === '#admin-tab-maintenance') primary.href = location.href;
+        const id = [...maintenanceIds].find(([,candidate]) => candidate === value)?.[0];
+        const tab = id ? root.querySelector('.admin-dashboard-maintenance-scope [data-admin-subtab-target="' + id + '"]') : null;
+        if (tab && tab.getAttribute('aria-selected') !== 'true') {
+            restoringMaintenance = true;
+            try { tab.click(); } finally { restoringMaintenance = false; }
+        }
+    });
+
+    // A deferred Maintenance fragment changes document height after native reload restoration.
+    // Align its explicit URL anchor once after both page load and fragment insertion; polling never scrolls.
+    if (location.hash === '#admin-tab-maintenance') {
+        const panel = root.querySelector('#admin-tab-maintenance');
+        let pageLoaded = document.readyState === 'complete';
+        let aligned = false;
+        const observer = new MutationObserver(() => alignMaintenance());
+        const alignMaintenance = () => {
+            if (aligned || !pageLoaded || !panel?.querySelector('.admin-dashboard-maintenance-scope')) return;
+            aligned = true;
+            observer.disconnect();
+            requestAnimationFrame(() => {
+                if (location.hash === '#admin-tab-maintenance') panel.scrollIntoView({block:'start',behavior:'instant'});
+            });
+        };
+        if (panel) observer.observe(panel, {childList:true,subtree:true});
+        window.addEventListener('load', () => { pageLoaded = true; alignMaintenance(); }, {once:true});
+        alignMaintenance();
+    }
+
     const reads = Array.from(root.querySelectorAll('[data-dashboard-read]'));
     const states = new WeakMap();
     const refreshAgain = new WeakSet();
