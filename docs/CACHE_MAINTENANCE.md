@@ -13,11 +13,24 @@ no catalog entity IDs or affected public media render contexts.
 
 Issue: [#212](https://github.com/klusik/PHP_gallery/issues/212).
 
+## Persistent rotating regions
+
+The automatic cache worker uses a persistent rotating registry in `cache_lifecycle_regions`. One row owns each safe top-level managed directory, plus fixed discovery, root-file and receipt identities; there is no row per file or per check. The model owns SQL and the migration owns schema. The service owns producer policy, paths, discovery and scheduling. Indexed due/retry times select the oldest due work; each committed partial slice yields for thirty seconds, completed healthy regions wait one hour, and failed regions back off for fifteen minutes. Last service and last successful completed check remain separate.
+
+DB checkpoints are the only authority for regional stacks, catalog offsets, plan write/read fences and detached deletion cursors. Private filesystem journals hold catalog names, queued proof records and detached payloads. They do not contain a second independently updated checkpoint. A restart resumes the existing cursor; incomplete inventory never returns to its beginning merely because another opportunity arrived. Existing JSON manual/upgrade work is drained in its original location before registry initialization, including detached payloads; unreadable state blocks. The historical worker API remains for standalone database-free consumers and explicit manual previews. Retire this compatibility only after deployed unfinished legacy jobs and those consumers are migrated; usage is unknown.
+
+Discovery runs as another rotating task with a durable root catalog. New directories update/insert stable SHA-256 path identities; root files share one bounded region. A complete readable discovery may mark a drained missing region absent; a partial/unreadable catalog cannot prove absence. Seven-day drained tombstones and their private journals are retired in bounded batches. The 4096-name catalog limit and 4099-row bound include three reserved identities; capacity overflow is visible and preserves unseen content. Reused paths receive fresh producer validation, never inherited deletion authority.
+
+Passive Admin evidence retains the last completed regional measurements during later partial work and labels them as historical, with coverage and the oldest completion time. Smaller completed measurements replace larger ones directly; historical bytes are never reduced mechanically by deletion counters. Working observations, known pending debt and installation-wide confirmed removal receipts remain separate. Receipt updates and the deletion checkpoint commit share a DB transaction; filesystem deletion itself does not. Existing deterministic trash names and write fences recover a crash before/after detachment. A crash after unlink before checkpoint commit can conservatively undercount bytes, without double counting or granting permission to a replacement payload. OFF preserves all state. Status reads perform no filesystem scan and never create rows.
+
+
 Passive lifecycle storage and producer leases remain separate from inventory
 and reclamation workers. The reviewed runtime plan reuses the existing
-`request-maintenance` closure only across selected site-maintenance, updater and
-Admin test-recording consumers whose existing closures already contain it.
-This adds no logical root and preserves public/dashboard module fan-out.
+`request-maintenance` closure only across selected site-maintenance, updater,
+Admin test-recording and authentication consumers whose existing closures
+already contain all four files. The authentication edge replaces four direct
+duplicate entries without expanding its PHP file closure or adding a logical root.
+The dashboard retains its existing module decomposition allowance.
 GitHub cache writes explicitly load the lease owner before acquisition;
 ordinary public cache reads do not load it.
 Site-maintenance trigger registration also leaves lifecycle storage unloaded;
@@ -332,7 +345,7 @@ transports do not start it. Workers load only after response rendering, through
 the reviewed existing `site-maintenance-work` root. There is no visitor JavaScript
 or browser-owned continuation. One suitable visit starts a token-authenticated
 server chain, which continues across completed cycles without further visitors.
-Inventory is due after 30 seconds; unfinished scans retain identity and cursor.
+Work opportunities recur after thirty seconds. The registry resumes unfinished regional cursors; healthy completed regions become due hourly.
 An overdue observation first serves a bounded existing cleanup slice, so sparse
 arrivals cannot repeatedly scan/approve while starving the last candidate.
 The next completed-cycle interval starts when deletion finishes; observation
@@ -413,7 +426,7 @@ on a small pool. Without response finishing the short shutdown work may add to
 the triggering client's latency. No execution-time extension is requested.
 Unknown central maintenance ownership fails closed with safe diagnostic evidence.
 
-Optional external cache-only invocations admit at most ten seconds and 32 slices,
+Optional external cache-only invocations admit at most five seconds and 32 slices,
 alternate inventory with already verified committed candidates and release the
 lifecycle lock after each checkpoint. The same installation/scheduler locks prevent
 concurrent workers. External cron is optional for idle-time opportunities, not an
@@ -421,9 +434,9 @@ installation prerequisite. Ordinary external cache-only requests remain bounded
 and do not start legacy thumbnail chaining; only leased cache tickets continue
 the independent automatic chain.
 
-If deletion still has backlog thirty seconds after a scan finishes, a new
-observation round reuses the same cycle ID, queue and deletion cursor. Inventory
-and deletion alternate again. Compact durable exact-path and ancestor coverage
+A region retains its observation round until its cursor finishes. A pending
+deletion queue never restarts regional inventory from the root. Inventory and
+deletion alternate within the existing committed checkpoint. Compact durable exact-path and ancestor coverage
 markers fence queue membership against the committed plan offset, preventing
 duplicates and parent/child overlap even when producer proof changes between
 rounds. A crash before the state commit leaves markers beyond the write fence;
@@ -438,7 +451,7 @@ rounds; they are never destructively migrated.
 | --- | --- |
 | Real hosting CLI cron | Preferred where the account actually permits PHP CLI jobs; no HTTP worker is held. Shares filesystem/DB resources and the same owner locks. |
 | External HTTPS scheduler | Works without visitors. Holds one PHP request worker during the bounded burst; provision its timeout above the admission budget and disable overlapping/retry storms. |
-| Ordinary visitor opportunity | Default, independent of Admin/thumbnail scheduling. Short server-side work; waits during zero traffic and yields to foreground visits. |
+| Ordinary visitor opportunity | Default, independent of Admin/thumbnail scheduling. Starts authenticated server continuation; yields to foreground visits. A killed chain needs a later restart opportunity. |
 | Windows Task Scheduler | Development installation only; works with the browser closed while Windows is awake and the task account can execute PHP/access the installation. |
 
 This implementation targets generic shared hosting without required setup. For
@@ -461,6 +474,12 @@ scheduler's rotating log/exit-code facility; do not append forever into cache.
 Neither `--force` nor global maintenance enable/window bypass is required.
 Cache-only lifecycle bursts preserve their own due gate even if an unrelated
 caller supplied force for legacy updater-trash work.
+An explicit direct lifecycle maintainer call may bypass regional due timestamps;
+it still honors failed-region retry backoff, capability OFF and every deletion guard.
+Passive evidence includes discovery rounds/cursors and indexed retry failures,
+including a failed newer attempt alongside a retained completed measurement.
+Legacy removal totals without a recorded removal timestamp retain an unknown
+time; cycle completion is not substituted for confirmed removal time.
 
 For external HTTPS calls, store this curl configuration outside the web root,
 restrict it to the scheduler account, and inject the actual token privately:
@@ -561,3 +580,5 @@ fixtures. Existing retention fixtures cover TTL, leases, pins, changed proof and
 ZIP/recovery rules. Hosted BASIC does not execute these fixtures; runtime proof
 requires exact-candidate hosted FULL. Target filesystem throughput, scheduler
 configuration and production before/after sizes remain deployment checks.
+
+Workspace age records now bind their fixed anchor to the current producer marker and filesystem device/inode identity. An unbound historical age record is re-anchored conservatively, and changed identity is revalidated under the exclusive deletion lease before detachment. This protects a replacement at the same path from inheriting expiry. Producer-free legacy workspace usage is unknown; retain the conservative path while supported legacy roots remain.

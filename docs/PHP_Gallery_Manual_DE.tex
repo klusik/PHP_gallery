@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.132.3}
+\newcommand{\version}{0.132.4}
 \newcommand{\manualdate}{15.~Oktober~2026}
 
 \hypersetup{
@@ -2048,6 +2048,10 @@ globale Cache-Quote ein. Kompatibilität und Zeitplandiagnose bleiben in
 aufklappbaren Details verfügbar; der Download-Cache gehört zur Wartungszentrale.
 
 \paragraph{Gemessene Cache-Aufbewahrung.}
+Automatische Arbeit rotiert dauerhaft in~der Datenbank gespeicherte Bereiche. Letzte Bearbeitung und letzte erfolgreich abgeschlossene Prüfung sind getrennt. Alle dreißig Sekunden erhält die älteste fällige Arbeit höchstens fünf Sekunden; unvollständige Bereiche setzen ihren Cursor fort und lassen andere Bereiche vor. Gesunde abgeschlossene Bereiche werden nach einer Stunde erneut fällig, Fehler nach fünfzehn Minuten. Die Wurzelerkennung findet neue Verzeichnisse ohne Datenbankzeile je Datei. Abgeschlossene verschwundene Identitäten bleiben sieben Tage und werden in~kleinen Gruppen entfernt.
+
+Die kompakte Übersicht trennt letzte bekannte Messungen mit Alter, abgeschlossenes Prüfumfang, laufende Arbeit, bekannte geeignete Warteschlange und letzte bestätigte Löschung. Eine neue Teilprüfung behält die abgeschlossene Messung sichtbar; eine kleinere abgeschlossene Messung darf sie ersetzen. Historische Bytes sind keine aktuelle Größe; Löschungen werden nicht davon abgezogen. Statuslesen scannt keinen Speicher. DB-Kontrollpunkte besitzen die Cursor, private Dateijournale Namen und abgetrennte Nutzdaten. Unvollständige ältere Arbeit wird vor der Umstellung sicher beendet; beschädigte Kontrollpunkte bleiben ungeprüft. OFF erhält Register und Fortschritt. Die authentifizierte Serverfortsetzung braucht keinen offenen Browser; eine beendete Kette benötigt eine spätere Startgelegenheit.
+
 Registrierte temporäre Browserprofile und versionierte Release-Arbeitskopien
 haben eine feste Lebensdauer von 24 Stunden. Nutzung verlängert sie nicht.
 Neue Browserprofile speichern den Erstellungszeitpunkt; ältere Arbeitskopien

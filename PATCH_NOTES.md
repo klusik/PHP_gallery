@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 0.132.4
+
+Automatic cache maintenance gained a persistent, fair scheduler that resumes work across cycles and process restarts, retains confirmed findings, and reports unavailable evidence without treating it as an empty cache.
+
+### Highlights
+
+#### Fair, resumable cache maintenance
+- Added a database-backed registry for managed cache regions, scheduling state, checkpoints, findings, and completed measurements. [#220](https://github.com/klusik/PHP_gallery/issues/220) [#212](https://github.com/klusik/PHP_gallery/issues/212)
+- Rotated due regions fairly, resumed bounded inventory and cleanup work, discovered new paths, and applied retry backoff to failed regions.
+- Preserved completed measurements and confirmed reclamation receipts across cycles while keeping new manual-cycle counters independent.
+- Kept unavailable or invalid registry evidence explicitly unverified rather than presenting it as an empty cache or a successful check.
+
+#### Safer workspace expiry and cleanup
+- Bound workspace age evidence to the current producer marker and filesystem device/inode identity, preventing replacements at reused paths from inheriting expired state.
+- Retained drained-region tombstones for safe retirement and pruned them in bounded batches after their private journals were retired.
+
+### Technical Details
+
+#### Backend
+- Added `app/models/cache_lifecycle_registry.php`, `app/services/cache_lifecycle/registry.php`, and `app/services/cache_lifecycle_registry_storage.php` for persistent registry access and scheduling.
+- Updated cache inventory, policy, reclamation, and storage workflows to track observation rounds, preserve progress, discover regions, back off failures, and retire drained regions.
+- Kept legacy JSON queues available until their unfinished work drained before registry initialization.
+- Limited registry admission to 4,096 discovered names plus three reserved identities; runtime workers did not issue schema DDL.
+- Reduced optional external cache-only work batches from ten seconds to five seconds.
+
+#### Database
+- Added migration `202610150001_cache_lifecycle_regions.php` to create the persistent cache-region registry table.
+- Kept registry status reads passive: they did not scan storage or create registry rows. Disabling automatic cleanup preserved registry state.
+
+#### Frontend
+- Updated Admin cache diagnostics to distinguish historical measurements, completed coverage, active work, pending eligible cleanup, and confirmed removals.
+- Added region details and explicit unavailable-evidence status without presenting historical measurements as current size or subtracting deletion receipts from them.
+- Preserved in-place delegated panel controls when dashboard content was dynamically replaced.
+
+#### Tests
+- Added `tests/cache_lifecycle_registry_test.php` coverage for scheduling fairness, checkpoint and receipt persistence, discovery, retry backoff, bounded registry behavior, and retained measurements.
+- Added restart and independent-process coverage, including database reopen, corrupt checkpoints, replacement paths, and retired-region cleanup.
+- Extended HTTP and Chromium fixtures to cover registry-backed work and dynamic Admin panel controls without navigation or unintended cleanup actions.
+
+#### Documentation
+- Updated cache-maintenance guidance and the English, Czech, German, and Swedish administrator manuals.
+- Updated architecture, database, testing, and authoring references for the registry-backed lifecycle.
+
+### User Impact
+
+#### For visitors
+- Public visits continued to provide bounded cache-maintenance work opportunities, with opportunities recurring every 30 seconds and individual batches capped at five seconds.
+
+#### For administrators
+- Admins could inspect persistent region progress and retained findings, and could distinguish confirmed measurements and removals from unavailable or unverified registry evidence.
+
+#### For maintainers
+- Cache work could resume after process restarts, and regression coverage now exercised persistence, fairness, retry, and path-reuse safety.
+
 ## Version 0.132.3
 
 Admin log browsing became more compact and responsive, with accessible, localized copy and TXT export actions for individual entries, groups, selections, and filtered results.

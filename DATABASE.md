@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.132.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.132.4. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -9,6 +9,12 @@ Version 0.105 adds three integrity structures. Migration `202609200001_gallery_i
 Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
 
 Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
+
+## Cache lifecycle regions
+
+Migration `202610150001_cache_lifecycle_regions.php` creates `cache_lifecycle_regions` with stable SHA-256 `region_key`, safe relative path and owner, last service/successful completion, indexed next-due/retry times, failure count, discovery generation, missing-since and drained state. Bounded JSON columns retain the authoritative working checkpoint, compact current finding and last completed measurement. Fixed discovery/root-file rows avoid per-file registration; the receipt row retains actual confirmed removals across cycles and tombstone retirement. Checkpoint and receipt writes commit in one model-owned transaction. Runtime workers never issue DDL.
+
+There are at most 4099 admitted rows, including three internal identities. A complete readable root discovery can mark drained absent directories; partial scans cannot. Seven-day tombstones are pruned in batches of at most sixteen only after their private journals have been retired. Repeated checks update the existing row. Missing or corrupt DB/checkpoint evidence is unverified and never becomes an empty successful inventory. Existing unfinished legacy JSON plans stay recoverable until drained; [cache maintenance](docs/CACHE_MAINTENANCE.md#persistent-rotating-regions) describes the authority and recovery boundary.
 
 ## Database Engine
 

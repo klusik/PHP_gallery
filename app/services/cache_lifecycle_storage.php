@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/updates_path_safety.php';
+require_once __DIR__ . '/cache_lifecycle_registry_storage.php';
 
 /**
  * Bound compact control records before JSON decoding.
@@ -146,6 +147,7 @@ function cache_lifecycle_now(): int
 function cache_lifecycle_read_json(string $path): array
 {
     cache_lifecycle_assert_path($path);
+    if (cache_lifecycle_registry_state_path($path)) return cache_lifecycle_registry_checkpoint();
     if (!is_file($path) || is_link($path)) return [];
     $json = @file_get_contents($path, false, null, 0, CACHE_LIFECYCLE_STATE_BYTES + 1);
     $control = str_replace('\\', '/', $path) === str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/cache-lifecycle/state.json';
@@ -169,6 +171,7 @@ function cache_lifecycle_read_json(string $path): array
 function cache_lifecycle_write_json(string $path, array $record): void
 {
     cache_lifecycle_assert_path($path);
+    if (cache_lifecycle_registry_state_path($path)) { cache_lifecycle_registry_store($record); return; }
     cache_lifecycle_assert_path($path . '.tmp');
     $json = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     if (strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) throw new \RuntimeException('Cache lifecycle state exceeded its bound.');
@@ -230,7 +233,7 @@ function cache_lifecycle_lease_path(string $relative): string
 
 /**
  * Return bounded public progress and aggregate category measurements without scanning files.
- * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,chain_health:string,chain_arrival_at:int,chain_next_start_at:int,interrupted:bool,superseded_manual_at:int,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: historical observations differ from pending debt and real progress; chain fields disclose safe arrival/timing evidence but never tickets, URLs or credentials.
+ * @return array{ok:bool,id:string,phase:string,complete:bool,partial:bool,bytes:int,files:int,dirs:int,candidates:int,candidate_bytes:int,removed:int,bytes_removed:int,skipped:int,errors:int,blocked:int,last_error:string,excluded:string,scheduled:bool,pending_bytes:int,pending_candidates:int,last_attempt_at:int,last_progress_at:int,last_observed_at:int,next_due:int,stale:bool,stalled:bool,scheduler_health:string,scheduler_reason:string,scheduler_source:string,chain_health:string,chain_arrival_at:int,chain_next_start_at:int,interrupted:bool,superseded_manual_at:int,measurement_available:bool,registry?:bool,registry_unavailable?:bool,regions_total?:int,regions_completed?:int,regions_working?:int,regions_unverified?:int,oldest_completed_at?:int,last_removed_at?:int,working_bytes?:int,legacy_measurement?:bool,regions_sample?:list<array{path:string,phase:string,round:int,last_serviced_at:int,last_completed_at:int,next_due_at:int,retry_at:int,failures:int,cursor_path:string,cursor_offset:int}>,sample:list<array{path:string,owner:string,bytes:int}>,policies:array<string,array{label:string,seconds:int|null,mode:string,reason:string}>,totals:array<string,array<string,int>>} Authenticated summary: historical observations differ from pending debt and real progress; chain fields disclose safe arrival/timing evidence but never tickets, URLs or credentials.
  */
 function cache_lifecycle_status(): array
 {
@@ -252,7 +255,7 @@ function cache_lifecycle_status(): array
     if (is_array($state['current'] ?? null)) $pending = max(0, $pending - min((int) ($state['current']['bytes'] ?? 0), (int) ($state['bytes_removed'] ?? 0) - (int) ($state['current']['removed_before'] ?? $state['bytes_removed'] ?? 0)));
     $scheduled = !empty($state['scheduled']);
     if (($state['phase'] ?? '') === 'complete') $pending = 0;
-    return ['ok'=>true,'id'=>(string) ($state['id'] ?? ''),'phase'=>(string) ($state['phase'] ?? 'idle'),
+    $summary = ['ok'=>true,'id'=>(string) ($state['id'] ?? ''),'phase'=>(string) ($state['phase'] ?? 'idle'),
         'complete'=>in_array($state['phase'] ?? '', ['preview','cleanup','complete'], true),'partial'=>!empty($state['errors']) || !empty($state['blocked']),
         'bytes'=>$bytes,'files'=>$files,'dirs'=>$dirs,'candidates'=>(int) ($state['candidates'] ?? 0),
         'candidate_bytes'=>(int) ($state['candidate_bytes'] ?? 0),'removed'=>(int) ($state['removed'] ?? 0),
@@ -277,7 +280,22 @@ function cache_lifecycle_status(): array
         'interrupted'=>!empty($scheduler['interrupted']),
         'superseded_manual_at'=>(int) ($state['superseded_manual_at'] ?? 0),
         'sample'=>array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),
-        'policies'=>cache_lifecycle_policies(),'totals'=>$totals];
+        'policies'=>cache_lifecycle_policies(),'totals'=>$totals,'measurement_available'=>(int) ($state['last_observed_at'] ?? 0) > 0];
+    if (cache_lifecycle_registry_enabled()) {
+        try { $registry = cache_lifecycle_registry_summary(); }
+        catch (\Throwable) {
+            return array_replace($summary, ['ok'=>false,'partial'=>true,'registry_unavailable'=>true,'last_error'=>'cache_registry_unavailable']);
+        }
+        // Manual previews retain their explicit controls; registry findings never grant approval.
+        if ($registry['regions_total'] > 0) {
+            $manual = $state !== [] && ($state['phase'] ?? '') !== 'complete';
+            $controls = $manual ? array_intersect_key($summary, array_flip(['id','phase','scheduled','candidates','candidate_bytes','sample'])) : [];
+            $summary = array_replace($summary, $registry, $controls);
+            $summary['stale'] = $registry['oldest_completed_at'] === 0
+                || $now - $registry['oldest_completed_at'] > CACHE_REGISTRY_RECHECK_SECONDS;
+        }
+    }
+    return $summary;
 }
 
 /**

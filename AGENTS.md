@@ -124,6 +124,35 @@ Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable
 
 ### Source Candidate Preparation (All Non-Release Branches)
 
+Always review both PHP string delimiters and SQL literal delimiters when editing
+queries. Choose compatible quoting for fixed SQL literals and keep runtime values
+in bound parameters. Bind numeric/boolean PDO parameters explicitly with their
+native PDO types when comparing placeholders with SQL literals, so supported
+drivers receive the same numeric contract. See the practical checks in
+[AGENT_AUTHORING.md](docs/AGENT_AUTHORING.md#implementation-checks-learned-from-hosted-ci).
+
+Always give an independent-process fixture its own explicit minimal dependency
+bootstrap, including Core path-policy dependencies used by passive services.
+Verify persisted evidence through the child process's actual exit status and
+output, because the child starts with its own loaded-function set.
+
+Always define counters relative to their owning identity: initialize a fresh
+manual cycle independently, advance a regional observation round within that
+region, and retain confirmed lifetime receipts separately. Cover both new-cycle
+and continuation semantics in the existing behavioral fixture.
+
+Always size a crash fixture's admission input according to the existing worker's
+observation semantics, including directory metadata and dot entries. Assert the
+intended physical mutation before simulating interruption, using the neighboring
+fixture's established setup while retaining production caps and suite limits.
+
+Always inspect complete runtime closures before adding dependency ownership.
+Reuse an existing shared owner where its entire historical closure is already
+present, then regenerate the authored plan and compare direct duplicate entries,
+transitive modules and route file counts against the unchanged ratchets.
+Account for the existing decomposition allowance before choosing the consumer
+edge; an unchanged PHP file closure can still add transitive logical modules.
+
 Complete authored source and permanent documentation before committing. Stage
 new/deleted production membership in the source commit because the canonical
 inventory reads Git's index. Edit authored runtime roots/dependencies rather

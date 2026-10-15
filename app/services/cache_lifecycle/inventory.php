@@ -15,12 +15,12 @@ namespace Gallery\Services;
 /**
  * Start a read-only cache inventory, refusing to discard an unfinished deletion cursor.
  * @param bool $scheduled Whether configured automatic retention owns this scan; manual previews await explicit approval.
- * @return array<string,mixed> Initial lifecycle state with schema/id/phase/started_at, compact stack/totals and zero candidate/reclamation counters; busy state is returned unchanged.
+ * @return CacheLifecycleCheckpoint Initial lifecycle state with reset candidate counters and compact stack/totals, an existing resumed inventory, or a busy marker. Registry cycles retain cumulative confirmed reclamation counters; new manual cycles start them at zero.
  */
 function cache_lifecycle_inventory_start(bool $scheduled = false): array
 {
     return cache_lifecycle_with_lock(static function () use ($scheduled): array {
-        $control = cache_lifecycle_control_directory();
+        $control = cache_lifecycle_job_directory();
         foreach (['work','work/trash','work/catalogs','work/queued','work/coverage','work/plan.jsonl','retired'] as $relative) {
             cache_lifecycle_assert_path($control . '/' . $relative);
         }
@@ -51,9 +51,11 @@ function cache_lifecycle_inventory_start(bool $scheduled = false): array
                 'age_24h_bytes'=>0,'age_7d_bytes'=>0,'age_older_bytes'=>0];
         }
         $state = ['schema'=>1,'id'=>bin2hex(random_bytes(16)),'phase'=>'inventory','started_at'=>cache_lifecycle_now(),'scheduled'=>$scheduled,
-            'completed_at'=>0,'stack'=>[cache_lifecycle_frame('')],'totals'=>$totals,'errors'=>0,'blocked'=>0,
+            'completed_at'=>0,'observation_round'=>isset($GLOBALS['cache_lifecycle_registry_context']) ? (int) ($old['observation_round'] ?? 0) + 1 : 1,
+            'stack'=>[cache_lifecycle_frame(cache_lifecycle_inventory_root())],'totals'=>$totals,'errors'=>0,'blocked'=>0,
             'candidates'=>0,'candidate_bytes'=>0,'plan_offset'=>0,'plan_write_offset'=>0,'current'=>null,'cursor'=>[],
-            'removed'=>0,'bytes_removed'=>0,'skipped'=>0,'settled_bytes'=>0,'settled_candidates'=>0,
+            'removed'=>(int) (isset($GLOBALS['cache_lifecycle_registry_context']) ? ($old['removed'] ?? 0) : 0),
+            'bytes_removed'=>(int) (isset($GLOBALS['cache_lifecycle_registry_context']) ? ($old['bytes_removed'] ?? 0) : 0),'skipped'=>0,'settled_bytes'=>0,'settled_candidates'=>0,
             'last_manual_at'=>$scheduled ? 0 : cache_lifecycle_now(),'last_observed_at'=>0,'metadata_bytes'=>0,'queue_index_ready'=>true];
         if ($scheduled && !empty($old['id']) && empty($old['scheduled']) && in_array($old['phase'] ?? '', ['inventory','preview'], true)) {
             $state['superseded_manual_id'] = $old['id'];
@@ -125,9 +127,9 @@ function cache_lifecycle_record_candidate(array &$state, array $frame, string $o
     // Observation and queue admission are separate: a fresh round measures an
     // eligible root again without duplicating its committed deletion record.
     $state['totals'][$owner]['reclaimable_bytes'] += $frame['bytes'];
-    $identity = cache_lifecycle_control_directory() . '/work/queued/' . hash('sha256', $frame['path']) . '.json';
+    $identity = cache_lifecycle_job_directory() . '/work/queued/' . hash('sha256', $frame['path']) . '.json';
     if (cache_lifecycle_queue_contains($identity, $state)) return;
-    $coverage = cache_lifecycle_control_directory() . '/work/coverage/';
+    $coverage = cache_lifecycle_job_directory() . '/work/coverage/';
     if (cache_lifecycle_queue_contains($coverage . hash('sha256', $frame['path']) . '.json', $state)) return;
     $parents = [];
     for ($parent = dirname($frame['path']); $parent !== '.'; $parent = dirname($parent)) {
@@ -149,7 +151,7 @@ function cache_lifecycle_record_candidate(array &$state, array $frame, string $o
         $state['last_error'] = 'inventory_metadata_limit';
         return;
     }
-    cache_lifecycle_assert_path(cache_lifecycle_control_directory() . '/work/plan.jsonl');
+    cache_lifecycle_assert_path(cache_lifecycle_job_directory() . '/work/plan.jsonl');
     // A marker left before the state commit is not proof of queue membership:
     // its offset is at/after the persisted write fence and will be replaced.
     $indexDirectory = dirname($identity);
@@ -162,7 +164,7 @@ function cache_lifecycle_record_candidate(array &$state, array $frame, string $o
     foreach ($parents as $marker) {
         if (!cache_lifecycle_queue_contains($marker, $state)) cache_lifecycle_write_json($marker, $identityRecord);
     }
-    if (file_put_contents(cache_lifecycle_control_directory() . '/work/plan.jsonl', $line, FILE_APPEND | LOCK_EX) !== strlen($line)) {
+    if (file_put_contents(cache_lifecycle_job_directory() . '/work/plan.jsonl', $line, FILE_APPEND | LOCK_EX) !== strlen($line)) {
         throw new \RuntimeException('Cache preview journal could not be appended.');
     }
     $state['candidates']++;
@@ -202,7 +204,7 @@ function cache_lifecycle_queue_contains(string $path, array $state): bool
 function cache_lifecycle_inventory_slice(string $expectedId = '', float $maxSeconds = CACHE_LIFECYCLE_SLICE_SECONDS, int $maxEntries = CACHE_LIFECYCLE_SLICE_ENTRIES): array
 {
     return cache_lifecycle_with_lock(static function () use ($expectedId, $maxSeconds, $maxEntries): array {
-        $control = cache_lifecycle_control_directory();
+        $control = cache_lifecycle_job_directory();
         $state = cache_lifecycle_read_json($control . '/state.json');
         if ($expectedId !== '' && !hash_equals((string) ($state['id'] ?? ''), $expectedId)) return ['ok'=>false,'reason'=>'stale_cache_preview'];
         if (($state['phase'] ?? '') !== 'inventory') return ['ok'=>true] + $state;
@@ -308,6 +310,7 @@ function cache_lifecycle_inventory_slice(string $expectedId = '', float $maxSeco
                 $state['stack'][$index]['newest'] = max($state['stack'][$index]['newest'], $newest);
                 if ($name === '.keep') $state['stack'][$index]['pinned'] = true;
                 if (is_dir($path)) {
+                    if (($GLOBALS['cache_lifecycle_registry_context']['kind'] ?? '') === 'files') continue;
                     $state['totals'][$owner]['dirs']++;
                     if (count($state['stack']) >= 64) { $state['blocked']++; $state['stack'][$index]['unsafe'] = true; continue; }
                     $child = cache_lifecycle_frame($relative);

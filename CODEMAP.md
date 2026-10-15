@@ -1001,9 +1001,11 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 | Bash and PowerShell source contracts | `scripts/source_contracts/scripts.php`, `tests/source_contract_scripts_test.php` | Non-executing bounded parser for changed brace-bodied functions, preceding documentation, stable body fingerprints, and explicit refusal of unsupported forms. |
 | Windows release pair | `winapp/build_installer.py` | Version folder, exact JSON integrity and publication rollback. |
 
-## Cache lifecycle (#212)
+## Cache lifecycle
 
 `app/services/cache_lifecycle.php` owns producer policy, guarded private storage, streamed inventory and bounded reclamation through its sibling `cache_lifecycle/` parts. `site_maintenance.php` and Maintenance Center use that owner; controllers keep HTTP/CSRF and canonical envelopes. `admin-cache-lifecycle.js` delegates mounted/dynamic controls and preserves the preview ID. Native audit/GitHub producers hold shared leases. See `docs/CACHE_MAINTENANCE.md` for retention, pins, contextual rollback and partial-inventory bounds.
+
+The database model `app/models/cache_lifecycle_registry.php` owns stable regional rows and scheduling queries. `cache_lifecycle_registry_storage.php` owns passive completed/working evidence and the authoritative checkpoint bridge; the `registry.php` service part owns discovery, fair due rotation, legacy draining and bounded retention. Migration `202610150001_cache_lifecycle_regions.php` creates the table. The DB is authoritative for cursors and findings; disk journals retain names, proof plans and detached data.
 
 Its reclamation part admits external cache-only bursts under a separate
 invocation lock and bounded time/slice budgets. Inventory and reclamation share
@@ -1016,7 +1018,7 @@ loaded through the existing deferred worker root. The dependency-free Core
 `request_data.php` adapter owns passive response-status observation; services do
 not call the native HTTP response API. Installation/upgrade migration
 `202610140001_automatic_cache_cleanup.php` seeds the single capability ON without
-overwriting OFF. Foreground leases/signals, 60-second throttling and 40/120/600 ms
+overwriting OFF. Foreground leases/signals, thirty-second opportunities and 40/120/600 ms
 admission preserve bounded occupancy; <=128 MiB selects the small attempt, with
 independent operation/memory limits. Completed inventory is due hourly; unfinished
 work retains checkpoints. Cron is optional for zero-traffic installations.

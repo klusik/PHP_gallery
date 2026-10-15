@@ -20,7 +20,7 @@ namespace Gallery\Services;
 function cache_lifecycle_cleanup_start(string $id): array
 {
     return cache_lifecycle_with_lock(static function () use ($id): array {
-        $control = cache_lifecycle_control_directory();
+        $control = cache_lifecycle_job_directory();
         $state = cache_lifecycle_read_json($control . '/state.json');
         if (($state['phase'] ?? '') !== 'preview' || !hash_equals((string) ($state['id'] ?? ''), $id)) {
             return ['ok'=>false,'reason'=>'stale_cache_preview'];
@@ -89,6 +89,7 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
         if (is_file($path . '/.keep') || ($singleFile ? !is_file($path) : !is_dir($path))) return false;
         $stat = @lstat($path);
         if (!is_array($stat) || (int) $stat['mtime'] !== $record['root_mtime'] || (int) $stat['ctime'] !== $record['root_ctime']) return false;
+        if ($record['owner'] === 'workspaces') cache_lifecycle_workspace_observe($record['path']);
         $proof = cache_lifecycle_read_json(cache_lifecycle_path($record['proof']));
         if (!hash_equals($record['proof_hash'], hash('sha256', json_encode($proof, JSON_THROW_ON_ERROR)))) return false;
         if (!is_dir(dirname($destination))) mkdir(dirname($destination), 0775, true);
@@ -118,7 +119,7 @@ function cache_lifecycle_stage_candidate(array $record, string $destination, str
 function cache_lifecycle_cleanup_slice(string $expectedId = '', float $maxSeconds = CACHE_LIFECYCLE_SLICE_SECONDS, int $maxEntries = 180): array
 {
     return cache_lifecycle_with_lock(static function () use ($expectedId, $maxSeconds, $maxEntries): array {
-        $control = cache_lifecycle_control_directory();
+        $control = cache_lifecycle_job_directory();
         $state = cache_lifecycle_read_json($control . '/state.json');
         if ($expectedId !== '' && !hash_equals((string) ($state['id'] ?? ''), $expectedId)) return ['ok'=>false,'reason'=>'stale_cache_preview'];
         $streaming = !empty($state['scheduled']) && ($state['phase'] ?? '') === 'inventory';
@@ -224,6 +225,10 @@ function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = 
     if (!feature_capability_effective_enabled('automatic_cache_cleanup')) return ['ok'=>true,'skipped'=>true,'reason'=>'automatic_cache_cleanup_disabled'];
     $deadline = microtime(true) + max(0.02, min(CACHE_LIFECYCLE_COMBINED_SECONDS, $maxSeconds));
     $state = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
+    if (cache_lifecycle_registry_enabled() && ($state === [] || ($state['phase'] ?? '') === 'complete')) {
+        cache_lifecycle_registry_initialize($state);
+        return cache_lifecycle_registry_slice($maxSeconds, $force);
+    }
     if (($state['phase'] ?? '') === 'complete') {
         // A completed deployed checkpoint may retain the former hourly marker.
         // Only its timing is rebased; unfinished plans and cursors stay intact.
@@ -253,7 +258,7 @@ function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = 
         $state = cache_lifecycle_inventory_start(true);
         if (empty($state['ok'])) return $state;
     }
-    if (($state['phase'] ?? '') === 'cleanup' && !empty($state['scheduled']) && !empty($state['queue_index_ready'])
+    if (!cache_lifecycle_registry_enabled() && ($state['phase'] ?? '') === 'cleanup' && !empty($state['scheduled']) && !empty($state['queue_index_ready'])
         && (is_array($state['current'] ?? null) || (int) ($state['plan_offset'] ?? 0) < (int) ($state['plan_write_offset'] ?? 0))
         && cache_lifecycle_now() - (int) ($state['completed_at'] ?? 0) >= CACHE_LIFECYCLE_REFRESH_SECONDS) {
         // Serve existing deletion debt before refreshing its observation. With
@@ -320,8 +325,9 @@ function cache_lifecycle_scheduled_slice(bool $force = false, string $burstId = 
 function cache_lifecycle_retired_slice(float $maxSeconds = CACHE_LIFECYCLE_SLICE_SECONDS): array
 {
     return cache_lifecycle_with_lock(static function () use ($maxSeconds): array {
-        $control = cache_lifecycle_control_directory();
-        $path = cache_lifecycle_path('cache-lifecycle/retired');
+        $control = cache_lifecycle_job_directory();
+        $path = $control . '/retired';
+        cache_lifecycle_assert_path($path);
         if (!is_dir($path)) return ['ok'=>true,'pending'=>false,'removed'=>0,'bytes_removed'=>0];
         $record = cache_lifecycle_read_json($control . '/retired.json');
         $slice = application_update_delete_tree_slice($path, 180, min(CACHE_LIFECYCLE_SLICE_SECONDS, $maxSeconds),
@@ -408,8 +414,8 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
 {
     // Bound request admission while preserving each owner's shorter I/O slice.
     // Type: float. Units: seconds. Scope: one external or visitor cache invocation.
-    // Consumers: burst deadline. Rationale: external work is at most ten seconds; visitors use shorter 40-600 ms admission and never extend the parent's execution time.
-    $budget = max(0.04, min(10.0, $seconds));
+    // Consumers: burst deadline. Rationale: external work is at most five seconds; visitors use shorter 40-600 ms admission and never extend the parent's execution time.
+    $budget = max(0.04, min((float) CACHE_LIFECYCLE_CHAIN_WORK_SECONDS, $seconds));
     $started = microtime(true);
     $deadline = $started + $budget;
     $maxSlices = max(1, min(CACHE_LIFECYCLE_RUN_SLICES, $maxSlices));
@@ -433,12 +439,16 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
         $record['running'] = true;
         cache_lifecycle_write_json($control . '/scheduler.json', $record);
         $state = cache_lifecycle_read_json($control . '/state.json');
+        if (cache_lifecycle_registry_enabled() && ($state === [] || ($state['phase'] ?? '') === 'complete')) {
+            $state = cache_lifecycle_registry_summary();
+        }
         return ['ok'=>true,'state'=>$state];
     });
     if (empty($admission['ok'])) return $admission;
     $before = (array) $admission['state'];
     $result = ['ok'=>true,'skipped'=>true,'reason'=>'cache_lifecycle_not_due'];
     $slices = 0;
+    $registryProgressed = false;
     $id = '';
     $capacity = ['known'=>false,'bytes'=>null,'admitted'=>true];
     try {
@@ -466,6 +476,11 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
                 $remaining = $deadline - microtime(true);
                 $result = cache_lifecycle_scheduled_slice(false, $id, min($visitor ? 0.06 : CACHE_LIFECYCLE_COMBINED_SECONDS, $remaining));
                 $slices++;
+                if (!empty($result['registry'])) {
+                    $registryProgressed = $registryProgressed || !empty($result['registry_progressed']);
+                    if (empty($result['ok']) || !empty($result['skipped'])) break;
+                    continue;
+                }
                 if (empty($result['ok']) || !empty($result['busy']) || ($result['skipped'] ?? false) === true
                     || ($result['phase'] ?? '') === 'complete' || !empty($result['cleanup_blocked'])) break;
                 $id = (string) ($result['id'] ?? '');
@@ -485,11 +500,13 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
     $result['done'] = ($result['phase'] ?? '') === 'complete';
     $result['free_space_known'] = $capacity['known'];
     $result['free_bytes'] = $capacity['bytes'];
-    $recorded = cache_lifecycle_with_lock(static function () use ($result, $before): array {
+    $recorded = cache_lifecycle_with_lock(static function () use ($result, $before, $registryProgressed): array {
         $control = cache_lifecycle_control_directory();
         $current = cache_lifecycle_read_json($control . '/state.json');
+        $registry = cache_lifecycle_registry_enabled() && ($current === [] || ($current['phase'] ?? '') === 'complete');
+        if ($registry) $current = cache_lifecycle_registry_summary();
         $record = cache_lifecycle_read_json($control . '/scheduler.json');
-        $progress = !empty($current['last_observed_at']) && (($before['stack'] ?? []) !== ($current['stack'] ?? [])
+        $progress = $registryProgressed || !empty($current['last_observed_at']) && (($before['stack'] ?? []) !== ($current['stack'] ?? [])
             || ($before['totals'] ?? []) !== ($current['totals'] ?? [])
             || ($before['plan_offset'] ?? 0) !== ($current['plan_offset'] ?? 0)
             || ($before['removed'] ?? 0) !== ($current['removed'] ?? 0)
@@ -511,13 +528,15 @@ function cache_lifecycle_scheduled_burst(float $seconds, string $source, int $ma
         // Inventory's blocked directory count is partial coverage, not a failed
         // worker. Only an explicit boolean failure requests a retry delay.
         if ($current !== [] && ($result['blocked'] ?? false) === true) $current['next_due'] = cache_lifecycle_now() + CACHE_LIFECYCLE_REFRESH_SECONDS;
-        if ($current !== []) cache_lifecycle_write_json($control . '/state.json', $current);
+        if (!$registry && $current !== []) cache_lifecycle_write_json($control . '/state.json', $current);
         cache_lifecycle_write_json($control . '/scheduler.json', $record);
         return ['ok'=>true,'progressed'=>$progress,'id'=>(string) ($current['id'] ?? '')];
     });
     if (empty($recorded['ok'])) return $recorded;
     $result['progressed'] = $recorded['progressed'];
     $result['id'] = $recorded['id'];
-    cache_lifecycle_log_reclamation($before, cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json')));
+    $after = cache_lifecycle_registry_enabled() && !empty($before['registry'])
+        ? cache_lifecycle_registry_summary() : cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
+    cache_lifecycle_log_reclamation($before, $after);
     return $result;
 }

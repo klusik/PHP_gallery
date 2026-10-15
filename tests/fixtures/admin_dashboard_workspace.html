@@ -253,13 +253,14 @@ try {
     if (priorClipboard) Object.defineProperty(navigator, 'clipboard', priorClipboard); else delete navigator.clipboard;
     window.fetch = priorFetch;
     cacheHost.remove();
-    const lifecycleMarkup = '<form action="/fixture-lifecycle" data-cache-lifecycle-form><input name="preview_id" value=""><input name="csrf_token" value="fixture"><button type="submit" name="site_maintenance_action" value="cache_inventory_start">Scan</button><button type="submit" name="site_maintenance_action" value="cache_inventory_step" hidden>Continue scan</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_start" hidden>Approve</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_step" hidden>Continue cleanup</button></form><p data-cache-lifecycle-status></p><progress data-cache-lifecycle-progress max="100" hidden></progress><table><tr data-cache-owner="audits"><td data-cache-owner-bytes></td><td data-cache-owner-eligible></td></tr></table><ul data-cache-lifecycle-sample></ul><details data-cache-diagnostics hidden><summary>Diagnostics</summary><pre data-cache-diagnostic-events></pre></details>';
+    const lifecycleMarkup = '<form action="/fixture-lifecycle" data-cache-lifecycle-form><input name="preview_id" value=""><input name="csrf_token" value="fixture"><button type="submit" name="site_maintenance_action" value="cache_inventory_start">Scan</button><button type="submit" name="site_maintenance_action" value="cache_inventory_step" hidden>Continue scan</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_start" hidden>Approve</button><button type="submit" name="site_maintenance_action" value="cache_cleanup_step" hidden>Continue cleanup</button></form><p data-cache-registry-evidence data-cache-registry-template="{done}/{total}; {working}; {oldest}; {removed}"></p><pre data-cache-region-details></pre><p data-cache-lifecycle-status></p><progress data-cache-lifecycle-progress max="100" hidden></progress><table><tr data-cache-owner="audits"><td data-cache-owner-bytes></td><td data-cache-owner-eligible></td></tr></table><ul data-cache-lifecycle-sample></ul><details data-cache-diagnostics hidden><summary>Diagnostics</summary><pre data-cache-diagnostic-events></pre></details>';
     const lifecycleHost = document.createElement('section');
     lifecycleHost.setAttribute('data-admin-cache-lifecycle','');
     lifecycleHost.dataset.panelOpen = '1';
     lifecycleHost.innerHTML = lifecycleMarkup;
     document.body.append(lifecycleHost);
     const lifecycleActions = [];
+    let registryMode = false;
     window.fetch = async (url, options) => {
         if (new URL(url,location.href).pathname !== '/fixture-lifecycle') return priorFetch(url,options);
         const action = options.body.get('site_maintenance_action');
@@ -267,6 +268,9 @@ try {
         const phase = {cache_inventory_start:'inventory',cache_inventory_step:'preview',cache_cleanup_start:'cleanup',cache_cleanup_step:'complete'}[action];
         const state = {id:'a'.repeat(32),phase,files:2,candidates:1,bytes:200,candidate_bytes:200,bytes_removed:phase==='complete'?200:0,
             skipped:0,errors:0,blocked:0,partial:false,totals:{audits:{bytes:200,reclaimable_bytes:200}},sample:[{path:'test-audit/example',owner:'audits',bytes:200}]};
+        if (registryMode) Object.assign(state, {registry:true,scheduled:true,regions_completed:1,regions_total:2,regions_working:1,
+            oldest_completed_at:1700000000,last_removed_at:1700000030,working_bytes:1,pending_bytes:50,bytes:1048576000,totals:{audits:{bytes:1048576000,reclaimable_bytes:50}},
+            regions_sample:[{path:'test-audit',phase:'inventory',round:2,cursor_path:'test-audit/next',cursor_offset:24}]});
         if (action !== 'cache_inventory_start') check(options.body.get('preview_id')===state.id,'Lifecycle continuation preserves exact preview identity');
         return new Response(JSON.stringify({ok:true,message:'Lifecycle '+phase,mutation:{type:'cache.lifecycle',entity:'cache',action:'maintenance',entity_ids:[]},
             panel:null,contexts:[],fallback:{redirect_url:'/must-not-navigate'},cache_lifecycle:state}));
@@ -281,6 +285,23 @@ try {
     lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
     await until(() => lifecycleActions.length===6 && !lifecycleHost.querySelector('button').disabled);
     check(!lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden && location.href===cacheUrl,'Dynamically rerendered lifecycle controls retain capture delegation without rebinding');
+    registryMode = true;
+    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length===7 && !lifecycleHost.querySelector('button').disabled);
+    check(lifecycleHost.querySelector('[data-cache-owner-bytes]').textContent === '1000.00 MiB'
+        && lifecycleHost.querySelector('[data-cache-region-details]').textContent.includes('"round": 2')
+        && lifecycleHost.querySelector('[data-cache-registry-evidence]').textContent.startsWith('1/2; 1;'),
+        'Registry response keeps retained measurements and exposes safe current round/cursor evidence');
+    check(lifecycleHost.querySelector('[value="cache_cleanup_start"]').hidden && lifecycleHost.querySelector('[value="cache_inventory_step"]').hidden
+        && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1',
+        'Automatic registry evidence does not approve deletion, continue a manual identity, navigate or close the panel');
+    lifecycleHost.innerHTML = lifecycleMarkup;
+    lifecycleHost.querySelector('[value="cache_inventory_start"]').click();
+    await until(() => lifecycleActions.length===8 && !lifecycleHost.querySelector('button').disabled);
+    check(lifecycleHost.querySelector('[data-cache-region-details]').textContent.includes('test-audit/next')
+        && location.href===cacheUrl && lifecycleHost.dataset.panelOpen==='1',
+        'Dynamically replaced registry controls retain delegated interception and in-place refresh');
     lifecycleHost.remove();
     window.fetch = priorFetch;
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;

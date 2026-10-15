@@ -53,6 +53,53 @@ represent presentation choices as explicit value/label entries. Reserve literal
 `'page' => 'target'` entries for registered routes because the route-reference
 check validates those entries as route targets.
 
+### Implementation checks learned from hosted CI
+
+For SQL embedded in PHP, review the outer PHP string and inner SQL literals as
+two syntax layers. For example, a double-quoted PHP query can contain the fixed
+SQL condition `kind <> 'history'`, while changing values remain bound parameters.
+Review this at the declaration edit so hosted syntax feedback reaches the
+intended query rather than stopping at a PHP parse error.
+Use `bindValue(..., PDO::PARAM_INT)` for numeric/boolean placeholders compared
+with SQL literals. Passing an integer through `execute(array)` can bind it as
+a string; SQLite distinguishes that placeholder from the numeric literal where
+MySQL/MariaDB may coerce it. Keep the real driver fixture's strict expectation.
+
+For an independent PHP process fixture, list and require the minimal Core and
+service dependencies inside the child bootstrap. A passive cache-status reader
+needs the safe-relative-path policy as well as its storage entry point. Read the
+real child exit code, stderr and serialized persisted evidence; the parent
+process's loaded functions do not establish the child's include contract.
+
+For resumable work, identify the owner of every counter before initializing it.
+A newly created manual identity starts its own observation round, an existing
+regional identity advances its durable round, and installation-wide confirmed
+removal receipts survive both. Extend the existing scheduler fixture to compare
+fresh-cycle and continuation behavior with the same strict expectations.
+
+For filesystem crash injection, distinguish admitted observations from removed
+files. The existing deletion primitive counts `.` and `..` as observations;
+its neighboring scheduler fixture admits three observations to reach one unlink.
+Reuse that setup and assert a real removal before discarding the uncommitted
+cursor. This establishes the intended crash boundary while preserving the
+production worker cap, time budget and suite limits.
+
+For runtime-plan ownership, inspect the full historical closure before adding a
+shared dependency edge. Reuse an existing logical owner only when all of its
+files already belong to that consumer's closure. Generate from the authored
+roots/dependencies, inspect plan-wide duplicate entries and each affected route's
+transitive modules/file counts, and retain the established baselines and limits.
+Count the dependency's transitive owners against the consumer's remaining module
+allowance as well as checking its file closure: sharing existing PHP files can
+still introduce extra logical modules. Choose a complete existing consumer that
+fits both constraints.
+
+For retained measurements, present the newest retry/error evidence alongside the
+last successful result. A completed older observation can remain useful while a
+newer checkpoint or discovery attempt is unverified. Record actual removal time
+when removal is confirmed and preserve an unknown time for legacy receipts that
+lack one.
+
 ### PHP: added optional parameter and structured result
 
 The boolean parameter is documented even though it has a default. The documented

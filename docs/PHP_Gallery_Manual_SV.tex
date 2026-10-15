@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132.3}
+\newcommand{\version}{0.132.4}
 \newcommand{\manualdate}{15~oktober~2026}
 
 \hypersetup{
@@ -2042,6 +2042,10 @@ schemadiagnostik finns i utfällbara detaljer; Underhållscenter äger fortfaran
 rensningen av nedladdningscache.
 
 \paragraph{Uppmätt cachelagring.}
+Automatiskt arbete roterar beständiga områden i~databasen. Senaste bearbetning och senaste lyckade avslutade kontroll är separata. Var trettionde sekund får det äldsta förfallna arbetet högst fem sekunder; ofullständiga områden fortsätter från sin markör och lämnar plats åt andra. Friska avslutade områden förfaller efter en timme, fel försöks igen efter femton minuter. Rotupptäckt hittar nya mappar utan en databasrad per~fil. Avslutade försvunna identiteter behålls sju dagar och tas bort i~små omgångar.
+
+Den kompakta översikten skiljer senast kända mätningar med ålder, avslutad täckning, pågående arbete, känd berättigad kö och senaste bekräftade radering. En ny delkontroll behåller den avslutade mätningen synlig; en mindre avslutad mätning får ersätta den. Historiska byte är ingen aktuell storlek och raderingar dras inte av. Statusläsning skannar ingen lagring. DB-kontrollpunkter äger markörer; privata diskjournaler behåller namn och frånkopplade data. Oavslutat äldre arbete slutförs säkert före övergången; skadade kontrollpunkter förblir obekräftade. OFF bevarar register och framsteg. Autentiserad serverfortsättning behöver ingen öppen webbläsare; en avslutad kedja behöver en senare startmöjlighet.
+
 Registrerade tillfälliga webbläsarprofiler och versionsmärkta arbetskopior för
 utgåvor har en fast livslängd på 24 timmar. Användning förlänger inte tiden.
 Nya profiler sparar skapelsetiden; äldre arbetskopior använder en tidsankare från

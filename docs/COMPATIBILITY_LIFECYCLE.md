@@ -1203,3 +1203,9 @@ coverage, not a boolean worker failure. Actual cleanup blocking retains its
 independent safe retry delay. Timer waiting occupies a PHP worker and cannot
 guarantee recovery after all hosting processes terminate; independent scheduling
 can provide that recovery without changing the generic cache owner.
+
+## Cache registry transition and standalone previews
+
+The cache lifecycle service preserves pre-registry JSON manual/automatic plans, committed queue fences and detached deletion payloads until their original owner drains them. Usage is unknown. The DB registry starts afterwards and retains the last legacy observation as historical until regional coverage is available. Invalid legacy state fails closed. Explicit manual previews and database-free standalone fixture consumers keep the historical API; production automatic workers require the migrated registry and refuse unavailable evidence. Removal requires proof that no deployed unfinished legacy jobs remain and supported standalone consumers have migrated. Regression owners: `cache_lifecycle_scheduler_test.php`, `cache_lifecycle_registry_test.php` and the real autonomous HTTP fixture. New regional work never restarts its root scan merely because a work opportunity or process restart occurred.
+
+Workspace age records now bind their fixed anchor to the current producer marker and filesystem device/inode identity. An unbound historical age record is re-anchored conservatively, and changed identity is revalidated under the exclusive deletion lease before detachment. This protects a replacement at the same path from inheriting expiry. Producer-free legacy workspace usage is unknown; retain the conservative path while supported legacy roots remain.

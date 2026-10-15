@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.132.3';
+const CMS_VERSION = '0.132.4';
 ```
 
 Update-related code uses:
@@ -599,7 +599,7 @@ contract and load order are preserved.
 | `app/models/public_search_progressive.php` | `app/models/public_search_progressive/` | `deferred.php` |
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
-| `app/services/cache_lifecycle.php` | `app/services/cache_lifecycle/` | `policy.php`, `storage.php`, `inventory.php`, `reclamation.php`, `visitor.php`, `chain.php`, `observability.php` |
+| `app/services/cache_lifecycle.php` | `app/services/cache_lifecycle/` | `policy.php`, `storage.php`, `inventory.php`, `reclamation.php`, `visitor.php`, `chain.php`, `observability.php`, `registry.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
 | `app/services/custom_css.php` | `app/services/custom_css/` | `visual_background_save.php` (reviewed background attachment staged and committed through the existing CSS Save owner) |
 | `app/services/gallery_backgrounds.php` | `app/services/gallery_backgrounds/` | `visual_css_save.php` (opaque background revision, shared writer lock and private upload staging for the existing CSS Save owner) |
@@ -1771,6 +1771,10 @@ thumbnail_bounds.php
 
 ## Automatic Cache Lifecycle
 
+`cache_lifecycle_registry.php` in the model layer owns the region SQL. The lightweight registry storage service exposes passive findings and bridges region state into one authoritative DB checkpoint. `cache_lifecycle/registry.php` rotates due regions and root discovery, retains completed measurements and removal receipts, backs off failures and prunes drained tombstones. Catalog/plan payload journals remain filesystem-owned. See [cache rotation](docs/CACHE_MAINTENANCE.md#persistent-rotating-regions) for migration and recovery boundaries.
+
+Admin authentication reuses the complete pre-existing four-file `request-maintenance` dependency instead of directly duplicating its files. The passive dashboard retains its existing decomposition allowance. Registry persistence remains with the passive owner; public trigger registration does not load the worker or registry storage.
+
 `cache_lifecycle.php` and its sibling parts retain sole ownership of producer
 proof, inventory, detachment and reclamation. `visitor.php` admits ordinary
 successful home/gallery/Smart Gallery GET opportunities registered by the
@@ -1779,7 +1783,7 @@ only after rendering. Thumbnail settings/windows do not gate these opportunities
 Installation/upgrade seeds one canonical Admin Features preference only if absent;
 explicit OFF remains durable and preserves manual controls and checkpoints.
 
-Inventory is due every thirty seconds, without replacing unfinished cursors. Policy-owned
+Work opportunities occur every thirty seconds. The DB registry rotates due regions without replacing unfinished cursors; healthy completed regions become due hourly. Policy-owned
 committed candidates can be reclaimed before scan completion, alternating fairly.
 At <= 128 MiB measured pending debt, response-finishing hosts admit <= 600 ms / 8
 slices; larger debt <= 120 ms / 2 slices; unsupported finishing <= 40 ms / 2 slices.
