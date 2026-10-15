@@ -1,5 +1,23 @@
 # Compatibility lifecycle and retirement register
 
+## Retired deploy files and installed updater ownership
+
+Owner: `app/release_file_policy.php` and the updater activation/obsolete-file
+planner. Historical deploy entrypoints are removed from the repository and new
+production inventory. Historical path recognition remains solely to read prior
+schema-1 inventory and manifest evidence on supported older installations;
+usage is **unknown**. `deploy.bat` and the two scripts under `scripts/` were
+updater-owned. Their removal uses the existing trusted installed sidecar or
+manifest, guarded activation and rollback. Unknown files must never be deleted
+based on a familiar filename. Root `deploy.sh` was outside updater ownership
+and is preserved on such installations. `deploy/.htaccess` remains a shipped
+security rule protecting historical package directories. No schema migration or
+blanket name-based deletion is introduced. This read compatibility is permanent
+until supported installed releases no longer need older ownership records;
+removal requires migration/installed-consumer evidence. Regression owners are
+`production_file_policy_test.php`, `updater_inventory_compatibility_test.php`,
+`updater_resumable_state_machine_test.php` and the compact production package test.
+
 ## Admin log clipboard and native text downloads
 
 Owner: `admin-logs.js` and the existing `admin_log_export` controller/service.
@@ -985,9 +1003,9 @@ token permission scope and live/negative regression evidence proves that contrac
 - **Usage / introduction:** Production incidence and direct-export usage are
   unknown. This availability contract is authored for #182; the actual original
   production trigger remains unverified until deployment is checked.
-# Known integration digest installation recovery
+# Historical integration digest bootstrap evidence (superseded for new installs)
 
-The owner-only integration bootstrap protects the release path while the exact
+The earlier owner-only integration bootstrap preserved release-path evidence while the exact
 installed main `7dcfadf153b1c941fd81edee43272f8accb475a1` rejects bare upload-action
 digests (observed run 38218271690). Its owner is the release lifecycle, not the
 normal integration selector. It accepts a narrowly scoped repair feature and
@@ -1007,6 +1025,29 @@ feature fixtures and maintenance FULL do not prove production recovery acceptanc
 After a new main installation the exact-authority guard makes this path unusable.
 Retire executable preparation only after no pending recovery origin uses it;
 retain or migrate immutable marker/qualification readers before removing parsing.
+
+For the current CI-authority evaluator update, this release-before-develop
+bootstrap is superseded by the staged develop-first path in
+`docs/CI_COVERAGE_REUSE_CONTRACT.md`. Preserve the existing erroneous release 8
+origin and its complete evidence byte-for-byte; do not delete or rewrite it.
+Create any superseding release only after the optimized authority is on develop.
+The new route has its own pending live acceptance and does not inherit this
+bootstrap's recovery provenance, alter ordinary main guards, or enable bypass.
+
+### Staged CI authority update compatibility
+
+Stage 1 repairs publisher/workflow/readers/root binding while leaving the full
+pinned BASIC closure unchanged; its existing main-owned FULL integration and
+guarded FF establish W*. Stage 2 is dispatched by the owner from develop with
+`ci_authority_update: true`. It binds retained stage-1 proof and exact W*, permits
+only six approved evaluator transition paths with unchanged scanner closure,
+uses trusted inherited BASIC against a clean candidate checkout, and runs FULL
+from W* on exact S with PHP 8.1 and 8.5 before leased non-force FF. Records
+identify `authority_update` and `inherited_basic` explicitly without claiming
+that W* is in main history. Ordinary main review, separate recovery, human PR
+approval and manual publication remain in force. Report PENDING until real hosted
+runs prove both stages and every write guard; fixtures and maintenance green do
+not establish installation.
 
 ## Unchanged WinApp release attachments
 

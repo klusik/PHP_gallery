@@ -56,7 +56,7 @@ export function linearFixture() {
         {id:24808873,source:repository,current_user_can_bypass:'never'});
     const mandatory=['Read-only generated-state and source preflight','Positive production package (ubuntu-24.04)',
         'Positive production package (windows-2025)','Positive production package (macos-latest)',
-        'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)',
+        'PHP 8.5 workflows (mysql:8.4, Unicode)','PHP 8.5 workflows (mariadb:10.11, Unicode)',
         'PHP 8.5 workflows (mariadb:11.4, Unicode)','PHP 8.1 source (unicode)','PHP 8.5 source (ascii)',
         'Required Chromium fixtures','Complete required CI matrix'];
     const api=(path,method='GET',payload=null)=>{

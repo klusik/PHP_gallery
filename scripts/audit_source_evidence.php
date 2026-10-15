@@ -672,8 +672,10 @@ function audit_correlate_historical_candidate(array $candidate, string $branch, 
     }
     $result['matched_checks'] = $checkNames;
 
-    // These are existing candidate-preparation/reusable-workflow owners, not
-    // a new execution registry. Unexpected jobs or skipped required steps
+    // This exact map describes archived Candidate preparation/push snapshots,
+    // including their historical PHP 8.3 names and retired package step names.
+    // It is neither an active CI registry nor an authority adapter for current
+    // PHP 8.5 maintenance runs. Unexpected jobs or skipped required steps
     // invalidate this advisory snapshot rather than silently narrowing it.
     $requiredSteps = [
         'Prepare source candidate at event SHA' => [

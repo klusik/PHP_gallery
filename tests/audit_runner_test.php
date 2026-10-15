@@ -140,14 +140,15 @@ foreach (['basic', 'quick', 'full', 'release'] as $applicationProfile) {
 $supportSource = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/scripts/audit_lib.php'));
 audit_test_assert(str_contains($runnerSource, "'php-lint-changed' => audit_run_php_lint(true, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
     && str_contains($runnerSource, "'js-lint-changed' => audit_run_js_lint(true, \$node, \$basicChangedLintBase, \$basicChangedLintRequiresBase)")
-    && str_contains($runnerSource, "\$python = \$isBasicProfile ? null : resolve_python_command()")
-    && str_contains($runnerSource, "\$browser = \$isBasicProfile ? null : resolve_browser_executable()")
-    && str_contains($runnerSource, "\$environment = \$isBasicProfile\n    ? [")
+    && str_contains($runnerSource, "\$python = \$isMinimalProfile ? null : resolve_python_command()")
+    && str_contains($runnerSource, "\$browser = \$isMinimalProfile ? null : resolve_browser_executable()")
+    && str_contains($runnerSource, "\$environment = \$isMinimalProfile\n    ? [")
     && str_contains($runnerSource, "'component' => 'PHP GD'")
     && str_contains($runnerSource, "if (\$suiteId === 'source-documentation-changed' && \$basicChangedLintRequiresBase && \$basicChangedLintBase === null)")
     && str_contains($supportSource, "'--no-renames', \$baseSha, 'HEAD', '--'")
     && str_contains($supportSource, "'merge-base', '--is-ancestor', \$baseSha, 'HEAD'")
-    && str_contains($runnerSource, "if (\$requireGitEvidence)"),
+    && str_contains($supportSource, "'reason' => 'immutable-baseline-unavailable'")
+    && str_contains($runnerSource, "!in_array(\$profileLabel, ['full', 'release'], true)"),
     'Basic --changed syntax checks must cover the immutable comparison-base delta and block if its Git evidence is unavailable.');
 
 $hostedDatabase = [
@@ -339,36 +340,75 @@ audit_test_assert(missing_required_php_test_passes($mandatoryFixture, $mandatory
     'Complete structured PHP PASS results must satisfy the mandatory disposable DB owner.');
 
 $generalRequired = $registry['hosted_full_required_php_tests'] ?? null;
-audit_test_assert($generalRequired === ['deploy_app_packaging_test.php', 'runtime_module_plan_test.php'],
-    'Hosted complete audits must retain exact mandatory packaging and PHP-specific module test owners.');
+audit_test_assert($generalRequired === ['runtime_module_plan_test.php'],
+    'Hosted PHP regressions must retain their required PHP-specific module owner after independent packaging moves.');
 $generalFixture = $mandatoryFixture;
+$generalFixture['details']['tests'] = [$generalFixture['details']['tests'][0]];
 $generalFixture['details']['tests'][0]['name'] = $generalRequired[0];
-$generalFixture['details']['tests'][1]['name'] = $generalRequired[1];
+$generalFixture['counts']['passed'] = $generalFixture['counts']['total'] = 1;
 audit_test_assert(missing_required_php_test_passes($generalFixture, $generalRequired) === [],
-    'Both required hosted general regressions must qualify with an individual structured PASS.');
+    'Required hosted general regressions must qualify with an individual structured PASS.');
 foreach (['SKIP' => 'skipped', 'BLOCKED' => 'blocked', 'FAIL' => 'failed'] as $status => $counter) {
     $generalFailure = $generalFixture;
     $generalFailure['details']['tests'][0]['status'] = $status;
-    $generalFailure['counts']['passed'] = 1;
+    $generalFailure['counts']['passed'] = 0;
     $generalFailure['counts'][$counter] = 1;
     audit_test_assert(missing_required_php_test_passes($generalFailure, $generalRequired) === [$generalRequired[0]],
-        'Hosted negative packaging coverage must reject ' . $status . ' instead of hiding it within full PASS.');
+        'Hosted module coverage must reject ' . $status . ' instead of hiding it within full PASS.');
 }
 $missingModule = $generalFixture;
 array_pop($missingModule['details']['tests']);
-$missingModule['counts']['passed'] = 1;
-$missingModule['counts']['total'] = 1;
-audit_test_assert(missing_required_php_test_passes($missingModule, $generalRequired) === [$generalRequired[1]],
+$missingModule['counts']['passed'] = 0;
+$missingModule['counts']['total'] = 0;
+audit_test_assert(missing_required_php_test_passes($missingModule, $generalRequired) === [$generalRequired[0]],
     'A missing PHP-specific module plan child must not qualify the hosted full suite.');
 $zeroExitLie = $generalFixture;
-$zeroExitLie['details']['tests'][1]['exit_code'] = 1;
-audit_test_assert(missing_required_php_test_passes($zeroExitLie, $generalRequired) === [$generalRequired[1]],
+$zeroExitLie['details']['tests'][0]['exit_code'] = 1;
+audit_test_assert(missing_required_php_test_passes($zeroExitLie, $generalRequired) === [$generalRequired[0]],
     'A misleading module-plan PASS with nonzero exit must be rejected.');
 $runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/audit.php');
 audit_test_assert(str_contains($runnerSource, "getenv('GITHUB_ACTIONS') === 'true'")
     && str_contains($runnerSource, "'hosted_full_required_php_tests'")
     && str_contains($runnerSource, 'missing_required_php_test_passes($task, $required)'),
     'The existing central hosted full PHP runner must enforce structured required general child PASS.');
+
+$packagingNames = $registry['packaging_tests'] ?? [];
+audit_test_assert($packagingNames === ['production_file_policy_test.php', 'production_package_test.php']
+    && in_array('packaging', $profiles['full'], true) && in_array('packaging', $profiles['release'], true)
+    && !isset($registry['php_test_requirements']['deploy_app_packaging_test.php']),
+    'Policy and real compact packaging proofs need explicit central ownership without retired deploy registration.');
+$packagingFixture = $mandatoryFixture;
+$packagingFixture['id'] = 'packaging';
+foreach ($packagingNames as $index => $name) {
+    $packagingFixture['details']['tests'][$index]['name'] = $name;
+}
+audit_test_assert(missing_required_php_test_passes($packagingFixture, $packagingNames) === [],
+    'Packaging owner must accept its own individual successful children.');
+foreach (['SKIP', 'BLOCKED', 'FAIL'] as $status) {
+    $badPackaging = $packagingFixture;
+    $badPackaging['details']['tests'][1]['status'] = $status;
+    audit_test_assert(missing_required_php_test_passes($badPackaging, $packagingNames) !== [],
+        'Mandatory compact packaging must reject ' . $status . '.');
+}
+$packagingEnvironment = ['GITHUB_ACTIONS' => 'true', 'GITHUB_REPOSITORY' => 'klusik/PHP_gallery',
+    'GITHUB_JOB' => 'real-database-browser', 'PHP_GALLERY_PACKAGING_OWNER' => 'production-package',
+    'PHP_GALLERY_PACKAGING_CANDIDATE' => str_repeat('a', 40)];
+foreach (['real-database-browser', 'runtime-compatibility', 'release-audit'] as $ownerJob) {
+    $owned = \PhpGallery\Audit\audit_hosted_packaging_ownership($profiles['full'], 'full',
+        array_replace($packagingEnvironment, ['GITHUB_JOB' => $ownerJob]), str_repeat('a', 40));
+    audit_test_assert($owned['delegated_to_packaging'] === ['packaging']
+        && !in_array('packaging', $owned['suites'], true)
+        && in_array('php-regression', $owned['suites'], true),
+        'Only DB-independent packaging may move to the same-candidate native package owner.');
+}
+foreach ([['GITHUB_ACTIONS' => 'false'], ['GITHUB_REPOSITORY' => 'fork/repo'],
+    ['GITHUB_JOB' => 'unknown'], ['PHP_GALLERY_PACKAGING_OWNER' => ''],
+    ['PHP_GALLERY_PACKAGING_CANDIDATE' => str_repeat('b', 40)]] as $override) {
+    $retained = \PhpGallery\Audit\audit_hosted_packaging_ownership($profiles['full'], 'full',
+        array_replace($packagingEnvironment, $override), str_repeat('a', 40));
+    audit_test_assert($retained['suites'] === $profiles['full'] && $retained['delegated_to_packaging'] === [],
+        'Unknown owner or mismatched candidate must retain full packaging execution.');
+}
 
 $nonrequiredSkip = $mandatoryFixture;
 $nonrequiredSkip['details']['tests'][] = [
@@ -769,6 +809,51 @@ audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP unavailabl
 audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "SKIP Chromium unavailable\n"], true) === 'BLOCKED', 'Required child skip must become BLOCKED.');
 audit_test_assert(process_status(['exit_code' => 0, 'stdout' => "BLOCKED missing runtime\n"]) === 'BLOCKED', 'Explicit blocked child output must remain BLOCKED.');
 audit_test_assert(process_status(['exit_code' => 124, 'timed_out' => true]) === 'FAIL', 'Timed out children must normalize to FAIL.');
+
+$numericMetrics = \PhpGallery\Audit\parse_php_audit_metrics("PASS complete\nAUDIT_METRICS {\"compile_seconds\":0.125,\"children\":192,\"zero\":0}\nPASS retained\n");
+audit_test_assert($numericMetrics === ['present'=>true,'valid'=>true,
+    'metrics'=>['compile_seconds'=>0.125,'children'=>192,'zero'=>0],'error'=>null],
+    'Passing PHP children must retain their finite numeric measurements separately from ordinary stdout.');
+foreach (['', "PASS ordinary fixture\n", 'Ordinary diagnostic mentions AUDIT_METRICS without emitting a record.'] as $ordinaryOutput) {
+    audit_test_assert(\PhpGallery\Audit\parse_php_audit_metrics($ordinaryOutput)
+        === ['present'=>false,'valid'=>true,'metrics'=>[],'error'=>null],
+        'Ordinary tests must not need or fabricate optional metric evidence.');
+}
+$invalidMetrics = [
+    'missing prefix delimiter' => 'AUDIT_METRICS{"seconds":1}',
+    'missing payload' => 'AUDIT_METRICS ',
+    'invalid JSON' => 'AUDIT_METRICS {broken}',
+    'empty metrics' => 'AUDIT_METRICS {}',
+    'list instead of object' => 'AUDIT_METRICS [1,2]',
+    'string value' => 'AUDIT_METRICS {"path":"/private/source"}',
+    'numeric string' => 'AUDIT_METRICS {"seconds":"1.5"}',
+    'boolean value' => 'AUDIT_METRICS {"done":true}',
+    'null value' => 'AUDIT_METRICS {"seconds":null}',
+    'nested object' => 'AUDIT_METRICS {"nested":{"seconds":1}}',
+    'nested list' => 'AUDIT_METRICS {"samples":[1,2]}',
+    'negative number' => 'AUDIT_METRICS {"seconds":-1}',
+    'nonfinite number' => 'AUDIT_METRICS {"seconds":1e999}',
+    'unsafe key' => 'AUDIT_METRICS {"../private":1}',
+    'uppercase key' => 'AUDIT_METRICS {"Seconds":1}',
+    'long key' => 'AUDIT_METRICS {"' . str_repeat('a', 65) . '":1}',
+    'duplicate key' => 'AUDIT_METRICS {"seconds":1,"seconds":2}',
+    'multiple records' => "AUDIT_METRICS {\"seconds\":1}\nAUDIT_METRICS {\"seconds\":2}\n",
+    'oversized record' => 'AUDIT_METRICS {' . str_repeat(' ', 4096) . '"seconds":1}',
+];
+$tooManyMetrics = [];
+for ($metricIndex = 0; $metricIndex < 33; $metricIndex++) $tooManyMetrics['value_' . $metricIndex] = $metricIndex;
+$invalidMetrics['too many fields'] = 'AUDIT_METRICS ' . json_encode($tooManyMetrics, JSON_THROW_ON_ERROR);
+foreach ($invalidMetrics as $case => $emittedOutput) {
+    $rejectedMetrics = \PhpGallery\Audit\parse_php_audit_metrics($emittedOutput);
+    audit_test_assert($rejectedMetrics['present'] && !$rejectedMetrics['valid']
+        && $rejectedMetrics['metrics'] === [] && is_string($rejectedMetrics['error']),
+        'Malformed emitted PHP metrics must fail explicitly without retaining arbitrary data: ' . $case);
+}
+$retainedChild = ['name'=>'owned_fixture_test.php','status'=>'PASS','exit_code'=>0,'timed_out'=>false,
+    'duration_seconds'=>0.25,'serial'=>false,'metrics'=>$numericMetrics['metrics']];
+$retainedReport = json_decode(json_encode(['tests'=>[$retainedChild]], JSON_THROW_ON_ERROR), true, 8, JSON_THROW_ON_ERROR);
+audit_test_assert($retainedReport['tests'][0]['metrics'] === $numericMetrics['metrics'],
+    'Structured child evidence must preserve passing-phase numeric measurements through JSON artifact serialization.');
 
 $browserReason = 'BROWSER FAIL #139: Cancel: editor remains open {"drawerOpen":false}';
 audit_test_assert(node_failure_detail("intro\n" . $browserReason . "\nAssertionError: wrapper failed\n") === $browserReason,

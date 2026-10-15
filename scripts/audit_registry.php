@@ -92,6 +92,7 @@ $registry = [
         ],
         'full' => [
             'php-regression',
+            'packaging',
             'runtime-performance',
             'mvc-boundaries',
             'source-contract-inventory',
@@ -109,6 +110,7 @@ $registry = [
         ],
         'release' => [
             'php-regression',
+            'packaging',
             'runtime-performance',
             'mvc-boundaries',
             'source-contract-inventory',
@@ -131,19 +133,26 @@ $registry = [
     // Mandatory individual PASS in GitHub-hosted full/release PHP regressions.
     // These are coverage requirements, not an alternate selector or extra execution.
     'hosted_full_required_php_tests' => [
-        'deploy_app_packaging_test.php',
         'runtime_module_plan_test.php',
+    ],
+
+    // Database-independent policy and real small-package proofs have one central
+    // owner; the required three-platform job executes them on the exact candidate.
+    'packaging_tests' => [
+        'production_file_policy_test.php',
+        'production_package_test.php',
     ],
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
         'runtime_module_plan_test.php' => [
             'timeout' => 240,
-            'reason' => 'Compiles the complete source dependency graph and verifies composed/legacy loading in 192 isolated children; 45 seconds does not cover the measured 72-second Windows run.',
+            'reason' => 'Compiles the complete source dependency graph and verifies each module in separate composed/legacy children; the actual count is retained in metrics, and 45 seconds does not cover the measured 72-second Windows run.',
         ],
-        'deploy_app_packaging_test.php' => [
-            'timeout' => 600,
-            'reason' => 'Real Bash and PowerShell folder/ZIP proofs copy the complete production and source-review inventory into an owned dirty fixture.',
+        'production_package_test.php' => [
+            'extensions' => ['zip', 'mbstring'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'The real compact packaging fixture requires ZIP creation, complete-byte archive verification and portable Unicode case-folding.',
         ],
         'cooperative_galleries_foundations_test.php' => [
             'extensions' => ['openssl'],

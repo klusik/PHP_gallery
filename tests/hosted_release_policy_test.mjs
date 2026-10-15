@@ -14,14 +14,52 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {validateRequest,verifyQualification,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
+import {validateRequest,verifyQualification,verifyIntegrationEvidence,verifyFinalContent,requireQualificationChecks,fetchReleases,fetchJobs} from '../.github/scripts/release-promotion.mjs';
 import {requireOwnerDispatch,requireOwnerEnvironment,requireOwnerRuleset,requireBotPullRequest,effectiveOwnerReview,integrationCheckBinding} from '../.github/scripts/release-owner-authorization.mjs';
 import {dispatchPublishedWebsite} from '../.github/scripts/project-website-dispatch.mjs';
 import {verifyAutomaticCompletion} from '../.github/scripts/release-reconciliation.mjs';
 import {verifyPredecessor} from '../.github/scripts/release-origin.mjs';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {coverageFixtureZip} from './support/coverage_artifact_fixture.mjs';
+import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
+import {evidenceMatrixOwners,fullMatrixOwners,requireIntegrationBasicProfile} from '../.github/scripts/ci-owner-contract.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+{
+    const workflowSha='5'.repeat(40),mainSha='7'.repeat(40),repository='owner/gallery';
+    const current=fullMatrixOwners().map(name=>({name}));
+    const historical=fullMatrixOwners(1).map(name=>({name}));
+    const provider=(path,version=1)=>{
+        const workflow=ciOwnerWorkflowResponse(path,version);
+        if (workflow) return workflow;
+        if (path.endsWith('/git/ref/heads/main')) return {ref:'refs/heads/main',object:{type:'commit',sha:mainSha}};
+        if (path.endsWith(`/compare/${workflowSha}...${mainSha}`)) return {merge_base_commit:{sha:workflowSha}};
+        assert.fail('Unexpected owner-contract fixture GET '+path);
+    };
+    assert.deepEqual(evidenceMatrixOwners(current,repository,workflowSha,()=>assert.fail('Current owners need no historical fallback')),
+        fullMatrixOwners());
+    assert.deepEqual(evidenceMatrixOwners(historical,repository,workflowSha,provider),fullMatrixOwners(1),
+        'Historical native owners remain valid only with complete Git-hashed W inherited from main.');
+    for (const rows of [current.slice(1,8),[...current,current[4]],
+        current.map((job,index)=>index===4?historical[index]:job)]) {
+        assert.throws(()=>evidenceMatrixOwners(rows,repository,workflowSha,provider),/BLOCKED/,
+            'Missing, duplicated and mixed native owner contracts never pass.');
+    }
+    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>provider(path,2)),/workflow W/,
+        'Current W cannot authenticate legacy job names.');
+    assert.throws(()=>evidenceMatrixOwners(historical,repository,undefined,provider),/workflow W/);
+    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>{
+        const value=provider(path);
+        return path.includes('/contents/')?{...value,content:Buffer.from('truncated').toString('base64')}:value;
+    }),/Git object identity/);
+    assert.throws(()=>evidenceMatrixOwners(historical,repository,workflowSha,path=>
+        path.includes('/compare/')?{merge_base_commit:{sha:'8'.repeat(40)}}:
+            ciOwnerWorkflowResponse(path,path.endsWith('ref='+'8'.repeat(40))?2:1) || provider(path)),/inherited from main history/);
+    requireIntegrationBasicProfile(['php-lint','js-lint','source-documentation-changed'],repository,workflowSha,provider);
+    requireIntegrationBasicProfile(['php-lint-changed','js-lint-changed','source-documentation-changed'],repository,workflowSha,
+        path=>provider(path,2));
+    assert.throws(()=>requireIntegrationBasicProfile(['php-lint','js-lint','source-documentation-changed'],repository,workflowSha,
+        path=>provider(path,2)),/BASIC profile differs/);
+}
 {
     const publication={repository:'owner/gallery',tag:'v_1.2.3'};
     const context={repository:publication.repository,eventName:'release',ref:'refs/tags/v_1.2.3'};
@@ -70,7 +108,7 @@ const record = {repository:'owner/gallery',branch:request.branch,candidate_sha:c
     previous_tag_object_type:'commit',previous_tree_sha:'8'.repeat(40),predecessor_kind:'qualified',origin_blob_sha:'7'.repeat(40)};
 const owners = ['Prepare release candidate','Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)','Positive production package (macos-latest)',
-    'PHP 8.3 workflows (mysql:8.4, Unicode)','PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+    'PHP 8.5 workflows (mysql:8.4, Unicode)','PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
     'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Authoritative release audit','Complete required CI matrix','Release qualification gate'];
 const jobs = owners.map(name => ({name,status:'completed',conclusion:'success',html_url:'https://github.com/owner/gallery/actions/runs/123'}));
 assert.equal(validateRequest(request),'1.2.3');
@@ -78,6 +116,22 @@ verifyFinalContent(candidate,candidate,'b'.repeat(40),'b'.repeat(40));
 assert.throws(() => verifyFinalContent('c'.repeat(40),candidate,'b'.repeat(40),'b'.repeat(40)),/main advanced/);
 assert.throws(() => verifyFinalContent(candidate,candidate,'c'.repeat(40),'b'.repeat(40)),/tree differs/);
 assert.deepEqual(verifyQualification(request,run,jobs,record,record.repository,candidate),[]);
+{
+    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
+        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
+    const historicalJobs=jobs.map(job=>({...job,name:historicalName(job.name)}));
+    const historicalRun={...run,head_sha:'5'.repeat(40)};
+    const provider=path=>ciOwnerWorkflowResponse(path,1) || (path.endsWith('/git/ref/heads/main')
+        ? {ref:'refs/heads/main',object:{type:'commit',sha:'5'.repeat(40)}} : assert.fail('Unexpected historical fixture '+path));
+    for (const lifecycle_schema of [1,2]) {
+        const historicalRecord=lifecycle_schema===1?{...record,lifecycle_schema}:
+            {...record,lifecycle_schema,winapp_changed:false};
+        const owners=lifecycle_schema===1?historicalJobs:[...historicalJobs,
+            ...['Prepare manual release assets','Open qualified release PR'].map(name=>({name,status:'completed',conclusion:'success'}))];
+        assert.deepEqual(verifyQualification(request,historicalRun,owners,historicalRecord,record.repository,candidate,{api:provider}),[],
+            'Retained lifecycle schema '+lifecycle_schema+' keeps its authenticated original PHP owner mapping.');
+    }
+}
 for (const branch of ['main','develop','feature/example','release/v_01.2.3','release/v_1.2.3;command']) {
     assert.throws(() => validateRequest({...request,branch}),/BLOCKED/);
 }
@@ -134,8 +188,8 @@ const schema3Record={...record,lifecycle_schema:3,coverage_schema:1,winapp_chang
         artifact_sha256:'sha256:'+'b'.repeat(64)}};
 const fullOwnerNames=['Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-    'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
-    'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
+    'Positive production package (macos-latest)','PHP 8.5 workflows (mysql:8.4, Unicode)',
+    'PHP 8.5 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
     'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
 const manualDeltaPaths=['docs/PHP_Gallery_Manual.tex','docs/PHP_Gallery_Manual.pdf',
     'docs/PHP_Gallery_Manual_CZ.tex','docs/PHP_Gallery_Manual_CZ.pdf',
@@ -155,7 +209,7 @@ schema3Record.delta.changed_paths=deltaPaths;
 const integrationParent='8'.repeat(40),integrationSource='6'.repeat(40);
 const integrationPayload={schema_version:1,repository:record.repository,source_branch:'feature/integration-fixture',
     source_sha:integrationSource,candidate_sha:releaseA,candidate_tree:'4'.repeat(40),expected_develop_sha:integrationParent,
-    source_base:integrationParent,basic_profile:['php-lint','js-lint','source-documentation-changed'],workflow_sha:'5'.repeat(40),
+    source_base:integrationParent,basic_profile:['php-lint-changed','js-lint-changed','source-documentation-changed'],workflow_sha:'5'.repeat(40),
     workflow_path:'.github/workflows/develop-integration.yml',run_id:'456',run_attempt:'1',
     native_owners:fullOwnerNames.map((name,index)=>({id:600+index,
         name:'Develop integration / '+name,status:'completed',conclusion:'success'}))};
@@ -166,6 +220,8 @@ const integrationBinding=`integration:456:1:${releaseA}`;
 const integrationChecks=['Develop integration qualification','Complete required CI matrix'].map((name,index)=>({
     id:index===0?401:402,name,external_id:integrationBinding,app:{id:15368},head_sha:releaseA,status:'completed',conclusion:'success'}));
 const schema3Call=path=>{
+    const workflow=ciOwnerWorkflowResponse(path);
+    if (workflow) return workflow;
     if (path.endsWith('/actions/runs/456/attempts/1')) return {id:456,run_attempt:1,name:'Integrate into develop',
         path:'.github/workflows/develop-integration.yml',event:'workflow_dispatch',head_branch:'main',
         head_sha:'5'.repeat(40),status:'completed',conclusion:'success'};
@@ -212,6 +268,199 @@ const basicJobs=[workflowJob('Select release coverage owner',800),
         'Complete release matrix / Complete required CI matrix']
         .map((name,index)=>workflowJob(bootstrapPrefix+name,900+index,'completed','skipped'))];
 assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,schema3Adapters),[]);
+{
+    const skipped={id:711,name:'Inherited BASIC authority',workflow_name:'Integrate into develop',run_id:456,
+        run_attempt:1,status:'completed',conclusion:'skipped'};
+    assert.doesNotThrow(()=>verifyIntegrationEvidence(schema3Record,record.repository,{...schema3Adapters,
+        integrationJobs:[...schema3Adapters.integrationJobs,skipped]}),
+        'Ordinary current-main integration can retain one explicitly skipped inherited BASIC job.');
+    for (const patch of [{conclusion:'success'},{conclusion:'failure'},{status:'in_progress'},{run_attempt:2}]) {
+        assert.throws(()=>verifyIntegrationEvidence(schema3Record,record.repository,{...schema3Adapters,
+            integrationJobs:[...schema3Adapters.integrationJobs,{...skipped,...patch}]}),/BLOCKED/);
+    }
+    assert.throws(()=>verifyIntegrationEvidence(schema3Record,record.repository,{...schema3Adapters,
+        integrationJobs:[...schema3Adapters.integrationJobs,skipped,{...skipped,id:712}]}),/BLOCKED/);
+}
+{
+    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
+        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
+    const historicalPayload={...integrationPayload,basic_profile:['php-lint','js-lint','source-documentation-changed'],
+        native_owners:integrationPayload.native_owners.map(owner=>({...owner,name:historicalName(owner.name)}))};
+    const historical={...schema3Adapters,
+        api:path=>ciOwnerWorkflowResponse(path,1) || schema3Call(path),
+        integrationEvidence:{...schema3Adapters.integrationEvidence,payload:historicalPayload},
+        integrationJobs:schema3Adapters.integrationJobs.map(job=>({...job,name:historicalName(job.name)}))};
+    assert.deepEqual(verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,historical),[],
+        'Schema 3 consumes immutable historical FULL evidence and its original BASIC profile without rewriting the record.');
+    assert.throws(()=>verifyQualification(request,run,basicJobs,schema3Record,record.repository,candidate,
+        {...historical,api:schema3Call}),/workflow W/,
+        'Historical PHP names cannot be authenticated by a current PHP 8.5 workflow.');
+}
+// A protected-develop authority update terminates at one authentic original main-owned FULL archive.
+{
+    const authority=releaseA,source='2'.repeat(40),integrated='1'.repeat(40),sourceTree='0'.repeat(40),integratedTree='e'.repeat(40);
+    const checksum=bytes=>'sha256:'+createHash('sha256').update(bytes).digest('hex');
+    const historicalName=name=>name.replace('PHP 8.5 workflows (mysql:8.4,','PHP 8.3 workflows (mysql:8.4,')
+        .replace('PHP 8.5 workflows (mariadb:10.11,','PHP 8.3 workflows (mariadb:10.11,');
+    const anchorPayload={...integrationPayload,basic_profile:['php-lint','js-lint','source-documentation-changed'],
+        native_owners:integrationPayload.native_owners.map(owner=>({...owner,name:historicalName(owner.name)}))};
+    const originalArchive=coverageFixtureZip([['develop-integration.json',Buffer.from(JSON.stringify(anchorPayload))]]);
+    const anchorIdentity={...schema3Record.integration,artifact_sha256:checksum(originalArchive)};
+    const anchorEvidence={payload:anchorPayload,provider:{artifact_id:501,artifact_digest:checksum(originalArchive),run_id:'456'}};
+    const identity={candidate_sha:integrated,candidate_tree:integratedTree,workflow_sha:authority,
+        workflow_path:'.github/workflows/develop-integration.yml',run_id:'789',run_attempt:'1',check_run_id:1001,
+        artifact_id:503,artifact_sha256:'sha256:'+'d'.repeat(64)};
+    const basicReport=Buffer.from(JSON.stringify({schema_version:1,profile:'basic',status:'PASS',
+        source:{head_sha:source,comparison_base:authority,worktree_dirty:false},
+        tasks:['php-lint','js-lint','source-documentation-changed'].map(id=>({id,status:'PASS'}))}));
+    const originalBasic={schema_version:1,authority_sha:authority,source_sha:source,source_tree:sourceTree,
+        comparison_base:authority,profile:'basic',suites:['php-lint','js-lint','source-documentation-changed'],
+        successful:true,report_sha256:checksum(basicReport),root_binding:'trusted-evaluator-candidate-root-v1'};
+    const inheritedArchive=coverageFixtureZip([['trusted-basic.json',Buffer.from(JSON.stringify(originalBasic))],
+        ['trusted-basic.json.report.json',basicReport]]);
+    const payload={...integrationPayload,source_sha:source,candidate_sha:integrated,candidate_tree:integratedTree,
+        expected_develop_sha:authority,source_base:authority,workflow_sha:authority,run_id:'789',
+        native_owners:fullOwnerNames.map((name,index)=>({id:1200+index,name:'Develop integration / '+name,
+            status:'completed',conclusion:'success'})),authority_update:{anchor:{identity:anchorIdentity,evidence:anchorEvidence},
+            inherited_basic:{...originalBasic,artifact_id:504,artifact_sha256:checksum(inheritedArchive)}}};
+    const currentRun={id:789,run_attempt:1,name:'Integrate into develop',path:identity.workflow_path,event:'workflow_dispatch',
+        head_branch:'develop',head_sha:authority,status:'completed',conclusion:'success',
+        actor:{login:'owner'},triggering_actor:{login:'owner'}};
+    const checks=['Develop integration qualification','Complete required CI matrix'].map((name,index)=>({id:1001+index,
+        name,external_id:'integration:789:1:'+integrated,app:{id:15368},head_sha:integrated,status:'completed',conclusion:'success'}));
+    const currentJobs=[...payload.native_owners,...['Select squashed source','Prepare integration artifacts',
+        'Publish prepared integration candidate','Publish develop integration','Inherited BASIC authority'].map((name,index)=>({id:1300+index,
+            name,status:'completed',conclusion:'success'})),{id:1310,name:'Develop integration / Authoritative release audit',
+        status:'completed',conclusion:'skipped'}].map(job=>({...job,workflow_name:'Integrate into develop',run_id:789,run_attempt:1}));
+    const provider=(path,method='GET')=>{
+        assert.equal(method,'GET','Authority history readers must never write refs or metadata.');
+        assert.ok(!path.endsWith('/git/ref/heads/develop') && !path.includes('/git/ref/heads/feature/'),
+            'Historical authority validation does not depend on moving develop or feature refs.');
+        if (path.endsWith('/actions/artifacts/501')) return {id:501,name:'develop-integration-record',expired:false,
+            digest:checksum(originalArchive),size_in_bytes:originalArchive.length,workflow_run:{id:456}};
+        if (path.endsWith('/actions/artifacts/504')) return {id:504,name:'develop-integration-inherited-basic',expired:false,
+            digest:checksum(inheritedArchive),size_in_bytes:inheritedArchive.length,workflow_run:{id:789}};
+        if (path.endsWith('/collaborators/owner/permission')) return {permission:'maintain'};
+        if (path.endsWith('/actions/runs/789/attempts/1')) return currentRun;
+        if (path.endsWith('/commits/'+integrated+'/check-runs?per_page=100&filter=all')) return {total_count:checks.length,check_runs:checks};
+        if (path.endsWith('/commits/'+source)) return {sha:source,parents:[{sha:authority}],commit:{tree:{sha:sourceTree}}};
+        if (path.endsWith('/commits/'+integrated)) return {sha:integrated,parents:[{sha:source}],commit:{tree:{sha:integratedTree}}};
+        if (path.endsWith('/compare/'+source+'...'+integrated)) return {base_commit:{sha:source},merge_base_commit:{sha:source},
+            status:'ahead',ahead_by:1,behind_by:0,files:[{filename:'app/runtime/modules.php',status:'modified'}]};
+        const currentSource=path.includes('?ref='+source);
+        const currentMatrix=path.includes('/gallery-workflows.yml?ref='+authority);
+        const workflow=ciOwnerWorkflowResponse(path,currentSource || currentMatrix?2:1);
+        if (workflow) {
+            if (!workflow.path.endsWith('/candidate-preparation.yml')) return workflow;
+            const text=Buffer.from(workflow.content,'base64').toString('utf8').replace(/php scripts\/audit\.php --profile=basic(?: --changed)?/g,
+                'php scripts/audit.php --profile=basic'+(path.includes('?ref='+source)?' --changed':''));
+            const bytes=Buffer.from(text);
+            return {...workflow,sha:gitBlobSha(bytes),size:bytes.length,content:bytes.toString('base64')};
+        }
+        return schema3Call(path);
+    };
+    const authorityRecord={lifecycle_schema:3,coverage_schema:1,selected_develop_sha:integrated,integration:identity};
+    const authorityAdapters={api:provider,integrationEvidence:{payload,provider:{artifact_id:503,
+        artifact_digest:identity.artifact_sha256,run_id:'789'}},integrationJobs:currentJobs,
+        anchorIntegrationJobs:schema3Adapters.integrationJobs.map(job=>({...job,name:historicalName(job.name)})),
+        anchorArtifacts:{download:(repository,id)=>{assert.equal(repository,record.repository);assert.equal(id,501);return originalArchive;}},
+        inheritedBasicArtifacts:{download:(repository,id)=>{assert.equal(repository,record.repository);assert.equal(id,504);return inheritedArchive;}}};
+    assert.deepEqual(verifyIntegrationEvidence(authorityRecord,record.repository,authorityAdapters),{
+        candidate_sha:integrated,candidate_tree:integratedTree,workflow_sha:authority,run_id:'789',run_attempt:'1'},
+        'The new FULL proof trusts protected develop W* only through the original main-owned archive and inherited whole BASIC.');
+    const alteredPayload=mutate=>{
+        const next=structuredClone(payload);mutate(next);
+        return {...authorityAdapters,integrationEvidence:{...authorityAdapters.integrationEvidence,payload:next}};
+    };
+    for (const mutate of [value=>{delete value.authority_update;},value=>{value.authority_update=null;},
+        value=>{value.authority_update.mode='bypass';},value=>{value.authority_update.anchor.approved=true;},
+        value=>{value.authority_update.anchor.identity.candidate_sha=source;},
+        value=>{value.authority_update.anchor.evidence.provider.artifact_digest='sha256:'+'0'.repeat(64);},
+        value=>{value.authority_update.anchor.evidence.payload.source_branch='feature/invented';},
+        value=>{value.authority_update.anchor.evidence.payload.authority_update=null;},
+        value=>{delete value.authority_update.inherited_basic;},value=>{value.authority_update.inherited_basic.source_sha=integrated;},
+        value=>{value.authority_update.inherited_basic.source_tree=integratedTree;},
+        value=>{value.authority_update.inherited_basic.authority_sha=source;},
+        value=>{value.authority_update.inherited_basic.comparison_base=integrationParent;},
+        value=>{value.authority_update.inherited_basic.profile='full';},
+        value=>{value.authority_update.inherited_basic.suites=['php-lint-changed','js-lint-changed','source-documentation-changed'];},
+        value=>{value.authority_update.inherited_basic.successful=false;},
+        value=>{value.authority_update.inherited_basic.report_sha256='b'.repeat(64);},
+        value=>{delete value.authority_update.inherited_basic.artifact_id;},
+        value=>{value.authority_update.inherited_basic.artifact_id=0;},
+        value=>{value.authority_update.inherited_basic.artifact_sha256='b'.repeat(64);},
+        value=>{value.authority_update.inherited_basic.root_binding='candidate-evaluator';},
+        value=>{value.authority_update.inherited_basic.override=true;},
+        value=>{value.basic_profile=['php-lint','js-lint','source-documentation-changed'];},
+        value=>{value.recovery_mode='existing-develop';},value=>{value.override=false;}]) {
+        assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,alteredPayload(mutate)),/BLOCKED/);
+    }
+    for (const patch of [{head_branch:'main'},{actor:{login:'someone'}},{triggering_actor:{login:'someone'}},
+        {actor:null},{triggering_actor:null},{head_sha:source},{event:'push'}]) {
+        assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+            api:path=>path.endsWith('/actions/runs/789/attempts/1')?{...currentRun,...patch}:provider(path)}),/BLOCKED/);
+    }
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        api:path=>path.endsWith('/collaborators/owner/permission')?{permission:'write'}:provider(path)}),/BLOCKED/);
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        api:path=>path.endsWith('/actions/runs/456/attempts/1')?{...schema3Call(path),head_branch:'develop'}:provider(path)}),/BLOCKED/,
+        'A nested develop-owned authority cannot impersonate the terminating original main-owned anchor.');
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        api:path=>path.endsWith('/actions/artifacts/501')?{...provider(path),expired:true}:provider(path)}),/BLOCKED/);
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        anchorArtifacts:{download:()=>Buffer.from('truncated anchor archive')}}),/BLOCKED/);
+    for (const patch of [{name:'develop-integration-prepared-state'},{workflow_run:{id:456}},{expired:true},
+        {digest:'sha256:'+'0'.repeat(64)},{size_in_bytes:inheritedArchive.length+1}]) {
+        assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+            api:path=>path.endsWith('/actions/artifacts/504')?{...provider(path),...patch}:provider(path)}),/BLOCKED/);
+    }
+    const swappedBasic=(reportBytes,archiveEvidence=originalBasic,recordEvidence=archiveEvidence)=>{
+        const archive=coverageFixtureZip([['trusted-basic.json',Buffer.from(JSON.stringify(archiveEvidence))],
+            ['trusted-basic.json.report.json',reportBytes]]);
+        const retained=structuredClone(payload);
+        retained.authority_update.inherited_basic={...recordEvidence,artifact_id:504,artifact_sha256:checksum(archive)};
+        return {...authorityAdapters,integrationEvidence:{...authorityAdapters.integrationEvidence,payload:retained},
+            inheritedBasicArtifacts:{download:()=>archive},api:path=>path.endsWith('/actions/artifacts/504')
+                ?{...provider(path),digest:checksum(archive),size_in_bytes:archive.length}:provider(path)};
+    };
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,
+        swappedBasic(Buffer.concat([basicReport,Buffer.from('\n')]))),/BLOCKED/,
+        'Independent raw report bytes must reproduce report_sha256 even when decoded PASS semantics are unchanged.');
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,
+        swappedBasic(basicReport,{...originalBasic,source_tree:integratedTree},originalBasic)),/BLOCKED/,
+        'Provider-authenticated evidence cannot substitute different ten-field bytes for the retained record.');
+    for (const mutate of [value=>{value.status='FAIL';},value=>{value.source.head_sha=integrated;},
+        value=>{value.source.comparison_base=integrationParent;},value=>{value.source.worktree_dirty=true;},
+        value=>{value.tasks[0].status='FAIL';},value=>{value.tasks[0].id='php-lint-changed';},
+        value=>{value.tasks.pop();}]) {
+        const report=JSON.parse(basicReport.toString('utf8'));mutate(report);
+        const bytes=Buffer.from(JSON.stringify(report));
+        assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,
+            swappedBasic(bytes,{...originalBasic,report_sha256:checksum(bytes)})),/BLOCKED/,
+            'Matching archive and report digests do not authorize a failed, dirty, stale or partial original BASIC report.');
+    }
+    for (const transform of [rows=>rows.filter(job=>job.name!=='Inherited BASIC authority'),
+        rows=>rows.map(job=>job.name==='Inherited BASIC authority'?{...job,conclusion:'failure'}:job),
+        rows=>rows.map(job=>job.name==='Inherited BASIC authority'?{...job,conclusion:'skipped'}:job),
+        rows=>rows.map(job=>job.name==='Inherited BASIC authority'?{...job,run_attempt:2}:job),
+        rows=>[...rows,{...rows.find(job=>job.name==='Inherited BASIC authority'),id:1311}]]) {
+        assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,
+            {...authorityAdapters,integrationJobs:transform(currentJobs)}),/BLOCKED/,
+            'Authority updates require exactly one successful independent native BASIC job from this attempt.');
+    }
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        api:path=>path.includes('/contents/.github/workflows/gallery-workflows.yml?ref='+authority)
+            ?ciOwnerWorkflowResponse(path,1):provider(path)}),/BLOCKED/,
+        'Current native labels cannot replace the authenticated PHP 8.5 matrix source at trusted W*.');
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        integrationJobs:currentJobs.map(job=>job.name.endsWith('Required Chromium fixtures')?{...job,conclusion:'failure'}:job)}),/BLOCKED/);
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        anchorIntegrationJobs:authorityAdapters.anchorIntegrationJobs.filter(job=>!job.name.endsWith('Required Chromium fixtures'))}),/BLOCKED/);
+    assert.throws(()=>verifyIntegrationEvidence(authorityRecord,record.repository,{...authorityAdapters,
+        api:path=>path.includes('/contents/.github/workflows/candidate-preparation.yml?ref='+source)
+            ?ciOwnerWorkflowResponse(path,1):provider(path)}),/BLOCKED/,
+        'Feature BASIC remains changed-source at S even though the inherited W* evaluator intentionally runs whole BASIC.');
+}
 // Start a second release while its schema-3 predecessor is tagged but still unpublished.
 // Real ZIP bytes exercise the production coverage loader, not prehydrated payload adapters.
 {

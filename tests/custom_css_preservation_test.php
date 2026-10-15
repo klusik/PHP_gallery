@@ -266,11 +266,11 @@ namespace {
         foreach(['custom_css/css_template.css','custom_css/custom.css','custom_css/modern.css'] as $path) {
             css_preserve_require(in_array($path,$productionPaths,true),'canonical production inventory lost an intentional shipped CSS preset '.$path);
         }
-        $powershell=file_get_contents(dirname(__DIR__).'/scripts/deploy.ps1'); $shell=file_get_contents(dirname(__DIR__).'/scripts/deploy.sh');
-        css_preserve_require(str_contains($powershell,'scripts/release_files.php') && str_contains($powershell,"'list',") && str_contains($powershell,"'verify',"),
-            'PowerShell deployment bypassed the canonical inventory list or staged-tree verifier');
-        css_preserve_require(str_contains($shell,'release_files.php" list') && str_contains($shell,'release_files.php" verify'),
-            'Shell deployment bypassed the canonical inventory list or staged-tree verifier');
+        foreach(['public/assets/custom.css','public/assets/custom-overrides.css','public/assets/.custom-overrides.lock'] as $path) {
+            css_preserve_require(!\Gallery\Core\release_file_policy_is_production_path($path)
+                && !\Gallery\Core\release_file_policy_is_updater_path($path),
+                'production builder or updater policy admitted installation-owned CSS '.$path);
+        }
         // Exercise the independent editor against only the copied service and disposable assets.
         css_preserve_baseline();
         $initial = \Gallery\Services\custom_css_overrides_state();

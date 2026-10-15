@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.132.8
+
+Production packaging moved to a verified PHP builder, while CI qualification and release evidence were strengthened for candidate, develop-integration, and release workflows.
+
+### Highlights
+
+#### Verified production packaging
+- Replaced the legacy interactive and FTP deployment tools with a PHP production package builder that checked reviewed inventory, manifest hashes, complete source bytes, and output contents.
+- Preserved separate Ubuntu, Windows, and macOS packaging qualification, including Windows junction and reparse-point checks.
+
+#### Authenticated CI qualification
+- Added an owner-dispatched develop CI-authority update path that preserved inherited BASIC evaluator coverage and required FULL qualification before guarded develop integration. [#223](https://github.com/klusik/PHP_gallery/issues/223)
+- Added immutable origin and predecessor records for `v_0.132.8`, identifying `v_0.132.7` as the previous stable release. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Backend
+- Added `scripts/package_production.php` and its filesystem and integrity modules to build production folders and ZIPs from the canonical inventory.
+- Required current manifest integrity, exact source-byte SHA-256 verification, safe paths, and non-conflicting outputs; package reports recorded build evidence.
+- Removed legacy Bash, PowerShell, and batch deployment scripts and retired source-review and media packaging profiles.
+- Updated release and integration evidence checks to authenticate workflow ownership, candidate identity, required owners, and matrix versions.
+
+#### Frontend
+- Updated cache-busting revisions across Admin module import chains and strengthened checks that imports and tests used consistent module URLs.
+
+#### Tests
+- Added production-package tests for folder and ZIP contents, source-byte integrity, reproducible ZIP output, metadata, path and link safety, and failure cleanup.
+- Expanded CI, audit, release-policy, browser-fixture, and Admin import-contract coverage, including bounded audit metrics and sanitized failure diagnostics.
+
+#### Documentation
+- Updated packaging, CI ownership, release qualification, compatibility, and maintainer guidance, including all four maintained TeX manuals.
+
+### User Impact
+
+#### For visitors
+- Gallery viewing behavior did not change.
+
+#### For administrators
+- Administrator-facing behavior did not change.
+
+#### For maintainers
+- Production packages could be built and checked through one verified PHP tool instead of the retired deployment scripts. CI evidence checks and packaging coverage provided stricter qualification for maintained release workflows.
+
 ## Version 0.132.7
 
 Cache cleanup handled dense directories and historical download and updater ZIPs more safely, while the Admin dashboard gained live, read-only cache status and clearer cleanup progress.

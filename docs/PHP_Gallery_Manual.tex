@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.132.7}
+\newcommand{\version}{0.132.8}
 \newcommand{\manualdate}{15 October 2026}
 
 \hypersetup{
@@ -270,7 +270,7 @@ The~web process needs read access to~runtime code and~write access to~designated
 
 Internal application, tooling, documentation, cache, data, and~log directories carry their own Apache authorization guards, independent of~URL rewriting. The~host must honor those directives or~provide equivalent server rules; PHP's development server does~not~read them. Direct HTTP requests to~CLI commands receive an~empty 404 before application startup. Continue to~use the~public front controller for~browser routes and~the~shell for~maintenance commands. See \filepath{docs/HTTP_ENTRYPOINTS.md}.
 
-Prepare deployment folders or~ZIPs only when needed, using the~reviewed file list in~\filepath{app/production-files.json}. The~deploy helpers verify staged membership and~current integrity data; local agent files, live media, configuration, custom CSS, and~runtime payloads stay outside ordinary packages. Approved WinApp sources ship with the~package, while its installer remains independent. A~prompted Windows target that already contains a~package selects a~fresh timestamped sibling; an~explicit automation target refuses a~collision. Read \filepath{docs/PRODUCTION_FILES.md} before manual deployment.
+Build requested production folders or~ZIPs with \filepath{scripts/package_production.php}. The~PHP 8.1+ builder uses \filepath{app/production-files.json}, requires current integrity data, and~verifies exact membership and~complete SHA-256 content before publication. Existing outputs, unsafe paths and~filesystem links are~refused. Tests, private media, installed configuration and~runtime state cannot enter the~package. WinApp sources retain their separate companion inventory. Historical interactive and~FTP deployment scripts have been removed. See \filepath{docs/PRODUCTION_FILES.md}.
 
 \subsection{Browser installation}
 
@@ -2215,7 +2215,7 @@ Runtime diagnostics & PHP/hosting/database readiness, GD/Imagick/ImageMagick/for
 Integrity & Installed core-manifest hash verification for~managed application files plus release-time manifest generation/validation; separate from~user-data backup.\\
 Gallery benchmark & Development-only authenticated browser benchmark that uses anonymous preview loads, same-origin hidden frames, server render counters and~navigation timing, then exports JSON for~before/after comparisons.\\
 Updater & Stable/beta discovery, cached patch notes, resumable durable jobs, Range download resume, archive/manifest verification, staging, rollback snapshot, activation, migrations, cleanup, locks/stale-lock recovery, retry/cancel before activation, file rollback after activation, stable restore/clean reinstall/beta install, CLI continuation, and~emergency \filepath{reset.php}.\\
-Deployment helpers & Windows/Linux deploy scripts, release metadata, core-manifest generation and~package validation, with deployment designed not~to~make a~locally installed PHP executable an~unconditional runtime requirement for~the~gallery itself.\\
+Production packaging & One portable PHP folder/ZIP builder, positive inventory, complete source-byte verification, release metadata and~core-manifest generation.\\
 \bottomrule
 \end{longtable}
 
@@ -2510,7 +2510,7 @@ The commands in this section describe hosted release ownership and the retained 
 
 The~currently installed release workflow may~still require one central \codeword{--profile=release} audit and~its full matrix. The~\#185 target replaces that B gate: after generating notes, four manuals/PDFs, inventory and~manifest from A, run BASIC \codeword{--changed} for~the~exact A..B source delta and~prove every changed path is~release-owned. Do~not rerun browser, database/HTTP, functional, Node runtime, WinApp or~packaging regressions on B. Until the~replacement is~installed on~main and~verified by~real hosted CI, the~currently installed required workflow remains authoritative; do~not~claim the~target is~active or~substitute local evidence.
 
-Create a~deployment folder or~ZIP only when explicitly requested. The~helpers require current integrity data and~verify the~canonical production inventory; inspect the~requested artifact before use. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy only with explicit authorization. After publication, verify updater discovery, migrations, login, public galleries, protected media, and~integrity/status on~the~published installation.
+Create a~production folder or~ZIP only when explicitly requested; hosted release assets use the~same PHP builder automatically. Pass the~candidate epoch with \codeword{--timestamp} for~deterministic metadata. The~builder refuses stale manifests and~existing outputs; \filepath{scripts/release_files.php} inspects membership only. Three OS packaging owners cover the~real builder independently of~the~database matrix. The~main-only locked TinyTeX cache warmer requires reviewed installation before release branches can~reuse its exact key. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility floor and~PHP 8.5 as~the~newest representative. All~three database variants run on~PHP 8.5; historical evidence retains its actual versions.
 
 During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
 

@@ -36,7 +36,18 @@ try {
         $pipes, dirname(__DIR__), null, ['bypass_shell' => true]);
     check(is_resource($process), 'Browser runner unavailable.');
     fclose($pipes[0]);
-    check(proc_close($process) === 0, 'Browser journey failed.');
+    $browserStatus = proc_close($process);
+    if ($browserStatus !== 0) {
+        // The Node runner emits only safe categorized fixture records; preserve
+        // those in the central PHP child log before its temporary owner cleans up.
+        $nodeLog = (string) @file_get_contents($directory . '/node.log');
+        foreach (explode("\n", substr($nodeLog, -8192)) as $line) {
+            if (preg_match('/^FAIL gallery workflow [a-zA-Z0-9 .:_()-]{1,500}$/D', trim($line)) === 1) {
+                fwrite(STDERR, trim($line) . "\n");
+            }
+        }
+    }
+    check($browserStatus === 0, 'Browser journey failed; see the categorized browser fixture record.');
     $pdo = fixtureDatabase($directory, $token);
     $rows = $pdo->query("SELECT id, title, folder_path, visibility FROM galleries WHERE folder_path LIKE 'browser-workflow%'")->fetchAll(PDO::FETCH_ASSOC);
     check(count($rows) === 1 && $rows[0]['title'] === 'Browser edited 2', 'Browser duplicate suppression or edit persistence failed.');
@@ -59,7 +70,15 @@ try {
     $statement->execute([$rows[0]['folder_path']]);
     check((int) $statement->fetchColumn() === 1, 'Browser recoverable delete and restore ledger mismatch.');
     echo "PASS gallery workflow browser database and sidecar postconditions\n";
-} catch (Throwable) {
-    fwrite(STDERR, "FAIL gallery workflow browser or persistence checks\n");
+} catch (Throwable $exception) {
+    // Assertions use authored labels. Database exceptions may contain private
+    // connection details, so retain their category and argument-free locations.
+    $reason = $exception instanceof PDOException ? 'database dependency or persistence failure' : $exception->getMessage();
+    $reason = substr((string) preg_replace('/[^a-zA-Z0-9 .:_()-]/', ' ', $reason), 0, 400);
+    fwrite(STDERR, 'FAIL gallery workflow ' . $reason . "\n");
+    foreach (array_slice($exception->getTrace(), 0, 8) as $frame) {
+        fwrite(STDERR, 'FAIL gallery workflow stack ' . basename((string) ($frame['file'] ?? 'unknown'))
+            . ':' . (int) ($frame['line'] ?? 0) . ' ' . (string) ($frame['function'] ?? 'unknown') . "\n");
+    }
     exit(1);
 }

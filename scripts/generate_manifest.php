@@ -148,7 +148,7 @@ function manifest_allowed_roots(): array
 /**
  * Return root-level files that are part of the immutable release surface.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,bool> Approved root-relative filenames mapped to true membership flags.
  */
 function manifest_allowed_root_files(): array
 {
@@ -159,7 +159,6 @@ function manifest_allowed_root_files(): array
         'reset.php' => true,
         'setup-gallery.php' => true,
         'config.example.php' => true,
-        'deploy.bat' => true,
         'README.md' => true,
         'PATCH_NOTES.md' => true,
         'ARCHITECTURE.md' => true,

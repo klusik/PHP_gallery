@@ -17,6 +17,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {peelReleaseTag} from './release-origin.mjs';
+import {evidenceMatrixOwners} from './ci-owner-contract.mjs';
 import {api,command,workflowCoverageJobs,verifyQualification,requireQualificationChecks,fetchJobs} from './release-promotion.mjs';
 import {loadQualification,qualificationRequest} from './release-completion.mjs';
 import {loadReleaseCoverage} from './coverage-artifacts.mjs';
@@ -153,19 +154,7 @@ export function qualifiedDevelopMerge(call, repository, sha) {
         if (!Array.isArray(jobs?.jobs) || jobs.total_count > 100) continue;
         // Match the authoritative full-profile ownership, excluding only
         // the release-only audit intentionally skipped by ordinary develop CI.
-        const mandatory = [
-            'Read-only generated-state and source preflight',
-            'Positive production package (ubuntu-24.04)',
-            'Positive production package (windows-2025)',
-            'Positive production package (macos-latest)',
-            'PHP 8.3 workflows (mysql:8.4, Unicode)',
-            'PHP 8.3 workflows (mariadb:10.11, Unicode)',
-            'PHP 8.5 workflows (mariadb:11.4, Unicode)',
-            'PHP 8.1 source (unicode)',
-            'PHP 8.5 source (ascii)',
-            'Required Chromium fixtures',
-            'Complete required CI matrix',
-        ];
+        const mandatory=evidenceMatrixOwners(jobs.jobs,repository,run.head_sha,call);
         if (mandatory.every(name => jobs.jobs.filter(job => job.name === name
             && job.status === 'completed' && job.conclusion === 'success').length === 1)) {
             return run.html_url;
@@ -430,11 +419,7 @@ export function qualifiedLinearCandidate(call,repository,sha) {
     const jobPath='repos/'+repository+'/actions/runs/'+run.id+'/attempts/'+run.run_attempt+'/jobs?per_page=100';
     const jobs=completeQualificationRows(call,jobPath,'jobs');
     const coverage=workflowCoverageJobs(jobs,repository,binding.runId,binding.attempt,sha,binding.kind,call);
-    const requiredNames = ['Read-only generated-state and source preflight',
-        'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-        'Positive production package (macos-latest)','PHP 8.3 workflows (mysql:8.4, Unicode)',
-        'PHP 8.3 workflows (mariadb:10.11, Unicode)','PHP 8.5 workflows (mariadb:11.4, Unicode)',
-        'PHP 8.1 source (unicode)','PHP 8.5 source (ascii)','Required Chromium fixtures','Complete required CI matrix'];
+    const requiredNames=evidenceMatrixOwners(coverage,repository,run.head_sha,call);
     if (!requiredNames.every(name=>{
         const owners=coverage.filter(job=>job.name===name || job.name.endsWith(' / '+name));
         return owners.length===1 && owners[0].status==='completed' && owners[0].conclusion==='success';

@@ -1,5 +1,114 @@
 # Issue #185: CI coverage and change-aware gating baseline
 
+## CI optimization implementation baseline (2026-10-15)
+
+This section supersedes the packaging ownership proposals below. Earlier tables
+remain historical measurements, not instructions to retain retired deploy tools.
+Implementation starts at develop `1a658ebe3383f3ac7424b166f6d6304075d346ab` on
+`feature/ci_optimization`. Protected branches are not written by the agent.
+The installed BASIC / one exact-candidate FULL / release delta cadence remains.
+
+Owner update on 2026-10-15: active CI tests only PHP 8.1 (compatibility floor)
+and PHP 8.5 (newest representative). MySQL 8.4 and MariaDB 10.11 move to PHP 8.5;
+MariaDB 11.4 remains on PHP 8.5. No database variant or functional assertion is
+removed. Tool/preparation jobs and macOS packaging also move from 8.3 to 8.5.
+Earlier PHP 8.3 timings below remain historical evidence. Historical release
+records retain their actual main-owned workflow matrix; current native owner
+names and authenticated consumers must change together. See
+[owner decision in #223](https://github.com/klusik/PHP_gallery/issues/223#issuecomment-6194682975).
+
+Representative **before** evidence, all attempt 1:
+
+- [FULL 38741037506](https://github.com/klusik/PHP_gallery/actions/runs/38741037506):
+  candidate `eda8aade5c78ce969e68640cfcffdb908eee978e`, immutable base
+  `23fd6c26a6117e1c5d61d3f6094ca98783a56553`, installed workflow
+  `895cc70680dcec52d6b3b83b6e197b413f2a796f`. Workflow created/started
+  13:14:36 UTC, updated/completed 13:22:06 UTC: 450 s, no provider-recorded initial
+  queue delay. Sum of actual native job durations: 1,307 s including integration
+  preparation/publish, or 1,217 s for the eleven FULL owners. Longest job: MySQL
+  8.4 / PHP 8.3, 268 s. These are elapsed runner walls, not billable usage.
+- [BASIC 38740881557](https://github.com/klusik/PHP_gallery/actions/runs/38740881557):
+  same candidate/base, workflow 30 s, actual source job 25 s, central audit
+  10.7696 s: PHP syntax 1,195 files / 7.1912 s, JS+MJS syntax 240 files /
+  2.7125 s, declaration documentation 0.6564 s. Native initial queue is 3 s;
+  GitHub's unrelated custom check rows are excluded from runner time.
+- [Release 38742234930](https://github.com/klusik/PHP_gallery/actions/runs/38742234930):
+  source A `eda8aade5c78ce969e68640cfcffdb908eee978e`, prepared Q
+  `1a658ebe3383f3ac7424b166f6d6304075d346ab`, 339 s workflow wall.
+  Production asset job 42 s, actual legacy package/checksum step 22 s.
+  Four manual compilation 17 s. TinyTeX restore 0 s, install 2 s, package
+  provisioning 77 s, verify 1 s and save 3 s: an observed cold path.
+
+| FULL owner | Central audit s | PHP regression s | Old packaging child s | Runtime-plan child s |
+| --- | ---: | ---: | ---: | ---: |
+| MySQL 8.4 / PHP 8.3 | 225.3262 | 177.8494 | 51.1076 | 23.3651 |
+| MariaDB 10.11 / PHP 8.3 | 172.1242 | 135.0019 | 45.3515 | 18.7598 |
+| MariaDB 11.4 / PHP 8.5 | 192.7605 | 145.5436 | 49.4176 | 25.1379 |
+| PHP 8.1 source | 131.3977 | 84.9293 | 34.1611 | 16.3547 |
+| PHP 8.5 no-intl source | 129.7005 | 88.1861 | 34.1988 | 16.5818 |
+
+Both slow children were serial barriers in all five profiles. The three existing
+positive folder jobs lasted Ubuntu 15 s, Windows 38 s and macOS 35 s; they did
+not prove ZIP content hashes. The new single PHP builder replaces shell deploy;
+compact real-builder negative cases and full folder+ZIP SHA proofs belong to
+three explicit OS packaging owners (Ubuntu/PHP 8.1, Windows/PHP 8.5 and macOS/PHP 8.5), without SQL-profile repetition. Runtime
+module scenarios remain intact; optimization targets repeated analysis cost.
+
+The same MySQL report's next serial children were the real browser journey
+23.0195 s, session-route contention 11.3324 s, widget browser 7.9808 s and session
+contention 7.0372 s. These protect actual HTTP/browser or session concurrency;
+their isolation remains. The browser change removes an unconditional per-mutation
+delay and retains observable state waits. WinApp regression itself took 2.9195 s
+(149 PASS / 1 installer-native SKIP), with no observed repeated dependency install
+that would justify a new Python cache. Node retained 49/49 PASS in 14.9356 s.
+
+At measurement time the complete cache API inventory contained 34 same-key
+TinyTeX caches on sibling release refs, approximately 72 MB each, and none on
+`refs/heads/main`. Key:
+`tinytex-v2-ubuntu24.04-x86_64-364e417dca2f751a09660d305ac3263e69afa943d95016927be355b5d2a4baff`.
+The main-only toolchain cache warmer prepares that exact locked toolchain for
+eligible default-branch restoration. It needs reviewed installation before
+release branches can benefit. A warm-path saving is not yet measured.
+
+Checkout and tool setup in the representative source job were 4+4+1 s;
+MySQL containers 14 s, checkout 5 s, PHP 8 s and Node 3 s. This evidence does
+not justify a Git object cache, self-hosting, paid images, workspace caches or
+an empty npm cache. Full-history checkouts needed for immutable merge-base,
+ancestry and tags remain; any narrower package checkout must retain its actual
+freshness requirements. Database initialization remains disposable.
+
+After measurements must use the exact prepared implementation candidate and
+record setup, audit, package phases and native required results. Baseline and
+implementation change source/configuration and run on fresh hosted machines;
+comparison is observational, not a controlled same-SHA speedup or flakiness rate.
+Missing warm-cache/release live acceptance must remain explicit. No percentage
+or billing improvement is inferred.
+
+### First instrumented implementation run (not final qualification)
+
+[Maintenance 38754164559](https://github.com/klusik/PHP_gallery/actions/runs/38754164559)
+prepared `2fc50a83081afcaf58bd6bed304baeb555f4133d` against
+`1a658ebe3383f3ac7424b166f6d6304075d346ab`. The complete 1,048-file folder and
+ZIP content proof passed on all three OSes: builder total Linux 0.8769 s,
+Windows 2.9461 s and macOS 2.2962 s. The compact smoke passed Linux 0.2420 s and
+macOS 0.6563 s. Windows smoke failed at incorrect `mklink` command quoting;
+Windows runtime-plan freshness also exposed a checkout line-ending mismatch.
+Both are required failures, not accepted SKIPs.
+
+All 49 Node fixtures passed in each PHP profile and required Chromium passed
+34/34. The five PHP profiles were red at a computed-import diagnostic contract;
+PHP 8.1 additionally exposed a cache fixture observing directory removal before
+the aggregate log receipt persisted. Fixes retain the refusal/receipt assertions,
+use native verified Windows junctions and canonical CRLF-only plan comparison,
+and wait for the actual durable receipt within the existing deadline.
+The first run also exposed discarded successful-child profiling output. The
+central audit now retains bounded numeric `AUDIT_METRICS` records in child JSON
+and compact logs after PASS; malformed emitted records fail explicitly. The
+runtime test's compiler/isolated-child phase values therefore remain accessible.
+These observations are diagnostic evidence, not a green handoff or a flake rate.
+Fresh exact-candidate qualification and final timings belong to the final run
+linked in the implementation handoff; an earlier partial run never qualifies a fix.
+
 Snapshot: **2026-10-11**. Source branch: `develop`, commit `5509c865ede3f54df87024ac8692fa5e3166ea1a`. This is an evidence and design artifact, **not an active change to hosted test selection**.
 
 ## Maintainer cadence replacement (2026-10-12)

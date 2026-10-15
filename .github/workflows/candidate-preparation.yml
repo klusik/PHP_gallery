@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           coverage: none
       - uses: actions/setup-node@v7.0.0
         with:
@@ -71,7 +71,7 @@ jobs:
           echo "PHP_GALLERY_SOURCE_BASE=$(git merge-base "${GITHUB_SHA}" origin/main)" >> "${GITHUB_ENV}"
       - id: audit
         name: Central BASIC syntax and declaration checks
-        run: php scripts/audit.php --profile=basic
+        run: php scripts/audit.php --profile=basic --changed
       - id: current
         if: ${{ always() }}
         name: Reject superseded BASIC source evidence
@@ -130,7 +130,7 @@ jobs:
           fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
       - uses: actions/setup-node@v7.0.0

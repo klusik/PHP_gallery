@@ -93,6 +93,9 @@ function content_hash(string $path): string
 /**
  * Discover a conservative release surface, independent of Git and manifest freshness.
  * Raw bytes and sorted relative names make additions/deletions and same-size edits visible.
+ * @param string $root Canonical repository root containing the release inputs.
+ * @param string $version Target release version which must match CMS_VERSION.
+ * @return array{scope_version:int,version:string,files:array<string,string>,fingerprint:string} Sorted relative-path SHA-256 hashes and the complete versioned snapshot fingerprint.
  */
 function snapshot(string $root, string $version): array
 {
@@ -102,7 +105,7 @@ function snapshot(string $root, string $version): array
     $files = [];
     $rootFiles = [
         '.htaccess', '.gitignore', '.gitattributes', 'index.php', 'install.php', 'reset.php',
-        'setup-gallery.php', 'config.example.php', 'deploy.bat', 'README.md', 'PATCH_NOTES.md',
+        'setup-gallery.php', 'config.example.php', 'README.md', 'PATCH_NOTES.md',
         'PATCH_NOTES_TEMPLATE.md', 'ARCHITECTURE.md', 'DATABASE.md', 'TESTING.md', 'CODEMAP.md',
         'AGENTS.md', 'RELEASE.md', 'LICENSE', 'release-metadata.json',
     ];

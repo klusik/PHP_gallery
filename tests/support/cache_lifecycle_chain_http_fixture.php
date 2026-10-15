@@ -38,6 +38,43 @@ namespace {
      * @return void Throws when the real worker did not satisfy the contract.
      */
     function chain_http_assert(bool $condition, string $message): void { if (!$condition) throw new \RuntimeException($message); }
+
+    /**
+     * Read complete persisted reclamation receipts while excluding an in-progress log append.
+     * @param string $path Owned JSONL sink written by the real Admin log model under an exclusive lock.
+     * @return list<array{key:string,context:array{removed_entries:int,bytes_removed:int,from_at:int,to_at:int}}> Confirmed safe aggregate receipts, or an empty list before any reclamation is logged.
+     */
+    function chain_http_reclamation_receipts(string $path): array
+    {
+        if (!is_file($path)) return [];
+        $stream = fopen($path, 'rb');
+        chain_http_assert(is_resource($stream), 'Owned Admin log receipt sink is unreadable.');
+        try {
+            chain_http_assert(flock($stream, LOCK_SH), 'Could not snapshot the owned Admin log receipt sink.');
+            $contents = stream_get_contents($stream);
+            chain_http_assert(is_string($contents), 'Owned Admin log receipt snapshot is incomplete.');
+        } finally {
+            flock($stream, LOCK_UN);
+            fclose($stream);
+        }
+        $receipts = [];
+        foreach (explode("\n", rtrim($contents, "\n")) as $line) {
+            if ($line === '') continue;
+            $event = json_decode($line, true, 16, JSON_THROW_ON_ERROR);
+            chain_http_assert(is_array($event), 'Owned Admin log receipt is not a JSON object.');
+            if (($event['key'] ?? '') !== 'cache.automatic_reclaimed') continue;
+            $context = $event['context'] ?? null;
+            chain_http_assert(is_array($context)
+                && array_keys($context) === ['removed_entries','bytes_removed','from_at','to_at'],
+                'Actual removal receipt contains missing or unsafe context fields.');
+            foreach ($context as $value) chain_http_assert(is_int($value), 'Actual removal receipt contains a non-integer aggregate.');
+            chain_http_assert($context['removed_entries'] > 0 && $context['bytes_removed'] >= 0
+                && $context['from_at'] > 0 && $context['to_at'] >= $context['from_at'],
+                'Actual removal receipt contains invalid removal counters or timestamps.');
+            $receipts[] = $event;
+        }
+        return $receipts;
+    }
     if (getenv('CI') !== 'true') { echo "SKIP hosted-only autonomous HTTP fixture.\n"; exit(0); }
     $root = sys_get_temp_dir() . '/gallery-cache-chain-http-' . bin2hex(random_bytes(8));
     // Confine server workers and every deletion to this owned random directory.
@@ -83,16 +120,26 @@ namespace {
         for ($index = 0; $index <= 4096; $index++) file_put_contents($root . '/cache/dense-unregistered/name-' . $index, '');
         require_once dirname(__DIR__, 2) . '/app/services/cache_lifecycle.php';
         $finished = false;
+        $receipt = null;
+        $receipts = [];
         for ($probe = 0; $probe < 240; $probe++) {
             clearstatcache();
             $status = \Gallery\Services\cache_lifecycle_status();
+            $receipts = chain_http_reclamation_receipts($root . '/events.jsonl');
+            foreach ($receipts as $candidate) {
+                if ($candidate['context']['bytes_removed'] >= 4096) { $receipt = $candidate; break; }
+            }
+            // Registry commits and physical unlink precede the logger's receipt.
+            // Earlier status events cannot stand in for confirmed reclamation;
+            // retain the same bounded observation window until all three exist.
             if (!is_dir($root . '/cache/' . $relative) && !$status['partial'] && $status['totals']['unknown']['files'] >= 4097
-                && is_file($root . '/events.jsonl')) { $finished = true; break; }
+                && $receipt !== null) { $finished = true; break; }
             usleep(CACHE_CHAIN_HTTP_POLL_US);
         }
         chain_http_assert($finished && $status['scheduler_source'] === 'cache_chain',
             'Autonomous HTTP requests did not reclaim eligible data and measure protected dense storage: '
             . json_encode(array_diff_key($status, ['policies'=>true,'totals'=>true,'sample'=>true]), JSON_THROW_ON_ERROR)
+            . '\nConfirmed removal receipts: ' . json_encode($receipts, JSON_THROW_ON_ERROR)
             . '\nOwned server log: ' . file_get_contents($root . '/server.log'));
         chain_http_assert(file_get_contents($root . '/cache/unregistered-original/payload') === 'protected original'
             && is_file($root . '/cache/dense-unregistered/name-4096'), 'An autonomous cleaner deleted unregistered/pinned data.');
@@ -100,11 +147,9 @@ namespace {
         chain_http_assert(count(array_filter($arrivals, static fn(string $kind): bool => $kind === 'public')) === 1
             && count(array_filter($arrivals, static fn(string $kind): bool => $kind === 'worker')) >= 2,
             'The server chain needed another public visit or never recorded real worker requests.');
-        $events = array_map(static fn(string $line): array => json_decode($line, true, 16, JSON_THROW_ON_ERROR), file($root . '/events.jsonl', FILE_IGNORE_NEW_LINES));
-        $events = array_values(array_filter($events, static fn(array $event): bool => $event['key'] === 'cache.automatic_reclaimed'));
-        chain_http_assert(count($events) >= 1 && $events[0]['key'] === 'cache.automatic_reclaimed'
-            && $events[0]['context']['bytes_removed'] >= 4096
-            && array_keys($events[0]['context']) === ['removed_entries','bytes_removed','from_at','to_at'], 'Actual removal lacked a safe aggregate Admin log receipt.');
+        chain_http_assert($receipt !== null && $receipt['key'] === 'cache.automatic_reclaimed'
+            && $receipt['context']['bytes_removed'] >= 4096
+            && array_keys($receipt['context']) === ['removed_entries','bytes_removed','from_at','to_at'], 'Actual removal lacked a safe aggregate Admin log receipt.');
         file_put_contents($root . '/off', '0');
         $stopped = false;
         for ($probe = 0; $probe < 80; $probe++) {

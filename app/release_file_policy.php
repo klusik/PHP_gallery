@@ -124,6 +124,8 @@ function release_file_policy_is_production_path(string $relativePath): bool
         'deploy.bat', 'deploy.sh', 'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'CODEMAP.md',
         'DATABASE.md', 'TESTING.md', 'LICENSE', 'CONTRIBUTING.md', 'ACCESSIBILITY.md', 'release-metadata.json',
     ], true)) {
+        // Retired deployment names remain readable in installed schema-1 sidecars.
+        // Current generation and packaging exclude their removed source files.
         return true;
     }
     if (in_array($relativePath, ['config.php', 'app/bootstrap/config.php', 'public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true)
@@ -171,7 +173,7 @@ function release_file_policy_is_winapp_source_path(string $relativePath): bool
 /**
  * Validate path entries and require stable sorted unique ordering.
  *
- * @param array<int,mixed> $paths Raw path list from the JSON inventory.
+ * @param list<string> $paths Raw inventory path strings; malformed element values are rejected.
  * @return list<string> Safe normalized relative paths.
  * @throws RuntimeException When a path is unsafe or the list is not sorted and unique.
  */
@@ -179,6 +181,9 @@ function release_file_policy_validate_path_list(array $paths): array
 {
     $validated = [];
     $portableKeys = [];
+    $portablePrefixes = [];
+    $directoryKeys = [];
+    $fileKeys = [];
     foreach ($paths as $path) {
         if (!is_string($path) || !release_file_policy_is_safe_relative_path($path)) {
             throw new RuntimeException('Production file inventory contains an unsafe path.');
@@ -188,6 +193,24 @@ function release_file_policy_validate_path_list(array $paths): array
             throw new RuntimeException('Production file inventory contains paths that collide on Windows.');
         }
         $portableKeys[$portableKey] = true;
+        $prefix = '';
+        $segments = explode('/', $path);
+        foreach ($segments as $index => $segment) {
+            $prefix = $prefix === '' ? $segment : $prefix . '/' . $segment;
+            $prefixKey = release_file_policy_portable_path_key($prefix);
+            if ((isset($portablePrefixes[$prefixKey]) && $portablePrefixes[$prefixKey] !== $prefix)
+                || ($index < count($segments) - 1 && isset($fileKeys[$prefixKey]))) {
+                throw new RuntimeException('Production file inventory contains conflicting portable directory paths.');
+            }
+            $portablePrefixes[$prefixKey] = $prefix;
+            if ($index < count($segments) - 1) {
+                $directoryKeys[$prefixKey] = true;
+            }
+        }
+        if (isset($directoryKeys[$portableKey])) {
+            throw new RuntimeException('Production file inventory contains a file/directory collision.');
+        }
+        $fileKeys[$portableKey] = true;
         $validated[] = $path;
     }
 
@@ -256,12 +279,12 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
         if ($segment !== rtrim($segment, " .")) {
             return false;
         }
-        if (preg_match('/[\x00-\x1F\x7F]/', $segment) === 1) {
+        if (preg_match('/[\x00-\x1F\x7F<>"|?*]/', $segment) === 1) {
             return false;
         }
         $deviceStem = strtoupper(explode('.', $segment, 2)[0]);
-        if (in_array($deviceStem, ['CON', 'PRN', 'AUX', 'NUL'], true)
-            || preg_match('/^(COM|LPT)[1-9]$/', $deviceStem) === 1) {
+        if (in_array($deviceStem, ['CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'], true)
+            || preg_match('/^(COM|LPT)([1-9]|¹|²|³)$/u', $deviceStem) === 1) {
             return false;
         }
     }
@@ -273,12 +296,11 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
  * Return the sorted expected package paths for a named static profile.
  *
  * @param string $rootPath Application root containing the inventory.
- * @param string $profile Production, updater, or source-review package profile.
- * @param bool $includeMedia Whether to append files under the explicit galleries media root.
+ * @param string $profile Production distribution or updater activation profile.
  * @return list<string> Sorted project-relative package paths.
- * @throws RuntimeException When the profile is invalid or media paths are unsafe.
+ * @throws RuntimeException When the profile is invalid or an inventory path is missing or unsafe.
  */
-function release_file_policy_paths(string $rootPath, string $profile = 'production', bool $includeMedia = false): array
+function release_file_policy_paths(string $rootPath, string $profile = 'production'): array
 {
     $inventory = release_file_policy_read($rootPath);
     if ($profile === 'production') {
@@ -286,17 +308,8 @@ function release_file_policy_paths(string $rootPath, string $profile = 'producti
         sort($paths, SORT_STRING);
     } elseif ($profile === 'updater') {
         $paths = $inventory['updater_files'];
-    } elseif ($profile === 'source-review') {
-        $paths = array_merge($inventory['production_files'], $inventory['companion_files'], $inventory['source_review_files']);
-        sort($paths, SORT_STRING);
     } else {
         throw new RuntimeException('Unknown production file inventory profile.');
-    }
-
-    if ($includeMedia) {
-        $mediaPaths = release_file_policy_media_paths($rootPath);
-        $paths = array_values(array_unique(array_merge($paths, $mediaPaths)));
-        sort($paths, SORT_STRING);
     }
 
     $paths = release_file_policy_validate_path_list($paths);
@@ -643,36 +656,6 @@ function release_file_policy_archive_owned_candidates(string $root): array
 }
 
 /**
- * Return regular media files beneath galleries/ when the caller explicitly opted in.
- *
- * @param string $rootPath Application root containing galleries/.
- * @return list<string> Sorted gallery-relative package paths.
- * @throws RuntimeException When the media root or any descendant is unsafe.
- */
-function release_file_policy_media_paths(string $rootPath): array
-{
-    $root = release_file_policy_root($rootPath);
-    $mediaRoot = $root . '/galleries';
-    if (!file_exists($mediaRoot) && !is_link($mediaRoot)) {
-        return [];
-    }
-    if (is_link($mediaRoot) || !is_dir($mediaRoot)) {
-        throw new RuntimeException('The optional media root is unsafe.');
-    }
-
-    $paths = [];
-    foreach (release_file_policy_enumerate_files($root, 'galleries') as $relative) {
-        if (in_array(basename($relative), ['.DS_Store', 'Thumbs.db'], true)) {
-            continue;
-        }
-        $paths[] = $relative;
-    }
-
-    sort($paths, SORT_STRING);
-    return release_file_policy_validate_path_list($paths);
-}
-
-/**
  * Enumerate files below one validated project directory without following links or junctions.
  *
  * @param string $rootPath Canonical project root.
@@ -779,6 +762,9 @@ function release_file_policy_assert_paths_exist(string $rootPath, array $paths):
             if (is_link($candidate)) {
                 throw new RuntimeException('A production file path contains a symbolic link.');
             }
+            // Windows junction lstat may cache mode 0 despite is_link() returning false.
+            // Read fresh following stat metadata; the exact realpath check below still rejects redirects.
+            clearstatcache(true, $candidate);
             if ($index < count($segments) - 1 && !is_dir($candidate)) {
                 throw new RuntimeException('A required production file parent directory is missing.');
             }
@@ -797,20 +783,18 @@ function release_file_policy_assert_paths_exist(string $rootPath, array $paths):
  * Compare a staged package tree against the exact static policy profile.
  *
  * @param string $stageRoot Directory containing a completed package.
- * @param string $sourceRoot Source checkout used only to resolve an explicit media opt-in.
- * @param string $profile Production, updater, or source-review package profile.
- * @param bool $includeMedia Whether explicitly selected source galleries are part of the package.
+ * @param string $sourceRoot Source package containing the authoritative inventory.
+ * @param string $profile Production distribution or updater activation profile.
  * @return array{expected_count:int,actual_count:int,unexpected:list<string>,missing:list<string>} Exact comparison result.
  * @throws RuntimeException When a staged path is unsafe or cannot be enumerated.
  */
 function release_file_policy_verify_tree(
     string $stageRoot,
     string $sourceRoot,
-    string $profile = 'production',
-    bool $includeMedia = false
+    string $profile = 'production'
 ): array {
     $root = release_file_policy_root($stageRoot);
-    $expected = release_file_policy_paths($sourceRoot, $profile, $includeMedia);
+    $expected = release_file_policy_paths($sourceRoot, $profile);
     $actual = release_file_policy_enumerate_files($root);
     $unexpected = array_values(array_diff($actual, $expected));
     $missing = array_values(array_diff($expected, $actual));

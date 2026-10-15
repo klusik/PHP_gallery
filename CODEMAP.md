@@ -334,7 +334,7 @@ When changing a feature master, first decide whether the behavior is a new capab
 | Admin Maintenance > Trash UI and mutations | `app/controllers/admin_trash.php`, `app/views/admin_trash.php`, `app/views/admin_dashboard_sections.php` |
 | User-facing delete routing | `app/controllers/admin_galleries_bulk.php`, `app/controllers/admin_public_inline.php`, `app/controllers/public_gallery_cards.php` |
 | Scheduled reconciliation and optional auto-purge | `app/services/site_maintenance.php` |
-| Storage policy | `data/gallery-trash/.htaccess`, `scripts/deploy.sh`, `scripts/deploy.ps1` |
+| Storage policy | `data/gallery-trash/.htaccess`, `app/release_file_policy.php` |
 | Schema | `database/migrations/202609070001_gallery_trash_bin.php`, `database/migrations/202609070002_gallery_trash_state_machine.php` |
 | Focused regression model | `tests/gallery_trash_model_test.php` |
 
@@ -650,8 +650,9 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 
 | Task | Files |
 | --- | --- |
-| Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
-| Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
+| Portable production folder/ZIP builder | `scripts/package_production.php` |
+| Exact package membership and updater ownership | `app/release_file_policy.php`, `scripts/release_files.php` |
+| Current and authenticated historical CI owners | `.github/scripts/ci-owner-contract.mjs`, `.github/scripts/develop-integration.mjs`, `.github/scripts/release-promotion.mjs`, `.github/scripts/release-reconciliation.mjs` |
 | Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `scripts/audit_php_registry.php`, `scripts/audit_process.php`, `scripts/audit_source_evidence.php`, `tests/audit_runner_test.php`, `tests/agent_authoring_examples_test.php`<br>Owns source-only feedback, immutable comparison/dirty evidence, complete failed-source findings, checked authoring examples, curated quick and complete PHP suites, bounded workers and exclusive barriers, child/process-tree cleanup, Node/Python coverage, contracts, syntax, release checks and compact reports. |
 | Include-phase and route performance probes | `scripts/audit_performance.php`, `scripts/audit_performance_registry.php`, `scripts/audit_runtime_probe.php`, `scripts/audit_route_probe_registry.php`, `scripts/audit_route_probe.php`, `scripts/audit_route_performance.php`<br>Checks early-runtime/bootstrap include counts and memory before `cms_run()`, then measures nine registered route lifecycles against an owned disposable workflow fixture when available; records wall time observationally. |
 | Required browser fixtures | `.github/workflows/gallery-workflows.yml`, `scripts/audit_process.php`, `tests/support/headless_browser_fixture.mjs`<br>Owns required Chromium CI status and selected loopback fixtures with private DevTools result polling, browser shutdown and profile cleanup. |
@@ -673,7 +674,7 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 
 ## Test Files
 
-`tests/` is the authoritative tracked regression tree. Production packages exclude it by default; local source-review folders/ZIPs may opt in with `--include-tests true` or `-IncludeTests true`.
+`tests/` is the authoritative tracked regression tree. Production packages exclude it. The portable PHP builder has no FTP, interactive, media or source-review mode; source archives remain a separate Git distribution surface.
 
 | Test | Purpose |
 | --- | --- |

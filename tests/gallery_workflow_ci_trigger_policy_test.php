@@ -222,6 +222,15 @@ namespace {
         }
     }
     $workflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml'));
+    $workflowDirectory = dirname(__DIR__) . '/.github/workflows';
+    foreach (array_merge(glob($workflowDirectory . '/*.yml') ?: [], glob($workflowDirectory . '/*.yaml') ?: []) as $workflowPath) {
+        $configuredWorkflow = (string) file_get_contents($workflowPath);
+        preg_match_all('/^\s+(?:php-version|php):\s*[\'"]?(8[.][0-9]+)[\'"]?\s*$/m', $configuredWorkflow, $configuredPhpVersions);
+        foreach ($configuredPhpVersions[1] as $configuredVersion) {
+            check(in_array($configuredVersion, ['8.1', '8.5'], true),
+                'CI may provision only the PHP compatibility floor and latest runtime: ' . basename($workflowPath) . ' uses ' . $configuredVersion);
+        }
+    }
     $workflowHeader = strstr($workflow, "\njobs:", true);
     check(is_string($workflowHeader) && !str_contains($workflowHeader, 'PHP_GALLERY_BROWSER: disabled')
         && !str_contains($workflowHeader, 'GALLERY_WORKFLOW_BROWSER: disabled'),
@@ -253,6 +262,25 @@ namespace {
         && str_contains($sourceOwner, 'checkout_ref || github.sha')
         && str_contains($nativeGate, "const required = ['preflight'"),
         'Manifest delegation requires required same-candidate preflight and the unchanged native aggregate gate.');
+    $packageOwner = $jobBlocks['production-package'] ?? '';
+    check(str_contains($packageOwner, "os: ubuntu-24.04\n            php: '8.1'")
+        && str_contains($packageOwner, "os: windows-2025\n            php: '8.5'")
+        && str_contains($packageOwner, "os: macos-latest\n            php: '8.5'")
+        && str_contains($packageOwner, 'php-version: ${{ matrix.php }}')
+        && str_contains($packageOwner, 'php scripts/audit.php --suite=production-package')
+        && str_contains($packageOwner, 'checkout_ref || github.sha')
+        && str_contains($packageOwner, 'production-package-${{ runner.os }}')
+        && str_contains($packageOwner, 'if-no-files-found: error')
+        && !str_contains($packageOwner, 'continue-on-error:')
+        && !str_contains($packageOwner, 'deploy.sh') && !str_contains($packageOwner, 'deploy.ps1'),
+        'All three native package jobs must execute the single central policy/smoke/full-content owner and retain mandatory evidence.');
+    foreach (['real-database-browser', 'runtime-compatibility', 'release-audit'] as $delegatingJob) {
+        check(str_contains($jobBlocks[$delegatingJob] ?? '', 'PHP_GALLERY_PACKAGING_OWNER: production-package')
+            && str_contains($jobBlocks[$delegatingJob] ?? '', 'PHP_GALLERY_PACKAGING_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}'),
+            'Packaging delegation must identify its native owner and exact candidate: ' . $delegatingJob);
+    }
+    check(str_contains($nativeGate, "'production-package'") && str_contains($nativeGate, "result !== 'success'"),
+        'Missing, cancelled, failed or skipped package matrix owners must block the required gate.');
     foreach (['real-database-browser', 'runtime-compatibility'] as $jobName) {
         $job = $jobBlocks[$jobName] ?? '';
         check(preg_match('/^    env:\s*\n(?:(?:      #[^\n]*|      [^\n]+)\n)*?      PHP_GALLERY_BROWSER: disabled\s*\n      GALLERY_WORKFLOW_BROWSER: disabled/m', $job) === 1,
@@ -262,7 +290,9 @@ namespace {
     $realDatabaseJob = $jobBlocks['real-database-browser'] ?? '';
     check(substr_count($realDatabaseJob, 'real_browser: true') === 1
         && substr_count($realDatabaseJob, 'real_browser: false') === 2
-        && str_contains($realDatabaseJob, "database: 'mysql:8.4'\n            real_browser: true"),
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mysql:8.4'\n            real_browser: true")
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:10.11'\n            real_browser: false")
+        && str_contains($realDatabaseJob, "php: '8.5'\n            database: 'mariadb:11.4'\n            real_browser: false"),
         'Exactly one stable MySQL matrix entry must own the real-app Chromium workflow journey.');
     check(str_contains($realDatabaseJob, 'if: matrix.real_browser')
         && str_contains($realDatabaseJob, 'Discover Chromium for the real application workflow')
@@ -274,7 +304,7 @@ namespace {
     check(str_contains($browserJob, "PHP_GALLERY_BROWSER_REQUIRED: '1'")
         && !str_contains($browserJob, 'PHP_GALLERY_BROWSER: disabled')
         && !str_contains($browserJob, 'matrix:')
-        && str_contains($browserJob, "php-version: '8.3'")
+        && str_contains($browserJob, "php-version: '8.5'")
         && str_contains($browserJob, "node-version: '22'"),
         'Exactly one stable browser job must require Chromium independently of the runtime matrix.');
     check(str_contains($browserJob, 'command -v "$candidate"')
@@ -374,6 +404,22 @@ namespace {
         && substr_count($releaseWorkflow, 'if ! php scripts/generate_manifest.php --check; then') === 2
         && str_contains($releaseWorkflow, 'PHP_Gallery_Manual PHP_Gallery_Manual_CZ PHP_Gallery_Manual_DE PHP_Gallery_Manual_SV'),
         'TinyTeX must use an exact input-bound cache, save only after all manuals succeed and retain reproducible PDF builds.');
+    $warmWorkflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/manual-toolchain-cache.yml');
+    preg_match('/key: (tinytex-v2[^\r\n]+)/', $releaseWorkflow, $releaseCacheKey);
+    preg_match('/key: (tinytex-v2[^\r\n]+)/', $warmWorkflow, $warmCacheKey);
+    check(($releaseCacheKey[1] ?? '') !== '' && ($releaseCacheKey[1] ?? '') === ($warmCacheKey[1] ?? null)
+        && str_contains($warmWorkflow, "github.ref == 'refs/heads/main'")
+        && str_contains($warmWorkflow, "github.repository == 'klusik/PHP_gallery'")
+        && str_contains($warmWorkflow, 'branches: [main]')
+        && str_contains($warmWorkflow, 'contents: read')
+        && !str_contains($warmWorkflow, 'contents: write') && !str_contains($warmWorkflow, 'restore-keys:')
+        && str_contains($warmWorkflow, 'provision_tinytex.sh install')
+        && str_contains($warmWorkflow, 'provision_tinytex.sh provision')
+        && str_contains($warmWorkflow, 'provision_tinytex.sh verify')
+        && str_contains($warmWorkflow, "success() && steps.tinytex-cache.outputs.cache-hit != 'true'")
+        && !str_contains($warmWorkflow, 'prepare_release_candidate.php')
+        && !str_contains($warmWorkflow, 'pdflatex ') && !str_contains($warmWorkflow, 'gh release'),
+        'Default-branch toolchain warming must populate the identical locked key only from main-owned inputs without release generation or publication.');
     check(str_contains($releaseWorkflow, "git rev-parse 'HEAD^{tree}'")
         && str_contains($releaseWorkflow, 'Prepared tree already exists at current release head')
         && str_contains($releaseWorkflow, 'Release branch changed after preparation; this qualification is stale.'),

@@ -1,5 +1,40 @@
 # Testing Guide
 
+## CI optimization contracts
+
+Active workflows use PHP 8.1 and PHP 8.5 only; all three database
+engines retain their complete scenarios on PHP 8.5. Ubuntu packaging also checks
+the PHP 8.1 floor, while Windows and macOS packaging use PHP 8.5. Historical
+qualification records retain their authenticated original matrix. The newest
+representative advances only through an explicit reviewed update. Reports use
+separate PHP/JS/MJS counts.
+
+Ordinary feature BASIC checks complete PHP/JS/MJS files changed from the frozen
+ancestor base. Reports include separate language counts and an explicit reason
+for a whole-tree fallback when evaluator/parser/configuration inputs change.
+Unavailable baseline evidence blocks; FULL retains whole-tree syntax and all
+functional owners. CI harness changes use the explicit `maintenance_full`
+qualification path and still need maintainer-controlled installation before the
+inherited evaluator guard permits ordinary protected integration.
+
+Admin import tests validate actual module targets, explicit revision values,
+shared URL identity and payload/importer invalidation against the immutable base.
+The source recognizer refuses unsupported or ambiguous forms. Coordinated
+revision changes are accepted; missing targets, divergent coordinator instances
+and changed payloads behind unchanged revisions fail. Existing stage4,
+smart-gallery and side-panel tests own positive and negative cases.
+
+The runtime-plan test retains every composed/legacy isolated module child and
+route comparison. Compiler analysis is shared with dynamic-site review rather
+than parsing discarded tooling files or analyzing the application twice.
+Retained phase timings distinguish compilation from child process wall and
+summed child execution. A bounded numeric `AUDIT_METRICS` record is retained in
+each child's JSON metrics and compact log even after PASS; malformed emitted
+records fail rather than silently losing evidence. Browser journeys use bounded state waits and retain
+specific failure/stack data. Historical missing diagnostics cannot establish
+the old gallery-tag failure's root cause; deliberate hosted failure acceptance
+and live default-branch TinyTeX reuse remain separate evidence requirements.
+
 `tests/cache_lifecycle_registry_test.php` uses the actual registry model with a disposable SQLite table derived from the migration. It covers oldest-due selection, partial-region fairness/cursors, retained completed observations, connection restart, stable row count, discovery/path reuse, legitimate size decreases, persistent removal receipts, passive status, opt-out and corrupt-checkpoint backoff. The existing required autonomous HTTP fixture shares a real disposable registry across independent worker requests, retaining actual token/header/controller transport and a single public kickoff. The existing Chromium dashboard fixture additionally checks retained registry measurements, identical PHP/AJAX regional rows in EN/CS/DE/SV, separate completed/service dates in UTC, missing/empty evidence, failed attempts and retry timing, inert hostile paths, preserved open details, mobile wrapping and dynamically replaced controls with unchanged URL and open panel. Existing legacy scheduler/detachment/crash fixtures remain compatibility coverage. No live cache is used. Hosted central FULL remains the qualification authority; BASIC covers source only. The dense-region case measures 4097 protected entries across unchanged bounded worker opportunities and proves intra-burst continuation. Visitor/chain fixtures cover one forty-millisecond starvation slice and coalesced safe status events. The existing lifecycle retention fixture covers genuine historical flat ZIPs, native abandoned outputs, seven-day expiry unaffected by chmod, shared serving leases and contextual two-copy updater archive retention. Dashboard fixtures additionally cover passive GET parity/failure recovery, preserved help/forms/URL, mobile wrapping and a server-timed waiting bar with a local four-Hz presentation timer. Current manual-cycle counters must remain distinct from retained regional/lifetime summaries.
 
 
@@ -97,7 +132,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.132.7. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.132.8. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -135,8 +170,8 @@ qualification.
 
 ## Database support evidence
 
-The project-tested database/PHP representatives are MySQL 8.4/PHP 8.3,
-MariaDB 10.11/PHP 8.3, and MariaDB 11.4/PHP 8.5. Their matrix jobs require the
+The project-tested database/PHP representatives are MySQL 8.4/PHP 8.5,
+MariaDB 10.11/PHP 8.5, and MariaDB 11.4/PHP 8.5. Their matrix jobs require the
 disposable real-database workflow; a missing fixture is a failure in CI. The
 separate PHP 8.1 job is source-only and does not qualify a database combination.
 Other server series, including newer vendor-maintained or innovation releases,
@@ -263,7 +298,7 @@ a recursive bot-triggered push. A source-only PASS is feedback, not handoff.
 | `candidate-preparation:prepare` | Central `release-preflight`, authored dependency/inventory generation, complete-file manifest and branch-head lease | A source-policy or preparation failure prevents qualification; generated files are committed only on the working branch |
 | `gallery-workflows:preflight` | Read-only central `candidate-preflight`: PHP/JS syntax, declaration/policy and debt budgets, Python imports, MVC, mutation, CI contracts and manifest | Full matrix jobs depend on this PASS; stale/unprepared source cannot proceed |
 | `runtime-compatibility` | PHP 8.1 with Unicode/intl, PHP 8.5 with ASCII/no intl; central `full` includes PHP/Node/WinApp regression, runtime probes, source/MVC/mutation contracts, PHP/JS syntax, manifest and packaging-negative regressions | Both matrix variants required, not interchangeable with real DB workflows |
-| `real-database-browser` | Central `full` in a disposable migrated HTTP+database fixture: PHP 8.3/MySQL 8.4 with real-app Chromium; PHP 8.3/MariaDB 10.11; PHP 8.5/MariaDB 11.4. Includes database concurrency, nine actual route lifecycles and registered integration regressions | Every database variant must PASS, including required real browser on the MySQL case |
+| `real-database-browser` | Central `full` in a disposable migrated HTTP+database fixture: PHP 8.5/MySQL 8.4 with real-app Chromium; PHP 8.5/MariaDB 10.11; PHP 8.5/MariaDB 11.4. Includes database concurrency, nine actual route lifecycles and registered integration regressions | Every database variant must PASS, including required real browser on the MySQL case |
 | `browser-tests` | Required Chromium `browser-map` fixtures via `scripts/audit.php --suite=browser-map` | Missing browser or fixture failures block the matrix |
 | `production-package` | Positive production-folder membership and integrity on Ubuntu, Windows and macOS; negative packaging assertions stay in the complete central PHP regression until #95 reassigns ownership | All three OS jobs required; a positive package build alone does not replace negative cases |
 | `gallery-workflows:ci-gate` and `candidate-preparation:gate` | Aggregate required jobs, exact prepared SHA, immutable source base and current remote branch HEAD | FAIL, BLOCKED, missing, skipped, cancelled, superseded or stale required evidence refuses green handoff |
@@ -307,9 +342,7 @@ by AGENTS.md and cannot replace hosted CI.
 
 ### Clean PHP include-phase probes
 
-`production_file_policy_test.php` validates canonical positive membership, safe contained paths, additive companion membership and source-archive activation. `updater_inventory_compatibility_test.php` runs a trusted frozen pre-WinApp reader against the real incoming inventory and an extracted-source fixture: it reproduces the reported package rejection, checks compatible old/current activation sets, and retains unlisted-file refusal. Keep this installed-consumer proof when changing inventory schema or base path surfaces. `updates_path_safety_test.php` checks updater destination ancestors. The full/release regression `deploy_app_packaging_test.php` runs the actual deploy helpers on owned dirty fixtures and inspects folder/ZIP contents, required-file failures and local source-review/media choices; its complete-inventory proof has an exclusive 600-second process budget. The `production-package` CI job independently builds and verifies production folders on Linux, Windows and macOS. See [production file policy](docs/PRODUCTION_FILES.md).
-
-The same regression exercises repeated interactive Windows folder/ZIP builds under the Windows PowerShell runtime used by `deploy.bat`, including timestamp collisions, and verifies earlier packages remain unchanged. An interactive destination collision selects a fresh sibling directory and prints its path; an explicit `-DeployFolder` keeps the existing refusal to overwrite. Launches without arguments show success/failure completion and wait for Enter before closing. Scripted invocations with arguments finish without pausing.
+`production_file_policy_test.php` validates canonical positive membership, private-path exclusion, safe contained paths, additive companion membership and source-archive activation. `updater_inventory_compatibility_test.php` retains the frozen installed pre-WinApp reader and old/current activation proof. `updates_path_safety_test.php` checks updater destination ancestors. The compact `production_package_test.php` uses the real canonical PHP builder with a minimal isolated payload: folder and ZIP membership, complete SHA-256 content, deterministic output, missing/stale/unsafe inputs, links, destination protection, no-clobber and cleanup. The central packaging owner runs it independently of the SQL engine. The `production-package` CI matrix additionally builds a complete production folder and ZIP on Ubuntu, Windows and macOS and verifies every file against its source bytes. Windows owns real junction/reparse-point rejection. A missing required capability or incomplete proof fails that owner. Legacy FTP, interactive collision naming and source-review/media packaging options have been removed with their implementation; their old tests are retired.
 
 `tests/cli_http_boundary_test.php` exercises real direct HTTP requests to CLI
 entrypoints through a PHP server without rewrite rules, checks empty refusals
@@ -386,7 +419,7 @@ The source policy scanner preserves declaration identities and records while ski
 
 ### Required Chromium CI
 
-`.github/workflows/gallery-workflows.yml` contains one `browser-tests` job on PHP 8.3 and Node 22. It explicitly discovers Chrome/Chromium, prints its version, exports the executable as `PHP_GALLERY_BROWSER`, sets `PHP_GALLERY_BROWSER_REQUIRED=1`, and runs `php scripts/audit.php --suite=browser-map`. This executes the registered Node entries marked `browser` through the existing confined headless Chromium fixtures. No npm install, Playwright, Selenium, or Composer stack is added. Missing/unstartable Chromium, skipped required fixtures, or zero executed browser coverage produce nonzero failure or BLOCKED coverage.
+`.github/workflows/gallery-workflows.yml` contains one `browser-tests` job on PHP 8.5 and Node 22. It explicitly discovers Chrome/Chromium, prints its version, exports the executable as `PHP_GALLERY_BROWSER`, sets `PHP_GALLERY_BROWSER_REQUIRED=1`, and runs `php scripts/audit.php --suite=browser-map`. This executes the registered Node entries marked `browser` through the existing confined headless Chromium fixtures. No npm install, Playwright, Selenium, or Composer stack is added. Missing/unstartable Chromium, skipped required fixtures, or zero executed browser coverage produce nonzero failure or BLOCKED coverage.
 
 Database/runtime matrix jobs set `PHP_GALLERY_BROWSER=disabled` and `GALLERY_WORKFLOW_BROWSER=disabled` in their own job environments to avoid redundant Chromium execution. Local browser coverage remains optional unless required mode is explicitly enabled. The dedicated job covers isolated DOM/runtime fixtures; the disposable migrated-database browser journey described in [GALLERY_WORKFLOWS.md](docs/GALLERY_WORKFLOWS.md) remains a separate opt-in path.
 
@@ -760,7 +793,7 @@ php scripts/audit.php --profile=full
 
 The central full profile owns every registered standalone Node model. Do not glob `tests/*_test.mjs` manually: the ZIP writer tests require managed temporary output paths, ZIP64 is classified as slow coverage, and browser integration has a different environment contract. When diagnosing one Node failure directly, use the exact invocation recorded in `scripts/audit_registry.php`. The central runner creates and removes temporary ZIP outputs automatically.
 
-Deployment packages remain production-like and omit `tests/` by default. A normal local ZIP is created with `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true`; add `--include-tests true` only for a development/source-review ZIP. On Windows use `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true`, adding `-IncludeTests true` for the review package. Test inclusion is local-only and is rejected in FTP mode; all existing secret, runtime-data, cache, log, `.git`, and media exclusions remain in force.
+Production packages contain only the reviewed production and companion inventory. Build an explicitly requested folder or ZIP with `php scripts/package_production.php --root=<source> --directory=<new-directory> --zip=<new-archive.zip> --timestamp=<candidate-epoch>`. Tests, gallery media, credentials and runtime state have no opt-in in this builder; source review uses the separate Git source archive. Membership-only inspection remains available through `scripts/release_files.php` and must not be represented as content-hash verification.
 
 Browser ZIP-import changes must additionally verify stored and Deflate archives, nested image paths, mixed supported and unsupported entries, empty archives, damaged central directories, encrypted/ZIP64 archives, traversal names, hidden `__MACOSX` metadata, oversized entries, expansion-ratio limits, duplicate filenames, and a ZIP selected while browser-assisted upload is unchecked or unsupported. The archive itself must never reach the classic PHP upload request; extracted valid images must still use the existing browser preparation, batching, server validation, thumbnail, and Admin side-panel progress pipeline.
 

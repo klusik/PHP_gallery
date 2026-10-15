@@ -19,7 +19,7 @@ declare(strict_types=1);
  * @param string $root Absolute repository root.
  * @param string $module Route-owned logical module to prepare.
  * @param string $mode Composed or legacy flattened loader mode for ordering comparison.
- * @return array<string,mixed> Bounded observations from bootstrap and route preparation.
+ * @return array{module:string,mode:string,routes:list<string>,included_count:int,loaded_modules:list<string>,included_app_order:list<string>,side_effects:array{output:bool,headers:bool,session:bool,umbrellas:bool}} Bounded observations from bootstrap and route preparation, with no application output or request initialization.
  */
 function runtime_module_fixture_run(string $root, string $module, string $mode = 'composed'): array
 {
@@ -154,7 +154,8 @@ if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''))
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
-        fwrite(STDOUT, json_encode(['ok' => false, 'error' => $exception->getMessage()], JSON_THROW_ON_ERROR) . "\n");
+        fwrite(STDOUT, json_encode(['ok' => false, 'error' => $exception->getMessage(),
+            'exception' => get_class($exception), 'trace' => $exception->getTraceAsString()], JSON_THROW_ON_ERROR) . "\n");
         exit(1);
     }
 }
