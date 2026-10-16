@@ -32,9 +32,35 @@ namespace Gallery\Recovery;
 
 require_once __DIR__ . '/io.php';
 
-const COMPONENTS = ['database', 'originals', 'configuration', 'data', 'custom_assets', 'application'];
-const CONTROLS = ['network_egress_blocked', 'email_disabled', 'jobs_disabled', 'integrations_disabled', 'uploads_isolated', 'database_isolated'];
-const OPERATOR_CHECKS = ['database_import', 'gallery_relationships', 'private_gallery_denial', 'admin_login', 'trash_restore', 'migrations_current', 'configuration_rekeyed', 'custom_assets', 'public_routes', 'thumbnails', 'uploads'];
+const COMPONENTS = [
+    'database',
+    'originals',
+    'configuration',
+    'data',
+    'custom_assets',
+    'application',
+];
+const CONTROLS = [
+    'network_egress_blocked',
+    'email_disabled',
+    'jobs_disabled',
+    'integrations_disabled',
+    'uploads_isolated',
+    'database_isolated',
+];
+const OPERATOR_CHECKS = [
+    'database_import',
+    'gallery_relationships',
+    'private_gallery_denial',
+    'admin_login',
+    'trash_restore',
+    'migrations_current',
+    'configuration_rekeyed',
+    'custom_assets',
+    'public_routes',
+    'thumbnails',
+    'uploads',
+];
 const COUNT_FIELDS = ['images', 'galleries', 'trash_entries'];
 
 /** Create an unverified inventory whose missing evidence remains explicit. */

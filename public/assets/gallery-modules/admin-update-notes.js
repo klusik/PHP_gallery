@@ -52,7 +52,15 @@ async function loadVersion(viewer, version) {
     const url = new URL(viewer.dataset.fragmentUrl, location.href);
     url.searchParams.set('patch_version', version);
     try {
-        const response = await fetch(url, {signal: controller.signal, credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
+        const response = await fetch(url, {
+            signal: controller.signal,
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
         const payload = await response.json();
         if (!response.ok || !payload?.ok || typeof payload.html !== 'string') throw new Error('Could not load release notes.');
         if (!viewer.isConnected || NOTE_REQUESTS.get(viewer) !== controller) return;
@@ -78,7 +86,10 @@ export function refreshUpdateNotes(page, payload) {
     const container = page?.querySelector('[data-update-patch-notes]');
     if (!container || typeof payload.notes_html !== 'string') return;
     const oldViewer = container.querySelector('[data-patch-notes-viewer]');
-    if (oldViewer) { NOTE_REQUESTS.get(oldViewer)?.abort(); NOTE_REQUESTS.delete(oldViewer); }
+    if (oldViewer) {
+        NOTE_REQUESTS.get(oldViewer)?.abort();
+        NOTE_REQUESTS.delete(oldViewer);
+    }
     container.innerHTML = payload.notes_html;
     const diagnostics = page.querySelector('[data-update-api-status]');
     if (diagnostics && typeof payload.api_html === 'string') {
@@ -95,7 +106,11 @@ export function refreshUpdateNotes(page, payload) {
 export function setupAdminUpdateNotes() {
     if (document.documentElement.dataset.adminUpdateNotesReady === '1') return;
     document.documentElement.dataset.adminUpdateNotesReady = '1';
-    document.addEventListener('click', /** Handle picker controls. @param {MouseEvent} event User interaction. @return {void} Opens a picker or reads a version. */ event => {
+    document.addEventListener('click', /**
+     * Handle picker controls.
+     * @param {MouseEvent} event User interaction.
+     * @return {void} Opens a picker or reads a version.
+     */ event => {
         const control = event.target instanceof Element ? event.target.closest('[data-patch-version], [data-patch-notes-picker-button]') : null;
         const viewer = control?.closest('[data-patch-notes-viewer]');
         if (viewer) {
@@ -107,16 +122,28 @@ export function setupAdminUpdateNotes() {
             if (!current.querySelector('[data-patch-notes-picker]')?.contains(event.target)) setPickerOpen(current, false);
         }
     });
-    document.addEventListener('submit', /** Handle the no-JavaScript compatible notes form. @param {SubmitEvent} event Form intent. @return {void} Reads the chosen section in place. */ event => {
+    document.addEventListener('submit', /**
+     * Handle the no-JavaScript compatible notes form.
+     * @param {SubmitEvent} event Form intent.
+     * @return {void} Reads the chosen section in place.
+     */ event => {
         if (!event.target.matches?.('[data-patch-notes-form]')) return;
         event.preventDefault();
         const viewer = event.target.closest('[data-patch-notes-viewer]');
         loadVersion(viewer, viewer.querySelector('[data-patch-notes-input]')?.value || '');
     });
-    document.addEventListener('change', /** Handle the native accessible selector. @param {Event} event Selection change. @return {void} Reads a release. */ event => {
+    document.addEventListener('change', /**
+     * Handle the native accessible selector.
+     * @param {Event} event Selection change.
+     * @return {void} Reads a release.
+     */ event => {
         if (event.target.matches?.('[data-patch-notes-select]')) loadVersion(event.target.closest('[data-patch-notes-viewer]'), event.target.value);
     });
-    document.addEventListener('keydown', /** Close open pickers with Escape. @param {KeyboardEvent} event Keyboard input. @return {void} Collapses selectors. */ event => {
+    document.addEventListener('keydown', /**
+     * Close open pickers with Escape.
+     * @param {KeyboardEvent} event Keyboard input.
+     * @return {void} Collapses selectors.
+     */ event => {
         if (event.key === 'Escape') for (const viewer of document.querySelectorAll('[data-patch-notes-viewer]')) setPickerOpen(viewer, false);
     });
 }

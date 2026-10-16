@@ -75,9 +75,16 @@ $registry = [
         ],
         // Shared environment-independent source qualification for split hosted FULL owners.
         'source-contracts' => [
-            'php-lint', 'js-lint', 'source-documentation-changed', 'source-policy-changed',
-            'source-contract-inventory', 'python-import-policy', 'mvc-boundaries',
-            'mutation-contracts', 'ci-workflow-contract', 'version-audit',
+            'php-lint',
+            'js-lint',
+            'source-documentation-changed',
+            'source-policy-changed',
+            'source-contract-inventory',
+            'python-import-policy',
+            'mvc-boundaries',
+            'mutation-contracts',
+            'ci-workflow-contract',
+            'version-audit',
         ],
         // Portable runtime suites have one exact-candidate owner across the hosted matrix.
         'portable' => [
@@ -482,8 +489,10 @@ $registry['hosted_full_php_shard_count'] = $phpRegistry['hosted_full_php_shard_c
 $registry['performance_probes'] = require __DIR__ . '/audit_performance_registry.php';
 $registry['route_performance_probes'] = require __DIR__ . '/audit_route_probe_registry.php';
 foreach ($phpRegistry['serial_tests'] as $name => $reason) {
-    $registry['php_test_requirements'][$name] = array_replace($registry['php_test_requirements'][$name] ?? [],
-        ['serial' => true, 'serial_reason' => $reason]);
+    $registry['php_test_requirements'][$name] = array_replace(
+        $registry['php_test_requirements'][$name] ?? [],
+        ['serial' => true, 'serial_reason' => $reason],
+    );
 }
 
 return $registry;
