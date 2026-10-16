@@ -369,6 +369,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           ORIGINAL_SHA: ${{ steps.initialize.outputs.candidate_sha }}
           INITIAL_MAIN_SHA: ${{ steps.origin.outputs.initial_main_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           allowed='^(app/bootstrap\.php|app/core-manifest\.json|app/production-files\.json|README\.md|TESTING\.md|DATABASE\.md|ARCHITECTURE\.md|PATCH_NOTES\.md|release-metadata\.json|docs/PHP_Gallery_Manual(_CZ|_DE|_SV)?\.(tex|pdf))$'
