@@ -250,6 +250,14 @@ in progress during FF; subsequent release consumers require its enclosing run
 completed-success, retained W in main history, exact run/attempt/check IDs,
 native owner IDs and A tree. The moving develop ref is not the release identity.
 
+The publisher creates each exact-candidate check once. If the non-forced FF is
+rejected solely with HTTP 422 and `Complete required CI matrix` expected, it
+allows six total attempts with two-second waits. Before each retry it revalidates
+the active run, BASIC/FULL evidence, original check IDs and feature/develop leases.
+Other or mixed violations and ambiguous transport outcomes remain fatal. This
+provider-propagation repair requires qualification and protected main installation;
+it neither replays FULL nor changes server protections.
+
 Lifecycle schema 3 / coverage schema 1 is explicit. Schema 1/2 retain historical
 FULL validation. New records contain separate authenticated integration/delta
 identities. Schema 3 authenticates native strict owners and filters only explicitly

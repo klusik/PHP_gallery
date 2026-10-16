@@ -2694,6 +2694,11 @@ record binds FULL A and~the~approved BASIC A..B delta; parallel develop changes 
 policy is~inactive until installed on~main and verified by~real hosted CI; until
 then the~currently installed required workflows remain authoritative.
 
+After qualification and~protected installation, a~sole HTTP~422 rejection
+for~the~new required matrix check permits up~to~six publication attempts with
+two-second waits. Each retry revalidates the~active run, BASIC/FULL evidence,
+original check IDs and~branch leases. Other failures stop; FULL is~not~replayed.
+
 The~central entry point \filepath{scripts/audit.php} provides qualification/regression profiles plus source preflights.
 \codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
 contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax

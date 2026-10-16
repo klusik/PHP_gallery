@@ -23,9 +23,8 @@ require a browser/database only when the behavior needs one.
 - Use named constants for timers/sleeps, complete native headers, truthful named
   declaration docs/types/shapes and purpose docs for every anonymous class too.
   These remain required in fixtures.
-- Always attach the full `Purpose`, `Type`, `Units`, `Scope`, `Consumers`, and
-  `Rationale` policy comment to every scanner-covered fixture constant, with its
-  actual default, bound, owner, and consumer stated explicitly.
+- Attach `Purpose`, `Type`, `Units`, `Scope`, `Consumers` and `Rationale` to every
+  scanner-covered fixture constant, stating its actual default/bound, owner and consumer.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.
@@ -35,13 +34,16 @@ require a browser/database only when the behavior needs one.
 - Document named object-literal mock methods with the same declaration contract
   as production methods, and describe assertion inputs with their actual scalar,
   ordered-list or row-field shapes.
-- Await each browser fixture phase's observable success or failure before changing
-  mocked connectivity or starting another request. Capture the actual layout state
-  immediately before each operation, and serve the visible URL selected by the
-  production coordinator. Preserve exact revision, node and scroll assertions.
-- Populate every explicit source-extraction adapter, including owned delegates,
-  before qualification. Audit the complete dependency list against its adapter
-  table and include the safe adapter name in unexpected-dependency failures.
+- For each async phase, identify the in-flight operation, terminal success/error
+  and next permitted action. Await failed reads before changing mocked connectivity;
+  await the released write's expected revision before owner teardown. Serve the
+  coordinator's visible URL with the real method/envelope and owner generation.
+  Capture layout immediately before each operation; preserve exact revision, node
+  and scroll assertions after completion, accounting for prior validation reflow.
+- Audit every source-extraction dependency against its adapter table, including
+  single/bulk owned delegates and argument shapes. Name missing adapters safely.
+- Assert negative HTTP status, error contract and unchanged persistence separately;
+  report safe test-authored expected/actual values and assertion call sites.
 
 ## Bounded workers, caches and interruption
 

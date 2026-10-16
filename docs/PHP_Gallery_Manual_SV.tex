@@ -2658,6 +2658,12 @@ och det godkända BASIC-deltat A..B. Denna reducerade policy är
 inaktiv tills den är installerad på main och verifierad med verklig värdbaserad CI;
 tills dess gäller de för närvarande installerade obligatoriska arbetsflödena.
 
+Efter kvalificering och~skyddad installation tillåter ett ensamt HTTP~422-avslag
+för den~nya obligatoriska matriskontrollen högst sex skrivförsök med två sekunders
+mellanrum. Varje nytt försök verifierar aktiv körning, BASIC/FULL-bevis,
+ursprungliga kontroll-ID:n och~grenarnas tillstånd igen. Andra fel stoppar
+körningen; FULL körs inte om.
+
 Den centrala ingången \filepath{scripts/audit.php} erbjuder tre regressions-/kvalificeringsprofiler samt källförkontroller. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, helhetsinventeringen och~kategoribudgetar, WinApp-tester, långsamma Node-testfall och Chromium. Obligatorisk värdbaserad kandidatkontroll kör \codeword{--profile=full} för~exakt förberett SHA; värdbaserad utgåvekontroll använder \codeword{--profile=release}. Ett snabbt eller~lokalt PASS ersätter inte de~obligatoriska jobben.
 
 Källprofilen \codeword{--profile=basic} kontrollerar endast PHP-/JavaScript-syntax och~fullständig dokumentation för namngivna deklarationer; med~\codeword{--changed} binds omfattningen till en oföränderlig bas. Den kör inga funktions-/regressionstester, Node-runtime-, Python-, browser-, databas-, WinApp- eller paketeringstester. \#185-målet använder profilen för push/squash och~A..B-deltat, men den är inaktiv tills den installerats på main och verifierats genom värdbaserad CI.

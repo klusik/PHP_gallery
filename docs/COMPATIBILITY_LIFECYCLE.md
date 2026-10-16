@@ -91,6 +91,17 @@ This is permanent support for existing callers rather than a timed fallback.
 Usage is unknown. `tests/updater_cache_gc_test.php` supplies synthetic safety and
 progress coverage; hosted FULL and production acceptance are distinct gates.
 
+## Develop required-check propagation
+
+Owner: `.github/scripts/develop-integration.mjs`, `integrateDevelop()`. Integration
+[38899855917](https://github.com/klusik/PHP_gallery/actions/runs/38899855917)
+passed FULL but GitHub rejected FF one second after creating its required check.
+Propagation is the suspected cause; frequency is **unknown**. The narrow retry
+retains exact evidence and leases, rejects other/ambiguous errors and is covered
+by `tests/develop_integration_test.mjs`. Keep this provider compatibility until
+GitHub guarantees immediate enforcement visibility and hosted acceptance proves
+safe removal. Feature fixtures do not prove protected installation or live recovery.
+
 ## Retained Actions job inventory provider failures
 
 Owner: `.github/scripts/release-promotion.mjs`, `command()` and `fetchJobs()`.

@@ -245,6 +245,9 @@ ref inputs, preserved messages/tree/parent, no-op preparation, rejected leases,
 dispatch identity, queued/successful/failed/cancelled/mismatched BASIC, bounded
 waiting with an injected clock, moved feature/develop refs, superseded evidence,
 native-suite failure, final-SHA FULL gating and final publisher input bindings.
+It also reproduces delayed required-check enforcement, bounded retry exhaustion,
+unrelated/mixed API failures and invalidation by moved refs, changed checks,
+cancelled publishers, superseded BASIC or failed native FULL owners between attempts.
 Execution belongs to the central hosted audit. For live acceptance, install the
 qualified main-owned workflow first, then select a one-commit feature with stale
 generated data. Confirm one prepared commit above the same P, successful fresh

@@ -2652,6 +2652,11 @@ váže FULL A a~schválený BASIC rozdíl A..B.
 Tato omezená politika není aktivní, dokud není nasazena na main a~ověřena reálným
 hostovaným CI; do té doby platí aktuálně nasazené povinné workflow.
 
+Po kvalifikaci a~chráněné instalaci dovoluje samotné odmítnutí HTTP~422 kvůli
+novému povinnému checku matice nejvýše šest pokusů o~zápis s~dvousekundovými
+odstupy. Každé opakování znovu ověří aktivní běh, důkazy BASIC/FULL, původní
+ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
+
 Centrální vstup \filepath{scripts/audit.php} nabízí tři regresní a~kvalifikační profily a~zdrojové předběžné kontroly. \codeword{--profile=quick} používá výslovnou podmnožinu PHP testů, přísné zdrojové a~MVC kontrakty, pravidla importů Pythonu, rychlé testy Node a~kontrolu syntaxe změněných souborů. Vynechává úplnou sadu PHP, celkový inventář a~rozpočty kategorií, testy WinApp, pomalé testy Node a~Chromium. Povinná hostovaná kvalifikace spouští \codeword{--profile=full} pro přesné připravené SHA a~vydání hostovaně používá \codeword{--profile=release}; rychlý ani~lokální PASS povinné joby nenahrazuje.
 
 Zdrojový profil \codeword{--profile=basic} kontroluje pouze syntaxi PHP/JavaScriptu a~úplnou dokumentaci pojmenovaných deklarací; s~\codeword{--changed} je~rozsah svázán s~neměnným základem. Funkční/regresní testy, runtime Node, Python, browser, databáze, WinApp ani balení nespouští. Cíl \#185 používá tento profil pro push/squash a~delta A..B, ale není aktivní, dokud není instalován na main a~ověřen hostovaným CI.

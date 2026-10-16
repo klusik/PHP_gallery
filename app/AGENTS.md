@@ -13,9 +13,11 @@ Web requests use the small PHP 8.1-compatible Core runtime in `app/runtime/`; ex
 
 For a bounded numeric runtime-policy default, define a named constant with the attached six-field policy comment and use that constant in parameter defaults. Keep the policy explanation with the owning constant instead of embedding a multiline comment in a callable signature; keep PHPDoc focused on the callable contract.
 
+Before adding runtime owners, record current counts, unchanged limits and expected deltas, including allowance already consumed. Label estimates; hosted generated-plan checks establish actual conformance.
+
 ## Translation Catalog Ownership
 
-When adding or changing user-facing strings, update the EN/CS/DE/SV JSON catalogs in `app/lang/` together; keep the corresponding legacy PHP dictionary entries synchronized when those maintained dictionaries carry the same keys. Runtime translation lookup and catalog-consistency checks consume JSON packs, so PHP-only additions are not available to the active catalog and do not satisfy translation coverage. Preserve matching key sets and interpolation placeholders across all four maintained JSON packs.
+Update user-facing keys in all EN/CS/DE/SV `app/lang/*.json` catalogs consumed by runtime/tests. Review new literal call sites against matching keys/placeholders and synchronize maintained PHP dictionaries. PHP-only additions do not provide active-catalog coverage.
 
 When a model, service, or controller module grows past comfortable reading length, split it into part files inside a sibling directory named after the module, and keep the original file as the module entry point holding the module docblock, shared constants, shared types, and an ordered `require_once` list. Do not register part files in a top-level layer loader and do not require a part file from outside its own module, so the historical include contract and load order stay intact. A part file lives one directory deeper than the entry file, so re-base every filesystem-relative expression you move into one: the project root is `dirname(__DIR__, 3)`, and the `dirname(__DIR__, 2)` that was correct in the entry file silently resolves to `app/` instead. Byte-identical function bodies do not prove equivalence here, and `php -l` cannot catch it; `tests/module_split_path_resolution_test.php` enforces the depth and the resulting storage locations. Widen any path filter that names its own module, such as backtrace filtering, to cover the whole part directory. Source-level contract checks must read the whole module: tests use `module_source()` from `tests/support/module_source.php`, and `scripts/check_admin_mutation_contracts.php` does the same inside `contract_file()`. The current split modules are listed under "Split Modules" in `ARCHITECTURE.md`. Migration files must be timestamp-prefixed, such as `202606040001_mobile_webdav_upload_tokens.php`. JavaScript and CSS assets should stay framework-free and be placed in `public/assets/`.
 
@@ -31,6 +33,8 @@ Use these ownership rules:
 - Views: markup and presentation-only formatting from already prepared data.
 
 Before adding a helper, search for the existing domain owner and extend/centralize it instead of creating a near-duplicate. Semantic inputs must cross layers, not SQL fragments. For example, a service may pass a gallery scope or ID to a model, but not `$whereSql`. Keep existing docstrings/comments when moving code.
+
+Review persistence as one transition: schema readiness, old fields that take precedence, atomic updates and failure/reconciliation. A newly saved mode must not remain silently overridden by an old value.
 
 `scripts/check_mvc_boundaries.php` is a mandatory audit suite. Existing violations are migration debt captured in `scripts/mvc_boundary_baseline.json`. Never add a new baseline entry to make a change pass. A migrated file should remove its resolved debt with `php scripts/check_mvc_boundaries.php --refresh-baseline`, which is designed to fail if new violations exist.
 

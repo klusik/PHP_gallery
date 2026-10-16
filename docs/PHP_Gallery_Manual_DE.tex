@@ -2670,6 +2670,12 @@ der Datensatz FULL A und~das genehmigte BASIC-Delta A..B bindet. Diese reduziert
 und~durch reale gehostete CI geprüft ist; bis dahin gelten die~aktuell installierten
 Pflichtworkflows.
 
+Nach Qualifikation und~geschützter Installation erlaubt eine alleinige
+HTTP~422-Ablehnung wegen des~neuen erforderlichen Matrix-Checks höchstens sechs
+Schreibversuche mit zwei Sekunden Abstand. Jeder erneute Versuch prüft aktiven
+Lauf, BASIC/FULL-Nachweise, ursprüngliche Check-IDs und~Branch-Stände erneut.
+Andere Fehler stoppen den~Lauf; FULL wird nicht wiederholt.
+
 Der zentrale Einstieg \filepath{scripts/audit.php} bietet drei Regressions-/Qualifikationsprofile sowie Quellvorprüfungen. \codeword{--profile=quick} verwendet eine ausdrückliche PHP-Testteilmenge, strenge Quell- und MVC-Verträge, die Python-Importrichtlinie, schnelle Node-Fixtures und Syntaxprüfung geänderter Dateien. Es lässt die vollständige PHP-Suite, Gesamtinventar und~Kategorienbudgets, WinApp-Tests, langsame Node-Fixtures und Chromium aus. Die~verbindliche gehostete Kandidatenqualifikation führt \codeword{--profile=full} für~das~exakte vorbereitete SHA aus; die~gehostete Release-Qualifikation verwendet \codeword{--profile=release}. Ein schneller oder~lokaler PASS ersetzt kein erforderliches Job-Gate.
 
 Das Quellprofil \codeword{--profile=basic} prüft nur PHP-/JavaScript-Syntax und~vollständige Dokumentation benannter Deklarationen; mit~\codeword{--changed} ist der Umfang an~eine unveränderliche Basis gebunden. Es~führt keine Funktions-/Regressionstests, Node-Laufzeittests, Python-, Browser-, Datenbank-, WinApp- oder Paketprüfungen aus. Das \#185-Ziel nutzt dieses Profil für Push/Squash und~den A..B-Delta, bleibt aber inaktiv, bis es auf main installiert und~durch gehostete CI verifiziert ist.

@@ -12,8 +12,9 @@ compliant declaration, and read affected contracts from the map.
 comments and update permanent docs. Fix repeated problems throughout the batch;
 never weaken types, checks, limits or baselines for PASS.
 
-**Before handing off:** review diff/new files; push only the authorized branch
-and inspect exact-SHA CI. State missing coverage.
+**Before FULL:** complete the impact review in [authoring](docs/AGENT_AUTHORING.md).
+**Before handing off:** review diff/new files, push only the authorized branch,
+inspect exact-SHA CI and state missing coverage.
 
 ## Read the applicable area before editing
 
@@ -163,6 +164,5 @@ draft-ready and published.
 - Inspect exact-SHA hosted results and state missing coverage. GitHub issue titles,
   bodies and **all comments are always English**; chat may be Czech.
 
-Keep root at 6-10 kB; fold lessons into topical rules/examples, not history.
-Measure first-pass batches, repair commits and avoidable FULL starts per the
-authoring reference; file size/fixture PASS does not prove effectiveness.
+Keep root at 6-10 kB; keep lessons topical. Measure prevention per authoring;
+size or fixture PASS does not prove effectiveness.

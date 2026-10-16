@@ -1,6 +1,6 @@
 {
     "version": "0.132.10",
-    "generated_at": "2026-10-16T06:11:13+00:00",
+    "generated_at": "2026-10-16T12:20:19+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -9,7 +9,7 @@
         "PATCH_NOTES.md": "sha256:cf217e414b690f458e747fc964122c3fed6f28e209bce605a4ec8e9ecdfe3492",
         "README.md": "sha256:0dfd9f35ba36f62156cb4644ae549a7d961c7a85718d4bf52d5b8bf2a6ed2680",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
-        "app/AGENTS.md": "sha256:9dc7ac83bacb8daa286f5c4ca361ec939e40f0da48b1dc8f95e8e95e8ac6a735",
+        "app/AGENTS.md": "sha256:b0c45e5f7c754e79fb18821420a7e9ece39742ea130214c02466f3fb23afa675",
         "app/bootstrap.php": "sha256:cf54d067431a5e0e659e568f9549a83458f19034c846d94610e5b976170dd3be",
         "app/bootstrap/configuration.php": "sha256:32dd730bee28b264854f92fc4cd375a976156b0229ac611c97adfa18f5cab44b",
         "app/bootstrap/dispatch.php": "sha256:f2a84ade0848885c5c002a8db03d908110e01dd20aa15ea0f02fef6dc5525c3e",
@@ -702,7 +702,7 @@
         "index.php": "sha256:fd5326ffb13ac5dd93011a5b25f04a8616e520154ecef38606c25ad7e1bc96b4",
         "install.php": "sha256:de3355b5f012bdb7c02a9dc3d9072c8e78c6e36293a74f0b96c18fcd686932e6",
         "public/.htaccess": "sha256:9ba32f1495b6a32f21f82256daab26cd9c1a0d00c9cc98e767dc64725f422409",
-        "public/assets/AGENTS.md": "sha256:4325b0fba266edfa6e6bba22476233575c0f11a25e51ca4e24f6d2610b4ac3ca",
+        "public/assets/AGENTS.md": "sha256:b4b010221dd3f2314867b2cc3f96d3c2a62824fe72dcf940e078a2d679d8bb22",
         "public/assets/cooperative-gallery.css": "sha256:fba582007cdeda862792605e4e4261ea6599b72b7b27c479050aa90318e30e82",
         "public/assets/cooperative-gallery.js": "sha256:722448b291a8a899ccd37cf1f7d7e47dff4a70d823439c4f54a4bb48390a6696",
         "public/assets/flags/LICENSE.flag-icons.md": "sha256:8f1195d55a2fd315a07d812328470ca9ba2abb78c8d317ff19619d5125e00cea",
