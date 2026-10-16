@@ -189,6 +189,64 @@
     left: 4rem;
     min-width: 2.6rem;
 }
+.lightbox-slideshow-speeds {
+    position: absolute;
+    z-index: 14;
+    top: 4.25rem;
+    left: 1rem;
+    width: min(28rem, calc(100% - 2rem));
+    display: grid;
+    gap: 0.35rem;
+    color: #fffdf8;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.lightbox-slideshow-speeds[hidden] {
+    display: none;
+}
+.lightbox-slideshow-speed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6rem 4rem;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.15rem;
+    margin: 0;
+    padding: 0.2rem 0.7rem;
+    border: 1px solid rgba(255, 253, 248, 0.55);
+    border-radius: var(--radius, 16px);
+    background: rgba(10, 10, 10, 0.36);
+    backdrop-filter: blur(8px);
+    color: inherit;
+}
+.lightbox-slideshow-speed > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lightbox-slideshow-speed input[type="range"] {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    min-height: 1.5rem;
+    accent-color: #fffdf8;
+    color-scheme: dark;
+    cursor: pointer;
+}
+.lightbox-slideshow-speed input:focus-visible {
+    outline: 2px solid #fffdf8;
+    outline-offset: 3px;
+}
+.lightbox-slideshow-speed-options {
+    text-align: center;
+    font-weight: 700;
+}
+.lightbox-slideshow-speed-options > span {
+    display: none;
+}
+.lightbox-slideshow-speed-options .is-selected {
+    display: block;
+}
 .lightbox-mobile-fullscreen-button {
     display: none;
     place-items: center;
@@ -872,15 +930,19 @@
 }
 
 .lightbox.is-fullscreen .lightbox-hud,
-.lightbox.is-fullscreen .lightbox-meta {
+.lightbox.is-fullscreen .lightbox-meta,
+.lightbox.is-fullscreen.is-slideshow .gallery-dev-overlay {
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
     transform: translateY(0.35rem);
 }
 
 .lightbox.is-fullscreen.is-ui-visible .lightbox-hud,
-.lightbox.is-fullscreen.is-ui-visible .lightbox-meta {
+.lightbox.is-fullscreen.is-ui-visible .lightbox-meta,
+.lightbox.is-fullscreen.is-slideshow.is-ui-visible .gallery-dev-overlay {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
     transform: translateY(0);
 }

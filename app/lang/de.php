@@ -33,6 +33,12 @@
  */
 
 return [
+    'lightbox.slideshow_photo_speed' => 'Geschwindigkeit des Bildwechsels',
+    'lightbox.slideshow_transition_speed' => 'Übergangsgeschwindigkeit',
+    'lightbox.slideshow_speed_fast' => 'Schnell',
+    'lightbox.slideshow_speed_medium' => 'Mittel',
+    'lightbox.slideshow_speed_slow' => 'Langsam',
+    'lightbox.slideshow_speed_help' => 'Änderungen wirken sofort. Mit den Pfeiltasten Schnell, Mittel oder Langsam wählen.',
     'admin.gallery_editor.select_at_least_one' => 'Wählen Sie mindestens ein Foto aus.',
     'admin.gallery_editor.cover_selection_limit' => 'Wählen Sie ein bis vier Titelbilder aus.',
     'admin.gallery_editor.cover_update_failed' => 'Das Titelbild konnte nicht gespeichert werden. Referenz: {reference}',

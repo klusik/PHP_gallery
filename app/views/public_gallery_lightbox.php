@@ -118,7 +118,8 @@ function view_render_lightbox_source_nodes(array $nodes): void
 /**
  * Render the public lightbox shell.
  *
- * @param array<string, mixed> $viewModel Prepared lightbox presentation model.
+ * @param array{voting_allowed?:bool,maps_allowed?:bool,slideshow_allowed?:bool,browsing_mode?:string,gallery_map_url?:string,gallery_map_title?:string,viewer_favourite_html?:string} $viewModel Prepared visibility flags, browsing mode, map labels/URL and escaped favourite markup.
+ * @return void Emits the existing viewer shell and permitted runtime controls.
  */
 function view_render_lightbox(array $viewModel): void
 {
@@ -138,6 +139,28 @@ function view_render_lightbox(array $viewModel): void
     $zoomHudControlsHtml = '<span class="lightbox-zoom-controls lightbox-zoom-controls-hud lightbox-hud" data-lightbox-zoom-controls role="group" aria-label="' . e(t('lightbox.zoom_controls', 'Image zoom')) . '"><button type="button" data-lightbox-action="zoom-out" aria-label="' . e(t('lightbox.zoom_out', 'Zoom out')) . '" title="' . e(t('lightbox.zoom_out', 'Zoom out')) . '">−</button><button type="button" data-lightbox-action="zoom-reset" aria-label="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '" title="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '"><span data-lightbox-zoom-status aria-hidden="true">100%</span></button><button type="button" data-lightbox-action="zoom-in" aria-label="' . e(t('lightbox.zoom_in', 'Zoom in')) . '" title="' . e(t('lightbox.zoom_in', 'Zoom in')) . '">+</button></span>';
     $slideshowToolbarHtml = $slideshowAllowed ? '<button type="button" class="lightbox-slideshow-link" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S ' . e(t('lightbox.slideshow', 'slideshow')) . '</button>' : '';
     $slideshowHudHtml = $slideshowAllowed ? '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>' : '';
+    $slideshowSpeedHtml = '';
+    if ($slideshowAllowed) {
+        $slideshowSpeedHtml = '<div class="lightbox-slideshow-speeds lightbox-hud" data-lightbox-slideshow-speeds hidden>'
+            . '<span class="visually-hidden" id="lightbox-slideshow-speed-help">' . e(t('lightbox.slideshow_speed_help', 'Changes take effect immediately. Use arrow keys to choose Fast, Medium or Slow.')) . '</span>';
+        foreach ([
+            ['value' => 'interval', 'label' => t('lightbox.slideshow_photo_speed', 'Photo change speed')],
+            ['value' => 'transition', 'label' => t('lightbox.slideshow_transition_speed', 'Transition speed')],
+        ] as $speedControl) {
+            $controlId = 'lightbox-slideshow-speed-' . $speedControl['value'];
+            $slideshowSpeedHtml .= '<label class="lightbox-slideshow-speed">'
+                . '<span id="' . e($controlId) . '-label" title="' . e($speedControl['label']) . '">' . e($speedControl['label']) . '</span>'
+                . '<input type="range" min="0" max="2" step="1" value="1" data-lightbox-slideshow-speed="' . e($speedControl['value']) . '"'
+                . ' aria-labelledby="' . e($controlId) . '-label" aria-describedby="lightbox-slideshow-speed-help"'
+                . ' aria-valuetext="' . e(t('lightbox.slideshow_speed_medium', 'Medium')) . '">'
+                . '<span class="lightbox-slideshow-speed-options" aria-hidden="true">'
+                . '<span data-lightbox-speed-option>' . e(t('lightbox.slideshow_speed_slow', 'Slow')) . '</span>'
+                . '<span data-lightbox-speed-option class="is-selected">' . e(t('lightbox.slideshow_speed_medium', 'Medium')) . '</span>'
+                . '<span data-lightbox-speed-option>' . e(t('lightbox.slideshow_speed_fast', 'Fast')) . '</span>'
+                . '</span></label>';
+        }
+        $slideshowSpeedHtml .= '</div>';
+    }
     $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
 
     echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
@@ -148,6 +171,7 @@ function view_render_lightbox(array $viewModel): void
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
     echo $slideshowHudHtml;
+    echo $slideshowSpeedHtml;
     echo '<button type="button" class="lightbox-map-hud-button lightbox-hud" data-lightbox-map aria-label="' . e(t('lightbox.map', 'Map')) . '" title="' . e(t('lightbox.map', 'Map')) . '" hidden>M</button>';
     echo $zoomHudControlsHtml;
     echo '<span class="visually-hidden" data-lightbox-zoom-announcement role="status" aria-live="polite">' . e(t('lightbox.zoom_status', 'Zoom {percent}', ['percent' => '100%'])) . '</span>';

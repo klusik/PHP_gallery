@@ -33,6 +33,12 @@
  */
 
 return [
+    'lightbox.slideshow_photo_speed' => 'Photo change speed',
+    'lightbox.slideshow_transition_speed' => 'Transition speed',
+    'lightbox.slideshow_speed_fast' => 'Fast',
+    'lightbox.slideshow_speed_medium' => 'Medium',
+    'lightbox.slideshow_speed_slow' => 'Slow',
+    'lightbox.slideshow_speed_help' => 'Changes take effect immediately. Use arrow keys to choose Fast, Medium or Slow.',
     'admin.gallery_editor.select_at_least_one' => 'Select at least one photo.',
     'admin.gallery_editor.cover_selection_limit' => 'Choose between one and four title-picture photos.',
     'admin.gallery_editor.cover_update_failed' => 'The title picture could not be saved. Reference: {reference}',

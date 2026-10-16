@@ -26,6 +26,23 @@ const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
 
+## Runtime slideshow timing controls
+
+`app/views/public_gallery_lightbox.php` renders exactly two native three-position ranges when the prepared
+`slideshow_allowed` flag permits playback. The existing `lightbox.js` viewer owns their independent interval/blend
+values and the existing HUD lifecycle. Presets run left-to-right as Slow/Medium/Fast and use double/default/half of the rendered 2000 ms stable-display and
+1000 ms transition defaults. Nothing is stored in Admin settings, gallery metadata or the database.
+
+Interval input uses the existing scheduler's timeout cancellation, preload abort and generation token. Scheduling
+waits for navigation phase `displayed`, so adjusting a range during metadata loading or an active blend cannot start
+an overlapping automatic navigation; terminal presentation schedules with the latest interval. Transition input
+updates the duration read once by the next blend and leaves its current CSS/timeout pair intact. Actual pointer,
+focus and keyboard input restarts the HUD inactivity timer; only an active pointer drag holds it visible. Mere retained
+focus/hover cannot pin the HUD. Hidden fullscreen controls and the slideshow developer overlay use visibility as well
+as opacity and reject pointer input. Automatic advances leave the inactivity window intact. Range keyboard input
+bypasses photo-navigation and voting shortcuts. The deferred lightbox
+loader already propagates the content asset revision, including this changed module.
+
 ## Local website-address configuration
 
 `config.php` remains the sole storage owner for `base_url`. The Settings hub's dedicated `site` section delegates URL validation and filesystem persistence to `app/services/site_url.php`; the controller owns administrator authentication, CSRF validation, and the redirect to the new address. The service edits only a single top-level literal value, serializes writers, checks the original bytes before atomic replacement, preserves permissions, and invalidates OPcache. It never uses `app_settings` for this configuration. Computed or duplicate values and unavailable write access cause refusal with the original configuration preserved.

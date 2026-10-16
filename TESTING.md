@@ -1544,6 +1544,26 @@ Run `php tests/version_094_audit_hardening.php` and `php tests/public_media_vers
 
 When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
 
+### Live Slideshow Speed Verification
+
+The registered `lightbox_slideshow_speed_test.mjs` executes the production closure with controlled timers and
+deferred full-image decode, using the real navigation owner. It covers unchanged medium defaults, independent
+Fast/Medium/Slow values, rapid interval replacement, stale decode after timer expiry, decode-before-timer gating,
+changes during presentation, stop cancellation, closed-viewer scheduling, complete idle HUD hiding despite focus/hover,
+pointer-drag retention and release, native
+three-position markup, keyboard scope and EN/CS/DE/SV JSON/PHP catalog membership.
+
+In a real local gallery, start slideshow and move the pointer to reveal the two compact outlined rows. Change each
+range with pointer and arrows/Home/End; left must be Slow and right Fast for both ranges; confirm immediate independent timing, readable selected values, visible
+focus and no accidental navigation/voting. Change repeatedly during a blend and while the next original is loading;
+there must be no double advance, flash or overlapping animation. Stop input while leaving a range focused and the
+pointer over it: after inactivity the complete HUD, including developer diagnostics, must disappear. Move again to
+reveal it; hold a drag past the idle interval and release outside the panel to verify retention and cleanup.
+Stop/resume, manually navigate, exit fullscreen and close/reopen; choices
+remain within the viewer instance, and page reload restores Medium. Repeat with slideshow disabled and in the
+supported desktop/mobile browsers; disabled playback must expose neither speed control. Local Chromium evidence
+does not replace the hosted FULL matrix or Firefox/Safari/touch acceptance.
+
 ### Public Lightbox Zoom Verification
 
 Require the registered seven PHP zoom contracts and Node model test in hosted full CI after changing lightbox markup, browser events,

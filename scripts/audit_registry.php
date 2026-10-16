@@ -459,6 +459,7 @@ $registry = [
         'lightbox_preload_lifecycle_test.mjs' => [],
         'lightbox_navigation_lifecycle_test.mjs' => [],
         'lightbox_resource_lifecycle_test.mjs' => [],
+        'lightbox_slideshow_speed_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_content_widget_floating_test.mjs' => [],

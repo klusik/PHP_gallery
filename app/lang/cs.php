@@ -33,6 +33,12 @@
  */
 
 return [
+    'lightbox.slideshow_photo_speed' => 'Rychlost střídání fotografií',
+    'lightbox.slideshow_transition_speed' => 'Rychlost přechodu',
+    'lightbox.slideshow_speed_fast' => 'Rychlá',
+    'lightbox.slideshow_speed_medium' => 'Střední',
+    'lightbox.slideshow_speed_slow' => 'Pomalá',
+    'lightbox.slideshow_speed_help' => 'Změny se projeví ihned. Šipkami vyberte rychlou, střední nebo pomalou rychlost.',
     'admin.gallery_editor.select_at_least_one' => 'Vyberte alespoň jednu fotografii.',
     'admin.gallery_editor.cover_selection_limit' => 'Vyberte jednu až čtyři titulní fotografie.',
     'admin.gallery_editor.cover_update_failed' => 'Titulní fotografii se nepodařilo uložit. Referenční kód: {reference}',
