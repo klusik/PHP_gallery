@@ -51,6 +51,17 @@ try {
     assert.equal(qualified.releaseCheck.external_id,'release:123:1:'+candidate);
     assert.equal(qualified.matrixCheck.name,'Complete required CI matrix');
 
+    const assembled=buildReleaseQualificationRecord({...env,RELEASE_TRUST_MODEL:'protected-develop',
+        INTEGRATION_IDENTITY_JSON:JSON.stringify({candidate_sha:base,candidate_tree:tree,trust:'protected-develop'}),
+        DELTA_EVIDENCE_PATH:'',DELTA_ARTIFACT_ID:'',DELTA_ARTIFACT_SHA256:''});
+    assert.equal(assembled.record.lifecycle_schema,4);
+    assert.equal(assembled.record.source_qualification,'protected-develop-v1');
+    assert.equal(assembled.record.delta,null,'release must not invent a BASIC delta after inheriting qualified develop');
+    assert.equal(assembled.releaseCheck.conclusion,'success');
+    assert.throws(()=>buildReleaseQualificationRecord({...env,RELEASE_TRUST_MODEL:'protected-develop',
+        INTEGRATION_IDENTITY_JSON:JSON.stringify({candidate_sha:candidate,candidate_tree:tree,trust:'protected-develop'})}),/BLOCKED/,
+        'assembly still binds the exact develop source selected by its origin');
+
     const rejects=overrides=>assert.throws(()=>buildReleaseQualificationRecord({...env,...overrides}));
     rejects({DELTA_ARTIFACT_ID:'not-an-id'});
     rejects({DELTA_ARTIFACT_SHA256:'sha256:bad'});

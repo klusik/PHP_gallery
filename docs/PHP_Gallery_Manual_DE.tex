@@ -2430,7 +2430,7 @@ Während der Entwicklung sind kleine, getrennte Commits erlaubt. Die Qualifikati
   \item Die Übergabe nennt GitHub-Actions-URL, Arbeitszweig, genaues vorbereitetes SHA, unveränderliche Vergleichsbasis, Pflichtjobs und manuelle/fehlende Abdeckung. Veraltete, fehlende, übersprungene, abgebrochene, rote oder blockierte Pflichtprüfungen sind keine grüne Qualifikation. Quellen korrigieren und denselben Zweig für neues CI pushen.
 \end{enumerate}
 
-Derzeit bereitet der installierte GitHub-Workflow \filepath{.github/workflows/candidate-preparation.yml} Feature- und~Fix-Branches vor und~qualifiziert deren veröffentlichte SHA. Das \#185-Ziel ändert Feature-Pushes und~den~abschließenden Squash zu BASIC-Syntax- und~Dokumentationsprüfungen; FULL wechselt zur Actions-Integrationsschaltfläche, die zunächst einen einzelnen Autoren-Commit bestätigt und~FULL einmal auf~finalem A ausführt. Das~zentrale schreibgeschützte Gate \codeword{--profile=candidate-preflight} und~die~bestehende Pflichtmatrix bleiben maßgeblich, bis das~Ziel auf main installiert und~durch reale gehostete CI geprüft ist. Prüfungsrunner dürfen fehlende Artefakte nicht stillschweigend reparieren. Die~spätere Release-Vorbereitung aktualisiert Handbuchversionen und~Datumsangaben und~kompiliert die~vorhandenen TeX-Quellen zu~PDF; fehlende Fachtexte erstellt sie nicht.
+Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
 \section{Ihre Galerie vor der Veröffentlichung prüfen}
 \label{sec:testing}
@@ -2477,7 +2477,7 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
-Derzeit führt der installierte Release-Ablauf vor aufwendigen AI- oder~TeX-Schritten das Richtlinien-Gate \codeword{--profile=release-preflight} und die vollständige Matrix für den exakten Kandidaten aus. Das \#185-Ziel ersetzt diese B-Prüfungen durch BASIC A..B, bleibt aber bis zur Installation auf main und realer CI-Verifikation inaktiv.
+Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
 Der registrierte Breadcrumb-Designtest vergleicht die Stillisten für Design und physische Galerien in \filepath{docs/ADMIN_SETTINGS_INVENTORY.md} mit \codeword{breadcrumb_style_registry()}. Er schützt außerdem den Fallback \codeword{chevron} und den nur für Galerievererbung vorgesehenen Wert \codeword{inherit}. Ergänzen Sie bei einem neuen Stil beide dokumentierten Listen; \codeword{inherit} ist kein visueller Designstil.
 
@@ -2495,13 +2495,13 @@ Der vollständige Release-Ablauf steht in \filepath{RELEASE.md}. Vergleichen Sie
 
 Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen lokalen Wiederherstellungspfad für Maintainer. Normale Vorbereitung und Qualifikation laufen auf GitHub; Agenten führen diese Befehle standardmäßig nicht lokal aus. Lokale Wiederherstellung setzt eine ausdrückliche Anforderung oder tatsächlich unerreichbares CI voraus und bleibt ohne gehostete Nachweise BLOCKED. Der später beschriebene Review-Workflow führt geschützten Merge und Tag-Erstellung aus; die GitHub-Release-Veröffentlichung bleibt manuell.
 
-Derzeit kann der installierte Release-Workflow weiterhin ein zentrales Audit \codeword{--profile=release} mit vollständiger Matrix verlangen. Das \#185-Ziel ersetzt diese B-Prüfung: Nach Vorbereitung von Notizen, vier Handbüchern/PDFs, Inventar und Manifest ab A führt es BASIC \codeword{--changed} für den exakten A..B-Quelldelta aus und weist nach, dass jeder geänderte Pfad zu den zugelassenen Release-Eingaben gehört. Browser-, Datenbank/HTTP-, Funktions-, Node-Laufzeit-, WinApp- und Paketregressionen werden auf B nicht wiederholt. Bis der Ersatz auf main installiert und durch reale gehostete CI geprüft ist, bleibt der installierte Workflow verbindlich; das Ziel ist inaktiv und lokale Nachweise aktivieren es nicht.
+Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
 Erstellen Sie Produktionsordner oder ZIP-Dateien nur auf ausdrückliche Anforderung; die gehosteten Release-Artefakte verwenden dasselbe PHP-Werkzeug automatisch. Übergeben Sie den Kandidatenzeitpunkt mit \codeword{--timestamp} für deterministische Metadaten. Veraltete Manifeste und vorhandene Ausgaben werden abgelehnt; \filepath{scripts/release_files.php} prüft nur die Mitgliedschaft. Drei Betriebssystem-Paketverantwortliche prüfen das echte Werkzeug unabhängig von der Datenbankmatrix. Der ausschließlich auf main ausgeführte, gesperrte TinyTeX-Cache-Aufbau benötigt vor gemeinsamer Nutzung durch Release-Zweige eine geprüfte Installation. Eine reine CMS-Änderung benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung benötigen ausdrückliche Erlaubnis. CI prüft PHP 8.1 als Kompatibilitätsuntergrenze und PHP 8.5 als neuesten Vertreter. Alle drei Datenbankvarianten verwenden PHP 8.5; historische Nachweise behalten ihre tatsächlichen Versionen.
 
 Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
 
-Für~die~gehostete GitHub-Vorbereitung pushen Sie einen Zweig \codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z} ab FULL-qualifiziertem A. Der~Workflow erstellt B im selben Zweig, baut alle vier PDFs gemeinsam und~führt nach dem \#185-Ziel nur BASIC changed-source und~den~Nachweis erlaubter Release-Eingaben für A..B aus. Der~installierte Workflow bleibt maßgeblich, bis das~Ziel auf main installiert und~gehostet qualifiziert ist. Die~Vorbereitung führt keinen Merge nach~\codeword{main} aus, erstellt keinen Tag und~veröffentlicht kein Release.
+Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
 \section{Die Galerie schnell wirken lassen}
 \label{sec:performance}
@@ -2599,168 +2599,77 @@ Isolieren Sie vor Öffnen einer wiederhergestellten Installation E-Mail, geplant
 
 \section{Betreuerprüfung und Veröffentlichungsnachweise}
 \label{sec:release-evidence}
-\index{v00254@Veröffentlichungsqualifikation}
-\index{t00241@Tests!v00258@verwerfbare Abläufe}
 
-Der~parallele FULL-Vertrag hat~28 erforderliche native Verantwortliche. Jede
-der~fünf PHP-/Datenbankumgebungen nutzt vier getrennte GitHub-Jobs mit jeweils
-vier lokalen Prozessen, eigenem Checkout und~bei Bedarf eigener Datenbank-/HTTP-Fixture.
-Die~zentralen Profile \codeword{source-contracts} und~\codeword{portable} führen
-vollständige Quellprüfungen und~Node-/WinApp-Tests einmal pro~Kandidat parallel
-zum~Sicherheits-Preflight aus. Aufwendige Laufzeitjobs benötigen weiterhin die
-Prüfung der~generierten Daten. Exklusive Barrieren bleiben innerhalb jedes Shards.
-Alle Shards und~gemeinsamen Verantwortlichen müssen für~dieselbe SHA erfolgreich
-sein; nachfolgende Prüfungen sichern die~unveränderte saubere Checkout-Identität.
-Ein grüner Feature-Lauf installiert die~Matrix nicht in~geschützten Workflows.
-Die~gestufte Installation beschreibt \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md}.
+\subsection{Quellqualifikation aus dem gewählten Feature-Workflow}
 
-Nur Release~\codeword{0.132.9} unterscheidet den~menschlich geprüften
-Wartungs-Merge der~Dispatcher-Reparatur vom~unveränderten stabilen Tag~\codeword{0.132.8}.
-Die~Ursprungsprüfung authentifiziert PR, Freigabe, Merge, Workflow-Objekte und~die
-vollständige Wartungsqualifikation. Aktuelles main und~die~normale menschliche
-PR-Freigabe bleiben erforderlich; andere Versionen benötigen den~Tag direkt auf~main.
+Feature-Push und~abschließender Squash erhalten BASIC für Syntax und
+Deklarationsdokumentation. Wählen Sie~in GitHub Actions
+\ui{Integrate into develop}, unter \ui{Use workflow from} main oder~den
+gewünschten Feature-Zweig und~anschließend den~Quellzweig.
+Der~ausdrückliche Start durch den~Eigentümer führt Workflow, Audit und~Tests
+dieser Revision aus. Test- und~Registry-Änderungen benötigen keine vorherige
+Installation auf~main.
 
-Das~zentrale Audit bewahrt benannte WinApp-unittest-Ergebnisse, Laufzeiten und
-Überspringgründe zusammen mit~dem~tatsächlichen Prozessergebnis in~JSON.
-Fehlende, unvollständige oder~widersprüchliche Datensätze belegen kein PASS.
-Der~native Windows-Smoke-Test darf ausdrücklich übersprungen bleiben;
-Python-Fixtures ersetzen keine Abnahme der~installierten Windows-Anwendung.
-Diese Datensätze bestätigen weder unabhängig die~Workflow-Quellautorität
-noch erlauben sie~die~Wiederverwendung von~Testabdeckung.
+Die~Quelle ist~ein Commit über dem beobachteten develop. Die~gehostete
+Vorbereitung erzeugt Runtime-Module, Inventar und~Manifest, übernimmt geänderte
+generierte Daten in~den endgültigen Kandidaten und~startet frisches BASIC.
+Ein separater Autoritäts-Checkout prüft den~sauberen Kandidaten.
+FULL behält alle 28 Pflichtbesitzer: Quellverträge, Node/WinApp,
+Pakete auf~drei Systemen, vier Shards je~Datenbank bei~drei Datenbanken,
+vier Shards je~PHP-8.1/8.5-Quellumgebung, Chromium und~Gesamtprüfung.
+Fehlende, rote, abgebrochene oder~übersprungene Pflichtbesitzer stoppen die~Integration.
 
-Historische Qualifikation verwendet den~neuesten veröffentlichten gebundenen
-Check und~dessen höchsten Versuch. Neuere rote oder~ausstehende Checks dürfen
-nicht auf~ältere grüne Nachweise zurückfallen. Unvollständige oder~doppelte
-API-Seiten und~Änderungen während der~Erfassung verweigern die~Qualifikation.
-Dies schützt historische Prüfung; neuere Läufe ohne veröffentlichten
-Qualifikationscheck und~unabhängige develop/release-Abdeckungsübernahme bleiben
-außerhalb dieses Lesers.
+Erfolgreiche Ausführung wird vor~dem geschützten normalen Fast-forward
+gesichert. \codeword{qualify_only} speichert sie ohne develop-Schreibzugriff.
+Ihre Lauf-ID als~\codeword{qualified_run} erlaubt die~spätere Integration
+derselben Kandidaten-, Eingabebaum- und~Basisidentität ohne erneutes FULL.
+Geänderte Eingaben erfordern neue Ausführung; Besitzer, Läufe, Ref-Leases
+und~GitHub-Schutz bleiben verbindlich.
 
-Nach geprüfter Installation auf~main ist~die~Integrationsoption
-\codeword{auto\_squash\_generated} standardmäßig true. Die~Vorbereitung nimmt
-nur die~drei erlaubten generierten Dateien in~einen Commit A über dem~beobachteten
-develop P auf, erhält die~ursprüngliche Nachricht mit~\codeword{Prepared-From}
-und~ersetzt nur den~ausgewählten Feature-Ref bei~exakter Übereinstimmung der~alten
-SHA. Sie~startet frisches BASIC für~A, prüft alle fünf Sekunden höchstens fünfzehn
-Minuten und~authentifiziert vor~FULL den~exakten Lauf, ersten Versuch sowie native
-und~eigene Checks. Verschobene Refs, fehlgeschlagenes oder~überholtes BASIC und
-Zeitüberschreitungen stoppen die~Integration. Unveränderte Vorbereitung erhält
-die~SHA; deaktivierte Automatik behält den~manuellen Squash-Checkpoint.
-Wiederherstellung und~CI-Autoritätsänderungen behalten ihre bisherigen Pfade.
-Feature-Änderungen allein installieren dieses Verhalten nicht auf~main.
+Für~eine ausdrücklich gewünschte reine CI-Installation vor~der~Version
+erstellen Sie~den Feature-Zweig aus main und~starten
+\ui{Basic source checks} mit~\codeword{install_ci}. Vollständiges FULL und
+Release-Audit erzeugen einen Bot-PR; eine echte menschliche Freigabe erlaubt
+das~normale geschützte Auto-Merge.
 
-Feature-Pushes und~der~abschließende Squash verwenden nur BASIC: PHP-/JavaScript-
-Syntax und~vollständige Dokumentation benannter Deklarationen. Sobald das~Feature
-ein einzelner Autoren-Commit S auf~develop P ist, wählt der~Maintainer den~Branch
-mit der~Actions-Schaltfläche \ui{Integrate into develop} aus. Sie~verweigert
-ungesquashte Historie, führt die~vollständige zentrale Matrix genau einmal für
-den~finalen Kandidaten A aus und~führt develop erst nach erfolgreichem FULL
-fast-forward. Release-Vorbereitung ab A erzeugt B und~führt BASIC changed-source
-sowie den~Nachweis zulässiger A..B-Releaseeingaben aus; Browser-, Datenbank-,
-Funktions-, Node-Laufzeit-, WinApp- und~Paketregressionen laufen auf B nicht erneut.
-PDF-, Paket- und~Installererzeugung ist Ausgabe, keine Regressionsqualifikation.
-Ein reiner Fast-forward nach dem Release auf Q braucht kein zweites FULL, weil
-der Datensatz FULL A und~das genehmigte BASIC-Delta A..B bindet. Diese reduzierte Policy ist~inaktiv, bis sie auf main installiert
-und~durch reale gehostete CI geprüft ist; bis dahin gelten die~aktuell installierten
-Pflichtworkflows.
+\subsection{Release-Zusammenstellung aus qualifiziertem develop}
 
-Der zentrale Einstieg \filepath{scripts/audit.php} bietet drei Regressions-/Qualifikationsprofile sowie Quellvorprüfungen. \codeword{--profile=quick} verwendet eine ausdrückliche PHP-Testteilmenge, strenge Quell- und MVC-Verträge, die Python-Importrichtlinie, schnelle Node-Fixtures und Syntaxprüfung geänderter Dateien. Es lässt die vollständige PHP-Suite, Gesamtinventar und~Kategorienbudgets, WinApp-Tests, langsame Node-Fixtures und Chromium aus. Die~verbindliche gehostete Kandidatenqualifikation führt \codeword{--profile=full} für~das~exakte vorbereitete SHA aus; die~gehostete Release-Qualifikation verwendet \codeword{--profile=release}. Ein schneller oder~lokaler PASS ersetzt kein erforderliches Job-Gate.
+Ein in~geschütztes develop aufgenommener Commit ist~qualifiziert.
+Erstellen Sie~daraus den~separat autorisierten Zweig
+\codeword{release/v_X.Y[.Z]}. Das~Release wiederholt kein BASIC/FULL und~lädt
+keine alten Qualifikationsarchive. Es~fixiert A, aktualisiert Metadaten und
+Patch Notes, gleicht alle vier Handbuchausgaben ab, erstellt ihre PDFs mit
+festgelegtem TinyTeX und~reproduzierbarer Zeit und~erzeugt zuletzt Inventar
+und~vollständiges Manifest. Geänderte WinApp-Eingaben benötigen den~Installer;
+sonst bleiben unabhängige Version und~geprüfte vorhandene Dateien erhalten.
 
-Das Quellprofil \codeword{--profile=basic} prüft nur PHP-/JavaScript-Syntax und~vollständige Dokumentation benannter Deklarationen; mit~\codeword{--changed} ist der Umfang an~eine unveränderliche Basis gebunden. Es~führt keine Funktions-/Regressionstests, Node-Laufzeittests, Python-, Browser-, Datenbank-, WinApp- oder Paketprüfungen aus. Das \#185-Ziel nutzt dieses Profil für Push/Squash und~den A..B-Delta, bleibt aber inaktiv, bis es auf main installiert und~durch gehostete CI verifiziert ist.
+Fertiger redaktioneller Text bleibt erhalten; andernfalls arbeitet die
+begrenzte Copilot-Erzeugung mit~vollständigen Git-Belegen. Ungültiger Text
+wird nicht angewendet. Buildfehler, fehlende Anhänge und~veraltete generierte
+Hashes stoppen die~Zusammenstellung, keine neue Quellqualifikation.
+Lebenszyklusschema 4 speichert develop-Quelle und~Zusammenstellungsergebnis.
 
-PHP-Suiten verwenden standardmäßig vier Arbeitsprozesse. Setzen Sie \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} auf eine ganze Zahl von 1 bis 8; ungültige Werte blockieren die Ausführung. Registrierte exklusive Tests laufen allein, nachdem aktive Prozesse beendet sind. Jeder Kindprozess behält getrennte Diagnosen und eine ab seinem tatsächlichen Start gemessene Zeitgrenze; Ergebnisse bleiben in stabiler Eingabereihenfolge. Jedes Profil misst außerdem Include-Phasen in frischen Prozessen vor \codeword{cms\_run()}: die frühe Laufzeit erlaubt eine PHP-Datei und 16~MiB Spitzenverbrauch, der Anwendungsbootstrap 40 Dateien und 16~MiB. Die Laufzeit ist nur eine Beobachtung; diese Sonden führen keine Datenbank-, Sitzungs- oder Routingarbeit aus.
+Der~stabile Tag bleibt nach CI-Wartung auf~main unverändert.
+Die~Initialisierung folgt der~First-Parent-Historie statt eines neuen Tags
+oder~einer versionsgebundenen Ausnahme. Ref-Leases schützen konkurrierende
+Schreiber; alte Identitäten und~veröffentlichte Dateien bleiben unverändert.
 
-PHP- und JavaScript-Syntaxprüfungen sowie unabhängige Node/Chromium-Fixtures verwenden dieselbe Prozessgrenze. Parallele PHP-Tests laufen vor exklusiven Fixtures, sodass der Pool nur einmal geleert wird; Berichte behalten ihre ursprüngliche Reihenfolge. Syntaxprüfungen führen den Quellcode nicht aus. Die vollständige Datenbank- und Konkurrenzqualifizierung bleibt vom Aufwand der Fixture und der Rechnerleistung abhängig. Prüfungen der Produktionsliste akzeptieren LF- und CRLF-Zeilenenden aus Git-Checkouts, lehnen aber Änderungen am Inhalt oder an der Dateimitgliedschaft weiterhin ab. Die MVC-Prüfung ermittelt Namespace- und Importkontexte einmal je Datei und erhält Alias- und PDO-Prüfungen, ohne vorherige Tokens bei jedem Aufruf erneut zu durchsuchen. Die vollständige Compiler- und Ladematrix für jedes Modul mit zusammengesetztem und ursprünglichem Loader läuft in den Profilen full und release. Schnelles Feedback behält Abhängigkeits-, Graph-, Kernel- und Bootstrap-Verträge bei, ohne jedes Modul zweimal zu starten.
+\subsection{Freigabe, Version und~vollständige Anhänge}
 
-Dieselbe Laufzeit-Leistungssuite misst neun echte Routen nur mit einer eigenen isolierten Datenbank-/HTTP-Testinstallation: robots, Startseite, Galerie, Vorschaubild, Medium, angemeldete Administration und Telemetrie sowie beide anonymen Administrationsverweigerungen. Routenlimits liegen bei 160--300 eingebundenen Dateien und 32--48~MiB Spitzenspeicher; echte Produktantworten und Verweigerungen werden ebenfalls geprüft. Ohne diese Installation werden Routenmessungen ausdrücklich übersprungen. Laufzeit bleibt eine Beobachtung.
+Der~Workflow öffnet den~exakten Bot-PR nach main. Genehmigen Sie~Q einmal.
+Die~Automatik führt den~geschützten Standard-Merge aus, prüft Eltern/Baum,
+erstellt den~unveränderlichen Versionstag, versucht sichere develop-Synchronisierung
+und~füllt einen unveröffentlichten Entwurf mit~Original-ZIP, Metadaten,
+Prüfsummen, vier PDFs, Notizen und~dauerhaften Abschlussbelegen.
+Fehlende geprüfte Anhänge werden ergänzt, identische vorhandene bleiben erhalten.
 
-CI führt erforderliche Chromium-Fixtures in einem eigenen Job mit \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1} aus; fehlende, nicht startbare oder übersprungene erforderliche Browserabdeckung lässt den Job fehlschlagen. Datenbank- und Laufzeitjobs deaktivieren Browser nur in ihrer eigenen Umgebung. Die lokale Browsererkennung bleibt optional. Die Option \codeword{--quick} der Workflow-Starter delegiert direkt an das schnelle Profil, ohne Datenbank oder Daemon anzulegen. Grenzen stehen in \filepath{TESTING.md}, isolierte Qualifizierung in \filepath{docs/GALLERY_WORKFLOWS.md}.
-
-Bei Browserfehlern zeigen Audit-Konsole und~Bericht den~Fixture-Namen und~die~konkrete fehlgeschlagene Prüfung oder~den~Laufzeitfehler direkt an, höchstens fünf Probleme je~Suite. Der~vollständige Auszug bleibt sieben Tage in~\codeword{browser-map.log} im~Actions-Artefakt \codeword{required-chromium}. Der~angezeigte Berichtspfad gehört zum~Runner; laden Sie das~Artefakt im~Abschnitt Artifacts des~Laufs herunter. Der~gemeinsame Admin-Browserstarter bewahrt bei Fehlern einen begrenzten stderr-Auszug und~Seitenausnahmen, bei Zeitüberschreitung den~letzten Prüfungsfortschritt. Asynchrone Oberflächentests warten innerhalb fester Fristen auf~beobachtbaren Abschluss statt auf~eine kurze Pause. Der~SimBrief-Dialogvertrag wartet höchstens zwei Sekunden auf~die~Bereinigung nach dem~nativen Schließereignis und~prüft Dialogschluss, Editorsichtbarkeit, unveränderte URL, Fokus und~Hintergrundisolation getrennt. Wiederholte native Cancel-Klicks decken 320/390/1280px und~einen neu gerenderten Editor ab; Abbrechen darf nichts absenden. Fehlgeschlagene Tests werden nicht automatisch bis zum~Erfolg wiederholt.
-
-Automatisierte Regression und betriebliche Abnahme beantworten unterschiedliche Fragen. Das zentrale Audit prüft Code, Verträge, Syntax, verfügbare Browserfixtures und Veröffentlichungskonsistenz. Die isolierte Ablauffixture ergänzt echte Datenbank-, HTTP- und Chromium-Abläufe mit erzeugten Fotos und Konten. Sie benötigt eine ausdrücklich ausschließlich verwerfbare Konfiguration und darf niemals Datenbank oder Medien der Installation verwenden. Folgen Sie \filepath{docs/GALLERY_WORKFLOWS.md} für Voraussetzungen; eine fehlende Umgebung ist eine Abdeckungslücke, kein Beweis einer funktionierenden Funktion.
-
-Folgen Sie für Veröffentlichungsvorbereitung \filepath{RELEASE.md}: Schließen Sie Quellcode und alle vier Handbuchquellen ab. GitHub Actions erstellt alle vier PDFs gemeinsam, prüft Compilerdiagnosen und aktualisiert das Manifest. Nach dem \#185-Ziel qualifiziert der gehostete Ablauf nur geänderte Quellen mit BASIC und zugelassene Release-Eingaben von A bis B; das derzeit installierte vollständige Release-Audit bleibt verpflichtend, bis das Ziel auf main installiert und durch reale CI geprüft ist. \filepath{scripts/gallery_workflow_mysql.php} mit \codeword{--release} bleibt nur für ausdrücklich angeforderte lokale Wiederherstellung oder Diagnose verfügbar.
-
-Das Qualifikationswerkzeug \filepath{scripts/release_qualification.php} vermerkt den genauen Quellcode- und PDF-Fingerabdruck. Sein Befehl \codeword{render} erzeugt begrenzte Seitenvorschauen; Darstellung allein genehmigt deren Erscheinungsbild nicht. Der Befehl \codeword{record-audit} akzeptiert nur den passenden zentralen Veröffentlichungsbericht, kein älteres vollständiges Audit. Eine geänderte Quelldatei oder ein neu erstelltes PDF wählt neue ausstehende Nachweise, statt frühere Zustimmung still wiederzuverwenden.
-
-Prüfen Sie das PDF visuell nur auf ausdrückliche Anfrage oder zur Diagnose eines konkreten Layoutproblems; optionale PDF-Prüffelder dürfen ausstehend bleiben. Prüfen Sie repräsentative Browserabläufe. Vermerken Sie, was tatsächlich von wem und mit welchem Ergebnis geprüft wurde. Halten Sie ungelöste Prüfungen ausstehend und den kurzen Aktualisierungsfunktionstest nach Veröffentlichung getrennt. Ein grüner automatisierter Bericht erlaubt keine Veröffentlichung; das Werkzeug erstellt niemals Commits oder Tags, lädt nicht hoch und veröffentlicht keine Version. Datensatzbefehle finden Sie in \filepath{docs/RELEASE_QUALIFICATION.md}.
-
-\subsection{GitHub-gehostete Release-Vorbereitung und~Qualifikation}
-
-
-\subsubsection{Automatische Freigabe nach PR-Genehmigung}
-
-Erstellen Sie aus dem aktuellen \codeword{develop} den Zweig \codeword{release/v_X.Y[.Z]}
-und übertragen Sie ihn in das Remote-Repository. Der Arbeitsablauf legt direkt
-nach dem gewählten Commit einen unveränderlichen Ausgangspunkt an und führt Stage~A/B, vorhandene KI-Notizen, gesperrtes
-TinyTeX, alle vier Handbücher, Manifeste und vollständige Prüfung von exakt Q aus.
-Frühere Ausgangspunkte und das veröffentlichte \codeword{v\_0.126} bleiben unverändert.
-
-Ein Vorgänger mit Tag kann noch auf die manuelle Veröffentlichung des GitHub
-Release warten. Bei Schema~3 authentifiziert die Initialisierung dessen
-ursprüngliches FULL-Integrationsarchiv und BASIC-Release-Differenzarchiv vor der
-Prüfung des exakten vorherigen Kandidaten, Laufs und Versuchs, der Git-Bäume und
-der menschlichen Genehmigung. Nachweise der aktuellen Ausgabe ersetzen diese
-Archive nicht. Fehlende, abgelaufene, beschädigte oder fremde Nachweise und
-fehlgeschlagene Pflichtjobs blockieren die Initialisierung. Die zentrale
-Regression prüft den Start der nächsten Ausgabe vor der Veröffentlichung mit
-diesem aktuellen Nachweisformat.
-
-Nach erfolgreicher Prüfung und Artefakterstellung öffnet der Bot genau einen PR
-nach main und startet den Abschluss automatisch auf Q über die auf main bereits
-registrierte Workflow-Datei. Der Maintainer genehmigt den exakten Q-Stand einmal.
-Der ausführende Prozess prüft P/Q erneut und fordert den geschützten Standard-Merge an ohne Workflow-Formular oder zusätzliche
-Deployment-Genehmigung. M muss die geordneten Eltern [P,Q] und denselben vollständigen
-Git-Baum wie Q besitzen. Derselbe Job erstellt den unveränderlichen Tag auf M.
-Ein Neustart nach dem Merge prüft vollständige PR-Details und erstellt nur einen
-fehlenden Tag; widersprüchliche Tags führen zum Fehler.
-
-Nach verifiziertem Merge und Tag füllt die Automatik den unveröffentlichten
-GitHub Release mit den ursprünglichen Notizen des exakten Q, Produktions-ZIP,
-Metadaten, allen vier Handbüchern, Prüfarchiv, Prüfsummen und beiden
-Abschlussnachweisen. Warten Sie auf \codeword{DRAFT\_READY}, prüfen Sie den
-vollständigen Entwurf und wählen Sie manuell \ui{Publish release}.
-Das Herunterladen von Artefakten oder manuelle Anhängen von Dateien entfällt.
-Identische vorhandene Anhänge bleiben erhalten; Konflikte führen zu einem
-Fehler ohne Überschreiben. Veröffentlichte Releases bleiben unverändert.
-Bei Fehlern lautet der Status \codeword{TAGGED / DRAFT\_PENDING}; eine
-Wiederholung ergänzt fehlende Dateien, ohne den verifizierten Merge oder Tag
-zurückzunehmen. Vorübergehende Übertragungsfehler werden höchstens dreimal
-versucht; eine verlorene Antwort beim Erstellen des Entwurfs wird automatisch
-anhand vorhandener Releases geprüft. Lassen Sie den Entwurf bis
-\codeword{DRAFT\_READY} unveröffentlicht. Berechtigungs-, Integritäts- oder
-Dateikonflikte müssen vor einem erneuten Abschlusslauf behoben werden.
-WinApp-Installer und Aktualisierungsmetadaten stammen aus dem
-exakten Qualifizierungsversuch oder aus dem festgelegten vorherigen
-veröffentlichten Release nach Prüfung unveränderter ausgelieferter Quellen,
-der unabhängigen Version und der Integrität. Ein unveränderter Installer
-wird nicht erneut erstellt.
-
-Develop wird nur durch echtes nicht erzwungenes Fast-forward auf geprüftes Q
-mit aktivem Schutz für lineare Historie und CI aktualisiert. Parallele Entwicklung
-stoppt diese separate Synchronisierung und lässt den fertigen Tag bestehen.
-Auf develop entsteht kein Merge-, Rebase- oder Replay-Commit. Das vorherige M
-muss kein Vorfahr des nächsten Q sein. Ausgelassene Bypass-Daten werden ausdrücklich
-protokolliert und bleiben serverseitig geschützt; sichtbarer Bypass oder unlesbare
-effektive Regeln blockieren. Fehlende Nachweise, veraltete Genehmigung, rotes CI und andere Eltern/Bäume blockieren
-den Abschluss. Isolierte Abnahme des echten GitHub-Verhaltens beschreibt
-\filepath{docs/RELEASE_LIFECYCLE.md}; CI mit Testumgebungen ersetzt keine Abnahme des tatsächlichen GitHub-Ablaufs.
-Agenten führen während der Implementierung keine geschützte Integration
-oder Produktionsveröffentlichung aus.
-
-Der~Workflow \filepath{.github/workflows/release-qualification.yml} bereitet den~Kandidaten auf~GitHub-Runnern vor. Er~veröffentlicht kein Release. Die~folgenden Details beschreiben den~aktuell installierten Workflow, solange der~\#185-Ersatz inaktiv ist; nach Installation auf~main ersetzt das~BASIC A..B-Ziel oben dessen Vorprüfungen und~vollständige B-Matrix. Die~derzeitigen Schritte sind:
-
-\begin{enumerate}
-  \item \textbf{Zweig und~Vorprüfung.} Ein~Push nach~\codeword{release/v_X.Y} oder~\codeword{release/v_X.Y.Z}  löst die~Vorbereitung aus. Eine~optional angegebene Version muss zum Zweignamen passen. Ein~bereits vorhandener Tag \codeword{v_X.Y[.Z]} führt zur Ablehnung. Der~vorige Release-Tag liefert die~Vergleichsbasis. Vor AI oder~TeX prüft \codeword{release-preflight} Quellsyntax, Deklarationsdokumentation, Dateiinventar, Python-Importrichtlinie und~Workflow-Verträge.
-  \item \textbf{Deterministische Metadaten.} Der~Helfer gleicht Anwendungsversion, Release-Metadaten, Versionshinweis-Gerüst sowie Versions- und~Datumsmarkierungen aller vier Handbücher ab und~aktualisiert das~Produktionsinventar. Er~verfasst keine inhaltliche TeX-Dokumentation. Fertige redaktionelle Versionshinweise bleiben erhalten. Gleichen Sie vor der~Freigabe die~Inhalte aller vier Handbücher ab.
-  \item \textbf{Redaktionelle Hinweise.} Eine~vollständige von~Betreuern verfasste Versionssektion bleibt unverändert. Fehlt sie oder~ist sie unvollständig, nutzt der~Workflow GitHub Copilot CLI mit~\codeword{gpt-6-luna}; nur bei fehlender Verfügbarkeit dieses Modells wechselt er~zur automatischen Modellauswahl. Für~die~Erzeugung ist \codeword{COPILOT_GITHUB_TOKEN} erforderlich. Der~vollständige Git-Textdiff wird ohne Kürzung nach Bytezahl übergeben; generierte und~binäre Release-Artefakte bleiben ausgeschlossen. Getrennte temporäre Ausgabedateien verhindern blockierte Pipes. Jeder Git-Befehl hat~eine Frist von~30 Sekunden; der~gesamte Belegschritt ist auf~zwei Minuten begrenzt. Überschrittene Metadaten- oder~Diagnoselimits stoppen die~Vorbereitung ausdrücklich. Strenge Markdown-Prüfung verhindert Platzhalter, falsche Versionen, zusätzliche Abschnitte und~Assistentenkommentare. Fehler bei Erzeugung oder~Validierung blockieren die~Qualifikation, statt unvollständige Hinweise zu~veröffentlichen. Der~Helfer \filepath{.github/scripts/patch_notes_ai_chunks.php} übergibt jedes Originalbyte des~Git-Diffs genau einmal in~aufeinanderfolgenden, UTF-8-sicheren Teilen von~höchstens 100.000~Bytes. Ein~SHA-256-Manifest prüft alle Teile und~den~vollständigen ursprünglichen Beleg; jeder Teil benötigt eine~gültige sachliche Zusammenfassung von~höchstens 6.500~Bytes. Überschreiten die~Zusammenfassungen das~Limit von~180.000~Bytes für~die~Endanfrage, fassen weitere begrenzte Durchläufe alle Nachweise zusammen, ohne Teile wegzulassen. Copilot-Zeitüberschreitungen, fehlende Antworten, veränderte Prüfsummen oder~ungültiges endgültiges Markdown stoppen die~Qualifikation; der~Originaldiff wird nie stillschweigend gekürzt. Prompt und~Validator teilen die~verpflichtenden Hauptüberschriften \codeword{Highlights}, \codeword{Technical Details} und~\codeword{User Impact}, auch bei reinen Test-, Dokumentations- oder~Werkzeugveröffentlichungen. Nur irrelevante optionale Unterabschnitte dürfen entfallen. Beschreiben Sie belegte Auswirkungen für~Betreuer oder~unverändertes öffentliches/Admin-Verhalten ohne erfundene Produktvorteile. Erwähnungen im~Fließtext oder~falsche Überschriftenebenen werden abgelehnt. Bei Generierungs- oder~Validierungsfehlern bleibt verfügbarer ursprünglicher Modelltext sieben Tage im~Actions-Artefakt \codeword{release-notes-rejected-response}; Prompts und~Authentifizierungsdiagnostik sind ausgeschlossen. Ungültiger Text blockiert weiterhin die~Vorbereitung und~wird niemals angewendet.
-  \item \textbf{Reproduzierbare Handbücher.} Der~Workflow verwendet durch Prüfsummen gesperrtes TinyTeX und~eine festgelegte TeX-Live-Paketliste. Ein~gültiger Cache wird anhand der~Lockdatei und~des~Paketinventars wiederverwendet. Englische, tschechische, deutsche und~schwedische Ausgaben werden jeweils mit~\codeword{pdflatex}, \codeword{makeindex} und~zwei weiteren \codeword{pdflatex}-Durchläufen gebaut. Der~Zeitpunkt aus~den~Release-Metadaten steuert reproduzierbare PDF- und~Manifest-Zeitstempel. Danach werden Produktionsinventar, Integritätsmanifest und~Release-Konsistenz geprüft.
-  \item \textbf{Sicheres Zurückschreiben.} Nur freigegebene Vorbereitungsdateien werden gestaged. Eine~zwischenzeitliche Änderung am~Remote-Zweig verhindert einen veralteten Push; ein~identischer bereits vorbereiteter Tree darf den~aktuellen Commit wiederverwenden. Geschrieben wird nur in~denselben Release-Zweig, nicht nach~\codeword{main}.
-  \item \textbf{Gate für~den~exakten Kandidaten.} Der~wiederverwendbare zentrale CI-Workflow checkt die~genaue SHA des~vorbereiteten Commits aus und~führt die~vollständige Release-Matrix einschließlich verpflichtender Chromium-Prüfung aus. Das~Gesamt-Gate besteht nur bei erfolgreicher Vorbereitung, vollständigen Hinweisen, erfolgreicher Matrix und~unveränderter Zweig-SHA. Sobald geprüfte Artefakte bereitstehen, öffnet ein~grünes Gate den~Bot-PR; eine menschliche Freigabe startet den~automatischen geschützten Merge und~die Tag-Erstellung. Die GitHub-Release-Veröffentlichung bleibt manuell.
-\end{enumerate}
-
-Weitere Einzelheiten stehen in~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} und~\filepath{docs/LATEX_BUILD.md}. Eine~gewöhnliche TeX-Quelländerung erfordert weder sofortige PDF-Kompilierung noch ein~separates Release-Audit.
+Warten Sie~auf \codeword{DRAFT_READY} und~wählen Sie~manuell
+\ui{Publish release}. \codeword{TAGGED / DRAFT_PENDING} wird für~dasselbe Q
+fortgesetzt; Kandidat und~korrekter Tag werden nicht neu aufgebaut oder~verschoben.
+Paralleles develop blockiert unsichere Synchronisierung, keinen korrekten Tag
+oder~Entwurf. Manuelle Hosting-/Browserprüfung und~Zweigbereinigung bleiben separat.
+Siehe \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
+\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} und~\filepath{docs/LATEX_BUILD.md}.
 
 \section{Glossar}
 \label{sec:glossary}

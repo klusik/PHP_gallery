@@ -16,6 +16,7 @@ import {readCoverageArtifact,loadIntegrationQualification} from './coverage-arti
 import {fullMatrixOwners,requireCurrentWorkflowOwners} from './ci-owner-contract.mjs';
 import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
+import {loadFeatureExecution,verifyFeatureOwners,verifyFeatureBasic} from './feature-qualification.mjs';
 
 /**
  * Space status requests while awaiting the prepared candidate's BASIC run.
@@ -143,25 +144,59 @@ function encodedBranch(branch) {
  * @param {string} repository Exact owner/repository configured for this run.
  * @param {string} workflowRef GitHub workflow reference environment value.
  * @param {boolean} [authorityUpdate=false] Whether the independently integrated develop installation owns this run.
- * @returns {boolean} True only for the exact main workflow or the separately authenticated protected-develop installation.
+ * @param {string} [featureRef=''] Explicit owner-selected feature/main ref for the versioned qualification path.
+ * @returns {boolean} True only for the exact selected workflow/ref or the historical protected-develop installation.
  */
-function trustedWorkflowRef(repository,workflowRef,authorityUpdate=false) {
-    const branch=authorityUpdate ? 'develop' : 'main';
+function trustedWorkflowRef(repository,workflowRef,authorityUpdate=false,featureRef='') {
+    const branch=featureRef ? featureRef.slice('refs/heads/'.length) : (authorityUpdate ? 'develop' : 'main');
     return workflowRef===WORKFLOW_PATH+'@refs/heads/'+branch
         || workflowRef===repository+'/'+WORKFLOW_PATH+'@refs/heads/'+branch;
+}
+
+/** Resolve the exact server-selected workflow branch without silently substituting main.
+ * @param {WorkflowContext} context Actual workflow ref and qualification mode.
+ * @returns {string} Selected feature/main branch, or the historical protected-develop branch.
+ */
+function integrationBranch(context) {
+    return context.featureQualification ? context.ref.slice('refs/heads/'.length) : (context.authorityUpdate ? 'develop' : 'main');
+}
+
+/** Admit the owner's selected feature workflow while keeping legacy authority modes explicit.
+ * @param {WorkflowContext} context Actual workflow ref and versioned qualification mode.
+ * @returns {boolean} Whether the ref belongs to the selected supported integration path.
+ */
+function trustedIntegrationRef(context) {
+    return context.featureQualification
+        ? context.ref==='refs/heads/main' || context.ref.startsWith('refs/heads/feature/') && validBranchName(context.ref.slice(11))
+        : context.ref===(context.authorityUpdate ? 'refs/heads/develop' : 'refs/heads/main');
+}
+
+/** Require explicit maintainer selection before a feature-authored workflow can publish protected integration.
+ * @param {WorkflowContext} context Exact actual workflow identity.
+ * @param {Record<string,unknown>} run Independently fetched current run including actor and triggering actor.
+ * @param {GithubApi} call Read-only provider adapter.
+ * @returns {void} Throws for an unapproved actor or foreign feature workflow; ordinary historical main modes remain supported.
+ */
+function requireFeatureDispatch(context,run,call) {
+    if (!context.featureQualification) return;
+    const owner=context.repository.split('/')[0];
+    if (run.actor?.login!==owner || run.triggering_actor?.login!==owner
+        || !['admin','maintain'].includes(call(`repos/${context.repository}/collaborators/${encodeURIComponent(owner)}/permission`)?.permission)) {
+        throw new Error('BLOCKED feature integration requires explicit owner workflow selection.');
+    }
 }
 
 /** GitHub API adapter supporting exact paths, methods and JSON payloads.
  * @typedef {function(string,string=,(Record<string,unknown>|null)=):Record<string,unknown>} GithubApi
  */
 /** Integration request bound to the user-selected feature source and observed develop lease.
- * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number,basicArtifactId?:number,basicArtifactDigest?:string}} IntegrationRequest
+ * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number,basicArtifactId?:number,basicArtifactDigest?:string,qualifiedRun?:string}} IntegrationRequest
  */
 /** Retained protocol shared by normal integration and no-ref-write owner recovery.
- * @typedef {{schema_version:1,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
+ * @typedef {{schema_version:1|2,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,feature_qualification?:import('./feature-qualification.mjs').FeatureQualification,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
  */
 /** Protected workflow identity taken from the current GitHub Actions environment.
- * @typedef {{repository:string,workflowPath:string,workflowRef:string,eventName:string,ref:string,runId:number|string,runAttempt:number|string,headSha:string,authorityUpdate?:boolean}} WorkflowContext
+ * @typedef {{repository:string,workflowPath:string,workflowRef:string,eventName:string,ref:string,runId:number|string,runAttempt:number|string,headSha:string,authorityUpdate?:boolean,featureQualification?:boolean,stage?:'execution'|'publication',qualifiedRun?:string}} WorkflowContext
  */
 
 /** Validate a Git branch name while allowing ordinary punctuation such as comma and hash.
@@ -275,9 +310,10 @@ function completeRows(call,path,key) {
  * @param {string} developSha Observed develop P.
  * @param {boolean} recovery Whether the source is already the exact protected develop candidate; its own authority is then retained.
  * @param {boolean} [authorityUpdate=false] Require inherited scanners while allowing the reviewed evaluator transition.
+ * @param {boolean} [featureQualification=false] Use independent main-owned BASIC instead of requiring candidate evaluator identity.
  * @returns {{tree:string}} Candidate tree SHA.
  */
-function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recovery=false,authorityUpdate=false) {
+function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recovery=false,authorityUpdate=false,featureQualification=false) {
     const source=call('repos/'+repository+'/commits/'+sourceSha);
     if (source?.sha!==sourceSha || source.commit?.tree?.sha===undefined
         || source.parents?.length!==1 || source.parents[0]?.sha!==developSha) {
@@ -291,7 +327,7 @@ function verifyAncestry(call,repository,sourceSha,candidateSha,developSha,recove
         requireAuthorityUpdateSourcePaths(sourceTree,baseTree);
     }
     // Recovery trusts only the exact already-protected candidate, not a new feature's authority edits.
-    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,authorityUpdate);
+    if (!featureQualification) requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,authorityUpdate);
     if (candidateSha!==sourceSha) {
         const candidate=call('repos/'+repository+'/commits/'+candidateSha);
         if (candidate?.sha!==candidateSha || candidate.parents?.length!==1 || candidate.parents[0]?.sha!==sourceSha) {
@@ -467,7 +503,7 @@ export function requireTrustedBasicEvidence(report,request,context,tree) {
     if (!report || JSON.stringify(Object.keys(report).sort())!==JSON.stringify(fields)
         || report.schema_version!==1 || report.authority_sha!==context.headSha
         || report.source_sha!==request.sourceSha || report.source_tree!==tree
-        || report.comparison_base!==request.expectedDevelopSha || report.authority_sha!==request.expectedDevelopSha
+        || report.comparison_base!==request.expectedDevelopSha || !context.featureQualification && report.authority_sha!==request.expectedDevelopSha
         || report.profile!=='basic' || report.successful!==true
         || JSON.stringify(report.suites)!==JSON.stringify(['php-lint','js-lint','source-documentation-changed'])
         || !/^sha256:[a-f0-9]{64}$/.test(report.report_sha256 ?? '')
@@ -508,15 +544,16 @@ export function selectDevelopIntegration(branch,context,repository,call,recovery
     if (typeof recovery!=='boolean') throw new Error('BLOCKED recovery mode must be boolean.');
     if (recovery && context?.authorityUpdate) throw new Error('BLOCKED CI authority update cannot be combined with recovery.');
     if (!validBranchName(branch) || !branch.startsWith('feature/') || context?.repository!==repository
-        || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(repository,context.workflowRef,context.authorityUpdate)
-        || context.eventName!=='workflow_dispatch' || context.ref!==(context.authorityUpdate ? 'refs/heads/develop' : 'refs/heads/main')
+        || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(repository,context.workflowRef,context.authorityUpdate,context.featureQualification ? context.ref : '')
+        || context.eventName!=='workflow_dispatch' || !trustedIntegrationRef(context)
         || !/^\d+$/.test(String(context.runId)) || !/^\d+$/.test(String(context.runAttempt))
         || !/^[a-f0-9]{40}$/.test(context.headSha)) throw new Error('BLOCKED source selection is outside the main-owned workflow context.');
     const active=call('repos/'+repository+'/actions/runs/'+String(context.runId));
-    if (String(active?.id)!==String(context.runId) || active?.path!==WORKFLOW_PATH || active?.head_branch!==(context.authorityUpdate ? 'develop' : 'main')
+    if (String(active?.id)!==String(context.runId) || active?.path!==WORKFLOW_PATH || active?.head_branch!==integrationBranch(context)
         || active?.head_sha!==context.headSha || active?.event!=='workflow_dispatch' || active?.status!=='in_progress'
         || String(active?.run_attempt)!==String(context.runAttempt)) throw new Error('BLOCKED source selection workflow run is not current and active.');
     requireAuthorityUpdateInstallation(context,repository,call);
+    requireFeatureDispatch(context,active,call);
     const sourceSha=call('repos/'+repository+'/git/ref/heads/'+encodedBranch(branch))?.object?.sha;
     const observedDevelopSha=call('repos/'+repository+'/git/ref/heads/develop')?.object?.sha;
     if (recovery) requireRecoveryOwner(call,repository,active,sourceSha,observedDevelopSha);
@@ -533,7 +570,9 @@ export function selectDevelopIntegration(branch,context,repository,call,recovery
     if (base?.sha!==expectedDevelopSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED current develop P tree is unavailable.');
     if (context.authorityUpdate) requireAuthorityUpdateSourcePaths(
         completeTree(call,repository,source.commit.tree.sha),completeTree(call,repository,base.commit.tree.sha));
-    requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,context.authorityUpdate);
+    if (!context.featureQualification) requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,context.authorityUpdate);
+    if (context.qualifiedRun) loadFeatureExecution(repository,String(context.qualifiedRun),
+        {candidate:sourceSha,tree:source.commit.tree.sha,base:expectedDevelopSha},{api:path=>call(path)});
     const runs=completeRows(call,'repos/'+repository+'/actions/workflows/candidate-preparation.yml/runs?branch='
         +encodeURIComponent(branch)+'&head_sha='+sourceSha,'workflow_runs');
     const exact=runs.filter(run=>run.head_branch===branch && run.head_sha===sourceSha
@@ -563,25 +602,26 @@ export function validateDevelopIntegration(request,context,repository,call,recov
         || ![request.sourceSha,request.candidateSha,request.expectedDevelopSha,request.sourceBase].every(value=>/^[a-f0-9]{40}$/.test(value))
         || request.sourceBase!==request.expectedDevelopSha || context?.repository!==repository
         || !/^\d+$/.test(String(request.basicRunId)) || !/^\d+$/.test(String(request.basicRunAttempt))
-        || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(repository,context.workflowRef,context.authorityUpdate)
-        || context.eventName!=='workflow_dispatch' || context.ref!==(context.authorityUpdate ? 'refs/heads/develop' : 'refs/heads/main')
+        || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(repository,context.workflowRef,context.authorityUpdate,context.featureQualification ? context.ref : '')
+        || context.eventName!=='workflow_dispatch' || !trustedIntegrationRef(context)
         || !/^[a-f0-9]{40}$/.test(context.headSha) || !/^\d+$/.test(String(context.runId))
         || !/^\d+$/.test(String(context.runAttempt))) throw new Error('BLOCKED untrusted integration workflow identity or request.');
     const runId=String(context.runId),attempt=String(context.runAttempt);
     const currentRun=call('repos/'+repository+'/actions/runs/'+runId);
     if (String(currentRun?.id)!==runId || currentRun?.path!==WORKFLOW_PATH || currentRun?.event!=='workflow_dispatch'
-        || currentRun?.head_branch!==(context.authorityUpdate ? 'develop' : 'main') || currentRun?.head_sha!==context.headSha
+        || currentRun?.head_branch!==integrationBranch(context) || currentRun?.head_sha!==context.headSha
         || currentRun?.status!=='in_progress' || String(currentRun?.run_attempt)!==attempt) {
         throw new Error('BLOCKED current publisher is not the exact active main-owned workflow attempt.');
     }
     const anchor=requireAuthorityUpdateInstallation(context,repository,call);
-    const inheritedBasic=anchor ? loadTrustedBasicEvidence(request,context,call) : null;
+    requireFeatureDispatch(context,currentRun,call);
+    const inheritedBasic=anchor || context.featureQualification ? loadTrustedBasicEvidence(request,context,call) : null;
     if (recovery) {
         requireRecoveryOwner(call,repository,currentRun,request.sourceSha,request.candidateSha);
         if (request.sourceSha!==request.candidateSha) throw new Error('BLOCKED recovery cannot create a generated candidate child.');
     }
     const heads=readHeads(call,repository,request.branch,request.candidateSha,recovery ? request.candidateSha : request.expectedDevelopSha);
-    const ancestry=verifyAncestry(call,repository,request.sourceSha,request.candidateSha,request.expectedDevelopSha,recovery,context.authorityUpdate);
+    const ancestry=verifyAncestry(call,repository,request.sourceSha,request.candidateSha,request.expectedDevelopSha,recovery,context.authorityUpdate,context.featureQualification);
     const basicRuns=completeRows(call,'repos/'+repository+'/actions/workflows/candidate-preparation.yml/runs?branch='
         +encodeURIComponent(request.branch)+'&head_sha='+request.sourceSha,'workflow_runs');
     const matchingBasicRuns=basicRuns.filter(run=>run.head_branch===request.branch && run.head_sha===request.sourceSha
@@ -592,6 +632,7 @@ export function validateDevelopIntegration(request,context,repository,call,recov
     }
     validateBasicEvidence(call,repository,request.branch,request.sourceSha,request.basicRunId,request.basicRunAttempt);
     if (recovery) requirePreviousFull(call,repository,request.sourceSha,newestBasicRun);
+    if (context.featureQualification) return validateFeatureIntegration(request,context,call,ancestry.tree,inheritedBasic,heads.develop);
     const jobs=completeRows(call,'repos/'+repository+'/actions/runs/'+runId+'/attempts/'+attempt+'/jobs','jobs');
     const owners=[];
     const auxiliaryNames=['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate',
@@ -639,6 +680,57 @@ export function validateDevelopIntegration(request,context,repository,call,recov
     if (recovery) Object.assign(record,{recovery_mode:'existing-develop',observed_develop_sha:heads.develop,ref_write:false});
     if (anchor) record.authority_update={anchor,inherited_basic:inheritedBasic};
     return {plan:{branch:'develop',oldSha:heads.develop,newSha:request.candidateSha},record};
+}
+
+/** Bind independent BASIC and a complete native execution to a separate main-owned publication attempt.
+ * @param {IntegrationRequest} request Exact final candidate, base and optional sealed execution run.
+ * @param {WorkflowContext} context Current main-owned workflow and execution/publication stage.
+ * @param {GithubApi} call Independent GitHub provider reader.
+ * @param {string} tree Complete final candidate input tree.
+ * @param {import('./feature-qualification.mjs').FeatureBasic} basic Independently reproduced BASIC proof and archive identity.
+ * @param {string} develop Observed protected develop lease.
+ * @returns {{plan:{branch:string,oldSha:string,newSha:string},record:IntegrationEvidenceRecord}} Versioned feature qualification and guarded publication plan.
+ */
+function validateFeatureIntegration(request,context,call,tree,basic,develop) {
+    if (context.authorityUpdate || request.sourceSha!==request.candidateSha) {
+        throw new Error('BLOCKED feature qualification requires the final prepared source and ordinary main authority.');
+    }
+    const repository=context.repository,runId=String(context.runId),attempt=String(context.runAttempt);
+    const jobs=completeRows(call,`repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs`,'jobs');
+    let execution={run_id:runId,run_attempt:attempt,workflow_sha:context.headSha};
+    let owners=jobs.filter(job=>FULL_OWNERS.some(name=>job.name==='Develop integration / '+name))
+        .map(job=>({id:job.id,name:job.name,status:job.status,conclusion:job.conclusion}));
+    if (request.qualifiedRun) {
+        const prior=loadFeatureExecution(repository,String(request.qualifiedRun),
+            {candidate:request.candidateSha,tree,base:request.expectedDevelopSha},{api:path=>call(path)});
+        execution=prior.record.feature_qualification.execution;owners=prior.record.native_owners;
+    }
+    verifyFeatureOwners(repository,execution,owners,path=>call(path));
+    verifyFeatureBasic(basic,{authority:context.headSha,source:request.sourceSha,tree,
+        base:request.expectedDevelopSha,run:runId},repository,{api:path=>call(path)});
+    const auxiliary=['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate','Inherited BASIC authority'];
+    if (context.stage!=='execution') auxiliary.push('Retain integration execution');
+    for (const name of auxiliary) {
+        const matches=jobs.filter(job=>job.name===name);
+        if (matches.length!==1 || matches[0].run_id!==Number(runId) || matches[0].run_attempt!==Number(attempt)
+            || matches[0].workflow_name!=='Integrate into develop' || matches[0].status!=='completed'
+            || matches[0].conclusion!=='success') throw new Error('BLOCKED unsuccessful feature qualification stage: '+name);
+    }
+    const stage=context.stage==='execution'?'Retain integration execution':'Publish develop integration';
+    const active=jobs.filter(job=>job.name===stage);
+    if (active.length!==1 || !['queued','in_progress'].includes(active[0].status)) {
+        throw new Error('BLOCKED feature qualification stage is not the current active native job.');
+    }
+    const allowed=new Set([...auxiliary,stage,'Publish develop integration','Retain integration execution',
+        ...FULL_OWNERS.map(name=>'Develop integration / '+name),'Develop integration / Authoritative release audit']);
+    if (request.qualifiedRun) allowed.add('Develop integration');
+    if (jobs.some(job=>!allowed.has(job.name))) throw new Error('BLOCKED unexpected native feature qualification job.');
+    const record={schema_version:2,repository,source_branch:request.branch,source_sha:request.sourceSha,
+        candidate_sha:request.candidateSha,candidate_tree:tree,expected_develop_sha:request.expectedDevelopSha,
+        source_base:request.sourceBase,workflow_sha:context.headSha,workflow_path:WORKFLOW_PATH,
+        run_id:runId,run_attempt:attempt,basic_profile:BASIC_PROFILE,native_owners:owners,
+        feature_qualification:{schema_version:1,input_tree:tree,basic,execution}};
+    return {plan:{branch:'develop',oldSha:develop,newSha:request.candidateSha},record};
 }
 
 /** Require explicit repository-owner recovery of the exact already-protected source candidate.
@@ -774,20 +866,21 @@ export function integrateDevelop(request,context,repository,call,pause=pauseRequ
  * @throws {Error} Rejects invalid inputs, unsupported squash modes, missing source metadata or failed publication checks.
  */
 export function publishPreparedCandidate(request,context,call,adapters={}) {
-    if (context?.repository!==request?.repository || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(request.repository,context.workflowRef,context.authorityUpdate)
-        || context.eventName!=='workflow_dispatch' || context.ref!==(context.authorityUpdate ? 'refs/heads/develop' : 'refs/heads/main')
+    if (context?.repository!==request?.repository || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(request.repository,context.workflowRef,context.authorityUpdate,context.featureQualification ? context.ref : '')
+        || context.eventName!=='workflow_dispatch' || !trustedIntegrationRef(context)
         || String(request?.runId)!==String(context.runId) || !Number.isSafeInteger(request.artifactId)
         || !/^sha256:[a-f0-9]{64}$/.test(request.artifactDigest) || !validBranchName(request.branch)
         || !/^feature\//.test(request.branch) || !/^[a-f0-9]{40}$/.test(request.sourceSha)
         || !/^[a-f0-9]{40}$/.test(request.expectedDevelopSha)) throw new Error('BLOCKED artifact publisher is outside the trusted main workflow context.');
     const {repository,branch,sourceSha}=request;
     const ownRun=call('repos/'+repository+'/actions/runs/'+String(context.runId));
-    if (String(ownRun?.id)!==String(context.runId) || ownRun?.path!==WORKFLOW_PATH || ownRun?.head_branch!==(context.authorityUpdate ? 'develop' : 'main')
+    if (String(ownRun?.id)!==String(context.runId) || ownRun?.path!==WORKFLOW_PATH || ownRun?.head_branch!==integrationBranch(context)
         || ownRun?.head_sha!==context.headSha || ownRun?.event!=='workflow_dispatch' || ownRun?.status!=='in_progress'
         || String(ownRun?.run_attempt)!==String(context.runAttempt)) {
         throw new Error('BLOCKED candidate publisher is not this active main-owned workflow run.');
     }
     requireAuthorityUpdateInstallation(context,request.repository,call);
+    requireFeatureDispatch(context,ownRun,call);
     const artifactAdapters={api:adapters.api ?? (path=>call(path))};
     if (adapters.download) artifactAdapters.download=adapters.download;
     const transport=readCoverageArtifact(repository,request.artifactId,String(request.runId),request.artifactDigest,
@@ -918,8 +1011,8 @@ export function dispatchPreparedBasic(request,context,call) {
     const {repository,branch,candidateSha,expectedDevelopSha}=request;
     if (!validBranchName(branch) || !branch.startsWith('feature/')
         || context.repository!==repository || context.workflowPath!==WORKFLOW_PATH
-        || !trustedWorkflowRef(repository,context.workflowRef)
-        || context.eventName!=='workflow_dispatch' || context.ref!=='refs/heads/main'
+        || !trustedWorkflowRef(repository,context.workflowRef,false,context.featureQualification ? context.ref : '')
+        || context.eventName!=='workflow_dispatch' || !trustedIntegrationRef(context)
         || context.authorityUpdate
         || ![candidateSha,expectedDevelopSha,context.headSha].every(value=>/^[a-f0-9]{40}$/.test(value))
         || !/^\d+$/.test(String(context.runId))
@@ -930,14 +1023,14 @@ export function dispatchPreparedBasic(request,context,call) {
     const active=call('repos/'+repository+'/actions/runs/'+String(context.runId));
     if (String(active?.id)!==String(context.runId)
         || active.path!==WORKFLOW_PATH || active.event!=='workflow_dispatch'
-        || active.head_branch!=='main' || active.head_sha!==context.headSha
+        || active.head_branch!==integrationBranch(context) || active.head_sha!==context.headSha
         || active.status!=='in_progress'
         || String(active.run_attempt)!==String(context.runAttempt)) {
         throw new Error('BLOCKED prepared BASIC dispatcher is not the active main-owned run.');
     }
 
     readHeads(call,repository,branch,candidateSha,expectedDevelopSha);
-    verifyAncestry(call,repository,candidateSha,candidateSha,expectedDevelopSha,false,false);
+    verifyAncestry(call,repository,candidateSha,candidateSha,expectedDevelopSha,false,false,context.featureQualification);
 
     const dispatched=call('repos/'+repository+'/actions/workflows/candidate-preparation.yml/dispatches','POST',{
         ref:branch,

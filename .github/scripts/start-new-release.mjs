@@ -61,14 +61,14 @@ export function startNewRelease(request,repository,adapters={}) {
     if (head!==request.selected) throw new Error('BLOCKED release branch advanced before initialization.');
     const main=call('repos/'+repository+'/git/ref/heads/main').object?.sha;
     const develop=call('repos/'+repository+'/git/ref/heads/develop').object?.sha;
-    // A single owner-reviewed maintenance merge may separate actual main from its unchanged stable tag.
-    const stable=releaseStableMain(request.version,main,repository,adapters);
     // Select the exact stable identity, never releases/latest or an unverified ancestral git describe.
     const tags=JSON.parse(git('gh',['api','repos/'+repository+'/git/matching-refs/tags/v_','--paginate','--slurp'])).flat();
-    const matching=tags.filter(ref=>/^refs\/tags\/v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(ref.ref))
-        .filter(ref=>git('git',['rev-parse',ref.ref+'^{commit}'])===stable);
+    const stableTags=tags.filter(ref=>/^refs\/tags\/v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(ref.ref))
+        .map(ref=>({tag:ref.ref.slice('refs/tags/'.length),sha:git('git',['rev-parse',ref.ref+'^{commit}'])}));
+    const stable=releaseStableMain(request.version,main,repository,{...adapters,stableTags});
+    const matching=stableTags.filter(tag=>tag.sha===stable);
     if (matching.length!==1) throw new Error('BLOCKED current main must have one unambiguous stable tag.');
-    const predecessor=verifyPredecessor(call,repository,matching[0].ref.slice('refs/tags/'.length),adapters);
+    const predecessor=verifyPredecessor(call,repository,matching[0].tag,adapters);
     if (!isAncestor(call,repository,request.selected,develop)) throw new Error('BLOCKED pushed source is not retained on develop.');
     verifyPredecessorLineage(call,repository,predecessor,request.selected,adapters);
     const supplement='.github/release-predecessors/v_'+request.version+'.json';

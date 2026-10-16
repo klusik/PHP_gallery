@@ -107,7 +107,7 @@ export function runTrustedBasic(options,env=process.env) {
     const git=args=>runInheritedCommand('git',args,candidate,env).trim();
     const source=git(['rev-parse','HEAD']),tree=git(['rev-parse','HEAD^{tree}']);
     if ([env.SOURCE_SHA,env.AUTHORITY_SHA,env.DEVELOP_SHA].some(value=>!/^[a-f0-9]{40}$/.test(value ?? ''))
-        || source!==env.SOURCE_SHA || env.AUTHORITY_SHA!==env.DEVELOP_SHA || git(['status','--porcelain'])!=='') {
+        || source!==env.SOURCE_SHA || git(['status','--porcelain'])!=='') {
         throw new Error('BLOCKED inherited BASIC source or authority lease differs.');
     }
     const library=resolve(authority,'scripts/audit_lib.php');

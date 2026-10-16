@@ -21,6 +21,7 @@ import {requireBotPullRequest,effectiveOwnerReview} from './release-owner-author
 import {isAncestor,downloadReleaseEvidence,verifyLinearContent,qualifiedLinearCandidate} from './release-reconciliation.mjs';
 import {loadReleaseCoverage,readCoverageArtifact} from './coverage-artifacts.mjs';
 import {fullMatrixOwners} from './ci-owner-contract.mjs';
+import {verifyMaintenanceLineage,verifyMaintenanceMerge,MAINTENANCE_READ_LIMIT} from './maintenance-authority.mjs';
 
 /** Bind the sole untagged main repair approved before release 0.132.9.
  * Type: Readonly<{repository:string,version:string,main:string,stable:string,tag:string,repair:string,tree:string,transport:string,run:string,attempt:number,artifact:number,digest:string,pr:number,review:number,check:number}>.
@@ -48,26 +49,43 @@ export function isMaintenanceMainBridge(record) {
  * @param {string} version Intended canonical release version.
  * @param {string} main Observed current main commit.
  * @param {string} repository Exact owner/repository.
- * @param {import('./coverage-artifacts.mjs').ArtifactAdapters} adapters Optional isolated provider/archive readers; defaults to real read-only GitHub transports.
- * @returns {string} The observed main for normal releases, or the authenticated original stable commit for this finite maintenance bridge.
+ * @param {import('./coverage-artifacts.mjs').ArtifactAdapters & {stableTags?:Array<{tag:string,sha:string}>}} adapters Provider/archive readers and the complete canonical stable tag inventory when selecting a new origin.
+ * @returns {string} Existing stable tag commit reached through protected main's bounded first-parent history; historical finite origins retain their reader.
  */
 export function releaseStableMain(version,main,repository,adapters={}) {
     const pin=MAINTENANCE_MAIN_BRIDGE;
     const record={version,initial_main_sha:main,previous_stable_sha:pin.stable,previous_stable_tag:pin.tag};
-    if (!isMaintenanceMainBridge(record)) return main;
-    verifyMaintenanceMainBridge(record,repository,adapters);
-    return pin.stable;
+    if (isMaintenanceMainBridge(record)) {
+        verifyMaintenanceMainBridge(record,repository,adapters);
+        return pin.stable;
+    }
+    if (!Array.isArray(adapters.stableTags)) return main;
+    const tagged=new Set(adapters.stableTags.map(tag=>tag.sha));
+    let current=main;
+    // The bound is shared with the authenticated reader; every untagged step must be a reviewed maintenance merge.
+    for (let depth=0;depth<MAINTENANCE_READ_LIMIT;depth++) {
+        if (tagged.has(current)) return current;
+        current=verifyMaintenanceMerge(repository,current,{...adapters,api:adapters.api ?? api});
+    }
+    throw new Error('BLOCKED maintenance predecessor discovery exceeds its bound.');
 }
 
-/** Authenticate the human-reviewed maintenance merge and its complete independently pinned qualification.
+/** Preserve stable tag/main ancestry, retaining independently pinned qualification only for historical finite origins.
  * @param {{version:string,initial_main_sha:string,previous_stable_sha:string,previous_stable_tag:string}} record Checked origin or qualification projection; ordinary equal main/stable needs no exception.
  * @param {string} repository Exact owner/repository identity.
  * @param {import('./coverage-artifacts.mjs').ArtifactAdapters} adapters Independent provider and complete raw-archive readers; production defaults remain read-only.
- * @returns {void} Returns only for an ordinary identical main/stable or the fully authenticated finite bridge; never writes a ref, tag or check.
+ * @returns {void} Returns for unchanged main/stable or actual protected first-parent lineage; the historical finite origin keeps its original proof rules. Never writes a ref, tag or check.
  */
 export function verifyMaintenanceMainBridge(record,repository,adapters={}) {
     if (record.initial_main_sha===record.previous_stable_sha) return;
     const pin=MAINTENANCE_MAIN_BRIDGE,call=adapters.api ?? api;
+    if (!isMaintenanceMainBridge(record)) {
+        if (peelReleaseTag(call,repository,record.previous_stable_tag).commit_sha!==record.previous_stable_sha) {
+            throw new Error('BLOCKED maintenance predecessor stable tag moved.');
+        }
+        verifyMaintenanceLineage(repository,record.initial_main_sha,record.previous_stable_sha,{...adapters,api:call});
+        return;
+    }
     const fail=()=>{throw new Error('BLOCKED unqualified maintenance main-to-stable bridge.');};
     if (repository!==pin.repository || !isMaintenanceMainBridge(record)) fail();
     if (peelReleaseTag(call,repository,pin.tag).commit_sha!==pin.stable) fail();
@@ -165,8 +183,7 @@ export function validateOriginRecord(record,version) {
         || record.release_branch !== 'release/v_' + version
         || !/^v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(record.previous_stable_tag)
         || ![record.selected_develop_sha,record.initial_main_sha,record.previous_stable_sha].every(
-            sha => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha))
-        || record.initial_main_sha !== record.previous_stable_sha && !isMaintenanceMainBridge(record)) {
+            sha => typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha))) {
         throw new Error('BLOCKED malformed, inconsistent or unanchored release origin.');
     }
     // BigInt avoids rounding even when a valid numeric version segment is large.
@@ -292,6 +309,17 @@ export function peelReleaseTag(call,repository,tag) {
  */
 export function verifyPredecessor(call,repository,tag,adapters={}) {
     const identity = peelReleaseTag(call,repository,tag);
+    if (adapters.trustDevelop===true || process.env.PHP_GALLERY_RELEASE_TRUST_DEVELOP==='1') {
+        const merge=call(`repos/${repository}/commits/${identity.commit_sha}`);
+        const candidate=merge.parents?.[1]?.sha;
+        const source=call(`repos/${repository}/commits/${candidate}`);
+        if (merge?.sha!==identity.commit_sha || merge.parents?.length!==2
+            || !/^[a-f0-9]{40}$/.test(candidate ?? '') || source?.sha!==candidate
+            || source.commit?.tree?.sha!==identity.tree_sha) throw new Error('BLOCKED stable tag and release Git source differ.');
+        return {previous_stable_tag:tag,previous_tag_object_sha:identity.tag_object_sha,
+            previous_tag_object_type:identity.tag_object_type,previous_stable_sha:identity.commit_sha,
+            previous_release_candidate_sha:candidate,previous_tree_sha:identity.tree_sha,predecessor_kind:'protected-main'};
+    }
     let published;
     try {published=call('repos/'+repository+'/releases/tags/'+tag);}
     catch (error) {

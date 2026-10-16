@@ -122,8 +122,13 @@ try {
         && str_contains($workflow, "inputs.maintenance_full")
         && !str_contains($workflow, 'if: ${{ !inputs.maintenance_full }}')
         && preg_match('/  prepare:\r?\n    needs: basic\r?\n/', $workflow) === 1
-        && str_contains($workflow, "github.event_name == 'workflow_dispatch' && inputs.maintenance_full"),
+        && str_contains($workflow, "github.event_name == 'workflow_dispatch' && (inputs.maintenance_full || inputs.install_ci)"),
         'Ordinary feature pushes must run BASIC; explicit full dispatch retains successful BASIC before generated publication.');
+    $assert(str_contains($workflow, 'git rev-list --count "${source_base}..${GITHUB_SHA}"')
+        && str_contains($workflow, 'git show -s --format=%P "${GITHUB_SHA}"')
+        && str_contains($workflow, 'if [[ "${candidate_sha}" != "${SOURCE_SHA}" ]]')
+        && str_contains($workflow, "needs.prepare.result == 'success' && needs.prepare.outputs.candidate_sha == github.sha"),
+        'FULL must reject multiple source commits, merges and prepared children before expensive execution.');
 
     $ci = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml');
     $assert(str_contains($ci, 'php scripts/audit.php --profile=candidate-preflight')

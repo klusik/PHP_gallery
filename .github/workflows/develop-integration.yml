@@ -5,9 +5,10 @@
 # Purpose: Integrate one BASIC-qualified feature squash through generated-only preparation and one exact full matrix.
 # Responsibilities:
 #   - Select a single source commit directly above observed develop and resolve its latest BASIC evidence
-#   - Prepare generated files without write credentials and publish them as data through main-owned API code
+#   - Execute the owner-selected main or feature workflow and retain complete exact-candidate evidence
 #   - Run the complete reusable matrix on the final candidate before a normal develop fast-forward
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
 name: Integrate into develop
 
 on:
@@ -27,11 +28,16 @@ on:
         required: false
         type: boolean
         default: false
-      ci_authority_update:
-        description: Run the reviewed authority update from a newly main-qualified protected develop workflow revision.
+      qualify_only:
+        description: Prepare and seal complete feature qualification without writing develop; integrate later using its run ID.
         required: false
         type: boolean
         default: false
+      qualified_run:
+        description: Optional sealed qualification run to reuse for the identical prepared candidate and base; FULL is not repeated.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -71,7 +77,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_BRANCH: ${{ inputs.source_branch }}
           RECOVERY_MODE: ${{ inputs.recover_existing }}
-          CI_AUTHORITY_UPDATE: ${{ inputs.ci_authority_update }}
+          CI_AUTHORITY_UPDATE: ${{ false }}
+          QUALIFIED_RUN: ${{ inputs.qualified_run }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.sha }}
@@ -95,7 +102,9 @@ jobs:
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA,
-            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true'};
+            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true',
+            featureQualification:process.env.CI_AUTHORITY_UPDATE!=='true' && process.env.RECOVERY_MODE!=='true',
+            qualifiedRun:process.env.QUALIFIED_RUN};
           const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,process.env.RECOVERY_MODE==='true');
           for(const [name,value] of Object.entries({branch:selected.branch,source_sha:selected.sourceSha,
             develop_sha:selected.expectedDevelopSha,source_base:selected.sourceBase,basic_run_id:selected.basicRunId,
@@ -176,8 +185,8 @@ jobs:
 
   inherited-basic:
     name: Inherited BASIC authority
-    needs: select
-    if: ${{ inputs.ci_authority_update }}
+    needs: [select, publish-candidate]
+    if: ${{ !cancelled() && !inputs.recover_existing && needs.select.result == 'success' && needs.publish-candidate.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -189,7 +198,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ needs.select.outputs.source_sha }}
+          ref: ${{ needs.publish-candidate.outputs.final_source_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
@@ -204,7 +213,7 @@ jobs:
       - name: Evaluate source against trusted BASIC authority
         env:
           AUTHORITY_SHA: ${{ github.sha }}
-          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.publish-candidate.outputs.final_source_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
           PHP_GALLERY_SOURCE_BASE: ${{ needs.select.outputs.develop_sha }}
         shell: bash
@@ -212,6 +221,7 @@ jobs:
           set -euo pipefail
           trusted_root="${RUNNER_TEMP}/ci-inherited-basic"
           mkdir -p "${trusted_root}"
+          git fetch --no-tags origin "${AUTHORITY_SHA}"
           git archive "${AUTHORITY_SHA}" scripts .github/scripts | tar -x -C "${trusted_root}"
           node "${trusted_root}/.github/scripts/trusted-basic.mjs" \
             --authority="${trusted_root}" \
@@ -225,12 +235,12 @@ jobs:
             ${{ runner.temp }}/trusted-basic.json
             ${{ runner.temp }}/trusted-basic.json.report.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
   publish-candidate:
     name: Publish prepared integration candidate
-    needs: [select, prepare, inherited-basic]
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.prepare.result == 'success' && ((inputs.ci_authority_update && needs.inherited-basic.result == 'success') || (!inputs.ci_authority_update && needs.inherited-basic.result == 'skipped')) }}
+    needs: [select, prepare]
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.prepare.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -259,7 +269,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
           RECOVERY_MODE: ${{ inputs.recover_existing }}
-          CI_AUTHORITY_UPDATE: ${{ inputs.ci_authority_update }}
+          CI_AUTHORITY_UPDATE: ${{ false }}
           AUTO_SQUASH_GENERATED: ${{ inputs.auto_squash_generated }}
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
@@ -267,8 +277,6 @@ jobs:
           BASIC_RUN_ATTEMPT: ${{ needs.select.outputs.basic_run_attempt }}
           ARTIFACT_ID: ${{ needs.prepare.outputs.artifact_id }}
           ARTIFACT_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
-          BASIC_ARTIFACT_ID: ${{ needs.inherited-basic.outputs.artifact_id }}
-          BASIC_ARTIFACT_DIGEST: ${{ needs.inherited-basic.outputs.artifact_digest }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.sha }}
           WORKFLOW_EVENT: ${{ github.event_name }}
@@ -294,7 +302,8 @@ jobs:
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA,
-            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true'};
+            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true',
+            featureQualification:process.env.CI_AUTHORITY_UPDATE!=='true' && process.env.RECOVERY_MODE!=='true'};
           let published;
           if(process.env.RECOVERY_MODE==='true') {
             const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,true);
@@ -352,19 +361,79 @@ jobs:
 
   full:
     name: Develop integration
-    needs: [select, publish-candidate]
+    needs: [select, publish-candidate, inherited-basic]
     # Optional ancestor skips must not suppress FULL; require the candidate authenticated by BASIC.
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha }}
+    if: ${{ !cancelled() && inputs.qualified_run == '' && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && (needs.inherited-basic.result == 'success' || inputs.recover_existing) && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha }}
     uses: ./.github/workflows/gallery-workflows.yml
     with:
       audit_profile: full
       checkout_ref: ${{ needs.publish-candidate.outputs.candidate_sha }}
       source_base: ${{ needs.select.outputs.develop_sha }}
 
+  retain-execution:
+    name: Retain integration execution
+    needs: [select, prepare, publish-candidate, inherited-basic, full]
+    if: ${{ !cancelled() && !inputs.recover_existing && !false && needs.select.result == 'success' && needs.prepare.result == 'success' && needs.publish-candidate.result == 'success' && needs.inherited-basic.result == 'success' && (needs.full.result == 'success' || (inputs.qualified_run != '' && needs.full.result == 'skipped')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Authenticate and seal execution before any protected write
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          SOURCE_SHA: ${{ needs.publish-candidate.outputs.final_source_sha }}
+          DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+          BASIC_RUN_ID: ${{ needs.publish-candidate.outputs.basic_run_id }}
+          BASIC_RUN_ATTEMPT: ${{ needs.publish-candidate.outputs.basic_run_attempt }}
+          BASIC_ARTIFACT_ID: ${{ needs.inherited-basic.outputs.artifact_id }}
+          BASIC_ARTIFACT_DIGEST: ${{ needs.inherited-basic.outputs.artifact_digest }}
+          QUALIFIED_RUN: ${{ inputs.qualified_run }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {writeFileSync,appendFileSync} from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          import {validateDevelopIntegration} from './.github/scripts/develop-integration.mjs';
+          const e=process.env;
+          const api=(path)=>{
+            const result=spawnSync('gh',['api',path],{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024,shell:false});
+            if(result.error || result.status!==0) throw new Error('GitHub API request failed: '+String(result.stderr||result.error));
+            return JSON.parse(result.stdout);
+          };
+          const context={repository:e.GITHUB_REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
+            workflowRef:e.GITHUB_WORKFLOW_REF,eventName:e.GITHUB_EVENT_NAME,ref:e.GITHUB_REF,
+            runId:e.GITHUB_RUN_ID,runAttempt:e.GITHUB_RUN_ATTEMPT,headSha:e.GITHUB_SHA,
+            featureQualification:true,stage:'execution'};
+          const request={branch:e.SOURCE_BRANCH,sourceSha:e.SOURCE_SHA,candidateSha:e.SOURCE_SHA,
+            expectedDevelopSha:e.DEVELOP_SHA,sourceBase:e.DEVELOP_SHA,basicRunId:e.BASIC_RUN_ID,
+            basicRunAttempt:e.BASIC_RUN_ATTEMPT,basicArtifactId:Number(e.BASIC_ARTIFACT_ID),
+            basicArtifactDigest:e.BASIC_ARTIFACT_DIGEST,qualifiedRun:e.QUALIFIED_RUN};
+          const {record}=validateDevelopIntegration(request,context,e.GITHUB_REPOSITORY,api);
+          writeFileSync(e.RUNNER_TEMP+'/develop-execution.json',JSON.stringify(record,null,2)+'\n');
+          appendFileSync(e.GITHUB_STEP_SUMMARY,`Sealed complete execution for ${record.candidate_sha}; reuse run ${e.GITHUB_RUN_ID} to publish without repeating FULL.\n`);
+          NODE
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: develop-integration-execution
+          path: ${{ runner.temp }}/develop-execution.json
+          if-no-files-found: error
+          retention-days: 90
+
   publish-develop:
     name: Publish develop integration
-    needs: [select, prepare, publish-candidate, full, inherited-basic]
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.prepare.result == 'success' && needs.publish-candidate.result == 'success' && needs.full.result == 'success' && ((inputs.ci_authority_update && needs.inherited-basic.result == 'success') || (!inputs.ci_authority_update && needs.inherited-basic.result == 'skipped')) }}
+    needs: [select, prepare, publish-candidate, full, inherited-basic, retain-execution]
+    if: ${{ !cancelled() && !inputs.qualify_only && needs.select.result == 'success' && needs.prepare.result == 'success' && needs.publish-candidate.result == 'success' && (needs.full.result == 'success' || (inputs.qualified_run != '' && needs.full.result == 'skipped')) && ((needs.inherited-basic.result == 'success' && needs.retain-execution.result == 'success') || inputs.recover_existing || false) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -386,7 +455,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
           RECOVERY_MODE: ${{ inputs.recover_existing }}
-          CI_AUTHORITY_UPDATE: ${{ inputs.ci_authority_update }}
+          CI_AUTHORITY_UPDATE: ${{ false }}
+          QUALIFIED_RUN: ${{ inputs.qualified_run }}
           SOURCE_SHA: ${{ needs.publish-candidate.outputs.final_source_sha }}
           CANDIDATE_SHA: ${{ needs.publish-candidate.outputs.candidate_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
@@ -417,12 +487,14 @@ jobs:
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA,
-            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true'};
+            authorityUpdate:process.env.CI_AUTHORITY_UPDATE==='true',
+            featureQualification:process.env.CI_AUTHORITY_UPDATE!=='true' && process.env.RECOVERY_MODE!=='true'};
           const request={branch:process.env.SOURCE_BRANCH,sourceSha:process.env.SOURCE_SHA,
             candidateSha:process.env.CANDIDATE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
             sourceBase:process.env.DEVELOP_SHA,basicRunId:process.env.BASIC_RUN_ID,
             basicRunAttempt:process.env.BASIC_RUN_ATTEMPT,
-            ...(context.authorityUpdate?{basicArtifactId:Number(process.env.BASIC_ARTIFACT_ID),
+            qualifiedRun:process.env.QUALIFIED_RUN,
+            ...(context.authorityUpdate || context.featureQualification?{basicArtifactId:Number(process.env.BASIC_ARTIFACT_ID),
               basicArtifactDigest:process.env.BASIC_ARTIFACT_DIGEST}:{})};
           const result=(process.env.RECOVERY_MODE==='true' ? recoverDevelop : integrateDevelop)(request,context,process.env.REPOSITORY,api);
           writeFileSync(process.env.RECORD_PATH,JSON.stringify(result.record,null,2)+'\n');

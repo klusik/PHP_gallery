@@ -382,6 +382,26 @@ function fixture(sourceHead=candidateSha) {
     return {call,state};
 }
 
+{
+    const f=fixture(sourceSha),original=f.call;
+    const selectedContext={...context,featureQualification:true,ref:'refs/heads/feature/ci-tests',
+        workflowRef:repository+'/.github/workflows/develop-integration.yml@refs/heads/feature/ci-tests'};
+    const selectedApi=(path,method='GET',payload=null)=>{
+        if (path.endsWith('/collaborators/klusik/permission')) return {permission:'admin'};
+        const result=original(path,method,payload);
+        if (path.endsWith('/actions/runs/901')) return {...result,head_branch:'feature/ci-tests',
+            actor:{login:'klusik'},triggering_actor:{login:'klusik'}};
+        if (path.endsWith('/git/trees/'+sourceTree+'?recursive=1')) return {...result,tree:result.tree.map(entry=>
+            entry.path==='scripts/audit_registry.php'?{...entry,sha:'e'.repeat(40)}:entry)};
+        return result;
+    };
+    assert.equal(selectDevelopIntegration(branch,selectedContext,repository,selectedApi).sourceSha,sourceSha,
+        'explicit feature workflow selection accepts actual changed test/audit definitions before main installation');
+    assert.throws(()=>selectDevelopIntegration(branch,selectedContext,repository,(path,method='GET',payload=null)=>
+        path.endsWith('/actions/runs/901')?{...selectedApi(path,method,payload),triggering_actor:{login:'attacker'}}
+            :selectedApi(path,method,payload)),/BLOCKED/,'an unselected actor cannot authorize feature publication');
+}
+
 assert.equal(validBranchName(branch),true,'comma and hash are valid Git branch characters');
 for (const invalid of ['feature/a b','feature/a#x\\y','feature/a..b','feature/.hidden','feature/end.lock'])
     assert.equal(validBranchName(invalid),false,'invalid ref '+invalid+' must fail');
@@ -599,20 +619,24 @@ for (const [label,change] of [
     // Exercise the workflow-to-helper boundary with the actual bare upload-action output.
     const workflow=readFileSync(new URL('../.github/workflows/develop-integration.yml',import.meta.url),'utf8');
     const fullJob=workflow.match(/^  full:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:)/m)?.[1] ?? '';
-    assert.match(fullJob,/^    needs: \[select, publish-candidate\]$/m,
-        'FULL must wait directly for both selected source and published candidate');
+    assert.match(fullJob,/^    needs: \[select, publish-candidate, inherited-basic\]$/m,
+        'FULL must wait for selected source, prepared candidate and independent BASIC');
     const fullCondition=fullJob.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m)?.[1] ?? '';
-    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha";
+    const expectedFullCondition="!cancelled() && inputs.qualified_run == '' && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && (needs.inherited-basic.result == 'success' || inputs.recover_existing) && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha";
     assert.equal(fullCondition,expectedFullCondition,
         'FULL must require cancellation safety, successful direct dependencies and the BASIC-qualified final source SHA');
     assert.match(fullJob,/checkout_ref: \$\{\{ needs\.publish-candidate\.outputs\.candidate_sha \}\}/,
         'FULL checkout must remain bound to the published candidate');
-    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]');
+    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]').replaceAll('needs.inherited-basic','needs["inherited-basic"]');
     const fullConditionCases=[
-        {name:'ordinary integration tolerates its skipped optional BASIC ancestor',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
-            optional:{prepare:'success','inherited-basic':'skipped'},expected:true},
+        {name:'ordinary feature integration requires independent BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':{result:'success'}},expected:true},
         {name:'authority update retains successful optional BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
-            optional:{prepare:'success','inherited-basic':'success'},expected:true},
+            optional:{prepare:'success','inherited-basic':{result:'success'}},expected:true},
+        {name:'sealed execution suppresses duplicate FULL',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{},qualifiedRun:'123',expected:false},
+        {name:'failed independent BASIC blocks FULL',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{'inherited-basic':{result:'failure'}},expected:false},
         ...['failure','skipped','cancelled'].flatMap(result=>[
             {name:'select '+result+' blocks FULL',cancelled:false,select:result,publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
             {name:'publication '+result+' blocks FULL',cancelled:false,select:'success',publish:result,candidate:sourceSha,source:sourceSha,optional:{},expected:false},
@@ -624,8 +648,10 @@ for (const [label,change] of [
     ];
     for (const scenario of fullConditionCases) {
         const needs={select:{result:scenario.select,outputs:{source_sha:scenario.source}},
-            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate,final_source_sha:scenario.qualified ?? scenario.source}},...scenario.optional};
-        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs}),scenario.expected,
+            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate,final_source_sha:scenario.qualified ?? scenario.source}},
+            'inherited-basic':{result:'success'},...scenario.optional};
+        const inputs={qualified_run:scenario.qualifiedRun ?? '',recover_existing:false};
+        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs,inputs}),scenario.expected,
             'FULL condition evaluation: '+scenario.name);
     }
     const publisher=workflow.match(/^  publish-candidate:\n([\s\S]*?)(?=^  full:)/m)?.[1] ?? '';
@@ -643,10 +669,7 @@ for (const [label,change] of [
     const dispatchedDigest=expression.replace('${{ steps.upload.outputs.artifact-digest }}',uploadDigest);
     assert.equal(dispatchedDigest,digest,'upload hex must match algorithm-qualified provider metadata');
     const releaseWorkflow=readFileSync(new URL('../.github/workflows/release-qualification.yml',import.meta.url),'utf8');
-    const releaseExpression=releaseWorkflow.match(/^\s+delta_artifact_sha256: (.+)$/m)?.[1].trim();
-    assert.ok(releaseExpression,'release delta exposes its archive digest');
-    assert.equal(releaseExpression.replace('${{ steps.upload-delta.outputs.artifact-digest }}',uploadDigest),digest,
-        'release delta uses the same authenticated artifact format');
+    assert.ok(!releaseWorkflow.includes('delta_artifact_sha256:'),'release trusts protected develop instead of reopening source delta evidence');
     const sourceOnly={...context,runId:901};
     const published=[];let blobCount=0,sourceRef=sourceSha;
     const api=(path,method='GET',payload=null)=>{

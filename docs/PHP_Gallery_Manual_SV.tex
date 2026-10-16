@@ -2421,7 +2421,7 @@ Under utvecklingen får ändringar delas upp i~små fristående commits, men kva
   \item Överlämningen anger GitHub Actions-URL, arbetsgren, exakt förberett SHA, oföränderlig jämförelsebas, obligatoriska jobb och manuell/saknad täckning. Föråldrade, saknade, överhoppade, avbrutna, röda eller blockerade obligatoriska kontroller är inte grön kvalificering. Rätta källan och pusha samma gren för nytt CI.
 \end{enumerate}
 
-Det för närvarande installerade GitHub-arbetsflödet \filepath{.github/workflows/candidate-preparation.yml} förbereder funktions- och~rättningsgrenar och~kvalificerar deras publicerade SHA. \#185-målet ändrar funktionspushar och~den~avslutande squashningen till BASIC-syntax- och~dokumentkontroller; FULL flyttas till Actions-integreringsknappen, som först bekräftar en enda författad commit och~sedan kör FULL en gång på slutliga A. Den~centrala skrivskyddade kontrollen \codeword{--profile=candidate-preflight} och~den~befintliga obligatoriska matrisen gäller tills målet är installerat på main och~verifierat genom verklig värdbaserad CI. Testkörningar får inte tyst reparera saknade artefakter. Senare uppdaterar releaseförberedelsen manualernas versions- och~datummarkörer och~kompilerar befintliga TeX-källor till PDF; den~skriver inte saknade tekniska förklaringar.
+Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
 \section{Kontrollera galleriet före publicering}
 \label{sec:testing}
@@ -2468,7 +2468,7 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
-Det nuvarande installerade utgåveflödet kör policykontrollen \codeword{--profile=release-preflight} före kostsamma AI- eller~TeX-steg och hela matrisen för den exakta kandidaten. \#185-målet ersätter dessa B-kontroller med BASIC A..B men är inaktivt tills installation på main och verifiering genom verklig CI.
+Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
 Det registrerade breadcrumb-tematestet jämför stillistorna för Tema och fysiska gallerier i \filepath{docs/ADMIN_SETTINGS_INVENTORY.md} med \codeword{breadcrumb_style_registry()}. Det skyddar även reservstilen \codeword{chevron} och värdet \codeword{inherit}, som endast gäller galleriers arv. Uppdatera båda dokumenterade listorna när en stil läggs till; \codeword{inherit} är ingen visuell temastil.
 
@@ -2486,13 +2486,13 @@ Följ \filepath{RELEASE.md} för hela utgåveförfarandet. Jämför exakt föreg
 
 Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens bevarade lokala återställningsväg. Normal förberedelse och kvalificering körs på GitHub; agenter kör inte dessa kommandon lokalt som standard. Lokal återställning kräver uttrycklig begäran eller faktiskt oåtkomligt CI och förblir BLOCKED utan värdbaserade bevis. Det senare beskrivna granskningsflödet utför skyddad merge och taggning; GitHub Release publiceras manuellt.
 
-Det för närvarande installerade utgåveflödet kan fortfarande kräva en central granskning med \codeword{--profile=release} och hela matrisen. \#185-målet ersätter B-kontrollen: efter att anteckningar, fyra handböcker/PDF-filer, inventering och manifest har förberetts från A körs BASIC \codeword{--changed} för den exakta källskillnaden A..B och det bevisas att varje ändrad sökväg är en godkänd utgåveindata. Browser-, databas/HTTP-, funktions-, Node-runtime-, WinApp- och paketeringsregressioner körs inte om på B. Tills ersättningen är installerad på main och verifierad genom verklig värdbaserad CI gäller det installerade arbetsflödet; målet är inaktivt och lokala bevis aktiverar det inte.
+Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
 Skapa produktionsmapp eller ZIP endast på uttrycklig begäran; den värdbaserade utgåvans artefakter använder samma PHP-verktyg automatiskt. Ange kandidatens tidsstämpel med \codeword{--timestamp} för deterministiska metadata. Verktyget nekar inaktuella manifest och befintliga utdata; \filepath{scripts/release_files.php} granskar bara medlemskap. Tre operativsystemsägare för paketering provar det verkliga verktyget oberoende av databasmatrisen. Uppvärmning av låst TinyTeX-cache enbart på main kräver granskad installation innan utgåvegrenar kan återanvända samma nyckel. En ren CMS-ändring kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. CI provar PHP 8.1 som kompatibilitetsgolv och PHP 8.5 som senaste representant. Alla tre databasvarianter använder PHP 8.5; historiska bevis behåller sina verkliga versioner.
 
 Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
 
-För~värdbaserad GitHub-förberedelse pushar du en~gren med~namnet \codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z} från FULL-kvalificerade A. Flödet skapar B i~samma gren, bygger alla fyra PDF-filer tillsammans och~kör enligt \#185-målet endast BASIC changed-source och~bevis för godkända utgåveindata för A..B. Det installerade arbetsflödet gäller tills målet är installerat på main och~värdbaserat kvalificerat. Förberedelsen gör ingen merge till~\codeword{main}, skapar ingen tagg och~publicerar ingen utgåva.
+Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
 \section{Få galleriet att kännas snabbt}
 \label{sec:performance}
@@ -2590,160 +2590,73 @@ Innan en återställd installation öppnas isolerar du e-post, schemalagda jobb,
 
 \section{Underhållarverifiering och utgåveunderlag}
 \label{sec:release-evidence}
-\index{u00260@utgåvekvalificering}
-\index{t00246@testning!t00247@tillfälliga arbetsflöden}
 
-Det~parallella FULL-kontraktet har~28 obligatoriska inbyggda ägare. Var~och~en
-av~de~fem PHP-/databasmiljöerna använder fyra separata GitHub-jobb med~fyra lokala
-processer, egen checkout och~vid behov egen databas-/HTTP-fixtur.
-Profilerna \codeword{source-contracts} och~\codeword{portable} kör fullständiga
-källkontroller och~Node-/WinApp-tester en~gång per~kandidat parallellt med
-säkerhetskontrollen. Dyra körmiljöjobb kräver fortfarande verifierade genererade data.
-Exklusiva barriärer behålls inom varje shard. Alla shardar och~gemensamma ägare
-måste lyckas för~samma SHA; efterkontroller bevarar checkoutens rena identitet.
-En~grön funktionskörning installerar inte matrisen i~skyddade arbetsflöden.
-Den~stegvisa installationen beskrivs i~\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md}.
+\subsection{Källkvalificering från valt feature-arbetsflöde}
 
-Endast utgåva~\codeword{0.132.9} skiljer den~mänskligt granskade underhållsmergen
-för~dispatcherreparationen från den~oförändrade stabila taggen~\codeword{0.132.8}.
-Ursprungsgranskningen autentiserar PR, godkännande, merge, arbetsflödesobjekt och~hela
-underhållskvalificeringen. Aktuellt main och~vanligt mänskligt PR-godkännande krävs
-fortfarande; andra versioner behöver den~stabila taggen direkt på~main.
+Feature-push och~slutlig squash får BASIC för syntax och~deklarationsdokumentation.
+Välj \ui{Integrate into develop} i~GitHub Actions, main eller~önskad
+feature-gren under \ui{Use workflow from} och~därefter källgrenen.
+Ägarens uttryckliga start kör den~revisionens faktiska arbetsflöde, audit och~tester.
+Ändrade tester och~register kräver ingen föregående installation på~main.
 
-Den~centrala granskningen sparar namngivna WinApp-unittest-resultat, körtider
-och~orsaker till~överhoppning i~JSON tillsammans med~processens faktiska resultat.
-Saknade, ofullständiga eller~motstridiga poster kan~inte styrka PASS.
-Det~inbyggda Windows-smoketestet får förbli uttryckligen överhoppat;
-Python-fixturer ersätter inte godkännande av~den~installerade Windows-appen.
-Dessa poster autentiserar inte arbetsflödets källauktoritet oberoende
-och~aktiverar inte återanvändning av~testtäckning.
+Källan är~en commit över observerad develop. Värdbaserad förberedelse skapar
+runtime-moduler, inventering och~manifest, för~in ändrade genererade data
+i~slutlig kandidat och~startar nytt BASIC. En separat auktoritetsutcheckning
+granskar den~rena kandidaten. FULL behåller alla 28 obligatoriska ägare:
+källkontrakt, Node/WinApp, paket på~tre system, fyra shardar per~databas
+för~tre databaser, fyra shardar per~PHP-8.1/8.5-källmiljö, Chromium och~samlad kontroll.
+Saknade, misslyckade, avbrutna eller~överhoppade obligatoriska ägare stoppar integration.
 
-Historisk kvalificering använder den~senaste publicerade bundna kontrollen
-och~dess högsta försök. Nyare röda eller~väntande kontroller får inte falla
-tillbaka på~äldre gröna underlag. Ofullständiga eller~dubbla API-sidor och~ändringar
-under insamlingen avvisar kvalificering. Detta skyddar historisk granskning;
-nyare körningar utan publicerad kvalificeringskontroll och~oberoende
-develop/release-återanvändning av~täckning ligger utanför denna läsare.
+Godkänd körning sparas före skyddad vanlig fast-forward.
+\codeword{qualify_only} sparar kvalificeringen utan skrivning till develop.
+Ange körningens ID som~\codeword{qualified_run} för~senare integration av
+samma kandidat, fullständiga indataträd och~bas utan nytt FULL.
+Ändrade indata kräver ny körning; ägare, körningar, ref-leasar och~GitHub-skydd
+kontrolleras fortfarande.
 
-Efter granskad installation på~main är~integrationsvalet
-\codeword{auto\_squash\_generated} true som~standard. Förberedelsen tar~bara med
-de~tre tillåtna genererade filerna i~en~commit A ovanpå observerad develop P,
-bevarar ursprungsmeddelandet med~\codeword{Prepared-From} och~ersätter endast
-vald feature-ref när~dess gamla SHA stämmer exakt. Den~startar nytt BASIC för~A,
-kontrollerar var~femte sekund i~högst femton minuter och~autentiserar exakt körning,
-första försök samt~inbyggda och~egna kontroller före FULL. Flyttade referenser,
-misslyckat eller~ersatt BASIC och~tidsgränser stoppar integrationen. Oförändrad
-förberedelse behåller SHA; avstängd automatik behåller den~manuella
-squash-kontrollpunkten. Återställning och~ändrad CI-auktoritet behåller befintliga
-vägar. Feature-ändringar installerar inte ensamma detta beteende på~main.
+För~uttryckligen begärd ren CI-installation före utgåvan skapar du
+feature-grenen från main och~startar \ui{Basic source checks} med
+\codeword{install_ci}. Fullständig FULL och~utgåveaudit skapar en bot-PR;
+ett verkligt mänskligt godkännande tillåter vanlig skyddad automatisk sammanslagning.
 
-Funktionspushar och~den~avslutande squashningen använder bara BASIC: PHP-/JavaScript-
-syntax och~fullständig dokumentation för namngivna deklarationer. När funktionen
-är en~enda författad commit S ovanpå develop P väljer underhållaren dess gren med
-Actions-knappen \ui{Integrate into develop}. Den avvisar osquashad historik, kör
-den fullständiga centrala matrisen exakt en gång på slutkandidaten A och gör
-fast-forward till develop först efter godkänd FULL. Releaseförberedelsen från A
-skapar B och~kör BASIC changed-source samt bevis för godkända A..B-utgåveändringar;
-browser-, databas-, funktions-, Node-runtime-, WinApp- och paketeringsregressioner
-körs inte om på B. PDF-, paket- och installationsprogramgenerering är utdata,
-inte regressionskvalificering. En~ren fast-forward efter utgåvan till redan FULL-
-kvalificerade Q behöver ingen andra FULL-körning eftersom posten binder FULL A
-och det godkända BASIC-deltat A..B. Denna reducerade policy är
-inaktiv tills den är installerad på main och verifierad med verklig värdbaserad CI;
-tills dess gäller de för närvarande installerade obligatoriska arbetsflödena.
+\subsection{Utgåvesammansättning från kvalificerad develop}
 
-Den centrala ingången \filepath{scripts/audit.php} erbjuder tre regressions-/kvalificeringsprofiler samt källförkontroller. \codeword{--profile=quick} använder en uttrycklig delmängd PHP-tester, strikta källkods- och MVC-kontrakt, Pythons importpolicy, snabba Node-testfall och syntaxkontroll av ändrade filer. Den utelämnar hela PHP-sviten, helhetsinventeringen och~kategoribudgetar, WinApp-tester, långsamma Node-testfall och Chromium. Obligatorisk värdbaserad kandidatkontroll kör \codeword{--profile=full} för~exakt förberett SHA; värdbaserad utgåvekontroll använder \codeword{--profile=release}. Ett snabbt eller~lokalt PASS ersätter inte de~obligatoriska jobben.
+En commit som~tagits in~i skyddad develop är~kvalificerad.
+Skapa den~separat godkända \codeword{release/v_X.Y[.Z]} från denna källa.
+Utgåvan kör inte om~BASIC/FULL och~hämtar inga äldre kvalificeringsarkiv.
+Den~låser A, uppdaterar metadata och~patch notes, anpassar alla fyra
+manualutgåvorna, bygger deras PDF med~låst TinyTeX och~reproducerbar tid
+och~skapar till~sist inventering och~fullständigt manifest.
+Ändrade WinApp-indata kräver installeraren; annars bevaras dess oberoende
+version och~verifierade befintliga filer.
 
-Källprofilen \codeword{--profile=basic} kontrollerar endast PHP-/JavaScript-syntax och~fullständig dokumentation för namngivna deklarationer; med~\codeword{--changed} binds omfattningen till en oföränderlig bas. Den kör inga funktions-/regressionstester, Node-runtime-, Python-, browser-, databas-, WinApp- eller paketeringstester. \#185-målet använder profilen för push/squash och~A..B-deltat, men den är inaktiv tills den installerats på main och verifierats genom värdbaserad CI.
+Färdig redaktionell text bevaras; annars används begränsad Copilot-generering
+med~fullständiga Git-underlag. Ogiltig text tillämpas aldrig.
+Byggfel, saknade bilagor och~inaktuella genererade hashvärden stoppar
+sammansättningen, ingen ny källkvalificering. Livscykelschema 4 sparar
+develop-källan och~sammansättningsresultatet.
 
-PHP-sviter använder fyra arbetsprocesser som standard. Sätt \codeword{PHP\_GALLERY\_AUDIT\_WORKERS} till ett heltal från 1 till 8; ogiltiga värden blockerar körningen. Registrerade exklusiva tester körs ensamma efter att aktiva processer har avslutats. Varje underprocess behåller egen diagnostik och en tidsgräns från sin verkliga start; resultaten behåller stabil indataordning. Varje profil mäter också inkluderingsfaser i nya processer före \codeword{cms\_run()}: den tidiga körmiljön tillåter en PHP-fil och 16~MiB toppminne, programbootstrap 40 filer och 16~MiB. Förfluten tid är endast en observation; sonderna utför inget databas-, sessions- eller ruttarbete.
+Den~stabila taggen ändras inte efter CI-underhåll på~main.
+Initieringen följer faktisk first-parent-historik i~stället för~en ny tagg
+eller~ett versionsbundet undantag. Ref-leasar skyddar samtidiga skrivningar;
+äldre identiteter och~publicerade filer förblir oförändrade.
 
-Syntaxkontroller för PHP och JavaScript samt oberoende Node/Chromium-fixturer använder samma processgräns. Parallella PHP-tester körs före exklusiva fixturer, så att poolen töms endast en gång; rapporterna behåller sin ursprungliga ordning. Syntaxkontroller kör aldrig källkoden. Fullständig databas- och konkurrenskvalificering beror fortfarande på fixturens kostnad och datorns prestanda. Kontroller av produktionslistan accepterar LF- och CRLF-radslut från Git-utcheckning, men avvisar fortfarande ändringar i innehåll eller filmedlemskap. MVC-kontrollen fastställer namnrymds- och importkontext en gång per fil och behåller alias- och PDO-kontroller utan att läsa om föregående token för varje anrop. Den fullständiga kompilator- och laddningsmatrisen för varje modul med sammansatt och ursprunglig laddare körs i profilerna full och release. Snabb återkoppling behåller kontrakt för beroenden, graf, kärna och bootstrap utan att starta varje modul två gånger.
+\subsection{Godkännande, version och~fullständiga bilagor}
 
-Samma prestandasvit mäter nio riktiga rutter endast med en egen isolerad databas-/HTTP-testinstallation: robots, startsida, galleri, miniatyr, media, inloggad administration och telemetri samt båda anonyma administrationsavvisningarna. Ruttgränserna är 160--300 inkluderade filer och 32--48~MiB toppminne; verkliga produktsvar och avvisningar kontrolleras också. Utan installationen hoppas ruttmätningarna uttryckligen över. Körtid förblir en observation.
+Arbetsflödet öppnar exakt bot-PR till main. Godkänn Q en gång.
+Automatiken utför skyddad standardsammanslagning, verifierar föräldrar/träd,
+skapar oföränderlig versionstagg, försöker säker develop-synkronisering
+och~fyller ett opublicerat utkast med~ursprunglig ZIP, metadata,
+kontrollsummor, fyra PDF, anteckningar och~beständiga slutförandebevis.
+Saknade verifierade bilagor läggs till, identiska befintliga bevaras.
 
-CI kör obligatoriska Chromium-testfall i ett eget jobb med \codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; saknad, ej startbar eller överhoppad obligatorisk webbläsartäckning får jobbet att misslyckas. Databas- och körmiljöjobb stänger av webbläsare endast i sin egen miljö. Lokal webbläsarupptäckt förblir valfri. Arbetsflödesstartarnas \codeword{--quick} delegerar direkt till snabbprofilen utan att skapa databas eller bakgrundsprocess. Se \filepath{TESTING.md} för gränser och \filepath{docs/GALLERY_WORKFLOWS.md} för isolerad kvalificering.
-
-Vid webbläsarfel visar granskningskonsolen och~rapporten testfallets namn och~den~konkreta misslyckade kontrollen eller~körfelet direkt, högst fem problem per~svit. Fullständig utdata sparas i~sju dagar i~\codeword{browser-map.log} i~Actions-artefakten \codeword{required-chromium}. Den~utskrivna rapportsökvägen tillhör körmiljön; hämta artefakten från avsnittet Artifacts för~körningen. Den~gemensamma Admin-webbläsarstartaren sparar begränsad stderr och~sidundantag vid fel samt senaste kontrollens framsteg vid tidsgränsen. Asynkrona gränssnittstester väntar på~observerbart slutförande inom fasta tidsgränser i~stället för~en~kort paus. SimBrief-dialogtestet väntar högst två sekunder på~rensning efter den~inbyggda stängningshändelsen och~kontrollerar dialogstängning, redigerarens synlighet, oförändrad URL, fokus och~bakgrundsisolering separat. Upprepade inbyggda Cancel-klick täcker 320/390/1280px och~en~omrenderad redigerare; avbrytande får inte skicka något. Misslyckade tester upprepas inte automatiskt tills de~lyckas.
-
-Automatiserad regression och driftsgodkännande besvarar olika frågor. Den centrala granskningen kontrollerar kod, kontrakt, syntax, tillgängliga webbläsartestfall och utgåvekonsekvens. Den isolerade arbetsflödestestmiljön lägger till riktiga databas-, HTTP- och Chromium-flöden med genererade fotografier och konton. Den kräver uttrycklig konfiguration enbart för en tillfällig miljö och får aldrig använda installationens databas eller medier. Följ \filepath{docs/GALLERY_WORKFLOWS.md} för förutsättningar; en saknad miljö är en lucka i täckningen, inte bevis för en fungerande funktion.
-
-För utgåveförberedelse följer du \filepath{RELEASE.md}: slutför källkoden och alla fyra handbokskällor. GitHub Actions bygger samtliga fyra PDF-filer tillsammans, granskar kompilatordiagnostik och uppdaterar manifestet. Enligt \#185-målet kvalificerar det värdbaserade flödet endast ändrade källor med BASIC och godkända utgåveindata från A till B; den för närvarande installerade fullständiga utgåvegranskningen är fortsatt obligatorisk tills målet är installerat på main och verifierat med verklig CI. \filepath{scripts/gallery_workflow_mysql.php} med \codeword{--release} används lokalt endast för uttryckligen begärd återställning eller diagnostik.
-
-Kvalificeringsverktyget \filepath{scripts/release_qualification.php} registrerar det exakta fingeravtrycket för källkod och PDF. Dess kommando \codeword{render} skapar begränsade sidförhandsvisningar; rendering ensam godkänner inte deras utseende. Kommandot \codeword{record-audit} accepterar endast den matchande centrala utgåverapporten, inte en äldre fullständig granskning. En ändrad källfil eller ombyggd PDF väljer nytt väntande underlag i stället för att tyst återanvända tidigare godkännande.
-
-Granska PDF visuellt endast på uttrycklig begäran eller för att diagnostisera ett konkret layoutproblem; valfria PDF-granskningsfält får förbli väntande. Granska representativa webbläsarflöden. Registrera vad som faktiskt kontrollerades, av vem och med vilket resultat. Låt olösta kontroller vara väntande och håll grundläggande funktionstest av uppdateraren efter publicering separat. En grön automatiserad rapport är inte tillstånd att publicera, och verktyget gör aldrig commit, taggar, laddar upp eller publicerar utgåvan. Se \filepath{docs/RELEASE_QUALIFICATION.md} för postkommandona.
-
-\subsection{Utgåveförberedelse och~kvalificering på~GitHub}
-
-
-\subsubsection{Automatisk utgivning efter PR-godkännande}
-
-Skapa grenen \codeword{release/v_X.Y[.Z]} från den aktuella
-\codeword{develop}-grenen och skicka den till fjärrarkivet.
-Arbetsflödet lägger till en oföränderlig utgångspunkt direkt efter vald commit
- och kör Stage~A/B, befintliga AI-anteckningar, låst TinyTeX, alla fyra manualer,
-manifest och fullständig kvalificering av exakt Q. Tidigare utgångspunkter och den
-publicerade \codeword{v\_0.126} förblir oförändrade.
-
-En föregångare med tagg kan fortfarande vänta på manuell publicering av GitHub
-Release. För schema~3 autentiserar initieringen föregångarens ursprungliga
-FULL-integrationsarkiv och BASIC-arkiv för utgåvans ändringar innan exakt tidigare
-kandidat, körning och försök, Git-träd och mänskligt godkännande kontrolleras.
-Den aktuella utgåvans bevis ersätter inte dessa arkiv. Saknade, utgångna, skadade
-eller främmande bevis och misslyckade obligatoriska jobb stoppar initieringen.
-Den centrala regressionen täcker starten av nästa utgåva före publicering med
-detta aktuella bevisformat.
-
-Efter godkänd kvalificering och artefaktbyggnad öppnar boten en enda PR till main.
-Arbetsflödet startar avslutet automatiskt på Q genom filen som redan är registrerad
-på main. Underhållaren godkänner exakt Q en gång. Observatören kontrollerar P/Q
-igen och begär skyddad standardmerge utan formulär eller ytterligare godkännande för driftsättning. M måste
-ha föräldrarna [P,Q] i rätt ordning och samma fullständiga Git-träd som Q.
-Samma jobb skapar den oföränderliga taggen på M. En omstart efter merge kontrollerar
-hela PR-detaljen och skapar bara en saknad tagg; motstridiga taggar ger fel.
-
-Efter verifierad merge och tagg fyller automatiken den opublicerade
-GitHub-utgåvan med de ursprungliga anteckningarna från exakt Q, produktions-ZIP,
-metadata, alla fyra handböcker, kvalificeringsarkiv, kontrollsummor och båda
-slutbevisen. Vänta på \codeword{DRAFT\_READY}, granska det kompletta utkastet
-och välj \ui{Publish release} manuellt. Du behöver inte hämta artefakter
-eller bifoga filer manuellt. Identiska befintliga bilagor bevaras; konflikter
-orsakar ett fel utan överskrivning. Publicerade utgåvor förblir oförändrade.
-Vid fel visas \codeword{TAGGED / DRAFT\_PENDING}; en ny körning kompletterar
-saknade filer utan att återställa verifierad merge eller tagg.
-Tillfälliga överföringsfel får högst tre försök, och ett förlorat svar när utkastet
-skapas kontrolleras automatiskt mot befintliga utgåvor. Låt utkastet vara
-opublicerat tills \codeword{DRAFT\_READY}; behörighetsfel, integritetsfel eller
-filkonflikter måste åtgärdas före en ny slutförandekörning.
-WinApp-installationsprogrammet och uppdateringsmetadata kommer från det exakta
-kvalificeringsförsöket eller från den fastställda föregående publicerade utgåvan
-efter verifiering av oförändrade levererade källor, den oberoende versionen
-och integriteten. Ett oförändrat installationsprogram byggs inte på nytt.
-
-Develop flyttas endast med verklig icke-tvingad fast-forward till kvalificerat Q
-med aktivt skydd för linjär historik och CI. Parallell utveckling stoppar den
-separata synkroniseringen och bevarar den färdiga taggen. Ingen merge-, rebase-
-eller replay-commit skapas på develop. Föregående M behöver inte vara förfader
-till nästa Q. Utelämnade bypass-data redovisas och förblir serverstyrda; synlig
-bypass eller oläsbara effektiva regler stoppar avslutet. Saknad evidens, gammalt godkännande, rött CI
- och andra föräldrar/träd blockerar avslut. Isolerad acceptans av verkligt
-GitHub-beteende beskrivs i~\filepath{docs/RELEASE_LIFECYCLE.md}; CI med testfixturer
-ersätter inte godkännandeprov i den verkliga GitHub-miljön. Agenter utför inte skyddad integration eller
-publicering av en produktionsversion under implementeringen.
-
-Arbetsflödet \filepath{.github/workflows/release-qualification.yml} förbereder kandidaten på~GitHubs körservrar. Det~publicerar inte en~utgåva. Stegen nedan beskriver det~för närvarande installerade arbetsflödet medan \#185-ersättningen är inaktiv; efter installation på~main ersätter BASIC A..B-målet ovan dess förkontroller och~fullständiga B-matris. De~nuvarande stegen är:
-
-\begin{enumerate}
-  \item \textbf{Gren och~förkontroll.} En~push till~\codeword{release/v_X.Y} eller~\codeword{release/v_X.Y.Z}, inleder förberedelsen. Förberedelsen avvisar en~redan befintlig tagg \codeword{v_X.Y[.Z]}, hittar föregående utgåvetagg som~jämförelsebas och~kör \codeword{release-preflight} för~källsyntax, deklarationsdokumentation, filinventering, Pythons importpolicy och~arbetsflödeskontrakt före AI eller~TeX.
-  \item \textbf{Deterministiska metadata.} Hjälpskriptet samordnar programversion, utgåvemetadata, mall för~versionsanteckningar och~version-/datummarkeringar i~alla fyra handböcker och~uppdaterar produktionslistan. Det~skriver inte nytt sakligt innehåll i~TeX. Färdiga redaktionella anteckningar bevaras. Innehållet i~alla fyra handböcker måste vara samordnat före utgåvan.
-  \item \textbf{Redaktionella anteckningar.} Ett~färdigt avsnitt skrivet av~underhållaren lämnas oförändrat. Om~det saknas eller~är ofullständigt används GitHub Copilot CLI med~\codeword{gpt-6-luna}; automatiskt modellval används bara om~den~modellen är otillgänglig. Generering kräver \codeword{COPILOT_GITHUB_TOKEN}. Hela Git-textdiffen skickas utan trunkering efter byteantal; genererade och~binära utgåveartefakter utelämnas. Separata tillfälliga utdatafiler förhindrar blockerade rör. Varje Git-kommando har~en~tidsgräns på~30 sekunder; hela underlagssteget har~en~gräns på~två minuter. Överskridna gränser för~metadata eller~diagnostik stoppar förberedelsen uttryckligen. Strikt Markdown-validering avvisar platshållare, fel versioner, extra avsnitt och~assistentkommentarer. Misslyckad generering eller~validering blockerar kvalificeringen i~stället för~att släppa igenom ofullständiga anteckningar. Hjälpskriptet \filepath{.github/scripts/patch_notes_ai_chunks.php} skickar varje ursprunglig diffbyte exakt en~gång i~sammanhängande UTF-8-säkra delar om~högst 100~000~byte. Ett~SHA-256-manifest verifierar hela underlaget och~varje del; varje del kräver en~giltig faktasammanfattning om~högst 6~500~byte. Om~alla sammanfattningar inte ryms inom slutpromptens gräns på~180~000~byte sammanförs de~i~ytterligare begränsade steg utan att~någon diffdel utelämnas. Tidsgränser för~Copilot, saknade svar, ändrade kontrollsummor eller~ogiltig slutlig Markdown stoppar kvalificeringen; ursprungsdiffen kortas aldrig tyst. Prompt och~validator delar de~obligatoriska huvudrubrikerna \codeword{Highlights}, \codeword{Technical Details} och~\codeword{User Impact}, även för~utgåvor med enbart test-, dokumentations- eller~verktygsändringar. Endast irrelevanta valfria underavsnitt får utelämnas. Beskriv belagd påverkan för~underhållare eller~oförändrat offentligt/Admin-beteende utan att~hitta på~produktfördelar. Omnämnda rubriker i~löptext eller~fel rubriknivå avvisas. Vid genererings- eller~valideringsfel sparas tillgänglig ursprunglig modelltext i~sju dagar i~Actions-artefakten \codeword{release-notes-rejected-response}; promptar och~autentiseringsdiagnostik utesluts. Ogiltig text blockerar fortfarande förberedelsen och~tillämpas aldrig.
-  \item \textbf{Reproducerbara handböcker.} Flödet använder checksummeverifierad TinyTeX och~en~låst uppsättning TeX Live-paket och~återanvänder giltig cache enligt låsfilen och~paketlistan. Engelska, tjeckiska, tyska och~svenska handböcker byggs var för~sig med~\codeword{pdflatex}, \codeword{makeindex} och~ytterligare två \codeword{pdflatex}-körningar. Tidpunkten i~utgåvans metadata ger reproducerbara PDF- och~manifesttidsstämplar. Efter bygget verifieras produktionslistan, integritetsmanifestet och~utgåvans konsekvens.
-  \item \textbf{Säker återskrivning.} Bara godkända förberedelsefiler läggs till~i~commiten. Om~fjärrgrenen har ändrats stoppas en~föråldrad push; ett~identiskt redan förberett träd får återanvända aktuell commit. Ändringar skrivs bara till~samma utgåvegren, inte till~\codeword{main}.
-  \item \textbf{Kontroll av~exakt kandidat.} Det~återanvändbara centrala CI-flödet checkar ut~det~exakta SHA-värdet för~förberedd commit och~kör hela utgåvematrisen inklusive obligatoriska Chromium-tester. Det~samlade kontrollsteget lyckas bara om~förberedelsen, anteckningarna och~hela matrisen lyckas och~grenen fortfarande pekar på~exakt samma commit. När kontrollerade artefakter är~klara öppnar en~grön kontroll botens PR; ett mänskligt godkännande startar automatisk skyddad merge och~taggning. GitHub Release publiceras manuellt.
-\end{enumerate}
-
-Detaljer finns i~\filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md} och~\filepath{docs/LATEX_BUILD.md}. En~vanlig ändring i~TeX-källan kräver varken omedelbar PDF-kompilering eller~en~separat utgåvegranskning.
+Vänta på~\codeword{DRAFT_READY} och~välj manuellt \ui{Publish release}.
+\codeword{TAGGED / DRAFT_PENDING} fortsätter för~samma Q;
+bygg inte om~kandidaten och~flytta inte en korrekt tagg.
+Parallell develop blockerar osäker synkronisering, inte korrekt tagg eller~utkast.
+Manuell hosting-/webbläsarkontroll och~grenstädning är~separata.
+Se~\filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
+\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} och~\filepath{docs/LATEX_BUILD.md}.
 
 \section{Ordlista}
 \label{sec:glossary}
