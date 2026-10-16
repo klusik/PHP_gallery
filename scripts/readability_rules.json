@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "tab_size": 4,
+  "languages": {
+    "php": {
+      "extensions": ["php"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 1
+    },
+    "js": {
+      "extensions": ["js"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 1
+    },
+    "mjs": {
+      "extensions": ["mjs", "cjs"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 1
+    },
+    "python": {
+      "extensions": ["py", "pyw"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 2
+    },
+    "css": {
+      "extensions": ["css"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 0
+    },
+    "tex": {
+      "extensions": ["tex"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 0
+    },
+    "markdown": {
+      "extensions": ["md"],
+      "preferred": 80,
+      "prominent": 100,
+      "priority": 160,
+      "blank_lines": 0
+    }
+  },
+  "exclude_globs": {
+    "*.min.js": "Minified upstream or generated JavaScript.",
+    "*.min.css": "Minified upstream or generated CSS.",
+    "*.min.mjs": "Minified upstream or generated modules.",
+    "*.min.cjs": "Minified upstream or generated CommonJS.",
+    "app/runtime/modules.php": "Generated runtime compiler output; edit authored module inputs.",
+    "public/assets/custom.css": "Installation-owned Theme stylesheet.",
+    "public/assets/custom-overrides.css": "Installation-owned visual editor stylesheet.",
+    "config.php": "Private installation configuration; never read."
+  },
+  "exceptions": []
+}

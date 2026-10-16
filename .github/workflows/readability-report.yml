@@ -1,0 +1,90 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/readability-report.yml
+# Module Type: On-demand Advisory Workflow
+# Purpose: Report readability using the selected branch's own exact source.
+# Responsibilities:
+#   - Keep recommendations separate from required source qualification.
+#   - Retain complete contextual reports and operational diagnostics.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Code readability report
+run-name: Readability · ${{ github.ref_name }} · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readability:
+    name: Advisory source readability
+    runs-on: ubuntu-24.04
+    # Bound setup, central reporting and artifact publication for one advisory job.
+    # Type: integer. Units: minutes. Scope: this workflow's readability job.
+    # Consumers: GitHub Actions job cancellation.
+    # Rationale: 10 minutes allows setup and upload around the 240-second scan
+    # while terminating a stalled optional run independently of required CI.
+    timeout-minutes: 10
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          # Fetch only the selected immutable snapshot; analysis needs no history.
+          # Type: integer. Units: commits. Scope: this job's checkout.
+          # Consumers: actions/checkout and the reporter's Git blob discovery.
+          # Rationale: depth 1 provides HEAD and its complete tree without
+          # downloading unrelated history for a whole-tree advisory report.
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify selected branch and evaluator identity
+        shell: bash
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_TYPE}" = branch
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "${WORKFLOW_SHA}" = "${GITHUB_SHA}"
+          test "${WORKFLOW_REF}" = "${GITHUB_REPOSITORY}/.github/workflows/readability-report.yml@${GITHUB_REF}"
+          printf 'Selected branch: %s\nImmutable source/evaluator SHA: %s\n' \
+            "${GITHUB_REF_NAME}" "${GITHUB_SHA}" >> "${GITHUB_STEP_SUMMARY}"
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Central advisory profile
+        run: php scripts/audit.php --profile=readability
+      - name: Publish concise advice summary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          reports=(cache/test-audit/*/readability/summary.md)
+          if (( ${#reports[@]} == 1 )); then
+            cat "${reports[0]}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo 'Report unavailable; inspect audit diagnostics in the artifact.' \
+              >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Retain complete report and detailed diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: readability-report-${{ github.sha }}
+          path: cache/test-audit/
+          if-no-files-found: error
+          # Retain complete diagnostics for asynchronous maintainer review.
+          # Type: integer. Units: days. Scope: this run's readability artifact.
+          # Consumers: GitHub Actions artifact retention and report readers.
+          # Rationale: 30 days covers later review without retaining bulky
+          # whole-tree reports indefinitely; reports never qualify a candidate.
+          retention-days: 30

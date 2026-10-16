@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.133.2}
+\newcommand{\version}{0.133.3}
 \newcommand{\manualdate}{16.~října~2026}
 
 \hypersetup{
@@ -2394,6 +2394,28 @@ Dokumentační řetězce deklarací jsou povinné pro pojmenované funkce, metod
 Samostatné moduly by měly vlastnit jednu soudržnou odpovědnost. Společné kontrakty si zaslouží normalizované vstupy, výslovné výstupy a~cílené testy. Dynamické fragmenty administrace a~veřejnosti vyžadují bezpečnou inicializaci a~úklid podle životního cyklu.
 
 \subsection{Psaní kódu před kontrolou zdrojů}
+
+Doporučení čitelnosti platí pro kód i~zdroje TeX a~Markdown. Upřednostňuje
+ručně psané řádky kolem 80 zobrazovaných sloupců, při 81--100 přirozené
+zalomení a~nad 100 aktivní hledání čitelného rozdělení. Jde o~radu, nikoli
+maximum nebo podmínku CI. Dlouhé argumenty a~prvky kolekcí pište po~řádcích
+s~odsazením, seskupujte podmínky a~oddělujte logické kroky/deklarace vhodnými
+prázdnými řádky. Prózu dokumentace zalamujte na~existujících mezerách
+se~zachováním odstavců, příkazů TeXu, nezlomitelných vazeb a~struktury Markdownu.
+Zachovejte sémantiku, typy, komentáře a~dokumentační řetězce; nezbytné dlouhé
+literály a~URL jsou přípustné.
+
+Pro~volitelný report celého stromu otevřete v~GitHub Actions
+\ui{Code readability report}, zvolte \ui{Run workflow} a~vyberte pouze větev.
+Workflow, skener, pravidla i~zdroje používají přesné SHA události této větve;
+souhrn uvádí větev/SHA. Artefakt obsahuje úplné HTML, Markdown, JSON
+a~diagnostiku jednotlivých souborů PHP, JS, MJS, Pythonu, CSS, TeXu
+a~Markdownu. Doporučení nikdy nezpůsobí selhání CI ani nepřepisují zdroje;
+selhání nástrojů zůstává viditelné. Workflow se~v~postranním seznamu objeví
+po~schváleném začlenění do~výchozí větve. Pravidla, výjimky, měření
+Unicode/tabulátorů a~cílené příklady popisuje
+\filepath{docs/CODE_READABILITY.md}; volitelný centrální profil auditu
+je~\codeword{readability}. Povinná kvalifikace zůstává stejná.
 
 Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou dokumentaci ve~stejné úpravě. Před značkami uveďte věcný účel, popište každý explicitní parametr včetně výchozích a~přidaných parametrů, skutečné návratové varianty a~konkrétní prvky kolekcí či~pole objektů. Nativní typy PHP/Python jsou samostatný požadavek. Anonymní callbacky dokumentační řetězec nepotřebují; pojmenované deklarace uvnitř ano. Běhové zásady samostatně vyžadují účel, typ, jednotky, rozsah, konzumenty a~zdůvodnění přímo před daným místem. Příklady v~\filepath{docs/AGENT_AUTHORING.md} ověřuje registrovaný test existujícími analyzátory; negativní fixtury zachovávají selhání neúplných kontraktů.
 

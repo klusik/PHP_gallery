@@ -50,6 +50,17 @@ The named-declaration scanners and historical presence check share the anonymous
 function exemption; native typing, class documentation and parser coverage remain
 independent. Preserve checked examples and negative cases in AGENT_AUTHORING.md.
 
+Always use descriptive named constants for operational numbers in tools, including
+timeouts, decoder depths, size/count limits, retry intervals and defaults. Attach
+purpose, `Type`, `Units`, `Scope`, `Consumers` and `Rationale` to each owner; state
+the actual value and why it fits the protected operation. For format-native named
+YAML/JSON settings, document the same facts in attached comments or the permanent
+configuration reference. Explain grammar offsets and test boundary values locally
+instead of inventing configuration for structural arithmetic. Review every new
+numeric policy in the batch, including its test bridge and delegated children.
+Tooling is excluded from the changed-runtime gate, but whole-tree policy inventory
+still counts undocumented sites. Fix the source; preserve ratchet caps/baselines.
+
 BASIC currently checks syntax and changed declaration docs, not native attribution
 headers or FULL inventory budgets. A green BASIC cannot waive headers. Adding a
 cheap changed-header gate is a separate evaluator/CI change: reuse `header_issues()`

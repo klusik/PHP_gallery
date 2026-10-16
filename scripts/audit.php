@@ -86,6 +86,26 @@ require_once __DIR__ . '/audit_route_performance.php';
 require_once __DIR__ . '/audit_winapp.php';
 require_once __DIR__ . '/source_contracts/debt_ratchet.php';
 
+/**
+ * Bound publication of one complete immutable-tree readability report.
+ * @var int
+ * Units: seconds. Scope: one optional readability-advisory audit child.
+ * Consumers: audit_run_readability() through the central process runner.
+ * Rationale: retain the 240-second whole-tree budget, including blob reads,
+ * tokenization and report writes; terminate a stalled reporter independently.
+ */
+const AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS = 240;
+
+/**
+ * Bound the readability contract bridge independently of report publication.
+ * @var int
+ * Units: seconds. Scope: one optional readability-contract audit child.
+ * Consumers: the readability-contract audit dispatch below.
+ * Rationale: retain the 90-second outer budget so the 75-second Python bridge
+ * can terminate and return its own diagnostics before the parent deadline.
+ */
+const AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS = 90;
+
 $registryPath = __DIR__ . '/audit_registry.php';
 if (!is_file($registryPath)) {
     fwrite(STDERR, "Audit registry is missing: scripts/audit_registry.php\n");
@@ -196,6 +216,8 @@ $knownSuites = [
     'manifest',
     'git-diff-check',
     'ci-workflow-contract',
+    'readability-contract',
+    'readability-advisory',
 ];
 foreach ($suiteIds as $suiteId) {
     if (!in_array($suiteId, $knownSuites, true)) {
@@ -1014,6 +1036,35 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
 }
 
 /**
+ * Run opt-in readability reporting through the central process/report owner.
+ * @param list<string>|null $python Resolved interpreter prefix, or unavailable.
+ * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems?:list<string>}} Advisory publication result; only tool failure can fail this optional suite.
+ */
+function audit_run_readability(?array $python): array
+{
+    global $root, $runDirectory;
+    $id = 'readability-advisory';
+    $label = 'Advisory readability report';
+    if ($python === null) {
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [],
+            'Python is required to produce the report.', null,
+            ['problems' => ['Missing Python interpreter.']]);
+    }
+    $process = run_process(array_merge($python, [
+        $root . '/scripts/readability_report.py',
+        '--output', $runDirectory . '/readability',
+    ]), $root, AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS);
+    $log = audit_write_log($id, [audit_process_output($process)]);
+    $success = !$process['timed_out'] && $process['exit_code'] === 0;
+
+    return task_result($id, $label, $success ? STATUS_PASS : STATUS_FAIL,
+        (float) $process['duration'], [],
+        $success ? 'Advice published; findings never fail CI.'
+            : 'Report unavailable; inspect operational diagnostics.',
+        $log, $success ? [] : ['problems' => ['Readability reporter failed.']]);
+}
+
+/**
  * Run strict MVC enforcement plus the machine-readable whole-runtime architecture inventory.
  *
  * The strict checker remains the pass/fail gate. Historical runtime candidates are
@@ -1391,6 +1442,8 @@ function audit_suite_console_label(string $suiteId): string
         'js-lint' => 'JavaScript syntax',
         'js-lint-changed' => 'JavaScript syntax (changed)',
         'ci-workflow-contract' => 'CI workflow contracts',
+        'readability-contract' => 'Readability report contracts',
+        'readability-advisory' => 'Advisory readability report',
         'release-consistency' => 'Release consistency',
         'manifest' => 'Generated candidate artifacts',
         'git-diff-check' => 'Git whitespace check',
@@ -1450,6 +1503,12 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),
         'website' => audit_run_node_suite('website', 'Static project website', $registry['website_tests'], $node, $browser),
         'ci-workflow-contract' => audit_run_php_command('ci-workflow-contract', 'CI workflow contracts', 'tests/gallery_workflow_ci_trigger_policy_test.php'),
+        'readability-contract' => audit_run_php_command(
+            'readability-contract', 'Readability report contracts',
+            'tests/readability_report_test.php', [],
+            AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS
+        ),
+        'readability-advisory' => audit_run_readability($python),
         'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
         'winapp' => audit_run_winapp($python),
         'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),

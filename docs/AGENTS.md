@@ -59,6 +59,17 @@ do not modify it for ordinary feature, bug-fix, or documentation batches.
 
 ## LaTeX Manual Typography
 
+### TeX and Markdown source readability (advisory)
+
+Prefer source lines near 80 display columns; consider semantic wrapping at 81-100
+and actively seek a readable split above 100. Wrap edited prose at existing spaces
+without adding/removing paragraph breaks or changing rendered meaning. Keep TeX
+non-breaking `~` bindings, commands/arguments, math, URLs and literal environments
+intact. Preserve Markdown headings, tables, link destinations, inline/fenced code,
+list continuation indentation and explicit hard breaks. Apply focused edits to
+the passage being changed; do not reformat entire manuals automatically. Long
+indivisible constructs are valid exceptions. This is advice, never a CI gate.
+
 ### All manual language editions
 
 Every relevant product, operational, developer, testing, or release documentation change must keep all four maintained source editions aligned: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep feature coverage, compatibility notes, operating instructions, and developer workflows equivalent across languages. `scripts/prepare_release.php` updates only the English edition markers, while hosted release preparation aligns all four version/date markers; neither writes missing manual prose. Updating English alone is not a completed manual-source handoff.

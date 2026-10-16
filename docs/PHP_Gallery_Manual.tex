@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.133.2}
+\newcommand{\version}{0.133.3}
 \newcommand{\manualdate}{16 October 2026}
 
 \hypersetup{
@@ -2417,6 +2417,27 @@ Declaration docstrings are~required for~named functions, methods, and~class-like
 Atomic modules should own one cohesive responsibility. Shared contracts deserve normalized inputs, explicit outputs, and~focused tests. Dynamic Admin and~public fragments require lifecycle-safe setup and~teardown.
 
 \subsection{Authoring code before source checks}
+
+Readability guidance covers code, TeX and~Markdown source. Prefer handwritten
+lines near 80 display columns; consider natural breaks at~81--100 and~seek
+readable splitting above 100. This is~advice, not~a~maximum or~CI gate. Put
+lengthy arguments and~collection entries on~separate indented lines, group
+conditions and~separate logical steps/declarations with idiomatic blank lines.
+Wrap documentation prose at~existing spaces while preserving paragraphs,
+TeX commands, non-breaking bindings and~Markdown structure. Preserve semantics,
+types, comments and~docstrings; allow necessary longer literals and~URLs.
+
+For~an~optional whole-tree report, open \ui{Code readability report}
+in~GitHub Actions, choose \ui{Run workflow} and~select only the~branch.
+Its~workflow, checker, rules and~source use that branch's exact event SHA;
+the~summary records the~branch/SHA. Download the~artifact for~complete HTML,
+Markdown, JSON and~per-file diagnostics covering PHP, JS, MJS, Python, CSS,
+TeX and~Markdown. Findings never fail CI or~rewrite source; tooling failures
+remain visible. The~workflow appears in~the~sidebar after reviewed
+default-branch installation. Rules, exclusions, Unicode/tab measurement
+and~focused examples are~in~\filepath{docs/CODE_READABILITY.md}; the~central
+optional audit profile is~\codeword{readability}. Required qualification
+remains unchanged.
 
 The~canonical \filepath{AGENTS.md} requires each named declaration and~its~complete documentation in~the~same edit. Start with a~factual purpose before tags, document every explicit parameter (including defaults and~added parameters), actual return variants and~concrete collection/object shapes. PHP/Python native types remain independent. Anonymous callbacks need no~declaration docstring; named declarations inside them still do. Runtime policy sites independently need purpose, type, units, scope, consumers and~rationale immediately before the~site. Checked examples in~\filepath{docs/AGENT_AUTHORING.md} are~parsed by~the~existing scanners in~a~registered regression, with negative fixtures preserving failures for~incomplete contracts.
 
