@@ -1,5 +1,55 @@
 # Patch notes
 
+## Version 0.133
+
+Added persistent, ordered gallery title-picture selection with Automatic composition, and updated develop integration and release preparation to use protected-branch qualification evidence. The release addressed [#211](https://github.com/klusik/PHP_gallery/issues/211), [#235](https://github.com/klusik/PHP_gallery/issues/235), and [#236](https://github.com/klusik/PHP_gallery/pull/236).
+
+### Highlights
+
+#### Gallery title pictures
+- Added legacy, single-photo, Automatic, and ordered multi-photo title-picture modes. Administrators could select up to four directly owned photos; Automatic composition used up to two eligible photos.
+- Updated public cover resolution to check gallery access and photo visibility, skipping stale or inaccessible selections.
+
+#### Integration and release qualification
+- Updated feature integration to run the selected workflow ref, require BASIC and exact-candidate FULL evidence, and verify the published success status before protected fast-forward.
+- Changed release preparation to assemble from qualified protected `develop` without repeating historical BASIC/FULL qualification.
+
+### Technical Details
+
+#### Backend
+- Added cover-selection persistence, validation, revision checks, and authoritative state reads in `app/services/gallery_covers.php` and the related gallery mutation services and controllers.
+- Updated image moves and deletions to reconcile ordered selections atomically under gallery writer locks.
+- Updated sidecar and ZIP migration handling to map selections by gallery-relative filenames while retaining legacy scalar cover support.
+
+#### Database
+- Added migration `database/migrations/202610140002_gallery_cover_image_ids.php` for nullable ordered cover selections. `NULL` preserved legacy behavior, an empty list selected Automatic mode, and an ID list represented manual selection; `cover_image_id` remained compatible.
+- Required verified schema readiness for selection writes and refused mutations when the required schema could not be confirmed.
+
+#### Frontend
+- Added star-based single and multi-photo controls, selection limits, and cover-mode settings to the Admin gallery editor.
+- Updated cover changes to preserve the mounted editor, drafts, scroll position, and loaded image rows while public gallery fragments refreshed separately.
+- Added asynchronous mutation and authoritative reconciliation for ambiguous cover-write outcomes.
+
+#### Tests
+- Added and extended PHP, HTTP, MySQL, Node, and browser regression coverage for selection persistence, visibility, transfer, concurrency, editor-state preservation, and reconciliation. The supplied evidence described coverage and did not establish that these tests ran or passed.
+- Added integration and release-policy coverage for exact-candidate status validation, evidence reuse, and protected-`develop` release sourcing.
+
+#### CI and documentation
+- Updated `.github/scripts/` and the related workflows for selected-ref feature qualification, reusable exact-candidate evidence, and release assembly from protected `develop`.
+- Added release-origin and predecessor records for `v_0.133`, identifying `v_0.132.10` as the predecessor. The origin update referenced [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+- Updated maintainer guidance and all four manual sources for title-picture selection and the revised qualification and release process.
+
+### User Impact
+
+#### For visitors
+- Public gallery cards and pages could display the configured single, Automatic, or ordered multi-photo cover; access and visibility checks prevented inaccessible photos from being selected for display.
+
+#### For administrators
+- Administrators could select, accumulate, or reset title pictures in the gallery editor, with changes saved asynchronously and editor state preserved during updates.
+
+#### For maintainers
+- Feature integration and release preparation used explicit candidate and protected-branch evidence. Release assembly did not rerun historical qualification; approval, protected merge and tagging, and manual publication remained separate steps.
+
 ## Version 0.132.10
 
 Redesigned the Media Renamer workspace and updated develop-integration preparation to qualify generated candidates with fresh BASIC checks before FULL. Archived the prepared-environment CI experiment without adopting it.
