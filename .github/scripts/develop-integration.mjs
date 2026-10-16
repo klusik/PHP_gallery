@@ -8,6 +8,7 @@
  *   - Bind fresh BASIC and FULL to the final single-commit candidate after automatic preparation
  *   - Publish allowlisted generated data through GitHub APIs without checking out candidate code
  *   - Record actual native owners and create same-run exact-candidate required check runs
+ *   - Bind the protected-branch commit status to that same verified FULL and Actions identity
  *   - Dispatch and await BASIC for verified one-commit prepared candidates
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -193,7 +194,7 @@ function requireFeatureDispatch(context,run,call) {
  * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number,basicArtifactId?:number,basicArtifactDigest?:string,qualifiedRun?:string}} IntegrationRequest
  */
 /** Retained protocol shared by normal integration and no-ref-write owner recovery.
- * @typedef {{schema_version:1|2,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,feature_qualification?:import('./feature-qualification.mjs').FeatureQualification,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
+ * @typedef {{schema_version:1|2,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,matrix_status_id?:number,feature_qualification?:import('./feature-qualification.mjs').FeatureQualification,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
  */
 /** Protected workflow identity taken from the current GitHub Actions environment.
  * @typedef {{repository:string,workflowPath:string,workflowRef:string,eventName:string,ref:string,runId:number|string,runAttempt:number|string,headSha:string,authorityUpdate?:boolean,featureQualification?:boolean,stage?:'execution'|'publication',qualifiedRun?:string}} WorkflowContext
@@ -811,7 +812,47 @@ function pauseRequiredCheckPropagation(milliseconds) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);
 }
 
-/** Publish exact-candidate checks and retry only their explicit propagation rejection with fresh evidence.
+/** Publish the standard commit status for already verified exact-candidate FULL evidence.
+ * @param {string} repository Validated owner/repository identity.
+ * @param {string} candidate Exact immutable FULL-qualified commit SHA.
+ * @param {string} runId Actual verified integration workflow run ID.
+ * @param {GithubApi} call Publisher's GitHub Actions provider with statuses:write.
+ * @returns {{id:number,targetUrl:string}} Confirmed Actions-created status identity and its bound original workflow URL; unavailable or altered creation throws.
+ */
+export function publishIntegrationStatus(repository,candidate,runId,call) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(candidate)
+        || !/^[1-9]\d*$/.test(runId)) throw new Error('BLOCKED invalid integration status identity.');
+    const targetUrl=`https://github.com/${repository}/actions/runs/${runId}`;
+    // Dispatch check suites can be visible through Checks REST without entering the branch-rule rollup.
+    // Publish the same real qualification through Commit Statuses; neither representation runs or replaces FULL.
+    const status=call(`repos/${repository}/statuses/${candidate}`,'POST',{state:'success',
+        context:'Complete required CI matrix',target_url:targetUrl,
+        description:'All required native FULL owners verified for this exact commit.'});
+    if (!Number.isSafeInteger(status?.id) || status.id<1 || status.creator?.login!=='github-actions[bot]'
+        || status.state!=='success' || status.context!=='Complete required CI matrix' || status.target_url!==targetUrl) {
+        throw new Error('BLOCKED integration commit status creation was not confirmed.');
+    }
+    return {id:status.id,targetUrl};
+}
+
+/** Require the original successful Actions commit status before each protected ref update.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {string} candidate Exact qualified commit whose combined status is read.
+ * @param {{id:number,targetUrl:string}} expected Original status ID and immutable workflow link.
+ * @param {GithubApi} call Independently read current provider metadata.
+ * @returns {void} Returns only for the unchanged unique latest Actions-created status ID, successful state and workflow URL; missing or altered status throws.
+ */
+export function requireIntegrationStatus(repository,candidate,expected,call) {
+    const statuses=completeRows(call,`repos/${repository}/commits/${candidate}/status`,'statuses')
+        .filter(status=>status.context==='Complete required CI matrix');
+    // Combined Status omits creator. Creation authenticated it; the immutable status ID binds that same publisher.
+    if (statuses.length!==1 || statuses[0].id!==expected.id || statuses[0].state!=='success'
+        || statuses[0].target_url!==expected.targetUrl) {
+        throw new Error('BLOCKED integration commit status is missing, stale, failed or from another publisher.');
+    }
+}
+
+/** Publish exact-candidate checks/status and retry only explicit propagation rejection with fresh evidence.
  * @param {IntegrationRequest} request Selected source and candidate identity.
  * @param {WorkflowContext} context Current protected workflow identity.
  * @param {string} repository Configured repository.
@@ -828,12 +869,14 @@ export function integrateDevelop(request,context,repository,call,pause=pauseRequ
     const integrationId=makeCheck('Develop integration qualification')?.id;
     const matrixId=makeCheck('Complete required CI matrix')?.id;
     if (!Number.isSafeInteger(integrationId) || !Number.isSafeInteger(matrixId)) throw new Error('BLOCKED required check creation was not confirmed.');
+    const matrixStatus=publishIntegrationStatus(repository,request.candidateSha,runId,call);
     for (let attempt=1;attempt<=REQUIRED_CHECK_PROPAGATION_ATTEMPTS;attempt++) {
         if (attempt>1) checked=validateDevelopIntegration(request,context,repository,call);
         for (const [name,id] of [['Develop integration qualification',integrationId],['Complete required CI matrix',matrixId]]) {
             const current=exactCheck(call,repository,request.candidateSha,name,externalId);
             if (current.id!==id) throw new Error('BLOCKED required check identity changed before publication.');
         }
+        requireIntegrationStatus(repository,request.candidateSha,matrixStatus,call);
         const fresh=readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
         if (fresh.develop!==checked.plan.oldSha) throw new Error('BLOCKED develop changed before fast-forward write.');
         let updated;
@@ -851,7 +894,7 @@ export function integrateDevelop(request,context,repository,call,pause=pauseRequ
         if (updated?.object?.sha!==request.candidateSha) throw new Error('BLOCKED GitHub did not confirm the non-forced develop fast-forward.');
         const after=call('repos/'+repository+'/git/ref/heads/develop');
         if (after?.object?.sha!==request.candidateSha) throw new Error('BLOCKED develop moved after fast-forward publication.');
-        const record={...checked.record,check_run_id:integrationId,matrix_check_run_id:matrixId};
+        const record={...checked.record,check_run_id:integrationId,matrix_check_run_id:matrixId,matrix_status_id:matrixStatus.id};
         return {branch:'develop',sha:request.candidateSha,record};
     }
     throw new Error('BLOCKED required-check propagation attempts exhausted.');

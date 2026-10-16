@@ -238,6 +238,31 @@ function gallery_mutation_model_delete_subtree_in_transaction(array $galleryIds,
 }
 
 /**
+ * Validate an ordered cover list against direct image ownership in the current transaction.
+ *
+ * @param int $galleryId Exact gallery that must own every selected image.
+ * @param list<int> $imageIds Ordered selection; empty represents Automatic mode.
+ * @return list<int> The same ordered, unique direct-image IDs after ownership proof.
+ * @throws RuntimeException When IDs are malformed, duplicated, nested, moved, or foreign.
+ */
+function gallery_mutation_model_valid_direct_cover_ids(int $galleryId, array $imageIds): array
+{
+    $seen = [];
+    $check = db()->prepare("SELECT 1 FROM images WHERE id = ? AND gallery_id = ? AND relative_path NOT LIKE '%/%' LIMIT 1");
+    foreach ($imageIds as $imageId) {
+        if (!is_int($imageId) || $imageId <= 0 || isset($seen[$imageId])) {
+            throw new RuntimeException('Gallery cover selection is invalid.');
+        }
+        $seen[$imageId] = true;
+        $check->execute([$imageId, $galleryId]);
+        if ($check->fetchColumn() === false) {
+            throw new RuntimeException('Gallery cover selection ownership changed.');
+        }
+    }
+    return $imageIds;
+}
+
+/**
  * Delete selected image rows and all enabled historical dependencies atomically.
  *
  * Opens its own transaction after selection normalization. Reference cleanup
@@ -249,11 +274,13 @@ function gallery_mutation_model_delete_subtree_in_transaction(array $galleryIds,
  * @param int $galleryId Expected owner of every selected image row.
  * @param list<int|string> $imageIds Explicit service-validated selection; nonpositive/duplicate IDs are removed.
  * @param GalleryMutationDependencyMap $availableDependencies Verified optional cleanup targets, including translations/viewer/duplicate-ledger references.
+ * @param list<int>|null $coverImageIdsAfterDelete Ordered explicit selection after deletion, [] for automatic, null for legacy/no rewrite.
+ * @param string $now Shared application timestamp for gallery state updates.
  * @return int Deleted image count equal to the normalized selection on success; zero performs no SQL.
  * @throws RuntimeException If not every selected image was deleted from the expected owner.
  * @author Rudolf Klusal
  */
-function gallery_mutation_model_delete_images(int $galleryId, array $imageIds, array $availableDependencies): int
+function gallery_mutation_model_delete_images(int $galleryId, array $imageIds, array $availableDependencies, ?array $coverImageIdsAfterDelete, string $now): int
 {
     $imageIds = gallery_mutation_model_positive_ids($imageIds);
     if ($imageIds === []) {
@@ -276,6 +303,17 @@ function gallery_mutation_model_delete_images(int $galleryId, array $imageIds, a
         $deletedRows = $stmt->rowCount();
         if ($deletedRows !== count($imageIds)) {
             throw new RuntimeException('Image deletion changed fewer database rows than expected.');
+        }
+        if ($coverImageIdsAfterDelete !== null) {
+            $coverImageIdsAfterDelete = gallery_mutation_model_valid_direct_cover_ids($galleryId, $coverImageIdsAfterDelete);
+            $coverImageId = $coverImageIdsAfterDelete[0] ?? null;
+            $coverUpdate = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, cover_image_ids = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+            $coverUpdate->execute([
+                $coverImageId,
+                json_encode($coverImageIdsAfterDelete, JSON_THROW_ON_ERROR),
+                $now,
+                $galleryId,
+            ]);
         }
         $pdo->commit();
         return $deletedRows;
@@ -375,11 +413,13 @@ function gallery_mutation_model_image_belongs_to_galleries(int $imageId, array $
  * @param list<int|string> $destinationBranchIds Current destination subtree IDs used only to validate its existing cover.
  * @param string $now SQL timestamp shared by ownership, cover and journal writes.
  * @param string $operationId Moving journal operation belonging to this source/destination; empty preserves the legacy unjournaled model call.
+ * @param list<int>|null $sourceCoverImageIds Ordered source selection after move, [] for automatic, null for legacy/no rewrite.
+ * @param list<int>|null $destinationCoverImageIds Ordered destination selection to preserve, [] for automatic, null for legacy/no rewrite.
  * @return array{moved:int,source_cover_image_id:?int,destination_cover_image_id:?int} Committed row count and resolved cover IDs; empty selection returns zero/nulls without querying existing covers.
  * @throws RuntimeException For an incomplete ownership update or a journal marker that no longer owns the transaction.
  * @author Rudolf Klusal
  */
-function gallery_mutation_model_move_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $destinationSortOrders, array $destinationBranchIds, string $now, string $operationId = ''): array
+function gallery_mutation_model_move_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $destinationSortOrders, array $destinationBranchIds, string $now, string $operationId = '', ?array $sourceCoverImageIds = null, ?array $destinationCoverImageIds = null): array
 {
     $imageIds = gallery_mutation_model_positive_ids($imageIds);
     if ($imageIds === []) {
@@ -393,7 +433,7 @@ function gallery_mutation_model_move_images(int $sourceGalleryId, int $destinati
         $sourceCoverStmt->execute([$sourceGalleryId]);
         $sourceCoverRaw = $sourceCoverStmt->fetchColumn();
         $sourceCoverImageId = $sourceCoverRaw ? (int) $sourceCoverRaw : null;
-        if ($sourceCoverImageId !== null && in_array($sourceCoverImageId, $imageIds, true)) {
+        if ($sourceCoverImageIds === null && $sourceCoverImageId !== null && in_array($sourceCoverImageId, $imageIds, true)) {
             $sourceCoverImageId = gallery_mutation_model_first_cover_candidate($sourceGalleryId, $imageIds);
             $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
             $stmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ? AND cover_image_id IN (' . $placeholders . ')');
@@ -416,15 +456,29 @@ function gallery_mutation_model_move_images(int $sourceGalleryId, int $destinati
             throw new RuntimeException('Only ' . $updatedRows . ' of ' . count($imageIds) . ' image records moved.');
         }
 
+        if ($sourceCoverImageIds !== null) {
+            $sourceCoverImageIds = gallery_mutation_model_valid_direct_cover_ids($sourceGalleryId, $sourceCoverImageIds);
+            $sourceCoverImageId = $sourceCoverImageIds[0] ?? null;
+            $stmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, cover_image_ids = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+            $stmt->execute([$sourceCoverImageId, json_encode($sourceCoverImageIds, JSON_THROW_ON_ERROR), $now, $sourceGalleryId]);
+        }
+
         $destinationCoverStmt = $pdo->prepare('SELECT cover_image_id FROM galleries WHERE id = ?');
         $destinationCoverStmt->execute([$destinationGalleryId]);
         $destinationCoverRaw = $destinationCoverStmt->fetchColumn();
         $destinationCoverImageId = $destinationCoverRaw ? (int) $destinationCoverRaw : null;
-        if ($destinationCoverImageId === null || !gallery_mutation_model_image_belongs_to_galleries($destinationCoverImageId, $destinationBranchIds)) {
-            $destinationCoverImageId = gallery_mutation_model_first_cover_candidate($destinationGalleryId, []);
+        if ($destinationCoverImageIds !== null) {
+            $destinationCoverImageIds = gallery_mutation_model_valid_direct_cover_ids($destinationGalleryId, $destinationCoverImageIds);
+            $destinationCoverImageId = $destinationCoverImageIds[0] ?? null;
+            $stmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, cover_image_ids = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+            $stmt->execute([$destinationCoverImageId, json_encode($destinationCoverImageIds, JSON_THROW_ON_ERROR), $now, $destinationGalleryId]);
+        } else {
+            if ($destinationCoverImageId === null || !gallery_mutation_model_image_belongs_to_galleries($destinationCoverImageId, $destinationBranchIds)) {
+                $destinationCoverImageId = gallery_mutation_model_first_cover_candidate($destinationGalleryId, []);
+            }
+            $stmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+            $stmt->execute([$destinationCoverImageId, $now, $destinationGalleryId]);
         }
-        $stmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
-        $stmt->execute([$destinationCoverImageId, $now, $destinationGalleryId]);
 
         if ($operationId !== '') {
             gallery_image_move_model_commit_marker($operationId, $sourceGalleryId, $destinationGalleryId, $now);

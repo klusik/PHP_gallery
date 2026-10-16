@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.132.10';
+const CMS_VERSION = '0.133';
 ```
 
 Update-related code uses:
@@ -2184,6 +2184,28 @@ the submitting form receives its acknowledged revision before delayed refresh.
 See [panel lifecycle](docs/ADMIN_PANEL_LIFECYCLE.md) and the bounded
 [gallery picker](docs/GALLERY_PICKER.md). The responsive and progressive public
 thumbnail pipelines remain supported.
+
+### Gallery title-picture selection
+
+The Images editor's star mutations use the existing authenticated bulk-image
+route and the gallery editor service/model ownership chain. A writer lease
+serializes validated direct-image selection updates; `cover_image_id` remains
+the first selected ID for existing consumers, while nullable ordered
+`cover_image_ids` distinguishes legacy behavior, Automatic (`[]`), and a manual
+multi-selection. Automatic mode selects up to two eligible direct photos and
+fills remaining slots from accessible descendants through the existing
+`gallery_cover_collage_images()` and thumbnail pipeline. Public resolution
+rechecks image visibility and gallery access without Admin bypass.
+
+The star response reports authoritative selected IDs and mode. The browser
+updates star controls in the current panel and uses the canonical mutation
+coordinator to refresh affected public fragments against a fingerprint of the
+primary ID, ordered selection, and uploaded-cover path. It preserves the open
+editor state while that public refresh runs. On failed or ambiguous responses,
+read the current editor state before retrying because persistence and response
+construction are separate failure points. The selection migration is an
+explicit write prerequisite; unknown schema readiness fails closed. See
+[the title-picture contract](docs/TITLE_PICTURE_SELECTION.md).
 
 ## Public Download Capabilities
 

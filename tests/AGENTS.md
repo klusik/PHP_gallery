@@ -13,6 +13,8 @@ require a browser/database only when the behavior needs one.
 - Load the actual source owner before its first assertion. Keep shared source
   reads above all consumers, and import/fully qualify native exceptions inside
   PHP namespaces, including negative branches.
+- Model each provider endpoint's actual response separately, including omitted
+  fields; creation, collection and combined responses need not share a shape.
 - Give every independent child its own explicit minimal bootstrap, including
   Core path-policy dependencies for passive services. Parent-loaded functions
   do not establish child dependencies. Assert the child's real exit status,
@@ -23,9 +25,27 @@ require a browser/database only when the behavior needs one.
 - Use named constants for timers/sleeps, complete native headers, truthful named
   declaration docs/types/shapes and purpose docs for every anonymous class too.
   These remain required in fixtures.
+- Attach `Purpose`, `Type`, `Units`, `Scope`, `Consumers` and `Rationale` to every
+  scanner-covered fixture constant, stating its actual default/bound, owner and consumer.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.
+- Always use single namespace separators in executable fully qualified PHP
+  fixture calls. Double separators belong only to escaped string literals;
+  review the executable and string layers separately before committing adapters.
+- Document named object-literal mock methods with the same declaration contract
+  as production methods, and describe assertion inputs with their actual scalar,
+  ordered-list or row-field shapes.
+- For each async phase, identify the in-flight operation, terminal success/error
+  and next permitted action. Await failed reads before changing mocked connectivity;
+  await the released write's expected revision before owner teardown. Serve the
+  coordinator's visible URL with the real method/envelope and owner generation.
+  Capture layout immediately before each operation; preserve exact revision, node
+  and scroll assertions after completion, accounting for prior validation reflow.
+- Audit every source-extraction dependency against its adapter table, including
+  single/bulk owned delegates and argument shapes. Name missing adapters safely.
+- Assert negative HTTP status, error contract and unchanged persistence separately;
+  report safe test-authored expected/actual values and assertion call sites.
 
 ## Bounded workers, caches and interruption
 

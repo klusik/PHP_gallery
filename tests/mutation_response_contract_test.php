@@ -72,6 +72,9 @@ mutation_contract_assert($mutation === [
 ], 'Mutation descriptor must normalize stable entity ids.');
 
 $postcondition = admin_mutation_postcondition('gallery_present', ['gallery_id' => 123]);
+$coverPostcondition = admin_mutation_postcondition('cover_selection', ['gallery_id' => 123, 'revision' => 'opaque-state']);
+mutation_contract_assert($coverPostcondition === ['type' => 'cover_selection', 'gallery_id' => 123, 'revision' => 'opaque-state'],
+    'Cover reconciliation must retain gallery identity and an opaque public fingerprint without disclosing private selection IDs.');
 $context = admin_mutation_public_gallery_context(55, '/gallery/parent/', $postcondition);
 mutation_contract_assert($context === [
     'type' => 'gallery',

@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.132.10. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.133. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -319,6 +319,7 @@ Important columns:
 | `gallery_date` | Optional manual gallery date or date range start. |
 | `gallery_date_end` | Optional manual gallery date range end. `NULL` means the gallery has a single date or no manual range end. |
 | `cover_image_id` | Optional linked image used as cover. |
+| `cover_image_ids` | Optional ordered JSON image-ID list. `NULL` preserves legacy cover behavior, `[]` selects Automatic composition, and a nonempty list stores up to four direct photos. The first ID remains mirrored in `cover_image_id`. |
 | `cover_image_path` | Optional path-based cover override. |
 | `sort_order` | Admin/public ordering. |
 | `visibility` | `unpublished`, `public`, or `private`. Some compatibility code knows about older `draft`. |
@@ -1439,6 +1440,24 @@ replaces a revoked lifecycle with a new invitation while retaining its numeric I
 increasing revisions. Minimal local revocation depends only on verified invitation mapping
 and peer identity/state/revision/inbound hash, not recovery ciphertext availability.
 
+
+## Gallery title-picture selection storage
+
+Migration `202610140002_gallery_cover_image_ids.php` adds nullable
+`galleries.cover_image_ids` for ordered direct-photo selection. `NULL` means the
+gallery has not opted into the new composition mode and preserves its historical
+`cover_image_id`/child-gallery behavior. JSON `[]` records an explicit Automatic
+choice. A nonempty JSON list records up to four owned direct-photo IDs in
+selection order. The first selected ID is mirrored to `cover_image_id` for
+existing readers and foreign-key behavior. No second cover table is introduced.
+
+Selection writes require conclusive schema readiness before updating either
+column. The gallery editor writer lease serializes changes; direct ownership is
+rechecked while the lease is held, and a missing, moved, nested, or foreign
+photo aborts the whole write. Gallery sidecars additionally store selected
+gallery-relative filenames so ZIP import can remap them after image IDs are
+rebuilt. See [the selection contract](docs/TITLE_PICTURE_SELECTION.md) for
+public access filtering and mode behavior.
 
 ## Gallery-card orientation compatibility
 

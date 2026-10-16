@@ -28,6 +28,117 @@ const boundDocuments = new WeakSet();
 const selectionRangeAnchors = new WeakMap();
 
 /**
+ * Canonical cover selection projection consumed by editor presentation helpers.
+ * @typedef {Object} CoverSelectionResponse
+ * @property {'legacy'|'single'|'automatic'|'multi'} cover_selection_mode Persisted selector mode.
+ * @property {Array<number|string>} [cover_selection_ids] Persisted explicit selected image IDs.
+ * @property {Array<number|string>} [cover_image_ids] Compatibility projection of persisted explicit IDs.
+ * @property {number|string} [cover_image_id] Primary persisted image ID for legacy/single state.
+ * @property {string} [cover_selection_revision] Opaque persisted cover-selection revision.
+ * @property {string} [edit_revision] Current gallery settings revision after the mutation.
+ * @property {string} [previous_edit_revision] Exact settings revision superseded by this acknowledged write; absent on passive reconciliation.
+ */
+
+/**
+ * Choose the semantic cover action before normal form submission.
+ *
+ * @param {string} mode Current selection mode (multi or single/automatic).
+ * @param {string} state State of the clicked star (off, single, multi).
+ * @returns {string} Controller row action without the clicked image ID.
+ */
+export function coverStarActionForState(mode, state) {
+    return mode === 'multi'
+        ? (state === 'multi' ? 'cover_reset' : 'cover_add')
+        : (state === 'single' ? 'cover_arm' : 'cover');
+}
+
+/**
+ * Return the presentation state for server-confirmed title-picture selection.
+ *
+ * @param {CoverSelectionResponse|null} result Mutation or authoritative state response.
+ * @return {{mode:string,ids:number[],revision:string}|null} Normalized state, or null when incomplete.
+ */
+export function coverSelectionPresentation(result) {
+    if (!result || typeof result !== 'object') return null;
+    const mode = String(result.cover_selection_mode || '');
+    const rawIds = result.cover_selection_ids ?? result.cover_image_ids;
+    if (!['legacy', 'single', 'automatic', 'multi'].includes(mode) || !Array.isArray(rawIds)) return null;
+    const ids = [...new Set(rawIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    if (ids.length > 4) return null;
+    const revision = String(result.cover_selection_revision || '');
+    if (revision === '') return null;
+    return {mode, ids, revision};
+}
+
+/**
+ * Apply a server-confirmed title-picture state to the mounted editor controls.
+ *
+ * Only cover controls and the cover selector change; editor markup and drafts stay mounted.
+ *
+ * @param {HTMLFormElement} form Mounted image bulk form.
+ * @param {CoverSelectionResponse|null} result Canonical server response containing cover selection state.
+ * @return {boolean} Whether a complete authoritative state was applied.
+ */
+export function applyCoverSelectionPresentation(form, result) {
+    const selection = coverSelectionPresentation(result);
+    if (!selection || !(form instanceof HTMLFormElement)) return false;
+    const {mode, ids, revision} = selection;
+    form.dataset.coverSelectionMode = mode;
+    if (revision !== '') form.dataset.coverSelectionRevision = revision;
+    const revisionInput = form.querySelector('input[name="cover_selection_revision"]');
+    if (revisionInput instanceof HTMLInputElement && revision !== '') revisionInput.value = revision;
+    const editRevision = String(result.edit_revision || '');
+    const editorRoot = form.closest('[data-admin-side-panel]') || form.ownerDocument;
+    const settingsForm = editorRoot.querySelector('.admin-edit-gallery-form');
+    const settingsRevision = settingsForm?.querySelector('input[name="edit_revision"]');
+    if (settingsRevision instanceof HTMLInputElement && editRevision !== ''
+        && String(result.previous_edit_revision || '') === settingsRevision.value) {
+        settingsRevision.value = editRevision;
+    }
+    const settingsCoverRevision = settingsForm?.querySelector('input[name="cover_selection_revision"]');
+    if (settingsCoverRevision instanceof HTMLInputElement && revision !== '') settingsCoverRevision.value = revision;
+    const selectedIds = new Set(ids.map(String));
+    form.querySelectorAll('[data-admin-image-cover-star]').forEach(button => {
+        if (!(button instanceof HTMLButtonElement)) return;
+        const selected = selectedIds.has(String(button.dataset.imageId || ''));
+        const state = selected ? (mode === 'multi' ? 'multi' : 'single') : 'off';
+        button.dataset.coverState = state;
+        button.classList.toggle('is-cover', selected);
+        button.classList.toggle('is-cover-multi', state === 'multi');
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        const label = String((state === 'multi' ? button.dataset.coverLabelReset
+            : state === 'single' ? button.dataset.coverLabelArm
+            : mode === 'multi' ? button.dataset.coverLabelAdd : button.dataset.coverLabelSingle) || '');
+        const name = String(button.closest('[data-admin-image-order-row]')?.dataset.imageName || '');
+        button.title = label;
+        button.setAttribute('aria-label', (label + ' ' + name).trim());
+        const star = button.querySelector('[aria-hidden="true"]');
+        if (star) star.textContent = selected ? '★' : '☆';
+    });
+    const coverSelect = settingsForm?.querySelector('select[name="cover_image_id"]');
+    if (coverSelect instanceof HTMLSelectElement) {
+        const selectedValue = mode === 'automatic' ? 'automatic'
+            : mode === 'multi' ? 'multi'
+                : mode === 'single' ? String(ids[0] || Number(result.cover_image_id || 0))
+                    : '0';
+        if (selectedValue === 'multi' && !Array.from(coverSelect.options).some(option => option.value === 'multi')) {
+            const multiOption = form.ownerDocument.createElement('option');
+            multiOption.value = 'multi';
+            multiOption.textContent = String(form.dataset.coverMultiLabel || 'Selected photos').replace('{count}', String(ids.length));
+            coverSelect.add(multiOption);
+        }
+        if (selectedValue === 'multi') {
+            const multiOption = Array.from(coverSelect.options).find(option => option.value === 'multi');
+            if (multiOption) multiOption.textContent = String(form.dataset.coverMultiLabel || 'Selected photos').replace('{count}', String(ids.length));
+        }
+        if (Array.from(coverSelect.options).some(option => option.value === selectedValue)) {
+            coverSelect.value = selectedValue;
+        }
+    }
+    return true;
+}
+
+/**
  * Initializes image editor interactions in a document or newly injected panel fragment.
  * Document-level event delegation keeps controls in dynamically replaced panel content active.
  *
@@ -47,6 +158,49 @@ export function setupAdminGalleryImages(root = document) {
     let previewAnchorY = 0;
     let suppressPreviewFocusFor = null;
     const previewImage = overlay.querySelector('img');
+
+    /**
+     * Resolve a dynamically rendered star's action synchronously before SubmitEvent.
+     * Existing form handlers retain ownership of CSRF, saving, canonical completion,
+     * failure handling and full-page fallback.
+     *
+     * @param {MouseEvent} event Click on a gallery title-picture star.
+     * @return {void} Assign the clicked submitter's intended row action.
+     */
+    function handleCoverStarClick(event) {
+        const button = event.target instanceof Element ? event.target.closest('[data-admin-image-cover-star]') : null;
+        if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+        const form = button.closest('[data-admin-image-bulk-form]');
+        if (!(form instanceof HTMLFormElement)) return;
+        const mode = String(form.dataset.coverSelectionMode || 'legacy');
+        if (mode === 'multi' && String(button.dataset.coverState || 'off') === 'off'
+            && form.querySelectorAll('[data-admin-image-cover-star][data-cover-state="multi"]').length >= 4) {
+            event.preventDefault();
+            const status = form.querySelector('[data-admin-image-cover-status]');
+            if (status) status.textContent = status.dataset.coverLimitMessage || 'A title picture can contain at most four photos.';
+            return;
+        }
+        const action = form.dataset.coverMultiSupported === '1'
+            ? coverStarActionForState(mode, String(button.dataset.coverState || 'off'))
+            : 'cover';
+        button.value = action + ':' + String(button.dataset.imageId || '0');
+        form.__adminCoverSubmitter = button;
+    }
+
+    /**
+     * Reflect server-confirmed blue/gold star state without replacing the editor.
+     *
+     * @param {CustomEvent} event Existing side-panel successful bulk mutation.
+     * @return {void} Update selected rows, tooltips and keyboard pressed states.
+     */
+    function handleCoverSaved(event) {
+        if (event.detail?.source !== 'gallery-image-bulk') return;
+        const result = event.detail?.result;
+        if (!result?.ok || !['cover', 'cover_arm', 'cover_add', 'cover_reset'].includes(String(result.bulk_action || ''))) return;
+        const form = event.target instanceof Element ? event.target.closest('[data-admin-image-bulk-form]') : null;
+        if (!(form instanceof HTMLFormElement)) return;
+        applyCoverSelectionPresentation(form, result);
+    }
 
     /**
      * Repositions the preview after its thumbnail image finishes loading.
@@ -353,6 +507,8 @@ export function setupAdminGalleryImages(root = document) {
         inputs.slice(start, end + 1).forEach(applyRangeCheckboxState);
     }
 
+    doc.addEventListener('click', handleCoverStarClick, true);
+    doc.addEventListener('php-gallery:side-panel-success', handleCoverSaved);
     doc.addEventListener('pointerover', handlePreviewPointer, true);
     doc.addEventListener('pointermove', handlePreviewPointer, true);
     doc.addEventListener('pointerout', handlePreviewPointer, true);

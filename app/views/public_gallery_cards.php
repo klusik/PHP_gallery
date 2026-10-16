@@ -58,7 +58,7 @@ function view_public_gallery_description_layout_hook(string $layout): string
 /**
  * Render one physical public gallery card.
  *
- * @param array<string,mixed> $viewModel Controller-prepared gallery-card state.
+ * @param array{gallery_id?:int,title?:string,url?:string,visibility?:string,description_layout?:string,is_protected?:bool,show_reorder_handle?:bool,show_unpublished_marker?:bool,show_count_badge?:bool,picture_manager_enabled?:bool,branch_image_count?:int,cover_asset?:string,cover_picture_html?:string,collage_picture_html?:list<string>,cover_loading_attributes?:string,cover_selection_revision?:string,updated_at?:string,description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>} $viewModel Controller-prepared card presentation and public cover-selection revision.
  * @return void Emits canonical card content using compatible historical CSS classes.
  */
 function view_render_public_gallery_card(array $viewModel): void
@@ -87,7 +87,7 @@ function view_render_public_gallery_card(array $viewModel): void
         . ($pictureManagerEnabled ? ' has-picture-manager-select' : '')
         . ($showUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
 
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . $galleryId . '"' . ($pictureManagerEnabled ? ' data-picture-manager-gallery data-picture-manager-gallery-id="' . $galleryId . '" aria-selected="false"' : '') . ' data-gallery-visibility="' . e($visibility) . '" data-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . $galleryId . '">';
+    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . $galleryId . '"' . ($pictureManagerEnabled ? ' data-picture-manager-gallery data-picture-manager-gallery-id="' . $galleryId . '" aria-selected="false"' : '') . ' data-gallery-visibility="' . e($visibility) . '" data-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-selection-revision="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . $galleryId . '">';
     if ($showUnpublishedMarker) {
         echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
     }

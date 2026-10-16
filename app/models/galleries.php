@@ -52,6 +52,7 @@
  * @phpstan-type GalleryDatabaseRow array{
  *   id:int|string,parent_id:int|string|null,folder_path:string,folder_path_hash:string,
  *   slug:string,title:string,description:string|null,cover_image_id:int|string|null,
+ *   cover_image_ids?:string|null,
  *   sort_order:int|string,visibility:string,created_at:string,updated_at:string,
  *   voting_enabled?:int|string,show_filenames?:int|string,picture_game_enabled?:int|string,
  *   gps_map_enabled?:int|string|null,nsfw_enabled?:int|string,content_language?:string|null,
@@ -294,7 +295,7 @@ function gallery_model_slug_exists_on_connection(PDO $connection, string $slug, 
  * @param int $galleryId Gallery identifier.
  * @param array{
  *   title?:string,description?:string|null,slug?:string,visibility?:string,sort_order?:int,
- *   parent_id?:int|null,cover_image_id?:int|null,gallery_date?:string|null,gallery_date_end?:string|null,
+ *   parent_id?:int|null,cover_image_id?:int|null,cover_image_ids?:string|null,gallery_date?:string|null,gallery_date_end?:string|null,
  *   picture_game_enabled?:int,gps_map_enabled?:int|null,voting_enabled?:int,show_filenames?:int,
  *   description_layout?:string|null,count_badge_visibility?:string|null,lightbox_browsing_mode?:string|null,
  *   nsfw_enabled?:int,grid_columns?:int|null,grid_rows?:int|null,grid_use_for_subgalleries?:int,
@@ -321,6 +322,7 @@ function gallery_model_update_fields(int $galleryId, array $fields, string $now)
         'sort_order',
         'parent_id',
         'cover_image_id',
+        'cover_image_ids',
         'gallery_date',
         'gallery_date_end',
         'picture_game_enabled',

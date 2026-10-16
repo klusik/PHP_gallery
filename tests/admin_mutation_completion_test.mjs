@@ -109,6 +109,22 @@ assert(mutation.evaluateAdminMutationPostcondition({type: 'gallery_absent', gall
 assert(mutation.evaluateAdminMutationPostcondition({type: 'gallery_identity', gallery_id: 55}, currentRoot) === true, 'gallery_identity postcondition must use stable hero identity.');
 assert(mutation.evaluateAdminMutationPostcondition({type: 'image_present', image_ids: [77]}, galleryRoot(55, [], [77])) === true, 'image_present must resolve public image identity without depending on lightbox data-image-id.');
 assert(mutation.evaluateAdminMutationPostcondition({type: 'image_absent', image_ids: [77]}, galleryRoot(55, [], [])) === true, 'image_absent must verify the owned public image list.');
+const coverHero = {dataset: {publicCoverSelectionRevision: 'cover-revision-55'}};
+const coverPostconditionRoot = {
+    /** Resolve the fixture's exact gallery hero selector.
+     * @param {string} selector Coordinator-owned CSS selector.
+     * @return {{dataset:{publicCoverSelectionRevision:string}}|null} Matching revision marker or null for another gallery.
+     */
+    querySelector(selector) {
+        return selector === '.hero[data-public-gallery-id="55"][data-public-cover-selection-revision]' ? coverHero : null;
+    },
+};
+assert(mutation.evaluateAdminMutationPostcondition({type: 'cover_selection', gallery_id: 55, revision: 'cover-revision-55'}, coverPostconditionRoot) === true,
+    'cover_selection must verify the opaque persisted revision on the exact public gallery hero.');
+assert(mutation.evaluateAdminMutationPostcondition({type: 'cover_selection', gallery_id: 55, revision: 'stale-revision'}, coverPostconditionRoot) === false,
+    'cover_selection must reject stale public markup until the shared coordinator retry observes the committed revision.');
+assert(mutation.evaluateAdminMutationPostcondition({type: 'cover_selection', gallery_id: 56, revision: 'cover-revision-55'}, coverPostconditionRoot) === false,
+    'cover_selection must match the stable gallery id and cannot use an unrelated page revision.');
 assert(mutation.evaluateAdminMutationPostcondition({type: 'unknown'}, currentRoot) === false, 'Unknown postconditions must fail closed.');
 
 const adminOnlyGalleryIdRoot = {

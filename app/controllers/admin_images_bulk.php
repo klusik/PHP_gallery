@@ -63,13 +63,33 @@ use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Apply image selection or explicit row mutations with authentication and gallery ownership checks.
+ * Read authoritative cover state or apply authenticated image selections and row mutations.
  *
- * @return void Apply selected or explicit row actions through the same authenticated mutation pipeline.
+ * @return void Emit private read-only cover JSON, or apply CSRF-protected mutations through the shared pipeline.
  */
 function cms_admin_bulk_images(): void
 {
     require_admin();
+    // A failed POST may have committed before response construction failed. This
+    // passive, authenticated read reconciles stars without replacing the drawer
+    // or repeating a write. CSRF remains mandatory for every mutation below.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'POST') === 'GET' && ($_GET['cover_state'] ?? '') === '1') {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        $gallery = find_gallery((int) ($_GET['id'] ?? 0), true);
+        if (!$gallery) {
+            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'), 404);
+            return;
+        }
+        try {
+            $response = admin_bulk_images_success_response($gallery, '', 'admin-edit-images', 'cover');
+            $response['reconciled'] = true;
+            echo json_encode($response, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            admin_panel_error_response(t('admin.gallery_editor.cover_state_unavailable', 'The saved title-picture state could not be read. Reopen the editor before trying again.'), 503);
+        }
+        return;
+    }
     verify_csrf();
     // Variable $galleryId stores this steps working value.
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
@@ -83,7 +103,9 @@ function cms_admin_bulk_images(): void
     }
     // Variable $imageIds stores this steps working value.
     // Variable $submittedImageIds stores checked image ids from the bulk table.
-    $submittedImageIds = array_map('intval', $_POST['image_ids'] ?? []);
+    $rawImageIds = $_POST['image_ids'] ?? [];
+    $submittedImageIds = is_array($rawImageIds) ? array_map(static fn (mixed $id): int =>
+        is_int($id) || (is_string($id) && ctype_digit($id)) ? (int) $id : 0, $rawImageIds) : [0];
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? '');
     if ($action === '') {
@@ -95,12 +117,19 @@ function cms_admin_bulk_images(): void
     }
     // Explicit row actions target only that photo, regardless of the bulk selection.
     $singleImageId = 0;
-    if (preg_match('/^(delete|cover|public|draft|private):(\d+)$/', $action, $rowMatch) === 1) {
+    if (preg_match('/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\d+)$/', $action, $rowMatch) === 1) {
         $singleImageId = (int) $rowMatch[2];
         $action = $rowMatch[1];
     }
     // Variable $imageIds stores the selected images for this operation.
     $imageIds = $singleImageId > 0 ? [$singleImageId] : $submittedImageIds;
+    // Covers own their complete selection, validation, diagnostics and failure
+    // response. Do not silently filter an invalid bulk selection down to a
+    // single photo or bypass the logging path for zero selected checkboxes.
+    if (in_array($action, ['cover', 'cover_arm', 'cover_add', 'cover_reset'], true)) {
+        admin_save_gallery_title_picture($gallery, $imageIds, $returnTab, $action);
+        return;
+    }
     // Variable $count stores this steps working value.
     $count = 0;
     if (!$imageIds) {
@@ -304,10 +333,6 @@ function cms_admin_bulk_images(): void
             flash_message('admin_notice', $deleteFailureNotice);
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
-    }
-    if ($action === 'cover') {
-        admin_save_gallery_title_picture($gallery, $ownedIds, $returnTab);
-        return;
     }
     if (in_array($action, ['draft', 'public', 'private'], true)) {
         image_bulk_set_visibility($ownedIds, $action);

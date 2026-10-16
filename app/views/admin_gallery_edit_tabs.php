@@ -42,13 +42,22 @@ use function Gallery\Services\t;
 /**
  * Render the editable Media-tab field group.
  *
- * @param array<string, mixed> $viewModel Controller-prepared labels, state, and trusted option/branding fragments.
+ * @param array{labels:array<string,string>,cover_options_html:string,cover_multi_count:int,cover_automatic_selected:bool,cover_legacy_selected:bool,cover_automatic_available:bool,branding_fields_html:string,cover_asset_schema_ready:bool,background_source_schema_ready:bool,background_source?:string|null} $viewModel Controller-prepared cover state, localized labels, and trusted option/branding fragments.
  * @return void Emit Media controls and their compact help disclosures.
  */
 function view_render_admin_gallery_media_fields(array $viewModel): void
 {
     $labels = (array) ($viewModel['labels'] ?? []);
     $coverOptionsHtml = (string) ($viewModel['cover_options_html'] ?? '');
+    $coverMultiCount = (int) ($viewModel['cover_multi_count'] ?? 0);
+    $coverMultiOption = $coverMultiCount > 0
+        ? '<option value="multi" selected>' . e((string) ($labels['cover_multi_selected'] ?? 'Selected photos')) . '</option>'
+        : '';
+    $coverAutomaticSelected = !empty($viewModel['cover_automatic_selected']) ? ' selected' : '';
+    $coverLegacySelected = !empty($viewModel['cover_legacy_selected']) ? ' selected' : '';
+    $coverAutomaticOption = !empty($viewModel['cover_automatic_available'])
+        ? '<option value="automatic"' . $coverAutomaticSelected . '>' . e((string) ($labels['automatic'] ?? 'Automatic (2 photos)')) . '</option>'
+        : '';
     $brandingFieldsHtml = (string) ($viewModel['branding_fields_html'] ?? '');
     $coverAssetSchemaReady = (bool) ($viewModel['cover_asset_schema_ready'] ?? false);
     $backgroundSourceSchemaReady = (bool) ($viewModel['background_source_schema_ready'] ?? false);
@@ -61,8 +70,8 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
     echo '</div>';
 
     echo '<div class="admin-edit-card-grid admin-gallery-media-workspace">';
-    $coverHelp = (string) ($labels['includes_subgallery_images'] ?? 'Includes images from subgalleries.');
-    echo '<section class="admin-edit-card admin-gallery-media-card admin-gallery-media-cover" aria-label="' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '"><div class="admin-gallery-media-field"><label>' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '<select name="cover_image_id"><option value="0">' . e((string) ($labels['automatic'] ?? 'Automatic')) . '</option>' . $coverOptionsHtml . '</select></label><details class="admin-inline-help admin-gallery-media-help"><summary aria-label="' . e($coverHelp) . '" title="' . e($coverHelp) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($coverHelp) . '</div></details></div>';
+    $coverHelp = (string) ($labels['cover_auto_help'] ?? 'Automatic selects up to two pictures from this gallery or its subgalleries.');
+    echo '<section class="admin-edit-card admin-gallery-media-card admin-gallery-media-cover" aria-label="' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '"><div class="admin-gallery-media-field"><label>' . e((string) ($labels['title_picture'] ?? 'Title picture')) . '<select name="cover_image_id"><option value="0"' . $coverLegacySelected . '>' . e((string) ($labels['cover_legacy'] ?? 'Default (original gallery behavior)')) . '</option>' . $coverAutomaticOption . $coverMultiOption . $coverOptionsHtml . '</select></label><details class="admin-inline-help admin-gallery-media-help"><summary aria-label="' . e($coverHelp) . '" title="' . e($coverHelp) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e($coverHelp) . '</div></details></div>';
     if ($coverAssetSchemaReady) {
         echo '<label>' . e((string) ($labels['upload_gallery_thumbnail'] ?? 'Upload gallery thumbnail')) . '<input type="file" name="cover_upload" accept="image/*"><span class="muted">' . e((string) ($labels['gallery_thumbnail_upload_help'] ?? 'This is stored separately from gallery images.')) . '</span></label>';
     } else {
@@ -471,7 +480,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
 /**
  * Render the Images tab from controller-prepared rows and URLs.
  *
- * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,edit_url:string,panel_url:string}>,labels:array<string,string>} $viewModel Prepared canonical table, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
+ * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}>,cover_selection_mode?:'legacy'|'single'|'automatic'|'multi',cover_selection_revision?:string,cover_multi_supported?:bool,edit_revision?:string,labels:array<string,string>} $viewModel Prepared image rows, three-state cover revision, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
  * @return void Render compact image controls using the shared public-card renderers.
  */
 function view_render_admin_gallery_images_tab(array $viewModel): void
@@ -489,9 +498,11 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
     ob_start();
     echo '<div class="admin-gallery-images">';
     view_render_admin_tab_intro($intro);
-    echo '<form method="post" action="' . e((string) ($viewModel['bulk_action_url'] ?? '')) . '" data-admin-image-bulk-form>' . (string) ($viewModel['csrf_html'] ?? '');
+    echo '<form method="post" action="' . e((string) ($viewModel['bulk_action_url'] ?? '')) . '" data-admin-image-bulk-form data-cover-selection-mode="' . e((string) ($viewModel['cover_selection_mode'] ?? 'legacy')) . '" data-cover-selection-revision="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '" data-cover-multi-label="' . e((string) ($labels['cover_multi_label'] ?? 'Selected photos')) . '" data-cover-multi-supported="' . (!empty($viewModel['cover_multi_supported']) ? '1' : '0') . '">' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="gallery_id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
+    echo '<input type="hidden" name="cover_selection_revision" value="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
+    echo '<output data-admin-image-cover-status data-cover-limit-message="' . e((string) ($labels['cover_limit'] ?? 'Choose at most four title-picture photos.')) . '" role="status" aria-live="polite"></output>';
     echo (string) ($viewModel['bulk_toolbar_html'] ?? '');
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e((string) ($viewModel['reorder_url'] ?? '')) . '">';
     echo '<div class="admin-image-view-controls"><label class="admin-compact-toggle"><input type="checkbox" data-admin-image-names-toggle checked> <span>' . e((string) ($labels['show_names'] ?? 'Show filenames')) . '</span></label><button type="button" class="secondary admin-image-default-button" data-admin-image-names-default data-saved-message="' . e((string) ($labels['names_default_saved'] ?? '')) . '" data-unavailable-message="' . e((string) ($labels['names_unavailable'] ?? '')) . '">' . e((string) ($labels['save_names_default'] ?? 'Use as default')) . '</button><span class="visually-hidden" data-admin-image-names-status role="status"></span></div>';
@@ -712,7 +723,7 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
 
 /**
  * Render canonical image rows for a complete table or a bounded deferred batch.
- * @param list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,edit_url:string,panel_url:string}> $images Prepared row presentation data.
+ * @param list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}> $images Prepared row presentation data including the canonical star state.
  * @param array<string,string> $labels Localized row control labels.
  * @param bool $deferred Whether thumbnail sources belong to the bounded preload owner.
  * @return void Emit identical row actions while optionally withholding thumbnail requests.
@@ -722,13 +733,21 @@ function view_render_admin_gallery_image_rows(array $images, array $labels, bool
     foreach ($images as $image) {
         $imageId = (int) ($image['id'] ?? 0);
         $relativePath = (string) ($image['relative_path'] ?? '');
-        $isCover = (string) ($image['cover_label'] ?? '') !== '';
+        $coverState = (string) ($image['cover_state'] ?? ((string) ($image['cover_label'] ?? '') !== '' ? 'single' : 'off'));
+        $isCover = $coverState !== 'off';
+        $isMultiCover = $coverState === 'multi';
+        $coverMode = (string) ($image['cover_mode'] ?? 'single');
+        $coverMultiSupported = (bool) ($image['cover_multi_supported'] ?? false);
+        $coverLabel = $isMultiCover
+            ? (string) ($labels['cover_reset'] ?? 'Use only this photo')
+            : ($isCover ? (string) ($coverMultiSupported ? ($labels['cover_arm'] ?? 'Also select other photos') : ($image['cover_label'] ?? 'Title picture'))
+                : (string) ($coverMode === 'multi' ? ($labels['cover_add'] ?? 'Add to title pictures') : ($labels['set_cover'] ?? 'Set as title picture')));
         echo '<tr data-admin-image-order-row data-image-id="' . $imageId . '" data-image-name="' . e($relativePath) . '" data-image-captured-at="' . e((string) ($image['capture_date'] ?? '')) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="' . e((string) ($image['move_aria'] ?? '')) . '" title="' . e((string) ($labels['drag_title'] ?? '')) . '">↕</span></td>';
         echo '<td class="admin-image-thumbnail-cell"><div class="admin-image-thumbnail"><button type="button" class="admin-image-preview-button" data-admin-image-preview data-preview-src="' . e((string) ($image['preview_url'] ?? '')) . '" data-preview-name="' . e($relativePath) . '" data-preview-close-label="' . e((string) ($labels['close_preview'] ?? 'Close preview')) . '" aria-label="' . e((string) ($labels['preview'] ?? 'Preview') . ' ' . $relativePath) . '"><img class="admin-thumb" decoding="async" loading="lazy" ' . ($deferred ? 'data-admin-preload-src' : 'src') . '="' . e((string) ($image['thumbnail_url'] ?? '')) . '" alt=""></button>';
         echo '<label class="picture-manager-select-button admin-image-select" title="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><input type="checkbox" name="image_ids[]" value="' . $imageId . '" aria-label="' . e((string) ($labels['select'] ?? 'Select') . ' ' . $relativePath) . '"><span aria-hidden="true">✓</span></label></div></td>';
         echo '<td data-admin-image-name-cell title="' . e($relativePath) . '"><span class="admin-image-filename">' . e($relativePath) . '</span></td><td class="admin-image-actions-cell"><div class="admin-image-row-actions"><span data-admin-image-visibility-cell>';
         view_render_public_admin_visibility_menu(['image_bulk' => true, 'entity_id' => $imageId, 'kind' => 'image', 'name' => $relativePath, 'visibility' => (string) ($image['visibility'] ?? 'unpublished')]);
-        echo '</span><span data-admin-image-cover-cell><button type="submit" class="public-admin-card-action-button admin-image-cover-button' . ($isCover ? ' is-cover' : '') . '" name="action" value="cover:' . $imageId . '" data-admin-image-row-action data-image-id="' . $imageId . '" aria-pressed="' . ($isCover ? 'true' : 'false') . '" title="' . e((string) ($isCover ? ($image['cover_label'] ?? '') : ($labels['set_cover'] ?? 'Set as title picture'))) . '" aria-label="' . e((string) ($labels['set_cover'] ?? 'Set as title picture') . ' ' . $relativePath) . '"><span aria-hidden="true">' . ($isCover ? '★' : '☆') . '</span></button></span>';
+        echo '</span><span data-admin-image-cover-cell><button type="submit" class="public-admin-card-action-button admin-image-cover-button' . ($isCover ? ' is-cover' : '') . ($isMultiCover ? ' is-cover-multi' : '') . '" name="action" value="cover:' . $imageId . '" data-admin-image-row-action data-admin-image-cover-star data-cover-state="' . e($coverState) . '" data-cover-label-single="' . e((string) ($labels['set_cover'] ?? 'Set as title picture')) . '" data-cover-label-arm="' . e((string) ($labels['cover_arm'] ?? 'Also select other photos')) . '" data-cover-label-add="' . e((string) ($labels['cover_add'] ?? 'Add to title pictures')) . '" data-cover-label-reset="' . e((string) ($labels['cover_reset'] ?? 'Use only this photo')) . '" data-image-id="' . $imageId . '" aria-pressed="' . ($isCover ? 'true' : 'false') . '" title="' . e($coverLabel) . '" aria-label="' . e($coverLabel . ' ' . $relativePath) . '"><span aria-hidden="true">' . ($isCover ? '★' : '☆') . '</span></button></span>';
         view_render_public_image_admin_edit_link(['name' => $relativePath, 'url' => (string) ($image['edit_url'] ?? ''), 'panel_url' => (string) ($image['panel_url'] ?? '')]);
         view_render_public_image_admin_delete_form(['image_bulk' => true, 'name' => $relativePath, 'image_id' => $imageId]);
         echo '</div></td></tr>';

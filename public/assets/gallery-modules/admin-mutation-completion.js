@@ -386,8 +386,8 @@ export async function fetchAdminMutationRenderDocument(renderUrl, options = {}) 
 /**
  * Evaluate a typed mutation postcondition against server-rendered/live markup.
  *
- * @param {Record<string, *>|null} postcondition Typed postcondition metadata.
- * @param {*} root Document-like root exposing querySelector().
+ * @param {{type:string,image_id?:number,image_ids?:number[],gallery_id?:number,revision?:string}} postcondition Typed postcondition with optional cover revision.
+ * @param {{querySelector:Function}|null} root Document-like root exposing querySelector().
  * @return {boolean} True when the expected observable state is present.
  */
 export function evaluateAdminMutationPostcondition(postcondition, root) {
@@ -497,7 +497,26 @@ export function evaluateAdminMutationPostcondition(postcondition, root) {
         }
         const renderedId = Math.max(0, Number(hero?.dataset?.publicCoverImageId ?? hero?.getAttribute?.('data-public-cover-image-id') ?? 0));
         const expectedImageId = Math.max(0, Number(postcondition.image_id ?? 0));
-        return Number.isInteger(renderedId) && renderedId === expectedImageId;
+        if (!Number.isInteger(renderedId) || renderedId !== expectedImageId) {
+            return false;
+        }
+        if (expectedRevision !== '') {
+            const renderedRevision = String(hero?.dataset?.publicCoverSelectionRevision
+                ?? hero?.getAttribute?.('data-public-cover-selection-revision') ?? '');
+            return renderedRevision === expectedRevision;
+        }
+        return true;
+    }
+    if (type === 'cover_selection') {
+        const expectedGalleryId = positiveInteger(postcondition.gallery_id);
+        if (expectedGalleryId <= 0 || expectedRevision === '') return false;
+        const hero = root.querySelector(`.hero[data-public-gallery-id="${expectedGalleryId}"][data-public-cover-selection-revision]`);
+        const card = publicGalleryCardById(root, expectedGalleryId);
+        const renderedRevision = String(hero?.dataset?.publicCoverSelectionRevision
+            ?? hero?.getAttribute?.('data-public-cover-selection-revision')
+            ?? card?.dataset?.publicCoverSelectionRevision
+            ?? card?.getAttribute?.('data-public-cover-selection-revision') ?? '');
+        return renderedRevision !== '' && renderedRevision === expectedRevision;
     }
     if (type === 'gallery_visibility') {
         if (galleryId <= 0 || expectedVisibility === '') {

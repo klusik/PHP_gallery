@@ -56,7 +56,7 @@ visibility_eye_expect(str_contains($browser, 'data-public-admin-visibility-form'
 visibility_eye_expect(str_contains($browser, 'completeCoreGalleryMutationInCurrentView(result)'), 'Visibility mutations must use the shared completion coordinator.');
 visibility_eye_expect(str_contains($imageEditor, 'data-admin-image-row-action') && str_contains($imageEditor, 'value="cover:'), 'The drawer Images table must expose directly submitted row actions for cover selection.');
 visibility_eye_expect(str_contains($imageEditor, 'data-admin-image-cover-cell'), 'The cover action must have a replaceable row-owned presentation fragment.');
-visibility_eye_expect(str_contains($bulkImages, "preg_match('/^(delete|cover|public|draft|private):(\\d+)$/"), 'The bulk endpoint must normalize direct row actions into one owned image operation.');
+visibility_eye_expect(str_contains($bulkImages, "preg_match('/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\\d+)$/"), 'The bulk endpoint must normalize direct row actions into one owned image operation.');
 visibility_eye_expect(str_contains($bulkImages, '$imageIds = $singleImageId > 0 ? [$singleImageId] : $submittedImageIds;'), 'Direct image actions must override any unrelated checked rows with exactly their own stable ID.');
 visibility_eye_expect(str_contains($inline, 'gallery.visibility'), 'Gallery visibility must return typed mutation metadata.');
 visibility_eye_expect(str_contains($inline, 'image.visibility'), 'Image visibility must return typed mutation metadata.');

@@ -91,6 +91,10 @@ which unconditionally awaits `admin_side_panel_delegation/images_preload.mjs`.
 The protected BASIC registry remains unchanged. These fixtures separate source,
 queue and synthetic orchestration evidence from live browser/hosting acceptance;
 see `docs/ADMIN_IMAGES_PRELOAD.md` for the required measurement boundaries.
+The existing lifecycle Chromium scenario also dispatches canonical cover completion
+through a fully prepared Images editor, asserting no new batch fetch, row/thumbnail
+replacement or lost checkbox/tab/scroll/draft state. A following visibility completion
+must still refresh the table. The cover-star fixture separately verifies public revision refresh.
 
 Automatic browser-local iCloud import uses the centrally registered
 `browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the
@@ -134,7 +138,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.132.10. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.133. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -244,6 +248,9 @@ ref inputs, preserved messages/tree/parent, no-op preparation, rejected leases,
 dispatch identity, queued/successful/failed/cancelled/mismatched BASIC, bounded
 waiting with an injected clock, moved feature/develop refs, superseded evidence,
 native-suite failure, final-SHA FULL gating and final publisher input bindings.
+It also reproduces delayed required-check enforcement, bounded retry exhaustion,
+unrelated/mixed API failures and invalidation by moved refs, changed checks,
+cancelled publishers, superseded BASIC or failed native FULL owners between attempts.
 Execution belongs to the central hosted audit. For live acceptance, install the
 qualified main-owned workflow first, then select a one-commit feature with stale
 generated data. Confirm one prepared commit above the same P, successful fresh
@@ -620,6 +627,44 @@ category counts stayed within reviewed historical caps; the console still report
 remaining documentation/policy debt. Changed-declaration/MVC contracts remain
 distinct enforcement checks. Manual mobile, Firefox/WebKit and
 assistive-technology acceptance are not inferred from Chromium results.
+
+### Gallery title-picture selection
+
+`tests/gallery_cover_selection_test.php` owns the ordered selection decoding and
+resolver contracts: legacy `NULL`, explicit Automatic, direct-photo ownership,
+the four-photo bound, deterministic two-photo selection, accessible child
+fallback, public visibility filtering, stale selections, and selection revision
+changes. `tests/gallery_edit_writer_snapshots_test.php` covers atomic ordered
+persistence, direct ownership, migration readiness, the four-photo write limit,
+sidecar refresh, and reuse of the exclusive single-cover writer. Sidecar and ZIP
+ID remapping are implemented by their existing transfer owners and still need
+transfer-level qualification. Three-state action logic is added to the existing
+`tests/admin_side_panel_delegation/cover_stars.mjs` fixture and is consumed by
+the registered `tests/admin_side_panel_delegation_test.mjs` suite. The browser
+editor-preservation and lost-response fixture is
+`tests/support/admin_gallery_cover_stars_browser.mjs`; the existing registered
+`tests/admin_panel_lifecycle_browser_test.mjs` runs it for its default lifecycle
+fixture. The real HTTP cover cycle extends
+`tests/gallery_edit_concurrency_mysql_test.php` and uses its existing disposable
+database/HTTP setup. These are additions to existing audit-owned suites: they do
+not add YAML owners, create an alternate runner, or change the protected
+evaluator registry. `tests/runtime_module_plan_test.php` and
+`tests/support/runtime_module_fixture.php` protect the selective Admin bulk
+route's authored dependency closure and actual prepared module availability.
+These sources describe coverage ownership; their presence alone does not prove
+that a run passed.
+
+Hosted candidate preparation is authoritative for regenerated runtime modules,
+inventory, and exact-SHA qualification. Manual browser acceptance remains
+separate: verify G2 -> G3 -> arm G3 -> add G2 -> reset to G2, then repeat with
+the order reversed; verify persistence after reload and a new Admin session;
+change to Automatic and verify direct-photo, child-only, and mixed galleries.
+During each star click, confirm the right panel, selected tab, scroll position,
+unrelated draft fields, and loaded/preloaded image rows remain in place while
+the public gallery refreshes. Also verify a lost/failed response triggers the
+passive authoritative state GET and reconciles a changed revision in place
+before any retry, since a server error may occur after persistence. No live
+manual acceptance or hosted CI result is asserted by this documentation update.
 
 ## Canonical Feature Capability Policy
 

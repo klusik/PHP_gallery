@@ -1,5 +1,28 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery title-picture selection compatibility
+
+Owner: gallery cover model/service, editor mutations, sidecars, and the existing
+public mutation completion coordinator. `galleries.cover_image_id` remains the
+legacy primary reference; nullable `cover_image_ids` adds opt-in Automatic and
+ordered multi-photo modes without changing older rows. The protected behavior
+is the established single-cover and child-collage output for installations that
+have not applied the additive migration or whose row remains `NULL`. Multi-photo
+writes fail closed when schema readiness is missing or unknown. Public cards
+recheck current image visibility and gallery access; they never trust Admin
+selection alone. The writer lease serializes edits, and the public refresh
+fingerprint includes ordered selection and uploaded-cover path.
+
+The historical issue/commit records an Admin bulk-route HTTP 500 caused by
+missing selectively loaded cover-service declarations; generated runtime plans
+must continue to be produced from authored dependencies and qualified by the
+hosted workflow. Historical feature adoption is unknown. Keep the legacy path
+and access checks indefinitely for existing galleries; retire the compatibility
+branch only after explicit installed-schema and deployed-data evidence proves
+no supported installation requires it. Regression owners are listed in
+`docs/TITLE_PICTURE_SELECTION.md` and `TESTING.md`; browser and hosted
+qualification remain separate evidence.
+
 ## Owner-selected feature qualification and protected-develop releases (#235)
 
 Owners: integration/evidence and release origin/promotion readers. New integration
@@ -15,6 +38,12 @@ another version-specific exception. Regression coverage includes complete advers
 native owners, changed inputs, corrupt archives, release assembly failures and
 Git/tag identity preservation. Live acceptance is pending hosted qualification
 and human-reviewed installation; no production publication is part of this batch.
+
+Protected publication retains Checks IDs and an optional `matrix_status_id` from
+the same verified FULL. Commit Statuses cover GitHub's dispatch-suite rollup
+behavior; the publisher verifies the exact status ID, SHA, workflow URL, state
+and Actions creator before the unchanged guarded FF. Preserve both supported
+provider representations and historical records; neither changes test ownership.
 
 ## Reviewed untagged dispatcher maintenance merge before 0.132.9
 
@@ -83,6 +112,17 @@ for bounded shallow updater work, while the independent GC persists depth state.
 This is permanent support for existing callers rather than a timed fallback.
 Usage is unknown. `tests/updater_cache_gc_test.php` supplies synthetic safety and
 progress coverage; hosted FULL and production acceptance are distinct gates.
+
+## Develop required-check propagation
+
+Owner: `.github/scripts/develop-integration.mjs`, `integrateDevelop()`. Integration
+[38899855917](https://github.com/klusik/PHP_gallery/actions/runs/38899855917)
+passed FULL but GitHub rejected FF one second after creating its required check.
+Propagation is the suspected cause; frequency is **unknown**. The narrow retry
+retains exact evidence and leases, rejects other/ambiguous errors and is covered
+by `tests/develop_integration_test.mjs`. Keep this provider compatibility until
+GitHub guarantees immediate enforcement visibility and hosted acceptance proves
+safe removal. Feature fixtures do not prove protected installation or live recovery.
 
 ## Retained Actions job inventory provider failures
 

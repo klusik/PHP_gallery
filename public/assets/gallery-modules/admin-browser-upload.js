@@ -989,7 +989,7 @@ function isBrowserUploadPdfFile(file) {
  * @returns {Promise<Record<string, *>>} Canonical aggregate after the shared workflow acknowledges every PDF; clears its separate picker only after success.
  */
 async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
-    const helper = await import('./admin-pdf-documents.js?v=20261015-admin-import-contract-v1');
+    const helper = await import('./admin-pdf-documents.js?v=20261016-three-state-covers-v1');
     if (typeof helper.uploadGalleryPdfFiles !== 'function') {
         throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
     }

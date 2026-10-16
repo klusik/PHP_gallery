@@ -84,6 +84,7 @@ use function Gallery\Services\gallery_breadcrumb_ancestors;
 use function Gallery\Services\gallery_cover_asset_url;
 use function Gallery\Services\gallery_cover_collage_images;
 use function Gallery\Services\gallery_cover_image;
+use function Gallery\Services\gallery_cover_selection_revision;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
 use function Gallery\Services\gallery_count_badge_needs_total;
@@ -271,12 +272,12 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
 /**
  * Emit one gallery card with its authorized cover, tags and optional controls.
  *
- * @param array<string,mixed> $gallery Gallery row with its identity and presentation settings.
+ * @param array{id:int|string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,folder_path?:string,visibility?:string,description_layout?:string|null,updated_at?:string|null} $gallery Gallery card identity, cover choice and presentation settings.
  * @param bool $publicOnly Apply public access restrictions to cover and metadata selection.
  * @param bool $showPublicReorderHandle Show public reorder handle value.
  * @param bool $showSubgalleryBadge Show subgallery badge value.
  * @param int $cardIndex Zero-based card position used to prioritize thumbnail loading.
- * @param array<string,mixed> $cardContext Preloaded cover, layout and branch-count context.
+ * @param array{cover_asset?:string,cover?:array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,visibility?:string}|null,collage?:list<array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,visibility?:string}>,description_layout?:string|null,branch_image_count?:int,total_image_count?:int} $cardContext Preloaded cover asset/image, collage, layout and branch-count values.
  * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
  * @return void Emits the prepared gallery card.
  */
@@ -369,6 +370,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         'url' => gallery_public_url($gallery),
         'visibility' => $effectiveVisibility,
         'updated_at' => (string) ($gallery['updated_at'] ?? ''),
+        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
         'description_layout' => $descriptionLayout,
         'description' => (string) ($gallery['description'] ?? ''),
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),

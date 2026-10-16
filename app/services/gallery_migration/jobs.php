@@ -51,7 +51,7 @@ use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
-use function Gallery\Models\gallery_model_set_cover_image_id;
+use function Gallery\Models\gallery_model_update_fields;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\unique_slug;
 
@@ -328,9 +328,43 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
     }
-    $job = gallery_migration_sync_received_assets($job);
-
     $manifest = (array) ($job['manifest'] ?? []);
+    foreach (gallery_migration_manifest_galleries($manifest) as $entry) {
+        $galleryMetadata = (array) ($entry['gallery'] ?? []);
+        if (array_key_exists('cover_selection_source_ids', $galleryMetadata)) {
+            $selection = $galleryMetadata['cover_selection_source_ids'];
+            $primary = (int) ($galleryMetadata['cover_source_id'] ?? 0);
+            $selectionValid = is_array($selection) && array_is_list($selection) && count($selection) <= 4;
+            $seen = [];
+            if ($selectionValid) {
+                foreach ($selection as $sourceImageId) {
+                    if (!is_int($sourceImageId) || $sourceImageId <= 0 || isset($seen[$sourceImageId])) {
+                        $selectionValid = false;
+                        break;
+                    }
+                    $seen[$sourceImageId] = true;
+                }
+            }
+            if (!$selectionValid || ($selection === [] ? $primary !== 0 : $primary !== $selection[0])) {
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.cover_selection_invalid',
+                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                ));
+            }
+            if (gallery_cover_selection_schema_state() !== 'available') {
+                $schemaState = gallery_cover_selection_schema_state();
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.cover_selection_schema_required',
+                    $schemaState === 'missing'
+                        ? 'This import contains a multi-photo or automatic title-picture selection. Apply the gallery cover migration before completing the import.'
+                        : 'This import contains a multi-photo or automatic title-picture selection, but its database schema could not be verified. Check database diagnostics before completing the import.'
+                ));
+            }
+        }
+    }
+    $job = gallery_migration_sync_received_assets($job);
+    $manifest = (array) ($job['manifest'] ?? []);
+
     $totalAssets = count(gallery_migration_manifest_asset_refs($manifest));
     $receivedAssets = count((array) ($job['assets_received'] ?? []));
     if ($receivedAssets < $totalAssets) {
@@ -349,13 +383,68 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
         $galleryIds[] = $mappedGalleryId;
         $metadata = (array) ($entry['gallery'] ?? []);
         gallery_migration_apply_gallery_metadata($mappedGalleryId, ['gallery' => $metadata], $sourceGalleryId !== (int) ($manifest['source_gallery_id'] ?? 0), true);
+        $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery($mappedGalleryId);
         $coverSourceId = (int) ($metadata['cover_source_id'] ?? 0);
-        if ($coverSourceId > 0 && !empty($imageMap[(string) $coverSourceId])) {
-            gallery_model_set_cover_image_id(
-                $mappedGalleryId,
-                (int) $imageMap[(string) $coverSourceId],
-                now_sql()
-            );
+        $rawCoverSelection = $metadata['cover_selection_source_ids'] ?? null;
+        if (array_key_exists('cover_selection_source_ids', $metadata)) {
+            if (!$gallery || !array_key_exists('cover_image_ids', $gallery) || !gallery_cover_selection_schema_ready()) {
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.cover_selection_schema_required',
+                    'This import contains a multi-photo or automatic title-picture selection. Apply the gallery cover migration before completing the import.'
+                ));
+            }
+            if (!is_array($rawCoverSelection) || !array_is_list($rawCoverSelection)
+                || count($rawCoverSelection) > 4
+                || ($rawCoverSelection === [] ? $coverSourceId !== 0 : $coverSourceId !== $rawCoverSelection[0])) {
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.cover_selection_invalid',
+                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                ));
+            }
+            $mappedCoverIds = [];
+            foreach ($rawCoverSelection as $sourceImageId) {
+                if (!is_int($sourceImageId) || $sourceImageId <= 0
+                    || !isset($imageMap[(string) $sourceImageId])) {
+                    throw new RuntimeException(gallery_migration_t(
+                        'gallery_migration.error.cover_selection_invalid',
+                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                    ));
+                }
+                $targetImageId = (int) $imageMap[(string) $sourceImageId];
+                $targetImage = find_image($targetImageId, true);
+                if (!$targetImage || (int) ($targetImage['gallery_id'] ?? 0) !== $mappedGalleryId
+                    || str_contains((string) ($targetImage['relative_path'] ?? ''), '/')
+                    || in_array($targetImageId, $mappedCoverIds, true)) {
+                    throw new RuntimeException(gallery_migration_t(
+                        'gallery_migration.error.cover_selection_invalid',
+                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                    ));
+                }
+                $mappedCoverIds[] = $targetImageId;
+            }
+            $coverFields = [
+                'cover_image_id' => $mappedCoverIds[0] ?? null,
+                'cover_image_ids' => json_encode($mappedCoverIds, JSON_THROW_ON_ERROR),
+            ];
+            // The fresh row proves this persistence field exists. Keep the
+            // imported photo choice and uploaded-asset precedence atomic.
+            if (array_key_exists('cover_image_path', $gallery)) {
+                $coverFields['cover_image_path'] = null;
+            }
+            gallery_model_update_fields($mappedGalleryId, $coverFields, now_sql());
+        }
+        if (!array_key_exists('cover_selection_source_ids', $metadata)
+            && $coverSourceId > 0 && !empty($imageMap[(string) $coverSourceId])) {
+            $targetImageId = (int) $imageMap[(string) $coverSourceId];
+            $targetImage = find_image($targetImageId, true);
+            if ($targetImage && (int) ($targetImage['gallery_id'] ?? 0) === $mappedGalleryId
+                && !str_contains((string) ($targetImage['relative_path'] ?? ''), '/')) {
+                $coverFields = ['cover_image_id' => $targetImageId];
+                if (array_key_exists('cover_image_ids', $gallery) && gallery_cover_selection_schema_ready()) {
+                    $coverFields['cover_image_ids'] = null;
+                }
+                gallery_model_update_fields($mappedGalleryId, $coverFields, now_sql());
+            }
         }
         $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery($mappedGalleryId);
         if ($gallery) {

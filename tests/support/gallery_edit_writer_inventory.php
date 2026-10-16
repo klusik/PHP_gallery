@@ -37,7 +37,7 @@ function gallery_edit_writer_fixture_inventory(): array
         'media_renamer.php' => ['media_renamer_execute_gallery', 'media_renamer_execute_gallery_image_batch', 'media_renamer_execute_image_batch', 'media_renamer_execute_galleries', 'media_renamer_execute_plan'],
         'gallery_branding.php' => ['delete_gallery_branding_asset'],
         'gallery_migration.php' => ['gallery_migration_prepare_target_job', 'gallery_migration_install_package_file', 'gallery_migration_install_asset_file', 'gallery_migration_sync_received_assets', 'gallery_migration_job_status_response', 'gallery_migration_complete_job'],
-        'gallery_editor_mutations.php' => ['gallery_editor_set_cover_image'],
+        'gallery_editor_mutations.php' => ['gallery_editor_set_cover_image', 'gallery_editor_set_cover_images', 'gallery_editor_change_cover_selection'],
         'gallery_dates.php' => ['gallery_date_save_range'],
         'thumbnail_bounds.php' => ['save_gallery_thumbnail_bounds'],
         'gallery_grid.php' => ['reset_all_gallery_grid_overrides'],

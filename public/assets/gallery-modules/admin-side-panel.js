@@ -37,16 +37,16 @@ import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } fr
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261014-settings-control-links-v2';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261016-cover-in-place-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
-import { setupAdminGalleryImages } from './admin-gallery-images.js?v=20261003-images-v4';
+import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261016-three-state-covers-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261015-admin-import-contract-v1';
-import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261015-admin-import-contract-v1';
-import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261015-admin-import-contract-v1';
-import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261016-three-state-covers-v1';
+import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261016-three-state-covers-v1';
+import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261016-three-state-covers-v1';
+import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
 import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261012-pdf-files-v1';
@@ -727,7 +727,14 @@ export function setupAdminGallerySidePanel() {
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-bulk-form]')) {
             return;
         }
-        const submitter = event.submitter || form.__adminPanelSubmitter || null;
+        // A newly injected editor may submit on a browser where
+        // SubmitEvent.submitter is absent. Use only a live captured control;
+        // never reuse a previous star click for a later toolbar submission.
+        const fallback = form.__adminPanelSubmitter;
+        const submitter = (event.submitter instanceof HTMLElement && form.contains(event.submitter))
+            ? event.submitter
+            : (fallback instanceof HTMLElement && form.contains(fallback) && fallback.isConnected ? fallback : null);
+        form.__adminPanelSubmitter = null;
         if (isThumbnailSubmission(form, submitter)) {
             return;
         }
@@ -737,6 +744,22 @@ export function setupAdminGallerySidePanel() {
             event.stopImmediatePropagation();
         }
         if (!confirmImageBulkSubmission(form, submitter)) return;
+        await submitAdminPanelImageBulkForm(form, submitter);
+    }, true);
+
+    document.addEventListener('submit', /** Keep standalone title-picture star requests asynchronous while preserving other standalone bulk form behavior. @param {SubmitEvent} event Delegated submission narrowed to a non-panel gallery image form. @return {Promise<void>} Routes only star actions through the existing canonical completion path. */ async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-image-bulk-form]')
+            || form.closest('[data-admin-side-panel]') || form.matches('[data-admin-panel-bulk-form]')) return;
+        const fallback = form.__adminCoverSubmitter;
+        const submitter = event.submitter instanceof HTMLElement && form.contains(event.submitter)
+            ? event.submitter
+            : fallback instanceof HTMLElement && form.contains(fallback) && fallback.isConnected ? fallback : null;
+        form.__adminCoverSubmitter = null;
+        if (!(submitter instanceof HTMLButtonElement) || !submitter.matches('[data-admin-image-cover-star]')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
         await submitAdminPanelImageBulkForm(form, submitter);
     }, true);
 
@@ -1474,6 +1497,40 @@ function writeAdminGallerySidePanelStatus(panel, message, isError) {
 }
 
 /**
+ * Write status to the panel when present, otherwise to the standalone cover live region.
+ * @param {HTMLFormElement} form Original gallery image form.
+ * @param {string} message User-facing status text.
+ * @param {boolean} isError Whether the status represents an error.
+ * @return {void} Updates only the corresponding status node.
+ */
+function writeGalleryCoverStatus(form, message, isError) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (panel instanceof HTMLElement) {
+        writeAdminGallerySidePanelStatus(panel, message, isError);
+        return;
+    }
+    const status = form.querySelector('[data-admin-image-cover-status]');
+    if (status instanceof HTMLElement) {
+        status.textContent = message;
+        status.classList.toggle('is-alert', isError);
+    }
+}
+
+/**
+ * Track in-flight and uncertain title-picture mutations by their original form.
+ * Weak keys keep detached editors collectible while preventing overlapping writes
+ * and blind retries after an unconfirmed server response.
+ * @type {WeakSet<HTMLFormElement>}
+ */
+const pendingGalleryCoverForms = new WeakSet();
+
+/**
+ * Track forms that require a passive server read before another title-picture write.
+ * @type {WeakSet<HTMLFormElement>}
+ */
+const uncertainGalleryCoverForms = new WeakSet();
+
+/**
  * Submit the empty-gallery side-panel form to the existing create endpoint.
  *
  * @param {HTMLFormElement} form Side-panel create form.
@@ -1878,32 +1935,68 @@ async function submitAdminPanelAuxiliaryMutation(form, submitter = null) {
  */
 async function submitAdminPanelImageBulkForm(form, submitter) {
     const panel = form.closest('[data-admin-side-panel]');
-    if (!(panel instanceof HTMLElement)) {
-        HTMLFormElement.prototype.submit.call(form);
-        return;
-    }
-    const owner = captureAdminPanelOwner(panel);
     const selectedInputs = Array.from(form.querySelectorAll('input[name="image_ids[]"]:checked'));
     const actionControl = form.querySelector('[name="action"]');
     let action = actionControl instanceof HTMLSelectElement || actionControl instanceof HTMLInputElement ? String(actionControl.value || '') : '';
-    if (submitter instanceof HTMLButtonElement && submitter.name === 'action' && submitter.value !== '') {
+    if (submitter instanceof HTMLButtonElement && submitter.matches('[data-admin-image-cover-star]')) {
+        // Derive the transition from authoritative server-rendered attributes.
+        // This is independent of the later gallery-images click listener and
+        // prevents old click-capture timing from falling back to the toolbar.
+        const id = String(submitter.dataset.imageId || '');
+        const coverAction = form.dataset.coverMultiSupported === '1'
+            ? coverStarActionForState(String(form.dataset.coverSelectionMode || 'legacy'), String(submitter.dataset.coverState || 'off'))
+            : 'cover';
+        action = /^[1-9][0-9]*$/.test(id) ? coverAction + ':' + id : '';
+    } else if (submitter instanceof HTMLButtonElement && submitter.name === 'action' && submitter.value !== '') {
         action = submitter.value;
     }
-    const rowAction = /^(delete|cover|public|draft|private):(\d+)$/.exec(action);
+    const rowAction = /^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\d+)$/.exec(action);
+    const isCoverAction = action === 'cover' || Boolean(rowAction && ['cover', 'cover_arm', 'cover_add', 'cover_reset'].includes(rowAction[1]));
+    if (!(panel instanceof HTMLElement) && !isCoverAction) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const owner = panel instanceof HTMLElement
+        ? captureAdminPanelOwner(panel)
+        : {isCurrent: () => form.isConnected};
+    if (isCoverAction && pendingGalleryCoverForms.has(form)) {
+        writeGalleryCoverStatus(form, i18n('admin.side_panel.cover_request_pending', 'A title-picture change is already in progress.'), true);
+        return;
+    }
+    if (isCoverAction && uncertainGalleryCoverForms.has(form)) {
+        pendingGalleryCoverForms.add(form);
+        let reconciled = false;
+        try {
+            reconciled = await reconcileGalleryCoverAfterAmbiguousFailure(form, owner);
+        } finally {
+            pendingGalleryCoverForms.delete(form);
+        }
+        if (!reconciled) {
+            writeGalleryCoverStatus(form, i18n('admin.side_panel.cover_state_unavailable', 'The saved title-picture state could not be checked. Try again after the connection recovers.'), true);
+            return;
+        }
+        writeGalleryCoverStatus(form, i18n('admin.side_panel.cover_state_refreshed_after_failure', 'The saved title-picture state was refreshed. Review it before trying again.'), true);
+        return;
+    }
     if (!rowAction && selectedInputs.length === 0) {
-        writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.select_photo_first', 'Select at least one photo first.'), true);
+        writeGalleryCoverStatus(form, i18n('admin.side_panel.select_photo_first', 'Select at least one photo first.'), true);
         return;
     }
     if (action === '') {
-        writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.choose_photo_action', 'Choose a photo action first.'), true);
+        writeGalleryCoverStatus(form, i18n('admin.side_panel.choose_photo_action', 'Choose a photo action first.'), true);
         return;
     }
 
-    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    const buttons = panel instanceof HTMLElement
+        ? Array.from(form.querySelectorAll('button, input[type="submit"]'))
+        : (submitter instanceof HTMLButtonElement ? [submitter] : []);
     buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
     });
-    writeAdminGallerySidePanelStatus(panel, action === 'cover' ? i18n('admin.side_panel.saving_title_picture', 'Saving title picture...') : i18n('admin.side_panel.applying_photo_action', 'Applying photo action...'), false);
+    writeGalleryCoverStatus(form, action === 'cover' || action.startsWith('cover:')
+        || action.startsWith('cover_') ? i18n('admin.side_panel.saving_title_picture', 'Saving title picture...')
+        : i18n('admin.side_panel.applying_photo_action', 'Applying photo action...'), false);
+    if (isCoverAction) pendingGalleryCoverForms.add(form);
     try {
         const body = new FormData();
         const csrfInput = form.querySelector('input[name="csrf_token"]');
@@ -1918,6 +2011,13 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         }
         if (returnTabInput instanceof HTMLInputElement) {
             body.set('return_tab', returnTabInput.value);
+        }
+        if (isCoverAction) {
+            const revisionInput = form.querySelector('input[name="cover_selection_revision"]');
+            const revision = revisionInput instanceof HTMLInputElement
+                ? revisionInput.value
+                : String(form.dataset.coverSelectionRevision || '');
+            if (revision !== '') body.set('cover_selection_revision', revision);
         }
         if (action === 'move_existing') {
             const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
@@ -1952,7 +2052,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         body.set('ajax', '1');
         body.set('panel', '1');
 
-        const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
+        const response = await fetch(form.dataset.adminPanelAction || form.getAttribute('action') || window.location.href, {
             method: 'POST',
             body,
             credentials: 'same-origin',
@@ -1963,11 +2063,22 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         });
         const result = await readJsonResponseSafely(response, i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
         if (!response.ok || !result.ok) {
-            throw new Error(result.error || result.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
+            const error = new Error(result.error || result.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
+            error.status = response.status;
+            throw error;
         }
-        rememberAdminPanelMutation(result, owner);
-        if (!form.isConnected) {
+        if (panel instanceof HTMLElement) rememberAdminPanelMutation(result, owner);
+        if (!form.isConnected || !owner.isCurrent()) {
             await completeCoreGalleryMutationInCurrentView(result);
+            return;
+        }
+        if (panel instanceof HTMLElement && isCoverAction) {
+            applyCoverSelectionPresentation(form, result);
+        }
+        if (!(panel instanceof HTMLElement)) {
+            applyCoverSelectionPresentation(form, result);
+            await completeCoreGalleryMutationInCurrentView(result);
+            writeGalleryCoverStatus(form, String(result.message || i18n('admin.side_panel.cover_saved', 'Title picture saved.')), false);
             return;
         }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
@@ -1978,11 +2089,68 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
             },
         }));
     } catch (error) {
-        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'), true);
+        if (isCoverAction && owner.isCurrent()) {
+            const ambiguous = ![200, 409, 422].includes(Number(error?.status || 0));
+            if (ambiguous) uncertainGalleryCoverForms.add(form);
+            const reconciled = await reconcileGalleryCoverAfterAmbiguousFailure(form, owner);
+            const originalMessage = error?.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.');
+            if (reconciled) {
+                const refreshedMessage = i18n('admin.side_panel.cover_state_refreshed_after_failure', 'The saved title-picture state was refreshed from the server.');
+                writeGalleryCoverStatus(form, originalMessage + ' ' + refreshedMessage, true);
+                return;
+            }
+            if (ambiguous) uncertainGalleryCoverForms.add(form);
+            else uncertainGalleryCoverForms.delete(form);
+            writeGalleryCoverStatus(form, originalMessage, true);
+            return;
+        }
+        if (owner.isCurrent()) writeGalleryCoverStatus(form, error.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'), true);
     } finally {
         buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
         });
+        if (isCoverAction) pendingGalleryCoverForms.delete(form);
+    }
+}
+
+/**
+ * Read the authoritative cover state after a response that may have failed after persistence.
+ *
+ * The GET is passive and must not replace the gallery editor. Any valid canonical state,
+ * including an unchanged revision, is applied in place and handed to the shared coordinator.
+ *
+ * @param {HTMLFormElement} form Original mounted image bulk form.
+ * @param {{isCurrent: function(): boolean}} owner Captured side-panel owner guard.
+ * @return {Promise<boolean>} True when authoritative state was read and applied.
+ */
+async function reconcileGalleryCoverAfterAmbiguousFailure(form, owner) {
+    const panel = form.closest('[data-admin-side-panel]');
+    const galleryInput = form.querySelector('input[name="gallery_id"]');
+    if (!(galleryInput instanceof HTMLInputElement)) return false;
+    if (String(form.dataset.coverSelectionRevision
+        || form.querySelector('input[name="cover_selection_revision"]')?.value || '') === '') return false;
+    const stateUrl = new URL(form.dataset.adminPanelAction || form.getAttribute('action') || window.location.href, window.location.href);
+    stateUrl.searchParams.set('id', galleryInput.value);
+    stateUrl.searchParams.set('cover_state', '1');
+    stateUrl.searchParams.set('_cover_reconcile', String(Date.now()));
+    try {
+        const response = await fetch(stateUrl.toString(), {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        });
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
+        if (!response.ok || !result.ok || result.reconciled !== true || !owner.isCurrent() || !form.isConnected) return false;
+        if (!applyCoverSelectionPresentation(form, result)) return false;
+        uncertainGalleryCoverForms.delete(form);
+        if (panel instanceof HTMLElement) rememberAdminPanelMutation(result, owner);
+        await completeCoreGalleryMutationInCurrentView(result);
+        if (owner.isCurrent()) writeGalleryCoverStatus(form, i18n('admin.side_panel.cover_state_refreshed', 'The saved title-picture state was refreshed from the server.'), false);
+        return true;
+    } catch (reconciliationError) {
+        if (owner.isCurrent()) writeGalleryCoverStatus(form, reconciliationError?.message || i18n('admin.side_panel.cover_state_unavailable', 'The saved title-picture state could not be checked.'), true);
+        return false;
     }
 }
 

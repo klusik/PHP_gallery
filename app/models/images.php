@@ -39,6 +39,16 @@ namespace Gallery\Models;
 use InvalidArgumentException;
 use function Gallery\Core\db;
 
+/**
+ * Purpose: Set the default direct-image candidate count for automatic cover resolution.
+ * Type: int.
+ * Units: Candidate image rows.
+ * Scope: One gallery's direct images; default value 2, with caller values limited to 1-4.
+ * Consumers: image_model_direct_cover_candidates() and the automatic gallery-cover resolver.
+ * Rationale: Preserve the two-photo default while keeping candidate reads within the four supported manual-cover slots.
+ */
+const IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT = 2;
+
 /** Select bounded potential thumbnail-name conflicts through indexed semantic identities.
  * Non-ASCII characters widen to single-character patterns so binary database
  * collations cannot hide case-equivalent names. Services filter the bounded superset.
@@ -290,23 +300,39 @@ function image_model_rows_for_gallery(int $galleryId, bool $publicOnly): array
 }
 
 /**
- * Return the preferred direct cover candidate for one gallery.
+ * Return a deterministic bounded set of direct photos suitable for an automatic cover.
+ * Uses the same order and public-only filter as the historical single cover.
  *
- * @param int $galleryId Gallery identifier.
- * @param bool $publicOnly Whether the candidate must be public.
- * @return array<string,mixed>|null Preferred direct image row.
+ * @param int $galleryId Physical gallery owner.
+ * @param bool $publicOnly Restrict candidates to published photos for visitors.
+ * @param int $limit Number of candidates; default 2 and accepted range 1-4.
+ * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,nsfw_enabled?:int|string|null,title?:string|null,exif_taken_at?:string|null}> Ordered direct image rows for the cover resolver.
  */
-function image_model_first_direct_cover_candidate(int $galleryId, bool $publicOnly): ?array
+function image_model_direct_cover_candidates(int $galleryId, bool $publicOnly, int $limit = IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT): array
 {
+    if ($galleryId <= 0 || $limit < 1 || $limit > 4) {
+        return [];
+    }
     $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
-    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1";
+    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename, id LIMIT " . $limit;
     $stmt = db()->prepare($sql);
     $stmt->execute([$galleryId]);
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    return $stmt->fetchAll() ?: [];
+}
+
+/**
+ * Return the preferred direct cover candidate for one gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param bool $publicOnly Whether the candidate must be public.
+ * @return array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,nsfw_enabled?:int|string|null,title?:string|null,exif_taken_at?:string|null}|null Preferred direct image row, or null when no candidate exists.
+ */
+function image_model_first_direct_cover_candidate(int $galleryId, bool $publicOnly): ?array
+{
+    return image_model_direct_cover_candidates($galleryId, $publicOnly, 1)[0] ?? null;
 }
 
 /**

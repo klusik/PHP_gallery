@@ -133,6 +133,10 @@ return [
     // creates an edge only when the owner's complete historic closure is present.
     'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'gallery-pdf-documents'],
     'module_dependencies' => [
+        // The full gallery editor already contains the complete metadata owner
+        // closure, including cover selection. Reuse that existing domain owner
+        // without adding a module, widening PHP closures or duplicating its files.
+        'domain-admin-galleries-edit-page' => ['domain-admin-galleries-edit-metadata'],
         // Reuse the existing maintenance owner only where its complete historical
         // closure is already present, including Admin authentication. The edge
         // replaces four duplicated files without broadening any route's closure.

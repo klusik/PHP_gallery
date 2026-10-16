@@ -28,9 +28,18 @@ throughout. Feature edits never authorize themselves as protected CI authority.
    develop unchanged, and `qualified_run` reuses sealed identical A/P after a
    publication failure. Changed inputs require new execution. Agents never
    dispatch protected integration without maintainer authorization.
+   Publish and recheck both the exact-SHA Checks and Actions Commit Status for
+   the required context; dispatch-suite Checks alone can be absent from GitHub's
+   branch-rule rollup. Grant `statuses: write` only to that verified publisher.
 5. A separately authorized release trusts frozen A from protected develop and
    assembles B without another source audit or historical qualification replay.
    Preserve assembly integrity, Git leases, approval, merge/tag and draft boundaries.
+
+Before retrying, consolidate failed-owner results, deduplicating repeated shards.
+Record cause (source/test/contract/infrastructure), evidence, repair, equivalent
+consumers and remaining uncertainty in the working summary; repair the complete
+related class. Justify changed expectations against production behavior and retain
+negative/security assertions. This review does not replace hosted qualification.
 
 BASIC remains syntax plus changed named-declaration docs. It does not cover native
 headers, FULL inventory budgets or runtime regressions. Header checking in an
@@ -47,15 +56,14 @@ No-op preparation preserves SHA. Recovery and CI-authority updates retain their
 existing paths. Failure, timeout or moved refs stop; do not retry writes blindly.
 Feature source alone does not install this behavior into main.
 
-Include every generated bot commit when counting the candidate delta. If
-preparation adds a commit, stop/cancel integration before expensive FULL. Fetch
-that head, preserve the complete prepared tree, and perform only the separately
-authorized feature squash onto the same observed develop base. Verify tree
-identity (plus explicitly reviewed source/doc fixes), exact parent, exactly one
-commit above the base and clean worktree. Push with the exact old-head
-`--force-with-lease`, obtain fresh BASIC and retry integration. Idempotent
-preparation must retain the fresh files and SHA. Repeat if another child appears;
-FULL must qualify the final candidate that integration will fast-forward.
+Count every generated bot commit. Only when installed automatic mode is disabled
+or unavailable and preparation publishes a child, stop before expensive FULL and
+use the separately authorized manual checkpoint: fetch its head, preserve the
+prepared tree, squash the feature onto the same observed develop base, and verify
+tree identity (plus reviewed fixes), exact parent, one commit and clean checkout.
+Push with the exact old-head `--force-with-lease`, obtain fresh BASIC and retry.
+Repeat if another child appears; idempotent preparation and FULL must retain the
+final one-commit candidate that integration will fast-forward.
 
 ## Workflow authoring and evidence
 

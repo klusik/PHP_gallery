@@ -55,6 +55,15 @@ remain failures; use sealed execution to recover rather than rerunning tests.
 The unchanged required context is `Complete required CI matrix`, Actions app
 15368. The final integration record is retained for provenance and diagnostics.
 
+The publisher exposes that verified FULL through both Checks and Commit Statuses.
+GitHub can omit dispatch-suite Checks from its branch-rule rollup despite their
+successful REST response. Only the privileged publisher has `statuses: write`;
+it authenticates the Actions creator in the creation response and binds the same
+required context to the exact SHA/run. Before every FF it rechecks that immutable
+status ID, successful state and workflow URL, retaining `matrix_status_id`.
+Combined Status omits creator; its unchanged ID binds the authenticated author.
+Both representations use the same real FULL.
+
 ## CI-only installation on main
 
 When the maintainer needs changes installed on main before the next release,

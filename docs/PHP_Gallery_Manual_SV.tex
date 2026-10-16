@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132.10}
+\newcommand{\version}{0.133}
 \newcommand{\manualdate}{16~oktober~2026}
 
 \hypersetup{
@@ -1100,6 +1100,10 @@ Bildordningen kan ändras genom att dra i radhandtaget, och galleriet kan sorter
 När \ui{Redigera galleri} öppnas i den högra Admin-panelen kan vanliga inställningar användas medan fotografier läses in i bakgrunden. En tunn förloppsindikator räknar behandlade miniatyrbilder; \ui{Bilder} blir tillgänglig först när hela listan och alla miniatyrförfrågningar har avslutats. Misslyckade miniatyrbilder får platshållare och åtgärden \ui{Läs in bilder igen}; inställningar kan fortfarande sparas. Endast tabellens små miniatyrbilder förladdas. Stora förhandsvisningar läses in på begäran, och filnamnsverktyget förbereder sin plan när dess flik öppnas. Stängning eller ersättning av panelen avbryter gammalt arbete. Den vanliga fullständiga Admin-sidan finns kvar för webbläsare utan JavaScript.
 
 Fliken \ui{Bilder} i galleriredigeraren samlar vanliga bildåtgärder i en kompakt lista. Tillgängliga miniatyrförhandsvisningar kan öppnas med pekaren, tangentbordsfokus eller klick; radmarkering stöder intervall med Skift-klick. Varje rad har direktkontroller för synlighet, val av galleriets titelbild, redigering och radering av fotot. Åtgärderna använder fortfarande de befintliga autentiserade arbetsflödena på servern. \ui{Visa filnamn} ändrar bara redigerarens visning; administratörer kan spara ett valfritt webbläsarstandardvärde, medan varje galleri kommer ihåg valet under den aktuella redigerarsessionen.
+
+Titelbildsstjärnan har tre lägen när databasschemat stöder flera foton: en tom stjärna väljer bara det fotot (guld); ett nytt klick på den gyllene stjärnan behåller valet och aktiverar tilläggsläget (blått); ett klick på en annan tom stjärna lägger till fotot, upp till fyra foton. Ett klick på en vald blå stjärna behåller bara det fotot (guld). Varje klick sparas direkt. Stjärnorna uppdateras i den högra Admin-panelen utan att ersätta hela panelen; öppen flik, rullningsposition, andra formulärutkast och inlästa bildrader bevaras. Det offentliga galleriet uppdateras separat. Efter ett fel eller ett förlorat svar hämtar redigeraren först det aktuella titelbildsläget utan att ändra panelen. Om läget har ändrats uppdateras stjärnorna före den offentliga gallerisynkroniseringen; annars ska du kontrollera aktuellt läge innan du försöker igen, eftersom sparandet kan ha lyckats innan svaret byggdes.
+
+Under \ui{Media} > \ui{Titelbild} väljer \ui{Automatiskt (2 foton)} upp till två lämpliga direkta foton och fyller tomma platser med tillgängliga undergallerier. \ui{Standard (galleriets tidigare beteende)} bevarar den äldre visningen för gallerier som inte uttryckligen har valt automatiskt läge eller ett manuellt titelbildsläge. Offentliga kort kontrollerar aktuell synlighet och åtkomst igen; opublicerade eller otillgängliga foton visas inte.
 
 När den valfria funktionen \ui{Bildhanteraren} är~aktiverad kan en vanlig inloggad administratör välja fotografier och direkta fysiska undergallerier i det offentliga gallerirutnätet. Bockar väljer enskilda kort; Skift-klick väljer ett intervall; Ctrl-klick eller Cmd-klick växlar ett kort; \ui{Markera alla}, \ui{Rensa} och Ctrl/Cmd+A stöder större urval på den synliga sidan. Smarta gallerikort ingår inte i detta filbaserade urval. Att dra ett omarkerat fotografi börjar med det fotografiet som urval, medan dragning av ett befintligt bildurval flyttar de valda fotografierna tillsammans. Ett synligt undergallerikort blir ett släppmål, och släpp där utför samma validerade bildflytt som destinationsväljaren. Fysiska gallerikort kan inte själva dras.
 
@@ -2394,6 +2398,8 @@ GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agente
 
 Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt, obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet och~paketkontroller på~Linux, Windows och~macOS. Alla obligatoriska jobb och~kontrollen av~exakt SHA måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter de~slutliga källändringarna, inte vid~rutinmässig utveckling.
 
+Regressionstesterna för~titelbilden utökar de~redan registrerade sviterna för~Admin-panelens delegering och~webbläsarens livscykel samt den~befintliga HTTP-/databassviten för~samtidiga galleriändringar. Testfixturerna körs via \filepath{scripts/audit.php}; de~lägger inte till någon YAML-testägare eller alternativ körning, och~det~skyddade evaluatorregistret förblir oförändrat.
+
 Rapporter registrerar HEAD, upplöst jämförelse-SHA och~arbetskatalogens ändringsstatus. En~ändrad checkout ger återkoppling, inte kvalificering av~en ren commit. Den~länkade \filepath{source-failures.md} visar alla fynd från misslyckade ändringskontroller, blockerare och~fynd i~överskridna kategorier; fullständiga värdefria JSON-rapporter bevarar bevis och~markerar historisk skuld. Kandidatarbetsflöden laddar upp dem tillsammans. Rätta hela omgången före nästa körning; oförändrad indata är ingen rättning. Slutför alla fyra handbokskällor och~pusha endast den~godkända arbetsgrenen. Värdbaserad kandidatförberedelse uppdaterar genererade artefakter efter sista ändringen och~kör den~obligatoriska fullständiga CI-matrisen för~exakt förberett SHA. Ange SHA, bas, profil/resultat och~väsentliga täckningsluckor. Mät resultat vid första försöket och~rättningscykler från faktiska rapporter; förväntade besparingar är okända tills de~har observerats.
 
 \subsection{Lägga till en funktion}
@@ -2618,6 +2624,17 @@ För~uttryckligen begärd ren CI-installation före utgåvan skapar du
 feature-grenen från main och~startar \ui{Basic source checks} med
 \codeword{install_ci}. Fullständig FULL och~utgåveaudit skapar en bot-PR;
 ett verkligt mänskligt godkännande tillåter vanlig skyddad automatisk sammanslagning.
+
+Publiceraren binder samma verifierade FULL till både Checks och~en vanlig
+Actions-commitstatus, eftersom dispatch-kontroller kan saknas i~GitHubs
+sammanställning för grenregler. Före varje skyddad fast-forward verifieras
+statusens identitet, tillstånd och~körning igen.
+
+Efter kvalificering och~skyddad installation tillåter ett ensamt HTTP~422-avslag
+för den~nya obligatoriska matriskontrollen högst sex skrivförsök med två sekunders
+mellanrum. Varje nytt försök verifierar aktiv körning, BASIC/FULL-bevis,
+ursprungliga kontroll-ID:n och~grenarnas tillstånd igen. Andra fel stoppar
+körningen; FULL körs inte om.
 
 \subsection{Utgåvesammansättning från kvalificerad develop}
 

@@ -294,49 +294,56 @@ authorization before writes. Commit authored source, tests and documentation;
 push only the exact authorized working ref. Never directly mutate develop/main.
 Missing access means BLOCKED, before writes.
 
-Always verify one final integration commit above current develop after generated
-candidate preparation, including bot-authored artifacts. When preparation adds
-a commit, cancel the in-flight integration before expensive FULL execution,
-fetch that head and perform the authorized feature-only squash with an exact
-remote-head lease. Preserve and compare the prepared tree, verify one commit and
-the exact develop parent, and obtain fresh BASIC on the rewritten SHA. Dispatch
-integration again once idempotent preparation can retain that SHA, then complete
-FULL on the final candidate that the workflow will integrate.
+Before requesting FULL, read the complete base-to-candidate batch, including
+delegated edits, against its affected owners and consumers:
 
-Ordinary feature pushes and the final squash run hosted BASIC `--changed` in
-**Basic source checks**, freezing `git merge-base HEAD origin/main`. They do not
-prepare generated artifacts or run FULL. The maintainer-approved **Integrate into
-develop** action selects observed develop P, prepares and qualifies the final
-one-commit candidate with FULL using the owner's selected main or feature workflow.
-Seal execution before publication; identical inputs may reuse the sealed run.
-Release trusts qualified protected develop and assembles artifacts without another
-source audit. Missing history/base blocks integration; substituting HEAD
-would hide committed omissions. Keep candidate/base/dirty-state identity in
-central reports. Follow [.github instructions](../.github/AGENTS.md) and the
-[CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) for authority/installation.
+| Changed contract | Review together |
+| --- | --- |
+| Declaration/delegation | Callers, imports, all adapters, arguments, types and docs. |
+| HTTP mutation | Auth/CSRF, status/envelope, persisted state, errors and public completion. |
+| Browser fixture | Visible/mock URL, method/envelope, owner generation, terminal phases and per-operation layout. |
+| Persistence/import | Schema readiness, old precedence, atomic updates and reconciliation. |
+| Runtime dependency | Contained closure, current counts/limits and expected deltas, including consumed allowance. |
+| Catalog/policy | All four JSON key/placeholder sets and comments attached to owning policy sites. |
 
-BASIC currently checks syntax and changed named-declaration documentation, not
-native attribution headers or the whole-tree source inventory. Review the entire
-new/changed header batch before committing. Adding changed-file header enforcement
-to an early gate is a separate scanner/CI change: reuse the existing header
-scanner, preserve its negative cases and qualify/install affected CI authority.
-Do not claim that this instruction reorganization closes the coverage gap.
+Record reviewed contracts and unresolved points in the working summary; label
+estimates. Static review is not executed evidence and grants no local audit,
+generator or CI-authority exception. Apply the whole-class repair procedure in
+[.github instructions](../.github/AGENTS.md) before retrying a failed batch.
 
-No local audit or generator is a default agent step, and green hosted coverage is
-not repeated locally. Focused diagnostics follow only the root exceptional paths;
-unavailable CI remains BLOCKED regardless of local evidence. A profile PASS is
-never release approval. Read scoped instructions through the root map even when
-the session starts at the repository root.
+Follow that file's installed automatic preparation/squash path; use the manual
+checkpoint only when automatic mode is disabled or unavailable. Include generated
+bot commits, preserve the prepared tree and verify one commit above the exact
+develop parent, clean checkout and fresh BASIC for the final SHA. FULL must qualify
+that unchanged candidate before the guarded fast-forward.
 
-Read hosted `source-failures.md` once for all failed declarations, policy sites,
-blocked coverage and over-budget categories. Repair the entire relevant batch,
-commit and push the same branch for fresh preparation/qualification. Do not read
-passing child logs. Finish all permanent Markdown/all-four-TeX source edits before
-the source commit; ordinary development leaves PDFs and release markers/notes alone.
+Feature pushes/final squash run hosted **Basic source checks**, BASIC `--changed`
+against `git merge-base HEAD origin/main`, without preparation/FULL. The approved
+**Integrate into develop** action observes P, prepares A and runs FULL using the
+owner-selected main or feature workflow. Seal execution before publication;
+identical inputs may reuse it. Release trusts protected develop and assembles
+artifacts without another source audit. Missing history/base blocks CI;
+never substitute HEAD. Reports retain candidate/base/dirty-state identity. The
+[CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) owns authority/installation.
 
-Handoff records workflow URL, branch, exact prepared candidate SHA, immutable base,
-full hosted job results and material skipped/blocked/manual coverage. A source-event
-SHA, earlier green run or stale candidate cannot qualify the current branch.
+BASIC covers syntax and changed declaration docs, not native headers/FULL inventory.
+Review new/changed headers before commit. Any early gate must reuse the header
+scanner/negative cases and receive separate CI-authority qualification/installation;
+documentation changes do not install coverage.
+
+Local diagnostics follow only the root exceptions; do not routinely run audits,
+generators or repeat green coverage. Inaccessible mandatory CI remains BLOCKED;
+local/profile PASS is not release approval. Read scoped rules through the root map.
+
+Read hosted `source-failures.md` once per failed batch, then linked evidence;
+repair all related findings before committing/pushing the same authorized branch
+for fresh preparation/qualification. Read no passing child logs. Finish permanent
+Markdown/all-four-TeX edits before commit; leave PDFs/release markers/notes alone
+during ordinary development.
+
+Handoff records workflow URL, branch, exact prepared SHA, immutable base, all hosted
+job results and skipped/blocked/manual coverage. Earlier source-event SHAs, green
+runs or stale candidates cannot qualify the current branch.
 
 ## Measuring prevention
 

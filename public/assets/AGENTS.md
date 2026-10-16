@@ -13,11 +13,15 @@ Always document JavaScript callback parameters with JSDoc callable syntax, for
 example `@param {function(number, string):void} onProgress`, and describe what each
 callback argument means in the parameter description.
 
-When revising a module URL, search the entire import/re-export chain and all
-source/test expectations for its previous revision. Update strict expectations
-with the actual import. For covered Admin imports, use the existing relational
-owner in `scripts/admin_import_contracts.php`; do not add historical URL literals
-where that owner applies. Keep security/route expectations strict.
+When revising a module URL, update its complete import/re-export chain and
+source/test expectations. Use `scripts/admin_import_contracts.php` for covered
+Admin relationships instead of historical URL literals; keep route/security
+expectations strict.
+
+Resolve form destinations from the prepared endpoint or `action` attribute when
+named controls can shadow DOM properties. Exercise mounted and standalone forms
+through the production coordinator with their fragment loaders active; assert the
+resulting public revision and retained editor nodes, not merely request completion.
 
 Represent presentation choices as explicit value/label entries. Reserve literal
 `'page' => 'target'` maps for registered routes.

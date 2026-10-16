@@ -45,6 +45,9 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
 use function Gallery\Services\app_settings_reset_request_cache;
+use function Gallery\Services\gallery_cover_selection_ids;
+use function Gallery\Services\gallery_cover_selection_schema_state;
+use function Gallery\Services\gallery_cover_selection_storage_valid;
 use function Gallery\Models\gallery_mutation_model_delete_dependency;
 use function Gallery\Models\gallery_mutation_model_delete_images;
 use function Gallery\Models\gallery_mutation_model_delete_subtree;
@@ -639,6 +642,47 @@ function gallery_finalize_staged_deletion_files(array $stagedFiles): int
 }
 
 /**
+ * Compute a safe explicit cover selection after images leave a gallery.
+ *
+ * @param array{id:int|string,cover_image_ids?:string|null} $gallery Fresh gallery identity and optional selection JSON read under writer ownership.
+ * @param list<int> $excludedImageIds Images being moved or deleted.
+ * @param 'available'|'missing'|'unknown' $schemaState Shared cover-selection schema observation.
+ * @return list<int>|null Ordered retained direct-photo IDs; an empty list retains explicit Automatic, while null means legacy mode or no schema rewrite.
+ * @throws RuntimeException When schema state or persisted selection cannot be trusted.
+ */
+function gallery_mutation_cover_selection_after_change(array $gallery, array $excludedImageIds, string $schemaState): ?array
+{
+    if ($schemaState === 'missing') {
+        return null;
+    }
+    if ($schemaState !== 'available' || !array_key_exists('cover_image_ids', $gallery)) {
+        throw new RuntimeException('Gallery cover-selection storage could not be verified.');
+    }
+    if ($gallery['cover_image_ids'] === null) {
+        return null;
+    }
+    if (!gallery_cover_selection_storage_valid($gallery)) {
+        throw new RuntimeException('Gallery cover selection is invalid and cannot be safely reconciled.');
+    }
+
+    $currentIds = gallery_cover_selection_ids($gallery);
+    $retainedIds = [];
+    foreach ($currentIds as $imageId) {
+        if (in_array($imageId, $excludedImageIds, true)) {
+            continue;
+        }
+        $image = find_image($imageId, true);
+        if (!$image || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)
+            || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+            continue;
+        }
+        $retainedIds[] = $imageId;
+    }
+
+    return $retainedIds;
+}
+
+/**
  * Delete selected original image files, generated derivatives, and image rows from one gallery.
  *
  * The original media files are removed from disk because the gallery folder is
@@ -646,7 +690,7 @@ function gallery_finalize_staged_deletion_files(array $stagedFiles): int
  * at the same time so stale previews do not remain after rescans.
  *
  * @param int $galleryId Gallery that must own every selected image.
- * @param array<int> $imageIds Image ids submitted by the admin UI.
+ * @param list<int> $imageIds Image IDs submitted by the Admin UI.
  * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int,cleanup_failed:int} Structured result data for the caller.
  */
 function delete_gallery_images(int $galleryId, array $imageIds): array
@@ -660,10 +704,11 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
 }
 
 /**
- * Perform delete gallery images while the caller owns the gallery writer lease.
+ * Delete owned image files/rows and prune explicit title-picture selections.
+ * The caller must hold the gallery writer lease for the complete cleanup.
  *
  * @param int $galleryId Owning gallery.
- * @param array<int,int> $imageIds Selected image identifiers.
+ * @param list<int> $imageIds Selected image identifiers.
  * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int,cleanup_failed:int} Database, original, derivative and retained-quarantine counts.
  */
 function delete_gallery_images_owned(int $galleryId, array $imageIds): array
@@ -690,6 +735,10 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
     if (!$gallery) {
         throw new RuntimeException('Gallery not found.');
     }
+    $coverSchemaState = gallery_cover_selection_schema_state();
+    if ($coverSchemaState === 'unknown') {
+        throw new RuntimeException('Image deletion is temporarily unavailable because gallery cover-selection storage could not be verified.');
+    }
 
     // $images stores only rows owned by the requested gallery.
     $images = [];
@@ -703,6 +752,11 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
     if (!$images) {
         return ['requested' => count($normalizedIds), 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0, 'cleanup_failed' => 0];
     }
+    $coverImageIdsAfterDelete = gallery_mutation_cover_selection_after_change(
+        $gallery,
+        array_map(static fn (array $image): int => (int) $image['id'], $images),
+        $coverSchemaState
+    );
 
     // $galleryRoot stores the allowed filesystem boundary for originals and derivatives.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
@@ -772,7 +826,9 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
         $deletedRows = gallery_mutation_model_delete_images(
             $galleryId,
             $imageIdsToDelete,
-            gallery_mutation_delete_dependency_availability()
+            gallery_mutation_delete_dependency_availability(),
+            $coverImageIdsAfterDelete,
+            now_sql()
         );
     } catch (Throwable $exception) {
         gallery_restore_staged_deletion_files($stagedFiles);
@@ -814,8 +870,8 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
  * @param int $sourceGalleryId Gallery that currently owns the selected images.
  * @param int $destinationGalleryId Gallery that will receive the selected images.
  * @param array<int> $imageIds Image ids submitted by the admin UI.
- * @param array<string,mixed> $options Internal options; optional checkpoint callbacks are never HTTP input.
- * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Structured result data for the caller.
+ * @param array{checkpoint?:callable(string,string,int):void} $options Internal fault-injection checkpoint; never sourced from HTTP.
+ * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Counts and source/destination primary cover IDs after the durable move.
  */
 function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
 {
@@ -871,13 +927,13 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
 }
 
 /**
- * Validate and execute one image move while its caller owns both gallery locks.
+ * Validate and execute one image move, reconciling both galleries' title-picture selections under their locks.
  *
  * @param int $sourceGalleryId Source gallery identifier.
  * @param int $destinationGalleryId Destination gallery identifier.
- * @param array<int,int> $imageIds Submitted image identifiers.
- * @param array<string,mixed> $options Internal orchestration options, including an optional test checkpoint.
- * @return array<string,mixed> Existing mutation result plus its durable operation identifier.
+ * @param list<int> $imageIds Submitted image identifiers.
+ * @param array{checkpoint?:callable(string,string,int):void} $options Internal fault-injection checkpoint; never sourced from HTTP.
+ * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Counts and source/destination primary cover IDs after the durable move.
  */
 function gallery_move_images_locked(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
 {
@@ -916,6 +972,10 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
     if (!$sourceGallery || !$destinationGallery) {
         throw new RuntimeException('Source or destination gallery was not found.');
     }
+    $coverSchemaState = gallery_cover_selection_schema_state();
+    if ($coverSchemaState === 'unknown') {
+        throw new RuntimeException('Image moves are temporarily unavailable because gallery cover-selection storage could not be verified.');
+    }
 
     // $sourceRoot stores the filesystem boundary for current originals and derivatives.
     $sourceRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
@@ -949,6 +1009,10 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             'destination_cover_image_id' => null,
         ];
     }
+
+    $imageIdsToMove = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    $sourceCoverImageIds = gallery_mutation_cover_selection_after_change($sourceGallery, $imageIdsToMove, $coverSchemaState);
+    $destinationCoverImageIds = gallery_mutation_cover_selection_after_change($destinationGallery, [], $coverSchemaState);
 
     thumbnail_source_identity_preload($images);
     usort($images, /**
@@ -1082,7 +1146,9 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             $destinationSortOrders,
             gallery_subtree_ids($destinationGalleryId),
             now_sql(),
-            $operationId
+            $operationId,
+            $sourceCoverImageIds,
+            $destinationCoverImageIds
         );
         $updatedRows = (int) $moveResult['moved'];
         thumbnail_legacy_identity_cache_clear();

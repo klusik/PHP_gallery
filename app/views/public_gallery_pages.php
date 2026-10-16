@@ -136,12 +136,12 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
 /**
  * Render the selected-gallery hero from controller-prepared state.
  *
- * @param array<string,mixed> $viewModel Controller-prepared hero state.
+ * @param array{gallery_id?:int,visibility?:string,updated_at?:string,cover_image_id?:int,cover_selection_revision?:string,image_count?:int,image_revision?:string,subgallery_count?:int,subgallery_revision?:string,smart_gallery_count?:int,canonical_url?:string} $viewModel Controller-prepared hero state including the public cover-selection revision used by mutation completion.
  * @return void Render the hero and prepared actions.
  */
 function view_render_public_gallery_hero(array $viewModel): void
 {
-    echo '<section class="hero" data-public-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-gallery-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($viewModel['cover_image_id'] ?? 0)) . '" data-public-image-count="' . (int) ($viewModel['image_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['image_revision'] ?? '')) . '" data-public-subgallery-count="' . (int) ($viewModel['subgallery_count'] ?? 0) . '" data-public-subgallery-revision="' . e((string) ($viewModel['subgallery_revision'] ?? '')) . '" data-public-smart-gallery-count="' . (int) ($viewModel['smart_gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '">';
+    echo '<section class="hero" data-public-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-gallery-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($viewModel['cover_image_id'] ?? 0)) . '" data-public-cover-selection-revision="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '" data-public-image-count="' . (int) ($viewModel['image_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['image_revision'] ?? '')) . '" data-public-subgallery-count="' . (int) ($viewModel['subgallery_count'] ?? 0) . '" data-public-subgallery-revision="' . e((string) ($viewModel['subgallery_revision'] ?? '')) . '" data-public-smart-gallery-count="' . (int) ($viewModel['smart_gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '">';
     // Title/date and header actions retain their existing columns. Only the
     // description/document row uses the full available width below them.
     echo '<div class="hero-topbar">';

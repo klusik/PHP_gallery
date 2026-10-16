@@ -8,7 +8,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261013-images-preload-v1';
+import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261016-cover-in-place-v1';
 import {beginAdminPanelOpen, deactivateAdminPanel} from '/public/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261012-pdf-files-v1';
 
@@ -39,6 +39,7 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
     let failThumbnail = false;
     let runId = 0;
     let postCount = 0;
+    let imageBatchRequestCount = 0;
     const gates = [];
     const metrics = [];
     let panel = null;
@@ -97,6 +98,7 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
                 {headers: {'Content-Type': 'application/json'}});
         }
         if (url.pathname !== '/__images_batch') return previousFetch(input, options);
+        imageBatchRequestCount += 1;
         const id = Number(url.searchParams.get('id'));
         const offset = Number(url.searchParams.get('offset') || 0);
         const total = count;
@@ -148,6 +150,39 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
         check(panel.querySelector('[name="title"]').value === 'Typed after Save' && tab.getAttribute('aria-disabled') === null, 'Completed images preserve settings and unlock Images.');
         check(panel.querySelector('[data-admin-image-bulk-form]').dataset.adminPanelBulkForm === 'true', 'Deferred canonical bulk form joins the existing delegated panel pipeline.');
         check(tab.getAttribute('aria-selected') === 'true', 'Direct Images intent activates after full readiness.');
+        const preparedBulkForm = panel.querySelector('[data-admin-image-bulk-form]');
+        const preparedRow = preparedBulkForm.querySelector('[data-admin-image-order-row]');
+        const preparedThumbnail = preparedRow.querySelector('img');
+        const selectedPhoto = preparedRow.querySelector('[name="image_ids[]"]');
+        selectedPhoto.checked = true;
+        const preparedRequestCount = imageBatchRequestCount;
+        const preparedScroll = panel.querySelector('[data-admin-side-panel-body]').scrollTop;
+        preparedBulkForm.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {bubbles: true, detail: {
+            source: 'gallery-image-bulk',
+            result: {ok: true, message: 'Cover saved', bulk_action: 'cover',
+                mutation: {type: 'gallery.cover', entity: 'gallery', action: 'cover', entity_ids: [galleryId]},
+                cover_selection_mode: 'single', cover_selection_ids: [1], cover_selection_revision: 'cover-2',
+                panel: null, contexts: [], fallback: {}},
+        }}));
+        await new Promise(resolve => setTimeout(resolve, staleResponseSettleMs));
+        check(imageBatchRequestCount === preparedRequestCount && widget.dataset.preloadState === 'ready',
+            'Cover completion does not restart metadata or thumbnail preload.');
+        check(panel.querySelector('[data-admin-image-bulk-form]') === preparedBulkForm
+            && preparedRow.isConnected && preparedRow.querySelector('img') === preparedThumbnail && selectedPhoto.checked,
+            'Cover completion retains the prepared form, row, thumbnail and bulk selection.');
+        check(!panel.querySelector('#admin-edit-images').inert && tab.getAttribute('aria-selected') === 'true'
+            && panel.querySelector('[data-admin-side-panel-body]').scrollTop === preparedScroll
+            && afterSave.value === 'Typed after Save' && location.href === previousUrl,
+            'Cover completion preserves active Images, scroll, settings draft and URL.');
+        preparedBulkForm.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {bubbles: true, detail: {
+            source: 'gallery-image-bulk',
+            result: {ok: true, message: 'Visibility saved', bulk_action: 'public',
+                mutation: {type: 'image.visibility', entity: 'image', action: 'visibility', entity_ids: [1]},
+                panel: null, contexts: [], fallback: {}},
+        }}));
+        await waitFor(() => imageBatchRequestCount > preparedRequestCount && widget.dataset.preloadState === 'ready');
+        check(!preparedBulkForm.isConnected && panel.querySelector('[name="title"]').value === 'Typed after Save',
+            'Image metadata mutations still rebuild Images without replacing the settings draft.');
         for (const width of [390, 320, 1280]) {
             const viewport = await nativeFetch('/__viewport?width=' + width);
             check(viewport.ok, 'Owned preload viewport adapter is available.');

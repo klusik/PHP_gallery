@@ -440,6 +440,7 @@ jobs:
       contents: write
       actions: read
       checks: write
+      statuses: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
