@@ -1,0 +1,118 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ci-experiment/archived-workflows/prepared-ci-image-build.yml
+# Module Type: Archived CI Experiment Workflow Definition
+# Purpose: Archive the historical OCI image build workflow as inert evidence.
+# Responsibilities:
+#   - Retain build commands and version provenance from the controlled experiment.
+#   - Remain outside the GitHub Actions workflow discovery directory.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: EXPERIMENT OCI image build
+on:
+  push:
+    branches: [feature/prepared-ci-environment]
+    paths:
+      - '.github/ci-experiment/**'
+      - '.github/workflows/prepared-ci-image-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    name: EXPERIMENT / OCI build and locked version inventory
+    if: ${{ github.repository == 'klusik/PHP_gallery' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify authorized build mode and frozen T/B
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/feature/prepared-ci-environment ]]
+          source .github/ci-experiment/config.env
+          if [[ "$MODE" == build ]]; then echo 'build=true' >> "$GITHUB_OUTPUT"; fi
+          git merge-base --is-ancestor 4d373023b96554364e295fb76d931ff3535f7c5a HEAD
+      - uses: docker/setup-buildx-action@v3
+        if: ${{ steps.config.outputs.build == 'true' }}
+      - uses: docker/login-action@v3
+        if: ${{ steps.config.outputs.build == 'true' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish fresh, non-overwritten versioned images
+        if: ${{ steps.config.outputs.build == 'true' }}
+        shell: bash
+        timeout-minutes: 55
+        run: |
+          set -euo pipefail
+          package=ghcr.io/klusik/php-gallery-ci-experiment
+          suffix="experiment-${GITHUB_SHA:0:12}"
+          mkdir -p "$RUNNER_TEMP/prepared"
+          for kind in env mysql84 mariadb1011 mariadb114; do
+            tag="${package}:${kind}-${suffix}"
+            if docker buildx imagetools inspect "$tag" >/dev/null 2>&1; then
+              echo "::error::Refusing overwrite of existing OCI tag: $tag"
+              exit 1
+            fi
+          done
+          main_tag="${package}:env-${suffix}"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            -f .github/ci-experiment/Dockerfile \
+            --tag "$main_tag" --push \
+            --metadata-file "$RUNNER_TEMP/prepared/env.json" .
+          for spec in 'mysql84 mysql:8.4' 'mariadb1011 mariadb:10.11' 'mariadb114 mariadb:11.4'; do
+            read -r kind upstream <<< "$spec"
+            tag="${package}:${kind}-${suffix}"
+            docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+              -f .github/ci-experiment/Dockerfile.database \
+              --build-arg "DATABASE_IMAGE=$upstream" \
+              --tag "$tag" --push \
+              --metadata-file "$RUNNER_TEMP/prepared/${kind}.json" .
+          done
+          jq -n --arg E "$GITHUB_SHA" \
+            --arg T 4d373023b96554364e295fb76d931ff3535f7c5a \
+            --arg B e4abeb386354e7254a9083dbae5e16e8131ee314 \
+            --arg pkg "$package" --arg suffix "$suffix" \
+            --arg env "$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/prepared/env.json")" \
+            --arg mysql84 "$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/prepared/mysql84.json")" \
+            --arg mariadb1011 "$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/prepared/mariadb1011.json")" \
+            --arg mariadb114 "$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/prepared/mariadb114.json")" \
+            '{schema:1,source_experiment_sha:$E,tested_sha:$T,base_sha:$B,
+              images:{env:{tag:($pkg+":env-"+$suffix),digest:$env},
+               mysql84:{tag:($pkg+":mysql84-"+$suffix),digest:$mysql84},
+               mariadb1011:{tag:($pkg+":mariadb1011-"+$suffix),digest:$mariadb1011},
+               mariadb114:{tag:($pkg+":mariadb114-"+$suffix),digest:$mariadb114}}}' \
+            > "$RUNNER_TEMP/prepared/image-lock.json"
+          for kind in env mysql84 mariadb1011 mariadb114; do
+            tag="${package}:${kind}-${suffix}"
+            docker buildx imagetools inspect "$tag" \
+              > "$RUNNER_TEMP/prepared/${kind}-inspect.txt"
+            docker buildx imagetools inspect --raw "$tag" \
+              > "$RUNNER_TEMP/prepared/${kind}-manifest.json"
+          done
+          docker pull "$main_tag"
+          docker image inspect "$main_tag" --format '{{.Size}}' \
+            > "$RUNNER_TEMP/prepared/env-uncompressed-bytes.txt"
+          docker run --rm --entrypoint /bin/bash "$main_tag" -c \
+            'php8.1 -v; php8.1 -m; php8.5 -v; php8.5 -m;
+             node --version; python3 --version; google-chrome --version;
+             pdflatex --version | head -n1; cat /etc/os-release; uname -m' \
+            > "$RUNNER_TEMP/prepared/runtime-versions.txt"
+          cat "$RUNNER_TEMP/prepared/image-lock.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-oci-evidence-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prepared/
+          if-no-files-found: warn
+          retention-days: 30

@@ -188,6 +188,16 @@ inventory, even when production packaging excludes them. Use hosted preparation
 when membership changes; an unchanged production file set alone does not prove
 the complete inventory is fresh.
 
+When adding or archiving development tools under `.github/`, use complete
+native-comment attribution headers on every new shell script, MJS/JS module,
+YAML workflow copy, and composite-action file. Include Project, Repository,
+the actual tracked File path, Module Type, Purpose, Responsibilities, Author,
+and License. An archived workflow moved out of `.github/workflows/` needs its
+header path updated even though it can no longer execute as a workflow.
+Hosted BASIC does not execute the FULL whole-tree source contract inventory
+or the PHP source-header regression fixture; a green BASIC check cannot waive
+either, so review all new headers as a complete batch before squashing.
+
 Always inspect release-origin and promotion predecessor assumptions before a
 maintenance-only main installation. Preserve the existing stable tag and bind
 any required finite compatibility bridge to the real human-reviewed merge and

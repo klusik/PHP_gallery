@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "source_experiment_sha": "3c438ec7c5f4be04fe169385b95c5775a1706b75",
+  "tested_sha": "4d373023b96554364e295fb76d931ff3535f7c5a",
+  "base_sha": "e4abeb386354e7254a9083dbae5e16e8131ee314",
+  "images": {
+    "env": {
+      "tag": "ghcr.io/klusik/php-gallery-ci-experiment:env-experiment-3c438ec7c5f4",
+      "digest": "sha256:8d781b26121db735ba5787032f923e644c2e4a0b4b4e5f2d12f2790126cbcc47"
+    },
+    "mysql84": {
+      "tag": "ghcr.io/klusik/php-gallery-ci-experiment:mysql84-experiment-3c438ec7c5f4",
+      "digest": "sha256:8d3527f2f433a20f2f38518211b6459647bc835348a846dafa602667c48a50f1"
+    },
+    "mariadb1011": {
+      "tag": "ghcr.io/klusik/php-gallery-ci-experiment:mariadb1011-experiment-3c438ec7c5f4",
+      "digest": "sha256:10b22ad01712023f0694937d9685434ad860553ef5f3938d5ca937f2ba25536d"
+    },
+    "mariadb114": {
+      "tag": "ghcr.io/klusik/php-gallery-ci-experiment:mariadb114-experiment-3c438ec7c5f4",
+      "digest": "sha256:b0b0e631751cd01bae56ac4587ce2de9a920b59aa338a7950fc0fdcf52f5af5c"
+    }
+  }
+}

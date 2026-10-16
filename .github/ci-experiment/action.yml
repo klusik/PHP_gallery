@@ -1,0 +1,41 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ci-experiment/action.yml
+# Module Type: Archived CI Experiment Composite Action
+# Purpose: Record the original composite action used for read-only OCI experiment audits.
+# Responsibilities:
+#   - Preserve exact immutable test checkout and image digest inputs.
+#   - Delegate host-timed image pulls and central audit dispatch to the historical adapter.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Experiment prepared PHP Gallery audit
+description: Read-only exact-T checkout, external image pull and existing audit owner.
+inputs:
+  role:
+    description: Existing central audit owner to invoke.
+    required: true
+  image:
+    description: GHCR image digest, never a mutable tag.
+    required: true
+  token:
+    description: GitHub token with packages read permission.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        ref: 4d373023b96554364e295fb76d931ff3535f7c5a
+        path: source
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.token }}
+    - name: Externally timed pull and exact central audit owner
+      shell: bash
+      env:
+        ENV_IMAGE: ${{ inputs.image }}
+      run: bash control/.github/ci-experiment/host-run.sh "${{ inputs.role }}"
