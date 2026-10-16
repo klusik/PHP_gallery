@@ -1,4 +1,24 @@
 # Develop integration and BASIC release delta contract
+## Required-check publication maintenance repair
+
+Integration 38908611451 passed every native FULL owner but GitHub rejected the
+non-forced develop update with HTTP 422 because its freshly created required
+check was still expected. The finite publisher repair retains the original check
+IDs, allows six attempts separated by two seconds, and revalidates the active
+run, BASIC/FULL evidence and both branch leases before retrying. Other, mixed or
+ambiguous failures remain terminal. Existing registered fixtures cover recovery,
+exhaustion, changed evidence/refs and rejected unrelated errors.
+
+The separate qualification transport pins the complete repair delta and runs the
+unchanged main-owned release matrix, retaining all native owners before publishing
+maintenance-bound Release qualification. A bot PR still needs one real human
+approval and normal protected merge; no agent writes main/develop directly.
+No TeX manual impact: this internal provider recovery keeps the documented
+maintainer sequence and product behavior unchanged; sources already on develop
+retain the detailed retry description for the next ordinary release. Existing
+release origins and tags stay immutable. Before the next release, its origin
+must authenticate the reviewed maintenance main advance against the stable tag;
+this repair grants no release or tag authorization.
 
 ## Release after the reviewed maintenance dispatcher repair
 
