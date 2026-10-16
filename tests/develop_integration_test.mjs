@@ -504,6 +504,94 @@ for (const [label,mutate] of [
     assert.deepEqual(f.state.updates[0].payload,{sha:candidateSha,force:false});
 }
 
+// Reproduce the exact provider rejection from integration run 38899855917 without network or real delays.
+const requiredCheckPending='GitHub API request failed: gh: Repository rule violations found\n\n'
+    +'Required status check "Complete required CI matrix" is expected.\n\n (HTTP 422)\n';
+for (const failures of [1,5,6]) {
+    const f=fixture(),waits=[];let attempts=0;
+    const call=(path,method='GET',payload=null)=>{
+        if (method==='PATCH') {
+            attempts++;
+            assert.deepEqual(payload,{sha:candidateSha,force:false},'every retry preserves the exact non-forced target');
+            if (attempts<=failures) throw new Error(requiredCheckPending);
+        }
+        return f.call(path,method,payload);
+    };
+    const publish=()=>integrateDevelop(request,context,repository,call,milliseconds=>waits.push(milliseconds));
+    if (failures===6) assert.throws(publish,{message:requiredCheckPending},'persistent rejection remains fatal');
+    else assert.equal(publish().sha,candidateSha,'a delayed required check can settle without replaying FULL');
+    assert.equal(attempts,Math.min(failures+1,6));
+    assert.deepEqual(waits,Array(Math.min(failures,5)).fill(2000),'bounded waits occur only between rejected attempts');
+    assert.equal(f.state.checks.length,2,'retries reuse the original exact-candidate check IDs');
+    assert.equal(f.state.updates.length,failures===6?0:1,'only a confirmed successful request changes the fixture ref');
+}
+
+for (const message of [
+    requiredCheckPending.replace('HTTP 422','HTTP 403'),
+    requiredCheckPending.replace('HTTP 422','HTTP 500'),
+    requiredCheckPending.replace('Complete required CI matrix','Other required check'),
+    requiredCheckPending.replace('\n\n (HTTP 422)','\nChanges must be made through a pull request.\n\n (HTTP 422)'),
+    'GitHub API request failed: connection reset after request',
+]) {
+    const f=fixture();let attempts=0;
+    const call=(path,method='GET',payload=null)=>{
+        if (method==='PATCH') {attempts++;throw new Error(message);}
+        return f.call(path,method,payload);
+    };
+    assert.throws(()=>integrateDevelop(request,context,repository,call,()=>assert.fail('permanent/ambiguous errors cannot wait')),
+        {message},'unrelated or mixed failures must not retry');
+    assert.equal(attempts,1);
+    assert.equal(f.state.updates.length,0);
+}
+
+for (const [label,change] of [
+    ['feature moved',f=>{f.state.source='e'.repeat(40);}],
+    ['develop moved',f=>{f.state.develop='e'.repeat(40);}],
+    ['check failed',f=>{f.state.checks[1].conclusion='failure';}],
+    ['check missing',f=>{f.state.checks.pop();}],
+    ['check duplicated',f=>{f.state.checks.push({...f.state.checks[1],id:9999});}],
+    ['check replaced',f=>{f.state.checks[1].id=9999;}],
+    ['wrong check app',f=>{f.state.checks[1].app.id=1;}],
+    ['wrong check SHA',f=>{f.state.checks[1].head_sha='e'.repeat(40);}],
+    ['native owner failed',f=>{
+        const original=f.call;
+        f.call=(path,...args)=>{
+            const result=original(path,...args);
+            if (path.endsWith('/attempts/2/jobs?per_page=100&page=1')) result.jobs[0].conclusion='failure';
+            return result;
+        };
+    }],
+    ['BASIC superseded',f=>{
+        const original=f.call;
+        f.call=(path,...args)=>{
+            const result=original(path,...args);
+            if (path.includes('/candidate-preparation.yml/runs?')) {
+                result.workflow_runs.push({...result.workflow_runs[0],id:802});result.total_count++;
+            }
+            return result;
+        };
+    }],
+    ['publisher cancelled',f=>{
+        const original=f.call;
+        f.call=(path,...args)=>{
+            const result=original(path,...args);
+            if (path.endsWith('/actions/runs/901')) result.status='completed';
+            return result;
+        };
+    }],
+]) {
+    const f=fixture();let attempts=0,waits=0;
+    const call=(path,method='GET',payload=null)=>{
+        if (method==='PATCH') {attempts++;throw new Error(requiredCheckPending);}
+        return f.call(path,method,payload);
+    };
+    assert.throws(()=>integrateDevelop(request,context,repository,call,()=>{waits++;change(f);}),/BLOCKED/,
+        label+' during propagation must invalidate publication');
+    assert.equal(waits,1,label+' stops after the first wait');
+    assert.equal(attempts,1,label+' cannot reach another ref write');
+    assert.equal(f.state.updates.length,0);
+}
+
 {
     const generated=new Map([['modules.php',Buffer.from('runtime')],['production-files.json',Buffer.from('{}')],['core-manifest.json',Buffer.from('{}')]]);
     const archive=storedZip(generated),uploadDigest=createHash('sha256').update(archive).digest('hex');

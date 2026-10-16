@@ -37,6 +37,19 @@ const PREPARED_BASIC_POLL_INTERVAL_MS=5000;
  */
 const PREPARED_BASIC_WAIT_TIMEOUT_MS=15*60*1000;
 
+/** Bound retries for GitHub's delayed required-check enforcement after check creation.
+ * Type: number. Units: attempts. Scope: one exact-candidate develop publication.
+ * Consumers: integrateDevelop.
+ * Rationale: six attempts permit short provider propagation without retrying a permanent rejection indefinitely.
+ */
+const REQUIRED_CHECK_PROPAGATION_ATTEMPTS=6;
+/** Separate rejected publication attempts while GitHub propagates the required check.
+ * Type: number. Units: milliseconds. Scope: one exact-candidate develop publication.
+ * Consumers: integrateDevelop and pauseRequiredCheckPropagation.
+ * Rationale: two seconds avoids a tight write loop; at most five waits add ten seconds before fresh evidence reads.
+ */
+const REQUIRED_CHECK_PROPAGATION_DELAY_MS=2000;
+
 /** Identify the installed main-owned integration workflow that may publish protected refs.
  * Type: string. Units: repository-relative workflow path. Scope: one integration run.
  * Consumers: workflow-context validation and retained integration records.
@@ -697,29 +710,59 @@ export function recoverDevelop(request,context,repository,call) {
     return {branch:'develop',sha:request.candidateSha,record:{...checked.record,check_run_id:ids[0],matrix_check_run_id:ids[1]}};
 }
 
-/** Create exact-candidate required checks, reread the develop lease, and attempt one normal fast-forward.
+/** Wait for provider-side required-check enforcement before revalidating publication evidence.
+ * @param {number} milliseconds Delay between rejected publication attempts in milliseconds.
+ * @returns {void} Resumes the synchronous publisher after the bounded delay.
+ */
+function pauseRequiredCheckPropagation(milliseconds) {
+    console.warn('Waiting '+milliseconds+' ms for GitHub required-check propagation before revalidating integration.');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);
+}
+
+/** Publish exact-candidate checks and retry only their explicit propagation rejection with fresh evidence.
  * @param {IntegrationRequest} request Selected source and candidate identity.
  * @param {WorkflowContext} context Current protected workflow identity.
  * @param {string} repository Configured repository.
  * @param {GithubApi} call Authenticated GitHub API adapter.
- * @returns {{branch:string,sha:string,record:Record<string,unknown>}} Completed synchronization and attached integration proof.
+ * @param {function(number):void} [pause=pauseRequiredCheckPropagation] Synchronous delay accepting milliseconds; fixtures inject an inert implementation.
+ * @returns {{branch:string,sha:string,record:IntegrationEvidenceRecord}} Completed synchronization and attached integration proof.
+ * @throws {Error} Rejects stale or invalid evidence, changed refs/checks, unconfirmed writes, other API failures or exhausted propagation retries.
  */
-export function integrateDevelop(request,context,repository,call) {
-    const checked=validateDevelopIntegration(request,context,repository,call);
+export function integrateDevelop(request,context,repository,call,pause=pauseRequiredCheckPropagation) {
+    let checked=validateDevelopIntegration(request,context,repository,call);
     const runId=String(context.runId),attempt=String(context.runAttempt),externalId='integration:'+runId+':'+attempt+':'+request.candidateSha;
     const makeCheck=name=>call('repos/'+repository+'/check-runs','POST',{name,head_sha:request.candidateSha,
         external_id:externalId,status:'completed',conclusion:'success',output:{title:name,summary:'Exact source, ancestry and mandatory native owner evidence verified.'}});
-    const integration=makeCheck('Develop integration qualification');
-    const matrix=makeCheck('Complete required CI matrix');
-    if (!Number.isSafeInteger(integration?.id) || !Number.isSafeInteger(matrix?.id)) throw new Error('BLOCKED required check creation was not confirmed.');
-    const fresh=readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
-    if (fresh.develop!==checked.plan.oldSha) throw new Error('BLOCKED develop changed before fast-forward write.');
-    const updated=call('repos/'+repository+'/git/refs/heads/develop','PATCH',{sha:request.candidateSha,force:false});
-    if (updated?.object?.sha!==request.candidateSha) throw new Error('BLOCKED GitHub did not confirm the non-forced develop fast-forward.');
-    const after=call('repos/'+repository+'/git/ref/heads/develop');
-    if (after?.object?.sha!==request.candidateSha) throw new Error('BLOCKED develop moved after fast-forward publication.');
-    const record={...checked.record,check_run_id:integration.id,matrix_check_run_id:matrix.id};
-    return {branch:'develop',sha:request.candidateSha,record};
+    const integrationId=makeCheck('Develop integration qualification')?.id;
+    const matrixId=makeCheck('Complete required CI matrix')?.id;
+    if (!Number.isSafeInteger(integrationId) || !Number.isSafeInteger(matrixId)) throw new Error('BLOCKED required check creation was not confirmed.');
+    for (let attempt=1;attempt<=REQUIRED_CHECK_PROPAGATION_ATTEMPTS;attempt++) {
+        if (attempt>1) checked=validateDevelopIntegration(request,context,repository,call);
+        for (const [name,id] of [['Develop integration qualification',integrationId],['Complete required CI matrix',matrixId]]) {
+            const current=exactCheck(call,repository,request.candidateSha,name,externalId);
+            if (current.id!==id) throw new Error('BLOCKED required check identity changed before publication.');
+        }
+        const fresh=readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
+        if (fresh.develop!==checked.plan.oldSha) throw new Error('BLOCKED develop changed before fast-forward write.');
+        let updated;
+        try {
+            updated=call('repos/'+repository+'/git/refs/heads/develop','PATCH',{sha:request.candidateSha,force:false});
+        } catch (error) {
+            // Only the observed, sole missing-context rejection proves no ref write occurred.
+            // Mixed rule violations, transport failures and ambiguous responses remain fatal.
+            const propagation=error instanceof Error && /^GitHub API request failed: gh: Repository rule violations found\s+Required status check "Complete required CI matrix" is expected\.\s+\(HTTP 422\)\s*$/.test(error.message);
+            if (!propagation || attempt===REQUIRED_CHECK_PROPAGATION_ATTEMPTS) throw error;
+            readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
+            pause(REQUIRED_CHECK_PROPAGATION_DELAY_MS);
+            continue;
+        }
+        if (updated?.object?.sha!==request.candidateSha) throw new Error('BLOCKED GitHub did not confirm the non-forced develop fast-forward.');
+        const after=call('repos/'+repository+'/git/ref/heads/develop');
+        if (after?.object?.sha!==request.candidateSha) throw new Error('BLOCKED develop moved after fast-forward publication.');
+        const record={...checked.record,check_run_id:integrationId,matrix_check_run_id:matrixId};
+        return {branch:'develop',sha:request.candidateSha,record};
+    }
+    throw new Error('BLOCKED required-check propagation attempts exhausted.');
 }
 
 /** Validate prepared artifacts and publish a prepared feature candidate.
