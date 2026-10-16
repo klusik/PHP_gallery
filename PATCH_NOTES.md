@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.132.10
+
+Redesigned the Media Renamer workspace and updated develop-integration preparation to qualify generated candidates with fresh BASIC checks before FULL. Archived the prepared-environment CI experiment without adopting it.
+
+### Highlights
+
+#### Media Renamer
+- Reworked gallery selection and search, rename-plan previews, visibility filters, and request progress in the admin workspace.
+- Added interface labels in English, Czech, German, and Swedish.
+
+#### Prepared-candidate integration
+- Updated the integration workflow to prepare eligible generated-artifact candidates and require fresh BASIC qualification before FULL.
+- Recorded the selected develop commit and `0.132.9` as the previous stable release in release-origin metadata. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Develop integration
+- Updated `.github/scripts/develop-integration.mjs` and `.github/workflows/develop-integration.yml` to support automatic generated-artifact squashing, exact feature-ref checks, and fresh BASIC qualification before FULL.
+- Retained no-op preparation, the manual checkpoint path, and existing recovery and CI-authority-update paths; those latter paths remained excluded from automatic squashing.
+
+#### Frontend
+- Updated `app/views/admin_media_renamer.php`, `app/controllers/admin_media_renamer.php`, `public/assets/gallery-modules/admin-media-renamer.js`, and `public/assets/styles/side-panel.css` for the redesigned workspace and interactions.
+- Updated Media Renamer translations in `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json`.
+
+#### Tests
+- Extended `tests/develop_integration_test.mjs` to cover candidate preparation, ref leases and movement, BASIC run identity and outcomes, waiting limits, superseded evidence, and FULL gating.
+
+#### Documentation
+- Updated the English, Czech, German, and Swedish manuals with Media Renamer and integration-workflow guidance.
+- Archived the prepared-environment CI experiment and its benchmark evidence as closed and not adopted. Three paired hosted runs showed a median end-to-end slowdown of 41 seconds and one Chromium fixture failure; the archived workflows do not run automatically.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Administrators received a searchable gallery list, compact selection controls, expandable preview groups, aggregate counts, and visible request progress in the Media Renamer.
+- Gallery visibility-filter refreshes updated the list without creating a rename plan; administrators explicitly requested a preview.
+
+#### For maintainers
+- After the integration workflow is installed on `main`, automatic preparation defaults on for eligible candidates and requires fresh BASIC checks before FULL. No-op preparation preserves the feature SHA, while disabling automation retains the manual checkpoint.
+
 ## Version 0.132.9
 
 Updated hosted CI qualification to use a complete, sharded owner matrix and recorded the reviewed maintenance path for this release while preserving `v_0.132.8` as the previous stable tag.
