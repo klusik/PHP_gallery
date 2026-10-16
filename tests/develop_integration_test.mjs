@@ -323,14 +323,14 @@ function storedZip(files) {
  * @typedef {{id:number,name:string,head_sha:string,external_id:string,app:{id:number},status:string,conclusion:string}} FixtureCheck
  */
 /** Inert provider surface with mutable heads and independently captured metadata/ref writes.
- * @typedef {{call:IntegrationApi,state:{source:string,develop:string,updates:FixtureRefWrite[],checks:FixtureCheck[]}}} IntegrationFixture
+ * @typedef {{call:IntegrationApi,state:{source:string,develop:string,updates:FixtureRefWrite[],checks:FixtureCheck[],statuses:Array<{id:number,state:string,context:string,target_url:string,creator:{login:string}}>}}} IntegrationFixture
  */
 /** Build an inert successful evidence surface with mutable remote refs and captured writes.
  * @param {string} sourceHead Initial remote feature head; defaults to the prepared candidate A.
  * @returns {IntegrationFixture} API fixture, mutable refs and captured check/ref writes.
  */
 function fixture(sourceHead=candidateSha) {
-    const state={source:sourceHead,develop:developSha,updates:[],checks:[]};
+    const state={source:sourceHead,develop:developSha,updates:[],checks:[],statuses:[]};
     const basic={id:1001,name:'Basic source qualification',app:{id:15368},head_sha:sourceSha,
         check_suite:{id:7001},external_id:'basic:801:3:'+sourceSha,status:'completed',conclusion:'success'};
     const jobs=ownerNames.map((name,index)=>({id:2000+index,name:'Develop integration / '+name,run_id:901,
@@ -374,12 +374,39 @@ function fixture(sourceHead=candidateSha) {
             const check={id:state.checks.length+3000,name:payload.name,head_sha:payload.head_sha,external_id:payload.external_id,
                 app:{id:15368},status:'completed',conclusion:'success'};state.checks.push(check);return check;
         }
+        if (path==='repos/'+repository+'/statuses/'+candidateSha && method==='POST') {
+            const status={...payload,id:4000+state.statuses.length,creator:{login:'github-actions[bot]'}};
+            state.statuses.unshift(status);return status;
+        }
+        if (path==='repos/'+repository+'/commits/'+candidateSha+'/status?per_page=100&page=1') {
+            return {total_count:state.statuses.length,statuses:state.statuses.map(({creator,...status})=>status)};
+        }
         if (path==='repos/'+repository+'/git/refs/heads/develop' && method==='PATCH') {
             state.updates.push({path,method,payload});state.develop=payload.sha;return {ref:'refs/heads/develop',object:{type:'commit',sha:payload.sha}};
         }
         throw new Error('Unexpected fixture request: '+method+' '+path);
     };
     return {call,state};
+}
+
+{
+    const f=fixture(sourceSha),original=f.call;
+    const selectedContext={...context,featureQualification:true,ref:'refs/heads/feature/ci-tests',
+        workflowRef:repository+'/.github/workflows/develop-integration.yml@refs/heads/feature/ci-tests'};
+    const selectedApi=(path,method='GET',payload=null)=>{
+        if (path.endsWith('/collaborators/klusik/permission')) return {permission:'admin'};
+        const result=original(path,method,payload);
+        if (path.endsWith('/actions/runs/901')) return {...result,head_branch:'feature/ci-tests',
+            actor:{login:'klusik'},triggering_actor:{login:'klusik'}};
+        if (path.endsWith('/git/trees/'+sourceTree+'?recursive=1')) return {...result,tree:result.tree.map(entry=>
+            entry.path==='scripts/audit_registry.php'?{...entry,sha:'e'.repeat(40)}:entry)};
+        return result;
+    };
+    assert.equal(selectDevelopIntegration(branch,selectedContext,repository,selectedApi).sourceSha,sourceSha,
+        'explicit feature workflow selection accepts actual changed test/audit definitions before main installation');
+    assert.throws(()=>selectDevelopIntegration(branch,selectedContext,repository,(path,method='GET',payload=null)=>
+        path.endsWith('/actions/runs/901')?{...selectedApi(path,method,payload),triggering_actor:{login:'attacker'}}
+            :selectedApi(path,method,payload)),/BLOCKED/,'an unselected actor cannot authorize feature publication');
 }
 
 assert.equal(validBranchName(branch),true,'comma and hash are valid Git branch characters');
@@ -501,7 +528,31 @@ for (const [label,mutate] of [
     assert.equal(result.sha,candidateSha);
     assert.equal(result.record.check_run_id,3000);
     assert.equal(result.record.matrix_check_run_id,3001);
+    assert.equal(result.record.matrix_status_id,4000);
     assert.deepEqual(f.state.updates[0].payload,{sha:candidateSha,force:false});
+}
+
+{
+    const f=fixture(),original=f.call;
+    f.call=(path,...args)=>{
+        const result=original(path,...args);
+        if (path.endsWith('/attempts/2/jobs?per_page=100&page=1')) result.jobs[0].conclusion='failure';
+        return result;
+    };
+    assert.throws(()=>integrateDevelop(request,context,repository,f.call),/BLOCKED/);
+    assert.equal(f.state.statuses.length,0,'failed FULL cannot publish a successful commit status');
+    assert.equal(f.state.updates.length,0,'failed FULL cannot move develop');
+}
+
+{
+    const f=fixture(),original=f.call;
+    f.call=(path,method='GET',payload=null)=>{
+        const result=original(path,method,payload);
+        if (method==='POST' && path==='repos/'+repository+'/statuses/'+candidateSha) result.creator.login='attacker';
+        return result;
+    };
+    assert.throws(()=>integrateDevelop(request,context,repository,f.call),/BLOCKED/);
+    assert.equal(f.state.updates.length,0,'a status from another publisher cannot move develop');
 }
 
 // Reproduce the exact provider rejection from integration run 38899855917 without network or real delays.
@@ -523,6 +574,7 @@ for (const failures of [1,5,6]) {
     assert.equal(attempts,Math.min(failures+1,6));
     assert.deepEqual(waits,Array(Math.min(failures,5)).fill(2000),'bounded waits occur only between rejected attempts');
     assert.equal(f.state.checks.length,2,'retries reuse the original exact-candidate check IDs');
+    assert.equal(f.state.statuses.length,1,'retries retain the same authenticated commit status');
     assert.equal(f.state.updates.length,failures===6?0:1,'only a confirmed successful request changes the fixture ref');
 }
 
@@ -553,6 +605,9 @@ for (const [label,change] of [
     ['check replaced',f=>{f.state.checks[1].id=9999;}],
     ['wrong check app',f=>{f.state.checks[1].app.id=1;}],
     ['wrong check SHA',f=>{f.state.checks[1].head_sha='e'.repeat(40);}],
+    ['status failed',f=>{f.state.statuses[0].state='failure';}],
+    ['status missing',f=>{f.state.statuses=[];}],
+    ['status replaced',f=>{f.state.statuses[0].id=9999;}],
     ['native owner failed',f=>{
         const original=f.call;
         f.call=(path,...args)=>{
@@ -599,20 +654,24 @@ for (const [label,change] of [
     // Exercise the workflow-to-helper boundary with the actual bare upload-action output.
     const workflow=readFileSync(new URL('../.github/workflows/develop-integration.yml',import.meta.url),'utf8');
     const fullJob=workflow.match(/^  full:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:)/m)?.[1] ?? '';
-    assert.match(fullJob,/^    needs: \[select, publish-candidate\]$/m,
-        'FULL must wait directly for both selected source and published candidate');
+    assert.match(fullJob,/^    needs: \[select, publish-candidate, inherited-basic\]$/m,
+        'FULL must wait for selected source, prepared candidate and independent BASIC');
     const fullCondition=fullJob.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m)?.[1] ?? '';
-    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha";
+    const expectedFullCondition="!cancelled() && inputs.qualified_run == '' && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && (needs.inherited-basic.result == 'success' || inputs.recover_existing) && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha";
     assert.equal(fullCondition,expectedFullCondition,
         'FULL must require cancellation safety, successful direct dependencies and the BASIC-qualified final source SHA');
     assert.match(fullJob,/checkout_ref: \$\{\{ needs\.publish-candidate\.outputs\.candidate_sha \}\}/,
         'FULL checkout must remain bound to the published candidate');
-    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]');
+    const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]').replaceAll('needs.inherited-basic','needs["inherited-basic"]');
     const fullConditionCases=[
-        {name:'ordinary integration tolerates its skipped optional BASIC ancestor',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
-            optional:{prepare:'success','inherited-basic':'skipped'},expected:true},
+        {name:'ordinary feature integration requires independent BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{prepare:'success','inherited-basic':{result:'success'}},expected:true},
         {name:'authority update retains successful optional BASIC',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
-            optional:{prepare:'success','inherited-basic':'success'},expected:true},
+            optional:{prepare:'success','inherited-basic':{result:'success'}},expected:true},
+        {name:'sealed execution suppresses duplicate FULL',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{},qualifiedRun:'123',expected:false},
+        {name:'failed independent BASIC blocks FULL',cancelled:false,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,
+            optional:{'inherited-basic':{result:'failure'}},expected:false},
         ...['failure','skipped','cancelled'].flatMap(result=>[
             {name:'select '+result+' blocks FULL',cancelled:false,select:result,publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
             {name:'publication '+result+' blocks FULL',cancelled:false,select:'success',publish:result,candidate:sourceSha,source:sourceSha,optional:{},expected:false},
@@ -624,8 +683,10 @@ for (const [label,change] of [
     ];
     for (const scenario of fullConditionCases) {
         const needs={select:{result:scenario.select,outputs:{source_sha:scenario.source}},
-            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate,final_source_sha:scenario.qualified ?? scenario.source}},...scenario.optional};
-        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs}),scenario.expected,
+            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate,final_source_sha:scenario.qualified ?? scenario.source}},
+            'inherited-basic':{result:'success'},...scenario.optional};
+        const inputs={qualified_run:scenario.qualifiedRun ?? '',recover_existing:false};
+        assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs,inputs}),scenario.expected,
             'FULL condition evaluation: '+scenario.name);
     }
     const publisher=workflow.match(/^  publish-candidate:\n([\s\S]*?)(?=^  full:)/m)?.[1] ?? '';
@@ -643,10 +704,7 @@ for (const [label,change] of [
     const dispatchedDigest=expression.replace('${{ steps.upload.outputs.artifact-digest }}',uploadDigest);
     assert.equal(dispatchedDigest,digest,'upload hex must match algorithm-qualified provider metadata');
     const releaseWorkflow=readFileSync(new URL('../.github/workflows/release-qualification.yml',import.meta.url),'utf8');
-    const releaseExpression=releaseWorkflow.match(/^\s+delta_artifact_sha256: (.+)$/m)?.[1].trim();
-    assert.ok(releaseExpression,'release delta exposes its archive digest');
-    assert.equal(releaseExpression.replace('${{ steps.upload-delta.outputs.artifact-digest }}',uploadDigest),digest,
-        'release delta uses the same authenticated artifact format');
+    assert.ok(!releaseWorkflow.includes('delta_artifact_sha256:'),'release trusts protected develop instead of reopening source delta evidence');
     const sourceOnly={...context,runId:901};
     const published=[];let blobCount=0,sourceRef=sourceSha;
     const api=(path,method='GET',payload=null)=>{

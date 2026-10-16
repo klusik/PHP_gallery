@@ -23,6 +23,28 @@ no supported installation requires it. Regression owners are listed in
 `docs/TITLE_PICTURE_SELECTION.md` and `TESTING.md`; browser and hosted
 qualification remain separate evidence.
 
+## Owner-selected feature qualification and protected-develop releases (#235)
+
+Owners: integration/evidence and release origin/promotion readers. New integration
+schema 2 permits explicit owner-selected feature workflows and seals successful
+FULL before publication. New release schema 4 trusts the frozen protected develop
+source and records assembly, without reopening older source qualification.
+Historical integration schema 1 and release schemas 1–3 remain supported for
+immutable existing records. Their actual usage is unknown; retain their readers
+until supported historical origin/completion consumers can be proven absent.
+The old finite 0.132.9 bridge below is historical compatibility only. New releases
+resolve protected main first-parent history to the unchanged stable tag without
+another version-specific exception. Regression coverage includes complete adverse
+native owners, changed inputs, corrupt archives, release assembly failures and
+Git/tag identity preservation. Live acceptance is pending hosted qualification
+and human-reviewed installation; no production publication is part of this batch.
+
+Protected publication retains Checks IDs and an optional `matrix_status_id` from
+the same verified FULL. Commit Statuses cover GitHub's dispatch-suite rollup
+behavior; the publisher verifies the exact status ID, SHA, workflow URL, state
+and Actions creator before the unchanged guarded FF. Preserve both supported
+provider representations and historical records; neither changes test ownership.
+
 ## Reviewed untagged dispatcher maintenance merge before 0.132.9
 
 Owner: `release-origin.mjs`, `start-new-release.mjs` and the shared release

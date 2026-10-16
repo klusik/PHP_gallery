@@ -396,28 +396,28 @@ namespace {
         && !str_contains($releaseWorkflow, '--allow-all')
         && !str_contains($releaseWorkflow, '--allow-tool')
         && str_contains($releaseWorkflow, 'Release branch changed during preparation; refusing stale write-back.')
-        && str_contains($releaseWorkflow, 'uses: ./.github/workflows/release-bootstrap.yml')
-        && str_contains($releaseWorkflow, 'name: Basic release delta checks')
-        && str_contains($releaseWorkflow, 'php scripts/audit.php --profile=basic --changed')
-        && str_contains($releaseWorkflow, 'loadIntegrationQualification')
-        && str_contains($releaseWorkflow, 'release-delta.mjs')
+        && !str_contains($releaseWorkflow, 'uses: ./.github/workflows/release-bootstrap.yml')
+        && !str_contains($releaseWorkflow, 'name: Basic release delta checks')
+        && !str_contains($releaseWorkflow, 'php scripts/audit.php')
+        && str_contains($releaseWorkflow, 'loadDevelopSource')
+        && str_contains($releaseWorkflow, 'RELEASE_TRUST_MODEL: protected-develop')
         && !str_contains($releaseWorkflow, 'audit_profile: release')
         && str_contains($releaseWorkflow, 'name: Release qualification gate')
         && $releaseExecutionWorkflow !== ''
         && !str_contains($releaseExecutionWorkflow, 'refs/heads/main')
         && !str_contains($releaseWorkflow, 'gh release create')
         && !str_contains($releaseWorkflow, 'git tag '),
-        'Release workflow must preserve deterministic editorial/manual preparation and protected completion while qualifying only its authenticated A..B BASIC delta.');
+        'Release must assemble already qualified develop, retaining editorial/manual preparation and protected completion without repeating source audits.');
 
-    $integrationPosition = strpos($releaseWorkflow, 'name: Authenticate exact selected-develop integration qualification');
+    $integrationPosition = strpos($releaseWorkflow, 'name: Capture the qualified protected develop source');
     $preparationPosition = strpos($releaseWorkflow, 'name: Apply deterministic release preparation');
     $buildPosition = strpos($releaseWorkflow, 'name: Build all maintained manuals');
     $savePosition = strpos($releaseWorkflow, 'name: Save TinyTeX cache');
     check($integrationPosition !== false && $preparationPosition !== false && $integrationPosition < $preparationPosition
-        && str_contains($releaseWorkflow, 'PHP_GALLERY_SOURCE_BASE: ${{ needs.prepare.outputs.selected_develop_sha }}')
+        && str_contains($releaseWorkflow, 'SELECTED_DEVELOP_SHA: ${{ steps.origin.outputs.selected_develop_sha }}')
         && str_contains($releaseWorkflow, 'name: Verify immutable release develop origin and prior main tag')
         && !str_contains($releaseWorkflow, 'git describe --tags'),
-        'Strict release preparation must authenticate integrated develop A before generation and freeze BASIC delta checks to A.');
+        'Release freezes its protected develop source before generation and retains actual Git origin checks.');
     $bootstrapWorkflow = str_replace("\r\n", "\n", (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-bootstrap.yml'));
     $releaseHeader = strstr($releaseWorkflow, "\njobs:", true) ?: '';
     check(preg_match('/^[ \t]*concurrency:/m', $bootstrapWorkflow) === 0
@@ -429,9 +429,9 @@ namespace {
         && str_contains($bootstrapWorkflow, 'php scripts/audit.php --profile=release-preflight')
         && str_contains($bootstrapWorkflow, 'uses: ./.github/workflows/gallery-workflows.yml')
         && str_contains($bootstrapWorkflow, 'audit_profile: release')
-        && str_contains($releaseWorkflow, "needs.coverage-owner.outputs.bootstrap == 'true'")
+        && !str_contains($releaseWorkflow, "needs.coverage-owner.outputs.bootstrap == 'true'")
         && str_contains($releaseWorkflow, "needs.coverage-owner.outputs.bootstrap == 'false'"),
-        'Only first installation may call the retained legacy full release lifecycle; the installed strict owner cannot fall back after red integration.');
+        'Historical bootstrap remains readable but the current release cannot rerun or bootstrap functional qualification.');
     check($buildPosition !== false && $savePosition !== false && $buildPosition < $savePosition
         && str_contains($releaseWorkflow, "steps.manuals.outcome == 'success'")
         && str_contains($releaseWorkflow, "steps.tinytex-cache.outputs.cache-hit != 'true'")

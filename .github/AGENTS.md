@@ -12,9 +12,10 @@ throughout. Feature edits never authorize themselves as protected CI authority.
    only the explicitly authorized working branch with an exact ref and a checked
    remote-head lease. `candidate-preparation.yml` is currently **Basic source
    checks** on ordinary feature pushes: BASIC `--changed`, no preparation/FULL.
-2. The maintainer's **Integrate into develop** action selects one final commit S
-   directly above observed develop P and requires fresh exact-SHA BASIC. Missing
-   history, unsquashed/merged/stale work or evidence blocks selection.
+2. In **Integrate into develop**, select the intended main or feature workflow ref
+   in GitHub and its source branch. The owner-selected feature workflow executes
+   its changed tests/CI; it needs no preliminary main installation. Select one S
+   directly above observed develop P and require fresh exact-SHA BASIC.
 3. Hosted preparation generates runtime modules, inventory and manifest; publishers
    recheck source/develop leases. The reviewed automatic mode conditionally replaces
    only the selected feature commit using its exact old SHA, retains the prepared
@@ -23,12 +24,16 @@ throughout. Feature edits never authorize themselves as protected CI authority.
    recursively trigger qualification; the caller invokes the reusable matrix.
 4. Apply the manual squash checkpoint below when automatic mode is disabled or
    unavailable in the installed workflow and preparation publishes a child.
-   FULL qualifies the exact final one-commit candidate A before the guarded FF.
-   Agents never dispatch protected integration without maintainer authorization.
-5. A separately authorized release starts at qualified A, prepares B and receives
-   BASIC changed-source plus release-owned-input proof for A..B; no functional
-   integration replay. Follow RELEASE.md and RELEASE_LIFECYCLE.md for exact
-   approval, protected merge/tag, draft and publication/recovery behavior.
+   FULL qualifies exact A. Seal execution before publication; `qualify_only` leaves
+   develop unchanged, and `qualified_run` reuses sealed identical A/P after a
+   publication failure. Changed inputs require new execution. Agents never
+   dispatch protected integration without maintainer authorization.
+   Publish and recheck both the exact-SHA Checks and Actions Commit Status for
+   the required context; dispatch-suite Checks alone can be absent from GitHub's
+   branch-rule rollup. Grant `statuses: write` only to that verified publisher.
+5. A separately authorized release trusts frozen A from protected develop and
+   assembles B without another source audit or historical qualification replay.
+   Preserve assembly integrity, Git leases, approval, merge/tag and draft boundaries.
 
 Before retrying, consolidate failed-owner results, deduplicating repeated shards.
 Record cause (source/test/contract/infrastructure), evidence, repair, equivalent
@@ -88,19 +93,23 @@ final one-commit candidate that integration will fast-forward.
 
 ## Authority changes and release controls
 
-CI runtime/owner/evaluator changes need explicit hosted maintenance qualification
-and separately verified protected installation before becoming integration
-authority. Use the staged develop-first procedure and exact sealed blobs/manifest
-companion in the CI technical contract. Do not install through a release bootstrap
-or invent W* main ancestry. Keep `authority_update` and `inherited_basic` provenance
-and unchanged scanner closure. Acceptance requires real hosted evidence; verify
-the present installation instead of inferring it from a feature fixture or an old
-run. [Archived root CI notes](../docs/AGENT_CI_HISTORY.md) retain dated snapshots.
+An explicit owner dispatch authorizes the selected feature workflow/test revision.
+Require the actual native FULL owners and independent BASIC on the final candidate;
+do not require candidate audit/registry bytes to equal main/develop. Preserve
+historical `authority_update` readers for old records, not as a prerequisite for
+new work. For a CI-only main installation, base the feature on main and dispatch
+**Basic source checks** with `install_ci`: complete FULL plus release audit produces
+a bot PR under unchanged human-review protections. Squash onto observed main
+first, including bot commits; preparation must retain that SHA before FULL.
+If it publishes a child, stop at the checkpoint and obtain fresh BASIC after squash.
+No temporary transport or
+version-specific exception is needed. [Historical notes](../docs/AGENT_CI_HISTORY.md)
+never authorize protected writes.
 
-Before maintenance-only main installation, inspect release-origin/promotion
-predecessor assumptions. Preserve the stable tag and bind any finite compatibility
-bridge to the real human-reviewed merge and complete hosted evidence. Only create
-a release origin after the optimization is on develop and separately authorized.
+Before CI-only main installation, preserve the stable tag and actual main base.
+Release predecessor discovery follows protected main's first-parent merge history
+to the existing stable tag without replaying historical tests or adding version pins.
+Create release branches only when separately authorized.
 An erroneous unpublished attempt/source must be preserved in explicit archive
 refs before an authorized leased branch replacement; never rewrite its origin or
 evidence. Existing tags/assets/publications stay immutable; routine ref pruning

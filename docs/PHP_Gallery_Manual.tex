@@ -2447,7 +2447,7 @@ Atomic source commits are~allowed during development, but~qualification must use
   \item Report the~GitHub Actions URL, checked working branch, exact prepared candidate SHA, immutable comparison base, required job results and~manual or~missing coverage. A~stale, missing, skipped, cancelled, failed or~blocked mandatory job is~not~green qualification. Fix source and~push the~same branch for~fresh CI.
 \end{enumerate}
 
-The~currently installed GitHub workflow \filepath{.github/workflows/candidate-preparation.yml} prepares feature/fix branches and~qualifies their published candidate SHA. The~\#185 target changes feature pushes and~the~final squash to BASIC syntax/documentation checks; FULL moves to~the~Actions integration button after it~confirms a~single authored commit, and~runs once on~final A. The~central read-only \codeword{--profile=candidate-preflight} gate and~existing required matrix remain authoritative until the~target is~installed on~main and~verified by~real hosted CI. Qualification runners must not~repair missing artifacts silently. Release preparation later updates manual version/date markers and~compiles the~existing TeX sources to~PDF; it~does not~write missing documentation prose.
+The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
 \section{Checking your gallery before publication}
 \label{sec:testing}
@@ -2494,11 +2494,7 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 \end{lstlisting}
 
-The~currently installed release workflow may~still use its~pre-generation
-preflights and~full matrix. The~\#185 target replaces them with BASIC changed-source
-checks on A..B and~release-owned-input proof after preparation. Do~not~treat that
-source target as active until its~implementation is~installed on~main and~verified
-by~real hosted CI.
+The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
 The~registered breadcrumb Theme test compares the~Theme and~physical-gallery style lists in~\filepath{docs/ADMIN_SETTINGS_INVENTORY.md} with \codeword{breadcrumb_style_registry()}. It~also protects the~\codeword{chevron} fallback and~the~gallery-only \codeword{inherit} sentinel. When adding a~style, update both documented lists; \codeword{inherit} is~not~a~Theme visual style.
 
@@ -2516,13 +2512,13 @@ Follow \filepath{RELEASE.md} for~the~complete release sequence. Compare the~exac
 
 The commands in this section describe hosted release ownership and the retained local maintainer recovery path. Normal preparation and qualification run on GitHub; agents do not execute these commands locally by default. Local recovery requires an explicit request or genuinely unavailable CI and remains BLOCKED / not CI-qualified until hosted evidence exists. The later review workflow performs protected merge and tagging; GitHub Release publication stays manual.
 
-The~currently installed release workflow may~still require one central \codeword{--profile=release} audit and~its full matrix. The~\#185 target replaces that B gate: after generating notes, four manuals/PDFs, inventory and~manifest from A, run BASIC \codeword{--changed} for~the~exact A..B source delta and~prove every changed path is~release-owned. Do~not rerun browser, database/HTTP, functional, Node runtime, WinApp or~packaging regressions on B. Until the~replacement is~installed on~main and~verified by~real hosted CI, the~currently installed required workflow remains authoritative; do~not~claim the~target is~active or~substitute local evidence.
+The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
 Create a~production folder or~ZIP only when explicitly requested; hosted release assets use the~same PHP builder automatically. Pass the~candidate epoch with \codeword{--timestamp} for~deterministic metadata. The~builder refuses stale manifests and~existing outputs; \filepath{scripts/release_files.php} inspects membership only. Three OS packaging owners cover the~real builder independently of~the~database matrix. The~main-only locked TinyTeX cache warmer requires reviewed installation before release branches can~reuse its exact key. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility floor and~PHP 8.5 as~the~newest representative. All~three database variants run on~PHP 8.5; historical evidence retains its actual versions.
 
 During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
 
-For~GitHub-hosted preparation, push a~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z} branch from~FULL-qualified A. The~workflow prepares and~commits B back to~the~same branch, compiles all~four PDFs together, and~under the~\#185 target runs only BASIC changed-source and~release-owned-input checks for A..B. The~currently installed workflow remains in force until the~target is~installed on~main and~hosted-qualified. Preparation does not~merge to~\codeword{main}, create a~tag, or~publish a~release.
+The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
 \section{Making the~gallery feel fast}
 \label{sec:performance}
@@ -2636,197 +2632,84 @@ procedure. Updater file rollback still does~not~reverse database migrations.
 
 \section{Maintainer verification and~release evidence}
 \label{sec:release-evidence}
-\index{release qualification}
-\index{testing!disposable workflows}
 
-The~parallel FULL contract has~28 required native owners. Each~of~the~five
-PHP/database environments uses four isolated GitHub jobs, each with four local
-processes and~its~own checkout and, where required, database/HTTP fixture.
-The~central \codeword{source-contracts} and~\codeword{portable} profiles run
-whole-tree source checks and~Node/WinApp coverage once per~candidate beside
-safety preflight. Expensive runtime jobs still require generated-state preflight.
-Exclusive test barriers remain within each shard. Every shard and~shared owner
-must succeed for~the~same SHA; post-test checks preserve clean checkout identity.
-A~feature-only green run does~not~install the~matrix in~protected workflows.
-See~\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} for~the~staged authority proof.
+\subsection{Source qualification and~selected feature workflows}
 
-Release~\codeword{0.132.9} alone recognizes the~human-reviewed dispatcher
-maintenance merge separately from the~unchanged stable~\codeword{0.132.8} tag.
-The~origin verifier authenticates the~exact PR, owner review, merge, workflow
-blobs and~complete maintenance qualification. The~release still leases actual
-main and~requires normal human PR approval; other versions retain tag-on-main selection.
+Feature pushes and~the~final squash receive BASIC syntax and~declaration checks.
+In~GitHub Actions, choose \ui{Integrate into develop}, select main or~the~intended
+feature in~\ui{Use workflow from}, and~select the~source branch. The~owner's
+explicit dispatch runs that revision's actual workflow, audit and~tests.
+Changes to~tests or~registries need no~preliminary installation on~main.
 
-The~central audit retains named WinApp unittest outcomes, durations and~skip reasons
-in~JSON alongside the~actual process result. Missing, incomplete or~inconsistent
-records cannot establish PASS. Native Windows smoke may~remain explicitly skipped;
-Python fixtures do~not~replace installed-Windows acceptance. These records do~not
-independently authenticate workflow source or~enable coverage reuse.
+The~source is~one commit above observed develop. Hosted preparation generates
+runtime modules, inventory and~manifest, folds changed generated data into
+the~final candidate and~obtains fresh BASIC. A~separate authority checkout
+inspects the~clean candidate. FULL retains all~28 required native owners:
+shared source contracts, portable Node/WinApp, packaging on~three operating
+systems, four shards for~each~of~three databases, four shards for~each PHP
+8.1/8.5 source environment, required Chromium and~the~aggregate.
+Missing, failed, cancelled or~skipped mandatory owners block integration.
 
-Retained historical qualification uses the~newest published bound check and~its
-highest attempt. Newer red or~pending checks cannot fall back to~older green
-evidence. Incomplete or~duplicate API pages and~changes during collection refuse
-qualification. This protects historical inspection; it~does~not~discover newer
-unpublished workflow runs or~enable independent develop/release coverage reuse.
+Successful execution is~sealed before the~protected non-force fast-forward.
+\codeword{qualify_only} retains qualification without writing develop.
+Supply its~run ID as~\codeword{qualified_run} to~publish the~identical
+candidate, complete input tree and~base without another FULL. Changed inputs
+require new execution. The~publisher still checks actual owner/run identities,
+source leases and~branch protections.
 
-After reviewed installation on~main, \codeword{auto\_squash\_generated}
-defaults to~true in~the~integration action. Preparation retains only the~three
-allowlisted generated files in~one commit A above the~observed develop P,
-preserves the~original message with \codeword{Prepared-From}, and~conditionally
-replaces the~selected feature ref using its~exact old SHA. It~dispatches fresh
-BASIC for~A, polls every five seconds for~up~to~fifteen minutes, and~authenticates
-the~exact run, first attempt and~native/custom checks before FULL. Changed refs,
-failed or~superseded BASIC and~timeouts stop integration. No-op preparation
-preserves SHA; disabled automatic mode retains the~manual squash checkpoint.
-Recovery and~CI-authority updates retain their existing paths. Feature edits
-alone do~not~install this behavior into the~trusted main-owned workflow.
+For~an~explicit CI-only installation ahead of~a~release, base the~feature
+on~main and~dispatch \ui{Basic source checks} with \codeword{install_ci}.
+Complete FULL and~the~authoritative release audit produce a~bot PR;
+one real human approval installs it~through normal protected auto-merge.
 
-Feature pushes and~their final squash receive BASIC checks only: PHP/JavaScript
-syntax and~complete named-declaration documentation. After the~feature is~one
-authored commit S on~develop P, the~maintainer selects its~branch with the~Actions
-\ui{Integrate into develop} button. It~refuses unsquashed history, runs the~full
-central matrix exactly once on~final candidate A, then fast-forwards develop only
-after that exact-A matrix passes. Release preparation from A creates B and~runs
-BASIC changed-source checks plus release-owned-input proof for A..B; it~does not
-rerun browser, database, functional, Node runtime, WinApp or~packaging regressions.
-PDF/package/installer generation is~an~output, not regression qualification.
-A~pure post-release fast-forward to~Q needs no~second FULL run because the~release
-record binds FULL A and~the~approved BASIC A..B delta; parallel develop changes still block automatic synchronization. This reduced
-policy is~inactive until installed on~main and verified by~real hosted CI; until
-then the~currently installed required workflows remain authoritative.
+The~publisher binds the~same verified FULL to~both Checks and~a~standard
+Actions commit status, because dispatch-suite Checks can~be~absent from
+GitHub's branch-rule summary. It~rechecks the~status identity, state and~run
+before each protected fast-forward.
 
 After qualification and~protected installation, a~sole HTTP~422 rejection
 for~the~new required matrix check permits up~to~six publication attempts with
 two-second waits. Each retry revalidates the~active run, BASIC/FULL evidence,
 original check IDs and~branch leases. Other failures stop; FULL is~not~replayed.
 
-The~central entry point \filepath{scripts/audit.php} provides qualification/regression profiles plus source preflights.
-\codeword{--profile=quick} uses an~explicit PHP subset, strict source and~MVC
-contracts, the~Python import policy, fast Node fixtures, and~changed-file syntax
-checks. It~omits the~complete PHP suite, whole-tree inventory/category budgets, WinApp tests,
-slow Node fixtures, and~Chromium. The~source-only \codeword{--profile=basic} checks
-PHP/JavaScript syntax and~complete named-declaration documentation; \codeword{--changed}
-binds that scope to~an~immutable base. The~intended feature-to-develop flow runs
-\codeword{--profile=full} once on~final A. Release B uses BASIC \codeword{--changed}
-plus release-owned-input proof, not the~\codeword{release} functional matrix. These
-workflow changes are~inactive until installed on~main and~hosted-qualified.
+\subsection{Release assembly from qualified develop}
 
-PHP suites run with four workers by~default. Set
-\codeword{PHP\_GALLERY\_AUDIT\_WORKERS} to~an~integer from~1 through~8;
-invalid values block execution. Registered exclusive tests run alone after
-active workers finish. Each child retains separate diagnostics and~a~timeout
-measured from~its actual start; results stay in~deterministic input order.
+A~commit admitted to~protected develop is~qualified. Create the~separately
+authorized \codeword{release/v_X.Y[.Z]} branch from that source.
+Release does~not rerun BASIC/FULL or~download older qualification archives.
+It~freezes source A, updates metadata and~patch notes, aligns all~four manual
+editions, compiles their PDFs with the~locked TinyTeX toolchain and~reproducible
+timestamp, and~refreshes inventory and~the~complete-file manifest last.
+Changed WinApp inputs require the~installer; unchanged inputs retain its
+independent version and~verified existing assets.
 
-PHP and~JavaScript syntax checks and~independent Node/Chromium fixtures use the~same worker limit. Parallel PHP tests are~grouped before exclusive fixtures, so~the~pool drains once; reports retain their original order. Syntax checking never executes the~source. Complete database and~contention qualification remains dependent on~fixture cost and~machine performance. Production inventory checks accept LF and~CRLF checkout line endings but~still refuse content or~membership changes. The~MVC checker resolves namespace and~import contexts once per~file, preserving alias and~PDO checks without rescanning preceding tokens for~each call. The~complete compiler and~composed/legacy loading matrix for~every module runs in~full and~release profiles. Quick feedback retains dependency, graph, kernel, and~bootstrap contracts without starting every module twice.
-The~quick/full/release profiles also measure fresh-process include phases before
-\codeword{cms\_run()}: early runtime permits one PHP file and~16~MiB peak memory,
-and~application bootstrap permits 40 files and~16~MiB. Elapsed time is~observational;
-these probes perform no~database, session, or~route work.
+Editorial notes preserve completed maintainer prose or~use the~existing
+bounded Copilot generation from complete Git evidence. Invalid output is~never
+applied. Build failures, missing attachments and~stale generated hashes stop
+assembly; they do~not introduce another source qualification stage.
+Lifecycle schema 4 records the~qualified develop source and~assembly outcome.
 
-The~same runtime-performance suite measures nine real routes only with an~owned disposable database/HTTP fixture: robots, home, gallery, thumbnail, media, authenticated Admin and~telemetry, and~both anonymous Admin denials. Route ceilings range from~160--300 included files and~32--48~MiB peak memory; valid product responses and~denials are~checked as~well. Without that fixture route measurements are~explicitly skipped. Wall time remains observational.
+The~existing stable tag remains immutable after CI-only main maintenance.
+Initialization follows actual first-parent main history instead of~requiring
+a~new tag or~a~version-specific exception. Git leases still protect concurrent
+writers. Original release identities and~published assets stay unchanged.
 
-CI runs required Chromium fixtures in~one dedicated job with
-\codeword{PHP\_GALLERY\_BROWSER\_REQUIRED=1}; missing, unstartable, or~skipped
-required browser coverage fails the~job. Database and~runtime jobs disable browsers
-within their own environment. Local browser discovery remains optional.
-The~workflow launchers' \codeword{--quick} flag delegates directly to~the~quick
-profile without provisioning a~database or~daemon. See \filepath{TESTING.md}
-for~limits and~\filepath{docs/GALLERY_WORKFLOWS.md} for~isolated qualification.
+\subsection{Review, version and~complete attachments}
 
-Browser failures show the~fixture name and~specific assertion or~runtime error directly in~the~audit console and~report, with at~most five problems per~suite. Full output remains in~\codeword{browser-map.log} in~the~\codeword{required-chromium} Actions artifact for~seven days. The~printed report path belongs to~the~runner; download the~artifact from~the~run's Artifacts section. The~shared Admin browser harness records bounded browser stderr and~page exceptions on~failure, and~last assertion progress on~timeout. Asynchronous UI tests await observable completion within fixed deadlines instead of~assuming a~short delay is~sufficient. The~SimBrief review contract awaits native close-event cleanup for~up to~two seconds and~checks dialog closure, drawer visibility, unchanged URL, focus, and~background isolation separately. Repeated native Cancel clicks cover 320/390/1280px and~a~replaced editor; cancellation must~not~submit. Failed tests are~not~automatically retried into success.
+The~workflow opens the~exact bot-authored PR to~main. Approve Q once.
+Automation performs the~protected standard merge, verifies its~parents/tree,
+creates the~immutable version tag, attempts safe develop synchronization
+and~fills an~unpublished release draft with the~original ZIP, metadata,
+checksums, all~four PDFs, notes and~permanent assembly/completion evidence.
+It~adds missing verified assets and~preserves identical existing ones.
 
-Automated regression and~operational acceptance answer different questions.
-The~central audit checks code, contracts, syntax, available browser fixtures,
-and~release consistency. The~isolated workflow fixture adds real database,
-HTTP, and~Chromium journeys using generated photographs and~accounts.
-It~requires explicit disposable-only configuration and~must never use
-the~installation's database or~media. Follow
-\filepath{docs/GALLERY_WORKFLOWS.md} for~prerequisites; a~missing environment
-is~a~coverage gap, not~proof of~a~working feature.
-
-For~release preparation, follow \filepath{RELEASE.md}: finish all~source and~manual content, then let~GitHub Actions build all~four PDFs together, inspect compiler diagnostics and~regenerate the~manifest. Under the~\#185 target, hosted qualification checks only BASIC changed source and~approved release inputs from~A to~B; the~current installed full release audit remains required until that target is~installed on~main and~verified by~real CI. The~isolated \filepath{scripts/gallery_workflow_mysql.php} \codeword{--release} command remains available only for~explicit local recovery and~diagnosis.
-
-The~qualification tool \filepath{scripts/release_qualification.php} records
-the~exact source and~PDF fingerprint. Its \codeword{render} command produces
-bounded page previews; rendering alone does~not~approve their appearance.
-The~\codeword{record-audit} command accepts only the~matching central release
-report, not~an~older full audit. A~changed source file or~rebuilt PDF selects
-new pending evidence rather than silently reusing earlier approval.
-
-Visually review the~PDF only on~explicit request or~to~diagnose a~concrete
-layout problem; optional PDF review fields may~remain pending. Review
-representative browser workflows. Record what was~actually checked,
-by~whom, and~with what result. Keep unresolved checks pending and~post-publication
-updater smoke testing separate. A~green automated report is~not~permission
-to~publish, and~the~tool never commits, tags, uploads, or~publishes
-the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record commands.
-
-\subsection{GitHub-hosted release preparation and~qualification}
-
-
-\subsubsection{Automatic reviewed release lifecycle}
-
-Create a~new \codeword{release/v_X.Y[.Z]} branch from~FULL-qualified develop A
-and~push it. The~workflow adds an~immutable origin and~prepares notes, locked
-TinyTeX, all four manuals/PDFs, inventory and~manifest into B. Under the~\#185
-target it~then runs only BASIC changed-source checks for A..B plus proof that
-changes belong to~the~approved release inputs; it~does not rerun the~functional
-matrix on~B. Historical origins and~published \codeword{v\_0.126} remain unchanged.
-
-A~tagged predecessor may still await manual GitHub Release publication. For~a~schema-3
-predecessor, initialization authenticates its~original FULL integration archive
-and~BASIC release-delta archive before verifying the~exact prior candidate,
-run/attempt, Git trees and~human approval. Current-release evidence cannot replace
-those archives. Missing, expired, corrupt or~foreign evidence and~failed mandatory
-owners block initialization. Central regression coverage includes starting the~next
-release before publication with this~current evidence format.
-
-After qualification and~manual-publication assets succeed, the~bot opens one PR
-to~main and~automatically dispatches completion at~Q using the~workflow filename
-already registered on~main. The~maintainer approves its~exact Q head once.
-The~observer rechecks P/Q and~requests protected standard merge completion; no~workflow form or~deployment approval
-is~required. The~result must have ordered parents [P,Q] and~Q's complete Git tree.
-The~same job creates the~immutable version tag on~M. A~retry after merge verifies
-the~full PR detail and~creates only a~missing tag; conflicting tags fail closed.
-
-After verified merge and tag, automation fills the unpublished GitHub Release
-with original exact-Q notes, production ZIP, metadata, all four manuals,
-qualification archive, checksums and both completion receipts. Wait for
-\codeword{DRAFT\_READY}, review the complete draft and select \ui{Publish release}
-manually. No artifact download or manual attachment is required. Existing
-identical assets remain; conflicts fail without replacement. Published releases
-remain immutable. Failure reports \codeword{TAGGED / DRAFT\_PENDING}; retrying
-completion fills missing files without undoing the verified merge or tag.
-Temporary transfer interruptions receive up to three attempts, and a lost draft
-creation response is checked against existing releases automatically. Keep the
-draft unpublished until \codeword{DRAFT\_READY}; permission, integrity or conflicting
-file errors require correction before another completion run.
-The independent WinApp installer and update metadata come from the exact
-qualification attempt, or from the pinned published predecessor after verifying
-unchanged shipped source, version and integrity. An unchanged installer is not rebuilt.
-
-Develop is~advanced only through a~true non-force fast-forward to~qualified Q,
-with active linear-history/CI protection. Parallel develop work stops that
-independent synchronization without changing the~completed tag. No~merge,
-rebase or~replay commit is~created on~develop. Previous M need not~be~an~ancestor
-of~the~next Q. Omitted bypass membership is~reported and~remains server enforced;
-visible bypass or~unreadable effective rules stop completion. Unavailable evidence, stale approval,
-red CI or~different parents/trees stop completion. Fixture CI does~not~prove
-live GitHub routing or~protected writes; isolated owner-approved acceptance
-is~documented in~\filepath{docs/RELEASE_LIFECYCLE.md}. Agents never perform
-protected integration or~a~production release during feature implementation.
-
-The~\filepath{.github/workflows/release-qualification.yml} workflow prepares a~candidate on~GitHub-hosted runners. It~is~distinct from~publishing a~release. The~detailed steps below describe the~currently installed workflow while the~\#185 replacement remains inactive; after installation on~main, the~BASIC A..B target above replaces its~pre-generation tiers and~full B matrix. Its~ordered contract is:
-
-\begin{enumerate}
-  \item \textbf{Branch and~preflight.} A~push to~\codeword{release/v_X.Y} or~\codeword{release/v_X.Y.Z}, starts preparation. Preparation rejects an~already existing \codeword{v_X.Y[.Z]} tag, identifies the~previous release tag for~its comparison base, and~runs \codeword{release-preflight} for~source syntax, declarations, inventory, Python policy, and~workflow contracts before AI or~TeX provisioning.
-  \item \textbf{Deterministic metadata.} The~candidate helper aligns the~runtime version, release metadata, patch-note scaffold, and~all~four manual version/date markers, and~refreshes the~production inventory. It~does not~write explanatory TeX content. Preserve previously completed editorial notes and~keep the~four manuals semantically aligned before release.
-  \item \textbf{Editorial notes.} A~complete, maintainer-written version section is~kept unchanged. If~it~is~missing or~unfinished, the~workflow uses GitHub Copilot CLI with~\codeword{gpt-6-luna}, falling back to~automatic model selection only when that model is~unavailable. A~configured \codeword{COPILOT_GITHUB_TOKEN} is~required for~generation. The~complete Git text diff is~included without byte truncation, excluding generated and~binary release artifacts. Separate temporary output files prevent pipe deadlocks. Each Git command has~a~30-second deadline; the~complete evidence step has~a~two-minute limit. Metadata or~diagnostic overflow stops preparation explicitly. Strict Markdown validation prevents placeholders, wrong versions, extraneous sections, or~assistant commentary from~becoming release notes. Generation or~validation failure blocks qualification rather than~publishing incomplete prose. The~bounded evidence helper \filepath{.github/scripts/patch_notes_ai_chunks.php} sends every original diff byte exactly once in~contiguous UTF-8-safe slices of~at~most 100,000~bytes. A~SHA-256 manifest verifies every slice and~the~original evidence; each slice requires a~valid digest of~at~most 6,500~bytes. When the~combined digests exceed the~180,000-byte final prompt budget, further bounded reduction passes consolidate all digests without omitting any slice. Per-request Copilot deadlines, missing responses, corrupted hashes, or~invalid final Markdown stop qualification; no~source diff is~silently sampled or~truncated. The~generation prompt and~validator share the~mandatory main headings \codeword{Highlights}, \codeword{Technical Details}, and~\codeword{User Impact}, including for~test, documentation, or~tooling releases. Only irrelevant optional subsections may~be~omitted. State evidenced maintainer impact or~unchanged public/Admin behavior without inventing product benefits. Inline heading mentions or~incorrect heading levels are~rejected. On~AI generation or~validation failure, the~available raw model prose is~retained for~seven days in~the~Actions artifact \codeword{release-notes-rejected-response}; prompts and~authentication diagnostics are~excluded. Invalid prose still blocks preparation and~is~never applied.
-  \item \textbf{Reproducible documentation.} The~workflow provisions checksum-locked TinyTeX and~the~frozen TeX Live package set, reusing a~cache keyed by~its lock and~package inventory when valid. It~builds English, Czech, German, and~Swedish manuals with~\codeword{pdflatex}, \codeword{makeindex}, and~two further \codeword{pdflatex} passes per~edition. The~release-metadata timestamp fixes the~PDF and~manifest build epoch. The~final inventory, integrity manifest, and~release consistency are~verified after compilation.
-  \item \textbf{Safe branch write-back.} Only approved preparation files are~staged. A~changed remote branch prevents a~stale push; an~identical already-prepared tree may~reuse its~current commit. Preparation commits back to~the~same release branch, not~to~\codeword{main}.
-  \item \textbf{Exact-candidate gate.} The~reusable central CI workflow checks out the~prepared commit SHA and~runs the~complete release matrix, including required Chromium coverage. The~aggregate gate succeeds only if~preparation, editorial notes, and~the~full matrix succeed and~the~branch still points to~that exact commit. After checked assets are~ready, a~green gate opens the~bot PR; one human approval triggers automatic protected merge and~tagging. GitHub Release publication stays manual.
-\end{enumerate}
-
-See \filepath{RELEASE.md}, \filepath{docs/GALLERY_WORKFLOWS.md}, and~\filepath{docs/LATEX_BUILD.md} for~the~operational details. Do~not~run ordinary PDF compilation or~a~separate release audit merely because a~TeX source was edited.
+Wait for~\codeword{DRAFT_READY}, then manually choose \ui{Publish release}.
+\codeword{TAGGED / DRAFT_PENDING} is~recoverable for~the~same Q;
+do~not~rebuild the~candidate or~move a~correct tag. Parallel develop work
+blocks unsafe synchronization, not~a~correct completed tag or~draft.
+Human browser/hosting smoke tests and~branch cleanup remain separate.
+See \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
+\filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} and~\filepath{docs/LATEX_BUILD.md}.
 
 \section{Glossary}
 \label{sec:glossary}

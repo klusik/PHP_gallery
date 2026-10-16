@@ -20,6 +20,7 @@ import {resolve} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {readCoverageArtifact} from './coverage-artifacts.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
+import {loadFeatureExecution,verifyFeatureBasic} from './feature-qualification.mjs';
 import {verifyPredecessor,isMaintenanceMainBridge,verifyMaintenanceMainBridge} from './release-origin.mjs';
 import {requireBotPullRequest,effectiveOwnerReview,qualificationCheckBinding,integrationCheckBinding} from './release-owner-authorization.mjs';
 
@@ -175,7 +176,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
         && !/[\x00-\x20\x7f~^:?*\[\\]/.test(sourceBranch) && !sourceBranch.includes('@{')
         && !sourceBranch.includes('..') && !sourceBranch.endsWith('/') && !sourceBranch.endsWith('.')
         && sourceBranch.split('/').every(part=>part.length>0 && !part.startsWith('.') && !part.endsWith('.lock'));
-    if (payload.schema_version!==1 || payload.repository!==repository || !validFeatureBranch || !sha(sourceSha)
+    if (![1,2].includes(payload.schema_version) || payload.repository!==repository || !validFeatureBranch || !sha(sourceSha)
         || !sha(developBase) || payload.source_base!==developBase
         || payload.candidate_sha!==identity.candidate_sha || payload.candidate_tree!==identity.candidate_tree
         || payload.workflow_sha!==identity.workflow_sha || payload.workflow_path!==identity.workflow_path
@@ -187,6 +188,11 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     if (typeof call!=='function') throw new Error('BLOCKED integration server evidence reader is unavailable.');
     const requiredLabels=evidenceMatrixOwners(payload.native_owners,repository,identity.workflow_sha,call);
     const authorityMode=Object.hasOwn(payload,'authority_update');
+    const featureMode=payload.schema_version===2;
+    if (featureMode && (authorityMode || payload.feature_qualification?.schema_version!==1
+        || payload.feature_qualification.input_tree!==identity.candidate_tree || sourceSha!==identity.candidate_sha)) {
+        throw new Error('BLOCKED malformed versioned feature integration evidence.');
+    }
     if (authorityMode) {
         const authority=payload.authority_update,anchor=authority?.anchor,basic=authority?.inherited_basic;
         const exactFields=(value,fields)=>value!==null && typeof value==='object' && !Array.isArray(value)
@@ -256,7 +262,8 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     }
     const run=call(`repos/${repository}/actions/runs/${identity.run_id}/attempts/${identity.run_attempt}`);
     if (run?.id!==Number(identity.run_id) || run.run_attempt!==Number(identity.run_attempt)
-        || run.path!==identity.workflow_path || run.event!=='workflow_dispatch' || run.head_branch!==(authorityMode?'develop':'main')
+        || run.path!==identity.workflow_path || run.event!=='workflow_dispatch'
+        || (featureMode ? !/^(?:main|feature\/.+)$/.test(run.head_branch ?? '') : run.head_branch!==(authorityMode?'develop':'main'))
         || run.head_sha!==identity.workflow_sha || run.name!=='Integrate into develop'
         || run.status!=='completed' || run.conclusion!=='success') {
         throw new Error('BLOCKED integration workflow attempt is not the successful trusted source run.');
@@ -290,7 +297,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     if (workflowCommit?.sha!==identity.workflow_sha) {
         throw new Error('BLOCKED integration workflow source is unavailable.');
     }
-    if (!authorityMode) {
+    if (!authorityMode && !featureMode) {
         const mainRef=call(`repos/${repository}/git/ref/heads/main`),mainSha=mainRef?.object?.sha;
         if (mainRef?.ref!=='refs/heads/main' || mainRef.object?.type!=='commit' || !sha(mainSha)) {
             throw new Error('BLOCKED integration current main ref is unavailable.');
@@ -312,7 +319,7 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
     if (authorityMode && source.commit?.tree?.sha!==payload.authority_update.inherited_basic.source_tree) {
         throw new Error('BLOCKED inherited BASIC source tree differs from immutable source S.');
     }
-    requireIntegrationBasicProfile(payload.basic_profile,repository,authorityMode?sourceSha:identity.workflow_sha,call);
+    if (!featureMode) requireIntegrationBasicProfile(payload.basic_profile,repository,authorityMode?sourceSha:identity.workflow_sha,call);
     if (identity.candidate_sha!==sourceSha) {
         if (candidate.parents?.length!==1 || candidate.parents[0]?.sha!==sourceSha) {
             throw new Error('BLOCKED integrated A is not the recorded generated-only child of source S.');
@@ -325,6 +332,28 @@ export function verifyIntegrationEvidence(record,repository,adapters={}) {
             || prepared.files.some(file=>!generatedPaths.has(file.filename) || file.status!=='modified')) {
             throw new Error('BLOCKED prepared integration candidate A contains a non-generated source change.');
         }
+    }
+    if (featureMode) {
+        const feature=payload.feature_qualification;
+        const original=loadFeatureExecution(repository,feature.execution?.run_id,
+            {candidate:identity.candidate_sha,tree:identity.candidate_tree,base:developBase},
+            {...adapters.inheritedBasicArtifacts,api:call,download:adapters.executionArtifacts?.download ?? adapters.inheritedBasicArtifacts?.download});
+        if (!isDeepStrictEqual(feature.execution,original.record.feature_qualification.execution)
+            || !isDeepStrictEqual(owners,original.record.native_owners)) throw new Error('BLOCKED reused feature execution differs from its sealed source.');
+        verifyFeatureBasic(feature.basic,{authority:identity.workflow_sha,source:sourceSha,tree:identity.candidate_tree,
+            base:developBase,run:identity.run_id},repository,{...adapters.inheritedBasicArtifacts,api:call});
+        const stages=['Select squashed source','Prepare integration artifacts','Publish prepared integration candidate',
+            'Inherited BASIC authority','Retain integration execution','Publish develop integration'];
+        const jobs=Array.isArray(adapters.integrationJobs)?adapters.integrationJobs
+            : fetchJobs(repository,identity.run_id,Number(identity.run_attempt),identity.candidate_sha,adapters.execute ?? command,call,'integration');
+        for (const name of stages) {
+            const matches=jobs.filter(job=>job.name===name);
+            if (matches.length!==1 || matches[0].status!=='completed' || matches[0].conclusion!=='success'
+                || matches[0].run_id!==Number(identity.run_id) || matches[0].run_attempt!==Number(identity.run_attempt)
+                || matches[0].workflow_name!=='Integrate into develop') throw new Error('BLOCKED incomplete feature publication stage: '+name);
+        }
+        return {candidate_sha:identity.candidate_sha,candidate_tree:identity.candidate_tree,
+            workflow_sha:identity.workflow_sha,run_id:identity.run_id,run_attempt:identity.run_attempt};
     }
     const jobs=Array.isArray(adapters.integrationJobs) ? adapters.integrationJobs
         : fetchJobs(repository,identity.run_id,Number(identity.run_attempt),identity.candidate_sha,adapters.execute ?? command,call,'integration');
@@ -532,19 +561,37 @@ export function verifyQualification(request, run, jobs, record, repository, curr
         || !/^[a-f0-9]{40}$/.test(record.source_base) || currentHead !== request.candidate) {
         throw new Error('BLOCKED stale or unbound prepared candidate evidence.');
     }
-    if (record.lifecycle_schema!==undefined && ![1,2,3].includes(record.lifecycle_schema)) {
+    if (record.lifecycle_schema!==undefined && ![1,2,3,4].includes(record.lifecycle_schema)) {
         throw new Error('BLOCKED unsupported release lifecycle schema.');
     }
     if (![record.origin_commit_sha,record.selected_develop_sha,record.initial_main_sha,
         record.previous_stable_sha].every(value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value))
         || record.source_base!==record.previous_release_candidate_sha
-        || record.previous_stable_sha !== record.initial_main_sha && !isMaintenanceMainBridge(record)
         || ![record.previous_tag_object_sha,record.previous_tree_sha,record.previous_release_candidate_sha,record.origin_blob_sha].every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))
         || typeof record.previous_stable_tag !== 'string'
         || !/^v_(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?$/.test(record.previous_stable_tag)) {
         throw new Error('BLOCKED qualification lacks immutable selected-develop and prior-main provenance.');
     }
     verifyMaintenanceMainBridge(record,repository,adapters ?? {});
+    if (record.lifecycle_schema===4) {
+        if (record.source_qualification!=='protected-develop-v1' || record.coverage_schema!==2
+            || record.integration?.trust!=='protected-develop' || record.integration.candidate_sha!==record.selected_develop_sha
+            || !/^[a-f0-9]{40}$/.test(record.integration.candidate_tree ?? '') || record.delta!==null
+            || typeof record.installer_required!=='boolean') throw new Error('BLOCKED malformed protected-develop release source.');
+        const required=['Select release source','Prepare release candidate','Release qualification gate',
+            'Prepare manual release assets','Prepare Windows companion installer','Open qualified release PR'];
+        for (const name of required) {
+            const matches=jobs.filter(job=>job.name===name);
+            const expected=name==='Prepare Windows companion installer' && !record.installer_required?'skipped':'success';
+            if (matches.length!==1 || matches[0].status!=='completed' || matches[0].conclusion!==expected
+                || matches[0].workflow_name!=='Release qualification' || matches[0].run_id!==Number(request.runId)
+                || matches[0].run_attempt!==run.run_attempt) throw new Error('BLOCKED incomplete release assembly stage: '+name);
+        }
+        if (run.conclusion!=='success' || jobs.some(job=>!required.includes(job.name))) {
+            throw new Error('BLOCKED release assembly is incomplete.');
+        }
+        return [];
+    }
     if (record.lifecycle_schema===3) {
         if (record.coverage_schema!==1) throw new Error('BLOCKED unsupported release coverage schema.');
         const integration=verifyIntegrationEvidence(record,repository,adapters);
@@ -828,7 +875,7 @@ export function requireCurrentMainBase(request, repository, adapters = null) {
     const sha = call(`repos/${repository}/git/ref/heads/main`).object?.sha;
     if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('BLOCKED_MAIN_ADVANCED: current main SHA is unavailable.');
     const record = adapters?.record ?? JSON.parse(readFileSync(resolve(process.env.RELEASE_RECORD ?? 'release-record/release-candidate.json'),'utf8'));
-    if (sha !== record.initial_main_sha || record.previous_stable_sha !== sha && !isMaintenanceMainBridge(record)) {
+    if (sha !== record.initial_main_sha) {
         refuseAdvancedMain(request,repository,sha,'current main differs from the exact selected published predecessor',call);
     }
     verifyMaintenanceMainBridge(record,repository,adapters ?? {});

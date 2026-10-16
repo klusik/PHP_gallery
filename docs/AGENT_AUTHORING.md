@@ -319,8 +319,10 @@ that unchanged candidate before the guarded fast-forward.
 
 Feature pushes/final squash run hosted **Basic source checks**, BASIC `--changed`
 against `git merge-base HEAD origin/main`, without preparation/FULL. The approved
-**Integrate into develop** action observes P, prepares A and runs FULL. Release
-BASIC uses release-owned delta from qualified A. Missing history/base blocks CI;
+**Integrate into develop** action observes P, prepares A and runs FULL using the
+owner-selected main or feature workflow. Seal execution before publication;
+identical inputs may reuse it. Release trusts protected develop and assembles
+artifacts without another source audit. Missing history/base blocks CI;
 never substitute HEAD. Reports retain candidate/base/dirty-state identity. The
 [CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) owns authority/installation.
 

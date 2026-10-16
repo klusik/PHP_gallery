@@ -2,11 +2,13 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/candidate-preparation.yml
 # Module Type: Basic Source Workflow
-# Purpose: Run syntax and declaration documentation only on feature source pushes.
+# Purpose: Run BASIC on feature pushes and qualify explicitly selected CI maintenance.
 # Responsibilities:
 #   - Bind BASIC source evidence to the exact unsuperseded feature/squash SHA
 #   - Leave preparation and full execution to the requested develop integration
+#   - Require one final prepared commit before explicit maintenance FULL and a reviewed CI installation PR
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
 name: Basic source checks
 
 on:
@@ -21,6 +23,11 @@ on:
     inputs:
       maintenance_full:
         description: Explicit full hosted verification of CI infrastructure; ordinary pushes remain BASIC.
+        required: false
+        type: boolean
+        default: false
+      install_ci:
+        description: Qualify this CI-only branch based on main with FULL and release audit, then open a bot PR for human approval.
         required: false
         type: boolean
         default: false
@@ -113,7 +120,7 @@ jobs:
 
   prepare:
     needs: basic
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.maintenance_full }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.maintenance_full || inputs.install_ci) }}
     name: Prepare source candidate at event SHA
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -177,6 +184,11 @@ jobs:
             echo "::error::Could not find the reviewed source comparison base." >&2
             exit 1
           fi
+          if [[ "$(git rev-list --count "${source_base}..${GITHUB_SHA}")" != '1' \
+            || "$(git show -s --format=%P "${GITHUB_SHA}")" != "${source_base}" ]]; then
+            echo '::error::Squash the complete feature, including generated bot commits, to one commit above the comparison base before FULL.' >&2
+            exit 1
+          fi
           echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
           echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
       - name: Cheap source-policy preflight before generation
@@ -236,6 +248,10 @@ jobs:
             echo "::error::Published branch head is not the prepared candidate SHA." >&2
             exit 1
           fi
+          if [[ "${candidate_sha}" != "${SOURCE_SHA}" ]]; then
+            echo '::error::Preparation published generated changes. Squash the complete prepared tree, obtain fresh BASIC, and dispatch FULL on that final SHA.' >&2
+            exit 1
+          fi
           echo "candidate_sha=${candidate_sha}" >> "${GITHUB_OUTPUT}"
           echo "Prepared candidate SHA: ${candidate_sha}"
       - name: Show source/preparation failure diagnostics
@@ -272,9 +288,10 @@ jobs:
   qualify:
     name: Full CI for the published prepared SHA
     needs: prepare
+    if: ${{ needs.prepare.result == 'success' && needs.prepare.outputs.candidate_sha == github.sha }}
     uses: ./.github/workflows/gallery-workflows.yml
     with:
-      audit_profile: full
+      audit_profile: ${{ inputs.install_ci && 'release' || 'full' }}
       checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
       source_base: ${{ needs.prepare.outputs.source_base }}
 
@@ -339,3 +356,38 @@ jobs:
           writeFileSync(process.env.RUNNER_TEMP + '/prepared-matrix-check.json',JSON.stringify(check));
           NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/prepared-matrix-check.json"
+
+  install-ci:
+    name: Propose qualified CI installation
+    needs: [prepare, qualify, gate]
+    if: ${{ inputs.install_ci && needs.prepare.result == 'success' && needs.qualify.result == 'success' && needs.gate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+      checks: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+      SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify every native owner and installation scope
+        run: node .github/scripts/ci-installation.mjs qualify
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ci-installation-record
+          path: ${{ runner.temp }}/ci-installation.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Propose the exact qualified candidate for human review
+        run: node .github/scripts/ci-installation.mjs propose

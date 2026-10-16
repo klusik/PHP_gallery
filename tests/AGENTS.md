@@ -13,6 +13,8 @@ require a browser/database only when the behavior needs one.
 - Load the actual source owner before its first assertion. Keep shared source
   reads above all consumers, and import/fully qualify native exceptions inside
   PHP namespaces, including negative branches.
+- Model each provider endpoint's actual response separately, including omitted
+  fields; creation, collection and combined responses need not share a shape.
 - Give every independent child its own explicit minimal bootstrap, including
   Core path-policy dependencies for passive services. Parent-loaded functions
   do not establish child dependencies. Assert the child's real exit status,

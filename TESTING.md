@@ -13,9 +13,11 @@ Ordinary feature BASIC checks complete PHP/JS/MJS files changed from the frozen
 ancestor base. Reports include separate language counts and an explicit reason
 for a whole-tree fallback when evaluator/parser/configuration inputs change.
 Unavailable baseline evidence blocks; FULL retains whole-tree syntax and all
-functional owners. CI harness changes use the explicit `maintenance_full`
-qualification path and still need maintainer-controlled installation before the
-inherited evaluator guard permits ordinary protected integration.
+functional owners. The maintainer can select the feature workflow directly in
+**Integrate into develop**, including its changed tests/registries/evaluators.
+CI-only main installations use the reusable `install_ci` qualification and bot PR.
+`tests/feature_qualification_test.mjs` covers selected feature execution, sealed
+publication recovery, adverse owners and release trust in protected develop.
 
 Admin import tests validate actual module targets, explicit revision values,
 shared URL identity and payload/importer invalidation against the immutable base.
@@ -198,38 +200,35 @@ Use a disposable, migrated installation with two administrator accounts and a ga
 The relevant automated owners are `tests/gallery_creation_preferences_test.php`, `tests/gallery_editor_creation_defaults_save_test.php`, `tests/public_gallery_create_entrypoint_test.php`, `tests/simbrief_create_draft_test.php`, `tests/gallery_display_editor_layout_test.php`, the gallery edit concurrency contract, and the registered panel lifecycle/browser fixtures. Their presence is not a substitute for the migrated database and actual browser review above.
 
 
-## Qualification lifecycle target and activation status (issue #185)
+## Qualification lifecycle (#235)
 
-The latest #185 target supersedes the earlier per-child release coverage
-inheritance proposal. Feature pushes and the final squash use BASIC: PHP and
+Feature pushes and the final squash use BASIC: PHP and
 JavaScript syntax plus complete documentation for named declarations only. BASIC
 does not run regression suites, Node runtime tests, browser tests, database/HTTP
 fixtures, WinApp, package qualification, debt inventories or functional checks.
 
 After feature work is reduced to one authored commit S on top of develop P, the
-maintainer selects the feature branch with the Actions **Integrate into develop**
-button. The action must reject unsquashed feature history. It runs the central
+maintainer selects main or the feature workflow ref and source branch with Actions
+**Integrate into develop**. The selected feature's actual tests execute without
+prior main installation. The action rejects unsquashed history. It runs the central
 FULL profile once on final candidate A; only a passing exact-A matrix allows its
 automatic fast-forward to develop. Agents do not write protected branches.
 
 Release preparation starts from A and produces B with notes, all four
-locked-toolchain manuals and PDFs, inventory and manifest. BASIC `--changed`
-checks only A..B PHP/JavaScript syntax and changed named-declaration docs, while
-release-owned-input proof accepts only approved release changes. It does not
-rerun browser, database/HTTP, functional, Node runtime, WinApp or packaging
-regressions on B. Release packages and a conditional WinApp installer may still
-be generated; production is not regression qualification. Human release-PR
+locked-toolchain manuals and PDFs, inventory and manifest. Protected develop is
+the qualification boundary: release does not rerun source audits or reopen older
+FULL/BASIC archives. Build integrity and a conditional WinApp installer remain
+assembly responsibilities. Human release-PR
 approval, protected main merge M, tag, draft and publication ownership remain
 unchanged. A pure post-release fast-forward to Q adds no source and needs no
-second FULL run because the lifecycle record binds FULL on A to the approved
-BASIC A..B release delta; parallel develop work still blocks it.
+second FULL run because the release records its qualified develop source and
+completed assembly; parallel develop work still blocks it.
 
-This target is **inactive** until its implementation is installed on main and
-verified by real hosted CI. Until then, follow the currently installed required
-workflows; source changes and local fixtures do not activate reduced execution.
-The earlier independently authenticated per-child coverage inheritance proposal
-is superseded. See [the concrete review contract](docs/CI_COVERAGE_REUSE_CONTRACT.md)
-for evidence and activation gates.
+Successful FULL is sealed before publication. Use `qualify_only` to retain it
+without a develop write, then `qualified_run` to integrate identical inputs/base
+without another FULL. Historical records keep their original readers. Installation
+and actual hosted acceptance remain separate from a green fixture. See the
+[current contract](docs/CI_COVERAGE_REUSE_CONTRACT.md).
 
 ## Central Audit Runner
 

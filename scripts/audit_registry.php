@@ -257,6 +257,8 @@ $registry = [
     ],
     'node_tests' => [
         'develop_integration_test.mjs' => [],
+        'feature_qualification_test.mjs' => [],
+        'integration_status_test.mjs' => [],
         'release_delta_test.mjs' => [],
         'coverage_artifacts_test.mjs' => [],
         'release_qualification_record_test.mjs' => [],

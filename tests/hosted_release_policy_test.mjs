@@ -199,9 +199,17 @@ for (const patch of [{candidate_sha:'c'.repeat(40)},{ready:false},{ready:'false'
 }
 assert.throws(() => verifyQualification(request,run,jobs,record,record.repository,'d'.repeat(40)),/stale/);
 for (const patch of [{origin_commit_sha:'bad'}, {selected_develop_sha:'develop'},
-    {previous_stable_tag:'v_1.2.3;bad'}, {previous_stable_sha:'c'.repeat(40)}]) {
+    {previous_stable_tag:'v_1.2.3;bad'}]) {
     assert.throws(() => verifyQualification(request,run,jobs,{...record,...patch},record.repository,candidate),/provenance/);
 }
+assert.throws(()=>verifyQualification(request,run,jobs,{...record,previous_stable_sha:'c'.repeat(40)},record.repository,candidate,
+    {api:path=>{
+        if (path==='repos/'+record.repository+'/git/ref/tags/'+record.previous_stable_tag) {
+            return {ref:'refs/tags/'+record.previous_stable_tag,object:{type:'commit',sha:record.previous_stable_sha}};
+        }
+        assert.equal(path,'repos/'+record.repository+'/commits/'+record.previous_stable_sha);
+        return {sha:record.previous_stable_sha,commit:{tree:{sha:record.previous_tree_sha}}};
+    }}),/stable tag moved/,'the stable SHA is checked against the actual Git tag, separately from record shape');
 assert.throws(() => verifyQualification(request,run,jobs.slice(1),record,record.repository,candidate),/missing/);
 assert.throws(() => verifyQualification(request,run,[...jobs,jobs[0]],record,record.repository,candidate),/ambiguous/);
 for (const conclusion of ['failure','skipped','cancelled',null]) {
@@ -862,9 +870,23 @@ const release={id:1,tag_name:'v_1.2',draft:false,prerelease:false,html_url:'http
 assert.equal(fetchReleases('owner/gallery',()=>JSON.stringify([[release],[{...release,id:2}]])).length,2);
 assert.throws(()=>fetchReleases('owner/gallery',()=>JSON.stringify([{releases:[]}])) ,/malformed/);
 const qualification=read('.github/workflows/release-qualification.yml');
+{
+    const assembled={...record,lifecycle_schema:4,coverage_schema:2,source_qualification:'protected-develop-v1',
+        initial_main_sha:record.previous_stable_sha,installer_required:false,delta:null,
+        integration:{candidate_sha:record.selected_develop_sha,candidate_tree:'b'.repeat(40),trust:'protected-develop'}};
+    const assemblyJobs=['Select release source','Prepare release candidate','Release qualification gate',
+        'Prepare manual release assets','Prepare Windows companion installer','Open qualified release PR'].map((name,index)=>
+        ({id:9000+index,name,status:'completed',conclusion:name==='Prepare Windows companion installer'?'skipped':'success',
+            workflow_name:'Release qualification',run_id:Number(request.runId),run_attempt:run.run_attempt}));
+    const noHistoricalReads={api:()=>{throw new Error('Release must not reopen historical qualification.');}};
+    assert.deepEqual(verifyQualification(request,run,assemblyJobs,assembled,record.repository,candidate,noHistoricalReads),[]);
+    assert.throws(()=>verifyQualification(request,run,assemblyJobs.map(job=>job.name==='Prepare manual release assets'
+        ?{...job,conclusion:'failure'}:job),assembled,record.repository,candidate,noHistoricalReads),/BLOCKED/,
+        'qualified develop does not excuse an incomplete release build');
+}
 const bootstrapWorkflow=read('.github/workflows/release-bootstrap.yml');
-assert.match(qualification,/resolveIntegrationBootstrap\(repository,process\.env\.GITHUB_SHA/);
-assert.match(qualification,/const bootstrap=workflow===null \|\| recovery!==null/);
+assert.match(qualification,/name: Select release source/);
+assert.ok(!qualification.includes('resolveIntegrationBootstrap'),'ordinary release never bootstraps test authority');
 assert.match(bootstrapWorkflow,/integration_recovery:JSON\.parse\(e\.INTEGRATION_RECOVERY \|\| 'null'\)/);
 // Existing schema-2 consumers still require every native FULL/release owner for a repair release.
 const recoveryRecord={...schema2Record,integration_recovery:{reason:'upload-artifact-digest-prefix'}};
@@ -874,9 +896,8 @@ assert.throws(()=>verifyQualification(request,run,schema2Jobs.map(job=>job.name=
 const completion=read('.github/workflows/release-promotion.yml');
 assert.match(qualification,/Initialize or reuse immutable origin after release push/);
 assert.doesNotMatch(qualification,/workflow_dispatch:|initialization_run:/);
-assert.match(qualification,/name: Select release coverage owner[\s\S]*contents\/.github\/workflows\/develop-integration\.yml\?ref=\$\{mainSha\}/);
-assert.match(qualification,/HTTP 404/);
-assert.match(qualification,/name: Run first-install full release lifecycle[\s\S]*uses: \.\/\.github\/workflows\/release-bootstrap\.yml[\s\S]*secrets: inherit/);
+assert.match(qualification,/name: Select release source[\s\S]*Freeze the observed main Git base/);
+assert.doesNotMatch(qualification,/name: Run first-install full release lifecycle|uses: \.\/\.github\/workflows\/release-bootstrap\.yml|audit_profile:|php scripts\/audit\.php/);
 assert.match(qualification,/name: Prepare release candidate\s+needs: coverage-owner\s+if: \$\{\{ needs\.coverage-owner\.outputs\.bootstrap == 'false' \}\}/);
 assert.match(bootstrapWorkflow,/^on:\s+workflow_call:/m);
 assert.doesNotMatch(bootstrapWorkflow,/^  push:/m);
@@ -932,7 +953,14 @@ assert.doesNotMatch(read('.github/scripts/release-completion.mjs'),/release','cr
     assert.equal(requireCurrentMainBase(request,repository,{...f,record:bridgeRecord}),f.record.initial_main_sha,
         'promotion leases actual reviewed maintenance main while preserving the real previous stable tag');
     assert.notEqual(bridgeRecord.initial_main_sha,bridgeRecord.previous_stable_sha);
-    assert.throws(()=>requireCurrentMainBase(request,repository,{...f,record:{...bridgeRecord,previous_stable_tag:'v_0.132.7'}}),/BLOCKED/,
-        'an arbitrary predecessor cannot reuse the finite bridge');
+    const foreignStable='c'.repeat(40);
+    const foreignTag=path=>{
+        if (path.endsWith('/git/ref/tags/v_0.132.7')) return {object:{type:'commit',sha:foreignStable}};
+        if (path.endsWith('/commits/'+foreignStable)) return {sha:foreignStable,commit:{tree:{sha:bridgeRecord.previous_tree_sha}}};
+        return f.api(path);
+    };
+    assert.throws(()=>requireCurrentMainBase(request,repository,{...f,api:foreignTag,
+        record:{...bridgeRecord,previous_stable_tag:'v_0.132.7'}}),/stable tag moved/,
+        'an arbitrary tag cannot replace the independently selected stable commit');
 }
 process.stdout.write('PASS exact qualification identities, complete coverage, no overrides, active policy and manual publication contracts\n');

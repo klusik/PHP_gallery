@@ -143,6 +143,28 @@ export function loadIntegrationQualification(repository,candidate,adapters={}) {
     return {identity,evidence};
 }
 
+/** Capture the already qualified protected develop source without reopening historical test evidence.
+ * @param {string} repository Exact owner/repository.
+ * @param {string} candidate Immutable develop commit selected when starting the release.
+ * @param {ArtifactAdapters} [adapters={}] Read-only provider adapter; no archived FULL/BASIC artifacts are required.
+ * @returns {{candidate_sha:string,candidate_tree:string,trust:'protected-develop'}} Frozen packaging source identity.
+ */
+export function loadDevelopSource(repository,candidate,adapters={}) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(candidate ?? '')) {
+        throw new Error('BLOCKED malformed release source identity.');
+    }
+    const call=adapters.api ?? api;
+    const develop=call(`repos/${repository}/git/ref/heads/develop`)?.object?.sha;
+    const ancestry=candidate===develop ? {status:'identical',merge_base_commit:{sha:candidate}}
+        : call(`repos/${repository}/compare/${candidate}...${develop}`);
+    const commit=call(`repos/${repository}/commits/${candidate}`);
+    if (!['ahead','identical'].includes(ancestry?.status) || ancestry.merge_base_commit?.sha!==candidate
+        || commit?.sha!==candidate || !/^[a-f0-9]{40}$/.test(commit.commit?.tree?.sha ?? '')) {
+        throw new Error('BLOCKED selected release source is not retained on protected develop.');
+    }
+    return {candidate_sha:candidate,candidate_tree:commit.commit.tree.sha,trust:'protected-develop'};
+}
+
 /** Authenticate exact integration and BASIC delta transports for a schema-3 release consumer.
  * @param {import('./release-promotion.mjs').ReleaseRecord} record Exact retained release qualification record.
  * @param {ArtifactAdapters} adapters Optional isolated server and archive transports.
