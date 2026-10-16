@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.132.9}
-\newcommand{\manualdate}{15~oktober~2026}
+\newcommand{\version}{0.132.10}
+\newcommand{\manualdate}{16~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1063,6 +1063,8 @@ Att tillämpa utkastet kräver en separat bekräftelse. PHP Gallery skapar eller
 \index{m00159@Mediefilnamnsbyte}
 \index{f00078@filnamn!n00172@namnbyte}
 \index{m00160@medieunderhåll}
+
+Välj omfattning och filnamnsmönster och skapa förhandsvisningen innan du bekräftar ett fysiskt namnbyte. Den kompakta gallerilistan har lokal sökning utan att ändra markerade val och visas för omfattningen markerade gallerier. Använd rullistan för ett enskilt galleri. Frågetecken öppnar utförlig hjälp. Förhandsvisningen visar sammanlagda antal och utfällbara gallerigrupper; kontrollera gamla och föreslagna sökvägar samt status i varje grupp innan planen tillämpas. Sökord kombineras med AND oavsett ordning; dubbla citattecken bevarar en fras exakta ordföljd. Synlighetsfilter uppdaterar bara gallerilistan utan att skapa en namnbytesplan. Skapa planen uttryckligen med förhandsvisningsåtgärden. Tomma gallerier visas som kompakta sammanfattningsrader; gallerier med filförslag kan fällas ut i en resultatlista med begränsad höjd. En synlig förloppsindikator följer förfrågningar: listuppdatering och förhandsvisning visar obestämd aktivitet, medan satsvisa kontroller och namnbyten visar uppmätt förlopp.
 
 \ui{Gallerier > Mediefilnamnsbyte}, och panelen för filnamnsbyte som finns för enskilda gallerier, kan normalisera fysiska bildfilnamn utifrån gallerisammanhang och aktuell bildordning. Det är en filsystemsåtgärd, inte en kosmetisk titeländring, så verktyget börjar alltid med en provkörningsplan. Förhandsvisningen listar varje gammalt och föreslaget filnamn och markerar filer som redan stämmer, saknas, skulle krocka eller måste hoppas över enligt en säkerhetsregel.
 
@@ -2622,6 +2624,18 @@ tillbaka på~äldre gröna underlag. Ofullständiga eller~dubbla API-sidor och~�
 under insamlingen avvisar kvalificering. Detta skyddar historisk granskning;
 nyare körningar utan publicerad kvalificeringskontroll och~oberoende
 develop/release-återanvändning av~täckning ligger utanför denna läsare.
+
+Efter granskad installation på~main är~integrationsvalet
+\codeword{auto\_squash\_generated} true som~standard. Förberedelsen tar~bara med
+de~tre tillåtna genererade filerna i~en~commit A ovanpå observerad develop P,
+bevarar ursprungsmeddelandet med~\codeword{Prepared-From} och~ersätter endast
+vald feature-ref när~dess gamla SHA stämmer exakt. Den~startar nytt BASIC för~A,
+kontrollerar var~femte sekund i~högst femton minuter och~autentiserar exakt körning,
+första försök samt~inbyggda och~egna kontroller före FULL. Flyttade referenser,
+misslyckat eller~ersatt BASIC och~tidsgränser stoppar integrationen. Oförändrad
+förberedelse behåller SHA; avstängd automatik behåller den~manuella
+squash-kontrollpunkten. Återställning och~ändrad CI-auktoritet behåller befintliga
+vägar. Feature-ändringar installerar inte ensamma detta beteende på~main.
 
 Funktionspushar och~den~avslutande squashningen använder bara BASIC: PHP-/JavaScript-
 syntax och~fullständig dokumentation för namngivna deklarationer. När funktionen

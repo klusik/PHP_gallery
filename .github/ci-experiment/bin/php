@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Project: PHP Gallery
+# Purpose: Dispatch top-level CLI invocations to the matching child PHP version.
+set -euo pipefail
+case "${CI_PHP_VERSION:-8.5}" in
+    8.1|8.5) exec "/usr/bin/php${CI_PHP_VERSION:-8.5}" "$@" ;;
+    *) echo "BLOCKED unsupported CI_PHP_VERSION" >&2; exit 2 ;;
+esac

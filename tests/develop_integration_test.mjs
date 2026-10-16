@@ -20,7 +20,7 @@ import {spawnSync} from 'node:child_process';
 import {runInNewContext} from 'node:vm';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
 import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence,
-    requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths} from '../.github/scripts/develop-integration.mjs';
+    requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths,dispatchPreparedBasic,waitForPreparedBasic} from '../.github/scripts/develop-integration.mjs';
 import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {verifyIntegrationEvidence} from '../.github/scripts/release-promotion.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
@@ -514,9 +514,9 @@ for (const [label,mutate] of [
     assert.match(fullJob,/^    needs: \[select, publish-candidate\]$/m,
         'FULL must wait directly for both selected source and published candidate');
     const fullCondition=fullJob.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m)?.[1] ?? '';
-    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.select.outputs.source_sha";
+    const expectedFullCondition="!cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha";
     assert.equal(fullCondition,expectedFullCondition,
-        'FULL must require cancellation safety, successful direct dependencies and the selected source SHA');
+        'FULL must require cancellation safety, successful direct dependencies and the BASIC-qualified final source SHA');
     assert.match(fullJob,/checkout_ref: \$\{\{ needs\.publish-candidate\.outputs\.candidate_sha \}\}/,
         'FULL checkout must remain bound to the published candidate');
     const executableFullCondition=fullCondition.replaceAll('needs.publish-candidate','needs["publish-candidate"]');
@@ -531,12 +531,24 @@ for (const [label,mutate] of [
         ]),
         {name:'cancelled workflow blocks FULL',cancelled:true,select:'success',publish:'success',candidate:sourceSha,source:sourceSha,optional:{},expected:false},
         {name:'generated child requires a new squash checkpoint',cancelled:false,select:'success',publish:'success',candidate:candidateSha,source:sourceSha,optional:{},expected:false},
+        {name:'automatic squash with fresh BASIC proceeds',cancelled:false,select:'success',publish:'success',candidate:candidateSha,source:sourceSha,qualified:candidateSha,optional:{},expected:true},
+        {name:'missing final qualification blocks FULL',cancelled:false,select:'success',publish:'success',candidate:candidateSha,source:sourceSha,qualified:'',optional:{},expected:false},
     ];
     for (const scenario of fullConditionCases) {
         const needs={select:{result:scenario.select,outputs:{source_sha:scenario.source}},
-            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate}},...scenario.optional};
+            'publish-candidate':{result:scenario.publish,outputs:{candidate_sha:scenario.candidate,final_source_sha:scenario.qualified ?? scenario.source}},...scenario.optional};
         assert.equal(runInNewContext(executableFullCondition,{cancelled:()=>scenario.cancelled,needs}),scenario.expected,
             'FULL condition evaluation: '+scenario.name);
+    }
+    const publisher=workflow.match(/^  publish-candidate:\n([\s\S]*?)(?=^  full:)/m)?.[1] ?? '';
+    const finalPublisher=workflow.match(/^  publish-develop:\n([\s\S]*)/m)?.[1] ?? '';
+    assert.match(publisher,/checks: read/,'fresh BASIC authentication can read native and custom checks');
+    assert.match(publisher,/qualified=await waitForPreparedBasic\(/,'publication must await authenticated BASIC');
+    for (const [environment,output] of [['SOURCE_SHA','final_source_sha'],['BASIC_RUN_ID','basic_run_id'],['BASIC_RUN_ATTEMPT','basic_run_attempt']]) {
+        assert.ok(finalPublisher.includes(environment+': ${{ needs.publish-candidate.outputs.'+output+' }}'),
+            'final integration consumes the prepared candidate qualification: '+environment);
+        assert.ok(publisher.includes(output+': ${{ steps.publish.outputs.'+output+' }}'),
+            'publisher exposes the exact final qualification: '+output);
     }
     const expression=workflow.match(/^\s+artifact_digest: (.+)$/m)?.[1].trim();
     assert.ok(expression,'preparation exposes the archive digest');
@@ -556,8 +568,8 @@ for (const [label,mutate] of [
             expired:false,workflow_run:{id:901},size_in_bytes:archive.length};
         if (path==='repos/'+repository+'/git/ref/heads/'+encodeURIComponent(branch).replace(/%2F/gi,'/')) return {object:{sha:sourceRef}};
         if (path==='repos/'+repository+'/git/ref/heads/develop') return {object:{sha:developSha}};
-        if (path==='repos/'+repository+'/commits/'+sourceSha) return {sha:sourceSha,commit:{tree:{sha:sourceTree}},parents:[{sha:developSha}]};
-        if (path==='repos/'+repository+'/git/blobs') return {sha:String(++blobCount).repeat(40)};
+        if (path==='repos/'+repository+'/commits/'+sourceSha) return {sha:sourceSha,commit:{tree:{sha:sourceTree},message:'Implement feature\n\nRefs: #185'},parents:[{sha:developSha}]};
+        if (path==='repos/'+repository+'/git/blobs') return {sha:(++blobCount).toString(16).padStart(40,'0')};
         if (path==='repos/'+repository+'/git/trees') {published.push({kind:'tree',payload});return {sha:candidateTree};}
         if (path==='repos/'+repository+'/git/commits') {published.push({kind:'commit',payload});return {sha:candidateSha};}
         if (path==='repos/'+repository+'/git/refs/heads/'+encodeURIComponent(branch).replace(/%2F/gi,'/') && payload) {
@@ -582,6 +594,132 @@ for (const [label,mutate] of [
         artifactId:44,artifactDigest:'sha256:'+'0'.repeat(64),runId:901},sourceOnly,
         (path,method,payload)=>api(path,method,payload),{api,download:()=>archive}),/BLOCKED/);
     assert.equal(published.length,before,'a provider digest mismatch cannot create candidate Git objects or refs');
+
+    let mutationFailure=false;
+    const autoApi=(path,method='GET',payload=null)=>{
+        if (path==='repos/'+repository) return {full_name:repository,node_id:'R_fixture'};
+        if (path==='graphql') {
+            assert.equal(method,'POST');
+            assert.deepEqual(payload.variables.input.refUpdates,[{
+                name:'refs/heads/'+branch,beforeOid:sourceSha,afterOid:candidateSha,force:true,
+            }],'only the selected feature ref can be rewritten under its exact old-head lease');
+            if (mutationFailure) return {errors:[{message:'stale beforeOid'}]};
+            sourceRef=candidateSha;
+            return {data:{updateRefs:{clientMutationId:payload.variables.input.clientMutationId}}};
+        }
+        return api(path,method,payload);
+    };
+    const autoRequest={repository,branch,sourceSha,expectedDevelopSha:developSha,
+        autoSquashGenerated:true,artifactId:44,artifactDigest:digest,runId:901};
+    sourceRef=sourceSha;
+    const squashed=publishPreparedCandidate(autoRequest,sourceOnly,autoApi,{api:autoApi,download:()=>archive});
+    assert.equal(squashed.candidateSha,candidateSha);
+    const squashCommit=published.filter(item=>item.kind==='commit').at(-1).payload;
+    assert.deepEqual(squashCommit.parents,[developSha],'prepared tree remains exactly one commit above develop');
+    assert.equal(squashCommit.tree,candidateTree);
+    assert.equal(squashCommit.message,'Implement feature\n\nRefs: #185\n\nPrepared-From: '+sourceSha);
+    sourceRef=sourceSha;
+    mutationFailure=true;
+    assert.throws(()=>publishPreparedCandidate(autoRequest,sourceOnly,autoApi,{api:autoApi,download:()=>archive}),/conditional feature branch update/);
+    assert.equal(sourceRef,sourceSha,'a rejected atomic lease preserves the concurrent branch head');
+    mutationFailure=false;
+    assert.throws(()=>publishPreparedCandidate({...autoRequest,autoSquashGenerated:'true'},sourceOnly,autoApi,
+        {api:autoApi,download:()=>archive}),/BLOCKED/,'non-boolean automatic rewrite consent is refused');
+    const autoNoOp=(path,method,payload)=>path==='repos/'+repository+'/git/trees' ? {sha:sourceTree} : autoApi(path,method,payload);
+    const unchanged=publishPreparedCandidate(autoRequest,sourceOnly,autoNoOp,{api:autoNoOp,download:()=>archive});
+    assert.equal(unchanged.candidateSha,sourceSha,'automatic mode preserves an already prepared commit');
+    assert.throws(()=>publishPreparedCandidate(autoRequest,sourceOnly,(path,method,payload)=>{
+        if (path==='graphql') return {data:{updateRefs:{clientMutationId:payload.variables.input.clientMutationId}}};
+        return autoApi(path,method,payload);
+    },{api:autoApi,download:()=>archive}),/changed after publication/,
+    'a mutation response alone cannot replace the final feature-ref read');
+}
+
+/** Build an already squashed candidate with a freshly dispatched exact-SHA BASIC attempt.
+ * @returns {IntegrationFixture} Inert provider with one-commit ancestry and successful dispatch/native/custom BASIC metadata.
+ */
+function preparedBasicFixture() {
+    const f=fixture(sourceSha),original=f.call;
+    f.call=(path,method='GET',payload=null)=>{
+        if (path==='repos/'+repository+'/actions/workflows/candidate-preparation.yml/dispatches') {
+            assert.equal(method,'POST');
+            assert.deepEqual(payload,{ref:branch,inputs:{maintenance_full:false},return_run_details:true});
+            return {workflow_run_id:801};
+        }
+        if (path==='repos/'+repository+'/actions/runs/801/attempts/1/jobs?per_page=100&page=1') {
+            const response=original(path.replace('/attempts/1/','/attempts/3/'));
+            return {...response,jobs:response.jobs.map(job=>({...job,run_attempt:1}))};
+        }
+        const response=original(path,method,payload);
+        if (path==='repos/'+repository+'/actions/runs/801') return {...response,event:'workflow_dispatch',run_attempt:1};
+        if (path.includes('/actions/workflows/candidate-preparation.yml/runs?')) {
+            return {...response,workflow_runs:response.workflow_runs.map(run=>({...run,event:'workflow_dispatch',run_attempt:1}))};
+        }
+        if (path==='repos/'+repository+'/commits/'+sourceSha+'/check-runs?filter=all&per_page=100&page=1') {
+            return {...response,check_runs:response.check_runs.map(check=>({...check,external_id:'basic:801:1:'+sourceSha}))};
+        }
+        return response;
+    };
+    return f;
+}
+
+{
+    const preparedRequest={repository,branch,candidateSha:sourceSha,expectedDevelopSha:developSha};
+    const f=preparedBasicFixture();
+    assert.equal(dispatchPreparedBasic(preparedRequest,context,f.call),'801');
+    assert.throws(()=>dispatchPreparedBasic(preparedRequest,{...context,authorityUpdate:true},f.call),/BLOCKED/);
+    assert.throws(()=>dispatchPreparedBasic(preparedRequest,context,(path,...args)=>path.endsWith('/dispatches')
+        ? {} : f.call(path,...args)),/run identity/,'dispatch must return an exact run ID');
+
+    const waitRequest={...preparedRequest,basicRunId:'801'};
+    let elapsed=0,polls=0;
+    const queued=(path,...args)=>{
+        const response=f.call(path,...args);
+        return path==='repos/'+repository+'/actions/runs/801' && polls++===0
+            ? {...response,status:'queued',conclusion:null} : response;
+    };
+    const selected=await waitForPreparedBasic(waitRequest,context,queued,async milliseconds=>{elapsed+=milliseconds;},()=>elapsed);
+    assert.equal(elapsed,5000,'queued BASIC uses the named polling interval');
+    assert.equal(selected.sourceSha,sourceSha);
+    assert.equal(selected.basicRunId,'801');
+    assert.equal(selected.basicRunAttempt,'1');
+    for (const patch of [
+        {head_sha:candidateSha},{head_branch:'feature/other'},{run_attempt:2},
+        {path:'.github/workflows/other.yml'},{status:'completed',conclusion:'failure'},
+        {status:'completed',conclusion:'cancelled'},{status:'unknown'},
+    ]) {
+        await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,(path,...args)=>{
+            const response=f.call(path,...args);
+            return path==='repos/'+repository+'/actions/runs/801' ? {...response,...patch} : response;
+        }),/BLOCKED/);
+    }
+    elapsed=0;
+    await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,(path,...args)=>{
+        const response=f.call(path,...args);
+        return path==='repos/'+repository+'/actions/runs/801' ? {...response,status:'queued',conclusion:null} : response;
+    },async milliseconds=>{elapsed+=milliseconds;},()=>elapsed),/timed out/);
+    assert.equal(elapsed,15*60*1000,'waiting is bounded without real fixture sleeps');
+    f.state.source=candidateSha;
+    await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,f.call),/BLOCKED/,'a concurrent feature push blocks continuation');
+    f.state.source=sourceSha;
+    f.state.develop=candidateSha;
+    await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,f.call),/BLOCKED/,'a concurrent develop change blocks continuation');
+    f.state.develop=developSha;
+    await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,(path,...args)=>{
+        const response=f.call(path,...args);
+        if (path.includes('/actions/workflows/candidate-preparation.yml/runs?')) {
+            return {total_count:2,workflow_runs:[...response.workflow_runs,
+                {...response.workflow_runs[0],id:802,status:'queued',conclusion:null}]};
+        }
+        return response;
+    }),/BLOCKED/,'a newer unfinished BASIC run supersedes the dispatched evidence');
+    await assert.rejects(()=>waitForPreparedBasic(waitRequest,context,(path,...args)=>{
+        const response=f.call(path,...args);
+        return path.endsWith('/check-suites/7002') ? {...response,conclusion:'failure'} : response;
+    }),/BLOCKED/,'a green run cannot hide a failed native BASIC suite');
+    const final=validateDevelopIntegration({...request,sourceSha,candidateSha:sourceSha,basicRunId:'801',basicRunAttempt:'1'},context,repository,f.call);
+    assert.equal(final.record.source_sha,sourceSha);
+    assert.equal(final.record.candidate_sha,sourceSha,'final evidence binds BASIC and FULL to the same one-commit candidate');
 }
 
 /** Supply genuine-shaped owner recovery with old maintenance FULL and fresh main-run native owners.

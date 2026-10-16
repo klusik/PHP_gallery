@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "status": "archived_negative_adoption",
+  "issue": "https://github.com/klusik/PHP_gallery/issues/232",
+  "repository": "klusik/PHP_gallery",
+  "experiment_branch": "feature/prepared-ci-environment",
+  "tested_sha": "4d373023b96554364e295fb76d931ff3535f7c5a",
+  "tested_tree": "1a8f6963b56b2123443180ccdfcc1c8f15399e64",
+  "comparison_base": "e4abeb386354e7254a9083dbae5e16e8131ee314",
+  "build": {
+    "run_id": 38817076697,
+    "wall_seconds": 257,
+    "runner_seconds": 254,
+    "build_publish_step_seconds": 234
+  },
+  "frozen_images": {
+    "main": "sha256:8d781b26121db735ba5787032f923e644c2e4a0b4b4e5f2d12f2790126cbcc47",
+    "mysql84": "sha256:8d3527f2f433a20f2f38518211b6459647bc835348a846dafa602667c48a50f1",
+    "mariadb1011": "sha256:10b22ad01712023f0694937d9685434ad860553ef5f3938d5ca937f2ba25536d",
+    "mariadb114": "sha256:b0b0e631751cd01bae56ac4587ce2de9a920b59aa338a7950fc0fdcf52f5af5c"
+  },
+  "paired_results": [
+    {
+      "sample": 1,
+      "baseline": {
+        "run_id": 38821456673,
+        "result": "success",
+        "wall_seconds": 181,
+        "runner_seconds": 1404,
+        "manual_job_seconds": 123
+      },
+      "prepared": {
+        "run_id": 38821832860,
+        "result": "success",
+        "wall_seconds": 222,
+        "runner_seconds": 1759,
+        "manual_job_seconds": 67
+      },
+      "delta_wall_seconds": 41,
+      "delta_runner_seconds": 355
+    },
+    {
+      "sample": 2,
+      "baseline": {
+        "run_id": 38822303245,
+        "result": "success",
+        "wall_seconds": 188,
+        "runner_seconds": 1387,
+        "manual_job_seconds": 97
+      },
+      "prepared": {
+        "run_id": 38822705671,
+        "result": "failure",
+        "wall_seconds": 209,
+        "runner_seconds": 1794,
+        "manual_job_seconds": 55
+      },
+      "delta_wall_seconds": 21,
+      "delta_runner_seconds": 407,
+      "failure": {
+        "owner": "required Chromium fixtures",
+        "fixture": "theme_appearance_browser_test.mjs",
+        "assertion": "saved ratio survives mobile stack and desktop restoration",
+        "browser_passed": 33,
+        "browser_failed": 1
+      }
+    },
+    {
+      "sample": 3,
+      "baseline": {
+        "run_id": 38823235430,
+        "result": "success",
+        "wall_seconds": 167,
+        "runner_seconds": 1386,
+        "manual_job_seconds": 136
+      },
+      "prepared": {
+        "run_id": 38823577944,
+        "result": "success",
+        "wall_seconds": 215,
+        "runner_seconds": 1794,
+        "manual_job_seconds": 65
+      },
+      "delta_wall_seconds": 48,
+      "delta_runner_seconds": 408
+    }
+  ],
+  "delta_wall_seconds_min_median_max": [
+    21,
+    41,
+    48
+  ],
+  "delta_runner_seconds_min_median_max": [
+    355,
+    407,
+    408
+  ],
+  "notes": [
+    "Three paired hosted observations, not a p95 or flakiness estimate.",
+    "Runner seconds are not provider billing.",
+    "The A/B manual build is a separately added scenario, not part of original FULL.",
+    "Baseline A manual jobs encountered TinyTeX cache misses.",
+    "OCI pulls recur on newly provisioned hosted runners, so image preinstallation does not deliver persistent local state.",
+    "Old historical workflow definitions are parked outside .github/workflows and cannot run automatically."
+  ]
+}

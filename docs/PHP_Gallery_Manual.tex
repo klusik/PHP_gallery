@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.132.9}
-\newcommand{\manualdate}{15 October 2026}
+\newcommand{\version}{0.132.10}
+\newcommand{\manualdate}{16 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1070,6 +1070,8 @@ Applying the~draft requires a~separate confirmation. PHP Gallery creates or~reus
 \index{Media Renamer}
 \index{filenames!renaming}
 \index{media maintenance}
+
+Choose the~scope, set the~filename pattern, then build the~preview before confirming any physical rename. The~compact gallery list supports local search without changing checked selections; it~is~shown for~the~checked-gallery scope. For~a~single gallery, use the~dropdown. Question-mark controls reveal detailed help. The~preview shows summary counts and~expandable gallery groups; open each group to~review its~old-to-new mappings and~statuses before applying. Search terms are~combined with AND regardless of~their order; enclose a~phrase in~double quotes to~match its~word order exactly. Visibility filters refresh the~gallery selector without generating a~rename plan. Build the~plan explicitly with Preview rename plan. Empty galleries occupy compact summary rows; galleries with file mappings expand within a~bounded result list. A~visible progress bar accompanies requests: list refresh and~preview show indeterminate activity, while batched checks and~renames report measured progress.
 
 \ui{Galleries > Media renamer}, and~the~renamer panel available for~an~individual gallery, can~normalize physical image filenames from~gallery context and~the~current photo order. This is~a~filesystem operation, not~a~cosmetic title change, so~the~tool always begins with a~dry-run plan. The~preview lists each old and~proposed filename and~marks files that already match, are~missing, would~collide, or~must be~skipped by~a~safety rule.
 
@@ -2659,6 +2661,18 @@ highest attempt. Newer red or~pending checks cannot fall back to~older green
 evidence. Incomplete or~duplicate API pages and~changes during collection refuse
 qualification. This protects historical inspection; it~does~not~discover newer
 unpublished workflow runs or~enable independent develop/release coverage reuse.
+
+After reviewed installation on~main, \codeword{auto\_squash\_generated}
+defaults to~true in~the~integration action. Preparation retains only the~three
+allowlisted generated files in~one commit A above the~observed develop P,
+preserves the~original message with \codeword{Prepared-From}, and~conditionally
+replaces the~selected feature ref using its~exact old SHA. It~dispatches fresh
+BASIC for~A, polls every five seconds for~up~to~fifteen minutes, and~authenticates
+the~exact run, first attempt and~native/custom checks before FULL. Changed refs,
+failed or~superseded BASIC and~timeouts stop integration. No-op preparation
+preserves SHA; disabled automatic mode retains the~manual squash checkpoint.
+Recovery and~CI-authority updates retain their existing paths. Feature edits
+alone do~not~install this behavior into the~trusted main-owned workflow.
 
 Feature pushes and~their final squash receive BASIC checks only: PHP/JavaScript
 syntax and~complete named-declaration documentation. After the~feature is~one

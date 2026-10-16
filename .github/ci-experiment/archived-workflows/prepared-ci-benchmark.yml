@@ -1,0 +1,500 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ci-experiment/archived-workflows/prepared-ci-benchmark.yml
+# Module Type: Archived CI Experiment Workflow Definition
+# Purpose: Archive the historical controlled A/B benchmark workflow as inert evidence.
+# Responsibilities:
+#   - Preserve exact source-base, test matrix, and paired measurement definitions.
+#   - Remain outside the GitHub Actions workflow discovery directory.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: EXPERIMENT prepared-environment A-B benchmark
+on:
+  push:
+    branches: [feature/prepared-ci-environment]
+    paths:
+      - '.github/ci-experiment/config.env'
+      - '.github/ci-experiment/image-lock.json'
+      - '.github/workflows/prepared-ci-benchmark.yml'
+permissions:
+  contents: read
+concurrency:
+  group: prepared-ci-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  TESTED_SHA: 4d373023b96554364e295fb76d931ff3535f7c5a
+  TESTED_TREE: 1a8f6963b56b2123443180ccdfcc1c8f15399e64
+  BASE_SHA: e4abeb386354e7254a9083dbae5e16e8131ee314
+  PHP_GALLERY_SOURCE_BASE: e4abeb386354e7254a9083dbae5e16e8131ee314
+  PHP_GALLERY_AUDIT_CANDIDATE: 4d373023b96554364e295fb76d931ff3535f7c5a
+  PHP_GALLERY_PACKAGING_CANDIDATE: 4d373023b96554364e295fb76d931ff3535f7c5a
+jobs:
+  resolve:
+    name: EXPERIMENT / frozen A-B sample inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.frozen.outputs.enabled }}
+      arm: ${{ steps.frozen.outputs.arm }}
+      sample: ${{ steps.frozen.outputs.sample }}
+      env_image: ${{ steps.frozen.outputs.env_image }}
+      mysql84_image: ${{ steps.frozen.outputs.mysql84_image }}
+      mariadb1011_image: ${{ steps.frozen.outputs.mariadb1011_image }}
+      mariadb114_image: ${{ steps.frozen.outputs.mariadb114_image }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: frozen
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/feature/prepared-ci-environment ]]
+          source .github/ci-experiment/config.env
+          [[ "$MODE" == build || "$MODE" == smoke || "$MODE" == full ]]
+          if [[ "$MODE" != full ]]; then exit 0; fi
+          [[ "$ARM" == A || "$ARM" == B ]]
+          [[ "$SAMPLE" =~ ^[1-9][0-9]*$ ]]
+          lock=.github/ci-experiment/image-lock.json
+          jq -e --arg T "$TESTED_SHA" --arg B "$BASE_SHA" \
+            '.schema == 1 and .tested_sha == $T and .base_sha == $B and
+             ([.images.env,.images.mysql84,.images.mariadb1011,.images.mariadb114] |
+             all(.digest | test("^sha256:[0-9a-f]{64}$")))' "$lock"
+          for key in env mysql84 mariadb1011 mariadb114; do
+            digest="$(jq -r --arg key "$key" '.images[$key].digest' "$lock")"
+            echo "$key""_image=ghcr.io/klusik/php-gallery-ci-experiment@$digest" >> "$GITHUB_OUTPUT"
+          done
+          printf 'enabled=true\narm=%s\nsample=%s\n' "$ARM" "$SAMPLE" >> "$GITHUB_OUTPUT"
+          printf 'Experimental E=%s T=%s B=%s sample=%s arm=%s\n' \
+            "$GITHUB_SHA" "$TESTED_SHA" "$BASE_SHA" "$SAMPLE" "$ARM" >> "$GITHUB_STEP_SUMMARY"
+
+  baseline-full:
+    name: "EXPERIMENT / A: unmodified complete installed FULL"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'A' }}
+    permissions:
+      contents: read
+    uses: klusik/PHP_gallery/.github/workflows/gallery-workflows.yml@4d373023b96554364e295fb76d931ff3535f7c5a
+    with:
+      checkout_ref: 4d373023b96554364e295fb76d931ff3535f7c5a
+      source_base: e4abeb386354e7254a9083dbae5e16e8131ee314
+      audit_profile: full
+
+  prepared-preflight:
+    name: "EXPERIMENT / B: source preflight"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'B' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: preflight
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-preflight
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-source:
+    name: "EXPERIMENT / B: shared source contracts"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'B' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_SOURCE_OWNER: shared-source-contracts
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: source-contracts
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-source
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-portable:
+    name: "EXPERIMENT / B: portable Node WinApp"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'B' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: portable
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-portable
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-package-linux:
+    name: "EXPERIMENT / B: native Linux package owner"
+    needs: [resolve, prepared-preflight]
+    if: ${{ needs.resolve.outputs.arm == 'B' && needs.prepared-preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.1'
+      CI_PHP_INTL: with-intl
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: package
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-package-linux
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-package-native:
+    name: "EXPERIMENT / B: native package ${{ matrix.os }}"
+    needs: [resolve, prepared-preflight]
+    if: ${{ needs.resolve.outputs.arm == 'B' && needs.prepared-preflight.result == 'success' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-2025, php: '8.5'}
+          - {os: macos-latest, php: '8.5'}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: 4d373023b96554364e295fb76d931ff3535f7c5a
+          path: source
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: zip, mbstring
+          coverage: none
+      - name: Existing exact source mandatory native package suite
+        working-directory: source
+        run: php scripts/audit.php --suite=production-package
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-native-${{ runner.os }}
+          path: source/cache/test-audit/**/*
+          if-no-files-found: warn
+          retention-days: 7
+
+  real-database-browser:
+    name: "EXPERIMENT / B: PHP ${{ matrix.php }} ${{ matrix.database }} shard ${{ matrix.shard }}/4"
+    needs: [resolve, prepared-preflight]
+    if: ${{ needs.resolve.outputs.arm == 'B' && needs.prepared-preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: {contents: read, packages: read}
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [mysql84, mariadb1011, mariadb114]
+        shard: [1, 2, 3, 4]
+        include:
+          - {database: mysql84, php: '8.5', real_browser: true}
+          - {database: mariadb1011, php: '8.5', real_browser: false}
+          - {database: mariadb114, php: '8.5', real_browser: false}
+    services:
+      database:
+        image: ${{ matrix.database == 'mysql84' && needs.resolve.outputs.mysql84_image || matrix.database == 'mariadb1011' && needs.resolve.outputs.mariadb1011_image || needs.resolve.outputs.mariadb114_image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_AUDIT_WORKERS: '4'
+      PHP_GALLERY_AUDIT_SHARD_INDEX: ${{ matrix.shard }}
+      PHP_GALLERY_AUDIT_SHARD_TOTAL: '4'
+      PHP_GALLERY_AUDIT_OWNER: hosted-full
+      PHP_GALLERY_SOURCE_OWNER: shared-source-contracts
+      PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp
+      PHP_GALLERY_PACKAGING_OWNER: production-package
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_REQUIRED: '1'
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      GALLERY_RUNTIME_NORMALIZATION: unicode
+      GALLERY_SESSION_REQUIRED: '1'
+      GALLERY_WORKFLOW_BROWSER: ${{ matrix.real_browser && '/usr/bin/google-chrome' || 'disabled' }}
+      GALLERY_WORKFLOW_BROWSER_REQUIRED: ${{ matrix.real_browser && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: database
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-db-${{ strategy.job-index }}
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  runtime-compatibility:
+    name: "EXPERIMENT / B: PHP ${{ matrix.php }} source shard ${{ matrix.shard }}/4"
+    needs: [resolve, prepared-preflight]
+    if: ${{ needs.resolve.outputs.arm == 'B' && needs.prepared-preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: {contents: read, packages: read}
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.5']
+        shard: [1, 2, 3, 4]
+        include:
+          - {php: '8.1', normalization: unicode, intl: with-intl}
+          - {php: '8.5', normalization: ascii, intl: without-intl}
+    env:
+      CI_PHP_VERSION: ${{ matrix.php }}
+      CI_PHP_INTL: ${{ matrix.intl }}
+      PHP_GALLERY_AUDIT_WORKERS: '4'
+      PHP_GALLERY_AUDIT_SHARD_INDEX: ${{ matrix.shard }}
+      PHP_GALLERY_AUDIT_SHARD_TOTAL: '4'
+      PHP_GALLERY_AUDIT_OWNER: hosted-full
+      PHP_GALLERY_SOURCE_OWNER: shared-source-contracts
+      PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp
+      PHP_GALLERY_PACKAGING_OWNER: production-package
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_RUNTIME_NORMALIZATION: ${{ matrix.normalization }}
+      GALLERY_SESSION_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: compat
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-compat-${{ strategy.job-index }}
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-browser:
+    name: "EXPERIMENT / B: required Chromium fixtures"
+    needs: [resolve, prepared-preflight]
+    if: ${{ needs.resolve.outputs.arm == 'B' && needs.prepared-preflight.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_BROWSER: /usr/bin/google-chrome
+      PHP_GALLERY_BROWSER_REQUIRED: '1'
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: browser
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-browser
+          path: |
+            source/cache/test-audit/**/*
+            ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+  prepared-full-gate:
+    name: "EXPERIMENT / B: complete 28-part coverage gate (non-authoritative)"
+    if: ${{ always() && needs.resolve.outputs.arm == 'B' }}
+    needs: [resolve, prepared-preflight, prepared-source, prepared-portable, prepared-package-linux, prepared-package-native, real-database-browser, runtime-compatibility, prepared-browser]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Reject missing or skipped required FULL owners
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const results = JSON.parse(process.env.RESULTS);
+          const owners = ['prepared-preflight','prepared-source','prepared-portable',
+            'prepared-package-linux','prepared-package-native','real-database-browser',
+            'runtime-compatibility','prepared-browser'];
+          const bad = owners.filter(name => results[name]?.result !== 'success');
+          console.log(JSON.stringify({arm:'B',owners:owners.map(name=>[name,results[name]?.result])}));
+          if (bad.length) throw new Error('BLOCKED experimental required owners: ' + bad.join(', '));
+          NODE
+
+  manual-baseline-A:
+    name: "EXPERIMENT / A: current TinyTeX cache and four PDFs"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'A' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: actions/checkout@v7.0.1
+        with: {ref: 4d373023b96554364e295fb76d931ff3535f7c5a, path: source, fetch-depth: 0, persist-credentials: false}
+      - uses: shivammathur/setup-php@v2
+        with: {php-version: '8.5', coverage: none}
+      - id: tex-cache
+        uses: actions/cache/restore@v6.1.0
+        timeout-minutes: 3
+        with:
+          path: ~/.TinyTeX
+          key: tinytex-v2-ubuntu24.04-x86_64-${{ hashFiles('source/.github/texlive-lock.json', 'source/.github/texlive-packages.txt', 'source/.github/scripts/provision_tinytex.sh') }}
+      - name: Locked TinyTeX bundle install on miss
+        if: ${{ steps.tex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: cd source && bash .github/scripts/provision_tinytex.sh install
+      - name: Frozen TeX package provisioning on miss
+        if: ${{ steps.tex-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: cd source && bash .github/scripts/provision_tinytex.sh provision
+      - name: Verify identical frozen TeX toolchain
+        shell: bash
+        run: cd source && bash .github/scripts/provision_tinytex.sh verify
+      - name: Build all four manuals using original release commands, isolated
+        shell: bash
+        run: bash control/.github/ci-experiment/manuals.sh "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/experiment-manual-A"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-A-four-manuals
+          path: ${{ runner.temp }}/experiment-manual-A/
+          if-no-files-found: warn
+          retention-days: 7
+
+  manual-prepared-B:
+    name: "EXPERIMENT / B: prepared TinyTeX and four PDFs"
+    needs: resolve
+    if: ${{ needs.resolve.outputs.arm == 'B' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: {contents: read, packages: read}
+    env:
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {ref: '${{ github.sha }}', path: control, persist-credentials: false}
+      - uses: ./control/.github/ci-experiment
+        with:
+          role: manuals
+          image: ${{ needs.resolve.outputs.env_image }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-B-four-manuals
+          path: ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 7
+
+
+  result-capture:
+    name: EXPERIMENT / capture all A-B job outcomes and hosted timestamps
+    if: ${{ always() && needs.resolve.outputs.enabled == 'true' }}
+    needs: [resolve, baseline-full, prepared-preflight, prepared-source, prepared-portable, prepared-package-linux, prepared-package-native, real-database-browser, runtime-compatibility, prepared-browser, prepared-full-gate, manual-baseline-A, manual-prepared-B]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    env:
+      EXPERIMENT_ARM: ${{ needs.resolve.outputs.arm }}
+      EXPERIMENT_SAMPLE: ${{ needs.resolve.outputs.sample }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - name: Read-only hosted job/step timestamp and coverage inventory
+        shell: bash
+        env:
+          EXPERIMENT_REPORT_DIR: ${{ runner.temp }}/ab-report
+        run: node control/.github/ci-experiment/report.mjs
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experiment-ab-${{ needs.resolve.outputs.arm }}-${{ needs.resolve.outputs.sample }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ab-report/
+          if-no-files-found: warn
+          retention-days: 30

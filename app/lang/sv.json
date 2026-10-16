@@ -1,4 +1,8 @@
 {
+    "admin.media_renamer.checked": "Kontrollerad",
+    "admin.media_renamer.help": "Hjälp",
+    "admin.media_renamer.open_gallery": "Öppna galleri",
+    "admin.media_renamer.find_gallery": "Sök galleri",
     "admin.gallery_editor.images_preparing": "Förbereder fotografier …",
     "admin.gallery_editor.images_progress": "Behandlade fotografier: {current} / {total}",
     "admin.gallery_editor.images_ready": "Fotografierna är klara.",
@@ -2566,7 +2570,7 @@
     "admin.media_renamer.scope_kicker": "Omfattning",
     "admin.media_renamer.scope_mode_legend": "Omfattning för namnändring",
     "admin.media_renamer.scope_selected": "Markerade gallerier",
-    "admin.media_renamer.scope_selected_help": "Använd kryssrutorna i galleritabellen nedan.",
+    "admin.media_renamer.scope_selected_help": "Använd kryssrutorna i gallerilistan nedan.",
     "admin.media_renamer.scope_single": "Ett galleri",
     "admin.media_renamer.scope_single_help": "Välj exakt ett galleri i rullgardinsmenyn.",
     "admin.media_renamer.scope_title": "Välj gallerier",

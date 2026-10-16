@@ -1,0 +1,170 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ci-experiment/archived-workflows/prepared-ci-smoke.yml
+# Module Type: Archived CI Experiment Workflow Definition
+# Purpose: Archive the historical prepared OCI smoke workflow as inert evidence.
+# Responsibilities:
+#   - Preserve image-version, database connectivity and sandbox smoke checks.
+#   - Remain outside the GitHub Actions workflow discovery directory.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: EXPERIMENT prepared-environment smoke
+on:
+  push:
+    branches: [feature/prepared-ci-environment]
+    paths:
+      - '.github/ci-experiment/**'
+      - '.github/workflows/prepared-ci-smoke.yml'
+permissions:
+  contents: read
+env:
+  TESTED_SHA: 4d373023b96554364e295fb76d931ff3535f7c5a
+  TESTED_TREE: 1a8f6963b56b2123443180ccdfcc1c8f15399e64
+  BASE_SHA: e4abeb386354e7254a9083dbae5e16e8131ee314
+jobs:
+  resolve:
+    name: EXPERIMENT / resolve frozen image digests
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.lock.outputs.enabled }}
+      env_image: ${{ steps.lock.outputs.env_image }}
+      mysql84_image: ${{ steps.lock.outputs.mysql84_image }}
+      mariadb1011_image: ${{ steps.lock.outputs.mariadb1011_image }}
+      mariadb114_image: ${{ steps.lock.outputs.mariadb114_image }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/feature/prepared-ci-environment ]]
+          source .github/ci-experiment/config.env
+          [[ "$MODE" == build || "$MODE" == smoke || "$MODE" == full ]]
+          if [[ "$MODE" != smoke ]]; then exit 0; fi
+          lock=.github/ci-experiment/image-lock.json
+          jq -e --arg T "$TESTED_SHA" --arg B "$BASE_SHA" \
+            '.schema == 1 and .tested_sha == $T and .base_sha == $B and
+             ([.images.env,.images.mysql84,.images.mariadb1011,.images.mariadb114] |
+               all(.digest | test("^sha256:[0-9a-f]{64}$")))' "$lock"
+          for key in env mysql84 mariadb1011 mariadb114; do
+            digest="$(jq -r --arg key "$key" '.images[$key].digest' "$lock")"
+            echo "$key""_image=ghcr.io/klusik/php-gallery-ci-experiment@$digest" >> "$GITHUB_OUTPUT"
+          done
+          echo 'enabled=true' >> "$GITHUB_OUTPUT"
+  database-smoke:
+    name: EXPERIMENT / actual disposable ${{ matrix.database }} connection
+    needs: resolve
+    if: ${{ needs.resolve.outputs.enabled == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [mysql84, mariadb1011, mariadb114]
+    services:
+      database:
+        image: ${{ matrix.database == 'mysql84' && needs.resolve.outputs.mysql84_image || matrix.database == 'mariadb1011' && needs.resolve.outputs.mariadb1011_image || needs.resolve.outputs.mariadb114_image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      ENV_IMAGE: ${{ needs.resolve.outputs.env_image }}
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_SOURCE_BASE: e4abeb386354e7254a9083dbae5e16e8131ee314
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      EXPERIMENT_DATABASE: ${{ matrix.database }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: External measured image pull, runtime and database smoke
+        shell: bash
+        run: bash control/.github/ci-experiment/host-run.sh smoke
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experimental-smoke-${{ matrix.database }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 30
+  manuals-smoke:
+    name: EXPERIMENT / four isolated locked manual builds
+    needs: resolve
+    if: ${{ needs.resolve.outputs.enabled == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      ENV_IMAGE: ${{ needs.resolve.outputs.env_image }}
+      CI_PHP_VERSION: '8.5'
+      CI_PHP_INTL: with-intl
+      PHP_GALLERY_SOURCE_BASE: e4abeb386354e7254a9083dbae5e16e8131ee314
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: External pull and isolated original four-manual entrypoint
+        shell: bash
+        run: bash control/.github/ci-experiment/host-run.sh manuals
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: experimental-manuals-smoke-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prepared-experiment/
+          if-no-files-found: warn
+          retention-days: 30
+  smoke-gate:
+    name: EXPERIMENT / smoke-only gate (non-authoritative)
+    if: ${{ always() && needs.resolve.outputs.enabled == 'true' }}
+    needs: [resolve, database-smoke, manuals-smoke]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse missing or skipped experimental smoke owners
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e '
+            .resolve.result == "success" and
+            ."database-smoke".result == "success" and
+            ."manuals-smoke".result == "success"'

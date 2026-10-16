@@ -5,9 +5,10 @@
  * Module Type: Protected Develop Integration Evidence Publisher
  * Purpose: Verify source, artifact and full-matrix evidence before a protected non-forced develop fast-forward.
  * Responsibilities:
- *   - Bind BASIC to the original single-commit source S and FULL to prepared candidate A
+ *   - Bind fresh BASIC and FULL to the final single-commit candidate after automatic preparation
  *   - Publish allowlisted generated data through GitHub APIs without checking out candidate code
  *   - Record actual native owners and create same-run exact-candidate required check runs
+ *   - Dispatch and await BASIC for verified one-commit prepared candidates
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -15,6 +16,26 @@ import {readCoverageArtifact,loadIntegrationQualification} from './coverage-arti
 import {fullMatrixOwners,requireCurrentWorkflowOwners} from './ci-owner-contract.mjs';
 import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
+
+/**
+ * Space status requests while awaiting the prepared candidate's BASIC run.
+ * Type: number.
+ * Units: milliseconds.
+ * Scope: one prepared candidate's BASIC qualification.
+ * Consumers: waitForPreparedBasic.
+ * Rationale: five-second polling observes completion without a tight API loop.
+ */
+const PREPARED_BASIC_POLL_INTERVAL_MS=5000;
+
+/**
+ * Bound waiting for the prepared candidate's BASIC run, including queue time.
+ * Type: number.
+ * Units: milliseconds.
+ * Scope: one prepared candidate's BASIC qualification.
+ * Consumers: waitForPreparedBasic.
+ * Rationale: fifteen minutes leaves time within the twenty-minute publisher job for setup and evidence validation.
+ */
+const PREPARED_BASIC_WAIT_TIMEOUT_MS=15*60*1000;
 
 /** Identify the installed main-owned integration workflow that may publish protected refs.
  * Type: string. Units: repository-relative workflow path. Scope: one integration run.
@@ -236,7 +257,7 @@ function completeRows(call,path,key) {
 /** Prove the selected source is exactly one commit above develop and candidate is generated-only.
  * @param {GithubApi} call Authenticated GitHub API adapter.
  * @param {string} repository Owner/repository.
- * @param {string} sourceSha Original feature source S.
+ * @param {string} sourceSha Selected one-commit source S, or final A after automatic squash and fresh BASIC.
  * @param {string} candidateSha Prepared candidate A.
  * @param {string} developSha Observed develop P.
  * @param {boolean} recovery Whether the source is already the exact protected develop candidate; its own authority is then retained.
@@ -701,12 +722,13 @@ export function integrateDevelop(request,context,repository,call) {
     return {branch:'develop',sha:request.candidateSha,record};
 }
 
-/** Validate a preparation artifact and create its generated-only child commit through GitHub Data APIs.
- * @param {{repository:string,branch:string,sourceSha:string,expectedDevelopSha:string,artifactId:number,artifactDigest:string,runId:number|string,basicArtifactId?:number,basicArtifactDigest?:string}} request Exact selected S/P, generated metadata and independent BASIC archive for authority updates.
+/** Validate prepared artifacts and publish a prepared feature candidate.
+ * @param {{repository:string,branch:string,sourceSha:string,expectedDevelopSha:string,artifactId:number,artifactDigest:string,runId:number|string,autoSquashGenerated?:boolean,basicArtifactId?:number,basicArtifactDigest?:string}} request Exact selected S/P, generated metadata and independent BASIC archive for authority updates. autoSquashGenerated=true creates a prepared commit directly above expectedDevelopSha; omitted/false retains a child of sourceSha.
  * @param {WorkflowContext} context Main-owned publisher identity.
  * @param {GithubApi} call Authenticated synchronous GitHub API adapter.
  * @param {{api?:function(string):Record<string,unknown>,download?:function(string,number):Buffer}} adapters Optional independent provider and archive transports for inert fixtures.
  * @returns {{candidateSha:string,candidateTree:string,artifactId:number,artifactDigest:string}} Published candidate identity.
+ * @throws {Error} Rejects invalid inputs, unsupported squash modes, missing source metadata or failed publication checks.
  */
 export function publishPreparedCandidate(request,context,call,adapters={}) {
     if (context?.repository!==request?.repository || context.workflowPath!==WORKFLOW_PATH || !trustedWorkflowRef(request.repository,context.workflowRef,context.authorityUpdate)
@@ -737,6 +759,22 @@ export function publishPreparedCandidate(request,context,call,adapters={}) {
         throw new Error('BLOCKED source S is not exactly one commit above expected develop P.');
     }
     const baseTree=source.commit?.tree?.sha;
+    if (request.autoSquashGenerated!==undefined
+        && typeof request.autoSquashGenerated!=='boolean') {
+        throw new Error('BLOCKED automatic squash flag must be a boolean.');
+    }
+
+    const autoSquashGenerated=request.autoSquashGenerated===true;
+
+    if (autoSquashGenerated && context.authorityUpdate) {
+        throw new Error('BLOCKED automatic squash is unavailable during a CI authority update.');
+    }
+
+    if (autoSquashGenerated
+        && (typeof source.commit?.message!=='string'
+            || source.commit.message.trim()==='')) {
+        throw new Error('BLOCKED original source commit message is unavailable.');
+    }
     if (typeof baseTree!=='string') throw new Error('BLOCKED source tree unavailable.');
     if (context.authorityUpdate) {
         const base=call(`repos/${repository}/commits/${request.expectedDevelopSha}`);
@@ -759,15 +797,185 @@ export function publishPreparedCandidate(request,context,call,adapters={}) {
     if (!/^[a-f0-9]{40}$/.test(tree?.sha ?? '')) throw new Error('BLOCKED generated candidate tree creation failed.');
     if (tree.sha===baseTree) return {candidateSha:sourceSha,candidateTree:baseTree,
         artifactId:request.artifactId,artifactDigest:request.artifactDigest};
-    const commit=call('repos/'+repository+'/git/commits','POST',{message:'Prepare generated state for develop integration',tree:tree.sha,parents:[sourceSha]});
+    const parentSha=autoSquashGenerated
+        ? request.expectedDevelopSha
+        : sourceSha;
+
+    const commitMessage=autoSquashGenerated
+        ? `${source.commit.message}\n\nPrepared-From: ${sourceSha}`
+        : 'Prepare generated state for develop integration';
+
+    const commit=call('repos/'+repository+'/git/commits','POST',{
+        message:commitMessage,
+        tree:tree.sha,
+        parents:[parentSha],
+    });
     if (!/^[a-f0-9]{40}$/.test(commit?.sha ?? '')) throw new Error('BLOCKED generated candidate commit creation failed.');
     const latest=call('repos/'+repository+'/git/ref/heads/'+encodedBranch(branch));
     if (latest?.object?.sha!==sourceSha) throw new Error('BLOCKED source branch moved before generated candidate publication.');
     const latestDevelop=call('repos/'+repository+'/git/ref/heads/develop');
     if (latestDevelop?.object?.sha!==request.expectedDevelopSha) throw new Error('BLOCKED develop moved before generated candidate publication.');
-    const written=call('repos/'+repository+'/git/refs/heads/'+encodedBranch(branch),'PATCH',{sha:commit.sha,force:false});
-    if (written?.object?.sha!==commit.sha) throw new Error('BLOCKED generated candidate branch update failed.');
+    if (autoSquashGenerated) {
+        const repositoryInfo=call('repos/'+repository);
+        if (repositoryInfo?.full_name!==repository
+            || typeof repositoryInfo.node_id!=='string'
+            || repositoryInfo.node_id.trim()==='') {
+            throw new Error('BLOCKED repository identity is unavailable.');
+        }
+
+        const mutationId='prepared:'+String(context.runId)
+            +':'+String(context.runAttempt)+':'+commit.sha;
+
+        const result=call('graphql','POST',{
+            query:'mutation ($input: UpdateRefsInput!) { updateRefs(input: $input) { clientMutationId } }',
+            variables:{
+                input:{
+                    repositoryId:repositoryInfo.node_id,
+                    clientMutationId:mutationId,
+                    refUpdates:[{
+                        name:'refs/heads/'+branch,
+                        beforeOid:sourceSha,
+                        afterOid:commit.sha,
+                        force:true,
+                    }],
+                },
+            },
+        });
+
+        const errors=result?.errors;
+        if ((errors!==undefined
+                && (!Array.isArray(errors) || errors.length>0))
+            || result?.data?.updateRefs?.clientMutationId!==mutationId) {
+            throw new Error('BLOCKED conditional feature branch update was not confirmed.');
+        }
+    } else {
+        const written=call('repos/'+repository+'/git/refs/heads/'+encodedBranch(branch),'PATCH',{sha:commit.sha,force:false});
+        if (written?.object?.sha!==commit.sha) {
+            throw new Error('BLOCKED generated candidate branch update failed.');
+        }
+    }
     const verified=call('repos/'+repository+'/git/ref/heads/'+encodedBranch(branch));
     if (verified?.object?.sha!==commit.sha) throw new Error('BLOCKED generated candidate branch changed after publication.');
     return {candidateSha:commit.sha,candidateTree:tree.sha,artifactId:request.artifactId,artifactDigest:request.artifactDigest};
+}
+
+/**
+ * Request BASIC for a verified prepared candidate and return the dispatched run ID.
+ * @param {{repository:string,branch:string,candidateSha:string,expectedDevelopSha:string}} request Repository, feature branch, prepared commit and observed develop parent.
+ * @param {WorkflowContext} context Exact active main-owned integration workflow context.
+ * @param {GithubApi} call Authenticated GitHub API transport.
+ * @returns {string} Decimal ID of the newly dispatched BASIC workflow run.
+ * @throws {Error} Rejects untrusted context, stale heads, invalid ancestry or authority, failed dispatch or missing run identity.
+ */
+export function dispatchPreparedBasic(request,context,call) {
+    if (!request || !context) {
+        throw new Error('BLOCKED prepared BASIC request or context is missing.');
+    }
+
+    const {repository,branch,candidateSha,expectedDevelopSha}=request;
+    if (!validBranchName(branch) || !branch.startsWith('feature/')
+        || context.repository!==repository || context.workflowPath!==WORKFLOW_PATH
+        || !trustedWorkflowRef(repository,context.workflowRef)
+        || context.eventName!=='workflow_dispatch' || context.ref!=='refs/heads/main'
+        || context.authorityUpdate
+        || ![candidateSha,expectedDevelopSha,context.headSha].every(value=>/^[a-f0-9]{40}$/.test(value))
+        || !/^\d+$/.test(String(context.runId))
+        || !/^\d+$/.test(String(context.runAttempt))) {
+        throw new Error('BLOCKED prepared BASIC dispatch is outside the trusted integration context.');
+    }
+
+    const active=call('repos/'+repository+'/actions/runs/'+String(context.runId));
+    if (String(active?.id)!==String(context.runId)
+        || active.path!==WORKFLOW_PATH || active.event!=='workflow_dispatch'
+        || active.head_branch!=='main' || active.head_sha!==context.headSha
+        || active.status!=='in_progress'
+        || String(active.run_attempt)!==String(context.runAttempt)) {
+        throw new Error('BLOCKED prepared BASIC dispatcher is not the active main-owned run.');
+    }
+
+    readHeads(call,repository,branch,candidateSha,expectedDevelopSha);
+    verifyAncestry(call,repository,candidateSha,candidateSha,expectedDevelopSha,false,false);
+
+    const dispatched=call('repos/'+repository+'/actions/workflows/candidate-preparation.yml/dispatches','POST',{
+        ref:branch,
+        inputs:{maintenance_full:false},
+        return_run_details:true,
+    });
+
+    if (!Number.isSafeInteger(dispatched?.workflow_run_id)
+        || dispatched.workflow_run_id<1) {
+        throw new Error('BLOCKED dispatched BASIC run identity was not confirmed.');
+    }
+
+    return String(dispatched.workflow_run_id);
+}
+
+/**
+ * Await the dispatched BASIC run and authenticate the final one-commit selection.
+ * @param {{repository:string,branch:string,candidateSha:string,expectedDevelopSha:string,basicRunId:string}} request Exact repository, feature branch, prepared commit, develop parent and dispatched BASIC run ID.
+ * @param {WorkflowContext} context Active main-owned integration context authenticated during final selection.
+ * @param {GithubApi} call Authenticated GitHub API transport.
+ * @param {function(number):Promise<void>} pause Delay implementation; defaults to a timer and accepts the requested milliseconds.
+ * @param {function():number} now Monotonic millisecond clock; defaults to performance.now and permits deterministic fixture timing.
+ * @returns {Promise<{branch:string,sourceSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:string,basicRunAttempt:string}>} Authenticated final source and BASIC evidence after successful completion.
+ * @throws {Error} Rejects invalid inputs, moved heads, mismatched or unsuccessful runs, superseded evidence, untrusted final selection or timeout.
+ */
+export async function waitForPreparedBasic(
+    request,
+    context,
+    call,
+    pause=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds)),
+    now=()=>performance.now()
+) {
+    if (!request || !context) {
+        throw new Error('BLOCKED prepared BASIC wait request or context is missing.');
+    }
+
+    const {repository,branch,candidateSha,expectedDevelopSha,basicRunId}=request;
+    if (context.repository!==repository || context.authorityUpdate
+        || !validBranchName(branch) || !branch.startsWith('feature/')
+        || ![candidateSha,expectedDevelopSha].every(value=>/^[a-f0-9]{40}$/.test(value))
+        || typeof basicRunId!=='string' || !/^\d+$/.test(basicRunId)
+        || !Number.isSafeInteger(Number(basicRunId)) || Number(basicRunId)<1) {
+        throw new Error('BLOCKED prepared BASIC wait inputs are invalid.');
+    }
+
+    const deadline=now()+PREPARED_BASIC_WAIT_TIMEOUT_MS;
+    while (now()<deadline) {
+        readHeads(call,repository,branch,candidateSha,expectedDevelopSha);
+
+        const run=call('repos/'+repository+'/actions/runs/'+basicRunId);
+        if (String(run?.id)!==basicRunId
+            || run.path!==PREPARATION_PATH
+            || run.event!=='workflow_dispatch'
+            || run.head_branch!==branch
+            || run.head_sha!==candidateSha
+            || run.run_attempt!==1) {
+            throw new Error('BLOCKED prepared BASIC run identity or attempt changed.');
+        }
+
+        if (run.status==='completed') {
+            if (run.conclusion!=='success') {
+                throw new Error('BLOCKED prepared BASIC did not succeed: '+String(run.conclusion));
+            }
+
+            const selected=selectDevelopIntegration(branch,context,repository,call);
+            if (selected.sourceSha!==candidateSha
+                || selected.expectedDevelopSha!==expectedDevelopSha
+                || selected.basicRunId!==basicRunId
+                || selected.basicRunAttempt!==String(run.run_attempt)) {
+                throw new Error('BLOCKED prepared BASIC evidence or selected source was superseded.');
+            }
+
+            return selected;
+        }
+
+        if (!['queued','in_progress','waiting','pending','requested'].includes(run.status)) {
+            throw new Error('BLOCKED prepared BASIC returned an unsupported run status.');
+        }
+
+        await pause(PREPARED_BASIC_POLL_INTERVAL_MS);
+    }
+
+    throw new Error('BLOCKED timed out waiting for prepared BASIC qualification.');
 }

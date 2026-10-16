@@ -1,0 +1,6 @@
+# Project: PHP Gallery
+# Purpose: Freeze each disposable database service as a separate OCI digest.
+ARG DATABASE_IMAGE=mysql:8.4
+FROM ${DATABASE_IMAGE}
+LABEL org.opencontainers.image.source="https://github.com/klusik/PHP_gallery"
+LABEL org.opencontainers.image.description="Isolated PHP Gallery CI database variant"

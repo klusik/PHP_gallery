@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.132.9}
-\newcommand{\manualdate}{15.~Oktober~2026}
+\newcommand{\version}{0.132.10}
+\newcommand{\manualdate}{16.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1067,6 +1067,8 @@ Die Übernahme des Entwurfs erfordert eine gesonderte Bestätigung. PHP Gallery 
 \index{m00168@Medienumbenenner}
 \index{d00059@Dateinamen!u00245@Umbenennen}
 \index{m00169@Medienwartung}
+
+Wählen Sie den Umfang und das Dateinamenmuster und erstellen Sie vor jeder Bestätigung eine Vorschau. Die kompakte Galerieliste bietet eine lokale Suche, ohne die markierte Auswahl zu ändern; sie erscheint beim Umfang markierter Galerien. Für eine einzelne Galerie verwenden Sie die Auswahlliste. Fragezeichen öffnen ausführliche Hilfe. Die Vorschau zeigt Gesamtzahlen und aufklappbare Galeriegruppen; prüfen Sie vor der Übernahme die alten und vorgeschlagenen Pfade sowie den Status in jeder Gruppe. Suchbegriffe werden unabhängig von ihrer Reihenfolge mit AND verknüpft; doppelte Anführungszeichen erhalten die genaue Wortfolge einer Phrase. Sichtbarkeitsfilter aktualisieren nur die Galerieliste, ohne einen Umbenennungsplan zu erstellen. Erstellen Sie den Plan ausdrücklich mit der Vorschauaktion. Leere Galerien erscheinen als kompakte Zusammenfassungszeilen; Galerien mit Dateizuordnungen lassen sich innerhalb einer höhenbegrenzten Ergebnisliste aufklappen. Eine sichtbare Fortschrittsanzeige begleitet Anfragen: Listenaktualisierung und Vorschau zeigen unbestimmte Aktivität, stapelweise Prüfungen und Umbenennungen den gemessenen Fortschritt.
 
 \ui{Galerien > Medienumbenenner} und der Umbenennungs-Seitenbereich einer einzelnen Galerie können physische Bilddateinamen anhand des Galeriekontexts und der aktuellen Fotoreihenfolge normalisieren. Dies ist ein Dateisystemvorgang, keine kosmetische Titeländerung; daher beginnt das Werkzeug immer mit einem Probelaufplan. Die Vorschau führt jeden alten und vorgeschlagenen Dateinamen auf und kennzeichnet Dateien, die bereits passen, fehlen, kollidieren würden oder aufgrund einer Sicherheitsregel übersprungen werden müssen.
 
@@ -2633,6 +2635,19 @@ API-Seiten und~Änderungen während der~Erfassung verweigern die~Qualifikation.
 Dies schützt historische Prüfung; neuere Läufe ohne veröffentlichten
 Qualifikationscheck und~unabhängige develop/release-Abdeckungsübernahme bleiben
 außerhalb dieses Lesers.
+
+Nach geprüfter Installation auf~main ist~die~Integrationsoption
+\codeword{auto\_squash\_generated} standardmäßig true. Die~Vorbereitung nimmt
+nur die~drei erlaubten generierten Dateien in~einen Commit A über dem~beobachteten
+develop P auf, erhält die~ursprüngliche Nachricht mit~\codeword{Prepared-From}
+und~ersetzt nur den~ausgewählten Feature-Ref bei~exakter Übereinstimmung der~alten
+SHA. Sie~startet frisches BASIC für~A, prüft alle fünf Sekunden höchstens fünfzehn
+Minuten und~authentifiziert vor~FULL den~exakten Lauf, ersten Versuch sowie native
+und~eigene Checks. Verschobene Refs, fehlgeschlagenes oder~überholtes BASIC und
+Zeitüberschreitungen stoppen die~Integration. Unveränderte Vorbereitung erhält
+die~SHA; deaktivierte Automatik behält den~manuellen Squash-Checkpoint.
+Wiederherstellung und~CI-Autoritätsänderungen behalten ihre bisherigen Pfade.
+Feature-Änderungen allein installieren dieses Verhalten nicht auf~main.
 
 Feature-Pushes und~der~abschließende Squash verwenden nur BASIC: PHP-/JavaScript-
 Syntax und~vollständige Dokumentation benannter Deklarationen. Sobald das~Feature

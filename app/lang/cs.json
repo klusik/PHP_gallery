@@ -1,4 +1,8 @@
 {
+    "admin.media_renamer.checked": "Zkontrolováno",
+    "admin.media_renamer.help": "Nápověda",
+    "admin.media_renamer.open_gallery": "Otevřít galerii",
+    "admin.media_renamer.find_gallery": "Najít galerii",
     "admin.gallery_editor.images_preparing": "Připravuji fotografie…",
     "admin.gallery_editor.images_progress": "Zpracované fotografie: {current} / {total}",
     "admin.gallery_editor.images_ready": "Fotografie jsou připravené.",
@@ -2566,7 +2570,7 @@
     "admin.media_renamer.scope_kicker": "Rozsah",
     "admin.media_renamer.scope_mode_legend": "Rozsah přejmenování",
     "admin.media_renamer.scope_selected": "Zaškrtnuté galerie",
-    "admin.media_renamer.scope_selected_help": "Použijte zaškrtávátka v tabulce galerií níže.",
+    "admin.media_renamer.scope_selected_help": "Použijte zaškrtávací políčka v seznamu galerií níže.",
     "admin.media_renamer.scope_single": "Jedna galerie",
     "admin.media_renamer.scope_single_help": "Vyberte přesně jednu galerii z rozbalovacího seznamu.",
     "admin.media_renamer.scope_title": "Vyberte galerie",

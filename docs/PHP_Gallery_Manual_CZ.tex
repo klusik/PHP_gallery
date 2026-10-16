@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132.9}
-\newcommand{\manualdate}{15.~října~2026}
+\newcommand{\version}{0.132.10}
+\newcommand{\manualdate}{16.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1063,6 +1063,8 @@ Použití návrhu vyžaduje samostatné potvrzení. PHP Gallery vytvoří nebo z
 \index{p00174@přejmenování médií}
 \index{n00108@názvy souborů!p00173@přejmenování}
 \index{u00239@údržba médií}
+
+Zvolte rozsah, nastavte vzor názvu a~vytvořte náhled před potvrzením fyzického přejmenování. Kompaktní seznam galerií umožňuje místní hledání bez změny zaškrtnutého výběru a~zobrazuje se pro rozsah vybraných galerií. Pro jednu galerii použijte rozbalovací nabídku. Otazníčky otevírají podrobnou nápovědu. Náhled obsahuje souhrnné počty a~rozbalovací skupiny podle galerie; před použitím zkontrolujte původní a~navržené cesty i~stavy uvnitř každé skupiny. Hledaná slova se kombinují operátorem AND bez ohledu na pořadí; fráze v~dvojitých uvozovkách zachová přesné pořadí slov. Filtry viditelnosti obnovují pouze seznam galerií bez sestavení plánu přejmenování. Plán vytvoříte výslovně tlačítkem náhledu. Prázdné galerie zabírají kompaktní souhrnné řádky; galerie s~návrhy souborů se rozbalují uvnitř přehledu s~omezenou výškou. Požadavky doprovází viditelný ukazatel průběhu: obnova seznamu a~náhled zobrazují neurčitou aktivitu, dávkové kontroly a~přejmenování měřený postup.
 
 \ui{Galerie > Přejmenování médií} a~panel přejmenování jednotlivé galerie mohou normalizovat fyzické názvy souborů obrázků podle kontextu galerie a~aktuálního pořadí fotografií. Jde o~operaci souborového systému, nikoli kosmetickou změnu názvu, proto nástroj vždy začíná plánem nanečisto. Náhled uvádí původní a~navržený název každého souboru a~označuje soubory, které již odpovídají, chybí, kolidovaly by nebo musejí být přeskočeny kvůli bezpečnostnímu pravidlu.
 
@@ -2617,6 +2619,18 @@ nejvyšší pokus. Novější selhání nebo čekající check nesmí použít s
 výsledek. Neúplné nebo duplicitní stránky API a~změny během sběru kvalifikaci
 odmítnou. Jde o~ochranu historického čtení; neodhaluje novější běhy bez zveřejněného
 kvalifikačního checku ani nepovoluje nezávislé převzetí pokrytí develop/release.
+
+Po schválené instalaci na main má integrační volba
+\codeword{auto\_squash\_generated} výchozí hodnotu true. Příprava zahrne pouze
+tři povolené generované soubory do jediného commitu A nad pozorovaným develop P,
+zachová původní zprávu s~\codeword{Prepared-From} a~podmíněně nahradí vybranou
+feature větev při přesné shodě jejího původního SHA. Spustí nový BASIC pro A,
+kontroluje jej každých pět sekund nejvýše patnáct minut a~před FULL ověří přesný
+běh, první pokus i~nativní a~vlastní kontroly. Posunuté větve, neúspěšný nebo
+překonaný BASIC a~timeout integraci zastaví. Příprava beze změny zachová SHA;
+vypnutá automatika ponechá ruční squash checkpoint. Obnova a~změny autority CI
+zachovávají dosavadní postup. Samotná změna feature větve toto chování do
+důvěryhodného workflow na main nenainstaluje.
 
 Push funkcí a~jejich závěrečný squash používají pouze BASIC: syntaxi PHP/JavaScriptu
 a~úplnou dokumentaci pojmenovaných deklarací. Jakmile je funkce jediným autorským
