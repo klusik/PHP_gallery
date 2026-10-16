@@ -35,21 +35,43 @@ import {i18n} from './admin-core.js?v=20260512-admin-core-v1';
 let mediaRenamerReady = false;
 
 /**
- * Attach delegated media-renamer form handling once per page.
+ * Attach delegated media-renamer forms and local gallery filtering once per page.
+ * @return {void} Registers listeners once without submitting requests.
  */
 export function setupAdminMediaRenamer() {
     if (mediaRenamerReady) {
         return;
     }
     mediaRenamerReady = true;
+    // Filtering only changes visibility: checked galleries remain in the submitted selection.
+    document.addEventListener('input', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !input.matches('[data-media-renamer-search]')) {
+            return;
+        }
+        // Quoted phrases stay together; every unquoted word must also occur, in any order.
+        const terms = Array.from(input.value.toLocaleLowerCase().matchAll(/"([^"]+)"|([^\s"]+)/gu), (match) => match[1] || match[2]);
+        const rows = input.form?.querySelectorAll('.admin-media-renamer-gallery-choice') || [];
+        let shown = 0;
+        rows.forEach((row) => {
+            const text = Array.from(row.querySelectorAll('label strong, label small'), (part) => part.textContent).join(' ').toLocaleLowerCase();
+            row.hidden = !terms.every((term) => text.includes(term));
+            shown += row.hidden ? 0 : 1;
+        });
+        const status = input.form?.querySelector('[data-media-renamer-search-status]');
+        if (status) {
+            status.textContent = `${shown} / ${rows.length}`;
+        }
+    });
     document.addEventListener('submit', handleMediaRenamerSubmit);
     document.addEventListener('change', handleMediaRenamerSettingChange);
 }
 
 /**
- * Refresh the site-wide selector when filter-style options change.
+ * Refresh only the site-wide selector when visibility filters change, without planning renames.
  *
  * @param {Event} event Browser change event.
+ * @return {void} Submits the list-only action or ignores unrelated/disabled controls.
  */
 function handleMediaRenamerSettingChange(event) {
     const control = event.target;
@@ -62,25 +84,24 @@ function handleMediaRenamerSettingChange(event) {
         return;
     }
 
-    if (form.dataset.mediaRenamerAutosubmitting === '1') {
+    const refreshButton = form.querySelector('[data-media-renamer-filter-refresh]');
+    if (!(refreshButton instanceof HTMLButtonElement) || refreshButton.disabled) {
         return;
     }
-
-    form.dataset.mediaRenamerAutosubmitting = '1';
+    // Submit an explicit list-only action; a filter change must not build rename plans.
     if (typeof form.requestSubmit === 'function') {
-        form.requestSubmit();
+        form.requestSubmit(refreshButton);
     } else {
-        form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+        // Preserve older browsers through the native button submission path with its action value.
+        refreshButton.click();
     }
-    window.setTimeout(() => {
-        delete form.dataset.mediaRenamerAutosubmitting;
-    }, 1000);
 }
 
 /**
  * Submit preview and apply forms without navigating away from the current view.
  *
  * @param {SubmitEvent} event Browser submit event.
+ * @return {Promise<void>} Refreshes the workspace or displays the request failure in its progress area.
  */
 async function handleMediaRenamerSubmit(event) {
     const form = event.target;
@@ -98,6 +119,8 @@ async function handleMediaRenamerSubmit(event) {
     event.preventDefault();
     const workspace = findRenamerWorkspace(form);
     const progress = ensureRenamerProgress(form, workspace);
+    // Single-response reads have no server progress samples; show activity without invented percentages.
+    progress.dataset.indeterminate = !isAvailabilityCheckSubmitter(submitter) && !isSiteWideApplyForm(form) && !form.dataset.mediaRenamerConfirm ? '1' : '0';
     setRenamerProgress(progress, 8, i18n('admin.media_renamer.progress_starting', 'Preparing rename request...'));
     setRenamerFormDisabled(form, true);
 
@@ -514,7 +537,7 @@ function updateAvailabilityButton(submitter, processed, total) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
- * @param {(percent: number, label: string) => void} updateProgress Progress updater.
+ * @param {function(number, string):void} updateProgress Receives the percentage and visible status label.
  * @return {Promise<Response>} Fetch response.
  */
 async function submitRenamerForm(form, submitter, updateProgress) {
@@ -549,7 +572,12 @@ async function submitRenamerForm(form, submitter, updateProgress) {
         body.set(submitter.name, submitter.value);
     }
     body.set('ajax', '1');
-    updateProgress(35, i18n('admin.media_renamer.progress_running', 'Renaming files, updating database rows, and refreshing derived assets...'));
+    const requestAction = body.get('renamer_action');
+    updateProgress(35, requestAction === 'filter'
+        ? i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...')
+        : requestAction === 'preview'
+            ? i18n('admin.media_renamer.progress_preview', 'Building preview from current database state...')
+            : i18n('admin.media_renamer.progress_running', 'Renaming files, updating database rows, and refreshing derived assets...'));
     const requestUrl = url.toString();
     const response = await fetch(requestUrl, {
         method: 'POST',
@@ -609,6 +637,7 @@ function ensureRenamerProgress(form, workspace) {
  * @param {HTMLElement|null} progress Progress element.
  * @param {number} percent Percentage value.
  * @param {string} label Visible status label.
+ * @return {void} Updates the activity indicator and announces the current request status.
  */
 function setRenamerProgress(progress, percent, label) {
     if (!(progress instanceof HTMLElement)) {
@@ -617,7 +646,11 @@ function setRenamerProgress(progress, percent, label) {
     progress.hidden = false;
     const bar = progress.querySelector('[data-admin-media-renamer-progress-bar]');
     if (bar instanceof HTMLProgressElement) {
-        bar.value = Math.max(0, Math.min(100, percent));
+        if (progress.dataset.indeterminate === '1' && percent < 100) {
+            bar.removeAttribute('value');
+        } else {
+            bar.value = Math.max(0, Math.min(100, percent));
+        }
     }
     const text = progress.querySelector('[data-admin-media-renamer-progress-text]');
     if (text instanceof HTMLElement) {

@@ -1,4 +1,8 @@
 {
+    "admin.media_renamer.checked": "Geprüft",
+    "admin.media_renamer.help": "Hilfe",
+    "admin.media_renamer.open_gallery": "Galerie öffnen",
+    "admin.media_renamer.find_gallery": "Galerie suchen",
     "admin.gallery_editor.images_preparing": "Fotos werden vorbereitet …",
     "admin.gallery_editor.images_progress": "Verarbeitete Fotos: {current} / {total}",
     "admin.gallery_editor.images_ready": "Fotos sind bereit.",
@@ -2566,7 +2570,7 @@
     "admin.media_renamer.scope_kicker": "Umfang",
     "admin.media_renamer.scope_mode_legend": "Umbenennungsumfang",
     "admin.media_renamer.scope_selected": "Markierte Galerien",
-    "admin.media_renamer.scope_selected_help": "Verwenden Sie die Kontrollkästchen in der Galerietabelle unten.",
+    "admin.media_renamer.scope_selected_help": "Verwenden Sie die Kontrollkästchen in der Galerieliste unten.",
     "admin.media_renamer.scope_single": "Einzelne Galerie",
     "admin.media_renamer.scope_single_help": "Wählen Sie genau eine Galerie aus der Auswahlliste.",
     "admin.media_renamer.scope_title": "Galerien auswählen",

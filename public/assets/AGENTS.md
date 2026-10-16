@@ -9,6 +9,10 @@ control execution.
 
 ## Imports, request lifecycle and presentation
 
+Always document JavaScript callback parameters with JSDoc callable syntax, for
+example `@param {function(number, string):void} onProgress`, and describe what each
+callback argument means in the parameter description.
+
 When revising a module URL, search the entire import/re-export chain and all
 source/test expectations for its previous revision. Update strict expectations
 with the actual import. For covered Admin imports, use the existing relational

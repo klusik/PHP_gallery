@@ -115,7 +115,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261015-admin-import-contract-v1';
+} from './gallery-modules/admin-operations.js?v=20261016-renamer-ui-v3';
 
 /**
  * Runs a setup callback after the DOM is ready.

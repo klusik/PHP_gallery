@@ -1,4 +1,8 @@
 {
+    "admin.media_renamer.checked": "Checked",
+    "admin.media_renamer.help": "Help",
+    "admin.media_renamer.open_gallery": "Open gallery",
+    "admin.media_renamer.find_gallery": "Find gallery",
     "admin.gallery_editor.images_preparing": "Preparing photos…",
     "admin.gallery_editor.images_progress": "Photos processed: {current} / {total}",
     "admin.gallery_editor.images_ready": "Photos ready.",
@@ -2566,7 +2570,7 @@
     "admin.media_renamer.scope_kicker": "Scope",
     "admin.media_renamer.scope_mode_legend": "Rename scope",
     "admin.media_renamer.scope_selected": "Checked galleries",
-    "admin.media_renamer.scope_selected_help": "Use the checkboxes in the gallery table below.",
+    "admin.media_renamer.scope_selected_help": "Use the checkboxes in the gallery list below.",
     "admin.media_renamer.scope_single": "Single gallery",
     "admin.media_renamer.scope_single_help": "Choose exactly one gallery from the dropdown.",
     "admin.media_renamer.scope_title": "Choose galleries",

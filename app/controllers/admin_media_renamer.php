@@ -69,7 +69,8 @@ use function Gallery\Services\admin_log_current_route_name;
 use function Gallery\Services\telemetry_request_id;
 
 /**
- * Handle the site-wide media renamer admin page.
+ * Handle the site-wide media renamer page and explicit list, preview, and apply requests.
+ * @return void Emits the page or the requested AJAX response.
  */
 function cms_admin_media_renamer(): void
 {
@@ -104,6 +105,9 @@ function cms_admin_media_renamer(): void
         $selectedSingleGalleryId = (int) ($_POST['single_gallery_id'] ?? 0);
         $pattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
         $submittedAvailability = admin_media_renamer_availability_payload_from_post();
+        if ($action === 'filter' && !$submittedAvailability) {
+            $renameAvailabilityChecked = false;
+        }
 
         if ($action === 'check_availability_batch') {
             $batchIds = media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
@@ -156,12 +160,15 @@ function cms_admin_media_renamer(): void
         }
 
         $filterSelectedFromSubmittedAvailability = $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && $submittedAvailability;
-        $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && !$submittedAvailability, $pattern);
+        $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && !$submittedAvailability && $action !== 'filter', $pattern);
         if ($filterSelectedFromSubmittedAvailability) {
             $selectedGalleryIds = admin_media_renamer_filter_gallery_ids_by_availability($selectedGalleryIds, $submittedAvailability);
         }
 
-        if ($action === 'check_availability') {
+        if ($action === 'filter') {
+            // Visibility changes refresh selector rows only; planning stays an explicit admin action.
+            $plans = [];
+        } elseif ($action === 'check_availability') {
             $notice = t('admin.media_renamer.availability_checked', 'Rename availability was checked for the current list. Galleries with no pending renames can now be hidden.');
         } elseif ($action === 'apply_refresh') {
             $plans = $selectedGalleryIds ? media_renamer_plans_for_galleries($selectedGalleryIds, $pattern) : [];
