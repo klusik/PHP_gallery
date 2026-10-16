@@ -2,694 +2,167 @@
 
 ## Authoring Contract (Read Before Editing)
 
-Root `AGENTS.md` is the canonical instruction for every coding agent in this
-repository. Read applicable scoped instructions and the relevant topical section
-before editing; use [the checked authoring examples](docs/AGENT_AUTHORING.md)
-for declaration, type, header, and runtime-policy syntax.
-
-**Before writing code:** locate the existing domain owner and a compliant nearby
-declaration. Identify the affected contracts: MVC, named declarations, native
-types, data shapes, attribution headers, runtime policy, route dependencies,
-Admin mutations, compatibility, and permanent documentation. Read only the
-references relevant to the change.
-
-**While writing code:** write each named declaration and its complete, factual
-documentation in the same edit. Start with a purpose sentence before tags;
-describe every explicit parameter and every return variant, including `void`.
-Update the contract when adding a defaulted parameter or changing behavior.
-Specify collection elements and object fields. Attach purpose, type, units,
-scope, consumers, and rationale to each affected runtime policy site. Preserve
-meaningful comments when moving code. Never defer these steps to an audit,
-insert placeholder prose, or weaken types/baselines to obtain PASS.
-
-**Before handing off:** review the whole changed batch, fix every occurrence of
-an identified problem, and finish permanent documentation. Use the central
-verification contract below: push the authorized working branch for hosted
-preparation and exact-candidate qualification. Report workflow URL, branch,
-candidate SHA, comparison base, required job results and incomplete coverage. A later edit
-invalidates earlier qualification. A source preflight PASS is feedback only.
-
-## Project Structure & Module Organization
-This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. Core application code lives in `app/`, split into `controllers/`, `services/`, and `views/`. Database schema changes live in `database/migrations/` and must be added as new timestamped files. Public web assets are under `public/assets/`; writable runtime data is kept in `cache/`, `galleries/`, and `data/`. Standalone test scripts live in `tests/`. Deployment helpers and CLI utilities are in `scripts/`, with Windows-specific tooling in `winapp/`.
-
-## Build, Test, and Development Commands
-- `php -S localhost:8000 -t public public/index.php` - run the app locally with the `public/` directory as the web root.
-- `php -S localhost:8000 index.php` - alternate local run mode using the repository root router.
-- `php scripts/prepare_candidate.php` - regenerate reviewed runtime modules, production inventory, and the final integrity manifest in dependency order after staging new files.
-- `php scripts/prepare_candidate.php --check` - read-only generated-artifact freshness proof for the exact checkout.
-- `php scripts/migrate.php` - apply pending database migrations.
-- `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
-- `php scripts/audit.php --profile=release-preflight` - cheap source-only feedback before release preparation; checks syntax, documentation, policy, and debt budgets without preparing a release.
-- `php scripts/audit.php --profile=release-stage-b` - hosted release-only medium-cost MVC and Admin mutation contracts before generation; the final matrix still qualifies the prepared SHA.
-- `php scripts/audit.php --profile=basic` - source-only PHP/JavaScript syntax and named-declaration documentation checks; no runtime/regression execution.
-- `php scripts/audit.php --profile=basic --changed` - the same narrow checks for an immutable comparison base's source delta.
-- `php scripts/audit.php --profile=quick` - run the edit-cycle audit with the explicit fast PHP subset, runtime performance probes, fast Node/contracts, and changed-file syntax checks.
-- `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
-- `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
-
-These commands describe runner interfaces, not by themselves an active branch policy. The intended feature-to-develop sequence is hosted BASIC on feature pushes and the final squash, followed by the approved Actions **Integrate into develop** button; it must refuse unsquashed history. That action runs the complete central FULL matrix exactly once on final candidate A before automatic develop fast-forward. Release preparation from A creates B and runs BASIC `--changed` against A plus release-owned-input checks, without repeating browser, database, functional, Node runtime, WinApp or packaging regressions. Generated release assets and the conditional installer remain production outputs. This reduced-execution policy is inactive until installed on main and verified by real hosted CI; until then use the currently installed required workflows. Local audits are reserved for explicit diagnosis/recovery, not routine handoff.
-
-## Coding Style & Naming Conventions
-Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space indentation style. Keep functions small and explicit. New or materially refactored features should follow the project MVC boundary: models own SQL/data access, services own reusable domain orchestration and policy, controllers own HTTP/request-response flow, and views own HTML presentation. Do not move SQL into controllers/views merely for convenience, and do not let model modules read request globals or render output. Name controller files by feature area, for example `admin_galleries_edit.php` or `public_media.php`.
-
-Web requests use the small PHP 8.1-compatible Core runtime in `app/runtime/`; existing procedural controllers remain the route handlers, and `app/bootstrap/dispatch.php` remains the canonical route/security table. Runtime feature loading uses the reviewed generated `app/runtime/modules.php` plan. Update its authored dependency/root inputs and run `php scripts/generate_runtime_modules.php` when route dependencies change. The compiler and source/root policy checks are development tooling; production performs no source scan or dependency compilation and has no load-all fallback. Public requests never load umbrella files. `app/bootstrap_full.php` is the explicit convenience for legacy CLI/test consumers that need them together; consumers may continue requiring individual compatibility umbrellas directly.
-
-When a model, service, or controller module grows past comfortable reading length, split it into part files inside a sibling directory named after the module, and keep the original file as the module entry point holding the module docblock, shared constants, shared types, and an ordered `require_once` list. Do not register part files in a top-level layer loader and do not require a part file from outside its own module, so the historical include contract and load order stay intact. A part file lives one directory deeper than the entry file, so re-base every filesystem-relative expression you move into one: the project root is `dirname(__DIR__, 3)`, and the `dirname(__DIR__, 2)` that was correct in the entry file silently resolves to `app/` instead. Byte-identical function bodies do not prove equivalence here, and `php -l` cannot catch it; `tests/module_split_path_resolution_test.php` enforces the depth and the resulting storage locations. Widen any path filter that names its own module, such as backtrace filtering, to cover the whole part directory. Source-level contract checks must read the whole module: tests use `module_source()` from `tests/support/module_source.php`, and `scripts/check_admin_mutation_contracts.php` does the same inside `contract_file()`. The current split modules are listed under "Split Modules" in `ARCHITECTURE.md`. Migration files must be timestamp-prefixed, such as `202606040001_mobile_webdav_upload_tokens.php`. JavaScript and CSS assets should stay framework-free and be placed in `public/assets/`.
-
-## Strict MVC Requirement
-
-MVC is mandatory for all new code and for any responsibility being materially refactored. The canonical dependency direction is `Controller -> Service -> Model`; controllers select views and pass prepared view-model data. Do not use a controller, service, generic helper, bootstrap file, or view as a temporary place for SQL. Do not make a view call a feature-policy/domain service to discover what it should render.
-
-Use these ownership rules:
-
-- Models: SQL, PDO, persistence, schema-specific query construction, row mapping.
-- Services: reusable use cases, validation independent of HTTP transport, domain policy, orchestration, filesystem workflows.
-- Controllers: request globals, route/request normalization, authentication/CSRF boundary checks, response type/status/headers, service calls, view-model preparation.
-- Views: markup and presentation-only formatting from already prepared data.
-
-Before adding a helper, search for the existing domain owner and extend/centralize it instead of creating a near-duplicate. Semantic inputs must cross layers, not SQL fragments. For example, a service may pass a gallery scope or ID to a model, but not `$whereSql`. Keep existing docstrings/comments when moving code.
-
-`scripts/check_mvc_boundaries.php` is a mandatory audit suite. Existing violations are migration debt captured in `scripts/mvc_boundary_baseline.json`. Never add a new baseline entry to make a change pass. A migrated file should remove its resolved debt with `php scripts/check_mvc_boundaries.php --refresh-baseline`, which is designed to fail if new violations exist.
-
-## Declaration Documentation
-
-Docstrings (PHPDoc, JSDoc, and Python docstrings) are required only for named functions, methods, and classes or class-like declarations such as interfaces, traits, and enums. Place PHPDoc/JSDoc immediately above the declaration and Python docstrings first inside its body. Write a factual purpose summary before any tags; a tag-only block is incomplete. Named functions and methods need a typed and described `@param` for each explicit parameter, with names matching the signature, and a typed `@return`/`@returns` (including `void`). Include defaulted, nullable, variadic, and newly added parameters, and describe actual return variants such as `null` or failure. Python may use equivalent typed Google-style docstrings. Classes need a factual purpose summary. Native PHP/Python signature types are independently required; PHP constructors/destructors cannot declare a native return type, but still need return documentation.
-
-Document structured parameters/results with concrete fields and collection element types, using inline shapes or genuinely documented reusable types. Bare `Object`, `Array`, `array`, `mixed`, `any`, and wildcards do not explain a structured contract. Alias resolution and semantic truthfulness still require review; scanner PASS is not full type checking. The existing opaque-unused-parameter exception applies only to its documented, lexically unused PHP input and must not become a general escape hatch. See [checked examples and language limits](docs/AGENT_AUTHORING.md).
-
-Anonymous functions, closures, arrow functions, and inline or variable-bound callbacks do not require docstrings, even when assigned to a named variable or object member. Variables, constants, and class properties do not require declaration docstrings either. Use ordinary comments for local reasoning when useful. Do not insert a docblock inside a call's argument list or extract a named helper solely to satisfy documentation checks. If an anonymous function contains a named function or class, that nested declaration still follows the named-declaration rule.
-
-Always add a native signature type to every explicit PHP callback parameter,
-including arrow callbacks. Apply the callback exemption to declaration
-docstrings only. Always attach a factual purpose docblock immediately to every
-class-like declaration, including anonymous classes inside fixtures or object
-properties. When changing an existing declaration, complete its entire
-parameter/return contract in the same edit: describe collection elements and
-row fields, every added/defaulted parameter, and every return variant including
-`void`.
-
-When changing a browser module's cache-busting revision, always search the
-complete import chain and all source/test assertions for the previous revision.
-Update every affected exact expectation together with the real import, keeping
-the checks equally strict. Always represent presentation options as explicit
-value/label entries. Reserve literal `'page' => 'target'` maps for registered
-routes, as required by the route-reference integrity contract.
-
-File attribution headers, native signature typing, operational-policy comments, and parser coverage checks remain separate requirements. `scripts/check_source_documentation.php` and the historical named-function presence test must apply the same anonymous-function exemption.
-
-### Runtime Policy Explanations
-
-The declaration-docstring exemption for constants does not exempt runtime policy
-sites. For added or materially changed sites covered by the existing PHP/JS
-runtime-policy scanner, attach an explanation immediately before the site: a
-factual purpose sentence, type (`Type:` or `@var`/`@type`), `Units:`, `Scope:`,
-`Consumers:`, and `Rationale:`. Describe the actual bound/default and its owner;
-do not invent a reason or leave empty labels. A file header does not document an
-individual site. Tooling, fixtures, unsupported formats, and advisory heuristics
-retain their existing scope; this is not a blanket requirement for all constants.
-
-## Compatibility Lifecycle
-
-New or materially changed compatibility/fallback branches need a reason, a
-concrete protected behavior/version/environment, an owning component, and a safe
-retirement condition or permanent-support rationale in the change description.
-Record high-impact paths in `docs/COMPATIBILITY_LIFECYCLE.md` with regression
-evidence and measurable usage or an explicit `unknown`. Do not infer introduction
-versions or usage from a path's age. Preserve behavior until its retirement proof
-covers migration, supported clients/data, and acceptance requirements. This is a
-review convention; do not add a branch parser or blanket expiry dates.
-
-## Testing Guidelines
-Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
-
-### Source Candidate Preparation (All Non-Release Branches)
-
-Always review both PHP string delimiters and SQL literal delimiters when editing
-queries. Choose compatible quoting for fixed SQL literals and keep runtime values
-in bound parameters. Bind numeric/boolean PDO parameters explicitly with their
-native PDO types when comparing placeholders with SQL literals, so supported
-drivers receive the same numeric contract. See the practical checks in
-[AGENT_AUTHORING.md](docs/AGENT_AUTHORING.md#implementation-checks-learned-from-hosted-ci).
-
-Always give an independent-process fixture its own explicit minimal dependency
-bootstrap, including Core path-policy dependencies used by passive services.
-Verify persisted evidence through the child process's actual exit status and
-output, because the child starts with its own loaded-function set. Keep the parent’s exact success marker synchronized with changed child coverage text.
-
-Always define counters relative to their owning identity: initialize a fresh
-manual cycle independently, advance a regional observation round within that
-region, and retain confirmed lifetime receipts separately. Keep the current manual incomplete-check marker visible with its counters. Cover both new-cycle
-and continuation semantics in the existing behavioral fixture.
-
-Always size a crash fixture's admission input according to the existing worker's
-observation semantics, including directory metadata and dot entries. Assert the
-intended physical mutation before simulating interruption, using the neighboring
-fixture's established setup while retaining production caps and suite limits.
-
-For retained cache evidence, carry current manual-operation counters separately
-through status, controller messages, diagnostics and browser progress. Keep the
-historical regional observations and installation-wide removal receipts intact.
-For historical ZIP expiry, use producer creation/payload modification evidence;
-retain ctime for replacement checks without treating permission changes as birth
-or renewed content. Recognize a legacy producer through positive format proof and
-its shared construction/serving lease before admitting reclamation.
-
-Pass a named interval constant to each new timer or sleep, including fixtures.
-Document runtime constants
-with explicit `Type:`, `Units:`, `Scope:`, `Consumers:` and `Rationale:` lines
-so both changed-source and whole-tree checks recognize the contract.
-
-Assert short-opportunity caps and durable progress across bounded continuations;
-cover admission exhausting the deadline without requiring a first-attempt slice.
-
-Hold a follow-up passive read while asserting a mutation response in a browser
-fixture; then release it separately to verify refresh without racing snapshots.
-
-For live filtering, invalidate older requests as soon as inputs change, before debounce admission. Capture the request URL and commit rows, counts and history only for that same current response; exercise delayed response and delayed JSON completion in the existing fixture.
-
-Send browser harness controls such as viewport changes through the captured native fetch, outside application-request mocks. Preserve the mock's strict method and credential assertions for product requests.
-
-Use a named, typed presentation helper for reusable formatting in runtime-scanned views, so the runtime compiler can resolve each call statically. Include the actual view owner explicitly in an isolated render fixture. Remove the retired dynamic-call review entry when replacing its callback.
-
-Always inspect complete runtime closures before adding dependency ownership.
-Reuse an existing shared owner where its entire historical closure is already
-present, then regenerate the authored plan and compare direct duplicate entries,
-transitive modules and route file counts against the unchanged ratchets.
-Account for the existing decomposition allowance before choosing the consumer
-edge; an unchanged PHP file closure can still add transitive logical modules.
-
-Complete authored source and permanent documentation before committing. Stage
-new/deleted production membership in the source commit because the canonical
-inventory reads Git's index. Edit authored runtime roots/dependencies rather
-than generated `app/runtime/modules.php`.
-
-Always account for new development and documentation paths in the source-review
-inventory, even when production packaging excludes them. Use hosted preparation
-when membership changes; an unchanged production file set alone does not prove
-the complete inventory is fresh.
-
-When adding or archiving development tools under `.github/`, use complete
-native-comment attribution headers on every new shell script, MJS/JS module,
-YAML workflow copy, and composite-action file. Include Project, Repository,
-the actual tracked File path, Module Type, Purpose, Responsibilities, Author,
-and License. An archived workflow moved out of `.github/workflows/` needs its
-header path updated even though it can no longer execute as a workflow.
-Hosted BASIC does not execute the FULL whole-tree source contract inventory
-or the PHP source-header regression fixture; a green BASIC check cannot waive
-either, so review all new headers as a complete batch before squashing.
-
-Always inspect release-origin and promotion predecessor assumptions before a
-maintenance-only main installation. Preserve the existing stable tag and bind
-any required finite compatibility bridge to the real human-reviewed merge and
-complete hosted evidence before resuming integration or creating an origin.
-
-The default sequence is **edit -> commit -> exact working-branch push -> hosted
-preparation -> exact candidate CI -> inspect/fix -> handoff**. The stable
-`.github/workflows/candidate-preparation.yml` prepares runtime modules, production
-inventory and complete-file manifest hashes in dependency order, commits changed
-generated artifacts separately, and invokes full CI for that published SHA.
-Identical inputs must not rewrite artifacts or manifest timestamps. Bot commits
-do not recursively trigger CI; the caller explicitly invokes the reusable matrix.
-
-Read-only `candidate-preflight` refuses stale generated state before expensive
-jobs. Preparation and final gates reject stale remote branch heads and use normal
-non-forced writes. A later fix repeats hosted preparation and qualification.
-Local `prepare_candidate.php` / `--check` remain maintainer recovery tools when
-explicitly requested or hosted preparation is unavailable; agents do not routinely
-duplicate them. Never hash truncated Contents API data. Releases use `RELEASE.md`.
-
-### Squash checkpoint after generated candidate commits
-
-Always verify exactly one integration-candidate commit above the observed
-current `develop` after preparation, including every generated bot commit.
-Run FULL qualification on this final squashed SHA so its evidence remains bound
-to the candidate that integration will fast-forward.
-
-When hosted preparation publishes another commit, stop/cancel the integration
-before its expensive matrix proceeds. Fetch the published head, preserve all
-generated files, and squash the entire feature delta onto the same observed
-develop base. Verify the resulting tree equals the prepared tree plus any
-explicitly reviewed source/documentation fixes, the parent equals that base,
-the commit count is one, and the working tree is clean. Push the authorized
-feature ref with an exact old-head `--force-with-lease` when the user authorized
-the squash; leave protected-branch updates to the approved integration workflow.
-Obtain fresh BASIC for the rewritten SHA before dispatching integration again.
-Verify that idempotent preparation keeps the fresh generated files and candidate
-SHA unchanged. Repeat this checkpoint whenever preparation adds another commit,
-and proceed to FULL once the complete prepared history is one final commit.
-
-### Automatic reviewed release lifecycle (#101)
-
-Follow `docs/RELEASE_LIFECYCLE.md` for future maintainer-pushed releases. A normal
-push of `release/v_X.Y[.Z]` initializes immutable origin A, prepares release
-notes, four locked-toolchain manuals, inventory and manifest into B, and runs
-BASIC changed-source checks plus release-owned-input proof against A..B. It does
-not rerun the functional integration owners on B.
-The resulting bot PR requires one human owner approval; qualification-dispatched automation
-uses a standard protected merge M with parents [P,Q] and tree(Q), then creates an
-immutable tag on M, then idempotently stages one unpublished GitHub Release draft
-with existing exact-Q release notes and automatically verified original assets.
-The maintainer reviews the complete draft and clicks Publish release. Automation
-only adds missing verified assets to unpublished drafts; existing descriptions,
-published releases, tags and conflicting assets remain immutable; draft failure never rolls
-back the verified M/tag. No deployment approval, manual dispatch input, extra
-main commit, red override or privileged bypass is allowed.
-Draft creation reconciles a lost response with a complete read-only inventory
-before any later replay. Binary transport distinguishes Actions ZIP endpoints
-from release-asset downloads; create-only uploads use the absolute upload URL
-and original content length. Transient transfers retry at most three times;
-authorization, integrity, conflict and published-release failures never retry writes.
-Machine-populated completion dispatch selects qualified Q before its workflow reaches
-main. Both branches verify installed/effective policy and record omitted bypass
-inventory honestly while relying on server enforcement; never fabricate that field.
-
-After tagging, the release workflow may attempt a true non-force develop FF to Q
-only with the complete installed qualification policy and a record binding FULL
-evidence for A to BASIC release-delta evidence for B. Parallel develop work blocks
-reconciliation without modifying the completed tag; no automatic replay/merge/rebase.
-This implemented future workflow does not authorize agents to execute protected
-writes, create production release branches, publish releases or modify server rules.
-Feature agents still write only their explicitly authorized working branch.
-Existing origins, published tags/assets and historical evidence stay immutable.
-Cleanup remains optional and separately leased; never routinely prune refs.
-
-### Qualification lifecycle target and activation status (#185)
-
-Current installed cadence was verified by hosted integration `38741037506` and
-release delta `38742234930` on 2026-10-15: BASIC feature pushes, one exact-candidate
-FULL before guarded develop integration, then release-owned BASIC delta. The
-historical activation caveats below do not reset that installed behavior.
-Changes to inherited CI authority require explicit maintenance qualification
-and maintainer-controlled installation; feature edits cannot authorize themselves.
-
-For the CI-authority evaluator update, use the staged develop-first procedure in
-`docs/CI_COVERAGE_REUSE_CONTRACT.md`; do not install it through a release
-bootstrap. Stage 1 changes only the integration publisher/workflow/readers and
-root-binding adapter while preserving the complete pinned BASIC closure, then
-uses the existing main-owned FULL integration and guarded FF to establish W*.
-Stage 2 is the owner-dispatched **Integrate into develop** action from develop
-with `ci_authority_update: true`, exact stage-1 proof and W* binding, one-commit
-candidate S, only the six approved evaluator transition paths, unchanged scanner
-closure, trusted inherited BASIC inspection, FULL from W* on exact S, and leased
-non-force FF. Record `authority_update` and `inherited_basic`; never invent W*
-main ancestry. Keep main protections and recovery distinct. This path remains
-unqualified until real hosted runs prove both stages. Stage 1 was installed on
-develop by main-owned run `38774538606`; record subsequent acceptance in #223.
-For the finite parallel-CI transition, retain the six executable evaluator
-pins and authenticate the one exact `app/core-manifest.json` companion against
-the sealed successful maintenance source/tree/run. Compare complete source/base
-leaf identities before selection, publication and final integration; admit only
-those exact regular blobs and preserve every other inherited path.
-Only create a release origin after the optimization is already on develop.
-Preserve an erroneous unpublished attempt and its source in explicit archive refs
-before replacing its leased release branch; never rewrite its origin or evidence.
-
-When changing a CI runtime or owner matrix, update every corresponding literal
-fixture expectation in the same batch while preserving strict assertions. Retain
-each failed preflight child's referenced log in the hosted artifact; an exit code
-without its diagnostic is insufficient handoff evidence.
-
-Always give a reusable FULL job below optional ancestors an explicit status
-function and direct dependency success conditions. Require the published SHA to
-equal the selected one-commit source before FULL; a generated child needs a new
-squash and fresh BASIC. Cover both skipped optional ancestors and adverse direct
-dependencies in the workflow's existing contract fixture.
-
-Always load a fixture's actual source owner before its first source assertion;
-keep shared source reads above all consumers when adding earlier contract checks.
-Always import or fully qualify native PHP exception classes inside namespaces,
-including invalid-input branches exercised by negative fixtures.
-
-Always bind delegated suites and every PHP shard to the same exact candidate,
-require all native owners in the aggregate and authenticated evidence readers,
-and prove the shard partition is complete and disjoint. Retain each shard's
-exclusive-test barriers and private DB/HTTP/workspace resources. Distinguish
-independent GitHub runner jobs from processes sharing one runner. Qualify a
-changed CI matrix through explicit hosted maintenance, then verify its protected
-installation separately before using it as integration authority.
-
-The latest #185 target replaces the earlier per-child coverage-inheritance
-proposal. Feature pushes and the final squash receive BASIC checks for PHP and
-JavaScript syntax plus complete named-declaration documentation only. After the
-feature history has been reduced to one authored commit S on top of develop P,
-the maintainer uses the Actions **Integrate into develop** button to select the
-feature branch. The action refuses an unsquashed branch, runs the complete
-central FULL matrix exactly once on final candidate A, then fast-forwards develop
-only after FULL succeeds. Agents never mutate `develop` directly.
-
-A release branch starts at qualified A. Release preparation creates B with
-notes, all four locked-toolchain manuals/PDFs, inventory and manifest. It runs
-BASIC changed-source checks against immutable A plus proof that every change is
-release-owned. It does not rerun browser, database, functional, Node runtime,
-WinApp or packaging regression suites on B. Package and installer generation
-remain release outputs; generation is not regression qualification.
-
-Human approval of the release PR, protected main merge M, tag and draft behavior
-remain unchanged. After the release, a pure fast-forward of `develop` to Q needs
-no second FULL run: the lifecycle record carries FULL for A and BASIC for the
-approved release-only A..B delta. Parallel develop work still blocks that
-synchronization.
-
-This target is **not active** until its implementation is installed on main and
-verified by real hosted CI. Until then, follow the currently installed required
-workflows; source changes and local fixtures do not activate reduced execution.
-See `docs/CI_COVERAGE_REUSE_CONTRACT.md` for evidence and activation gates. The
-older proposal to authenticate and inherit per-child develop coverage on release
-Q is superseded and remains only as historical context there.
-
-### Mandatory Agent Verification Contract
-
-**CI-first and working-branch-only writes take precedence over every later local
-test command in this repository.** GitHub Actions is the default and authoritative
-verification environment for coding agents. `scripts/audit.php` remains the sole
-test orchestrator inside CI; no YAML-maintained parallel test registry is allowed.
-
-1. Before any write, identify the current branch, HEAD, exact remote repository
-   and remote branch HEAD. Obtain explicit user authorization and usable write
-   permission for that exact working branch. Supported ordinary targets are
-   `feature/*`, `fix/*`, `bugfix/*`, `hotfix/*`, and `codex/*`. Missing or ambiguous
-   branch identity, authorization or permission means **BLOCKED / not CI-qualified**;
-   stop before writes and request the specific missing branch-scoped access.
-2. **NEVER directly mutate `develop` or `main` as an agent**, through Git or an
-   API: no push, force-push, fast-forward, reset, deletion, ref update or merge.
-   Broad credentials do not grant authorization. Creating/switching branches,
-   release operations, squash, tags and publication require separate explicit
-   authorization. Maintainer-dispatched protected release workflows are the
-   documented release path; ordinary implementation does not invoke them.
-3. Finish source, tests and permanent documentation; use hosted BASIC for feature
-   pushes and the final squash, then commit focused batches and push only the
-   authorized branch with an exact ref, for example
-   `git push origin HEAD:refs/heads/feature/example`. Check the remote head before
-   each write, use non-forced pushes for ordinary updates, and integrate concurrent
-   candidate-bot commits before adding fixes. An explicitly authorized feature
-   squash uses the exact old-head lease in the squash checkpoint above. Never
-   overwrite another writer.
-4. Use the hosted sequence above: BASIC feature/squash checks, the approved
-   **Integrate into develop** Actions button, then FULL on exact A before its
-   automatic fast-forward. Release B receives only BASIC changed-source and
-   release-owned-input checks. Hosted preparation owns generated artifacts and
-   exact candidate identities. Inspect summaries and failure artifacts; fix the
-   complete batch and obtain fresh hosted evidence. CI freezes
-   `PHP_GALLERY_SOURCE_BASE` to the merge-base with `origin/main`; release delta
-   checks use selected develop A. Missing history/base is BLOCKED.
-5. **Do not run local audits, test loops or duplicate syntax checks by default**,
-   including `quick`, `full`, `release-preflight` and `release`. A focused local
-   diagnostic is exceptional: an observed CI failure needs environment-specific
-   reproduction, CI is genuinely inaccessible, or the user explicitly requests
-   it. Red or slow CI is not unavailable CI. Limited local evidence never replaces
-   hosted qualification; report BLOCKED when CI cannot be used.
-6. Read the compact hosted summary first. For source failures read
-   `source-failures.md` once for the entire failed batch; use linked JSON for
-   complete evidence. Read raw child logs only for FAIL, BLOCKED or material SKIP.
-   Do not enumerate tests or replay the test tree. After a fix, push for fresh CI.
-7. Handoff must include workflow URL, checked branch, exact prepared candidate
-   SHA, immutable comparison base, required jobs/result and missing/manual
-   coverage. FAIL, BLOCKED, missing, cancelled, skipped or stale mandatory checks
-   cannot be called green. Earlier/source-event SHAs do not qualify a later bot
-   candidate. A later edit invalidates earlier evidence.
-
-GitHub branch protections/rulesets are separate server controls. Repository
-instructions alone are not access control. Follow `RELEASE.md` for the recommended
-protected-branch and release-environment setup; never enable bypass for agents.
-
-The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Production packages exclude tests, gallery media and installation state. `scripts/package_production.php` is the canonical PHP folder/ZIP builder. Historical shell deploy entrypoints, FTP credentials/uploads and interactive packaging are removed; do not reintroduce them. `scripts/release_files.php` remains a policy inspection bridge; membership verification alone does not prove content integrity.
-
-`quick` uses `php-fast`, the curated `quick_tests` registry in `scripts/audit_php_registry.php`; it does not execute the complete PHP regression tree, whole-tree source inventory/category budgets, WinApp suite, slow Node fixtures, or Chromium. `full` and `release` retain complete PHP regression, enforced reliable inventory budgets, and WinApp coverage. A quick PASS cannot prove the inventory budgets pass. The quick/full/release profiles retain strict changed-source documentation/policy checks, the whole-tree Python import policy, MVC/mutation contracts, clean-child include-phase probes, and the registered runtime-performance route suite. Include probes enforce ceilings of 1 file/16 MiB for early runtime and 40 files/16 MiB for application bootstrap (24-file baseline). Route probes measure nine routes against an owned disposable workflow fixture; without that fixture the suite reports an explicit SKIP. Route ceilings range from 160–300 files and 32–48 MiB by route. Wall time is observational. A quick PASS is edit-cycle feedback, not full handoff evidence.
-
-PHP suites share a portable bounded worker pool: default four workers, configurable with `PHP_GALLERY_AUDIT_WORKERS=1` through `8`; invalid values block the suite. Explicit `serial_tests` reasons in `scripts/audit_php_registry.php` create exclusive barriers: active workers finish before a serial test starts, and no other test runs beside it. Add unsafe shared-resource, contention, or nested-process fixtures to that registry rather than encoding filenames in the scheduler. Each child retains separate captured stdout/stderr and a timeout measured from its own start; reports retain deterministic test order.
-
-The dedicated `browser-tests` CI job requires Chromium with `PHP_GALLERY_BROWSER_REQUIRED=1` and invokes `php scripts/audit.php --suite=browser-map`. Missing, unstartable, or silently skipped browser coverage must make this job nonzero. Database/runtime matrix jobs disable browsers explicitly at job scope. Local optional browser discovery and the separate disposable database browser journey remain supported; an isolated browser fixture PASS does not qualify a live installation.
-
-### PHP Syntax Validation
-
-Hosted central audits own mandatory PHP/JavaScript syntax validation. `full`
-checks the entire tree; quick diagnostic coverage retains its changed-file rules.
-Do not duplicate a green CI matrix with local lint loops. A direct focused lint
-command is reserved for the exceptional diagnostic paths in the CI-first contract.
-Missing required hosted runtimes or syntax coverage is BLOCKED, not PASS.
-
-## Capability Policy Guidelines
-
-`app/services/feature_flags.php` is the compatibility entry point for the canonical optional-capability policy implemented in `app/services/feature_flags/`. Before adding a new toggle, route guard, or feature-specific enable helper, search the registry and existing domain service first. Reuse an existing capability or storage owner when the new behavior is another surface of the same feature. Do not create a second setting merely because one controller needs a differently named check.
-
-When adding or changing a capability:
-
-1. Register the canonical key in `feature_capability_definitions()` and keep the key stable. Declare group, label, description, dependencies, explicit owned routes or prefixes, data-disable policy, behavior tags, and specialized Settings destination where applicable.
-2. Choose one storage owner. Plain capability switches use the existing `feature_flag.<key>.enabled` app-setting convention. Existing domain-owned masters must use a `domain_adapter`; an already established scalar may use an explicit `app_setting` source. Do not shadow an existing domain setting with a second feature flag. Derived/read-only state is not writable.
-3. Distinguish configured state from effective state. `feature_capability_configured_enabled()` is the persisted administrator preference. `feature_capability_effective_enabled()` additionally applies dependencies and is the normal runtime/UI availability check. Legacy `feature_flag_enabled()` intentionally means configured state for compatibility and must not be substituted for dependency-aware gating without reviewing the caller.
-4. Put route ownership in the canonical registry. Routes requiring more than one capability belong in `feature_capability_multi_route_requirements()` using `all_of` or `any_of`; do not approximate a compound requirement with one arbitrary owner. The dispatcher in `app/bootstrap/dispatch.php` enforces these requirements before controller execution.
-5. Master OFF is non-destructive unless a future design explicitly documents otherwise. Preserve subsystem rows, files, review ledgers, translations, tags, Trash contents, and subordinate preferences. Turning a capability back on should expose the same stored state.
-6. Hide capability-owned navigation and controls with the same effective policy that protects their actions. For shared pages containing both core and optional actions, gate the individual mutation or UI affordance rather than making the whole page optional. Read-only diagnostics may remain available when only destructive/installer actions are disabled.
-7. Preserve schema laziness. Admin > Features health may consume an already resolved schema state, but opening the page must not fan out optional table/column probes. Feature policy chooses availability; `schema_inspection.php`, mutation schema policy, and presentation schema policy remain the schema authorities.
-8. Fresh-install defaults are allowed only for writable persisted sources and are seeded through the existing lifecycle marker. An upgrade fallback and a fresh-install default are different concepts; do not rewrite an existing administrator preference during upgrade.
-9. Register global discoverability through the existing Admin Settings registry instead of creating a parallel Settings index. Specialized mutation pages remain the owner of their own complex settings and actions.
-10. Extend the focused capability contracts when registry structure, adapters, routes, dependency semantics, Admin health, or expensive OFF-path behavior changes. The authoritative handoff is still the central audit described above, not a manual stack of focused tests.
-
-Compatibility wrappers such as `feature_flag_enabled()`, `set_feature_flag_enabled()`, and `feature_flag_for_route()` remain intentionally supported because existing callers and tests use them. Do not remove or silently change their semantics unless all callers are migrated and the regression suite proves the compatibility contract can be retired.
-
-## Admin Side-Panel Interaction Priority
-Treat the existing Admin right-side panel as the primary interaction surface for every action launched from that panel. When JavaScript is enabled, panel forms and buttons must complete in place through the existing side-panel/AJAX workflow: keep the panel open, do not navigate to a standalone Admin route, do not change `window.location`, and do not reload the page. A normal POST/redirect route may remain only as a non-JavaScript or direct-page fallback; it must not be the normal behavior of an action initiated inside the panel.
-
-Because side-panel content is injected dynamically, bind handlers in a way that also covers newly rendered panel fragments and prevent generic form handlers from taking over panel-owned actions. When a JavaScript module that owns a panel action changes, update its cache-busting import so deployed browsers cannot continue running an older handler. Add focused regression checks for panel persistence and in-place refresh whenever a side-panel action is added or changed.
-
-Persistent mutations launched from the right-side panel, including review/ignore ledgers and reset actions, must use the JSON/AJAX path as the primary browser pipeline and replace only the owned panel fragment or affected page elements. Treat the POST/redirect implementation as fallback compatibility. For every new panel button, test that the browser URL is unchanged, the panel remains open, and a dynamically re-rendered copy of the same control is still intercepted without rebinding the whole page.
-
-Every successful persistent side-panel AJAX mutation must return the canonical envelope built by `app/helpers_mutation.php`: `ok`, `message`, typed `mutation` metadata with stable `entity_ids`, optional `panel` refresh metadata, explicit affected `contexts` with observable postconditions where meaningful, and `fallback` metadata for direct-page use. Browser code must preserve that envelope through batching/aggregation and pass it to `public/assets/gallery-modules/admin-mutation-completion.js`; do not reconstruct completion semantics from workflow-specific top-level URLs, counters, or flags. Public refresh retry, cache/stale-read handling, postcondition verification, and stale/out-of-order suppression belong only to the shared coordinator. Workflow modules may own progress UI and their panel fragment, but must not add a parallel refresh/retry pipeline. The hosted central mutation-contract suite must cover `scripts/check_admin_mutation_contracts.php` whenever persistent panel responses or wiring change.
-
-Do not invent browser confirmation dialogs or extra intermediate navigation for an explicitly requested one-click/in-place panel action unless the feature requirements specifically call for confirmation. Destructive operations must still use the existing authentication, CSRF, authorization, path-safety, and mutation services.
-
-## Public Thumbnail Renderer Guidelines
-Both public thumbnail renderers are permanent supported pipelines. `progressive` is the default and safe fallback; `responsive` remains the supported legacy renderer with complete server-rendered responsive srcsets plus no-JavaScript behavior. Both values are permanent machine/architecture names. Do not introduce temporary, experimental, numbered, or replacement-style renderer identifiers.
-
-Changes to shared thumbnail bundle, bounds, HTML, manifest, warm-up, public-card, or browser lifecycle code must test both renderers. No renderer may weaken gallery/password/NSFW access checks, media authorization, semantic server-rendered image markup, useful alt text, or no-JavaScript navigation. Progressive larger candidates must remain inert until the bounded near-viewport scheduler activates them.
-
-The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with only `responsive` and `progressive` values. Invalid values must fall back to progressive. Admin-facing Default/Legacy wording is UI status only and must not leak into setting keys, PHP/JavaScript identifiers, CSS classes, filenames, data attributes, test names, or architecture terms.
-
-`PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
-
-## Public Lightbox Zoom Guidelines
-The public lightbox zoom is a single-viewer feature. Keep `data-lightbox-stage`, `.lightbox-zoom-surface`, and
-`data-lightbox-img` as one coordinated presentation path rather than adding a parallel fullscreen viewer or a second
-media authorization route. Scale is bounded to 100-400%. The fitted 100% photograph is explicitly centered; the zoom
-surface owns the real enlarged CSS width/height and grows around that center, while translation-only transform moves the
-surface for pan. Do not restore compositor `scale()` zoom on the image itself or a fixed 100% clipping frame, because both
-regress full-quality repaint and cursor geometry.
-
-Pointer/pinch anchoring must be calculated from canonical fitted image dimensions, current scale, and current translation.
-Do not feed an in-flight animated `getBoundingClientRect()` back into the next zoom step. Repeated off-center zoom must
-keep the same fractional photograph point under the cursor/midpoint without accumulating top-left or bottom-right drift.
-Fullscreen must preserve both X and Y pan range and keep close/HUD controls above the transformed media layer for hit
-testing.
-
-At exactly 100%, passive quality selection may choose a larger authorized candidate for a large or high-DPI stage. Any
-deliberate zoom above 100% must synchronously assign the already-authorized active card `data-full-src` to the live
-`data-lightbox-img` in that same input task. It must not wait for fullscreen, resize, a debounce, detached decode,
-`requestAnimationFrame`, or another mode transition. Cancel pending preview cross-fades first, keep navigation/quality
-tokens scoped to the current image, restore the protected preview on failure, and never prefetch neighboring originals
-merely because the active photo is zoomed.
-
-After changing zoom markup, geometry, quality promotion, fullscreen CSS, or event routing, run the seven PHP
-`lightbox_zoom_*` contracts plus `node tests/lightbox_zoom_model_test.mjs`, JavaScript syntax checks, and the manual
-browser matrix in `TESTING.md`. Preserve the scoped gesture split: ordinary mouse-wheel and two-finger trackpad scrolling pan a photo only above 100%, while Ctrl+wheel (including Chromium trackpad pinch) zooms only the photograph. Safari GestureEvents are the fallback for trackpad pinch; Command+wheel stays browser-owned. At 100% keep one-finger mobile swipe navigation; above 100% allow one-finger pan and two-finger pinch, including swipe-to-pinch and pinch-to-pan handoff. Keep the OFP viewer independent: unmodified wheel scrolls only the document, Ctrl+wheel/trackpad pinch zooms at the PDF cursor, touch pan/pinch works within the document stage, and HUD colors/scale are independent of gallery themes. Preserve maps, voting, strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
-
-## Public SimBrief OFP Attachment Delivery
-
-Saved OFP PDF links use the dedicated, gallery-scoped `gallery_ofp_pdf` route. The public gallery controller emits a same-origin `index.php` URL from the actual script mount path rather than an absolute `base_url`; it must work on subdirectory installations with rewrite disabled and never expose the local PDF path or the remote SimBrief URL. The existing `media&ofp=1` form remains compatible. Enforce `simbrief_ofp_visitor_access_allowed()` against the **source gallery** before opening the validated local attachment: public and unpublished galleries work for fresh anonymous visitors through their direct URLs, access-gated galleries require the same password/share/NSFW grants, genuinely private galleries are unavailable without the normal gallery visitor grant, and administrator access must not leak into anonymous preview. The separate generated page subgallery remains private. Denied, missing and invalid PDF assets return the same no-store plain-text 404 without loading a gallery HTML template. Treat `gallery_ofp_pdf` as a public-policy media route in both dispatcher and authored runtime-module roots. Keep the real HTTP regression in the central PHP test registry, and update all four permanent TeX manuals for any future behavior changes.
-
-## Continuous Documentation Synchronization
-
-Every implementation batch that materially changes product behavior, administrator
-operations, security or compatibility policy, runtime ownership, migrations,
-deployment, updater behavior, CI, testing, tooling, or the developer workflow
-must review and update its permanent documentation **during that same batch**.
-This applies to maintainer-facing infrastructure changes even when the public
-UI does not change. Do not defer such explanations to a future release branch.
-
-Update the relevant Markdown references (for example `README.md`,
-`ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and applicable
-`docs/*.md`) and the corresponding sections of **all four** maintained
-`docs/PHP_Gallery_Manual*.tex` sources whenever their current behavior,
-instructions, safety requirements, or architecture would otherwise be stale.
-A change to generated-artifact preparation or CI gating, for example, belongs
-in the TeX manuals' developer/maintainer reference, not only in `AGENTS.md`.
-Describe the current supported behavior in the existing topical sections;
-never append an issue-by-issue change log to a permanent manual.
-
-Review documentation impact before the final source commit and hosted preparation and
-the authoritative hosted handoff qualification. The documentation updates belong in the same
-source candidate as the implementation. If no TeX section is affected by a
-truly internal change, explicitly record `No TeX manual impact` with a brief
-reason in the implementation handoff or issue instead of silently omitting it.
-An internal-only or CI-only label does not by itself justify omission.
-
-During ordinary development update **TeX sources only**, preserving existing
-edition version/date markers. Do not compile, rewrite, inspect, or commit
-manual PDFs as part of routine source changes. The release workflow only
-updates release/version metadata and compiles existing TeX to PDF; it does
-not author the technical/manual prose. `PATCH_NOTES.md` remains reserved
-for explicit maintainer requests or the separate release preparation process;
-do not modify it for ordinary feature, bug-fix, or documentation batches.
-## LaTeX Manual Typography
-
-### All manual language editions
-
-Every relevant product, operational, developer, testing, or release documentation change must keep all four maintained source editions aligned: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep feature coverage, compatibility notes, operating instructions, and developer workflows equivalent across languages. `scripts/prepare_release.php` updates only the English edition markers, while hosted release preparation aligns all four version/date markers; neither writes missing manual prose. Updating English alone is not a completed manual-source handoff.
-
-During ordinary development, edit and review the Markdown/LaTeX sources without rebuilding tracked PDFs after each code or documentation change. PDF artifacts may intentionally lag behind their sources until final release preparation; routine documentation work does not require a local TeX installation. Build all four maintained PDFs together once after the final release source/metadata edits, before the final manifest and exact-candidate release audit. The GitHub-hosted release workflow owns this batch compilation and checks compiler success and relevant warnings. Use the local commands in `docs/LATEX_BUILD.md` only when an explicit local build is requested or a concrete compilation/layout failure needs diagnosis. Later changes to frozen release inputs require a new preparation and qualification run.
-
-Do not routinely read generated manual PDFs, extract their text, render pages, take screenshots, create contact sheets, or perform visual PDF review after a successful LaTeX build. The maintainer explicitly considers that redundant work. Validate the source, compiler result/warnings, and existing automated release consistency checks instead. Visual inspection is appropriate only when the user explicitly requests it or a concrete build/layout problem needs diagnosis; inspect only the affected pages in that case. This repository-specific preference overrides generic PDF skill review workflows and older release visual-review suggestions. Routine release preparation must not introduce a human PDF visual-approval gate.
-
-
-The administrator manual is permanent product documentation, not a release-news feed. Do not add version-by-version “What is new”, patch-note, or release-history sections near the beginning of `docs/PHP_Gallery_Manual.tex`. Put release history in `PATCH_NOTES.md`; if a future manual genuinely needs historical material, add it deliberately as a documented appendix rather than inserting news before the usage guide. Before release, confirm the manual proceeds from its purpose/reading guide into the usage guide without a release-news block.
-
-For human-readable prose in `docs/PHP_Gallery_Manual.tex`, do not leave short function words stranded at the end of a rendered line. Use LaTeX non-breaking spaces (`~`) to bind them to the following word or visible phrase. Apply this throughout the manual, including headings, captions, list text, footnotes, and explanatory table text.
-
-As a general rule, bind ordinary standalone one-letter words (normally `a` and `I`) and ordinary two-letter words forward. Also bind common three-letter function words where appropriate, including `the`, `and`, `for`, `but`, `nor`, `yet`, `are`, `was`, `can`, `may`, `has`, `had`, `did`, `not`, `per`, and `via`. Apply the rule case-insensitively in prose and chain bindings naturally, for example `a~thing`, `the~thing`, `on~the~menu`, and `The~gallery needs to~be~formatted like this.` Keep all-uppercase technical abbreviations and operators such as `UI`, `IP`, `OS`, `DB`, `ID`, `AND`, `OR`, and `NOT` untouched regardless of length.
-
-Do not insert these typography tildes into LaTeX commands or machine-readable material such as URLs, filesystem paths, setting names, labels, references, citation keys, index keys, math, code/literal strings, or `lstlisting`/verbatim-style environments. A short word at a source-code line wrap still belongs to the following prose word, so the non-breaking binding must survive source wrapping rather than only same-line text. When editing or adding manual prose, preserve this convention instead of relying on TeX to choose a line break automatically.
-
-## Release Preparation Artifact Policy
-
-Release preparation must not create deployment folders, release ZIPs, clean packaging staging trees, checksum files or handoff bundles in `deploy/` by default. The maintainer does not need these generated artifacts. Do not create them unless the user explicitly requests a particular package or archive. Keep central audit and qualification evidence in their existing ignored `cache/` locations.
-
-The only normally needed distributable build artifact is the Windows installer in `winapp/dist/`, and rebuild it only when shipped WinApp code, assets, dependencies, runtime binaries or installer/build behavior changed since the previous installer. CMS-only release markers, documentation changes and test-only fixes do not require a new installer. Preserve the independent WinApp version unless the user requests its change; when no installer change is needed, leave `winapp/dist/` untouched. This default overrides packaging suggestions in `RELEASE.md`; release metadata, all four manual editions/PDFs, manifest freshness and the authoritative release audit remain required.
-
-## Release Manifest Handoff Requirement
-Every change to an updater-managed release file must refresh `app/core-manifest.json` before a production archive, affected-files ZIP, release commit, or handoff is created. Hosted candidate preparation runs the canonical `php scripts/prepare_candidate.php` after the source commit, then its read-only `--check`; it generates the manifest last after runtime and inventory preparation. The production builder refuses stale integrity data before staging and verifies every selected file against its actual source bytes before publication. It does not repair generated state. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
-
-## GitHub Issue Language
-
-GitHub issue titles, bodies, and **all issue comments MUST ALWAYS be written in
-English**, regardless of the language used in the chat. This includes progress
-updates, implementation plans, diagnostics, verification results, and handoff or
-closure comments. Apply this rule when creating or editing issue content, and
-check the language before submitting it. Conversations with the user may remain
-in the user's preferred language.
-
-## Commit & Pull Request Guidelines
-Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.
-
-## Security & Configuration Tips
-Do not commit `config.php`, local caches, uploads, or generated deploy archives. Use `config.example.php` as the baseline for new environments. Keep access checks in `app/services/gallery_access.php` and route-sensitive logic centralized in controllers and services rather than duplicated in views.
-
-## Agent-Local State
-
-Agents may create and use repository-local hidden folders for machine-specific, non-product state, including discovered executable paths, local environment variables, tool settings, and diagnostic notes. Use an ignored folder such as `.claude/`, `.codex/`, `.agent/`, or `.agent-local/`; do not store credentials, production data, generated deployment files, or application source there. Keep repository-owned metadata such as `.agents/` and `.github/` under normal version-control rules. Add any new agent-state folder explicitly to `.gitignore` before using it, and never include agent-local state in commits, manifests, deployment packages, or release archives.
-
-When a required executable is found outside `PATH`, record its repository-local path in the applicable ignored agent-state folder for reuse during the current workspace work. Do not repeatedly retry a missing command: check the saved value first, verify that it still exists, and report the tool as unavailable if it does not.
-
-## Patch Notes Guidelines
-Patch note generation rules are documented in `PATCH_NOTES_TEMPLATE.md`. When creating release notes, follow that template and the existing `PATCH_NOTES.md` style. Do not edit existing historical entries unless explicitly requested.
-
-## Schema Inspection Reliability Guidelines
-Schema capability checks use explicit `available`, `missing`, and `unknown` states at every security-sensitive, mutation-sensitive, and optional presentation/reporting boundary. `app/services/schema_inspection.php` owns observation and request-local caching; feature policy remains in the security/access services, `app/services/mutation_schema_policy.php`, or `app/services/presentation_schema_policy.php` according to risk. Do not reintroduce ambiguous boolean existence checks at a boundary that must distinguish confirmed absence from inspection failure.
-
-NSFW Guard is the first converted security-sensitive caller. Preserve its three-state policy: complete schema uses normal protection, confirmed pre-feature schema uses the documented compatibility path, and unknown inspection state fails public NSFW-sensitive requests with the centralized 503 boundary. Explicit NSFW setting changes require verified schema. Keep System Health diagnostics bounded and never expose raw database exceptions.
-
-The NSFW service-unavailable boundary must remain route-aware: translated minimal HTML for human pages, JSON for structured endpoints, and plain text for media or crawler responses. Preserve HTTP 503, private no-store caching, retry and noindex headers, request-ID correlation, and the stable bounded security log event. Logging failure must never interfere with the protective public response.
-
-Admin System Health and Runtime Diagnostics must consume the shared bounded NSFW health model. Missing and unknown states require visible action badges; unknown includes only safe suggested checks and request correlation. Keep affected objects restricted to validated table/column identifiers. The generic disabled state applies only when a feature has a real configuration switch; NSFW Guard currently has none.
-
-Phase 8 validated the pilot result shape and naming, public/Admin presentation,
-bounded logging, and the request-local query budget. The completed conversion keeps
-those structured result names stable unless a concrete future requirement proves a
-deficiency. Policy code should prefer the explicit state predicates over repeated
-raw array-key checks. Migration execution is a cache invalidation
-boundary: successful schema DDL, duplicate-DDL replay, migration-ledger
-bootstrap, and successful repair callbacks must clear request-local schema
-inspection results before same-process validation. Data-only statements should
-not invalidate schema capability state.
-
-Phase 9 converts gallery access/visibility/share-token and administrator
-authentication storage. Preserve these policies in future edits:
-
-- gallery access is legacy only when **all** core access columns are confirmed
-  absent; aggregate `missing` with a partially applied migration must fail closed;
-- visibility may map canonical `unpublished` to historical `draft` only after a
-  successful column-definition inspection proves the old vocabulary;
-- protected gallery/media/thumb/metadata/download routes must pass the dispatcher
-  visibility, access, and NSFW preflight before handler output;
-- confirmed missing remember-token storage may degrade only to ordinary PHP-session
-  login; unknown storage must not issue/use persistent tokens;
-- confirmed missing `users.email` preserves username login, but password reset
-  requires verified `users.email` plus `password_reset_tokens`;
-- Google OAuth configuration readiness and `user_google_accounts` schema readiness
-  are separate decisions; unknown link storage must not be described as merely
-  unconfigured;
-- share-token generation/use requires verified storage, while revocation may always
-  clear a verified validating hash even if optional encrypted display-token storage
-  is missing or unknown;
-- security schema logs and System Health may contain bounded capability/operation
-  identifiers, validated table/column names, safe categories, and request IDs only.
-  Never include passwords, hashes that act as credentials, share/reset tokens,
-  remember cookies, CSRF values, OAuth secrets, DSNs, raw SQL, raw database
-  exception messages, or filesystem paths.
-
-`admin_security_schema_health_statuses()` is the shared Admin registration for
-converted security/authentication capabilities. Runtime Diagnostics and dashboard
-System Health must consume the same bounded models. Add focused available/missing/
-unknown tests for any policy change and require a green hosted `full` audit for the exact prepared candidate.
-
-Phase 10 converts destructive and ingestion workflows through
-`app/services/mutation_schema_policy.php`. Preserve these mutation rules:
-
-- preflight the complete required schema **before the first irreversible target
-  mutation**, including filesystem moves/copies/deletes, credential creation,
-  database row deletion, migration target writes, derivative replacement, repair
-  DDL, or replacement of active application files;
-- `available` preserves the existing operation, `missing` may use only an
-  explicitly documented compatibility path or a migration/repair bootstrap, and
-  `unknown` must refuse or pause the mutation;
-- never use `db_table_exists()` or `db_column_exists()` as authorization to skip
-  destructive cleanup, ingestion registration, token handling, or maintenance.
-  Those legacy boolean helpers cannot distinguish confirmed absence from an
-  inspection failure;
-- optional cleanup/metadata columns may be skipped only after a three-state probe
-  confirms they are missing. Unknown optional dependencies must stop the operation
-  before a partial mutation can be committed;
-- token revocation is intentionally narrower than token issuance/authentication.
-  Revocation should remain possible whenever the identity and revocation columns
-  required to disable the credential are verified, even if unrelated optional or
-  authentication columns are missing;
-- browser/classic upload, WebDAV PUT, and gallery migration must establish both
-  core ingestion readiness and thumbnail-metadata write readiness before source or
-  derivative files are committed to the target gallery. A prepared ZIP, WebDAV
-  request body, or resumable migration job should remain recoverable on refusal;
-- thumbnail reads may retain documented legacy file-only behavior, but generation,
-  metadata repair, variant deletion, and bulk thumbnail deletion must stop on an
-  unknown metadata schema before derivative files are changed;
-- database cleanup/repair and updater activation may proceed through a confirmed
-  missing `schema_migrations` state only where the workflow itself can safely
-  bootstrap or apply migrations. Unknown metadata state still blocks the mutation;
-- update source validation must require both `schema_inspection.php` and
-  `mutation_schema_policy.php` before active application files can be replaced;
-- mutation refusal logs use `database.mutation_schema_refused` with only bounded
-  capability, state, operation, affected database-object identifiers, and ordinary
-  safe request correlation. Never log raw SQL, PDO messages, database credentials,
-  API keys, WebDAV secrets, upload paths, migration source paths, or update staging
-  paths;
-- `admin_mutation_schema_health_statuses()` is the shared System Health and Runtime
-  Diagnostics registration for the ten converted Phase 10 capability groups. Keep
-  those surfaces synchronized with the policy service and preserve visible Action
-  state for `missing` or `unknown` results.
-
-`tests/mutation_schema_policy_test.php` is the focused Phase 10 contract. Extend it
-whenever a converted mutation gains a new schema dependency or compatibility path.
-Keep optional presentation/reporting policy separate from destructive mutation policy.
-
-Phase 11 optional presentation/reporting callers use `app/services/presentation_schema_policy.php`. Preserve these final rules:
-
-- read-only optional presentation may be omitted for confirmed `missing` schema and may also be omitted for `unknown` only when omission cannot expose protected data, weaken access policy, or authorize a persistent mutation; `unknown` must emit bounded diagnostics and appear in System Health;
-- optional-feature writes must never use `unknown` as proof of absence. Use `presentation_schema_assert_write_available()` when the write requires the capability, or `presentation_schema_assert_known()` only for an audited compatibility path where confirmed `missing` safely means no optional persistence;
-- GPS/EXIF maps, flight maps/navigation data, voting, Picture Game, lightbox overrides, OpenAI settings, AI image metadata, SimBrief route-map persistence, navigation account/cache storage, telemetry reporting, and the complete Admin report each have named capability status functions; do not collapse them into a generic all-features-ready boolean;
-- Picture Game GET state records displayed pairs, so its pair-selection route is a write boundary even though it renders a page. Voting, Picture Game results, telemetry settings/maintenance, navigation account persistence, AI queue changes, and similar state changes require conclusive schema policy;
-- gallery creation/import must verify voting storage before enabling voting, and must not silently discard an explicit or metadata-organizer-inherited lightbox override when its schema state is `unknown`;
-- metadata-organizer capture-date readiness uses structured inspection of `images.exif_taken_at`; do not restore the legacy boolean column probe;
-- navigation token disconnect/revocation may use a narrower verified account-deletion capability, while account creation/token persistence requires the complete account schema;
-- SimBrief draft generation remains independent from optional flight-route persistence. Missing/unknown route-map schema may omit only the map write, not the remote draft itself;
-- Admin gallery-report schema discovery uses structured named-object inspection for known report dependencies. Its direct `information_schema.TABLES` query is the intentional exception because the report must dynamically enumerate every base table rather than ask whether one known object exists; keep its output generic on query failure;
-- System Health presentation definitions must stay lazy. Evaluate a real feature flag first and report `disabled` without metadata probes when the feature is off. Enabled capability resolvers share the request-local schema cache;
-- `database.presentation_schema_degraded` may contain only bounded capability/state/operation and validated affected-object names. Never include SQL, raw database exceptions, DSNs, passwords, OAuth/API tokens, cookies, CSRF values, reset/share tokens, or private paths;
-- retain the final regression contract in `tests/presentation_schema_policy_test.php`, including the ten-probe first-use voting budget, zero-query lazy registry construction, exact capability registry, source-boundary audits, and redaction checks.
-
-The schema-inspection reliability roadmap is complete. Permanent behavior belongs in `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `README.md`, `TESTING.md`, release notes, and the administrator manual. Do not recreate a temporary phased roadmap in release packages.
+Read this canonical contract and applicable area rules before editing, even from
+the root: nested AGENTS files are not all loaded automatically. User rules prevail.
+
+**Before writing:** verify branch authorization, find the domain owner and a
+compliant declaration, and read affected contracts from the map.
+
+**While writing:** write declarations and complete factual docs together. Preserve
+comments and update permanent docs. Fix repeated problems throughout the batch;
+never weaken types, checks, limits or baselines for PASS.
+
+**Before handing off:** review diff/new files; push only the authorized branch
+and inspect exact-SHA CI. State missing coverage.
+
+## Read the applicable area before editing
+
+| Affected area | Required instructions/reference |
+| --- | --- |
+| PHP/MVC/runtime/capabilities/Admin | [app rules](app/AGENTS.md), [architecture](ARCHITECTURE.md) |
+| Schema/access/auth/mutation readiness | [schema policy](docs/AGENT_SCHEMA_POLICY.md), [database](DATABASE.md) |
+| Browser/assets/thumbnails/lightbox/OFP | [asset rules](public/assets/AGENTS.md) |
+| Fixtures/children/browser harnesses | [test rules](tests/AGENTS.md), relevant [testing](TESTING.md) section |
+| CLI/audit/scanners/inventory/packaging | [tool rules](scripts/AGENTS.md) |
+| CI/evidence/preparation/integration | [CI rules](.github/AGENTS.md), [CI contract](docs/CI_COVERAGE_REUSE_CONTRACT.md) |
+| Windows companion/installer | [WinApp rules](winapp/AGENTS.md), [readme](winapp/README.md) |
+| Docs anywhere/manuals/notes | [docs rules](docs/AGENTS.md) |
+| Declaration/header/policy | [examples](docs/AGENT_AUTHORING.md) |
+| Compatibility | [lifecycle contract](docs/COMPATIBILITY_LIFECYCLE.md) |
+| Releases | [RELEASE.md](RELEASE.md), [lifecycle](docs/RELEASE_LIFECYCLE.md), [docs rules](docs/AGENTS.md) |
+
+Read all applicable rows. Scoped rules cannot waive authorization, CI or security.
+[Historical CI notes](docs/AGENT_CI_HISTORY.md) grant no permission or proof of
+current installation.
+
+## Branch authorization and repository safety
+
+Before writes, identify branch/HEAD, exact remote repository and remote branch
+HEAD; obtain explicit authorization and usable write permission for that branch.
+Targets: `feature/*`, `fix/*`, `bugfix/*`, `hotfix/*`, `codex/*`; new work uses
+`feature/`. Missing identity/access/authorization is **BLOCKED / not CI-qualified**;
+stop before writes and request that access.
+
+**Never directly mutate `develop` or `main`**, by Git or API: no push, force-push,
+FF, reset, deletion, ref update or merge. Creating/switching branches, squash,
+release operations, tags and publication need separate explicit authorization.
+Broad credentials/feature edits grant no authority. Protected writes belong to
+approved maintainer workflows; do not change protections or enable bypass.
+
+Check remote heads before writes. Use non-forced ordinary updates and exact refs
+(`git push origin HEAD:refs/heads/feature/example`); integrate concurrent bot
+commits before fixes. Never overwrite another writer. An authorized feature
+squash requires an exact old-head lease and the
+[checkpoint](.github/AGENTS.md#squash-checkpoint-after-preparation).
+Do not routinely prune refs.
+
+Never commit credentials, config.php, caches, uploads or deploy archives. Use
+config.example.php and existing access services. Ignored `.claude/`, `.codex/`,
+`.agent/`, `.agent-local/` hold only tool paths/settings/notes; ignore new state
+folders before use. Keep `.agents/`/`.github/` tracked and local state unpackaged.
+Revalidate saved tool paths before retrying missing executables.
+
+## Code and declaration essentials
+
+PHP 8.1+, four-space indentation, `declare(strict_types=1);` in new PHP files;
+no Composer or Node build, framework-free public JS/CSS. Never use Python
+`from __future__ import annotations`.
+
+MVC is mandatory for new/materially refactored responsibilities:
+`Controller -> Service -> Model`. Models own SQL/PDO/persistence/row mapping;
+services own reusable policy/orchestration/filesystem workflows; controllers own
+HTTP, auth/CSRF, responses and prepared view models; views own presentation.
+Find the existing owner before adding helpers. Pass semantic inputs, never SQL
+fragments. Views do not discover domain policy. Never add MVC baseline debt.
+
+Every new source file needs a leading native-comment header: Project, Repository,
+actual tracked File path, Module Type, Purpose, Responsibilities, Author (Rudolf
+Klusal), License. Correct copied/moved paths. Headers, docs, native types and
+policy explanations are independent; use the checked examples.
+
+Each new/changed named function/method needs purpose before tags, typed/described
+parameters (defaulted, nullable, variadic and added too), and every return variant
+including void/None/failure. Document concrete collection elements/object fields,
+not bare array/Object/mixed/any/wildcards. Keep the opaque-unused-PHP exception
+narrow. PHPDoc/JSDoc immediately precedes declarations; Python docstrings come
+first inside. Native PHP/Python types are independent; PHP constructors/destructors
+document returns without a native return type.
+
+All class-like declarations, including anonymous classes, need factual purpose
+docs. Anonymous callbacks/arrows, variables/constants/properties need no declaration
+docstring; nested named declarations still do. Every explicit PHP callback
+parameter still needs a native type. Do not extract helpers just for docs or put
+docblocks inside call arguments. Preserve meaningful comments and local reasoning.
+
+For added/materially changed scanner-covered PHP/JS runtime-policy sites, explain
+purpose, `Type:` (or @var/@type), `Units:`, `Scope:`, `Consumers:`, `Rationale:`
+immediately before the site, stating the actual bound/default and owner. A header
+cannot replace this. Preserve tooling/fixture/format exemptions; this is not a
+blanket rule for all constants. Use named constants for new timers/sleeps, fixtures
+included.
+
+Changed fallbacks need reason, protected behavior/environment, owner and retirement
+proof/permanent-support rationale. Record high-impact regression/usage evidence
+(or unknown) in the lifecycle contract; preserve support until safe retirement.
+Do not infer versions/usage.
+
+## Mandatory Agent Verification Contract
+
+**CI-first and working-branch-only writes override local test instructions.**
+`scripts/audit.php` is the sole orchestrator; no parallel YAML test registry.
+Do not routinely run local audits/lint/test loops/generators or repeat green CI.
+Focused local diagnosis needs an observed environment-specific CI failure,
+genuinely inaccessible CI or explicit user request. Red/slow CI is available CI.
+Local evidence cannot replace hosted qualification.
+
+Installed cadence: finish source/tests/permanent docs -> commit -> exact working
+branch push -> hosted **Basic source checks**. Feature pushes/final squash receive
+BASIC syntax and changed named-declaration docs. BASIC currently omits native
+headers and FULL inventory; review changed/new headers before commit. An early
+header gate needs a separate scanner/CI change and qualification.
+
+Maintainer-approved **Integrate into develop** selects exactly one candidate
+commit above observed develop, prepares generated artifacts and runs central FULL
+on final exact A before guarded non-force FF. If preparation adds a commit, stop
+before FULL, preserve the tree, obtain the separately authorized squash and fresh
+BASIC, then repeat until preparation retains that one-commit SHA. BASIC alone is
+not FULL/integration qualification. CI-authority changes need explicit maintenance
+qualification and protected installation before use.
+
+A separately authorized release prepares B from qualified A, checking BASIC at A
+plus release-owned A..B proof; functional integration is not replayed. Generation,
+human approval, merge/tag, draft and publication remain separate lifecycle stages.
+Protect existing origins, tags and published assets.
+
+Hosted preparation owns runtime modules, index-based inventory and complete-file
+manifest hashes in dependency order. Stage all new/deleted membership, including
+development/docs. Edit authored runtime inputs, not generated modules.php. Never
+hash truncated Contents API data. Any later edit invalidates earlier evidence.
+
+Read compact summaries, source-failures.md once per failed batch, then linked
+JSON. Raw logs are for FAIL/BLOCKED/material SKIP; do not replay passing tests.
+Freeze base SHA: feature BASIC uses merge-base with origin/main, integration
+observed develop P, release delta A. Missing history/base is BLOCKED, never HEAD.
+
+Handoff: workflow URL, branch, exact checked/prepared SHA, immutable base, required
+job results and missing/manual coverage. Failed/blocked/missing/cancelled/skipped/
+stale mandatory checks are not green; earlier source-event SHAs cannot qualify a
+later candidate. Distinguish BASIC-only, FULL-qualified, PR-open, merged/tagged,
+draft-ready and published.
+
+## Before-commit and handoff checklist
+
+- Review the whole diff and every new file, including tools/fixtures.
+- Correct native headers/paths, declaration docs/types/shapes and policy comments.
+- Preserve MVC, route/security and Admin contracts; finish permanent docs with code.
+- Update affected sections in all four TeX sources; otherwise record `No TeX manual
+  impact` with a reason. Follow docs rules for PDFs, markers and typography.
+- Leave PATCH_NOTES.md, packages/installers and release actions to their explicitly
+  authorized lifecycle. Use focused imperative commits; describe behavior,
+  schema/filesystem impact and validation.
+- Inspect exact-SHA hosted results and state missing coverage. GitHub issue titles,
+  bodies and **all comments are always English**; chat may be Czech.
+
+Keep root at 6-10 kB; fold lessons into topical rules/examples, not history.
+Measure first-pass batches, repair commits and avoidable FULL starts per the
+authoring reference; file size/fixture PASS does not prove effectiveness.

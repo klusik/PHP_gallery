@@ -303,18 +303,28 @@ the exact develop parent, and obtain fresh BASIC on the rewritten SHA. Dispatch
 integration again once idempotent preparation can retain that SHA, then complete
 FULL on the final candidate that the workflow will integrate.
 
-Hosted candidate preparation resolves `git merge-base HEAD origin/main` once and
-retains its immutable SHA through preparation and qualification. Release workflows
-use their previous stable tag. Missing history/base blocks CI; substituting HEAD
-would hide already committed omissions. The central runner passes the same base
-to declaration/policy checkers and records candidate identity and dirty state.
+Ordinary feature pushes and the final squash run hosted BASIC `--changed` in
+**Basic source checks**, freezing `git merge-base HEAD origin/main`. They do not
+prepare generated artifacts or run FULL. The maintainer-approved **Integrate into
+develop** action selects observed develop P, prepares and qualifies the final
+one-commit candidate with FULL. Release BASIC checks the release-owned delta
+against qualified origin A. Missing history/base blocks CI; substituting HEAD
+would hide committed omissions. Keep candidate/base/dirty-state identity in
+central reports. Follow [.github instructions](../.github/AGENTS.md) and the
+[CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) for authority/installation.
 
-GitHub uses source-only `release-preflight` before generation, read-only
-`candidate-preflight` before expensive jobs, and full coverage for ordinary
-handoff. These profiles do not establish release approval. No local audit or
-generator is a default agent step, and successful hosted coverage is not repeated
-locally. Focused local diagnostics follow only the explicit exceptional paths in
-AGENTS.md; unavailable CI remains BLOCKED regardless of local evidence.
+BASIC currently checks syntax and changed named-declaration documentation, not
+native attribution headers or the whole-tree source inventory. Review the entire
+new/changed header batch before committing. Adding changed-file header enforcement
+to an early gate is a separate scanner/CI change: reuse the existing header
+scanner, preserve its negative cases and qualify/install affected CI authority.
+Do not claim that this instruction reorganization closes the coverage gap.
+
+No local audit or generator is a default agent step, and green hosted coverage is
+not repeated locally. Focused diagnostics follow only the root exceptional paths;
+unavailable CI remains BLOCKED regardless of local evidence. A profile PASS is
+never release approval. Read scoped instructions through the root map even when
+the session starts at the repository root.
 
 Read hosted `source-failures.md` once for all failed declarations, policy sites,
 blocked coverage and over-budget categories. Repair the entire relevant batch,
