@@ -22,8 +22,8 @@ assembly because an incomplete package cannot be delivered.
 - P is actual observed main when O is initialized. The preceding stable tag may
   be on an earlier protected first-parent merge after CI-only maintenance.
 - M is the reviewed standard merge with parents [P,Q] and tree(Q).
-- The new immutable version tag points to M. Develop receives a single-parent
-  synchronization R above unchanged A with exactly tree(Q); it never receives M.
+- The new immutable version tag points to M. Unchanged develop A fast-forwards
+  to that exact M. Both branch refs then match; no synchronization commit is made.
 
 Resolve a stable tag from actual Git history; do not invent a maintenance tag,
 move a published tag or add a release-specific SHA exception. Protect origin
@@ -34,8 +34,13 @@ the corresponding Git operation.
 
 The maintainer creates/pushes `release/v_X.Y[.Z]` from current develop.
 Feature implementation does not authorize release/tag/publication or protected
-branch writes. Normal main review and develop linear-history protections stay
-unchanged. Never change Rulesets/Environments or use a bypass.
+branch writes. Main review, develop's non-force/check protections and no-bypass
+rules remain mandatory. The target develop policy admits reviewed main merges;
+ordinary feature integration still requires one direct child of develop.
+The legacy `required_linear_history` rule conflicts with main's actual merge.
+Read-only readiness and schema-4 PR creation report that blocker before approval.
+Only the maintainer may separately change installed policy; agents never edit
+Rulesets/Environments or use a bypass.
 
 ## Feature qualification and publication recovery
 
@@ -103,15 +108,25 @@ immutable state instead of rolling back or rebuilding the candidate.
 
 ## Develop synchronization, draft and attachments
 
-After verified M/tag, schema 4 projects tree(Q) onto a single-parent R above the
-unchanged selected develop A. Its required Actions status represents the verified
-release assembly and identical reviewed tree, not a new FULL execution. The
-publisher rechecks status identity and main/release/develop leases before a
-normal protected non-force update. The permanent receipt retains R/tree/A;
-retries recognize already identical protected contents without duplicate writes.
+After verified M/tag, schema 4 requires unchanged selected develop A to be an
+ancestor of M, then advances develop directly to M with `force:false`. It creates
+no commit and does not accept an equal-content sibling as synchronized. The
+required Actions status on M represents the verified assembly, reviewed tree and
+qualified source ancestry, not another FULL. Status identity and all three ref
+leases are rechecked before the protected FF and develop is read back afterward.
+The permanent receipt records `RECONCILED_FF`, M/tree/A. A retry accepts actual
+develop = M without duplicate status/ref writes; races stop publication.
 Parallel develop work reports its actual blocker without overwriting it and
 does not invalidate completed tagging or draft preparation. Historical releases
-retain their original linear-Q FF and reconciliation readers.
+retain their original linear-Q FF and reconciliation readers. Published schema-4
+`RECONCILED_EQUIVALENT` receipts still validate their original single-parent result
+and retained ancestry; new completion never emits that content-copy format.
+
+Existing divergent synchronization commits are not rewritten automatically. A
+later release whose source retains current develop can join both histories by
+FF after the maintainer installs the compatible history policy. Immediate
+realignment is a separately authorized migration. Tags, published main history
+and existing receipts remain immutable.
 
 New release initialization trusts its protected develop source even when the
 preceding Q is not its Git ancestor. It does not demand an old reconciliation

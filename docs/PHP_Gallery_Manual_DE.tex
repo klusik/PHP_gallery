@@ -2680,12 +2680,21 @@ Andere Fehler stoppen den~Lauf; FULL wird nicht wiederholt.
 
 \subsection{Release-Zusammenstellung aus qualifiziertem develop}
 
-Vor~der~PR-Freigabe verbindet die~Zusammenstellung die~fixierte main-Historie
-bei unverändertem vorbereitetem Baum. Nach Freigabe und~Tag überträgt ein Commit
-mit einem Elternknoten denselben Baum auf unverändertes develop. Sein Status
-bezeichnet die~geprüfte Zusammenstellung; funktionales FULL wird nicht wiederholt.
-Parallele develop-Arbeit bleibt erhalten. Der~dauerhafte Nachweis enthält Ergebnis,
-Baum und~Basis. Die~nächste Version vertraut geschütztem develop ohne historische
+Vor~der~PR-Freigabe bleiben fixierte main-Historie und~vorbereiteter Baum erhalten.
+Nach Freigabe und~Tag wird unverändertes develop per Fast-forward direkt auf
+den~tatsächlich markierten main-Commit gesetzt. Beide Zweige zeigen danach auf
+denselben Commit; es~entsteht kein zusätzlicher Commit als Inhaltskopie.
+Der~Status bezeichnet geprüfte Zusammenstellung und~qualifizierte Quellhistorie;
+funktionales FULL wird nicht wiederholt. Parallele develop-Arbeit bleibt erhalten.
+Der~dauerhafte Nachweis enthält tatsächliches main-Ergebnis, Baum und~Basis.
+Der~develop-Schutz muss freigegebene main-Merges zulassen und~Force-Updates,
+Bypass sowie fehlende Actions-Prüfungen weiterhin verhindern. Die~alte Pflicht
+zu~linearer Historie blockiert Bereitschaft und~PR-Erstellung ausdrücklich;
+nur der~Maintainer ändert die~installierte Richtlinie separat. Eine spätere
+Version kann bestehende getrennte Historien ohne Umschreiben verbinden.
+Alte Inhaltskopie-Nachweise bleiben lesbar; sofortiges Angleichen der~Refs
+benötigt eine separate Autorisierung.
+Die~nächste Version vertraut geschütztem develop ohne historische
 Abgleicharchive. Nur der~nach der~Zusammenstellung gestartete Beobachter verarbeitet
 auch frühe Freigaben; erfolgreicher Origin-Git-Push benötigt keinen sofortigen REST-Readback.
 

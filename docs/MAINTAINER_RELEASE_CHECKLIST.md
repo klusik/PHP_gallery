@@ -18,6 +18,12 @@ its summary explicitly says `ELIGIBLE`.
   all FULL owners and release audit, then approve its bot-created main PR once.
 ## Create the release branch
 
+- [ ] For the main-following release model, review develop's history policy:
+  admit main's reviewed merge commits while keeping deletion/non-force protection,
+  strict Actions checks and no bypass. A remaining linear-history requirement is
+  an explicit readiness blocker. This is a separate maintainer configuration step;
+  the workflow never changes settings. Existing divergent refs need no reset for
+  the next release; its source retains them before the reviewed FF joins main.
 - [ ] Start from current FULL-qualified develop A. Create and push
   `release/v_X.Y[.Z]` for the intended next version.
 - [ ] Wait for automatic preparation, notes, all four manuals/PDFs, manifest and complete attachments. Release trusts protected develop and does
@@ -28,7 +34,8 @@ its summary explicitly says `ELIGIBLE`.
 - [ ] Review the bot-created PR to main: exact Q, notes, manuals and outstanding
   manual coverage. Submit **Review changes -> Approve** once.
 - [ ] Automatic completion performs protected merge, immutable tag and safe
-  develop synchronization. Parallel develop work may block synchronization
+  develop FF to the exact tagged main SHA, without a content-copy commit.
+  Confirm develop = main after completion. Parallel work may block synchronization
   independently; it never authorizes a merge, reset or rebase of develop.
 
 ## Review and publish the completed draft

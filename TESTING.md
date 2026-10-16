@@ -3014,12 +3014,13 @@ operations and moved cleanup refs. `tests/linear_release_graph_test.mjs` builds 
 real isolated two-release graph with annotated tags, schema v1 origins, absent
 previous-main ancestry, deletion preservation and parallel replay.
 Its FF case also rejects a release destination containing a new merge commit.
-`tests/release_linear_sync_test.mjs` covers the schema-4 alternative: exact
-prepared-tree preservation while linking main, a single-parent synchronization
-above unchanged develop, realistic Commit Status responses, adverse parent/tree/
-publisher/status/ref metadata, idempotent retry, stale origin REST readback and
-next-release initialization without historical reconciliation assets. Functional
-FULL is executed for the implementation, not invented for a copied release tree.
+`tests/release_linear_sync_test.mjs` covers current schema-4 main-following FF:
+exact prepared-tree preservation, develop = actual reviewed main SHA, retained
+Q ancestry, no synchronization commit, successor history without another main
+link, historical content-copy receipt compatibility and explicit policy blockers.
+Realistic Commit Status responses and adverse parent/tree/ancestry/publisher/
+status/ref metadata retain idempotence and race checks. Functional FULL qualifies
+the implementation; release status represents real assembly and source ancestry.
 `tests/start_new_release_test.mjs` verifies atomic origin/ref creation, duplicate
 tags, exact-source retries and raced refs through the same central registry. It
 also introduces a target tag during object creation and after ref creation,

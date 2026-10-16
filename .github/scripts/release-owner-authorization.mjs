@@ -6,7 +6,7 @@
  * Purpose: Enforce single-owner authorization with distinct GitHub bot PR authorship.
  * Responsibilities:
  *   - Validate main-only owner-reviewed environments and no administrative bypass
- *   - Check installed active branch rulesets against branch-specific reviewed/linear hosted-CI contracts
+ *   - Check installed active branch rulesets against reviewed main and non-force develop hosted-CI contracts
  *   - Bind the owner's final pull-request approval to the exact immutable SHA
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -85,7 +85,7 @@ export function requireOwnerEnvironment(call,repository,name) {
     }
 }
 
-/** Require branch-specific server policies: reviewed main merges or true linear develop FF.
+/** Require reviewed main merges and checked non-force develop updates.
  * Last-push approval is deliberately disabled: the only human owner may also
  * have pushed the candidate. Stale approvals are dismissed and exact SHA-bound
  * review is independently validated after merge.
@@ -97,7 +97,7 @@ export function requireOwnerEnvironment(call,repository,name) {
  * @param {'main'|'develop'} branch Target protected branch.
  * @param {string} name Installed ruleset name.
  * @param {string} check Exact mandatory status context.
- * @returns {{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}} Verified visible policy identity and explicit bypass visibility; throws on absent, inactive or weakened rules.
+ * @returns {{id:number,name:string,branch:string,linear_history:boolean,bypass_inventory:string,current_actor_bypass:string}} Verified policy, explicit topology requirement and bypass visibility; throws on absent, inconsistent or weakened controls.
  */
 export function requireOwnerRuleset(call,repository,branch,name,check) {
     if (!['main','develop'].includes(branch)) throw new Error('BLOCKED unknown protected branch.');
@@ -122,10 +122,15 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
         || JSON.stringify(installed.conditions?.ref_name?.exclude) !== '[]') {
         throw new Error('BLOCKED '+branch+' ruleset permits bypass or targets unexpected refs.');
     }
+    const linearHistory=Array.isArray(installed.rules)
+        && installed.rules.some(rule=>rule.type==='required_linear_history');
     for (const rules of [installed.rules,call(prefix+'/rules/branches/'+branch)]) {
         if (!Array.isArray(rules)) throw new Error('BLOCKED effective rules are unreadable.');
-        const allowed = ['deletion','non_fast_forward','required_status_checks',
-            branch === 'main' ? 'pull_request' : 'required_linear_history'];
+        const allowed = ['deletion','non_fast_forward','required_status_checks'];
+        if (branch==='main') allowed.push('pull_request');
+        // Accept the historical linear policy for ordinary feature integration;
+        // release alignment separately requires permission to retain main merges.
+        if (branch==='develop' && linearHistory) allowed.push('required_linear_history');
         if (rules.length !== allowed.length || allowed.some(type=>rules.filter(rule=>rule.type===type).length!==1)) {
             throw new Error('BLOCKED unknown or overlapping effective branch policies require a live compatibility review.');
         }
@@ -148,10 +153,9 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
             && ci?.strict_required_status_checks_policy === false
             && !rules.some(rule=>rule.type==='required_linear_history');
         const developPolicy = !rules.some(rule=>rule.type==='pull_request')
-            && rules.some(rule=>rule.type==='required_linear_history')
             && ci?.strict_required_status_checks_policy === true;
         if (!common || !(branch === 'main' ? mainPolicy : developPolicy)) {
-            throw new Error('BLOCKED '+branch+' lacks compatible owner/linear history and exact hosted CI protections.');
+            throw new Error('BLOCKED '+branch+' lacks compatible owner, non-force history and exact hosted CI protections.');
         }
         if (rules.some(rule=>(rule.ruleset_id !== undefined && rule.ruleset_id !== installed.id)
             || (rule.ruleset_source !== undefined && rule.ruleset_source !== repository)
@@ -159,8 +163,24 @@ export function requireOwnerRuleset(call,repository,branch,name,check) {
             throw new Error('BLOCKED effective policies belong to a different ruleset identity.');
         }
     }
-    return {id:installed.id,name,branch,bypass_inventory:hasBypass?'VISIBLE_EMPTY':'NOT_RETURNED_SERVER_ENFORCED',
+    return {id:installed.id,name,branch,linear_history:linearHistory,
+        bypass_inventory:hasBypass?'VISIBLE_EMPTY':'NOT_RETURNED_SERVER_ENFORCED',
         current_actor_bypass:installed.current_user_can_bypass ?? 'NOT_RETURNED_SERVER_ENFORCED'};
+}
+
+/** Require develop to retain the actual reviewed main merge by fast-forward.
+ * @param {function(string):JsonValue} call Installed and effective policy reader.
+ * @param {string} repository Exact owner/name.
+ * @returns {ReturnType<typeof requireOwnerRuleset>} Verified non-force/check protections; throws while the historical merge prohibition remains installed.
+ */
+export function requireMainFollowingDevelop(call,repository) {
+    const policy=requireOwnerRuleset(call,repository,'develop',
+        'Reviewed main-to-develop release reconciliation','Complete required CI matrix');
+    if (policy.linear_history) {
+        throw new Error('BLOCKED develop requires linear history and cannot retain the reviewed main merge. '
+            +'A maintainer must review its history policy; no content-copy commit or force update is permitted.');
+    }
+    return policy;
 }
 
 /** Reject any PR not authored by the workflow bot for the exact source SHA.

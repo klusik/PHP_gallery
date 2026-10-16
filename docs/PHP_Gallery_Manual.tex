@@ -2701,11 +2701,18 @@ original check IDs and~branch leases. Other failures stop; FULL is~not~replayed.
 
 \subsection{Release assembly from qualified develop}
 
-Before PR review, assembly links the~frozen main history while preserving
-the~prepared tree. After approval and~tagging, a~single-parent synchronization
-commit copies that exact tree above unchanged develop. Its~status represents
-the~verified assembly; functional FULL is~not~repeated. Parallel develop work
-is~preserved. The~permanent receipt records the~result, tree and~base.
+Before PR review, assembly retains the~frozen main history and~prepared tree.
+After approval and~tagging, unchanged develop fast-forwards to~the~actual tagged
+main commit. Both branch refs then match; no~content-copy commit is~created.
+Its~status represents verified assembly and~qualified source ancestry;
+functional FULL is~not~repeated. Parallel develop work is~preserved.
+The~permanent receipt records the~actual main result, tree and~base.
+Develop's history policy must admit reviewed main merges while retaining
+non-force updates, required Actions checks and~no~bypass. The~legacy
+linear-history requirement explicitly blocks readiness and~PR creation;
+only the~maintainer changes installed policy. A~later release can~join existing
+divergent histories without rewriting them. Historical content-copy receipts
+remain readable; immediate ref realignment requires separate authorization.
 The~next release trusts protected develop without historical reconciliation
 archives. Only the~post-assembly observer handles approval, including approval
 submitted early; successful origin Git push needs no~immediate REST readback.

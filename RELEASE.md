@@ -53,9 +53,9 @@ prompts are excluded from diagnostic attachment uploads.
 ## Review, tag and publish
 
 Approve the bot PR once. Automation performs the protected standard merge,
-verifies its actual parents/tree, creates the immutable version tag, projects
-the approved release tree onto unchanged develop with a single-parent commit,
-and fills an unpublished GitHub Release draft. Main history is linked before
+verifies its actual parents/tree, creates the immutable version tag, fast-forwards
+unchanged develop to that same main commit, and fills an unpublished GitHub Release
+draft. No separate synchronization commit is created. Main history is linked before
 PR review; early approval is observed after assembly. Concurrent develop work
 is preserved and reported separately.
 
@@ -85,3 +85,15 @@ Never directly update protected main/develop or weaken server protections.
 Human browser/hosting smoke checks and separately approved branch cleanup remain
 distinct from assembly. See the [lifecycle](docs/RELEASE_LIFECYCLE.md) and
 [maintainer checklist](docs/MAINTAINER_RELEASE_CHECKLIST.md).
+
+The reviewed develop history policy must admit main's release merges while
+retaining non-force updates, deletion protection, exact Actions checks and no
+bypass. The example ruleset describes that target configuration; code never edits
+live protections. A remaining `required_linear_history` rule blocks the release
+PR with an explicit diagnostic. Ordinary feature integration still requires one
+qualified commit directly above develop.
+
+Existing published content-copy synchronization commits remain historical data.
+The next release can retain them through its selected source and then join both
+branches by a normal FF. Immediate realignment of already diverged refs needs a
+separately reviewed migration; release completion never resets or rebases them.

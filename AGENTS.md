@@ -2,8 +2,8 @@
 
 ## Authoring Contract (Read Before Editing)
 
-Read this contract and applicable area rules before editing: nested AGENTS files
-are not all loaded automatically. User rules prevail.
+Read this contract and affected area rules before edits; nested AGENTS are not
+loaded automatically. User rules prevail.
 
 **Before writing:** verify branch authorization, find the domain owner and a
 compliant declaration, and read affected contracts from the map.
@@ -135,10 +135,11 @@ BASIC and run central FULL on final exact A before guarded non-force FF. Seal
 execution before writing; reuse only identical candidate/base after publication
 failure. Owner dispatch, all native owners and protected-write rules remain required.
 
-A separately authorized release trusts frozen protected-develop A, prepares notes,
-four manuals, inventory, manifest and attachments, then opens a PR without replaying
-BASIC/FULL. Keep assembly, Git leases, human approval, merge/tag, draft and manual
-publication distinct; protect existing origins, tags and published assets.
+A separately authorized release trusts protected-develop A, assembles notes, four
+manuals, inventory, manifest and attachments, then opens a PR without new BASIC/FULL.
+Keep assembly, leases, approval, merge/tag, draft and manual publication distinct;
+preserve origins/tags/assets. FF develop to actual tagged main: equal trees alone
+do not prove shared history. Never create content-copy synchronization commits.
 
 Hosted preparation owns runtime modules, index-based inventory and complete-file
 manifest hashes in dependency order. Stage all new/deleted paths, development/docs

@@ -7,7 +7,7 @@
  * Responsibilities:
  *   - Bind PR creation, protected merge and immutable tag to the same qualified Q
  *   - Recheck predecessor, origin, review and effective server controls before writes
- *   - Synchronize the reviewed release tree above unchanged develop with linear history
+ *   - Fast-forward unchanged develop to the actual reviewed main release commit
  *   - Stage an idempotent unpublished GitHub Release draft after verifying the immutable tag
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -19,7 +19,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {api,command,output,validateRequest,verifyQualification,verifyIntegrationEvidence,verifyBasicDeltaEvidence,fetchJobs,fetchReleases,requireQualificationChecks,requireCurrentMainBase,inspectMergedPromotion} from './release-promotion.mjs';
 import {originPath,verifyReleaseOrigin,peelReleaseTag} from './release-origin.mjs';
-import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,qualificationCheckBinding} from './release-owner-authorization.mjs';
+import {requireBotPullRequest,effectiveOwnerReview,requireOwnerRuleset,requireMainFollowingDevelop,qualificationCheckBinding} from './release-owner-authorization.mjs';
 import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs';
 import {verifyPreparedAssets} from './release-asset-integrity.mjs';
 import {loadReleaseCoverage} from './coverage-artifacts.mjs';
@@ -43,7 +43,7 @@ import {synchronizeReleaseTree} from './release-linear-sync.mjs';
  */
 /** Permanent merge/approval/tag evidence uploaded alongside manual publication assets.
  * @typedef {CompletionRecord & {schema_version:number,final_main_sha:string,final_tree:string,tag:string,
- * tag_object_sha:string,tag_object_type:string,publication:string,main_policy:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string},promotion_pr:{number:number,url:string,author:string,
+ * tag_object_sha:string,tag_object_type:string,publication:string,main_policy:ReturnType<typeof requireOwnerRuleset>,promotion_pr:{number:number,url:string,author:string,
  * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}},develop_synchronization?:{state:string,result_sha:string,result_tree:string,develop_base_sha:string}}} CompletionEvidence
  */
 /** Tagged release and independently observed synchronization, including permanent publication proof.
@@ -125,12 +125,12 @@ export function verifyCandidate(record,repository,adapters={}) {
     }
 }
 
-/** Create or reuse one bot PR only after the preparation gate and assets succeed.
+/** Create or reuse one bot PR after assembly/assets and compatible history policy.
  * @param {CompletionRecord} record Current run's successful exact-Q record.
  * @param {string} repository Expected repository.
  * @param {string} notes Validated target-version patch notes.
  * @param {import('./release-origin.mjs').PredecessorAdapters & {api?:CompletionApi}} adapters Optional isolated readers and independently bound predecessor/archive evidence.
- * @returns {{number:number,html_url:string}} Exact PR awaiting the sole owner approval, or a verified already merged PR reused for completion recovery.
+ * @returns {{number:number,html_url:string}} Exact PR awaiting owner approval, or a verified merged PR for recovery; incompatible policy, stale identity or incomplete qualification throws before creation.
  */
 export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     const call=adapters.api ?? api;
@@ -161,6 +161,7 @@ export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
     }
     const base=requireCurrentMainBase(request,repository,{...adapters,api:call,record});
     requireOwnerRuleset(call,repository,'main','Reviewed release promotion to main','Release qualification');
+    if (record.lifecycle_schema===4) requireMainFollowingDevelop(call,repository);
     if (!pr) pr=call('repos/'+repository+'/pulls','POST',{title:'Release v_'+record.version,head:record.branch,base:'main',
         maintainer_can_modify:false,body:'Qualified head Q: `'+record.candidate_sha+'`\n\n'
             +'[Complete qualification and manual publication assets](https://github.com/'+repository+'/actions/runs/'+record.run_id+')\n\n'
@@ -275,10 +276,11 @@ export function completeRelease(record,repository,number,adapters={}) {
     try {
         requireOwnerRuleset(call,repository,'develop','Reviewed main-to-develop release reconciliation','Complete required CI matrix');
         if (record.lifecycle_schema===4) {
+            requireMainFollowingDevelop(call,repository);
             const synchronized=synchronizeReleaseTree(record,repository,observed.main.sha,call);
             result.synchronization=synchronized.state;result.synchronization_sha=synchronized.sha;
             result.detail=synchronized.detail;
-            if (synchronized.state==='RECONCILED_EQUIVALENT') {
+            if (synchronized.state==='RECONCILED_FF') {
                 result.evidence.develop_synchronization={state:synchronized.state,result_sha:synchronized.sha,
                     result_tree:observed.main.commit.tree.sha,develop_base_sha:record.selected_develop_sha};
             }
