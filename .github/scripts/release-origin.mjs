@@ -154,7 +154,7 @@ export function verifyMaintenanceMainBridge(record,repository,adapters={}) {
 /** @typedef {function(string,string=,object=):object} GithubReader */
 /** @typedef {function(string,string[],(string|null)=):string} GitReader */
 /** Historical predecessor readers, with independently authenticated raw coverage archives for schema 3.
- * @typedef {{git?:GitReader,evidence?:import('./release-promotion.mjs').PublicationEvidence,legacy?:{repository:string,tag:string,tag_object_sha:string,published_commit_sha:string,first_parent_sha:string,release_candidate_sha:string,tree_sha:string,qualification:string,owner:string},predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[],predecessorArtifacts?:import('./coverage-artifacts.mjs').ArtifactAdapters}} PredecessorAdapters
+ * @typedef {{git?:GitReader,trustDevelop?:boolean,evidence?:import('./release-promotion.mjs').PublicationEvidence,legacy?:{repository:string,tag:string,tag_object_sha:string,published_commit_sha:string,first_parent_sha:string,release_candidate_sha:string,tree_sha:string,qualification:string,owner:string},predecessorRecord?:import('./release-promotion.mjs').ReleaseRecord,predecessorJobs?:import('./release-promotion.mjs').ReleaseJob[],predecessorArtifacts?:import('./coverage-artifacts.mjs').ArtifactAdapters}} PredecessorAdapters
  */
 
 /** Return only the accepted release path derived from a canonical numeric version.
@@ -247,7 +247,9 @@ export function verifyReleaseOrigin(record, version, candidateSha, repository, a
         || !isAncestor(call,repository,addedAt,candidateSha)) {
         throw new Error('BLOCKED release origin develop ancestry was rewritten or mismatched.');
     }
-    verifyPredecessorLineage(call,repository,predecessor,record.selected_develop_sha,adapters);
+    if (adapters.trustDevelop!==true) {
+        verifyPredecessorLineage(call,repository,predecessor,record.selected_develop_sha,adapters);
+    }
     const supplement = '.github/release-predecessors/v_' + version + '.json';
     if (version !== '0.126' || repository !== 'klusik/PHP_gallery') {
         const introduction = git('git',['log','--format=%H','--diff-filter=A',candidateSha,'--',supplement]);
@@ -453,7 +455,8 @@ export function main() {
     if (candidate !== (process.env.ORIGIN_CHECKOUT_SHA ?? process.env.GITHUB_SHA)) {
         throw new Error('BLOCKED event SHA differs from the origin-verification checkout.');
     }
-    const evidence = verifyReleaseOrigin(record,match[1],candidate,process.env.GITHUB_REPOSITORY ?? '');
+    const evidence = verifyReleaseOrigin(record,match[1],candidate,process.env.GITHUB_REPOSITORY ?? '',
+        {trustDevelop:process.env.PHP_GALLERY_RELEASE_TRUST_DEVELOP==='1'});
     output('GITHUB_OUTPUT','provenance_json='+JSON.stringify(evidence));
     for (const [name,value] of Object.entries(evidence)) output('GITHUB_OUTPUT',name + '=' + value);
     output('GITHUB_STEP_SUMMARY','Verified immutable selected develop origin: ' + evidence.selected_develop_sha

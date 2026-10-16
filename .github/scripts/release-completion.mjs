@@ -7,7 +7,7 @@
  * Responsibilities:
  *   - Bind PR creation, protected merge and immutable tag to the same qualified Q
  *   - Recheck predecessor, origin, review and effective server controls before writes
- *   - Fast-forward develop only when its exact current head is an ancestor of Q
+ *   - Synchronize the reviewed release tree above unchanged develop with linear history
  *   - Stage an idempotent unpublished GitHub Release draft after verifying the immutable tag
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -24,6 +24,7 @@ import {isAncestor,verifyFastForwardHistory} from './release-reconciliation.mjs'
 import {verifyPreparedAssets} from './release-asset-integrity.mjs';
 import {loadReleaseCoverage} from './coverage-artifacts.mjs';
 import {loadDraftAssets,fillDraftAssets} from './release-draft-assets.mjs';
+import {synchronizeReleaseTree} from './release-linear-sync.mjs';
 
 /** Exact qualification, provenance, lifecycle and installer-impact fields owned by the gate.
  * @typedef {import('./release-promotion.mjs').ReleaseRecord} CompletionRecord
@@ -43,10 +44,10 @@ import {loadDraftAssets,fillDraftAssets} from './release-draft-assets.mjs';
 /** Permanent merge/approval/tag evidence uploaded alongside manual publication assets.
  * @typedef {CompletionRecord & {schema_version:number,final_main_sha:string,final_tree:string,tag:string,
  * tag_object_sha:string,tag_object_type:string,publication:string,main_policy:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string},promotion_pr:{number:number,url:string,author:string,
- * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}}}} CompletionEvidence
+ * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}},develop_synchronization?:{state:string,result_sha:string,result_tree:string,develop_base_sha:string}}} CompletionEvidence
  */
 /** Tagged release and independently observed synchronization, including permanent publication proof.
- * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,detail:string,evidence:CompletionEvidence,draft_status?:string,draft_url?:string,draft_release_id?:number,draft_error?:string}} CompletionResult
+ * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,synchronization_sha?:string,detail:string,evidence:CompletionEvidence,draft_status?:string,draft_url?:string,draft_release_id?:number,draft_error?:string}} CompletionResult
  */
 
 /**
@@ -117,7 +118,8 @@ export function verifyCandidate(record,repository,adapters={}) {
         record,repository,head,{...coverage,...adapters,api:call});
     requireQualificationChecks(call,repository,request,record.run_attempt);
     const origin=JSON.parse(git('git',['show',record.candidate_sha+':'+originPath(record.version)]));
-    const checked=verifyReleaseOrigin(origin,record.version,record.candidate_sha,repository,adapters);
+    const checked=verifyReleaseOrigin(origin,record.version,record.candidate_sha,repository,
+        {...adapters,...(record.lifecycle_schema===4?{trustDevelop:true}:{})});
     for (const [key,value] of Object.entries(checked)) {
         if (record[key]!==value) throw new Error('BLOCKED qualified provenance changed: '+key);
     }
@@ -272,6 +274,16 @@ export function completeRelease(record,repository,number,adapters={}) {
     // Tag completion remains valid if a concurrent feature prevents the independent develop FF.
     try {
         requireOwnerRuleset(call,repository,'develop','Reviewed main-to-develop release reconciliation','Complete required CI matrix');
+        if (record.lifecycle_schema===4) {
+            const synchronized=synchronizeReleaseTree(record,repository,observed.main.sha,call);
+            result.synchronization=synchronized.state;result.synchronization_sha=synchronized.sha;
+            result.detail=synchronized.detail;
+            if (synchronized.state==='RECONCILED_EQUIVALENT') {
+                result.evidence.develop_synchronization={state:synchronized.state,result_sha:synchronized.sha,
+                    result_tree:observed.main.commit.tree.sha,develop_base_sha:record.selected_develop_sha};
+            }
+            return result;
+        }
         const develop=call('repos/'+repository+'/git/ref/heads/develop').object?.sha;
         if (develop===record.candidate_sha) result.synchronization='RECONCILED_FF';
         else if (!isAncestor(call,repository,develop,record.candidate_sha)) {

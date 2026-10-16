@@ -34,6 +34,9 @@ throughout. Feature edits never authorize themselves as protected CI authority.
 5. A separately authorized release trusts frozen A from protected develop and
    assembles B without another source audit or historical qualification replay.
    Preserve assembly integrity, Git leases, approval, merge/tag and draft boundaries.
+   Link the frozen main before review with the same prepared tree; synchronize
+   schema-4 releases through a single-parent equivalent tree above unchanged A.
+   Keep that assembly-bound status/proof distinct from new functional FULL.
 
 Before retrying, consolidate failed-owner results, deduplicating repeated shards.
 Record cause (source/test/contract/infrastructure), evidence, repair, equivalent

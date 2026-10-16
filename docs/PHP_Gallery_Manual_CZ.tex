@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.132.10}
+\newcommand{\version}{0.133}
 \newcommand{\manualdate}{16.~října~2026}
 
 \hypersetup{
@@ -2635,6 +2635,15 @@ odstupy. Každé opakování znovu ověří aktivní běh, důkazy BASIC/FULL, p
 ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
+
+Před schválením PR sestavení připojí historii zafixovaného main a~zachová
+připravený strom. Po~schválení a~vytvoření tagu přenese stejný strom jedním
+lineárním commitem nad nezměněný develop. Jeho status představuje ověřené
+sestavení; funkční FULL se~neopakuje. Souběžná práce v~develop zůstává zachována.
+Trvalý záznam obsahuje výsledek, strom a~základ. Další vydání důvěřuje chráněnému
+develop bez starých rekonciliačních archivů. Schválení včetně předčasného zachytí
+pozorovatel spuštěný po~sestavení; úspěšný Git push originu nepotřebuje okamžitý
+REST readback.
 
 Commit přijatý do~chráněného develop je~kvalifikovaný.
 Z~tohoto zdroje založte samostatně schválenou \codeword{release/v_X.Y[.Z]}.

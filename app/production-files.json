@@ -2411,6 +2411,7 @@
         "tests/release_completion_test.mjs",
         "tests/release_delta_test.mjs",
         "tests/release_draft_test.mjs",
+        "tests/release_linear_sync_test.mjs",
         "tests/release_origin_test.mjs",
         "tests/release_qualification_record_test.mjs",
         "tests/release_qualification_test.php",

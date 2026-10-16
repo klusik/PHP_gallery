@@ -147,7 +147,7 @@ export function lifecycleFixture(version='1.2.1') {
         if (tail==='git/commits' && method==='POST') {
             const sha=git('commit-tree',payload.tree,'-p',payload.parents[0],'-m',payload.message);
             raw(remote,['fetch','-q',checkout,sha]);
-            return {sha,parents:payload.parents.map(sha=>({sha}))};
+            return {sha,tree:{sha:payload.tree},parents:payload.parents.map(sha=>({sha}))};
         }
         if (tail.startsWith('git/commits/')) {const value=object(tail.slice('git/commits/'.length));return {...value,tree:value.commit.tree};}
         if (tail.startsWith('commits/') && tail.includes('/check-runs?')) {

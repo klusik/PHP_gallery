@@ -50,7 +50,8 @@ export function startNewRelease(request,repository,adapters={}) {
     git('git',['fetch','origin','refs/heads/'+branch]);
     if (git('git',['ls-tree',head,'--',path])) {
         const stored=JSON.parse(git('git',['show',head+':'+path]));
-        const checked=verifyReleaseOrigin(stored,request.version,head,repository,adapters);
+        const checked=verifyReleaseOrigin(stored,request.version,head,repository,
+            {...adapters,trustDevelop:adapters.trustDevelop===true || process.env.PHP_GALLERY_RELEASE_TRUST_DEVELOP==='1'});
         // A rerun may reuse O/Q after its original event D0; an unrelated writer is stale.
         if (head!==request.selected && request.selected!==stored.selected_develop_sha) {
             throw new Error('BLOCKED release branch advanced beyond this event.');
@@ -70,7 +71,10 @@ export function startNewRelease(request,repository,adapters={}) {
     if (matching.length!==1) throw new Error('BLOCKED current main must have one unambiguous stable tag.');
     const predecessor=verifyPredecessor(call,repository,matching[0].tag,adapters);
     if (!isAncestor(call,repository,request.selected,develop)) throw new Error('BLOCKED pushed source is not retained on develop.');
-    verifyPredecessorLineage(call,repository,predecessor,request.selected,adapters);
+    // New releases trust protected develop; historical readers retain their original reconciliation protocol.
+    if (!(adapters.trustDevelop===true || process.env.PHP_GALLERY_RELEASE_TRUST_DEVELOP==='1')) {
+        verifyPredecessorLineage(call,repository,predecessor,request.selected,adapters);
+    }
     const supplement='.github/release-predecessors/v_'+request.version+'.json';
     if (git('git',['ls-tree',request.selected,'--',path,supplement])) throw new Error('BLOCKED origin paths already exist.');
     const record={schema_version:1,version:request.version,release_branch:branch,selected_develop_sha:request.selected,
@@ -96,7 +100,8 @@ export function startNewRelease(request,repository,adapters={}) {
     git('git',['fetch','origin',commit.sha]);
     // A normal push rejects non-ancestral concurrent writers; no force or protected ref is used.
     git('git',['push','origin',commit.sha+':refs/heads/'+branch]);
-    if (matchingBranchSha(call,repository,branch)!==commit.sha) throw new Error('BLOCKED origin publication raced.');
+    // Successful normal Git push is the publication acknowledgement. A cached REST ref is not a second lease.
+    // Preparation's final publisher still rechecks the exact live branch before any later write.
     return {state:'INITIALIZED',branch,origin_sha:commit.sha,candidate_sha:commit.sha,
         selected_develop_sha:request.selected,previous_stable_sha:predecessor.previous_stable_sha};
 }

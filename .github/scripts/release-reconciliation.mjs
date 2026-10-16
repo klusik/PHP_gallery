@@ -520,6 +520,25 @@ export function inspectSync(request, repository, adapters = {}) {
             throw new Error('BLOCKED permanent completion tag object differs from the published immutable tag.');
         }
         const qualified=verifyAutomaticCompletion(evidence,repository,call,adapters);
+        const synchronized=evidence.develop_synchronization;
+        if (evidence.lifecycle_schema===4 && synchronized?.state==='RECONCILED_EQUIVALENT') {
+            const result=call('repos/'+repository+'/commits/'+synchronized.result_sha);
+            if (synchronized.result_tree!==identity.tree_sha || result.commit?.tree?.sha!==identity.tree_sha
+                || synchronized.develop_base_sha!==evidence.selected_develop_sha || result.parents?.length!==1
+                || result.parents[0]?.sha!==evidence.selected_develop_sha
+                || !isAncestor(call,repository,synchronized.result_sha,developSha)) {
+                throw new Error('BLOCKED reviewed release tree or linear synchronization history differs.');
+            }
+            verifyFastForwardHistory(evidence.selected_develop_sha,synchronized.result_sha,developSha,adapters.git);
+            const currentTag=peelReleaseTag(call,repository,'v_'+version);
+            if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==developSha
+                || call('repos/'+repository+'/git/ref/heads/main').object?.sha!==mainSha
+                || currentTag.commit_sha!==identity.commit_sha || currentTag.tag_object_sha!==identity.tag_object_sha) {
+                throw new Error('BLOCKED linear synchronization or tag raced during inspection.');
+            }
+            return {...plan,state:'RECONCILED_EQUIVALENT',resultSha:synchronized.result_sha,qualificationRun:qualified,
+                detail:'Protected linear develop retains the exact approved release tree and permanent assembly-bound synchronization receipt.'};
+        }
         if (!isAncestor(call,repository,evidence.candidate_sha,developSha)) {
             return {...plan,state:'SYNC_PENDING',detail:'Automatically qualified Q is not retained in current develop; no cleanup is authorized.'};
         }

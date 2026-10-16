@@ -812,14 +812,15 @@ function pauseRequiredCheckPropagation(milliseconds) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);
 }
 
-/** Publish the standard commit status for already verified exact-candidate FULL evidence.
+/** Publish the standard required status for independently verified exact-candidate qualification.
  * @param {string} repository Validated owner/repository identity.
- * @param {string} candidate Exact immutable FULL-qualified commit SHA.
+ * @param {string} candidate Exact immutable qualified source or equivalent reviewed release-tree commit SHA.
  * @param {string} runId Actual verified integration workflow run ID.
  * @param {GithubApi} call Publisher's GitHub Actions provider with statuses:write.
+ * @param {string} [description='All required native FULL owners verified for this exact commit.'] Factual verified qualification description; release synchronization identifies assembly instead of claiming new FULL execution.
  * @returns {{id:number,targetUrl:string}} Confirmed Actions-created status identity and its bound original workflow URL; unavailable or altered creation throws.
  */
-export function publishIntegrationStatus(repository,candidate,runId,call) {
+export function publishIntegrationStatus(repository,candidate,runId,call,description='All required native FULL owners verified for this exact commit.') {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(candidate)
         || !/^[1-9]\d*$/.test(runId)) throw new Error('BLOCKED invalid integration status identity.');
     const targetUrl=`https://github.com/${repository}/actions/runs/${runId}`;
@@ -827,7 +828,7 @@ export function publishIntegrationStatus(repository,candidate,runId,call) {
     // Publish the same real qualification through Commit Statuses; neither representation runs or replaces FULL.
     const status=call(`repos/${repository}/statuses/${candidate}`,'POST',{state:'success',
         context:'Complete required CI matrix',target_url:targetUrl,
-        description:'All required native FULL owners verified for this exact commit.'});
+        description});
     if (!Number.isSafeInteger(status?.id) || status.id<1 || status.creator?.login!=='github-actions[bot]'
         || status.state!=='success' || status.context!=='Complete required CI matrix' || status.target_url!==targetUrl) {
         throw new Error('BLOCKED integration commit status creation was not confirmed.');

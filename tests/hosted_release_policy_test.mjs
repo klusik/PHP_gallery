@@ -908,8 +908,8 @@ for (const manual of ['PHP_Gallery_Manual.tex','PHP_Gallery_Manual_CZ.tex','PHP_
 }
 assert.match(bootstrapWorkflow,/name: Prepare Windows companion installer/);
 assert.match(bootstrapWorkflow,/name: Open qualified release PR/);
-assert.match(completion,/pull_request_review:/);
-assert.match(completion,/types: \[submitted\]/);
+assert.doesNotMatch(completion,/pull_request_review:/,'Only the post-assembly observer waits for review; early approval cannot start an unqualified duplicate.');
+assert.match(completion,/types: \[closed\]/,'Closed-PR recovery remains available.');
 assert.match(completion,/Bind successful server run and retained Q record before checkout/);
 assert.match(completion,/record\.candidate_sha!==e\.CANDIDATE_SHA/);
 assert.match(completion,/workflow_dispatch:/);
