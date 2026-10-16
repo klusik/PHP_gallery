@@ -229,6 +229,28 @@ for evidence and activation gates.
 
 ## Central Audit Runner
 
+### Automatic generated-candidate integration
+
+After the reviewed integration workflow is installed on main,
+`auto_squash_generated` defaults to true. Read-only preparation may produce only
+the three allowlisted generated files. Its trusted publisher retains the prepared
+tree in one commit directly above the observed develop parent, conditionally
+replaces only the selected feature ref under its exact old-head lease, dispatches
+fresh BASIC and authenticates the exact run/attempt and native/custom checks
+before FULL. No-op preparation retains the original SHA. Disabled automatic mode
+retains the manual squash checkpoint; recovery and authority updates are excluded.
+
+The registered `tests/develop_integration_test.mjs` fixture covers atomic feature
+ref inputs, preserved messages/tree/parent, no-op preparation, rejected leases,
+dispatch identity, queued/successful/failed/cancelled/mismatched BASIC, bounded
+waiting with an injected clock, moved feature/develop refs, superseded evidence,
+native-suite failure, final-SHA FULL gating and final publisher input bindings.
+Execution belongs to the central hosted audit. For live acceptance, install the
+qualified main-owned workflow first, then select a one-commit feature with stale
+generated data. Confirm one prepared commit above the same P, successful fresh
+BASIC-A, FULL-A and guarded develop FF. Also verify no-op preparation does not
+rewrite the branch. A green feature BASIC alone does not test this automation.
+
 ### Agent execution rule
 
 **GitHub Actions is the default and authoritative agent test environment.** The

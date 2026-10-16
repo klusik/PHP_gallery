@@ -2623,6 +2623,18 @@ under insamlingen avvisar kvalificering. Detta skyddar historisk granskning;
 nyare körningar utan publicerad kvalificeringskontroll och~oberoende
 develop/release-återanvändning av~täckning ligger utanför denna läsare.
 
+Efter granskad installation på~main är~integrationsvalet
+\codeword{auto\_squash\_generated} true som~standard. Förberedelsen tar~bara med
+de~tre tillåtna genererade filerna i~en~commit A ovanpå observerad develop P,
+bevarar ursprungsmeddelandet med~\codeword{Prepared-From} och~ersätter endast
+vald feature-ref när~dess gamla SHA stämmer exakt. Den~startar nytt BASIC för~A,
+kontrollerar var~femte sekund i~högst femton minuter och~autentiserar exakt körning,
+första försök samt~inbyggda och~egna kontroller före FULL. Flyttade referenser,
+misslyckat eller~ersatt BASIC och~tidsgränser stoppar integrationen. Oförändrad
+förberedelse behåller SHA; avstängd automatik behåller den~manuella
+squash-kontrollpunkten. Återställning och~ändrad CI-auktoritet behåller befintliga
+vägar. Feature-ändringar installerar inte ensamma detta beteende på~main.
+
 Funktionspushar och~den~avslutande squashningen använder bara BASIC: PHP-/JavaScript-
 syntax och~fullständig dokumentation för namngivna deklarationer. När funktionen
 är en~enda författad commit S ovanpå develop P väljer underhållaren dess gren med

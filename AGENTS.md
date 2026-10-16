@@ -123,9 +123,9 @@ header gate needs a separate scanner/CI change and qualification.
 
 Maintainer-approved **Integrate into develop** selects exactly one candidate
 commit above observed develop, prepares generated artifacts and runs central FULL
-on final exact A before guarded non-force FF. If preparation adds a commit, stop
-before FULL, preserve the tree, obtain the separately authorized squash and fresh
-BASIC, then repeat until preparation retains that one-commit SHA. BASIC alone is
+on final exact A before guarded non-force FF. Use the reviewed installed automatic
+feature squash/fresh-BASIC path or the separately authorized manual checkpoint
+when preparation changes SHA. FULL must retain that one-commit SHA. BASIC alone is
 not FULL/integration qualification. CI-authority changes need explicit maintenance
 qualification and protected installation before use.
 

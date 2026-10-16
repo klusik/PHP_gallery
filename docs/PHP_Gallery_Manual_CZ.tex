@@ -2618,6 +2618,18 @@ výsledek. Neúplné nebo duplicitní stránky API a~změny během sběru kvalif
 odmítnou. Jde o~ochranu historického čtení; neodhaluje novější běhy bez zveřejněného
 kvalifikačního checku ani nepovoluje nezávislé převzetí pokrytí develop/release.
 
+Po schválené instalaci na main má integrační volba
+\codeword{auto\_squash\_generated} výchozí hodnotu true. Příprava zahrne pouze
+tři povolené generované soubory do jediného commitu A nad pozorovaným develop P,
+zachová původní zprávu s~\codeword{Prepared-From} a~podmíněně nahradí vybranou
+feature větev při přesné shodě jejího původního SHA. Spustí nový BASIC pro A,
+kontroluje jej každých pět sekund nejvýše patnáct minut a~před FULL ověří přesný
+běh, první pokus i~nativní a~vlastní kontroly. Posunuté větve, neúspěšný nebo
+překonaný BASIC a~timeout integraci zastaví. Příprava beze změny zachová SHA;
+vypnutá automatika ponechá ruční squash checkpoint. Obnova a~změny autority CI
+zachovávají dosavadní postup. Samotná změna feature větve toto chování do
+důvěryhodného workflow na main nenainstaluje.
+
 Push funkcí a~jejich závěrečný squash používají pouze BASIC: syntaxi PHP/JavaScriptu
 a~úplnou dokumentaci pojmenovaných deklarací. Jakmile je funkce jediným autorským
 commitem S nad develop P, správce vybere její větev tlačítkem Actions

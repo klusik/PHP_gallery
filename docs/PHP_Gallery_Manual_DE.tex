@@ -2634,6 +2634,19 @@ Dies schützt historische Prüfung; neuere Läufe ohne veröffentlichten
 Qualifikationscheck und~unabhängige develop/release-Abdeckungsübernahme bleiben
 außerhalb dieses Lesers.
 
+Nach geprüfter Installation auf~main ist~die~Integrationsoption
+\codeword{auto\_squash\_generated} standardmäßig true. Die~Vorbereitung nimmt
+nur die~drei erlaubten generierten Dateien in~einen Commit A über dem~beobachteten
+develop P auf, erhält die~ursprüngliche Nachricht mit~\codeword{Prepared-From}
+und~ersetzt nur den~ausgewählten Feature-Ref bei~exakter Übereinstimmung der~alten
+SHA. Sie~startet frisches BASIC für~A, prüft alle fünf Sekunden höchstens fünfzehn
+Minuten und~authentifiziert vor~FULL den~exakten Lauf, ersten Versuch sowie native
+und~eigene Checks. Verschobene Refs, fehlgeschlagenes oder~überholtes BASIC und
+Zeitüberschreitungen stoppen die~Integration. Unveränderte Vorbereitung erhält
+die~SHA; deaktivierte Automatik behält den~manuellen Squash-Checkpoint.
+Wiederherstellung und~CI-Autoritätsänderungen behalten ihre bisherigen Pfade.
+Feature-Änderungen allein installieren dieses Verhalten nicht auf~main.
+
 Feature-Pushes und~der~abschließende Squash verwenden nur BASIC: PHP-/JavaScript-
 Syntax und~vollständige Dokumentation benannter Deklarationen. Sobald das~Feature
 ein einzelner Autoren-Commit S auf~develop P ist, wählt der~Maintainer den~Branch

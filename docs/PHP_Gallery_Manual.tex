@@ -2660,6 +2660,18 @@ evidence. Incomplete or~duplicate API pages and~changes during collection refuse
 qualification. This protects historical inspection; it~does~not~discover newer
 unpublished workflow runs or~enable independent develop/release coverage reuse.
 
+After reviewed installation on~main, \codeword{auto\_squash\_generated}
+defaults to~true in~the~integration action. Preparation retains only the~three
+allowlisted generated files in~one commit A above the~observed develop P,
+preserves the~original message with \codeword{Prepared-From}, and~conditionally
+replaces the~selected feature ref using its~exact old SHA. It~dispatches fresh
+BASIC for~A, polls every five seconds for~up~to~fifteen minutes, and~authenticates
+the~exact run, first attempt and~native/custom checks before FULL. Changed refs,
+failed or~superseded BASIC and~timeouts stop integration. No-op preparation
+preserves SHA; disabled automatic mode retains the~manual squash checkpoint.
+Recovery and~CI-authority updates retain their existing paths. Feature edits
+alone do~not~install this behavior into the~trusted main-owned workflow.
+
 Feature pushes and~their final squash receive BASIC checks only: PHP/JavaScript
 syntax and~complete named-declaration documentation. After the~feature is~one
 authored commit S on~develop P, the~maintainer selects its~branch with the~Actions

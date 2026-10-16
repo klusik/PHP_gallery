@@ -16,10 +16,13 @@ throughout. Feature edits never authorize themselves as protected CI authority.
    directly above observed develop P and requires fresh exact-SHA BASIC. Missing
    history, unsquashed/merged/stale work or evidence blocks selection.
 3. Hosted preparation generates runtime modules, inventory and manifest; publishers
-   use normal non-forced writes and recheck source/develop leases. Read-only
+   recheck source/develop leases. The reviewed automatic mode conditionally replaces
+   only the selected feature commit using its exact old SHA, retains the prepared
+   tree above P, then dispatches and authenticates fresh BASIC before FULL. Read-only
    candidate preflight refuses stale generated state. Bot commits do not
    recursively trigger qualification; the caller invokes the reusable matrix.
-4. Apply the squash checkpoint below whenever preparation publishes a child.
+4. Apply the manual squash checkpoint below when automatic mode is disabled or
+   unavailable in the installed workflow and preparation publishes a child.
    FULL qualifies the exact final one-commit candidate A before the guarded FF.
    Agents never dispatch protected integration without maintainer authorization.
 5. A separately authorized release starts at qualified A, prepares B and receives
@@ -33,6 +36,14 @@ early gate is an unimplemented proposal, not installed coverage. Review complete
 new/moved headers before committing; existing scanners are the sole rule owner.
 
 ## Squash checkpoint after preparation
+
+After maintainer-controlled installation of the automatic mode, the integration
+input `auto_squash_generated` defaults to true. It authorizes only the exact
+selected feature-ref replacement: preserve the original message, record
+`Prepared-From`, and bind fresh BASIC/native checks and FULL to the new SHA.
+No-op preparation preserves SHA. Recovery and CI-authority updates retain their
+existing paths. Failure, timeout or moved refs stop; do not retry writes blindly.
+Feature source alone does not install this behavior into main.
 
 Include every generated bot commit when counting the candidate delta. If
 preparation adds a commit, stop/cancel integration before expensive FULL. Fetch

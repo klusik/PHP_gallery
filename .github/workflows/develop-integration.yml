@@ -17,6 +17,11 @@ on:
         description: Feature branch containing the completed one-commit squash to integrate.
         required: true
         type: string
+      auto_squash_generated:
+        description: Automatically fold verified generated files into the selected feature commit and continue.
+        required: false
+        type: boolean
+        default: true
       recover_existing:
         description: Owner recovery only. Source must equal current develop and already have a retained exact-candidate successful maintenance FULL; refs remain unchanged.
         required: false
@@ -227,13 +232,17 @@ jobs:
     needs: [select, prepare, inherited-basic]
     if: ${{ !cancelled() && needs.select.result == 'success' && needs.prepare.result == 'success' && ((inputs.ci_authority_update && needs.inherited-basic.result == 'success') || (!inputs.ci_authority_update && needs.inherited-basic.result == 'skipped')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
-      actions: read
+      actions: write
+      checks: read
     outputs:
       candidate_sha: ${{ steps.publish.outputs.candidate_sha }}
       candidate_tree: ${{ steps.publish.outputs.candidate_tree }}
+      final_source_sha: ${{ steps.publish.outputs.final_source_sha }}
+      basic_run_id: ${{ steps.publish.outputs.basic_run_id }}
+      basic_run_attempt: ${{ steps.publish.outputs.basic_run_attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -251,8 +260,11 @@ jobs:
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
           RECOVERY_MODE: ${{ inputs.recover_existing }}
           CI_AUTHORITY_UPDATE: ${{ inputs.ci_authority_update }}
+          AUTO_SQUASH_GENERATED: ${{ inputs.auto_squash_generated }}
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
+          BASIC_RUN_ID: ${{ needs.select.outputs.basic_run_id }}
+          BASIC_RUN_ATTEMPT: ${{ needs.select.outputs.basic_run_attempt }}
           ARTIFACT_ID: ${{ needs.prepare.outputs.artifact_id }}
           ARTIFACT_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
           BASIC_ARTIFACT_ID: ${{ needs.inherited-basic.outputs.artifact_id }}
@@ -267,7 +279,10 @@ jobs:
           node --input-type=module <<'NODE'
           import {appendFileSync} from 'node:fs';
           import {spawnSync} from 'node:child_process';
-          import {publishPreparedCandidate,selectDevelopIntegration} from './.github/scripts/develop-integration.mjs';
+          import {
+            publishPreparedCandidate,selectDevelopIntegration,
+            dispatchPreparedBasic,waitForPreparedBasic,
+          } from './.github/scripts/develop-integration.mjs';
           const api=(path,method='GET',payload=null)=>{
             const args=['api',path];
             if(method!=='GET') args.push('--method',method,'--input','-');
@@ -290,18 +305,56 @@ jobs:
             published={candidateSha:selected.sourceSha,candidateTree:candidate.commit.tree.sha};
           } else published=publishPreparedCandidate({repository:process.env.REPOSITORY,branch:process.env.SOURCE_BRANCH,
             sourceSha:process.env.SOURCE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
+            autoSquashGenerated:process.env.AUTO_SQUASH_GENERATED==='true' && !context.authorityUpdate,
             artifactId:Number(process.env.ARTIFACT_ID),artifactDigest:process.env.ARTIFACT_DIGEST,
             runId:process.env.WORKFLOW_RUN_ID,
             ...(context.authorityUpdate?{basicArtifactId:Number(process.env.BASIC_ARTIFACT_ID),
               basicArtifactDigest:process.env.BASIC_ARTIFACT_DIGEST}:{})},context,api);
-          appendFileSync(process.env.GITHUB_OUTPUT,`candidate_sha=${published.candidateSha}\ncandidate_tree=${published.candidateTree}\n`);
+          let qualified={
+            sourceSha:process.env.SOURCE_SHA,
+            basicRunId:process.env.BASIC_RUN_ID,
+            basicRunAttempt:process.env.BASIC_RUN_ATTEMPT,
+          };
+
+          const needsFreshBasic=process.env.AUTO_SQUASH_GENERATED==='true'
+            && process.env.RECOVERY_MODE!=='true'
+            && !context.authorityUpdate
+            && published.candidateSha!==process.env.SOURCE_SHA;
+
+          if(needsFreshBasic) {
+            const request={
+              repository:process.env.REPOSITORY,
+              branch:process.env.SOURCE_BRANCH,
+              candidateSha:published.candidateSha,
+              expectedDevelopSha:process.env.DEVELOP_SHA,
+            };
+
+            const basicRunId=dispatchPreparedBasic(request,context,api);
+            console.log(`Waiting for BASIC run ${basicRunId} on ${published.candidateSha}.`);
+
+            qualified=await waitForPreparedBasic(
+              {...request,basicRunId},
+              context,
+              api
+            );
+          }
+
+          for(const [name,value] of Object.entries({
+            candidate_sha:published.candidateSha,
+            candidate_tree:published.candidateTree,
+            final_source_sha:qualified.sourceSha,
+            basic_run_id:qualified.basicRunId,
+            basic_run_attempt:qualified.basicRunAttempt,
+          })) {
+            appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
+          }
           NODE
 
   full:
     name: Develop integration
     needs: [select, publish-candidate]
-    # Optional ancestor skips must not suppress a valid FULL; newly generated children require a fresh squash/BASIC checkpoint.
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.select.outputs.source_sha }}
+    # Optional ancestor skips must not suppress FULL; require the candidate authenticated by BASIC.
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha }}
     uses: ./.github/workflows/gallery-workflows.yml
     with:
       audit_profile: full
@@ -334,13 +387,13 @@ jobs:
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
           RECOVERY_MODE: ${{ inputs.recover_existing }}
           CI_AUTHORITY_UPDATE: ${{ inputs.ci_authority_update }}
-          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.publish-candidate.outputs.final_source_sha }}
           CANDIDATE_SHA: ${{ needs.publish-candidate.outputs.candidate_sha }}
           DEVELOP_SHA: ${{ needs.select.outputs.develop_sha }}
           BASIC_ARTIFACT_ID: ${{ needs.inherited-basic.outputs.artifact_id }}
           BASIC_ARTIFACT_DIGEST: ${{ needs.inherited-basic.outputs.artifact_digest }}
-          BASIC_RUN_ID: ${{ needs.select.outputs.basic_run_id }}
-          BASIC_RUN_ATTEMPT: ${{ needs.select.outputs.basic_run_attempt }}
+          BASIC_RUN_ID: ${{ needs.publish-candidate.outputs.basic_run_id }}
+          BASIC_RUN_ATTEMPT: ${{ needs.publish-candidate.outputs.basic_run_attempt }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.sha }}
           WORKFLOW_EVENT: ${{ github.event_name }}
