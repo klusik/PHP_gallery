@@ -26,7 +26,15 @@ export function captureAdminSettingsValues(form) {
         const match = name.match(/^settings\[([^\]]+)\]/);
         if (match) values.get(match[1])?.push([name, String(value)]);
     }
-    return new Map(Array.from(values, /** Serialize one composite setting. @param {[string, Array<[string,string]>]} pair Identifier and submitted entries. @return {[string,string]} Comparable setting value. */ ([name, entries]) => [name, JSON.stringify(entries)]));
+    return new Map(Array.from(
+        values,
+        /**
+         * Serialize one composite setting.
+         * @param {[string, Array<[string,string]>]} pair Identifier and submitted entries.
+         * @return {[string,string]} Comparable setting value.
+         */
+        ([name, entries]) => [name, JSON.stringify(entries)],
+    ));
 }
 
 /**
@@ -37,7 +45,14 @@ export function captureAdminSettingsValues(form) {
  */
 export function countAdminSettingsChanges(baseline, current) {
     return Array.from(new Set([...baseline.keys(), ...current.keys()]))
-        .filter(/** Compare a canonical setting. @param {string} name Identifier. @return {boolean} Whether it changed. */ (name) => baseline.get(name) !== current.get(name)).length;
+        .filter(
+            /**
+             * Compare a canonical setting.
+             * @param {string} name Identifier.
+             * @return {boolean} Whether it changed.
+             */
+            (name) => baseline.get(name) !== current.get(name),
+        ).length;
 }
 
 /**
@@ -122,8 +137,22 @@ function setupAdminSettingsWorkspaceRoot(root) {
 
     /** Switch visible controls without replacing any form or its unsaved values. @param {string} section Category identifier. @param {{history?:boolean,focus?:boolean,scroll?:boolean}} options Navigation intent. @return {void} Preserves all category drafts. */
     const activate = (section, options = {}) => {
-        const target = panels.find(/** Locate a category panel. @param {HTMLElement} panel Candidate. @return {boolean} Whether its ID matches. */ (panel) => panel.id === `settings-${section}`) || panels[0];
-        const selected = tabs.find(/** Locate the panel's tab. @param {HTMLAnchorElement} tab Candidate. @return {boolean} Whether it owns the target. */ (tab) => tab.dataset.adminTabTarget === target.id);
+        const target = panels.find(
+            /**
+             * Locate a category panel.
+             * @param {HTMLElement} panel Candidate.
+             * @return {boolean} Whether its ID matches.
+             */
+            (panel) => panel.id === `settings-${section}`,
+        ) || panels[0];
+        const selected = tabs.find(
+            /**
+             * Locate the panel's tab.
+             * @param {HTMLAnchorElement} tab Candidate.
+             * @return {boolean} Whether it owns the target.
+             */
+            (tab) => tab.dataset.adminTabTarget === target.id,
+        );
         tabs.forEach(/** Synchronize accessible tab state. @param {HTMLAnchorElement} tab Category tab. @return {void} Updates selection and keyboard entry. */ (tab) => {
             const active = tab === selected;
             tab.classList.toggle('is-active', active);
@@ -140,7 +169,14 @@ function setupAdminSettingsWorkspaceRoot(root) {
             if (next.href !== window.location.href) window.history.pushState(null, '', next.href);
         }
         if (options.focus) selected?.focus();
-        if (options.scroll) target.scrollIntoView({block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+        if (options.scroll) {
+            target.scrollIntoView({
+                block: 'start',
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                    ? 'instant'
+                    : 'smooth',
+            });
+        }
         if (target.id === 'settings-uploads') void loadMobile();
     };
 
@@ -172,12 +208,26 @@ function setupAdminSettingsWorkspaceRoot(root) {
 
     /** Remove previous validation messages before an edit, reset or save attempt. @param {HTMLFormElement} form Category form. @return {void} Removes stale validation state. */
     const clearErrors = (form) => {
-        form.querySelectorAll('[aria-invalid="true"]').forEach(/** Clear field validity. @param {HTMLElement} control Invalid field. @return {void} Removes invalid status. */ (control) => control.removeAttribute('aria-invalid'));
+        form.querySelectorAll('[aria-invalid="true"]').forEach(
+            /**
+             * Clear field validity.
+             * @param {HTMLElement} control Invalid field.
+             * @return {void} Removes invalid status.
+             */
+            (control) => control.removeAttribute('aria-invalid'),
+        );
         form.querySelectorAll('[data-admin-settings-field-error]').forEach(/** Clear one inline message. @param {HTMLElement} message Error output. @return {void} Hides stale text. */ (message) => {
             message.textContent = '';
             message.hidden = true;
         });
-        form.querySelectorAll('.has-error').forEach(/** Clear error styling. @param {HTMLElement} row Setting row. @return {void} Removes stale styling. */ (row) => row.classList.remove('has-error'));
+        form.querySelectorAll('.has-error').forEach(
+            /**
+             * Clear error styling.
+             * @param {HTMLElement} row Setting row.
+             * @return {void} Removes stale styling.
+             */
+            (row) => row.classList.remove('has-error'),
+        );
         form.querySelector('[data-admin-settings-errors]').hidden = true;
     };
 
@@ -233,7 +283,14 @@ function setupAdminSettingsWorkspaceRoot(root) {
         feedback.hidden = true;
         state.saving = true;
         form.setAttribute('aria-busy', 'true');
-        const controls = Array.from(form.elements).map(/** Remember each control's disabled state. @param {HTMLInputElement} control Form control. @return {[HTMLInputElement,boolean]} State to restore. */ (control) => [control, control.disabled]);
+        const controls = Array.from(form.elements).map(
+            /**
+             * Remember each control's disabled state.
+             * @param {HTMLInputElement} control Form control.
+             * @return {[HTMLInputElement,boolean]} State to restore.
+             */
+            (control) => [control, control.disabled],
+        );
         for (const [control] of controls) control.disabled = true;
         form.querySelector('[data-admin-settings-changes]').textContent = form.dataset.savingLabel;
         try {
@@ -254,7 +311,16 @@ function setupAdminSettingsWorkspaceRoot(root) {
                 const sidebar = new DOMParser().parseFromString(result.sidebar_html, 'text/html').querySelector('aside.admin-sidebar');
                 if (sidebar) document.querySelector('aside.admin-sidebar')?.replaceWith(sidebar);
             }
-            const disclosureStates = Array.from(form.querySelectorAll('details[id]')).map(/** Preserve disclosure visibility across saved markup. @param {HTMLDetailsElement} details Disclosure. @return {[string,boolean]} Stable ID and open state. */ (details) => [details.id, details.open]);
+            const disclosureStates = Array.from(
+                form.querySelectorAll('details[id]'),
+            ).map(
+                /**
+                 * Preserve disclosure visibility across saved markup.
+                 * @param {HTMLDetailsElement} details Disclosure.
+                 * @return {[string,boolean]} Stable ID and open state.
+                 */
+                (details) => [details.id, details.open],
+            );
             panel.querySelector('[data-admin-settings-content]').innerHTML = result.html;
             disclosureStates.forEach(/** Restore a returned disclosure. @param {[string,boolean]} pair ID and previous open state. @return {void} Restores matching elements. */ ([id, open]) => {
                 const details = panel.querySelector(`#${CSS.escape(id)}`);
@@ -281,7 +347,16 @@ function setupAdminSettingsWorkspaceRoot(root) {
             feedback.classList.add('is-error');
             feedback.hidden = false;
         } finally {
-            controls.forEach(/** Unlock each original control. @param {[HTMLInputElement,boolean]} pair Control and prior state. @return {void} Restores prior availability. */ ([control, disabled]) => { control.disabled = disabled; });
+            controls.forEach(
+                /**
+                 * Unlock each original control.
+                 * @param {[HTMLInputElement,boolean]} pair Control and prior state.
+                 * @return {void} Restores prior availability.
+                 */
+                ([control, disabled]) => {
+                    control.disabled = disabled;
+                },
+            );
             state.saving = false;
             form.removeAttribute('aria-busy');
             if (form.isConnected) {
@@ -310,7 +385,16 @@ function setupAdminSettingsWorkspaceRoot(root) {
         );
         mobilePending.add(owner);
         owner.setAttribute('aria-busy', 'true');
-        controls.forEach(/** Lock the manager while one mutation is pending. @param {[HTMLInputElement,boolean]} pair Control and prior state. @return {void} Prevents duplicate submissions. */ (pair) => { pair[0].disabled = true; });
+        controls.forEach(
+            /**
+             * Lock the manager while one mutation is pending.
+             * @param {[HTMLInputElement,boolean]} pair Control and prior state.
+             * @return {void} Prevents duplicate submissions.
+             */
+            (pair) => {
+                pair[0].disabled = true;
+            },
+        );
         if (settingsForm) updateDraft(settingsForm);
         const feedback = owner.querySelector('[data-admin-settings-mobile-feedback]');
         if (feedback) feedback.hidden = true;
@@ -332,7 +416,16 @@ function setupAdminSettingsWorkspaceRoot(root) {
         } finally {
             mobilePending.delete(owner);
             owner.removeAttribute('aria-busy');
-            controls.forEach(/** Restore each original control. @param {[HTMLInputElement,boolean]} pair Control and prior state. @return {void} Unlocks after errors. */ (pair) => { pair[0].disabled = pair[1]; });
+            controls.forEach(
+                /**
+                 * Restore each original control.
+                 * @param {[HTMLInputElement,boolean]} pair Control and prior state.
+                 * @return {void} Unlocks after errors.
+                 */
+                (pair) => {
+                    pair[0].disabled = pair[1];
+                },
+            );
             if (settingsForm?.isConnected) updateDraft(settingsForm);
         }
     };

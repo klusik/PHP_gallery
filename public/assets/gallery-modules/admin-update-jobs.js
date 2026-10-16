@@ -29,7 +29,7 @@
  *   - Only one continuation request may be in flight for a job in this browser document.
  */
 
-import {setupAdminUpdateNotes, refreshUpdateNotes} from './admin-update-notes.js?v=20261002-update-notes-v1';
+import {setupAdminUpdateNotes, refreshUpdateNotes} from './admin-update-notes.js?v=20261016-readability-v1';
 
 const ACTIVE_REQUESTS = new Map();
 /**

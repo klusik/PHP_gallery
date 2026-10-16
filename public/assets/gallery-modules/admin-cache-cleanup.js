@@ -76,7 +76,16 @@ export function setupAdminCacheCleanup() {
                 state.previous = signature;
                 const noProgressSeconds = Math.max(0, Math.floor((Date.now() - state.lastProgressAt) / 1000));
                 const runtime = envelope.diagnostic || {};
-                const worker = ['held','available','missing','unreadable','unsafe','unavailable'].includes(runtime.worker_lock) ? runtime.worker_lock : 'unavailable';
+                const worker = [
+                    'held',
+                    'available',
+                    'missing',
+                    'unreadable',
+                    'unsafe',
+                    'unavailable',
+                ].includes(runtime.worker_lock)
+                    ? runtime.worker_lock
+                    : 'unavailable';
                 bar.hidden = false;
                 bar.dataset.state = job.status;
                 label.dataset.state = job.status;
@@ -96,18 +105,45 @@ export function setupAdminCacheCleanup() {
                 // retain actionable support evidence without copying unbounded public state.
                 const safeMessage = typeof job.error?.message === 'string' ? job.error.message.slice(0, 2048) : '';
                 const reference = typeof job.error?.reference === 'string' ? job.error.reference.slice(0, 128) : '';
-                if (job.status === 'failed') label.textContent += ` · ${safeMessage || form.dataset.failedLabel || 'Update failed.'}${reference ? ` [${reference}]` : ''}`;
+                if (job.status === 'failed') {
+                    label.textContent += (
+                        ` · ${safeMessage || form.dataset.failedLabel || 'Update failed.'}`
+                        + (reference ? ` [${reference}]` : '')
+                    );
+                }
                 const trace = region.querySelector('[data-cache-diagnostic-events]');
                 if (trace) {
                     let records = [];
-                    try { const parsed = JSON.parse(trace.textContent); records = Array.isArray(parsed) ? parsed : [parsed]; } catch { /* Start a safe client checkpoint if an older fragment has no JSON trace. */ }
-                    const checkpoint = {stage:'updater_checkpoint',source:'admin_updates_readonly',updater_job_id:jobId,
-                        updater_status:job.status,updater_stage:job.stage,updater_updated_at:job.updated_at,
-                        observed_at:runtime.observed_at,checkpoint_age_seconds:runtime.checkpoint_age_seconds,
-                        worker_lock:worker,observed_samples:state.samples,progress_changed:progressChanged,delta_current:deltaCurrent,
-                        no_observed_progress_seconds:noProgressSeconds,operation:job.operation,trigger:job.trigger,
-                        created_at:job.created_at,started_at:job.started_at,attempts:job.attempts,
-                        can_resume:job.can_resume,can_cancel:job.can_cancel,can_rollback:job.can_rollback,progress_unit:job.progress?.unit};
+                    try {
+                        const parsed = JSON.parse(trace.textContent);
+                        records = Array.isArray(parsed) ? parsed : [parsed];
+                    } catch {
+                        /* Start a safe client checkpoint if an older fragment has no JSON trace. */
+                    }
+                    const checkpoint = {
+                        stage: 'updater_checkpoint',
+                        source: 'admin_updates_readonly',
+                        updater_job_id: jobId,
+                        updater_status: job.status,
+                        updater_stage: job.stage,
+                        updater_updated_at: job.updated_at,
+                        observed_at: runtime.observed_at,
+                        checkpoint_age_seconds: runtime.checkpoint_age_seconds,
+                        worker_lock: worker,
+                        observed_samples: state.samples,
+                        progress_changed: progressChanged,
+                        delta_current: deltaCurrent,
+                        no_observed_progress_seconds: noProgressSeconds,
+                        operation: job.operation,
+                        trigger: job.trigger,
+                        created_at: job.created_at,
+                        started_at: job.started_at,
+                        attempts: job.attempts,
+                        can_resume: job.can_resume,
+                        can_cancel: job.can_cancel,
+                        can_rollback: job.can_rollback,
+                        progress_unit: job.progress?.unit,
+                    };
                     const runId = records.find(item => /^[a-f0-9]{32}$/.test(item?.run_id || ''))?.run_id;
                     if (runId) checkpoint.run_id = runId;
                     if (Number.isFinite(current) && Number.isFinite(total) && total > 0) {
@@ -184,7 +220,10 @@ export function setupAdminCacheCleanup() {
         const button = form.querySelector('[data-cache-cleanup-button]');
         const status = region?.querySelector('[data-cache-cleanup-result]');
         if (!(button instanceof HTMLButtonElement) || !(status instanceof HTMLElement)) return;
-        const runId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+        const runId = Array.from(
+            crypto.getRandomValues(new Uint8Array(16)),
+            byte => byte.toString(16).padStart(2, '0'),
+        ).join('');
         const isStop = form.matches('[data-cache-job-stop]');
         pending = true;
         button.disabled = true;

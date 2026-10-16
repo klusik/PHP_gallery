@@ -165,16 +165,40 @@ $routeNavdata = contract_file($root, 'public/assets/gallery-modules/admin-route-
 $navigationController = contract_file($root, 'app/controllers/navigation_data.php', $failures);
 
 // Background route freshness uses the shared public completion coordinator and never owns editor navigation.
-contract_require($routeNavdata, 'await completeAdminMutation(payload)', 'Route navigation-data completion bypasses the canonical mutation coordinator.', $failures, $checks);
+contract_require(
+    $routeNavdata,
+    'await completeAdminMutation(payload)',
+    'Route navigation-data completion bypasses the canonical mutation coordinator.',
+    $failures,
+    $checks,
+);
 contract_require($routeNavdata, "'php-gallery:side-panel-success'", 'Route navigation-data refresh no longer completes routes saved during an active import.', $failures, $checks);
 contract_forbid($routeNavdata, 'window.location.reload', 'Background route freshness must not reload the page.', $failures, $checks);
 contract_forbid($routeNavdata, 'window.location.href =', 'Background route freshness must not navigate the editor.', $failures, $checks);
-contract_require($navigationController, 'admin_mutation_success_envelope', 'Background navigation-data responses lost their canonical completion envelope.', $failures, $checks);
-contract_require($navigationController, 'admin_mutation_public_gallery_context', 'Completed routes no longer describe their affected public contexts.', $failures, $checks);
+contract_require(
+    $navigationController,
+    'admin_mutation_success_envelope',
+    'Background navigation-data responses lost their canonical completion envelope.',
+    $failures,
+    $checks,
+);
+contract_require(
+    $navigationController,
+    'admin_mutation_public_gallery_context',
+    'Completed routes no longer describe their affected public contexts.',
+    $failures,
+    $checks,
+);
 
 // The coordinator must accept only the canonical successful envelope. Browser-side
 // synthesis from old top-level gallery/image/url fields would hide a broken server contract.
-contract_require($coordinator, "input.ok !== true || !mutation || !Array.isArray(input.contexts)", 'Coordinator no longer strictly validates the canonical success envelope.', $failures, $checks);
+contract_require(
+    $coordinator,
+    "input.ok !== true || !mutation || !Array.isArray(input.contexts)",
+    'Coordinator no longer strictly validates the canonical success envelope.',
+    $failures,
+    $checks,
+);
 contract_forbid($coordinator, 'refresh_gallery_id', 'Coordinator contains workflow-specific refresh_gallery_id compatibility reconstruction.', $failures, $checks);
 contract_forbid($coordinator, 'created_gallery', 'Coordinator contains create/upload compatibility reconstruction.', $failures, $checks);
 contract_require($coordinator, 'ADMIN_MUTATION_RETRY_DELAYS_MS', 'Shared bounded retry policy is missing from the coordinator.', $failures, $checks);
@@ -182,7 +206,13 @@ contract_require($coordinator, 'Object.freeze([0, 150, 450, 1000, 2000])', 'Coor
 contract_require($coordinator, "'Cache-Control': 'no-cache'", 'Coordinator public refresh no longer sends an explicit no-cache request directive.', $failures, $checks);
 contract_forbid($coordinator, "'X-Requested-With': 'XMLHttpRequest'", 'Coordinator public HTML refresh is incorrectly classified as an AJAX mutation request.', $failures, $checks);
 contract_require($coordinator, 'mergeAdminMutationRenderViewState(persistedRenderUrl, currentUrl)', 'Coordinator no longer preserves visible parent pagination/filter state when resolving the authoritative render URL.', $failures, $checks);
-contract_require($coordinator, "['page', 'public_path', 'gallery_path', 'slug', 'id', '_panel_refresh']", 'Coordinator visible-state merge no longer protects routing query parameters.', $failures, $checks);
+contract_require(
+    $coordinator,
+    "['page', 'public_path', 'gallery_path', 'slug', 'id', '_panel_refresh']",
+    'Coordinator visible-state merge no longer protects routing query parameters.',
+    $failures,
+    $checks,
+);
 contract_require($coordinator, "cache: 'no-store'", 'Coordinator refreshes must retain no-store semantics.', $failures, $checks);
 contract_forbid($coordinator, 'window.location.reload', 'Coordinator must never hard reload the page.', $failures, $checks);
 contract_forbid($coordinator, 'window.location.href =', 'Coordinator must never navigate after enhanced mutation success.', $failures, $checks);
@@ -208,9 +238,22 @@ contract_require_before(
     $checks
 );
 contract_forbid($lightbox, 'lightboxHiddenCleanupTimer', 'Hidden cleanup state must not be duplicated in the lightbox coordinator.', $failures, $checks);
-contract_require($lightbox, 'lightboxResources?.dispose();', 'Lightbox teardown must dispose its resource owner, including route-only setup.', $failures, $checks);
+contract_require(
+    $lightbox,
+    'lightboxResources?.dispose();',
+    'Lightbox teardown must dispose its resource owner, including route-only setup.',
+    $failures,
+    $checks,
+);
 contract_count($lightboxResources, 'let hiddenCleanupTimer = null;', 1, 'Hidden cleanup timer must have one resource lifecycle owner.', $failures, $checks);
-contract_require_before($lightboxResources, 'let hiddenCleanupTimer = null;', "signal?.addEventListener?.('abort', dispose", 'Resource cleanup state must exist before terminal abort can dispose it.', $failures, $checks);
+contract_require_before(
+    $lightboxResources,
+    'let hiddenCleanupTimer = null;',
+    "signal?.addEventListener?.('abort', dispose",
+    'Resource cleanup state must exist before terminal abort can dispose it.',
+    $failures,
+    $checks,
+);
 
 // Direct card observation is the strongest gallery-membership invariant. Aggregate
 // counts are only a fallback for targets that may legitimately live off-page.
@@ -221,10 +264,28 @@ contract_require($coordinator, 'if (!paginated)', 'Gallery membership verificati
 // Public card deletes must never leak HTML diagnostics or authentication redirects into
 // an enhanced JSON mutation response. Buffered diagnostics remain observable in logs.
 contract_require($publicInlineController, 'admin_public_inline_json_buffer_start($wantsJson)', 'Public gallery delete no longer protects its JSON response from accidental PHP output.', $failures, $checks);
-contract_require($publicInlineController, "'gallery.public_json_output_discarded'", 'Discarded public mutation output is no longer recorded in the Admin log.', $failures, $checks);
+contract_require(
+    $publicInlineController,
+    "'gallery.public_json_output_discarded'",
+    'Discarded public mutation output is no longer recorded in the Admin log.',
+    $failures,
+    $checks,
+);
 contract_require($publicInlineController, '$diagnosticBufferLevel = ob_get_level();', 'Public mutation diagnostic logging can regress to corrupting the cleaned JSON response.', $failures, $checks);
-contract_require($publicInlineController, 'admin_public_inline_json_response(admin_mutation_success_envelope(', 'Public gallery delete success no longer uses the clean JSON response boundary.', $failures, $checks);
-contract_require($publicInlineController, 'admin_public_inline_json_response(admin_mutation_error_envelope(', 'Public gallery delete failure no longer uses the clean JSON response boundary.', $failures, $checks);
+contract_require(
+    $publicInlineController,
+    'admin_public_inline_json_response(admin_mutation_success_envelope(',
+    'Public gallery delete success no longer uses the clean JSON response boundary.',
+    $failures,
+    $checks,
+);
+contract_require(
+    $publicInlineController,
+    'admin_public_inline_json_response(admin_mutation_error_envelope(',
+    'Public gallery delete failure no longer uses the clean JSON response boundary.',
+    $failures,
+    $checks,
+);
 contract_require($security, 'function security_request_wants_json(): bool', 'Security boundary no longer detects enhanced JSON mutation requests.', $failures, $checks);
 contract_require($security, "'error_code' => 'auth.admin_required'", 'Expired Admin AJAX sessions can regress to an HTML login redirect.', $failures, $checks);
 contract_require($security, "'error_code' => 'security.invalid_csrf'", 'AJAX CSRF failures can regress to non-JSON output.', $failures, $checks);
@@ -235,9 +296,28 @@ contract_forbid($sidePanel, 'window.location.reload', 'Side-panel module contain
 contract_forbid($sidePanel, 'history.replaceState', 'Side-panel module contains history.replaceState().', $failures, $checks);
 contract_count($sidePanel, 'window.location.href =', 2, 'Unexpected side-panel window.location assignment count.', $failures, $checks);
 $uploadCompletion = contract_section($sidePanel, 'if (galleryUploadCompletesInSidePanel(form)) {', 'window.location.href =');
-contract_require($uploadCompletion, "dispatchAdminSidePanelSuccess(form, result);\n            return;", 'Direct upload redirect is no longer guarded by panel completion ownership.', $failures, $checks);
-contract_require($uploadCompletion, "await completeCoreGalleryMutationInCurrentView(result);\n            return;", 'Inline upload completion can fall through into direct-page navigation.', $failures, $checks);
-contract_require_before($uploadCompletion, 'rememberAdminPanelMutation(result, owner);', 'dispatchAdminSidePanelSuccess(form, result);', 'Upload completion lost its initiating panel owner.', $failures, $checks);
+contract_require(
+    $uploadCompletion,
+    "dispatchAdminSidePanelSuccess(form, result);\n            return;",
+    'Direct upload redirect is no longer guarded by panel completion ownership.',
+    $failures,
+    $checks,
+);
+contract_require(
+    $uploadCompletion,
+    "await completeCoreGalleryMutationInCurrentView(result);\n            return;",
+    'Inline upload completion can fall through into direct-page navigation.',
+    $failures,
+    $checks,
+);
+contract_require_before(
+    $uploadCompletion,
+    'rememberAdminPanelMutation(result, owner);',
+    'dispatchAdminSidePanelSuccess(form, result);',
+    'Upload completion lost its initiating panel owner.',
+    $failures,
+    $checks,
+);
 contract_require($sidePanel, "if (!(body instanceof HTMLElement)) {\n        window.location.href = link.href;", 'Panel-mount failure navigation fallback changed or disappeared.', $failures, $checks);
 contract_forbid($sidePanel, 'refreshCurrentGalleryContextFromServer', 'Obsolete duplicate gallery refresh helper is still present.', $failures, $checks);
 contract_forbid($sidePanel, 'replaceAdminEditorMainFromParsedDocument', 'Obsolete full editor replacement helper is still present.', $failures, $checks);
@@ -310,7 +390,13 @@ foreach ($dynamicContracts as [$serverFile, $serverMarker, $browserContents, $br
     contract_require($browserContents, $browserMarker, 'Browser interception is missing for dynamic marker: ' . $serverMarker, $failures, $checks);
 }
 contract_require($sidePanel, "document.addEventListener('submit'", 'Side-panel dynamic form interception is no longer delegated.', $failures, $checks);
-contract_require($metadataOrganizer, "document.addEventListener('submit', handleMetadataOrganizerSubmit, true)", 'Metadata Organizer dynamic forms are no longer delegated.', $failures, $checks);
+contract_require(
+    $metadataOrganizer,
+    "document.addEventListener('submit', handleMetadataOrganizerSubmit, true)",
+    'Metadata Organizer dynamic forms are no longer delegated.',
+    $failures,
+    $checks,
+);
 contract_require($mediaRenamer, "document.addEventListener('submit'", 'Media Renamer dynamic forms are no longer delegated.', $failures, $checks);
 contract_require($duplicateDetector, "document.addEventListener('submit'", 'Duplicate Detector dynamic forms are no longer delegated.', $failures, $checks);
 
@@ -320,13 +406,25 @@ $visibilityStart = "if (in_array(\$action, ['draft', 'public', 'private'], true)
 $visibilityEnd = "if (in_array(\$action, ['nsfw_on', 'nsfw_off'], true) && !nsfw_guard_schema_ready())";
 $visibilitySection = contract_section($bulkController, $visibilityStart, $visibilityEnd);
 contract_require($visibilitySection, 'if (admin_wants_json())', 'Bulk visibility mutation no longer has an AJAX success branch.', $failures, $checks);
-contract_require($visibilitySection, 'admin_bulk_images_success_response', 'Bulk visibility AJAX branch no longer returns the canonical mutation response.', $failures, $checks);
+contract_require(
+    $visibilitySection,
+    'admin_bulk_images_success_response',
+    'Bulk visibility AJAX branch no longer returns the canonical mutation response.',
+    $failures,
+    $checks,
+);
 contract_require($visibilitySection, 'return;', 'Bulk visibility AJAX branch can fall through to redirect handling.', $failures, $checks);
 $nsfwStart = "if (in_array(\$action, ['nsfw_on', 'nsfw_off'], true)) {";
 $nsfwEnd = "if (\$action === 'cover')";
 $nsfwSection = contract_section($bulkController, $nsfwStart, $nsfwEnd);
 contract_require($nsfwSection, 'if (admin_wants_json())', 'Bulk NSFW mutation no longer has an AJAX success branch.', $failures, $checks);
-contract_require($nsfwSection, 'admin_bulk_images_success_response', 'Bulk NSFW AJAX branch no longer returns the canonical mutation response.', $failures, $checks);
+contract_require(
+    $nsfwSection,
+    'admin_bulk_images_success_response',
+    'Bulk NSFW AJAX branch no longer returns the canonical mutation response.',
+    $failures,
+    $checks,
+);
 contract_require($nsfwSection, 'return;', 'Bulk NSFW AJAX branch can fall through to redirect handling.', $failures, $checks);
 
 // Friendship actions retain the canonical completion owner and delegate dynamic controls.

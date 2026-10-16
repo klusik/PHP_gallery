@@ -94,7 +94,33 @@ def known_type(type_name: str) -> str:
     type_name = re.sub(r"\b(?:typing|collections\.abc)\.", "", type_name.strip())
     type_name = re.sub(r"\b(List|Dict|Tuple|Set|FrozenSet|Type)\b", builtin_alias, type_name)
     # Unknown aliases and user classes cannot be judged without name resolution.
-    allowed = {"int", "str", "bool", "float", "bytes", "None", "object", "list", "dict", "tuple", "set", "frozenset", "type", "Optional", "Union", "Any", "Iterator", "Iterable", "Generator", "Awaitable", "Coroutine", "Callable", "Sequence", "Mapping", "Literal"}
+    allowed = {
+        "int",
+        "str",
+        "bool",
+        "float",
+        "bytes",
+        "None",
+        "object",
+        "list",
+        "dict",
+        "tuple",
+        "set",
+        "frozenset",
+        "type",
+        "Optional",
+        "Union",
+        "Any",
+        "Iterator",
+        "Iterable",
+        "Generator",
+        "Awaitable",
+        "Coroutine",
+        "Callable",
+        "Sequence",
+        "Mapping",
+        "Literal",
+    }
     if any(name not in allowed for name in re.findall(r"\b[A-Za-z_]\w*\b", type_name)):
         return ""
     try:
@@ -138,7 +164,11 @@ def canonical_type(node: ast.expr) -> str:
     return ast.unparse(node).replace(" ", "")
 
 
-def type_issues(parameters: list[dict[str, str]], return_type: str, documentation: str) -> list[str]:
+def type_issues(
+    parameters: list[dict[str, str]],
+    return_type: str,
+    documentation: str,
+) -> list[str]:
     """Find missing native annotations and definite builtin documentation mismatches.
 
     @param list[dict[str,str]] parameters Explicit parameters excluding bound receivers.
@@ -228,7 +258,13 @@ class DeclarationScanner(ast.NodeVisitor):
         """
         self.visit_FunctionDef(node)
 
-    def collect(self, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef, kind: str, parameters: list[dict[str, str]], return_type: str) -> None:
+    def collect(
+        self,
+        node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+        kind: str,
+        parameters: list[dict[str, str]],
+        return_type: str,
+    ) -> None:
         """Record one declaration and descend with its containing lexical identity.
 
         @param ast.ClassDef|ast.FunctionDef|ast.AsyncFunctionDef node Class or callable.
@@ -239,9 +275,26 @@ class DeclarationScanner(ast.NodeVisitor):
         """
         documentation = normalize_doc(ast.get_docstring(node) or "")
         identity = "/".join(self.owners + [kind + ":" + node.name])
-        record = {"kind": kind, "language": "python", "name": node.name, "line": node.lineno, "params": parameters, "return_type": return_type, "doc": documentation,
-                  "type_issues": type_issues(parameters, return_type, documentation) if kind != "class" else []}
-        self.snapshots.append({"identity": identity, "fingerprint": executable_fingerprint(node), "record": record, "uncertain": False})
+        record = {
+            "kind": kind,
+            "language": "python",
+            "name": node.name,
+            "line": node.lineno,
+            "params": parameters,
+            "return_type": return_type,
+            "doc": documentation,
+            "type_issues": (
+                type_issues(parameters, return_type, documentation)
+                if kind != "class"
+                else []
+            ),
+        }
+        self.snapshots.append({
+            "identity": identity,
+            "fingerprint": executable_fingerprint(node),
+            "record": record,
+            "uncertain": False,
+        })
         self.owners.append(kind + ":" + node.name)
         self.owner_kinds.append(kind)
         self.generic_visit(node)

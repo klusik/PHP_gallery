@@ -1,5 +1,38 @@
 # Patch notes
 
+## Version 0.133.5
+
+Prepared immutable release origin and predecessor records for v_0.133.5. Reflowed Admin and tooling source contracts, and refreshed Admin module cache versions after readability edits without changing product behavior. The release references [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### Highlights
+
+#### Release provenance and source maintenance
+- Added immutable origin and predecessor records for v_0.133.5.
+- Reflowed existing Admin and tooling declarations and recovery checklists while preserving their behavior, schemas, and interfaces.
+- Refreshed Admin module cache versions to preserve byte-level cache invalidation after formatting-only edits.
+
+### Technical Details
+
+#### Release records and assets
+- Added `.github/release-origins/v_0.133.5.json` and `.github/release-predecessors/v_0.133.5.json`.
+- Updated `app/core-manifest.json` and Admin module imports to refresh cache versions; synchronized `tests/fixtures/admin_update_jobs.html`.
+
+#### Tooling and contracts
+- Reflowed source contracts and recovery checks in `scripts/audit_registry.php`, `scripts/check_admin_mutation_contracts.php`, `scripts/recovery/contracts.php`, and `scripts/source_contracts/python_scan.py`.
+- Updated `public/assets/AGENTS.md` to reflect the asset-source contract changes.
+- No database, filesystem, runtime, or TeX manual changes were made.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing behavior did not change.
+
+#### For administrators
+- Administrator workflows and browser behavior did not change.
+
+#### For maintainers
+- Release origin and predecessor records were added, and Admin module cache versions were refreshed to retain invalidation behavior after source reformatting.
+
 ## Version 0.133.4
 
 Updated release reconciliation to fast-forward `develop` to the actual reviewed and tagged `main` merge, preserving shared history instead of creating a content-equivalent synchronization commit. Added immutable origin and predecessor records for this release.
