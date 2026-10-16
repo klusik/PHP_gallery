@@ -726,9 +726,35 @@ export function setupGalleryLightbox() {
     // lightboxRapidNavigationThreshold skips blend waits when the visitor outruns decoding.
     const lightboxRapidNavigationThreshold = 220;
     // lightboxSlideshowVisibleDuration stores how long one slideshow image remains stable before the next blend starts.
-    const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
+    /**
+     * Initialize the stable photo interval from the existing rendered timing.
+     * Type: number. Units: milliseconds. Scope: this viewer's slideshow.
+     * Consumers: scheduleLightboxSlideshowNext and runtime interval presets.
+     * Rationale: retain the 2000 ms default and existing 500..600000 ms input bounds.
+     */
+    let lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
     // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
-    const lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
+    /**
+     * Initialize the blend duration without changing existing slideshow playback.
+     * Type: number. Units: milliseconds. Scope: this viewer's slideshow.
+     * Consumers: currentLightboxTransitionDuration and runtime transition presets.
+     * Rationale: retain the 1000 ms default and existing 0..30000 ms input bounds.
+     */
+    let lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
+    /**
+     * Offer slow, medium and fast timings relative to the unchanged rendered defaults.
+     * Type: {interval:number[],transition:number[]}.
+     * Units: milliseconds, ordered slow/medium/fast from left to right. Scope: this viewer instance.
+     * Consumers: updateLightboxSlideshowSpeed and the existing scheduler/blend.
+     * Rationale: double/default/half preserves medium playback (2000 ms display,
+     * 1000 ms blend by default) while keeping the two runtime controls independent.
+     */
+    const lightboxSlideshowSpeedPresets = {
+        interval: [lightboxSlideshowVisibleDuration * 2, lightboxSlideshowVisibleDuration, lightboxSlideshowVisibleDuration / 2],
+        transition: [lightboxSlideshowTransitionDuration * 2, lightboxSlideshowTransitionDuration, lightboxSlideshowTransitionDuration / 2],
+    };
+    const lightboxSlideshowSpeedControls = overlay.querySelector('[data-lightbox-slideshow-speeds]');
+    let lightboxSlideshowSpeedPointerActive = false;
     // lightboxSlideshowEnabled stores whether this rendered gallery permits slideshow activation.
     const lightboxSlideshowEnabled = !(overlay instanceof HTMLElement) || overlay.dataset.lightboxSlideshowEnabled !== '0';
     // lightboxPreviewPreloadRadius limits how many nearby preview images are warmed after a photo opens.
@@ -4640,9 +4666,14 @@ export function setupGalleryLightbox() {
 
         /**
      * Synchronize visible slideshow controls and overlay state.
+     *
+     * @return {void} Updates existing play buttons and hides speed ranges outside playback.
      */
     function syncLightboxSlideshowControls() {
         overlay.classList.toggle('is-slideshow', lightboxSlideshowActive);
+        if (lightboxSlideshowSpeedControls instanceof HTMLElement) {
+            lightboxSlideshowSpeedControls.hidden = !lightboxSlideshowActive;
+        }
         overlay.querySelectorAll('[data-lightbox-action="slideshow"]').forEach((button) => {
             if (!(button instanceof HTMLElement)) {
                 return;
@@ -4650,6 +4681,56 @@ export function setupGalleryLightbox() {
             button.classList.toggle('is-active', lightboxSlideshowActive);
             button.setAttribute('aria-pressed', lightboxSlideshowActive ? 'true' : 'false');
         });
+    }
+
+    /**
+     * Apply one native slider input without changing the current image or navigation generation.
+     *
+     * @param {Event} event Input event from either slideshow speed range.
+     * @return {void} Updates its named position and, for interval changes, replaces the pending cycle.
+     */
+    function updateLightboxSlideshowSpeed(event) {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !lightboxSlideshowActive) {
+            return;
+        }
+        const setting = input.dataset.lightboxSlideshowSpeed;
+        if (setting !== 'interval' && setting !== 'transition') {
+            return;
+        }
+        const position = Number(input.value);
+        const presets = lightboxSlideshowSpeedPresets[setting];
+        if (!Number.isInteger(position) || position < 0 || position >= presets.length) {
+            return;
+        }
+        const options = input.closest('label').querySelectorAll('[data-lightbox-speed-option]');
+        options.forEach((option, index) => option.classList.toggle('is-selected', index === position));
+        input.setAttribute('aria-valuetext', options[position].textContent.trim());
+        if (setting === 'interval' && lightboxSlideshowVisibleDuration !== presets[position]) {
+            lightboxSlideshowVisibleDuration = presets[position];
+            // Navigation settles after its current blend; it will schedule with the new interval.
+            // Never start a second automatic cycle while that presentation is still in flight.
+            scheduleLightboxSlideshowNext();
+        } else if (setting === 'transition') {
+            // Each blend captures its duration once, so an in-flight animation stays unchanged.
+            lightboxSlideshowTransitionDuration = presets[position];
+        }
+        showLightboxHud();
+    }
+
+    /**
+     * Resume normal HUD inactivity hiding after a slider drag ends, including outside its panel.
+     *
+     * @return {void} Clears the pointer hold and restarts the existing HUD timer for active playback.
+     */
+    function finishLightboxSlideshowSpeedPointer() {
+        if (!lightboxSlideshowSpeedPointerActive) {
+            return;
+        }
+        lightboxSlideshowSpeedPointerActive = false;
+        if (lightboxSlideshowActive && !overlay.hidden) {
+            showLightboxHud();
+        }
     }
 
         /**
@@ -4663,7 +4744,7 @@ export function setupGalleryLightbox() {
      */
     function scheduleLightboxSlideshowNext() {
         clearLightboxSlideshowTimer();
-        if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1) {
+        if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1 || lightboxNavigation.phase !== 'displayed') {
             return;
         }
         const scheduledFromIndex = lightboxNavigation.index;
@@ -4691,7 +4772,7 @@ export function setupGalleryLightbox() {
                     scheduleLightboxSlideshowNext();
                     return;
                 }
-                hideLightboxHud();
+                // Automatic advance must not cut short the inactivity window after real HUD input.
                 openAt(nextIndex, {
                     revealHud: false,
                     slideshowPreparedImage: prepared.image,
@@ -4724,8 +4805,10 @@ export function setupGalleryLightbox() {
      * Stop slideshow mode while optionally keeping fullscreen active.
      *
      * @param {boolean} syncControls Whether button state should be refreshed immediately.
+     * @return {void} Cancels automatic work and releases the slider pointer hold.
      */
     function stopLightboxSlideshow(syncControls = true) {
+        lightboxSlideshowSpeedPointerActive = false;
         clearLightboxSlideshowTimer();
         if (!lightboxSlideshowActive) {
             return;
@@ -5171,6 +5254,21 @@ export function setupGalleryLightbox() {
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
     overlay.addEventListener('pointermove', showLightboxHudFromPointerMove, {signal: controller.signal});
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
+    if (lightboxSlideshowSpeedControls instanceof HTMLElement) {
+        lightboxSlideshowSpeedControls.addEventListener('input', updateLightboxSlideshowSpeed, {signal: controller.signal});
+        ['pointerenter', 'pointerleave', 'focusin', 'focusout', 'keydown'].forEach((eventName) => {
+            lightboxSlideshowSpeedControls.addEventListener(eventName, showLightboxHud, {signal: controller.signal});
+        });
+        lightboxSlideshowSpeedControls.addEventListener('pointerdown', (event) => {
+            if (event.target instanceof HTMLInputElement) {
+                lightboxSlideshowSpeedPointerActive = true;
+                showLightboxHud();
+            }
+        }, {signal: controller.signal});
+        window.addEventListener('pointerup', finishLightboxSlideshowSpeedPointer, {signal: controller.signal});
+        window.addEventListener('pointercancel', finishLightboxSlideshowSpeedPointer, {signal: controller.signal});
+        window.addEventListener('blur', finishLightboxSlideshowSpeedPointer, {signal: controller.signal});
+    }
     if (stageLink && isMobileTouchDevice && supportsTouchGestures) {
         stageLink.addEventListener('touchstart', startTouchGesture, {passive: false, capture: true, signal: controller.signal});
         stageLink.addEventListener('touchmove', trackTouchGesture, {passive: false, capture: true, signal: controller.signal});
@@ -5214,6 +5312,10 @@ export function setupGalleryLightbox() {
                 return;
             }
             close();
+            return;
+        }
+        if (event.target instanceof Element && event.target.closest('[data-lightbox-slideshow-speeds]')) {
+            // Native range arrows/Home/End belong to the slider, never photo navigation or voting.
             return;
         }
         if (!event.altKey && !event.ctrlKey && !event.metaKey && !isLightboxEditableKeyboardTarget(event)) {
@@ -5434,14 +5536,15 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Return whether desktop fullscreen map mode should keep navigation visible.
+     * Keep fullscreen controls visible during a slider drag or ordinary split-map navigation.
      *
-     * @return {boolean} True when fullscreen split-map mode should keep HUD controls visible.
+     * @return {boolean} True for an active slider drag or split-map navigation outside slideshow.
      */
     function shouldKeepLightboxHudVisible() {
-        return isLightboxFullscreen()
-            && !overlay.classList.contains('is-mobile-fullscreen')
-            && overlay.classList.contains('is-map-split');
+        return isLightboxFullscreen() && (
+            (!lightboxSlideshowActive && !overlay.classList.contains('is-mobile-fullscreen') && overlay.classList.contains('is-map-split'))
+            || (lightboxSlideshowActive && lightboxSlideshowSpeedPointerActive)
+        );
     }
 
     /**

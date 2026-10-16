@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.133.1}
+\newcommand{\version}{0.133.2}
 \newcommand{\manualdate}{16.~října~2026}
 
 \hypersetup{
@@ -1386,6 +1386,12 @@ Galerie připravuje prohlížeč, když se stane užitečným, a~získává info
 Prohlížeč obvykle začíná vhodně velkým náhledem. Větší nebo původní zdroj lze použít tam, kde to vyžaduje akce a~pravidla přístupu. Blízké náhledy se mohou nenápadně připravovat, aby se další fotografie zobrazila plynule.
 
 Při přípravě nové fotografie prohlížeč používá stejnou oblast průběhu, která hlásí načítání plné kvality. Rychlý pohyb dopředu nebo zpět vždy přidělí správu ukazatele nejnovější požadované fotografii, takže starší požadavek náhledu či metadat nemůže ponechat prohlížeč trvale zaneprázdněný ani nahradit aktuální výběr. Pokud fotografii nelze zobrazit, oblast průběhu ukáže napravitelnou chybu; návštěvník může pokračovat ovládáním dopředu, zpět, zavřením nebo opětovným otevřením. Tyto stavy načítání nemění pravidla přístupu galerie, chráněných médií, chytrých galerií, map, prezentace ani provozu bez JavaScriptu.
+
+\subsection{Změna rychlosti prezentace}
+
+Spusťte prezentaci klávesou \codeword{S} nebo jejím stávajícím tlačítkem. Pohybem ukazatele zobrazíte dva kompaktní orámované řádky: \ui{Rychlost střídání fotografií} a~\ui{Rychlost přechodu}. Každý posuvník nabízí polohy \ui{Rychlá}, \ui{Střední} a~\ui{Pomalá}; zvolená hodnota je uvedena vedle něj. U~obou posuvníků je vlevo pomalá a~vpravo rychlá. Šipky upravují aktivní posuvník bez přepínání fotografií. Skutečný vstup obnovuje časovač nečinnosti. Po nečinnosti zmizí veškeré ovládání včetně volitelné vývojářské diagnostiky, i~když posuvník zůstane zaměřený nebo nad ním stojí ukazatel. Při tažení ovládání zůstává viditelné do uvolnění; pohyb je znovu zobrazí.
+
+Intervaly zobrazení fotografie jsou 1, 2 a~4 sekundy, délky přechodu 0,5, 1 a~2 sekundy. Střední poloha zachovává dosavadní výchozí časy. Změny se projeví ihned a~nezávisle: interval nahradí zbývající čekání, délka přechodu se použije od následující animace. Probíhající animace se dokončí a~další fotografie nadále čeká na připravený snímek v~plné kvalitě. Volby zůstávají při zastavení, opětovném spuštění a~zavření i~otevření stejné instance prohlížeče; obnovení stránky vrátí střední polohu. Ukládání není potřeba.
 
 \subsection{Přibližování a~posouvání fotografie}
 \index{l00075@lightbox!p00180@přiblížení}

@@ -2317,6 +2317,7 @@
         "tests/lightbox_resource_lifecycle_test.mjs",
         "tests/lightbox_resource_lifecycle_test.php",
         "tests/lightbox_slideshow_preload_test.php",
+        "tests/lightbox_slideshow_speed_test.mjs",
         "tests/lightbox_zoom_integration_test.php",
         "tests/lightbox_zoom_lifecycle_test.php",
         "tests/lightbox_zoom_model_test.mjs",

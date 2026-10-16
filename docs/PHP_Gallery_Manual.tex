@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.133.1}
+\newcommand{\version}{0.133.2}
 \newcommand{\manualdate}{16 October 2026}
 
 \hypersetup{
@@ -1396,6 +1396,12 @@ The~Left and~Right arrow keys move one photograph backward or~forward. \codeword
 The~viewer usually starts with an~appropriately sized preview. A~larger or~original source can~be~used where the~action and~access policy call for~it. Nearby previews may~be~prepared quietly so~the~next photograph appears smoothly.
 
 While a~new photograph is~being prepared, the~viewer uses the~same progress area that reports full-quality loading. Rapid forward or~backward movement always gives the~newest requested photograph ownership of~that indicator, so~an~older preview or~metadata request cannot leave the~viewer permanently busy or~replace the~current selection. If~a~photograph cannot be~presented, the~progress area shows a~recoverable failure message; the~visitor can~continue with the~forward, backward, close, or~reopen controls. These loading states do~not~change gallery access, protected-media, Smart Gallery, map, slideshow, or~no-JavaScript rules.
+
+\subsection{Adjusting slideshow speed}
+
+Start the~slideshow with \codeword{S} or~its existing control. Move the~pointer to~reveal two compact outlined rows: \ui{Photo change speed} and~\ui{Transition speed}. Each range offers \ui{Fast}, \ui{Medium}, and~\ui{Slow}; the~current choice appears beside it. Both ranges run from Slow on~the~left to~Fast on~the~right. Arrow keys adjust a~focused range without navigating photographs. Actual input restarts the~inactivity timer. All controls, including optional developer diagnostics, disappear after inactivity even when a~range retains focus or~the~pointer rests over it. Dragging keeps controls visible until release; movement reveals them again.
+
+Photo display intervals are~1, 2, and~4 seconds; transition durations are~0.5, 1, and~2 seconds. Medium preserves the~existing defaults. Changes apply immediately and~independently: the~interval replaces the~pending wait, while the~next blend uses the~new transition duration. An~animation already running finishes normally, and~the~next photograph still waits for~its full-quality image to~be~ready. Choices remain during stop/resume and~close/reopen within the~same viewer instance; reloading restores Medium. No~Save action is~needed.
 
 \subsection{Zooming and~panning a~photograph}
 \index{lightbox!zoom}

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.133.1}
+\newcommand{\version}{0.133.2}
 \newcommand{\manualdate}{16.~Oktober~2026}
 
 \hypersetup{
@@ -1390,6 +1390,12 @@ Die Pfeiltasten nach links und rechts wechseln ein Foto zurück beziehungsweise 
 Der Betrachter beginnt gewöhnlich mit einer passend großen Vorschau. Eine größere oder originale Quelle kann verwendet werden, wenn Aktion und Zugriffsrichtlinie dies vorsehen. Benachbarte Vorschauen können unauffällig vorbereitet werden, damit das nächste Foto flüssig erscheint.
 
 Während ein neues Foto vorbereitet wird, verwendet der Betrachter denselben Fortschrittsbereich, der das Laden voller Qualität meldet. Bei schnellem Vor- oder Zurückwechseln erhält stets das zuletzt angeforderte Foto die Zuständigkeit für diese Anzeige, sodass eine ältere Vorschau- oder Metadatenanfrage den Betrachter nicht dauerhaft beschäftigt halten oder die aktuelle Auswahl ersetzen kann. Kann ein Foto nicht angezeigt werden, zeigt der Fortschrittsbereich eine behebbare Fehlermeldung; der Besucher kann mit Vorwärts, Rückwärts, Schließen oder erneutem Öffnen fortfahren. Diese Ladezustände verändern keine Regeln für Galeriezugriff, geschützte Medien, Smart Galleries, Karten, Diashow oder Nutzung ohne JavaScript.
+
+\subsection{Geschwindigkeit der Diashow ändern}
+
+Starten Sie die Diashow mit \codeword{S} oder ihrer bisherigen Schaltfläche. Eine Zeigerbewegung zeigt zwei kompakte umrandete Zeilen: \ui{Geschwindigkeit des Bildwechsels} und \ui{Übergangsgeschwindigkeit}. Jeder Regler bietet \ui{Schnell}, \ui{Mittel} und \ui{Langsam}; die aktuelle Auswahl steht daneben. Beide Regler reichen von Langsam links bis Schnell rechts. Pfeiltasten ändern den fokussierten Regler, ohne Fotos zu wechseln. Tatsächliche Eingaben starten die Inaktivitätsfrist neu. Danach verschwinden sämtliche Bedienelemente einschließlich optionaler Entwicklerdiagnose, auch bei verbleibendem Fokus oder ruhendem Zeiger über einem Regler. Während des Ziehens bleiben sie bis zum Loslassen sichtbar; eine Zeigerbewegung zeigt sie erneut.
+
+Die Fotoanzeige dauert 1, 2 oder 4 Sekunden, der Übergang 0,5, 1 oder 2 Sekunden. Mittel erhält die bisherigen Standardzeiten. Änderungen wirken sofort und unabhängig: das Intervall ersetzt die laufende Wartezeit, während die nächste Überblendung die neue Übergangsdauer übernimmt. Eine laufende Animation endet unverändert; das nächste Foto wartet weiterhin auf das vorbereitete Bild in voller Qualität. Die Auswahl bleibt beim Stoppen, Fortsetzen sowie Schließen und erneuten Öffnen derselben Betrachterinstanz erhalten; Neuladen setzt Mittel zurück. Speichern ist nicht erforderlich.
 
 \subsection{Ein Foto vergrößern und verschieben}
 \index{l00164@Lightbox!z00279@Zoom}

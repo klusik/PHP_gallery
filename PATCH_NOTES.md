@@ -1,5 +1,42 @@
 # Patch notes
 
+## Version 0.133.2
+
+Added independent slideshow speed controls for photo display and transitions, and updated the lightbox to hide its HUD after inactivity.
+
+### Highlights
+
+#### Slideshow speed controls
+- Added localized three-position controls for photo display and transition speed, with Slow, Medium, and Fast settings. Medium retained the existing 2-second display and 1-second transition defaults. [#240](https://github.com/klusik/PHP_gallery/issues/240)
+- Applied display-speed changes to the pending slideshow cycle and transition-speed changes to the next blend, without changing a blend already in progress.
+- Updated idle behavior to hide slideshow controls and developer diagnostics after inactivity, including when a range remained focused or hovered. Dragging kept controls visible until release.
+- Kept slideshow timing choices for the viewer instance; reloading the page reset them.
+
+### Technical Details
+
+#### Frontend
+- Updated `app/views/public_gallery_lightbox.php`, `public/assets/gallery-modules/lightbox.js`, and `public/assets/styles/lightbox.css` for the speed controls and HUD behavior.
+- Added English, Czech, German, and Swedish labels and help text in `app/lang/`.
+- Kept image-readiness gating for slideshow transitions and prevented slider keyboard input from triggering photo navigation or voting.
+
+#### Tests
+- Added `tests/lightbox_slideshow_speed_test.mjs` and registered it in `scripts/audit_registry.php`. It covered timing changes, image decode and presentation gates, HUD behavior, markup, keyboard routing, and translation catalogs.
+
+#### Documentation and release records
+- Updated `README.md`, `ARCHITECTURE.md`, `TESTING.md`, and all four manual sources with slideshow controls and testing guidance.
+- Added immutable origin and predecessor records for `v_0.133.2`, referencing [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+- Visitors could independently adjust slideshow photo display and transition speeds while playback was permitted and active. The lightbox hid its controls and developer diagnostics after inactivity.
+
+#### For administrators
+- Administrator behavior did not change.
+
+#### For maintainers
+- Slideshow timing, image-readiness, HUD, keyboard-routing, and localization behavior received registered regression coverage.
+
 ## Version 0.133.1
 
 Updated release qualification and promotion to preserve reviewed release contents while synchronizing published releases with the linear `develop` history. The release-process changes addressed [#235](https://github.com/klusik/PHP_gallery/issues/235); origin and predecessor records referenced [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).

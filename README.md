@@ -22,7 +22,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.133.1
+**Current Version:** 0.133.2
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -160,6 +160,19 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Pagination** - Handle large galleries without overwhelming the browser
 - **Fullscreen viewer** - Lightbox with keyboard navigation, cursor-centered 100-400% zoom/pan, EXIF overlay
 - **Picture game** - Side-by-side image comparison game (optional per-gallery)
+
+### Live Slideshow Speed
+
+Start the existing slideshow with `S` or its play control. Pointer movement reveals two compact, stacked HUD ranges:
+**Photo change speed** and **Transition speed**. Each offers Fast, Medium and Slow. Their default timings are
+1/2/4 seconds of stable photo display and 0.5/1/2 seconds of blending, respectively; Medium preserves existing playback.
+Changes take effect immediately and independently. The interval replaces the pending automatic cycle; transition speed
+is captured by the next blend, leaving an animation already running intact. A photo still waits for full-image decode
+before advancing. Native range arrow keys adjust speed. Actual input restarts the HUD inactivity timer; after inactivity
+all HUD controls and the optional developer panel disappear, even if a range remains focused or hovered. A pointer
+drag holds the controls visible until release, and automatic advances do not shorten the input inactivity window.
+Both ranges run from Slow on the left through Medium to Fast on the right.
+Choices remain only in the current viewer instance, including stop/resume and close/reopen; reloading resets them.
 
 ### Lightbox Image Zoom
 

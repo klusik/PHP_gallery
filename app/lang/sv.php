@@ -33,6 +33,12 @@
  */
 
 return [
+    'lightbox.slideshow_photo_speed' => 'Bildväxlingshastighet',
+    'lightbox.slideshow_transition_speed' => 'Övergångshastighet',
+    'lightbox.slideshow_speed_fast' => 'Snabb',
+    'lightbox.slideshow_speed_medium' => 'Medel',
+    'lightbox.slideshow_speed_slow' => 'Långsam',
+    'lightbox.slideshow_speed_help' => 'Ändringar gäller direkt. Använd piltangenterna för att välja Snabb, Medel eller Långsam.',
     'admin.gallery_editor.select_at_least_one' => 'Välj minst ett foto.',
     'admin.gallery_editor.cover_selection_limit' => 'Välj mellan ett och fyra omslagsfoton.',
     'admin.gallery_editor.cover_update_failed' => 'Omslagsbilden kunde inte sparas. Referens: {reference}',
