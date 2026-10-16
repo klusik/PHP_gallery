@@ -108,6 +108,13 @@ attachment filling of an unpublished draft. Manual **Publish release** stays
 separate. Parallel develop work blocks an unsafe synchronization, not a correct
 already completed tag/draft.
 
+Release preparation links the frozen main history before review without changing
+the prepared tree. Schema-4 completion publishes a single-parent equivalent tree
+above unchanged selected develop, using actual assembly qualification and scoped
+Actions status authority. The permanent receipt binds the result/tree/base;
+future initialization trusts protected develop instead of reopening historical
+reconciliation archives. Only the post-assembly observer handles approval.
+
 ## Compatibility and acceptance
 
 Readers retain historical integration schema 1, authority-update records and

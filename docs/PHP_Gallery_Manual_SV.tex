@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.133}
+\newcommand{\version}{0.133.1}
 \newcommand{\manualdate}{16~oktober~2026}
 
 \hypersetup{
@@ -2637,6 +2637,15 @@ ursprungliga kontroll-ID:n och~grenarnas tillstånd igen. Andra fel stoppar
 körningen; FULL körs inte om.
 
 \subsection{Utgåvesammansättning från kvalificerad develop}
+
+Före PR-godkännandet länkar bygget den frysta main-historiken och~behåller
+det förberedda trädet. Efter godkännande och~taggning kopieras samma träd
+med en~ensam förälder ovanpå oförändrad develop. Statusen avser verifierat
+utgåvebygge; funktionell FULL upprepas inte. Parallellt develop-arbete bevaras.
+Det permanenta kvittot anger resultat, träd och~bas. Nästa utgåva litar på
+skyddad develop utan historiska avstämningsarkiv. Endast observatören efter
+bygget hanterar även tidiga godkännanden; lyckad Git-push av~ursprunget kräver
+ingen omedelbar REST-avläsning.
 
 En commit som~tagits in~i skyddad develop är~kvalificerad.
 Skapa den~separat godkända \codeword{release/v_X.Y[.Z]} från denna källa.

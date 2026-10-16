@@ -368,6 +368,8 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           ORIGINAL_SHA: ${{ steps.initialize.outputs.candidate_sha }}
+          INITIAL_MAIN_SHA: ${{ steps.origin.outputs.initial_main_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           allowed='^(app/bootstrap\.php|app/core-manifest\.json|app/production-files\.json|README\.md|TESTING\.md|DATABASE\.md|ARCHITECTURE\.md|PATCH_NOTES\.md|release-metadata\.json|docs/PHP_Gallery_Manual(_CZ|_DE|_SV)?\.(tex|pdf))$'
@@ -390,22 +392,33 @@ jobs:
             docs/PHP_Gallery_Manual_DE.tex docs/PHP_Gallery_Manual_DE.pdf \
             docs/PHP_Gallery_Manual_SV.tex docs/PHP_Gallery_Manual_SV.pdf
 
-          if git diff --cached --quiet; then
-            echo "changed=false" >> "${GITHUB_OUTPUT}"
-            echo "candidate_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m "chore(release): prepare v_${RELEASE_VERSION}"
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): prepare v_${RELEASE_VERSION}"
+          fi
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')" = "${INITIAL_MAIN_SHA}"
+          # Link the frozen main before review, keeping every byte of the qualified prepared release.
+          node --input-type=module <<'NODE'
+          import {command} from './.github/scripts/release-promotion.mjs';
+          import {linkReleaseHistory} from './.github/scripts/release-linear-sync.mjs';
+          const head=command('git',['rev-parse','HEAD']);
+          const linked=linkReleaseHistory(head,process.env.INITIAL_MAIN_SHA,command);
+          if(linked!==head) command('git',['reset','--soft',linked]);
+          NODE
+          if [[ "$(git rev-parse HEAD)" == "${ORIGINAL_SHA}" ]]; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "candidate_sha=${ORIGINAL_SHA}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
 
           git fetch origin "${GITHUB_REF_NAME}"
           remote_sha="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
           if [[ "${remote_sha}" != "${ORIGINAL_SHA}" ]]; then
             # A rerun may rebuild the identical tree already committed by this workflow.
             # Reuse that current SHA without writing; any differing tree still fails the lease.
-            if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "origin/${GITHUB_REF_NAME}^{tree}")" ]]; then
+            if [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse "origin/${GITHUB_REF_NAME}^{tree}")" ]] &&
+              git merge-base --is-ancestor "${INITIAL_MAIN_SHA}" "${remote_sha}"; then
               echo "Prepared tree already exists at current release head; reusing exact SHA."
               echo "changed=false" >> "${GITHUB_OUTPUT}"
               echo "candidate_sha=${remote_sha}" >> "${GITHUB_OUTPUT}"

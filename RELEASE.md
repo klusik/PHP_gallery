@@ -53,8 +53,11 @@ prompts are excluded from diagnostic attachment uploads.
 ## Review, tag and publish
 
 Approve the bot PR once. Automation performs the protected standard merge,
-verifies its actual parents/tree, creates the immutable version tag, attempts
-safe develop synchronization and fills an unpublished GitHub Release draft.
+verifies its actual parents/tree, creates the immutable version tag, projects
+the approved release tree onto unchanged develop with a single-parent commit,
+and fills an unpublished GitHub Release draft. Main history is linked before
+PR review; early approval is observed after assembly. Concurrent develop work
+is preserved and reported separately.
 
 Wait for **DRAFT_READY**, then review notes and all original attachments and
 manually choose **Publish release**. A green assembly is not publication approval.

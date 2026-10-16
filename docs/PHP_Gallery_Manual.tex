@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.133}
+\newcommand{\version}{0.133.1}
 \newcommand{\manualdate}{16 October 2026}
 
 \hypersetup{
@@ -2673,6 +2673,15 @@ two-second waits. Each retry revalidates the~active run, BASIC/FULL evidence,
 original check IDs and~branch leases. Other failures stop; FULL is~not~replayed.
 
 \subsection{Release assembly from qualified develop}
+
+Before PR review, assembly links the~frozen main history while preserving
+the~prepared tree. After approval and~tagging, a~single-parent synchronization
+commit copies that exact tree above unchanged develop. Its~status represents
+the~verified assembly; functional FULL is~not~repeated. Parallel develop work
+is~preserved. The~permanent receipt records the~result, tree and~base.
+The~next release trusts protected develop without historical reconciliation
+archives. Only the~post-assembly observer handles approval, including approval
+submitted early; successful origin Git push needs no~immediate REST readback.
 
 A~commit admitted to~protected develop is~qualified. Create the~separately
 authorized \codeword{release/v_X.Y[.Z]} branch from that source.

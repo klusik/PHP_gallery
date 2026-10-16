@@ -22,7 +22,8 @@ assembly because an incomplete package cannot be delivered.
 - P is actual observed main when O is initialized. The preceding stable tag may
   be on an earlier protected first-parent merge after CI-only maintenance.
 - M is the reviewed standard merge with parents [P,Q] and tree(Q).
-- The new immutable version tag points to M. Develop may FF to Q, never to M.
+- The new immutable version tag points to M. Develop receives a single-parent
+  synchronization R above unchanged A with exactly tree(Q); it never receives M.
 
 Resolve a stable tag from actual Git history; do not invent a maintenance tag,
 move a published tag or add a release-specific SHA exception. Protect origin
@@ -70,6 +71,9 @@ retained safely and never applied. Existing complete maintainer prose is reused.
 Generation does not invent product behavior or rewrite technical manual content.
 
 Assembly commits only intended release files back to the same leased branch.
+Before review it links frozen P as a parent while retaining the complete prepared
+tree. The PR presents that exact tree against P, including any changes from main
+maintenance, before the owner approves. Main drift stops publication.
 Lifecycle schema 4 records `protected-develop-v1`, A/tree, Q, actual Git origin
 and assembly outcome. There is no synthetic BASIC delta or invented inherited
 test PASS. The required `Release qualification` check represents successful
@@ -86,7 +90,7 @@ After assembly/assets succeed, open/reuse the exact bot PR to main. The owner
 submits one real approval of Q. Stale reviews, changed Q/P or a closed unmerged PR
 stop the operation. The workflow never approves itself.
 
-The automatic observer is dispatched with the prepared release ref and exact
+The automatic observer is dispatched only after assembly with the prepared release ref and exact
 PR/Q/run, avoiding dependence on token-created push/PR events. It waits for the
 assembly run and human review, rechecks live heads and existing server protections,
 then requests the standard protected merge. Observe and verify actual M parents
@@ -99,10 +103,23 @@ immutable state instead of rolling back or rebuilding the candidate.
 
 ## Develop synchronization, draft and attachments
 
-After verified M/tag, a non-force FF to Q is permitted when current develop is
-already Q or a true ancestor. There is no second functional qualification.
-Parallel develop work reports its actual blocker without rewriting history and
-does not invalidate completed tagging or draft preparation.
+After verified M/tag, schema 4 projects tree(Q) onto a single-parent R above the
+unchanged selected develop A. Its required Actions status represents the verified
+release assembly and identical reviewed tree, not a new FULL execution. The
+publisher rechecks status identity and main/release/develop leases before a
+normal protected non-force update. The permanent receipt retains R/tree/A;
+retries recognize already identical protected contents without duplicate writes.
+Parallel develop work reports its actual blocker without overwriting it and
+does not invalidate completed tagging or draft preparation. Historical releases
+retain their original linear-Q FF and reconciliation readers.
+
+New release initialization trusts its protected develop source even when the
+preceding Q is not its Git ancestor. It does not demand an old reconciliation
+attachment or replay historical CI. Stable tag/origin identities remain checked.
+Successful origin Git push is acknowledged by Git itself; a cached immediate
+REST ref response cannot turn it into a failure. Later publishers retain leases.
+Early approval is observed by the post-assembly observer; a second review-event
+job no longer fails merely because assembly is still pending.
 
 The filler inventories all releases/drafts and original uploaded assets before
 writing. It authenticates original archive bytes and each attachment's digest,

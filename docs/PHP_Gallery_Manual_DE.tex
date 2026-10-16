@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.133}
+\newcommand{\version}{0.133.1}
 \newcommand{\manualdate}{16.~Oktober~2026}
 
 \hypersetup{
@@ -2650,6 +2650,15 @@ Lauf, BASIC/FULL-Nachweise, ursprüngliche Check-IDs und~Branch-Stände erneut.
 Andere Fehler stoppen den~Lauf; FULL wird nicht wiederholt.
 
 \subsection{Release-Zusammenstellung aus qualifiziertem develop}
+
+Vor~der~PR-Freigabe verbindet die~Zusammenstellung die~fixierte main-Historie
+bei unverändertem vorbereitetem Baum. Nach Freigabe und~Tag überträgt ein Commit
+mit einem Elternknoten denselben Baum auf unverändertes develop. Sein Status
+bezeichnet die~geprüfte Zusammenstellung; funktionales FULL wird nicht wiederholt.
+Parallele develop-Arbeit bleibt erhalten. Der~dauerhafte Nachweis enthält Ergebnis,
+Baum und~Basis. Die~nächste Version vertraut geschütztem develop ohne historische
+Abgleicharchive. Nur der~nach der~Zusammenstellung gestartete Beobachter verarbeitet
+auch frühe Freigaben; erfolgreicher Origin-Git-Push benötigt keinen sofortigen REST-Readback.
 
 Ein in~geschütztes develop aufgenommener Commit ist~qualifiziert.
 Erstellen Sie~daraus den~separat autorisierten Zweig

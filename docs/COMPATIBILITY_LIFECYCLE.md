@@ -1,5 +1,27 @@
 # Compatibility lifecycle and retirement register
 
+## Linear synchronization of reviewed schema-4 releases
+
+Owners: release assembly, completion, origin and reconciliation readers. Schema 4
+links frozen main before PR review, then copies exactly the approved release tree
+onto a single-parent result above unchanged selected develop. The permanent
+completion receipt adds an optional result/tree/base synchronization record;
+retirement verifies that tree, linear parent, retained ancestry and original
+assembly/owner approval. It does not invent FULL evidence for the copied tree.
+Historical schemas retain their original FF and reconciliation proof readers.
+
+Protected develop is the source authority for new initialization even when a
+prior release Q is not its ancestor; old reconciliation assets and historical
+test archives are not new-release prerequisites. Existing published origins,
+tags and assets stay immutable. This supports published releases whose manual
+conflict resolution added a merge to Q (observed in v_0.133); adoption outside
+that incident is unknown. Keep this general compatibility path while linear
+develop and non-linear main/release histories remain supported. Early approval
+uses the post-assembly observer; normal Git push acknowledges origin publication
+without a redundant cached REST readback. Live protected synchronization awaits
+the next separately human-approved release; registered real-Git regressions own
+tree preservation, concurrency refusal, idempotence and successor initialization.
+
 ## Gallery title-picture selection compatibility
 
 Owner: gallery cover model/service, editor mutations, sidecars, and the existing

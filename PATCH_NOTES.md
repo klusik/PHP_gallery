@@ -1,5 +1,42 @@
 # Patch notes
 
+## Version 0.133.1
+
+Updated release qualification and promotion to preserve reviewed release contents while synchronizing published releases with the linear `develop` history. The release-process changes addressed [#235](https://github.com/klusik/PHP_gallery/issues/235); origin and predecessor records referenced [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### Highlights
+
+#### Release history synchronization
+- Updated promotion to link the frozen `main` history before review without changing the prepared release tree, then synchronize schema-4 release contents onto the selected `develop` history with a single parent.
+- Added synchronization receipts and status provenance tied to verified assembly, with retry handling for identical trees and protection against overwriting concurrent `develop` changes.
+- Updated release initialization to use protected `develop` without requiring the preceding release candidate to be its ancestor or requiring historical reconciliation archives.
+
+### Technical Details
+
+#### Backend
+- Added `.github/scripts/release-linear-sync.mjs` for assembly-bound synchronization of reviewed release trees to `develop`.
+- Updated `.github/scripts/develop-integration.mjs`, `.github/scripts/release-completion.mjs`, `.github/scripts/release-origin.mjs`, `.github/scripts/release-reconciliation.mjs`, and `.github/scripts/start-new-release.mjs` for the revised release and completion flow.
+- Updated release workflows to grant synchronization status permission, observe approval after assembly, and remove the separate `pull_request_review` trigger while retaining closed-PR recovery.
+- Updated origin publication handling to rely on a successful normal Git push rather than an immediate REST readback.
+
+#### Tests
+- Added `tests/release_linear_sync_test.mjs` and updated hosted release policy and lifecycle fixtures to cover tree preservation, linear synchronization, retries, concurrent changes, metadata and ref races, stale REST readback, and successor-release initialization. The supplied evidence described coverage but did not establish that tests ran or passed.
+
+#### Documentation and release records
+- Added immutable origin and predecessor records for `v_0.133.1`.
+- Updated release lifecycle and qualification guidance, audit registration, and the English, Czech, German, and Swedish manual sources to describe the synchronization and approval flow.
+
+### User Impact
+
+#### For visitors
+- Public gallery behavior did not change.
+
+#### For administrators
+- Administrator behavior did not change.
+
+#### For maintainers
+- Release promotion preserved the reviewed tree and recorded synchronization provenance while protecting concurrent `develop` changes. The updated process did not represent synchronization status as a new functional FULL run.
+
 ## Version 0.133
 
 Added persistent, ordered gallery title-picture selection with Automatic composition, and updated develop integration and release preparation to use protected-branch qualification evidence. The release addressed [#211](https://github.com/klusik/PHP_gallery/issues/211), [#235](https://github.com/klusik/PHP_gallery/issues/235), and [#236](https://github.com/klusik/PHP_gallery/pull/236).
