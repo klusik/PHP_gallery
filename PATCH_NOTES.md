@@ -1,5 +1,39 @@
 # Patch notes
 
+## Version 0.133.4
+
+Updated release reconciliation to fast-forward `develop` to the actual reviewed and tagged `main` merge, preserving shared history instead of creating a content-equivalent synchronization commit. Added immutable origin and predecessor records for this release.
+
+### Highlights
+
+#### Release history reconciliation
+- Updated release synchronization to keep `develop` on the reviewed `main` history and verify source ancestry before publication.
+- Blocked readiness checks and schema-4 release PR creation when installed policy requires linear history; the installed policy remains a separate maintainer action.
+- Preserved compatibility with historical `RECONCILED_EQUIVALENT` receipts while new releases emitted `RECONCILED_FF` receipts.
+
+### Technical Details
+
+#### Workflow and tooling
+- Updated `.github/scripts/release-completion.mjs`, `.github/scripts/release-linear-sync.mjs`, `.github/scripts/release-owner-authorization.mjs`, `.github/scripts/release-readiness.mjs`, and `.github/scripts/release-reconciliation.mjs` to enforce reviewed-main ancestry, verify refs around publication, and block unsafe or incompatible updates without force updates.
+- Added `.github/release-origins/v_0.133.4.json` and `.github/release-predecessors/v_0.133.4.json`.
+- Updated the example reconciliation ruleset and release, CI, compatibility, and maintainer contracts to document the history and policy requirements. Installed rules, protected refs, tags, and published assets were not changed.
+
+#### Tests and documentation
+- Extended `tests/release_linear_sync_test.mjs` with coverage for reviewed-main fast-forwarding, source ancestry, policy blockers, historical receipt compatibility, races, readback, and idempotence.
+- Updated all four manual source editions; PDFs were not rebuilt.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing behavior did not change.
+
+#### For administrators
+- Administrator behavior did not change.
+
+#### For maintainers
+- Release synchronization now fast-forwards `develop` to the reviewed `main` merge when policy and ancestry checks pass. Realigning already-diverged refs still requires separate authorization.
+- The changes did not alter application behavior, database schema, or runtime filesystem behavior.
+
 ## Version 0.133.3
 
 Added an optional, manually triggered code readability report for selected branches. The advisory report analyzes committed source without modifying it or affecting required CI qualification.
