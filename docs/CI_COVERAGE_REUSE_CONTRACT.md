@@ -9,6 +9,11 @@ run, BASIC/FULL evidence and both branch leases before retrying. Other, mixed or
 ambiguous failures remain terminal. Existing registered fixtures cover recovery,
 exhaustion, changed evidence/refs and rejected unrelated errors.
 
+Maintenance qualification also exposed a timing assumption in the existing cache
+registry fixture: two scheduler slices can finish a smaller valid observation.
+The fixture now explicitly starts its persisted partial cycle before applying the
+unchanged strict retained-byte assertion; production cache behavior is unchanged.
+
 The separate qualification transport pins the complete repair delta and runs the
 unchanged main-owned release matrix, retaining all native owners before publishing
 maintenance-bound Release qualification. A bot PR still needs one real human

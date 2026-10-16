@@ -141,7 +141,17 @@ namespace {
             'Process restart lost completed findings or confirmed removal receipts.');
         for ($i = 0; $i < 1100; $i++) unlink($root . '/cache/big/part-' . $i . '/original');
         $GLOBALS['cache_lifecycle_test_now'] += 3601;
-        \Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron', 2);
+        // Start a real persisted partial cycle explicitly. Two scheduler slices
+        // may already finish this fixture on a fast runner, legitimately replacing
+        // the old completed measurement with a smaller one before this assertion.
+        $GLOBALS['cache_lifecycle_registry_context'] = \Gallery\Models\cache_registry_model_find($bigKey);
+        try {
+            $partial = \Gallery\Services\cache_lifecycle_inventory_start(true);
+            cache_registry_assert($partial['phase'] === 'inventory' && !empty($partial['stack']),
+                'Retained-observation scenario did not start a partial inventory.');
+        } finally {
+            unset($GLOBALS['cache_lifecycle_registry_context']);
+        }
         cache_registry_assert(\Gallery\Services\cache_lifecycle_status()['bytes'] === $observed, 'New partial work replaced completed bytes with partial zeros.');
         // A reused path with fresh producer proof cannot inherit old deletion permission.
         mkdir($root . '/cache/' . $workspace);
