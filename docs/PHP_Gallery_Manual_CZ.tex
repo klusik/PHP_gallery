@@ -660,6 +660,27 @@ Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu
 Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Poloha simulátoru ve Windows}
+
+\ui{Sync UTC time} u~ovládání sledované složky je ve výchozím stavu vypnuté
+a~ukládá vlastní předvolbu. Při sledování samostatný pracovní proces kontroluje
+MSFS 2020 i~2024 každých 10 sekund. Porovnává celé datum a~čas UTC simulátoru
+s~Windows UTC; pouze absolutní odchylka nad 60 sekund vyvolá nastavení roku,
+pořadového dne v~roce, hodiny a~minuty a~následné nové čtení výsledku.
+Vyžaduje načtený nepozastavený let, rychlost 1x a~pět sekund ustáleného stavu.
+Menu, načítání, pauza a~jiné rychlosti zápisy pozastaví. Zastavení z~okna či traye
+a~úplné ukončení práci UTC zruší; skrytí do traye ji zachová. Volba se pamatuje.
+Tři neověřené opravy s~odstupem 30 sekund pozastaví dané spojení do opětovného
+připojení. Nahrávání a~získávání polohy fotografie zůstávají nezávislé.
+
+Obě generace používají stejné časové události. Jedničkové číslování dne v~roce
+pro setter a~vliv na Live Time/Live Weather vyžadují ověření ve dvou samostatných
+letech každého dostupného simulátoru a~sestavení; simulované testy výsledek
+neprokazují. Viz \filepath{winapp/README.md}. Hostované instalátory výslovně
+používají x64 CPython 3.14.x. Před zabalením se kontroluje sestavovací interpret
+i~skutečná patch verze, implementace a~šířka ukazatele uvnitř EXE pomocí výpisu
+před spuštěním GUI. Nesprávný či chybějící výpis přípravu odmítne. Nezávislá
+verze aplikace se nemění.
+
 WinApp 0.3.2 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
 
 Zabalený aktualizátor načítá rozhraní Windows výslovně ze System32, aby soubor VERSION nekolidoval s~knihovnou Windows pro verze. Při přechodu z~0.3.1 ručně spusťte ověřený instalátor 0.3.2. Běžící starší aplikace kopíruje vlastní pomocný proces před instalací, takže starý pomocník může i~po výměně aplikace ohlásit původní chybu DLL. Další aktualizace spuštěné z~opravené aplikace 0.3.2 používají opraveného pomocníka; ověřte předání na nainstalovaných Windows.
@@ -2418,6 +2439,12 @@ Unicode/tabulátorů a~cílené příklady popisuje
 je~\codeword{readability}. Povinná kvalifikace zůstává stejná.
 
 Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou dokumentaci ve~stejné úpravě. Před značkami uveďte věcný účel, popište každý explicitní parametr včetně výchozích a~přidaných parametrů, skutečné návratové varianty a~konkrétní prvky kolekcí či~pole objektů. Nativní typy PHP/Python jsou samostatný požadavek. Anonymní callbacky dokumentační řetězec nepotřebují; pojmenované deklarace uvnitř ano. Běhové zásady samostatně vyžadují účel, typ, jednotky, rozsah, konzumenty a~zdůvodnění přímo před daným místem. Příklady v~\filepath{docs/AGENT_AUTHORING.md} ověřuje registrovaný test existujícími analyzátory; negativní fixtury zachovávají selhání neúplných kontraktů.
+
+Python zdroje jednotně používají typované sekce Google stylu \texttt{Args:}
+a~\texttt{Returns:}. Každá položka uvádí název parametru, jeho typ a~skutečný
+význam; procedury dokumentují \texttt{None}. Nativní anotace jsou samostatným
+požadavkem. Parser zachovává podporu starých tagových vstupů kvůli kompatibilitě,
+ale autorské Python docstringy používají jednotný formát.
 
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 

@@ -664,6 +664,27 @@ After activation, open the~shared photographs from the~collaboration panel or~th
 Withdrawal, changed source protection and~local friendship revocation block subsequent authorized reads. An~unreachable peer remains bounded by~the~maximum 120-second verification lease; downloaded pixels cannot be~recalled. Adding a~participant creates a~separate proposal requiring fresh approval from everyone. Ordinary use can~advance technical renewal on~demand; unattended renewal is~optional. Missing or~unknown required schema refuses sharing and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational limits and~deployment qualification.
 
 \subsection{Windows simulator location}
+
+\ui{Sync UTC time}, beside the~Watch folder actions, is~off by~default and~saves
+its~own preference. While watching, a~separate worker checks MSFS 2020 or~2024
+every 10 seconds. It~compares full simulator UTC date/time with Windows UTC;
+only an~absolute difference above 60 seconds requests year, ordinal day, hour
+and~minute correction, followed by~fresh readback. The~worker waits for~a~loaded,
+unpaused flight at~1x rate and~five seconds of~settled state. Menus, loading,
+pause and~other rates suspend writes. Window/tray stop and~complete exit cancel
+UTC work; hiding to~tray preserves it. The~selection survives stopping.
+Three failed corrections with 30-second backoff suspend that connection until
+reconnection. Uploads and~photo-location acquisition remain independent.
+
+Both generations use the~same time events. The~one-based ordinal day setter
+and~any effect on~Live Time/Live Weather still require live verification
+in~two separately loaded flights per~available simulator/build; native mocks
+do~not~establish those results. See \filepath{winapp/README.md}.
+Hosted installers explicitly use x64 CPython 3.14.x. Before packaging,
+the~builder verifies its~interpreter and~the~actual frozen EXE's patch version,
+implementation and~pointer width through a~pre-GUI report; a~wrong or~missing
+report fails preparation. The~independent application version is~unchanged.
+
 WinApp 0.3.2 automatically uses the~MSFS 2024 camera world position and~falls back to~the~aircraft position on~bounded camera failure. MSFS 2020 uses the~aircraft position directly through the~same SimConnect runtime. Coordinates are~optional: simulator unavailability does~not~prevent upload. Position-source diagnostics distinguish camera and~aircraft results. The~installer requests application shutdown before replacing files; complete pending work before updating. Live simulator and~upgrade acceptance must be~checked on~the~target PC.
 
 The~frozen updater loads Windows APIs explicitly from System32, avoiding a~collision between the~bundled VERSION text file and~the~Windows version DLL. When upgrading from 0.3.1, manually launch the~verified 0.3.2 installer. The~running older app copies its own helper before installation, so~that old helper may~still report its DLL error after replacing the~app. Future updates started from the~corrected 0.3.2 app use the~repaired helper; verify the~installed handoff on~Windows.
@@ -2440,6 +2461,12 @@ optional audit profile is~\codeword{readability}. Required qualification
 remains unchanged.
 
 The~canonical \filepath{AGENTS.md} requires each named declaration and~its~complete documentation in~the~same edit. Start with a~factual purpose before tags, document every explicit parameter (including defaults and~added parameters), actual return variants and~concrete collection/object shapes. PHP/Python native types remain independent. Anonymous callbacks need no~declaration docstring; named declarations inside them still do. Runtime policy sites independently need purpose, type, units, scope, consumers and~rationale immediately before the~site. Checked examples in~\filepath{docs/AGENT_AUTHORING.md} are~parsed by~the~existing scanners in~a~registered regression, with negative fixtures preserving failures for~incomplete contracts.
+
+Python sources consistently use typed Google-style \texttt{Args:} and
+\texttt{Returns:} sections. Each parameter entry names the~argument, its~type
+and~its~actual meaning; procedures document \texttt{None}. Native annotations
+remain independent. Legacy tag inputs stay supported by~the~scanner
+for~compatibility, while authored Python docstrings use one consistent format.
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 

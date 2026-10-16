@@ -1,11 +1,11 @@
 {
     "version": "0.133.5",
-    "generated_at": "2026-10-16T22:01:35+00:00",
+    "generated_at": "2026-10-16T23:19:23+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:527a0839805e09e9559d4e69d89987ac2f3c8651016f8324c137d98c5f7c8b29",
-        "ARCHITECTURE.md": "sha256:feda08b868475112391c3f2a97c9998f9b78d9f6f22968e847b91ae801d57d85",
+        "ARCHITECTURE.md": "sha256:d28074052e5899a34122c676572a82c7296d2a482edf8ae0f8a6abec303caa84",
         "PATCH_NOTES.md": "sha256:ca81763f7a7f91b0b45ee6c01c2140c11591b0ca6fa1225ef174c9458e412ea5",
         "README.md": "sha256:88a0b2443060b7acc0f2ba3f209722d7e72987450386217ec77de880857930c2",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
@@ -238,7 +238,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:d4e99107c40dd625fc7407c13e366f0efbf58e0b96ebe28feba5cae040b8c882",
-        "app/production-files.json": "sha256:bd991409deddcaff68e71f447e7ef7e813e014209c62e857936b11b98a54a1dc",
+        "app/production-files.json": "sha256:ff20c34eee6359189bbae67d4fdc52031f955cf8febd0e54dfd6c72fba3e0a47",
         "app/release_file_policy.php": "sha256:d05c0e8aa62e6e7a2e02df56fbcc9833ebc7a877ee7777c1d7b0fa137aa9ea1f",
         "app/request_data.php": "sha256:2adbeafcdca483d5e2aeba4f8b8463a2940ff214e8f04c77ac1ced687f078de7",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",

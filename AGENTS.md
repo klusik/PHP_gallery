@@ -91,8 +91,9 @@ Each new/changed named function/method needs purpose before tags, typed/describe
 parameters (defaulted, nullable, variadic and added too), and every return variant
 including void/None/failure. Document concrete collection elements/object fields,
 not bare array/Object/mixed/any/wildcards. Keep the opaque-unused-PHP exception
-narrow. PHPDoc/JSDoc immediately precedes declarations; Python docstrings come
-first inside. Native PHP/Python types are independent; PHP constructors/destructors
+narrow. PHPDoc/JSDoc immediately precedes declarations. Python docstrings come
+first inside, using typed Google-style `Args:`/`Returns:` consistently.
+Native PHP/Python types are independent; PHP constructors/destructors
 document returns without a native return type.
 
 All class-like declarations, anonymous included, need purpose docs. Anonymous

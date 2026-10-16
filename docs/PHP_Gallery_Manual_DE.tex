@@ -664,6 +664,30 @@ Nach Aktivierung öffnen Sie gemeinsame Fotos im Panel oder über den Link des l
 Rücknahme, geänderter Quellschutz und lokale Freundschaftswiderrufe sperren nachfolgende autorisierte Zugriffe. Unerreichbare Teilnehmer bleiben durch höchstens 120 Sekunden Prüfungsdauer begrenzt; bereits heruntergeladene Pixel lassen sich nicht zurückrufen. Neue Teilnehmer benötigen einen separaten Vorschlag mit neuer Zustimmung aller. Technische Erneuerung kann bei Nutzung erfolgen; ein Zeitplan ist optional. Fehlendes oder unbekanntes erforderliches Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Simulatorposition unter Windows}
+
+\ui{Sync UTC time} bei den Überwachungsaktionen ist standardmäßig aus und
+speichert eine eigene Einstellung. Während der Ordnerüberwachung prüft ein
+separater Worker MSFS 2020 und 2024 alle 10 Sekunden. Er vergleicht das gesamte
+UTC-Datum samt Uhrzeit mit Windows UTC. Nur eine absolute Abweichung über
+60 Sekunden setzt Jahr, Jahrestag, Stunde und Minute und verlangt danach eine
+frische Rücklesung. Voraussetzung sind ein geladener, nicht pausierter Flug,
+1x-Geschwindigkeit und fünf Sekunden stabiler Zustand. Menüs, Laden, Pause und
+andere Geschwindigkeiten sperren Schreibzugriffe. Stoppen im Fenster/Tray und
+vollständiges Beenden brechen UTC-Arbeit ab; Ausblenden ins Tray erhält sie.
+Die Auswahl bleibt gespeichert. Drei fehlgeschlagene Korrekturen mit jeweils
+30 Sekunden Wartezeit sperren diese Verbindung bis zur Wiederverbindung.
+Uploads und Positionsabfragen für Fotos bleiben unabhängig.
+
+Beide Generationen verwenden dieselben Zeitereignisse. Der bei eins beginnende
+Jahrestag für den Setter und Auswirkungen auf Live Time/Live Weather müssen in
+zwei getrennten Flügen je verfügbarem Simulator/Build geprüft werden; Mocks
+beweisen dies nicht. Siehe \filepath{winapp/README.md}. Gehostete Installer
+verwenden ausdrücklich x64 CPython 3.14.x. Vor dem Verpacken werden der
+Build-Interpreter sowie tatsächliche Patchversion, Implementierung und
+Zeigerbreite im EXE durch einen Bericht vor GUI-Start geprüft. Ein falscher
+oder fehlender Bericht blockiert die Vorbereitung. Die eigenständige
+Anwendungsversion bleibt unverändert.
+
 WinApp 0.3.2 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
 
 Der gebündelte Aktualisierer lädt Windows-APIs ausdrücklich aus System32 und vermeidet damit eine Kollision der VERSION-Textdatei mit der Windows-Versionsbibliothek. Starten Sie beim Upgrade von 0.3.1 den geprüften Installer 0.3.2 manuell. Die laufende ältere Anwendung kopiert ihren eigenen Hilfsprozess vor der Installation; dieser alte Helfer kann den bisherigen DLL-Fehler auch nach dem Ersetzen der Anwendung melden. Künftige Updates aus der korrigierten Anwendung 0.3.2 verwenden den reparierten Helfer; prüfen Sie die installierte Übergabe unter Windows.
@@ -2431,6 +2455,13 @@ in~\filepath{docs/CODE_READABILITY.md}; das~optionale zentrale Auditprofil
 heißt \codeword{readability}. Erforderliche Qualifikation bleibt unverändert.
 
 Die~kanonische Datei \filepath{AGENTS.md} verlangt benannte Deklarationen und~ihre vollständige Dokumentation in~derselben Änderung. Vor den~Tags steht ein sachlicher Zweck; beschreiben Sie jeden expliziten Parameter einschließlich Standardwerten und~neuen Parametern, tatsächliche Rückgabevarianten sowie konkrete Sammlungselemente und~Objektfelder. Native PHP/Python-Typen bleiben eigenständig. Anonyme Callbacks benötigen keinen Deklarations-Docstring; benannte Deklarationen darin schon. Laufzeitrichtlinien benötigen unmittelbar am~betroffenen Ort zusätzlich Zweck, Typ, Einheiten, Geltungsbereich, Verbraucher und~Begründung. Die~Beispiele in~\filepath{docs/AGENT_AUTHORING.md} werden durch bestehende Scanner in~einem registrierten Regressionstest geprüft; negative Fixtures erhalten Fehler für unvollständige Verträge.
+
+Python-Quellen verwenden einheitlich typisierte Google-Abschnitte
+\texttt{Args:} und \texttt{Returns:}. Jeder Parametereintrag nennt Argument,
+Typ und tatsächliche Bedeutung; Prozeduren dokumentieren \texttt{None}.
+Native Annotationen bleiben eigenständig erforderlich. Der Parser unterstützt
+ältere Tag-Eingaben weiterhin zur Kompatibilität; verfasste Python-Docstrings
+verwenden das einheitliche Format.
 
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.
 

@@ -289,7 +289,11 @@ class UpdateController:
         return result
 
     def install(self) -> None:
-        """Close admission synchronously, then let existing operations finish safely."""
+        """Close admission, including UTC writes, before draining active work.
+
+        Returns:
+            None: Starts guarded drain or opens a source-mode installer.
+        """
         if self.busy or self.installer is None or self.asset is None or self.gate.active:
             return
         from uploader.update_helper import installed_identity
@@ -302,7 +306,9 @@ class UpdateController:
         self.gate.begin(time.monotonic())
         self.action.configure(state="disabled")
         self.set_status("Preparing installation: stopping new work and waiting for active operations...")
-        for attr in ("preflight_worker", "worker", "manual_worker", "ai_worker"):
+        for attr in (
+            "utc_sync", "preflight_worker", "worker", "manual_worker", "ai_worker"
+        ):
             worker = getattr(self.app, attr, None)
             if worker is not None and worker.is_alive():
                 worker.stop()

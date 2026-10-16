@@ -218,7 +218,9 @@ def selected_count(count: int, *, include_pending: bool = False) -> int:
     return count + int(include_pending)
 ```
 
-Tag-style Python docstrings are also supported. Named nested functions and async
+Use typed Google-style `Args:` and `Returns:` consistently in repository Python
+sources. The scanner retains tag-style support for compatibility; keep legacy
+input fixtures and parser behavior intact. Named nested functions and async
 methods follow the same rule; ordinary bound receivers are excluded from explicit
 parameter entries, while static methods document their explicit parameters.
 Bash/PowerShell named functions use meaningful immediately preceding native

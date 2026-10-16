@@ -28,6 +28,9 @@ import types
 import unittest
 from unittest import mock
 
+WINAPP_DIR = Path(__file__).resolve().parents[1]
+if str(WINAPP_DIR) not in sys.path:
+    sys.path.insert(0, str(WINAPP_DIR))
 
 SPEC = importlib.util.spec_from_file_location(
     "winapp_build_installer", Path(__file__).resolve().parents[1] / "build_installer.py"
@@ -84,12 +87,24 @@ class InstallerBuildTests(unittest.TestCase):
             (older / "PHPGalleryUploader-0.0.9-Setup.exe").write_bytes(b"older installer")
             calls = []
 
-            def fake_run(command: list[str], **kwargs: object) -> None:
+            def fake_run(
+                command: list[str],
+                **kwargs: Path | dict[str, str] | bool | int,
+            ) -> None:
                 """Emulate build artifacts and validate each subprocess contract.
 
                 No build tools run and no packages are installed. Create only
                 the EXE/installer files the orchestrator expects in its staging
                 tree, or raise the explicitly requested step failure.
+
+                Args:
+                    command (list[str]): Ordered executable and arguments.
+                    kwargs (Path | dict[str, str] | bool | int): cwd Path,
+                        env dict[str, str], check bool and optional timeout
+                        int; passed to subprocess.run.
+
+                Returns:
+                    None: Creates only simulated staged build output.
                 """
                 calls.append(command)
                 work = Path(kwargs["cwd"])
@@ -113,6 +128,12 @@ class InstallerBuildTests(unittest.TestCase):
                 if BUILD.SIMCONNECT_ARCHIVE_PATH in command:
                     self.assertIn("CArchiveReader", command[2])
                     self.assertEqual(hashlib.sha256((source / "SimConnect.dll").read_bytes()).hexdigest(), command[-1])
+                if "--runtime-info" in command:
+                    Path(command[-1]).write_text(json.dumps({
+                        "python_version": "3.14.4",
+                        "implementation": "CPython",
+                        "pointer_bits": 64,
+                    }), encoding="utf-8")
                 if "--self-update-smoke" in command:
                     self.assertEqual(work / "helper-smoke" / "helper.exe", Path(command[0]))
                     self.assertEqual(b"standalone app", Path(command[0]).read_bytes())
@@ -147,8 +168,15 @@ class InstallerBuildTests(unittest.TestCase):
                     raise OSError("simulated publication failure")
                 replace(staged, target)
 
-            with mock.patch.object(BUILD.subprocess, "run", side_effect=fake_run), \
-                    mock.patch.object(BUILD.os, "replace", side_effect=fake_replace):
+            with (
+                mock.patch.object(BUILD.subprocess, "run", side_effect=fake_run),
+                mock.patch.object(BUILD.os, "replace", side_effect=fake_replace),
+                mock.patch.object(BUILD, "runtime_info", return_value={
+                    "python_version": "3.14.4",
+                    "implementation": "CPython",
+                    "pointer_bits": 64,
+                }),
+            ):
                 if fail_at:
                     with self.assertRaises(subprocess.CalledProcessError):
                         BUILD.build_installer("ISCC.exe", source, use_installed_dependencies)
@@ -222,14 +250,23 @@ class InstallerBuildTests(unittest.TestCase):
                 self.exercise_build(fail_publication_at=step, previous_artifacts=False)
 
     def test_each_tool_failure_cleans_staging_and_preserves_previous_installer(self) -> None:
-        """Failure at any build step must retain the previous published artifact."""
-        for step in range(1, 9):
+        """Failure at any build step must retain the previous published artifact.
+
+        Returns:
+            None: Checks all nine ordered stages, including frozen attestation.
+        """
+        # Nine structural build stages; include Inno as the final failure case.
+        for step in range(1, 10):
             with self.subTest(step=step):
                 self.exercise_build(fail_at=step)
 
     def test_frozen_helper_smoke_failure_prevents_inno_packaging(self) -> None:
-        """A failed real-helper check must preserve the previous installer."""
-        calls = self.exercise_build(fail_at=7)
+        """A failed real-helper check must preserve the previous installer.
+
+        Returns:
+            None: Checks the eighth stage after frozen-runtime attestation.
+        """
+        calls = self.exercise_build(fail_at=8)
         self.assertEqual("--self-update-smoke", calls[-1][1])
         self.assertFalse(any(call[0] == "ISCC.exe" for call in calls))
 

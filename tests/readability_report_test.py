@@ -38,14 +38,16 @@ class ReadabilityReportTests(unittest.TestCase):
     def setUp(self) -> None:
         """Read the selected branch's actual advisory configuration.
 
-        @return None Retain fresh rules for each independent case.
+        Returns:
+            None: Retain fresh rules for each independent case.
         """
         self.rules = json.loads((ROOT / "scripts/readability_rules.json").read_text())
 
     def test_width_tiers_and_display_columns(self) -> None:
         """Distinguish measured boundaries, tabs and Unicode display width.
 
-        @return None Assert informational/prominent tiers without hard errors.
+        Returns:
+            None: Assert informational/prominent tiers without hard errors.
         """
         # Four-column tab + A (one) + wide ideograph (two) + e/mark (one).
         self.assertEqual(reporter.display_width("\tA界e\u0301", 4), 8)
@@ -65,7 +67,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_real_tokenizers_ignore_literals_and_keep_nested_calls(self) -> None:
         """Keep URLs, heredocs, regexes and comments inert in PHP/JS/MJS.
 
-        @return None Assert useful width advice only on actual code structure.
+        Returns:
+            None: Assert useful width advice only on actual code structure.
         """
         wide = "call(" + ", ".join(["argument_name"] * 8) + ");"
         sources = {
@@ -90,7 +93,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_python_spacing_decorators_and_strings(self) -> None:
         """Respect Python top-level/class spacing and attached decorators.
 
-        @return None Assert missing spacing without flagging a correct sibling.
+        Returns:
+            None: Assert missing spacing without flagging a correct sibling.
         """
         source = ('def first():\n    return "' + "x" * 140
                   + '"\n\n@decorator\ndef second():\n    pass\n')
@@ -111,7 +115,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_php_js_spacing_preserves_doc_attachment(self) -> None:
         """Compare real named sibling boundaries before their attached docs.
 
-        @return None Assert advice disappears after a semantic-free blank line.
+        Returns:
+            None: Assert advice disappears after a semantic-free blank line.
         """
         for language in ("php", "js", "mjs"):
             source = ("<?php\n" if language == "php" else "")
@@ -126,7 +131,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_css_context_and_documented_exceptions(self) -> None:
         """Keep data URLs inert and require narrow, explained exceptions.
 
-        @return None Assert useful selector advice and visible stale exceptions.
+        Returns:
+            None: Assert useful selector advice and visible stale exceptions.
         """
         source = ", ".join([".long-selector-name"] * 6) + " { color: red; }"
         findings, _ = reporter.analyze("sample.css", "css", source,
@@ -143,7 +149,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_discovery_exclusions_and_immutable_blobs(self) -> None:
         """Read committed files, excluding generated/vendor/minified/link paths.
 
-        @return None Prove modified/untracked bytes cannot enter source analysis.
+        Returns:
+            None: Prove modified/untracked bytes cannot enter source analysis.
         """
         directories = reporter.token_adapter(ROOT, {})["excluded_directories"]
         for path, mode in (("vendor/lib.js", "100644"),
@@ -169,7 +176,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_tex_prose_and_literal_exceptions(self) -> None:
         """Recommend TeX prose wrapping while retaining opaque document syntax.
 
-        @return None Assert prose advice and silence for commands/math/literals.
+        Returns:
+            None: Assert prose advice and silence for commands/math/literals.
         """
         prose = "Readable source paragraphs preserve the same rendered meaning. " * 3
         findings, _ = reporter.analyze(
@@ -198,7 +206,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_tex_escaped_controls_and_nested_groups(self) -> None:
         """Keep escaped percent/dollar controls from masking following prose.
 
-        @return None Assert wrapping remains available outside opaque arguments.
+        Returns:
+            None: Assert wrapping remains available outside opaque arguments.
         """
         source = (r"Coverage \% and cost \$ are prose, "
                   + "which remains readable with careful source wrapping. " * 3)
@@ -212,7 +221,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_markdown_prose_and_structural_exceptions(self) -> None:
         """Recommend Markdown prose wrapping without touching structural rows.
 
-        @return None Assert literal/link/table/headings and code stay exempt.
+        Returns:
+            None: Assert literal/link/table/headings and code stay exempt.
         """
         prose = "Readable Markdown paragraphs preserve their intended meaning. " * 3
         findings, _ = reporter.analyze(
@@ -241,7 +251,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_markdown_nested_fences_and_front_matter(self) -> None:
         """Require a matching fence and keep document metadata opaque.
 
-        @return None Assert only the real prose after fenced examples is flagged.
+        Returns:
+            None: Assert only the real prose after fenced examples is flagged.
         """
         prose = "This is intentionally wide prose for a readable source report. " * 3
         source = "\n".join([
@@ -258,7 +269,9 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_workflow_uses_selected_source_and_no_required_profiles(self) -> None:
         """Retain branch-only dispatch, immutable checkout and read-only authority.
 
-        @return None Assert no default-branch evaluator or style gate is installed.
+        Returns:
+            None: Assert no default-branch evaluator or style gate is
+                installed.
         """
         source = (ROOT / ".github/workflows/readability-report.yml").read_text()
         self.assertIn("  workflow_dispatch:\n", source)
@@ -276,7 +289,9 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_complete_report_success_escaping_and_no_rewrites(self) -> None:
         """Produce a full report from a real isolated committed source tree.
 
-        @return None Prove findings exit zero, HTML is escaped and blobs stay intact.
+        Returns:
+            None: Prove findings exit zero, HTML is escaped and blobs stay
+                intact.
         """
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -336,7 +351,8 @@ class ReadabilityReportTests(unittest.TestCase):
     def test_actual_repository_before_after_sample(self) -> None:
         """Calibrate width advice against the existing request identity line.
 
-        @return None Assert a real wide call is found and focused wrapping helps.
+        Returns:
+            None: Assert a real wide call is found and focused wrapping helps.
         """
         path = "public/assets/gallery-modules/admin-cache-cleanup.js"
         guide = (ROOT / "docs/CODE_READABILITY.md").read_text(encoding="utf-8")

@@ -55,10 +55,15 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (winapp 0.3.2)
+## Windows installer (next version: 0.4.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
+Gallery CMS release. The current source targets the upcoming **0.4.0** version;
+this version bump does not build or publish an installer. The next explicitly
+requested build will use a separate `winapp/dist/0.4.0/` folder, preserving the
+existing 0.3.2 installer and its update metadata.
+
+The installer includes Python, Tkinter, Pillow, pystray,
 the tray icons, and an embedded `SimConnect.dll` inside one application EXE.
 There is no separate DLL to install or distribute. End users do not
 need Python. Installation requests administrator rights and defaults to
@@ -76,7 +81,7 @@ another directory are untouched. These checks also apply to silent installation.
 File locks remain a secondary safeguard; the final launch checkbox controls
 relaunch for a directly launched installer.
 
-To build on Windows, install x64 Python 3.10+ with Tkinter and Inno Setup 6.3+
+To build on Windows, install x64 CPython 3.14.x with Tkinter and Inno Setup 6.3+
 (including Inno Setup 7), then run from the repository root:
 
 ```bat
@@ -89,6 +94,13 @@ validates the x64 SimConnect DLL and required exports, uses PyInstaller
 checks the EXE startup with `--help`
 using a disposable app-data directory, then calls the installed `ISCC.exe`.
 Internet access to the configured Python package index is needed for each build.
+Both hosted installer workflows select the latest available 3.14 patch for x64.
+The builder prints and validates its interpreter, then runs the frozen EXE's
+early `--runtime-info` diagnostic before packaging. Its fresh staging report
+identifies the actual embedded patch version, implementation and pointer width,
+before configuration/logging/GUI initialization. Missing or non-3.14/x64 CPython
+reports fail the build; the runner version alone is insufficient. This does not
+change the independent WinApp version.
 When the required dependencies are already installed, build without downloads or
 package installation using the existing Python and Inno Setup:
 
@@ -102,8 +114,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.3.2/PHPGalleryUploader-0.3.2-Setup.exe
-winapp/dist/0.3.2/winapp-update.json
+winapp/dist/0.4.0/PHPGalleryUploader-0.4.0-Setup.exe
+winapp/dist/0.4.0/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -115,8 +127,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.3.2-Setup.exe",
-      "version": "0.3.2",
+      "name": "PHPGalleryUploader-0.4.0-Setup.exe",
+      "version": "0.4.0",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
@@ -143,7 +155,7 @@ The compiler is discovered on PATH and in standard Inno Setup installation
 folders. Custom tool locations can be selected explicitly:
 
 ```bat
-set "PHP_GALLERY_PYTHON=C:\Program Files\Python313\python.exe"
+set "PHP_GALLERY_PYTHON=C:\Program Files\Python314\python.exe"
 winapp\build.bat --iscc "C:\Program Files\Inno Setup 7\ISCC.exe"
 ```
 
@@ -390,6 +402,47 @@ The Watch folder tab shows how many existing supported files will be ignored at 
 ### Optional source deletion
 
 **Delete source only after the gallery confirms a successful upload** is destructive and disabled unless selected by the user. It removes only a source that PHP Gallery has confirmed as stored. Duplicates, skipped files, and failed files are kept.
+
+## Sync UTC time while watching
+
+**Sync UTC time**, beside the Watch folder actions, is off by default. Selecting
+it saves only that preference, preserving unsaved connection/settings fields.
+When watching is active it starts a separate SimConnect worker for **both MSFS
+2020 and MSFS 2024**. Toggling it takes effect immediately; stopping the watcher
+from the window or tray stops UTC work but remembers the selection. Closing to
+the tray keeps watching/synchronization active. Use the tray's exit action for a
+complete shutdown. Installer drain cancels and waits for UTC work.
+
+The worker checks every **10 seconds**, comparing `ABSOLUTE TIME` (seconds since
+0001-01-01 UTC) with Windows UTC, including the date. Differences of **60 seconds
+or less** cause no write. Larger differences request UTC year, ordinal day of
+year (1..366), hour and minute through the four `ZULU_*_SET` events, then require
+fresh absolute-time readback within 60 seconds. The day setter uses the ordinal
+day, not the day of month or the zero-based day SimVar.
+
+Correction requires loaded-flight evidence, running/unpaused state, a flight
+camera view, normal **1x** simulation rate and **5 seconds** of settled state.
+Menus, loading, pause/active pause, replay and non-1x simulation do not admit
+writes. Queued flight transitions invalidate prior samples. Each worker owns its
+native handle; screenshot location acquisition, imports, uploads and AI remain
+independent. A missing simulator waits/reconnects without upload errors. Activity
+and the adjacent status show changes/corrections without a log for every no-op.
+
+Ignored/rejected corrections back off **30 seconds** and suspend after **three**
+failed attempts for that connection. A confirmed missing native capability also
+suspends that connection. The checkbox stays configurable and the saved
+preference survives; reconnection probes capability again for either generation.
+
+The common events and state notifications are documented by the
+[2020 SDK](https://docs.flightsimulator.com/html/Programming_Tools/Event_IDs/Miscellaneous_Events.htm)
+and [2024 SDK](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/Key_Events/Miscellaneous_Events.htm).
+Those event tables do not specify the ordinal's indexing. The implementation
+uses the one-based setter convention, calendar vectors and mandatory readback.
+**Live acceptance remains unverified for both simulators**, including exact
+day-setter behavior and any effect on the Weather panel's Live Time/Live Weather
+selection. No weather-mode event is sent; that alone does not establish observed
+UI behavior. Record simulator build, before/after UTC and mode selections in two
+separately loaded flights per available generation. Mocks cannot prove this.
 
 ## SimConnect metadata
 

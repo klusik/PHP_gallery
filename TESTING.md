@@ -562,6 +562,26 @@ Build tests verify the x64 runtime, required exports, embedded DLL
 hash and the installer entry that distributes only the application EXE with its
 embedded runtime. These tests run through the central WinApp regression suite.
 
+`winapp/tests/test_simconnect_time.py` extends the native fake layer for both
+OPEN identities, UTC epoch/calendar conversion, the 60/61-second boundary,
+ordinal date setters, fresh readback, bounded ignored/rejected setters, queued
+flight changes, pause/active pause, menus and non-1x states, malformed/foreign
+packets, cancellation and saved watcher/tray admission. The manager retains
+draining workers for application/update shutdown. `test_runtime_check.py` and
+build fixtures cover x64 CPython 3.14.patch attestation, early frozen reporting
+and refusal before installer publication. Central discovery owns these fixtures;
+YAML adds no test registry.
+
+Portable SimConnect UTC fixtures emulate Windows only inside the transport
+module. Host profile/path lookup and the real diagnostic redactor remain active
+through disconnect/reconnect coverage on Linux and Windows runners.
+
+Live MSFS 2020 and MSFS 2024 remain separate acceptance: record exact build,
+before/after UTC in two distinct flights, pause/rate transitions, checkbox/tray
+stop, reconnect and observed Live Time/Live Weather selections. Confirm the
+one-based ZULU_DAY_SET convention per available runtime, particularly leap day
+and year rollover. Native mocks do not establish live/installed acceptance.
+
 The installer contract also covers forced shutdown before file replacement,
 exact installation-path matching, verified exit, and refusal on unknown state.
 Compile the real script with the existing Inno Setup compiler. Manual upgrade

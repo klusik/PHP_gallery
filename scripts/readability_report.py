@@ -207,10 +207,13 @@ class Finding:
 def command(root: Path, arguments: list[str], data: bytes | None = None) -> bytes:
     """Run a bounded tool and retain its failure as an operational error.
 
-    @param Path root Repository or fixture working directory.
-    @param list[str] arguments Executable and literal argument vector.
-    @param bytes|None data Optional complete standard input bytes.
-    @return bytes Standard output; raise RuntimeError on tool failure.
+    Args:
+        root (Path): Repository or fixture working directory.
+        arguments (list[str]): Executable and literal argument vector.
+        data (bytes | None): Optional complete standard input bytes.
+
+    Returns:
+        bytes: Standard output; raise RuntimeError on tool failure.
     """
     result = subprocess.run(
         arguments, cwd=root, input=data, capture_output=True,
@@ -225,9 +228,12 @@ def command(root: Path, arguments: list[str], data: bytes | None = None) -> byte
 def display_width(text: str, tab_size: int) -> int:
     """Measure deterministic Unicode terminal columns, excluding line endings.
 
-    @param str text One source line without its newline.
-    @param int tab_size Tab stop interval in display columns.
-    @return int Width; combining/format marks zero, wide/fullwidth two.
+    Args:
+        text (str): One source line without its newline.
+        tab_size (int): Tab stop interval in display columns.
+
+    Returns:
+        int: Width; combining/format marks zero, wide/fullwidth two.
     """
     width = 0
     for character in text:
@@ -243,9 +249,12 @@ def display_width(text: str, tab_size: int) -> int:
 def token_adapter(root: Path, sources: dict[str, SourceRow]) -> AdapterResult:
     """Obtain existing PHP/JS token boundaries and shared directory exclusions.
 
-    @param Path root Checkout containing this branch's token adapter.
-    @param dict[str,SourceRow] sources Paths to source/language input fields.
-    @return AdapterResult Decoded token structures and directory exclusions.
+    Args:
+        root (Path): Checkout containing this branch's token adapter.
+        sources (dict[str, SourceRow]): Paths to source/language input fields.
+
+    Returns:
+        AdapterResult: Decoded token structures and directory exclusions.
     """
     payload = json.dumps(sources).encode()
     result = json.loads(command(root, [
@@ -266,11 +275,14 @@ def exclusion(
 ) -> str:
     """Explain why a tracked path is outside authored-source reporting.
 
-    @param str path Git-relative path with forward slashes.
-    @param str mode Git tree mode, including symlink and submodule modes.
-    @param Rules rules Readability configuration with exclusion glob reasons.
-    @param list[str] directories Canonical private/generated directory names.
-    @return str Exclusion reason, or empty string for eligible source.
+    Args:
+        path (str): Git-relative path with forward slashes.
+        mode (str): Git tree mode, including symlink and submodule modes.
+        rules (Rules): Readability configuration with exclusion glob reasons.
+        directories (list[str]): Canonical private/generated directory names.
+
+    Returns:
+        str: Exclusion reason, or empty string for eligible source.
     """
     # Git's regular-file modes: non-executable 100644 and executable 100755.
     if mode != "100644" and mode != "100755":
@@ -290,11 +302,15 @@ def snapshot(
 ) -> tuple[dict[str, SourceRow], dict[str, str]]:
     """Read eligible immutable Git blobs in one batch, never installation files.
 
-    @param Path root Git repository checkout.
-    @param str sha Immutable commit being analyzed.
-    @param Rules rules Language extensions and documented exclusions.
-    @param list[str] directories Canonical excluded directory basenames.
-    @return tuple[dict[str,SourceRow],dict[str,str]] Source rows and exclusions.
+    Args:
+        root (Path): Git repository checkout.
+        sha (str): Immutable commit being analyzed.
+        rules (Rules): Language extensions and documented exclusions.
+        directories (list[str]): Canonical excluded directory basenames.
+
+    Returns:
+        tuple[dict[str, SourceRow], dict[str, str]]: Source rows and
+            exclusions.
     """
     extensions = {
         extension: language
@@ -335,8 +351,11 @@ def snapshot(
 def python_structure(source: str) -> Structure:
     """Use native AST and tokens for Python literals and sibling declarations.
 
-    @param str source Complete Python module; never imported or executed.
-    @return Structure Code skeletons, literal fragments and sibling spans.
+    Args:
+        source (str): Complete Python module; never imported or executed.
+
+    Returns:
+        Structure: Code skeletons, literal fragments and sibling spans.
     """
     lines = source.splitlines()
     code = [""] * len(lines)
@@ -379,8 +398,11 @@ def python_structure(source: str) -> Structure:
 def css_structure(source: str) -> Structure:
     """Mask CSS comments, quoted values and URLs while preserving line numbers.
 
-    @param str source Authored stylesheet text.
-    @return Structure Conservative CSS skeleton; no declaration spacing inference.
+    Args:
+        source (str): Authored stylesheet text.
+
+    Returns:
+        Structure: Conservative CSS skeleton; no declaration spacing inference.
     """
     pattern = re.compile(
         r'/\*.*?\*/|url\((?:[^)\\]|\\.)*\)|"(?:[^"\\]|\\.)*"'
@@ -409,12 +431,16 @@ def analyze(
 ) -> tuple[list[Finding], dict[str, int]]:
     """Produce deduplicated width/spacing advice without judging literal contents.
 
-    @param str path Immutable Git-relative source path.
-    @param str language Configured language identifier.
-    @param str source Complete source text.
-    @param Structure structure Code lines, literals and declaration spans.
-    @param Rules rules Advisory language thresholds and tab stops.
-    @return tuple[list[Finding],dict[str,int]] Findings and noise-suppression counts.
+    Args:
+        path (str): Immutable Git-relative source path.
+        language (str): Configured language identifier.
+        source (str): Complete source text.
+        structure (Structure): Code lines, literals and declaration spans.
+        rules (Rules): Advisory language thresholds and tab stops.
+
+    Returns:
+        tuple[list[Finding], dict[str, int]]: Findings and noise-suppression
+            counts.
     """
     settings = rules["languages"][language]
     preferred = settings["preferred"]
@@ -509,10 +535,14 @@ def apply_exceptions(
 ) -> tuple[list[Finding], list[SuppressedFinding], list[StaleException]]:
     """Apply exact path/rule/context exceptions with a mandatory factual reason.
 
-    @param list[Finding] findings Complete unsuppressed advisory suggestions.
-    @param list[ExceptionRule] exceptions Exact path/rule/context/reason records.
-    @return tuple[list[Finding],list[SuppressedFinding],list[StaleException]]
-        Retained suggestions, explained suppressions and stale exceptions.
+    Args:
+        findings (list[Finding]): Complete unsuppressed advisory suggestions.
+        exceptions (list[ExceptionRule]): Exact path/rule/context/reason
+            records.
+
+    Returns:
+        tuple[list[Finding], list[SuppressedFinding], list[StaleException]]:  R
+            etained suggestions, explained suppressions and stale exceptions.
     """
     remaining, suppressed, stale = list(findings), [], []
     for exception in exceptions:
@@ -534,8 +564,11 @@ def apply_exceptions(
 def validate_rules(rules: Rules) -> None:
     """Reject corrupt configuration without inventing a successful report.
 
-    @param Rules rules Selected branch's decoded JSON configuration.
-    @return None Raise ValueError for unsupported schema or invalid thresholds.
+    Args:
+        rules (Rules): Selected branch's decoded JSON configuration.
+
+    Returns:
+        None: Raise ValueError for unsupported schema or invalid thresholds.
     """
     # Schema 1 is the current JSON wire format, independent of policy bounds.
     if (rules["schema_version"] != 1 or not (
@@ -550,9 +583,13 @@ def validate_rules(rules: Rules) -> None:
 def write_reports(output: Path, report: Report) -> None:
     """Publish escaped, complete human reports plus machine and diagnostic data.
 
-    @param Path output Dedicated audit report directory.
-    @param Report report Identity, inventory, suggestions, exceptions and coverage.
-    @return None Write HTML, Markdown, JSON, summary and JSONL diagnostics.
+    Args:
+        output (Path): Dedicated audit report directory.
+        report (Report): Identity, inventory, suggestions, exceptions and
+            coverage.
+
+    Returns:
+        None: Write HTML, Markdown, JSON, summary and JSONL diagnostics.
     """
     output.mkdir(parents=True, exist_ok=True)
     identity = report["identity"]
@@ -685,7 +722,9 @@ a { color: #075985; }
 def main() -> int:
     """Bind the selected commit, scan immutable blobs and publish advice.
 
-    @return int Zero regardless of findings; operational/configuration errors raise.
+    Returns:
+        int: Zero regardless of findings; operational/configuration errors
+            raise.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)

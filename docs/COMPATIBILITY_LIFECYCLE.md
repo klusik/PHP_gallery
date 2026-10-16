@@ -1,5 +1,27 @@
 # Compatibility lifecycle and retirement register
 
+## Watch-folder UTC synchronization and packaged Python
+
+Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.
+The saved `sync_utc_time` field is additive and defaults off for existing
+configurations. Both identified MSFS 2020/2024 connections use the common clock
+API, separate from per-photo camera/aircraft connections. Missing or incompatible
+simulators preserve the preference and uploads. Three failed corrections suspend
+only that connection; reconnection probes capability again. This is permanent
+optional-host support, not a reason to remove either simulator generation.
+
+The regression report concerns an MSFS 2024 new-flight UTC mismatch. Adoption
+and live behavior of this watchdog are unknown. Native-wire tests cover both
+identities, state transitions, date/readback and cancellation. Exact live
+day-setter indexing and Live Time/Live Weather effects remain unverified for
+both generations; retain the common route until live evidence justifies a
+specific adapter. Never substitute accepted HRESULTs for clock readback.
+
+Installer preparation selects x64 CPython 3.14.patch and verifies the actual
+frozen interpreter before packaging. Ordinary source execution retains its
+existing compatibility; no app version bump accompanies the interpreter check.
+Installed release/upgrade acceptance remains separate from build mocks/BASIC.
+
 ## Reviewed main ancestry and historical synchronization receipts
 
 Owners: release assembly, completion, policy, origin and reconciliation readers.

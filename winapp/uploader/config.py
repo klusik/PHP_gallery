@@ -65,7 +65,14 @@ def migrate_config_payload(data: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     ``WatcherConfig`` parser remains the compatibility authority.  New values
     are bounded here and a schema marker is added for future migrations.
 
-    @return: Tuple of normalized payload and whether an on-disk rewrite is useful.
+    Args:
+        data (Dict[str, Any]): Decoded JSON configuration with legacy
+            connection, watcher and AI keys; preserved values include strings,
+            booleans, numbers and string lists.
+
+    Returns:
+        Tuple[Dict[str, Any], bool]: Tuple of normalized payload and whether an
+            on-disk rewrite is useful.
     """
     original = dict(data) if isinstance(data, dict) else {}
     result = dict(original)

@@ -10,6 +10,19 @@ and native types with every new/changed named function, method or class; describ
 all parameters, concrete structures and return variants. Preserve comments and
 complete native headers. Extend the existing owner instead of duplicating policy.
 
+Write Python parameters as Google-style `Args:` entries, for example
+`enabled (bool): Whether this watcher admits UTC synchronization.` Write the
+result under `Returns:`, including `None` for a procedure. Use the checked
+Python example in [authoring](../docs/AGENT_AUTHORING.md#python-native-annotations-and-typed-google-style-docstring)
+when completing a declaration; parameter names, types and descriptions must
+match its native signature, including optional and variadic arguments.
+Describe callbacks with their `Callable` signatures, host objects with concrete
+Pillow/Tk/ctypes types, and JSON inputs with their actual elements/fields.
+
+Scope simulated Windows platform attributes to the tested transport module's
+namespace so host pathlib/profile lookup and diagnostic redaction retain the
+runner's actual platform during portable native fixtures.
+
 PHP Gallery remains authoritative for server authentication, validation, storage
 and access policy; preserve the companion's documented compatibility entrypoints.
 Keep permanent Markdown and affected sections in all four TeX sources synchronized.
