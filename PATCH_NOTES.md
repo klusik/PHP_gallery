@@ -1,5 +1,40 @@
 # Patch notes
 
+## Version 0.133.3
+
+Added an optional, manually triggered code readability report for selected branches. The advisory report analyzes committed source without modifying it or affecting required CI qualification.
+
+### Highlights
+
+#### Advisory code readability reports
+- Added recommendations for display width and declaration spacing across PHP, JavaScript, MJS, Python, CSS, TeX, and Markdown.
+- Kept findings advisory and source files unchanged; documented scanner coverage gaps, limitations, exclusions, and stale exceptions.
+
+### Technical Details
+
+#### Workflow and tooling
+- Added `.github/workflows/readability-report.yml` to analyze the selected branch’s exact commit using tracked Git blobs with read-only permissions.
+- Added `scripts/readability_report.py`, `scripts/readability_documents.py`, `scripts/readability_tokens.php`, and `scripts/readability_rules.json` for scanning and report generation.
+- Retained HTML, Markdown, JSON, summaries, and per-file diagnostics as a 30-day workflow artifact.
+- Added the `readability` audit profile for report-contract checks and advisory scanning. Scanner findings did not fail CI qualification.
+- Added immutable origin and predecessor records for `v_0.133.3`, referencing [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+#### Tests and documentation
+- Added `tests/readability_report_test.php` and `tests/readability_report_test.py` for scanner, reporting, workflow, and document-parsing regressions.
+- Updated authoring and testing guidance and all four PHP Gallery manual source editions with readability-report instructions.
+- Recorded no application behavior, database schema, or runtime filesystem changes.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing behavior did not change.
+
+#### For administrators
+- Administrator behavior did not change.
+
+#### For maintainers
+- Maintainers could manually generate advisory readability reports for selected branches, with retained diagnostics and documented coverage limitations.
+
 ## Version 0.133.2
 
 Added independent slideshow speed controls for photo display and transitions, and updated the lightbox to hide its HUD after inactivity.
