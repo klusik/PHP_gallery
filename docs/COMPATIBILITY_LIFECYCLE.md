@@ -1,5 +1,28 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery title-picture selection compatibility
+
+Owner: gallery cover model/service, editor mutations, sidecars, and the existing
+public mutation completion coordinator. `galleries.cover_image_id` remains the
+legacy primary reference; nullable `cover_image_ids` adds opt-in Automatic and
+ordered multi-photo modes without changing older rows. The protected behavior
+is the established single-cover and child-collage output for installations that
+have not applied the additive migration or whose row remains `NULL`. Multi-photo
+writes fail closed when schema readiness is missing or unknown. Public cards
+recheck current image visibility and gallery access; they never trust Admin
+selection alone. The writer lease serializes edits, and the public refresh
+fingerprint includes ordered selection and uploaded-cover path.
+
+The historical issue/commit records an Admin bulk-route HTTP 500 caused by
+missing selectively loaded cover-service declarations; generated runtime plans
+must continue to be produced from authored dependencies and qualified by the
+hosted workflow. Historical feature adoption is unknown. Keep the legacy path
+and access checks indefinitely for existing galleries; retire the compatibility
+branch only after explicit installed-schema and deployed-data evidence proves
+no supported installation requires it. Regression owners are listed in
+`docs/TITLE_PICTURE_SELECTION.md` and `TESTING.md`; browser and hosted
+qualification remain separate evidence.
+
 ## Reviewed untagged dispatcher maintenance merge before 0.132.9
 
 Owner: `release-origin.mjs`, `start-new-release.mjs` and the shared release

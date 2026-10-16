@@ -2185,6 +2185,28 @@ See [panel lifecycle](docs/ADMIN_PANEL_LIFECYCLE.md) and the bounded
 [gallery picker](docs/GALLERY_PICKER.md). The responsive and progressive public
 thumbnail pipelines remain supported.
 
+### Gallery title-picture selection
+
+The Images editor's star mutations use the existing authenticated bulk-image
+route and the gallery editor service/model ownership chain. A writer lease
+serializes validated direct-image selection updates; `cover_image_id` remains
+the first selected ID for existing consumers, while nullable ordered
+`cover_image_ids` distinguishes legacy behavior, Automatic (`[]`), and a manual
+multi-selection. Automatic mode selects up to two eligible direct photos and
+fills remaining slots from accessible descendants through the existing
+`gallery_cover_collage_images()` and thumbnail pipeline. Public resolution
+rechecks image visibility and gallery access without Admin bypass.
+
+The star response reports authoritative selected IDs and mode. The browser
+updates star controls in the current panel and uses the canonical mutation
+coordinator to refresh affected public fragments against a fingerprint of the
+primary ID, ordered selection, and uploaded-cover path. It preserves the open
+editor state while that public refresh runs. On failed or ambiguous responses,
+read the current editor state before retrying because persistence and response
+construction are separate failure points. The selection migration is an
+explicit write prerequisite; unknown schema readiness fails closed. See
+[the title-picture contract](docs/TITLE_PICTURE_SELECTION.md).
+
 ## Public Download Capabilities
 
 `app/services/download_capabilities.php` implements stateless public download capabilities. Tokens use a versioned `v1.<base64url-json>.<base64url-hmac>` envelope signed with HMAC-SHA-256 and carry only resource type, resource ID, scope, issue/expiry times, and a random nonce. The default lifetime is six hours, long enough for deliberate multi-gigabyte browser downloads without creating permanent bearer authority, and token length is bounded before payload decoding. Validation uses `hash_equals()` and rejects tampering, expiry, future-issued tokens outside the configured clock-skew allowance, wrong gallery IDs, wrong resource types, and wrong scopes without creating database state.

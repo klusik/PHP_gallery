@@ -242,8 +242,128 @@ try {
         && hash_file('sha256', $folder . '/' . $renamedImage['relative_path']) === $hash,
         'Validated rename lost original identity or contents.');
     echo "PASS gallery edit fresh rename plan executes without losing selection or original contents\n";
+
+    $stage = 'real HTTP three-state cover cycle and authoritative reconciliation';
+    $coverIds = [];
+    $statement = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, mime_type, checksum_sha256, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())');
+    foreach (range(1, 5) as $number) {
+        $filename = 'cover-' . $number . '.jpg';
+        check(copy($folder . '/' . $renamedImage['relative_path'], $folder . '/' . $filename), 'Could not prepare an isolated cover original.');
+        $statement->execute([$id, $filename, hash('sha256', $filename), $filename, 'image/jpeg', $hash, 'public']);
+        $coverIds[] = (int) $pdo->lastInsertId();
+    }
+    $bulkRoute = '/index.php?page=admin_bulk_images';
+    $stateRoute = $bulkRoute . '&id=' . $id . '&cover_state=1&ajax=1';
+    $stateResponse = $adminA->request($stateRoute, null, true);
+    $state = envelope($stateResponse, 'Read authoritative cover state');
+    check(str_contains($stateResponse['headers']['cache-control'] ?? '', 'no-store') && $state['panel'] === null,
+        'Cover reconciliation must be private, passive and must not replace the drawer.');
+    $csrf = $adminA->token($route);
+    $cycle = [
+        ['cover', $coverIds[1], 'single', [$coverIds[1]]],
+        ['cover', $coverIds[2], 'single', [$coverIds[2]]],
+        ['cover_arm', $coverIds[2], 'multi', [$coverIds[2]]],
+        ['cover_add', $coverIds[1], 'multi', [$coverIds[2], $coverIds[1]]],
+        ['cover_reset', $coverIds[1], 'single', [$coverIds[1]]],
+        ['cover_arm', $coverIds[1], 'multi', [$coverIds[1]]],
+        ['cover_add', $coverIds[2], 'multi', [$coverIds[1], $coverIds[2]]],
+        ['cover_reset', $coverIds[2], 'single', [$coverIds[2]]],
+    ];
+    foreach ($cycle as [$intent, $photoId, $mode, $expectedIds]) {
+        $previousRevision = $state['cover_selection_revision'];
+        $state = envelope($adminA->request($bulkRoute, [
+            'gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+            'action' => $intent . ':' . $photoId, 'cover_selection_revision' => $previousRevision,
+        ], true), 'Persist explicit row-star intent without checked bulk boxes');
+        check($state['panel'] === null && $state['mutation']['type'] === 'gallery.cover'
+            && $state['cover_selection_mode'] === $mode && $state['cover_selection_ids'] === $expectedIds
+            && $state['cover_selection_revision'] !== $previousRevision,
+            'The real HTTP star cycle lost its ordered state, revision or stable drawer contract.');
+        $reopened = envelope($adminB->request($stateRoute, null, true), 'Independent-session cover reload');
+        check($reopened['cover_selection_ids'] === $expectedIds && $reopened['cover_selection_mode'] === $mode
+            && $reopened['cover_selection_revision'] === $state['cover_selection_revision'],
+            'Cover selection did not survive an independent session read.');
+    }
+    $savedCover = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $staleCover = $adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+        'action' => 'cover:' . $coverIds[0], 'cover_selection_revision' => $previousRevision], true);
+    check($staleCover['status'] === 409 && !empty($staleCover['json']['reference'])
+        && !empty($staleCover['json']['reconciliation_required'])
+        && row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]) === $savedCover,
+        'A stale cover request must return a correlated 409 without modifying the row.');
+    $badCsrf = $adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => 'invalid', 'panel' => 1,
+        'action' => 'cover:' . $coverIds[0]], true);
+    check($badCsrf['status'] === 400, 'An invalid CSRF token was not rejected by the established JSON CSRF contract.');
+    check(row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]) === $savedCover,
+        'An invalid CSRF token changed the persisted cover row.');
+    $anonymous = new Http($origin);
+    $denied = $anonymous->request($stateRoute, null, true);
+    check($denied['status'] >= 400 && !isset($denied['json']['cover_selection_ids']),
+        'Passive cover reconciliation exposed selection state to an anonymous visitor.');
+
+    $state = envelope($adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+        'action' => 'cover', 'image_ids' => array_slice($coverIds, 0, 4),
+        'cover_selection_revision' => $state['cover_selection_revision']], true), 'Four-photo bulk cover');
+    check($state['cover_selection_mode'] === 'multi' && $state['cover_selection_ids'] === array_slice($coverIds, 0, 4),
+        'Bulk title-picture selection lost its four-photo ordered set.');
+    $savedCover = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $foreignCover = row($pdo, 'SELECT id FROM images WHERE gallery_id = ? ORDER BY id LIMIT 1', [$seed['root_id']]);
+    foreach ([['cover', $coverIds], ['cover_add:' . $coverIds[4], []], ['cover', [$coverIds[0], $coverIds[0]]],
+        ['cover:' . (int) $foreignCover['id'], []]] as [$intent, $selection]) {
+        $invalid = $adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+            'action' => $intent, 'image_ids' => $selection,
+            'cover_selection_revision' => $state['cover_selection_revision']], true);
+        check($invalid['status'] === 422 && !empty($invalid['json']['reference'])
+            && row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]) === $savedCover,
+            'Invalid/fifth/duplicate/foreign cover selection was not an atomic correlated 422 refusal.');
+    }
+    $automatic = galleryEditFixtureFields($adminA->request($route));
+    $automatic['cover_image_id'] = 'automatic';
+    envelope($adminA->request($route, $automatic, true), 'Explicit automatic cover setting');
+    $automaticState = envelope($adminA->request($stateRoute, null, true), 'Automatic cover reload');
+    check($automaticState['cover_selection_mode'] === 'automatic' && $automaticState['cover_selection_ids'] === [],
+        'Switching to Automatic did not clear the manual selection.');
+    echo "PASS real HTTP cover cycle, four-photo bulk, reload, concurrency, CSRF, authorization and automatic reset\n";
+
+    $stage = 'real HTTP deletion and move reconcile selected cover identities atomically';
+    $state = envelope($adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+        'action' => 'cover', 'image_ids' => array_slice($coverIds, 0, 3),
+        'cover_selection_revision' => $automaticState['cover_selection_revision']], true), 'Select covers before deletion');
+    envelope($adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+        'action' => 'delete:' . $coverIds[0]], true), 'Delete first selected cover');
+    $afterDelete = row($pdo, 'SELECT cover_image_id, cover_image_ids FROM galleries WHERE id = ?', [$id]);
+    check((int) $afterDelete['cover_image_id'] === $coverIds[1]
+        && json_decode($afterDelete['cover_image_ids'], true) === array_slice($coverIds, 1, 2),
+        'Deleting a selected cover did not retain the ordered surviving selection and primary.');
+    $targetRelative = $relative . '-destination';
+    $statement = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW(), NOW())');
+    $statement->execute([$seed['root_id'], $targetRelative, hash('sha256', $targetRelative), basename($targetRelative), 'Cover move destination', '', 'unpublished']);
+    $targetId = (int) $pdo->lastInsertId();
+    check(mkdir($directory . '/galleries/' . $targetRelative), 'Could not create an isolated cover move destination.');
+    envelope($adminA->request($bulkRoute, ['gallery_id' => $id, 'csrf_token' => $csrf, 'panel' => 1,
+        'action' => 'move_existing', 'destination_gallery_id' => $targetId, 'image_ids' => array_slice($coverIds, 1, 2)], true),
+        'Move remaining selected covers');
+    $afterMove = row($pdo, 'SELECT cover_image_id, cover_image_ids FROM galleries WHERE id = ?', [$id]);
+    check($afterMove['cover_image_id'] === null && $afterMove['cover_image_ids'] === '[]',
+        'Moving the last selected covers did not atomically switch the source to Automatic.');
+    foreach (array_slice($coverIds, 1, 2) as $movedId) {
+        check((int) row($pdo, 'SELECT gallery_id FROM images WHERE id = ?', [$movedId])['gallery_id'] === $targetId,
+            'The cover move did not preserve image ownership.');
+    }
+    echo "PASS real HTTP selected cover delete/move pruning and automatic fallback\n";
 } catch (Throwable $exception) {
-    // Print locations only: SQL, HTTP bodies and fixture credentials remain private.
-    fwrite(STDERR, 'FAIL gallery edit ' . $stage . ' at ' . basename($exception->getFile()) . ':' . $exception->getLine() . "\n");
+    // Assertion messages and their call sites are test-authored; arbitrary
+    // application/transport exceptions may contain private fixture details.
+    $location = basename($exception->getFile()) . ':' . $exception->getLine();
+    $diagnostic = '';
+    if ($exception instanceof RuntimeException
+        && basename($exception->getFile()) === 'gallery_workflow_safety.php') {
+        $assertion = $exception->getTrace()[0] ?? [];
+        if (isset($assertion['file'], $assertion['line'])) {
+            $location = basename((string) $assertion['file']) . ':' . (int) $assertion['line'];
+        }
+        $diagnostic = ': ' . $exception->getMessage();
+    }
+    fwrite(STDERR, 'FAIL gallery edit ' . $stage . ' at ' . $location . $diagnostic . "\n");
     exit(1);
 }

@@ -1720,6 +1720,16 @@ body.has-admin-side-panel {
 .admin-image-row-actions .public-admin-card-action-button:hover { background: #e2e8f0; color: #0f172a; }
 .admin-image-row-actions .public-admin-delete-button { color: #b42318; }
 .admin-image-row-actions .admin-image-cover-button.is-cover { color: #926000; background: #fff4c2; border-color: #ead28a; }
+/* Blue identifies accumulated cover photos; gold remains the exclusive choice. */
+.admin-image-row-actions .admin-image-cover-button.is-cover-multi {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-color: #60a5fa;
+}
+.admin-image-row-actions .admin-image-cover-button.is-cover-multi:focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
 .admin-image-row-actions .public-admin-visibility-menu { position: relative; }
 .admin-image-row-actions .public-admin-visibility-menu[open],
 .admin-image-row-actions .public-admin-visibility-menu:hover { z-index: 20; }

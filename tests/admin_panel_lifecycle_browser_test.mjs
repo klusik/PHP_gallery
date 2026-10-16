@@ -325,3 +325,9 @@ try {
         await rm(profile, {recursive: true, force: true, maxRetries: 3});
     }
 }
+
+// Extend this existing central browser owner after its original assertions and
+// cleanup. Alias fixtures retain their own coverage without repeating this case.
+if (fixtureName === 'admin_panel_lifecycle.html') {
+    await import('./support/admin_gallery_cover_stars_browser.mjs');
+}

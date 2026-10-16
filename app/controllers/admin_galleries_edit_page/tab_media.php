@@ -41,19 +41,26 @@ use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_background_source_schema_ready;
 use function Gallery\Services\gallery_cover_asset_schema_ready;
+use function Gallery\Services\gallery_cover_selection_ids;
+use function Gallery\Services\gallery_cover_selection_mode;
+use function Gallery\Services\gallery_cover_selection_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_media_fields;
 
 /**
  * Render the Media tab panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
+ * @param array{id:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,folder_path?:string,title?:string,description?:string,background_source?:string|null} $gallery Gallery identity, cover mode, optional uploaded cover and media settings being edited.
  * @param string $activeEditTab Currently selected editor tab.
  * @return void Emit the gallery Media tab from prepared presentation state.
  */
 function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditTab): void
 {
-    $coverOptionsHtml = gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true);
+    $coverMode = gallery_cover_selection_mode($gallery);
+    $coverMultiCount = $coverMode === 'multi' ? count(gallery_cover_selection_ids($gallery)) : 0;
+    $coverOptionsHtml = gallery_cover_options(
+        (int) $gallery['id'], $coverMode === 'multi' || $coverMode === 'automatic' ? 0 : (int) ($gallery['cover_image_id'] ?? 0), true
+    );
 
     ob_start();
     render_admin_gallery_branding_fields($gallery);
@@ -66,6 +73,10 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
     ob_start();
     view_render_admin_gallery_media_fields([
         'cover_options_html' => $coverOptionsHtml,
+        'cover_multi_count' => $coverMultiCount,
+        'cover_automatic_selected' => $coverMode === 'automatic',
+        'cover_legacy_selected' => $coverMode === 'legacy',
+        'cover_automatic_available' => gallery_cover_selection_schema_ready(),
         'branding_fields_html' => $brandingFieldsHtml,
         'cover_asset_schema_ready' => gallery_cover_asset_schema_ready(),
         'background_source_schema_ready' => $backgroundSourceSchemaReady,
@@ -74,7 +85,10 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
             'media_title' => t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'),
             'media_help' => t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'),
             'title_picture' => t('admin.gallery_editor.title_picture', t('admin.gallery_editor.title_picture_current', 'Title picture')),
-            'automatic' => t('admin.gallery_editor.automatic', 'Automatic'),
+            'automatic' => t('admin.gallery_editor.automatic_two_photos', 'Automatic (2 photos)'),
+            'cover_legacy' => t('admin.gallery_editor.cover_legacy', 'Default (original gallery behavior)'),
+            'cover_multi_selected' => t('admin.gallery_editor.cover_multi_selected', '{count} selected photos', ['count' => $coverMultiCount]),
+            'cover_auto_help' => t('admin.gallery_editor.cover_auto_help', 'Automatic selects up to two pictures from this gallery or its subgalleries. Manual stars override this choice.'),
             'includes_subgallery_images' => t('admin.gallery_editor.includes_subgallery_images', 'Includes images from subgalleries.'),
             'upload_gallery_thumbnail' => t('admin.gallery_editor.upload_gallery_thumbnail', 'Upload gallery thumbnail'),
             'gallery_thumbnail_upload_help' => t('admin.gallery_editor.gallery_thumbnail_upload_help', 'This is stored separately from gallery images.'),

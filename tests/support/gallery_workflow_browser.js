@@ -432,9 +432,9 @@ async () => {
         inPlace();
         const imageId = Number(doc.querySelector('[data-admin-image-order-row][data-image-id]').dataset.imageId);
         expect(imageId > 0);
-        /** Submit one row-owned action and require its replacement control to remain usable in the open drawer.
+        /** Submit one row-owned action and require its normal in-place or fragment completion in the open drawer.
          * @param {string} action Direct row action value without its stable image ID.
-         * @return {Promise<HTMLFormElement>} Dynamically replaced Images form after the canonical completion.
+         * @return {Promise<HTMLFormElement>} Existing Images form for cover updates, or the refreshed form for other row actions.
          */
         async function submitImageRowAction(action) {
             // Fragment insertion precedes scoped translations and delegated form preparation.
@@ -445,7 +445,26 @@ async () => {
             });
             const oldButton = oldForm?.querySelector('[data-admin-image-row-action][name="action"][value="' + action + ':' + imageId + '"]');
             expect(oldButton && oldForm.querySelectorAll('input[name="image_ids[]"]:checked').length === 0);
+            const responseCount = imageMutationResponses.length;
             oldButton.click();
+            if (action === 'cover') {
+                const response = await until(() => {
+                    const payload = imageMutationResponses.length > responseCount ? imageMutationResponses.at(-1) : null;
+                    return payload && oldForm.isConnected
+                        && oldForm.dataset.coverSelectionRevision === String(payload.cover_selection_revision || '') ? payload : null;
+                });
+                inPlace();
+                const expectedEntityId = galleryId;
+                expect(doc.querySelector('[data-admin-image-bulk-form]') === oldForm);
+                expect(response?.ok === true
+                    && Object.keys(response).slice(0, 6).join(',') === 'ok,message,mutation,panel,contexts,fallback'
+                    && response.mutation?.entity_ids?.length === 1
+                    && Number(response.mutation.entity_ids[0]) === expectedEntityId
+                    && response.panel === null
+                    && Array.isArray(response.contexts) && response.fallback?.redirect_url
+                    && String(oldForm.dataset.coverSelectionRevision) === String(response.cover_selection_revision));
+                return oldForm;
+            }
             // Require the replacement to have completed the same panel-owned initialization.
             const replacement = await until(() => {
                 const current = doc.querySelector('[data-admin-image-bulk-form]');
@@ -453,7 +472,7 @@ async () => {
             });
             inPlace();
             const payload = imageMutationResponses.at(-1);
-            const expectedEntityId = action === 'cover' ? galleryId : imageId;
+            const expectedEntityId = imageId;
             expect(payload?.ok === true
                 && Object.keys(payload).slice(0, 6).join(',') === 'ok,message,mutation,panel,contexts,fallback'
                 && payload.mutation?.entity_ids?.length === 1

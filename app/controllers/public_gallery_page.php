@@ -90,6 +90,7 @@ use function Gallery\Services\gallery_breadcrumb_ancestors;
 use function Gallery\Services\gallery_cover_asset_url;
 use function Gallery\Services\gallery_cover_collage_images;
 use function Gallery\Services\gallery_cover_image;
+use function Gallery\Services\gallery_cover_selection_revision;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
 use function Gallery\Services\gallery_count_badge_needs_total;
@@ -480,6 +481,7 @@ function cms_gallery(): void
         'visibility' => gallery_effective_visibility($gallery),
         'updated_at' => (string) ($gallery['updated_at'] ?? ''),
         'cover_image_id' => max(0, (int) ($gallery['cover_image_id'] ?? 0)),
+        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
         'image_count' => $imageTotalCount,
         'image_revision' => $imageStateRevision,
         'subgallery_count' => count($allChildren),

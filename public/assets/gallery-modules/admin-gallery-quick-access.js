@@ -10,7 +10,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20261015-admin-import-contract-v1';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 import {setGalleryRowHiddenReason} from './admin-core.js?v=20260512-modular-admin-v1';
 
 const installedRoots = new WeakSet();

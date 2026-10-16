@@ -41,6 +41,10 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\normalize_gallery_visibility;
+use function Gallery\Services\gallery_cover_selection_ids;
+use function Gallery\Services\gallery_cover_selection_mode;
+use function Gallery\Services\gallery_cover_selection_revision;
+use function Gallery\Services\gallery_cover_selection_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Services\thumbnail_editor_preload_url;
@@ -51,7 +55,7 @@ use function Gallery\Views\view_render_admin_gallery_image_rows;
 /**
  * Render the Images tab panel.
  *
- * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, cover choice and thumbnail URL policy inputs.
+ * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, three-state cover choice, revision and thumbnail URL policy inputs.
  * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param bool $rowsOnly Whether only canonical table rows are requested.
@@ -95,10 +99,17 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
     }
     $bulkToolbarHtml = (string) ob_get_clean();
 
+    $coverMode = gallery_cover_selection_mode($gallery);
+    $coverMultiSupported = gallery_cover_selection_schema_ready();
+    $coverSelectionIds = $coverMode === 'multi' ? gallery_cover_selection_ids($gallery) : [];
     $imageRows = [];
     foreach ($images as $image) {
         $imageId = (int) $image['id'];
         $relativePath = (string) $image['relative_path'];
+        $coverState = $coverMode === 'multi' && in_array($imageId, $coverSelectionIds, true)
+            ? 'multi'
+            : ($coverMode !== 'multi' && $coverMode !== 'automatic'
+                && (int) ($gallery['cover_image_id'] ?? 0) === $imageId ? 'single' : 'off');
         $imageRows[] = [
             'id' => $imageId,
             'relative_path' => $relativePath,
@@ -107,7 +118,10 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'preview_url' => $deferred ? thumbnail_editor_preview_url($image, $gallery) : thumbnail_url($image, 900),
             'capture_date' => (string) ($image['exif_taken_at'] ?? ''),
             'move_aria' => t('admin.image_order.move_aria', 'Move {file}', ['file' => $relativePath]),
-            'cover_label' => (int) ($gallery['cover_image_id'] ?? 0) === $imageId
+            'cover_state' => $coverState,
+            'cover_mode' => $coverMode,
+            'cover_multi_supported' => $coverMultiSupported,
+            'cover_label' => $coverState !== 'off'
                 ? t('admin.gallery_editor.title_picture_current', 'Title picture')
                 : '',
             'edit_url' => url_for('admin_edit_image', ['id' => $imageId]),
@@ -133,6 +147,9 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'actions' => $actions,
         ],
         'images' => $imageRows,
+        'cover_selection_mode' => $coverMode,
+        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
+        'cover_multi_supported' => $coverMultiSupported,
         'labels' => [
             'drag_help' => t('admin.gallery_editor.drag_photos_help', 'Drag to reorder, or sort by filename or EXIF capture date. Photos without a capture date stay last. Each change is saved immediately.'),
             'order_unchanged' => t('admin.gallery_editor.order_unchanged', 'Order unchanged.'),
@@ -157,6 +174,11 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             'capture_date' => t('admin.gallery_editor.images_capture_date', 'Date taken'),
             'sort_capture_date' => t('admin.image_order.sort_capture_date_asc_aria', 'Sort photos by capture date from oldest to newest'),
             'set_cover' => t('admin.gallery_editor.set_as_title_picture', 'Set as title picture'),
+            'cover_arm' => t('admin.gallery_editor.cover_arm', 'Also select other photos'),
+            'cover_add' => t('admin.gallery_editor.cover_add', 'Add to title pictures'),
+            'cover_reset' => t('admin.gallery_editor.cover_reset', 'Use only this photo'),
+            'cover_limit' => t('admin.gallery_editor.cover_selection_limit', 'Choose at most four title-picture photos.'),
+            'cover_multi_label' => t('admin.gallery_editor.cover_multi_selected', '{count} selected photos (blue stars)', ['count' => '{count}']),
             'close_preview' => t('admin.gallery_editor.images_close_preview', 'Close preview'),
         ],
     ];

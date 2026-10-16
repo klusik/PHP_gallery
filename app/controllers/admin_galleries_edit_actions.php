@@ -84,6 +84,13 @@ use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_editor_set_cover_image;
+use function Gallery\Services\gallery_editor_set_cover_images;
+use function Gallery\Services\gallery_editor_change_cover_selection;
+use function Gallery\Services\gallery_cover_selection_ids;
+use function Gallery\Services\gallery_cover_selection_mode;
+use function Gallery\Services\gallery_cover_selection_revision;
+use function Gallery\Services\gallery_editor_assert_cover_selection_schema;
+use function Gallery\Services\gallery_ancestors;
 use function Gallery\Services\gallery_editor_unique_slug;
 use function Gallery\Services\gallery_editor_update_fields;
 use function Gallery\Services\gallery_breadcrumb_style_save;
@@ -326,11 +333,11 @@ function admin_return_tab_from_post(string $fallback = ''): string
 /**
  * Build the JSON payload consumed after a gallery is saved in side-panel mode.
  *
- * @param array<string,mixed> $gallery Freshly persisted gallery row, including its exact edit_revision.
+ * @param array{id:int|string,title?:string,description?:string,slug?:string,parent_id?:int|string|null,visibility?:string,updated_at?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} $gallery Freshly persisted gallery identity, public cover state and exact edit revision.
  * @param string $notice Translated save outcome displayed by the originating panel.
  * @param string $returnTab Validated editor tab retained by the refresh URL.
- * @param array{original_gallery?:array<string,mixed>,old_parent_id?:int,original_gallery_url?:string} $saveResult Pre-save identity used to invalidate the old route and parent context.
- * @return array<string,mixed> Canonical mutation envelope plus public identity fields and decimal edit_revision; no credential columns are serialized.
+ * @param array{original_gallery?:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string,slug?:string,visibility?:string,updated_at?:string},old_parent_id?:int,original_gallery_url?:string} $saveResult Pre-save identity used to invalidate the old route and parent context.
+ * @return array{ok:true,message:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:?array{workflow:string,refresh_url:string,keep_open:bool},contexts:list<array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>}>,fallback:array{redirect_url:string},type:string,gallery_id:int,gallery_title:string,edit_revision:string,gallery_url:string,edit_url:string,refresh_url:string,old_gallery_url:string,identity_changed:bool,old_parent_gallery_id:int,old_parent_gallery_url:string,parent_gallery_id:int,parent_gallery_url:string,gallery_visibility:string,gallery_visibility_changed:bool,gallery_visibility_label:string,gallery_visibility_hint:string} Canonical completion envelope and public/editor fields; credential columns are not serialized.
  * @author Rudolf Klusal
  */
 function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab, array $saveResult = []): array
@@ -458,14 +465,18 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
 }
 
 /**
- * Build the JSON payload consumed after a gallery image bulk action runs in side-panel mode.
+ * Build a canonical mutation response for a gallery image bulk operation.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param string $notice Notice value.
- * @param string $returnTab Return tab value.
- * @param string $action Action value.
- * @param array $imageIds Image ids value.
- * @return array Structured result data for the caller.
+ * Covers retain a compatible primary image ID while also returning ordered
+ * multi-cover state for the AJAX star renderer and public refresh verifier.
+ *
+ * @param array{id:int|string,title?:string,slug?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,folder_path?:string} $gallery Authoritative gallery cover state and public-card identity.
+ * @param string $notice Human-readable result notice.
+ * @param string $returnTab Gallery editor tab fragment.
+ * @param string $action Applied normalized bulk action.
+ * @param list<int> $imageIds Selected owned image identifiers.
+ * @param array{destination_gallery?:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string}|null} $details Optional move destination row used to build its public refresh context.
+ * @return array{ok:true,message:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:?array{workflow:string,refresh_url:string,keep_open:bool},contexts:list<array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>}>,fallback:array{redirect_url:string},type:string,gallery_id:int,gallery_title:string,gallery_url:string,edit_url:string,refresh_url:string,bulk_action:string,image_ids:list<int>,cover_image_id:int,cover_selection_mode:string,cover_selection_revision:string,edit_revision:string,cover_selection_ids:list<int>} Canonical completion envelope plus bulk result fields; cover responses include the opaque cover_selection_revision and decimal edit_revision.
  */
 function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = [], array $details = []): array
 {
@@ -567,8 +578,33 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
         $contexts[] = admin_mutation_public_gallery_context(
             $galleryId,
             $galleryUrl,
-            admin_mutation_postcondition('cover_image', ['image_id' => (int) ($gallery['cover_image_id'] ?? 0)])
+            admin_mutation_postcondition('cover_selection', [
+                'gallery_id' => $galleryId,
+                'revision' => gallery_cover_selection_revision($gallery),
+            ])
         );
+        // The visible page may be a parent listing rather than the edited
+        // gallery. Refresh its existing server-rendered card and every ancestor
+        // whose automatic collage can borrow this gallery's cover.
+        $ancestors = gallery_ancestors($gallery, false);
+        foreach ($ancestors as $ancestor) {
+            $ancestorId = (int) $ancestor['id'];
+            $contexts[] = admin_mutation_public_gallery_context(
+                $ancestorId,
+                gallery_public_url($ancestor),
+                $ancestorId === (int) ($gallery['parent_id'] ?? 0)
+                    ? admin_mutation_postcondition('cover_selection', [
+                        'gallery_id' => $galleryId,
+                        'revision' => gallery_cover_selection_revision($gallery),
+                    ]) : null
+            );
+        }
+        $contexts[] = admin_mutation_public_gallery_context(0, url_for('home'),
+            (int) ($gallery['parent_id'] ?? 0) === 0
+                ? admin_mutation_postcondition('cover_selection', [
+                    'gallery_id' => $galleryId,
+                    'revision' => gallery_cover_selection_revision($gallery),
+                ]) : null);
     } elseif ($action === 'thumbs') {
         $mutationType = 'image.thumbnails';
         $mutationAction = 'generate';
@@ -578,7 +614,7 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
     $envelope = admin_mutation_success_envelope(
         $notice,
         admin_mutation_descriptor($mutationType, $action === 'cover' ? 'gallery' : 'image', $mutationAction, $action === 'cover' ? [$galleryId] : $normalizedImageIds),
-        admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+        $action === 'cover' ? null : admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
         $contexts,
         ['redirect_url' => $editUrl]
     );
@@ -594,50 +630,142 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
         'bulk_action' => $action,
         'image_ids' => $normalizedImageIds,
         'cover_image_id' => (int) ($gallery['cover_image_id'] ?? 0),
+        'cover_selection_mode' => gallery_cover_selection_mode($gallery),
+        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
+        'edit_revision' => gallery_edit_revision($gallery),
+        'cover_selection_ids' => gallery_cover_selection_mode($gallery) === 'multi'
+            ? gallery_cover_selection_ids($gallery)
+            : ((int) ($gallery['cover_image_id'] ?? 0) > 0 ? [(int) $gallery['cover_image_id']] : []),
     ]);
 }
 
 /**
- * Persist a gallery title picture from either the bulk image route or a panel-routed edit request.
+ * Immediately persist one title-picture star action through the gallery editor.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $imageIds Image ids value.
- * @param string $returnTab Return tab value.
+ * A plain cover action replaces the single photo. Arm/add/reset actions are
+ * mode-checked under the writer lock and report authoritative state in JSON.
+ *
+ * @param array{id:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null} $gallery Authorized gallery identity and current cover state.
+ * @param list<int> $imageIds Raw submitted photo IDs; this handler validates direct ownership before persisting.
+ * @param string $returnTab Return tab for non-AJAX navigation.
+ * @param 'cover'|'cover_arm'|'cover_add'|'cover_reset' $action Submitted semantic title-picture action.
+ * @return void Sends a canonical success/error JSON response or redirects after the attempted mutation.
  */
-function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab): void
+function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab, string $action = 'cover'): void
 {
-    // $galleryId stores the gallery being updated by the title-picture action.
     $galleryId = (int) ($gallery['id'] ?? 0);
-    // $ownedIds stores selected images that still belong to this gallery.
-    $ownedIds = [];
-    foreach ($imageIds as $imageId) {
-        // $image stores the selected image record used for gallery ownership validation.
-        $image = find_image((int) $imageId);
-        if ($image && (int) ($image['gallery_id'] ?? 0) === $galleryId) {
-            $ownedIds[] = (int) $imageId;
+    $phase = 'validate_selection';
+    try {
+        $expectedRevision = $_POST['cover_selection_revision'] ?? null;
+        if ($expectedRevision !== null && (!is_string($expectedRevision)
+            || preg_match('/\A[a-f0-9]{20}\z/', $expectedRevision) !== 1)) {
+            throw new \DomainException('Invalid title-picture state revision.');
         }
-    }
-    if (!$ownedIds) {
+        $ownedIds = [];
+        foreach ($imageIds as $imageId) {
+            $id = (int) $imageId;
+            $image = $id > 0 ? find_image($id, true) : null;
+            if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId
+                || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+                throw new \DomainException(t('admin.gallery_editor.selected_photo_unavailable', 'The selected photo is unavailable.'));
+            }
+            if (in_array($id, $ownedIds, true)) {
+                throw new \DomainException('Duplicate title-picture photo.');
+            }
+            $ownedIds[] = $id;
+        }
+        if ($ownedIds === []) {
+            throw new \DomainException(t('admin.gallery_editor.select_at_least_one', 'Select at least one photo.'));
+        }
+        if (count($ownedIds) > 4) {
+            throw new \DomainException(t('admin.gallery_editor.cover_selection_limit', 'Choose at most four title-picture photos.'));
+        }
+        if ($action !== 'cover' && count($ownedIds) !== 1) {
+            throw new \DomainException('This title-picture action needs exactly one photo.');
+        }
+
+        $phase = 'persist_cover';
+        $updated = $action === 'cover'
+            ? gallery_editor_set_cover_images($galleryId, $ownedIds, $gallery, $expectedRevision)
+            : gallery_editor_change_cover_selection($galleryId, $ownedIds[0], match ($action) {
+                'cover_arm' => 'arm',
+                'cover_add' => 'add',
+                'cover_reset' => 'reset',
+                default => throw new \DomainException('Unknown title-picture selection action.'),
+            }, $expectedRevision);
+
+        $phase = 'build_success_response';
+        $notice = t('admin.gallery_editor.title_picture_saved');
         if (admin_wants_json()) {
-            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'));
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, private');
+            $response = admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds);
+            // Advance a mounted settings draft only from the exact snapshot
+            // this cover operation superseded. Passive reconciliation cannot
+            // bless stale fields from an independently changed editor.
+            $response['previous_edit_revision'] = gallery_edit_revision($gallery);
+            echo json_encode($response, JSON_THROW_ON_ERROR);
             return;
         }
+        flash_message('admin_notice', $notice);
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    } catch (Throwable $exception) {
+        // The previous handler let exceptions escape to the early HTTP 500
+        // boundary, where PHP's error_log was the only available evidence.
+        // Correlate a safe UI message with a detailed Admin log entry.
+        $reference = strtoupper(bin2hex(random_bytes(8)));
+        $status = $exception instanceof GalleryEditConflict ? 409
+            : ($exception instanceof GalleryEditUnavailable ? 503
+                : ($exception instanceof \DomainException ? 422 : 500));
+        $context = [
+            'reference' => $reference,
+            'gallery_id' => $galleryId,
+            'action' => $action,
+            'phase' => $phase,
+            'image_ids' => array_values(array_map('intval', $imageIds)),
+            'exception' => get_class($exception),
+            'reason' => $status === 500 ? 'unexpected_failure' : ($status === 503 ? 'storage_unavailable' : ($status === 409 ? 'stale_selection' : 'invalid_selection')),
+            'source_file' => basename($exception->getFile()),
+            'source_line' => $exception->getLine(),
+            'http_status' => $status,
+        ];
+        try {
+            admin_log_event('error', 'gallery.cover_update_failed', 'Gallery title-picture update failed.', $context, [
+                'category' => 'gallery',
+                'severity' => 'error',
+                'subject_type' => 'gallery',
+                'subject_id' => $galleryId,
+                'request_id' => $reference,
+            ]);
+        } catch (Throwable) {
+            // Error reporting must remain available if Admin log persistence fails.
+        }
+        error_log('[PHP Gallery] gallery.cover_update_failed reference=' . $reference
+            . ' gallery_id=' . $galleryId . ' action=' . $action
+            . ' phase=' . $phase . ' exception=' . get_class($exception)
+            . ' location=' . basename($exception->getFile()) . ':' . $exception->getLine()
+            . ' reason=' . $context['reason']);
+
+        $notice = $status === 500
+            ? t('admin.gallery_editor.cover_update_failed', 'The title picture could not be saved. Reference: {reference}', ['reference' => $reference])
+            : ($status === 503
+                ? t('admin.gallery_editor.cover_storage_unavailable', 'Title-picture storage is unavailable. Check database migrations and System Health.')
+                : ($status === 409
+                    ? t('admin.gallery_editor.cover_selection_conflict', 'The title pictures changed in another session. The saved selection will be reloaded.')
+                    : $exception->getMessage())) . ' (' . $reference . ')';
+        if (admin_wants_json()) {
+            http_response_code($status);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, private');
+            echo json_encode(array_merge(admin_mutation_error_envelope($notice, 'gallery_cover_update_failed'), [
+                'reference' => $reference,
+                'reconciliation_required' => true,
+            ]));
+            return;
+        }
+        flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
-
-    // $coverImageId stores the first selected image because only one title picture can be saved.
-    $coverImageId = (int) $ownedIds[0];
-    // $updated stores the reloaded gallery row so JSON reflects the persisted database state.
-    $updated = gallery_editor_set_cover_image($galleryId, $coverImageId, $gallery);
-    // $notice stores the message returned to the direct page or side-panel workflow.
-    $notice = t('admin.gallery_editor.title_picture_saved');
-    if (admin_wants_json()) {
-        header('Content-Type: application/json');
-        echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds));
-        return;
-    }
-    flash_message('admin_notice', $notice);
-    redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
 }
 
 /**
@@ -758,12 +886,12 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
 /**
  * Persist gallery edits through the shared admin edit implementation.
  *
- * @param array<string,mixed> $gallery Request snapshot identifying the gallery; replaced by the reserved row before writing.
- * @param array<string,mixed> $input Submitted editor fields, including edit_revision for complete forms.
- * @param array<string,array<string,mixed>> $files PHP upload descriptors indexed by editor asset field.
+ * @param array{id:int|string,folder_path?:string,edit_revision?:int|string|null,...} $gallery Request snapshot identifying the gallery; replaced by the reserved row before writing.
+ * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,...} $input Submitted editor fields, including optional cover mode and edit_revision for complete forms.
+ * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by editor asset field.
  * @param string $returnTab Validated editor tab retained after saving.
  * @param bool $completeForm True for full-form checkbox semantics and mandatory submitted revision.
- * @return array{gallery:array<string,mixed>,notice:string,return_tab:string,moved:bool,original_gallery:array<string,mixed>,original_gallery_url:string,old_parent_id:int} Persisted row and before/after identity for completion.
+ * @return array{gallery:array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...},notice:string,return_tab:string,moved:bool,original_gallery:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string,slug?:string,visibility?:string,updated_at?:string,...},original_gallery_url:string,old_parent_id:int} Persisted gallery row, save notice/navigation and pre-save identity for completion.
  * @author Rudolf Klusal
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
@@ -783,15 +911,22 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
 /**
  * Apply the authenticated request after the service reserved its edit revision.
  *
- * @param array<string,mixed> $gallery Current row returned by the reservation.
- * @param array<string,mixed> $input Submitted transport fields.
- * @param array<string,mixed> $files PHP upload descriptors.
+ * @param array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...} $gallery Current row returned by the reservation.
+ * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,...} $input Submitted editor transport fields, including optional title-picture mode.
+ * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by field name.
  * @param string $returnTab Validated editor tab.
  * @param bool $completeForm True for the full editor, false for a partial action.
- * @return array<string,mixed> Save details; caller retains ownership until return.
+ * @return array{gallery:array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...},notice:string,return_tab:string,moved:bool,original_gallery:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string,slug?:string,visibility?:string,updated_at?:string,...},original_gallery_url:string,old_parent_id:int} Persisted gallery row and before/after identity used by the response builder.
  */
 function admin_save_gallery_owned_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm): array
 {
+    // Refuse explicit optional modes before folder, upload or branding effects.
+    // A missing migration must never silently turn Automatic into a cleared
+    // legacy cover; unknown inspection cannot authorize the optional write.
+    if (in_array($input['cover_image_id'] ?? null, ['automatic', 'multi'], true)
+        || ($gallery['cover_image_ids'] ?? null) !== null) {
+        gallery_editor_assert_cover_selection_schema();
+    }
     $submittedBreadcrumbStyle = array_key_exists('gallery_breadcrumb_style', $input)
         ? (string) $input['gallery_breadcrumb_style']
         : null;
@@ -971,15 +1106,44 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     $shouldUpdateFlightMap = $flightMapReady && ($completeForm || array_key_exists('flight_route_text', $input));
     // Variable $coverImageId stores this steps working value.
     $coverImageId = (int) ($gallery['cover_image_id'] ?? 0);
+    // Preserve the multi-cover marker across unrelated complete-form saves.
+    $coverImageIds = $gallery['cover_image_ids'] ?? null;
     // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
     $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
     if ($shouldUpdateCover) {
-        // Variable $coverImageId stores this steps working value.
-        $coverImageId = (int) ($input['cover_image_id'] ?? 0);
-        // Variable $coverImage stores this steps working value.
-        $coverImage = $coverImageId > 0 ? find_image($coverImageId) : null;
-        // Variable $coverImageId stores this steps working value.
-        $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === $galleryId ? $coverImageId : null;
+        $coverChoice = (string) ($input['cover_image_id'] ?? '0');
+        $storedCoverMode = gallery_cover_selection_mode($gallery);
+        $storedCoverChoice = match ($storedCoverMode) {
+            'multi' => 'multi',
+            'automatic' => 'automatic',
+            'single' => (string) ((int) ($gallery['cover_image_id'] ?? 0)),
+            default => '0',
+        };
+        if ($coverChoice === 'multi' && $storedCoverMode === 'multi') {
+            // Saving unrelated Media settings must preserve a manual blue selection.
+            $coverImageId = (int) ($gallery['cover_image_id'] ?? 0);
+        } elseif ($coverChoice === 'automatic' || $coverChoice === '0') {
+            $coverImageId = null;
+            if (array_key_exists('cover_image_ids', $gallery)) {
+                // "0" retains the historical fallback; "automatic" is a
+                // deliberate two-image direct/child collage selection.
+                $coverImageIds = $coverChoice === 'automatic' ? '[]' : null;
+            }
+        } elseif (ctype_digit($coverChoice) && (int) $coverChoice > 0) {
+            $coverImageId = (int) $coverChoice;
+            $coverImage = find_image($coverImageId);
+            if (!$coverImage || (int) ($coverImage['gallery_id'] ?? 0) !== $galleryId) {
+                throw new RuntimeException(t('admin.gallery_editor.selected_photo_unavailable', 'Selected photo is unavailable.'));
+            }
+            $coverImageIds = null;
+        } else {
+            throw new RuntimeException(t('admin.gallery_editor.selected_photo_unavailable', 'Selected photo is unavailable.'));
+        }
+        // An intentional switch from a separately uploaded title picture back
+        // to photos must remove the old asset precedence; unrelated saves keep it.
+        if ($coverChoice !== $storedCoverChoice && $coverChoice !== 'multi') {
+            $coverImagePath = null;
+        }
         if (gallery_cover_asset_schema_ready() && !empty($files['cover_upload']['name'] ?? '')) {
             // $uploadError stores an intermediate value used by the surrounding gallery workflow.
             $uploadError = (int) ($files['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -1001,6 +1165,7 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
                 $coverImagePath = store_uploaded_gallery_cover($galleryId, $files['cover_upload']);
                 // $coverImageId stores an intermediate value used by the surrounding gallery workflow.
                 $coverImageId = null;
+                $coverImageIds = null;
             }
         }
     }
@@ -1128,6 +1293,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
     if ($shouldUpdateCover) {
         $fields['cover_image_id'] = $coverImageId;
+        if (array_key_exists('cover_image_ids', $gallery)) {
+            $fields['cover_image_ids'] = $coverImageIds;
+        }
     }
     if (gallery_date_schema_ready()) {
         $fields['gallery_date'] = $galleryDate;

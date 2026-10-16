@@ -622,6 +622,44 @@ remaining documentation/policy debt. Changed-declaration/MVC contracts remain
 distinct enforcement checks. Manual mobile, Firefox/WebKit and
 assistive-technology acceptance are not inferred from Chromium results.
 
+### Gallery title-picture selection
+
+`tests/gallery_cover_selection_test.php` owns the ordered selection decoding and
+resolver contracts: legacy `NULL`, explicit Automatic, direct-photo ownership,
+the four-photo bound, deterministic two-photo selection, accessible child
+fallback, public visibility filtering, stale selections, and selection revision
+changes. `tests/gallery_edit_writer_snapshots_test.php` covers atomic ordered
+persistence, direct ownership, migration readiness, the four-photo write limit,
+sidecar refresh, and reuse of the exclusive single-cover writer. Sidecar and ZIP
+ID remapping are implemented by their existing transfer owners and still need
+transfer-level qualification. Three-state action logic is added to the existing
+`tests/admin_side_panel_delegation/cover_stars.mjs` fixture and is consumed by
+the registered `tests/admin_side_panel_delegation_test.mjs` suite. The browser
+editor-preservation and lost-response fixture is
+`tests/support/admin_gallery_cover_stars_browser.mjs`; the existing registered
+`tests/admin_panel_lifecycle_browser_test.mjs` runs it for its default lifecycle
+fixture. The real HTTP cover cycle extends
+`tests/gallery_edit_concurrency_mysql_test.php` and uses its existing disposable
+database/HTTP setup. These are additions to existing audit-owned suites: they do
+not add YAML owners, create an alternate runner, or change the protected
+evaluator registry. `tests/runtime_module_plan_test.php` and
+`tests/support/runtime_module_fixture.php` protect the selective Admin bulk
+route's authored dependency closure and actual prepared module availability.
+These sources describe coverage ownership; their presence alone does not prove
+that a run passed.
+
+Hosted candidate preparation is authoritative for regenerated runtime modules,
+inventory, and exact-SHA qualification. Manual browser acceptance remains
+separate: verify G2 -> G3 -> arm G3 -> add G2 -> reset to G2, then repeat with
+the order reversed; verify persistence after reload and a new Admin session;
+change to Automatic and verify direct-photo, child-only, and mixed galleries.
+During each star click, confirm the right panel, selected tab, scroll position,
+unrelated draft fields, and loaded/preloaded image rows remain in place while
+the public gallery refreshes. Also verify a lost/failed response triggers the
+passive authoritative state GET and reconciles a changed revision in place
+before any retry, since a server error may occur after persistence. No live
+manual acceptance or hosted CI result is asserted by this documentation update.
+
 ## Canonical Feature Capability Policy
 
 The optional-feature architecture is protected by five focused PHP contracts that are registered in the normal PHP regression suite:

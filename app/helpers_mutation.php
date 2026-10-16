@@ -118,9 +118,10 @@ function admin_mutation_panel_metadata(string $workflow, string $refreshUrl = ''
  * timestamp string, while revision is an opaque PUBLIC refresh fingerprint,
  * never the editor's write precondition. present/enabled are booleans; placement
  * is top/bottom. Missing optional fields mean no assertion for that field.
+ * The cover_selection type observes gallery_id plus the cover-selection revision.
  *
  * @param string $type Supported postcondition type.
- * @param array<string, mixed> $data Type-specific values.
+ * @param array{gallery_id?:int|string,tag_id?:int|string,smart_gallery_id?:int|string,image_id?:int|string,image_ids?:list<int|string>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:'top'|'bottom',placement_order?:int} $data Type-specific values; cover_selection requires a positive gallery_id and opaque public revision.
  * @return array{type:string,gallery_id?:int,tag_id?:int,smart_gallery_id?:int,image_id?:int,image_ids?:list<int>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:string,placement_order?:int} Observable fields admitted by the closed vocabulary.
  */
 function admin_mutation_postcondition(string $type, array $data = []): array
@@ -136,6 +137,7 @@ function admin_mutation_postcondition(string $type, array $data = []): array
         'image_order',
         'image_updated_at',
         'cover_image',
+        'cover_selection',
         'gallery_visibility',
         'gallery_updated_at',
         'image_visibility',

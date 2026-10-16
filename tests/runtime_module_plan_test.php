@@ -65,6 +65,13 @@ assert_contract(count($plans['file_order']) === count(array_unique($plans['file_
     'Global runtime file order must contain unique source paths.');
 
 $routeModules = $plans['route_modules'];
+$bulkModule = (string) ($routeModules['admin_bulk_images'] ?? '');
+assert_contract($bulkModule === 'domain-admin-images-bulk',
+    'The image bulk route must preserve its dedicated authenticated module.');
+$bulkFiles = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure($plans, $bulkModule)['files'];
+assert_contract(in_array('app/services/gallery_covers.php', $bulkFiles, true),
+    'Image bulk routes must preload gallery_covers.php before invoking title-picture selection and refresh helpers.');
+
 $requestMaintenancePaths = $plans['modules']['request-maintenance']['files'];
 assert_contract(in_array('app/services/updates_job_lookup.php', $requestMaintenancePaths, true),
     'Request maintenance must retain active-job lookup before eligibility gates.');

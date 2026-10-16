@@ -353,8 +353,10 @@ function public_gallery_metadata(array $gallery): array
 
 /**
  * Persist editable gallery metadata back into gallery.json.
+ * An explicit cover selection is stored as owned gallery-relative filenames in
+ * cover_images so another installation can remap it through its image index.
  *
- * @param array<string,mixed> $gallery Persisted gallery projection, requiring id, folder_path, title and description; optional presentation/access fields are serialized through their existing policies.
+ * @param array{id:int|string,folder_path:string,title:string,description:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,content_language?:string|null,parent_id?:int|string|null} $gallery Persisted gallery identity, required sidecar fields and optional cover selection/asset metadata.
  * @return bool Whether the sidecar was written; existing callers may ignore the result.
  */
 function write_gallery_sidecar(array $gallery): bool
@@ -427,8 +429,23 @@ function write_gallery_sidecar(array $gallery): bool
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id'], true);
-        if ($cover) {
+        if ($cover && (int) ($cover['gallery_id'] ?? 0) === (int) $gallery['id']
+            && !str_contains((string) ($cover['relative_path'] ?? ''), '/')) {
             $data['cover'] = $cover['relative_path'];
+        }
+    }
+    if (array_key_exists('cover_image_ids', $gallery) && $gallery['cover_image_ids'] !== null) {
+        if (!gallery_cover_selection_schema_ready() || !gallery_cover_selection_storage_valid($gallery)) {
+            return false;
+        }
+        // Paths survive backups/imports where database image IDs change.
+        $data['cover_images'] = [];
+        foreach (gallery_cover_selection_ids($gallery) as $coverId) {
+            $selectedCover = find_image($coverId, true);
+            if ($selectedCover && (int) ($selectedCover['gallery_id'] ?? 0) === (int) $gallery['id']
+                && !str_contains((string) ($selectedCover['relative_path'] ?? ''), '/')) {
+                $data['cover_images'][] = (string) $selectedCover['relative_path'];
+            }
         }
     }
     if (!empty($gallery['cover_image_path'])) {

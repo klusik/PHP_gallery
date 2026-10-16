@@ -23,9 +23,25 @@ require a browser/database only when the behavior needs one.
 - Use named constants for timers/sleeps, complete native headers, truthful named
   declaration docs/types/shapes and purpose docs for every anonymous class too.
   These remain required in fixtures.
+- Always attach the full `Purpose`, `Type`, `Units`, `Scope`, `Consumers`, and
+  `Rationale` policy comment to every scanner-covered fixture constant, with its
+  actual default, bound, owner, and consumer stated explicitly.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.
+- Always use single namespace separators in executable fully qualified PHP
+  fixture calls. Double separators belong only to escaped string literals;
+  review the executable and string layers separately before committing adapters.
+- Document named object-literal mock methods with the same declaration contract
+  as production methods, and describe assertion inputs with their actual scalar,
+  ordered-list or row-field shapes.
+- Await each browser fixture phase's observable success or failure before changing
+  mocked connectivity or starting another request. Capture the actual layout state
+  immediately before each operation, and serve the visible URL selected by the
+  production coordinator. Preserve exact revision, node and scroll assertions.
+- Populate every explicit source-extraction adapter, including owned delegates,
+  before qualification. Audit the complete dependency list against its adapter
+  table and include the safe adapter name in unexpected-dependency failures.
 
 ## Bounded workers, caches and interruption
 

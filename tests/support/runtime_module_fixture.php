@@ -62,6 +62,21 @@ function runtime_module_fixture_run(string $root, string $module, string $mode =
     } else {
         $kernel->load($module);
     }
+    // Both gallery-editor and image-bulk routes invoke the title-picture
+    // service directly after only their reviewed selective module is loaded.
+    // Unlike handler existence alone, these assertions prevent HTTP 500 caused
+    // by a missing function in a sibling PHP service file.
+    if (in_array($module, ['domain-admin-images-bulk', 'domain-admin-galleries-edit-actions', 'domain-admin-galleries-edit-page'], true)) {
+        foreach ([
+            'Gallery\\Services\\gallery_cover_selection_mode',
+            'Gallery\\Services\\gallery_cover_selection_ids',
+            'Gallery\\Services\\gallery_cover_selection_revision',
+        ] as $coverFunction) {
+            if (!function_exists($coverFunction)) {
+                throw new RuntimeException('Missing title-picture service dependency in ' . $module . ': ' . $coverFunction);
+            }
+        }
+    }
     $prepared = [];
     foreach ($routes as $page) {
         $route = $kernel->resolve(new \Gallery\Core\Request($page));

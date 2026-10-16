@@ -319,6 +319,7 @@ Important columns:
 | `gallery_date` | Optional manual gallery date or date range start. |
 | `gallery_date_end` | Optional manual gallery date range end. `NULL` means the gallery has a single date or no manual range end. |
 | `cover_image_id` | Optional linked image used as cover. |
+| `cover_image_ids` | Optional ordered JSON image-ID list. `NULL` preserves legacy cover behavior, `[]` selects Automatic composition, and a nonempty list stores up to four direct photos. The first ID remains mirrored in `cover_image_id`. |
 | `cover_image_path` | Optional path-based cover override. |
 | `sort_order` | Admin/public ordering. |
 | `visibility` | `unpublished`, `public`, or `private`. Some compatibility code knows about older `draft`. |
@@ -1439,6 +1440,24 @@ replaces a revoked lifecycle with a new invitation while retaining its numeric I
 increasing revisions. Minimal local revocation depends only on verified invitation mapping
 and peer identity/state/revision/inbound hash, not recovery ciphertext availability.
 
+
+## Gallery title-picture selection storage
+
+Migration `202610140002_gallery_cover_image_ids.php` adds nullable
+`galleries.cover_image_ids` for ordered direct-photo selection. `NULL` means the
+gallery has not opted into the new composition mode and preserves its historical
+`cover_image_id`/child-gallery behavior. JSON `[]` records an explicit Automatic
+choice. A nonempty JSON list records up to four owned direct-photo IDs in
+selection order. The first selected ID is mirrored to `cover_image_id` for
+existing readers and foreign-key behavior. No second cover table is introduced.
+
+Selection writes require conclusive schema readiness before updating either
+column. The gallery editor writer lease serializes changes; direct ownership is
+rechecked while the lease is held, and a missing, moved, nested, or foreign
+photo aborts the whole write. Gallery sidecars additionally store selected
+gallery-relative filenames so ZIP import can remap them after image IDs are
+rebuilt. See [the selection contract](docs/TITLE_PICTURE_SELECTION.md) for
+public access filtering and mode behavior.
 
 ## Gallery-card orientation compatibility
 
