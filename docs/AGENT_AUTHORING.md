@@ -15,6 +15,20 @@ truthful contracts with filler.
 
 ## Declaration contracts
 
+Readability is advisory: prefer around 80 display columns, reconsider natural
+breaks at 81-100, and actively seek a readable split above 100. Format lengthy
+arguments, arrays, objects and multi-item lists with one entry per indented line.
+Group boolean terms by meaning. Separate logical steps and neighboring named
+declarations with language-appropriate blank lines, keeping docs/decorators
+attached. Preserve semantics, types, comments and necessary longer literals.
+Use focused changes and review the source in a GitHub split diff; editor soft-wrap
+does not improve the stored diff. The [readability guide](CODE_READABILITY.md)
+contains actual-source before/after examples, exceptions and the optional report.
+These recommendations never weaken or add to mandatory source gates.
+They also cover TeX and Markdown source prose: wrap at existing spaces while
+preserving paragraph boundaries, TeX `~` bindings, commands, literal blocks and
+Markdown block/list structure. See the scoped documentation rules for exceptions.
+
 PHPDoc/JSDoc goes immediately above the named declaration. Python's docstring is
 the first statement inside the declaration. Start with a factual purpose sentence
 before annotation tags. Every explicit parameter needs its actual name, type and
@@ -213,15 +227,26 @@ batch bodies and unsupported script syntax may report BLOCKED coverage. SQL,
 YAML, CSS, SVG, TeX and Apache rules receive native header checks, not invented
 callable-docstring requirements.
 
-## Runtime policy contracts
+## Numeric and runtime policy contracts
 
-Constants do not need *declaration* docstrings. Independently, added or materially
-changed PHP/JS runtime policy sites need attached explanations. Use a purpose
+Constants do not need *declaration* docstrings. Independently, name added or
+materially changed numeric policy choices in runtime code, tools and tests:
+timeouts, sleep/retry intervals, size/count/depth bounds and defaults. Use a purpose
 sentence and meaningful `Type:`, `Units:`, `Scope:`, `Consumers:` and `Rationale:`
 fields; `@var`/`@type` can express the type. Never invent a rationale. Determine it
 from the protected behavior or make the design decision explicit before coding.
-The file header cannot document an individual bound. Tooling, fixtures and
-advisory heuristics retain their existing scanner scope.
+The file header cannot document an individual bound. State the actual value,
+policy owner and reason at the constant. For named YAML configuration fields use
+attached native comments; comment-free JSON needs the equivalent permanent
+configuration reference. Explain structural literals (delimiter lengths, indexing,
+wire-format versions) and fixture boundary values locally; they are not tunable
+operational policies.
+
+Tooling, fixtures and advisory heuristics retain their existing scanner scope.
+An exemption from the changed-runtime gate does not exempt whole-tree inventory
+or waive this authoring rule. Review all related new policy sites in the batch,
+including subprocess bridges and delegated children, before the first FULL. Repair
+undocumented owners without raising inventory caps or moving baseline debt.
 
 These illustrative limits belong to an example preview renderer. They are not
 recommended defaults for a production subsystem; use its existing policy owner.

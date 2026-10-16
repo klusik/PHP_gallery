@@ -34,6 +34,15 @@
 
 Hosted source/release lifecycle ownership:
 
+- `.github/workflows/readability-report.yml`: branch-selected manual advice;
+  exact event SHA, read-only permissions and complete downloadable reports.
+- `scripts/readability_report.py`, `readability_tokens.php` and
+  `readability_rules.json`: immutable source inventory, existing token adapters,
+  Unicode width/spacing recommendations and narrowly explained exceptions.
+  `scripts/readability_documents.py` owns conservative TeX/Markdown prose analysis
+  and protected command, math, code, table and link boundaries.
+  Central audit profile `readability` owns execution; required profiles are unchanged.
+
 - `.github/workflows/candidate-preparation.yml`: source-only preflight, canonical
   generated-state commit on authorized feature/fix/codex branches, exact-SHA full
   matrix and stale-head gate; agents follow the CI-first contract in AGENTS.md.

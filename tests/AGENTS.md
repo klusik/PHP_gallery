@@ -22,11 +22,15 @@ require a browser/database only when the behavior needs one.
 - Read a whole split module with `module_source()` from `support/module_source.php`.
   Never require a part outside its module. Preserve path-depth regression coverage
   in `module_split_path_resolution_test.php` when moving filesystem expressions.
-- Use named constants for timers/sleeps, complete native headers, truthful named
+- Use named constants for timers/sleeps, child deadlines and other operational
+  numeric policies, with actual values and rationale even in fixture bridges.
+  Explain structural literals and exact boundary vectors at their assertions.
+  Keep complete native headers, truthful named
   declaration docs/types/shapes and purpose docs for every anonymous class too.
   These remain required in fixtures.
-- Attach `Purpose`, `Type`, `Units`, `Scope`, `Consumers` and `Rationale` to every
-  scanner-covered fixture constant, stating its actual default/bound, owner and consumer.
+- Attach purpose, `Type`, `Units`, `Scope`, `Consumers` and `Rationale` to each
+  numeric policy owner, stating its actual default/bound, owner and consumer.
+  Preserve scanner scope; fixture exemptions do not waive the authoring rule.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.

@@ -2407,6 +2407,29 @@ Atomare Module sollten eine zusammenhängende Verantwortung besitzen. Gemeinsame
 
 \subsection{Code vor der Quellprüfung schreiben}
 
+Die~Lesbarkeitsempfehlung gilt für Code sowie TeX- und~Markdown-Quellen.
+Sie~bevorzugt handgeschriebene Zeilen mit etwa 80 Anzeigespalten, natürliche
+Umbrüche bei~81--100 und~eine aktive Suche nach sinnvoller Aufteilung über 100.
+Dies ist~ein Hinweis, keine Obergrenze oder CI-Bedingung. Lange Argumente
+und~Sammlungseinträge gehören auf~einzelne eingerückte Zeilen; Bedingungen
+werden gruppiert und~logische Schritte/Deklarationen durch passende Leerzeilen
+getrennt. Dokumentationsprosa wird an~bestehenden Leerzeichen umgebrochen;
+Absätze, TeX-Befehle, geschützte Bindungen und~Markdown-Struktur bleiben erhalten.
+Semantik, Typen, Kommentare und~Docstrings bleiben erhalten; notwendige lange
+Literale und~URLs sind zulässig.
+
+Für~einen optionalen Gesamtbericht öffnen Sie~\ui{Code readability report}
+in~GitHub Actions, wählen \ui{Run workflow} und~nur den~Zweig. Workflow,
+Prüfer, Regeln und~Quellen verwenden dessen exaktes Ereignis-SHA;
+die~Zusammenfassung nennt Zweig/SHA. Das~Artefakt enthält vollständige HTML-,
+Markdown-, JSON-Berichte und~Dateidiagnosen für~PHP, JS, MJS, Python, CSS,
+TeX und~Markdown. Hinweise lassen CI niemals scheitern und~schreiben keine
+Quellen um; Werkzeugfehler bleiben sichtbar. Nach geprüfter Installation
+im~Standardzweig erscheint der~Workflow in~der~Seitenleiste. Regeln, Ausnahmen,
+Unicode-/Tabulatormessung und~gezielte Beispiele stehen
+in~\filepath{docs/CODE_READABILITY.md}; das~optionale zentrale Auditprofil
+heißt \codeword{readability}. Erforderliche Qualifikation bleibt unverändert.
+
 Die~kanonische Datei \filepath{AGENTS.md} verlangt benannte Deklarationen und~ihre vollständige Dokumentation in~derselben Änderung. Vor den~Tags steht ein sachlicher Zweck; beschreiben Sie jeden expliziten Parameter einschließlich Standardwerten und~neuen Parametern, tatsächliche Rückgabevarianten sowie konkrete Sammlungselemente und~Objektfelder. Native PHP/Python-Typen bleiben eigenständig. Anonyme Callbacks benötigen keinen Deklarations-Docstring; benannte Deklarationen darin schon. Laufzeitrichtlinien benötigen unmittelbar am~betroffenen Ort zusätzlich Zweck, Typ, Einheiten, Geltungsbereich, Verbraucher und~Begründung. Die~Beispiele in~\filepath{docs/AGENT_AUTHORING.md} werden durch bestehende Scanner in~einem registrierten Regressionstest geprüft; negative Fixtures erhalten Fehler für unvollständige Verträge.
 
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.

@@ -1,5 +1,17 @@
 # Testing Guide
 
+## Optional readability report
+
+**Code readability report** is a manual, read-only advisory workflow. Select only
+the branch in GitHub's workflow selector; its workflow, checker, rules and analyzed
+Git blobs all belong to the same event SHA. Central `--profile=readability` runs
+the report contracts and complete PHP/JS/MJS/Python/CSS/TeX/Markdown scan. Required
+profiles are unchanged. Findings exit zero; operational failures remain visible.
+Download the complete HTML/Markdown/JSON report, per-file diagnostics and child
+logs from that run's artifact. See [rules, scope and examples](docs/CODE_READABILITY.md)
+for thresholds, Unicode measurement, exclusions, coverage limits and calibration.
+The workflow appears in the sidebar after reviewed default-branch installation.
+
 ## CI optimization contracts
 
 Active workflows use PHP 8.1 and PHP 8.5 only; all three database

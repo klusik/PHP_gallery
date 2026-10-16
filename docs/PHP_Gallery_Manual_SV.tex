@@ -2398,6 +2398,28 @@ Atomära moduler ska ansvara för ett sammanhängande område. Gemensamma kontra
 
 \subsection{Skriv kod före källkontrollen}
 
+Läsbarhetsrådet gäller kod samt TeX- och~Markdown-källor. Det~föredrar
+handskrivna rader kring 80 visningskolumner, naturliga radbrytningar vid~81--100
+och~aktiv sökning efter tydlig uppdelning över 100. Det~är ett~råd, ingen
+maxgräns eller CI-spärr. Lägg långa argument och~samlingsposter på~separata
+indragna rader, gruppera villkor och~skilj logiska steg/deklarationer med
+lämpliga tomrader. Bryt dokumentationsprosa vid~befintliga blanksteg och~bevara
+stycken, TeX-kommandon, fasta bindningar och~Markdown-struktur. Bevara semantik,
+typer, kommentarer och~docstrings; nödvändiga långa literaler och~URL:er
+är~tillåtna.
+
+För~en~valfri rapport över hela trädet öppnar du~\ui{Code readability report}
+i~GitHub Actions, väljer \ui{Run workflow} och~enbart grenen. Arbetsflöde,
+kontrollkod, regler och~källor använder grenens exakta händelse-SHA;
+sammanfattningen visar gren/SHA. Artefakten innehåller fullständiga HTML-,
+Markdown-, JSON-rapporter och~fildiagnostik för~PHP, JS, MJS, Python, CSS,
+TeX och~Markdown. Råd orsakar aldrig CI-fel och~skriver inte om~källor;
+verktygsfel förblir synliga. Arbetsflödet visas i~sidofältet efter granskad
+installation i~standardgrenen. Regler, undantag, Unicode-/tabulatormätning
+och~avgränsade exempel finns i~\filepath{docs/CODE_READABILITY.md};
+den~valfria centrala auditprofilen heter \codeword{readability}.
+Obligatorisk kvalificering är~oförändrad.
+
 Den~kanoniska filen \filepath{AGENTS.md} kräver namngivna deklarationer och~fullständig dokumentation i~samma ändring. Börja med ett sakligt syfte före taggarna; beskriv varje uttrycklig parameter inklusive standardvärden och~nya parametrar, verkliga returvarianter samt konkreta samlingselement och~objektfält. Inbyggda PHP/Python-typer är ett separat krav. Anonyma callbackar behöver ingen deklarationsdocstring; namngivna deklarationer inuti dem behöver det. Körningspolicyer behöver dessutom syfte, typ, enheter, omfattning, konsumenter och~motivering direkt före platsen. Exemplen i~\filepath{docs/AGENT_AUTHORING.md} kontrolleras med befintliga analysverktyg i~ett registrerat regressionstest; negativa fixturer bevarar fel för ofullständiga kontrakt.
 
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.

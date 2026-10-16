@@ -40,6 +40,11 @@ $phpRegistry = require __DIR__ . '/audit_php_registry.php';
 
 $registry = [
     'profiles' => [
+        // Opt-in advice only; never part of BASIC/FULL/release qualification.
+        'readability' => [
+            'readability-contract',
+            'readability-advisory',
+        ],
         // Minimal source gate for feature pushes and prepared release deltas.
         'basic' => [
             'php-lint',
