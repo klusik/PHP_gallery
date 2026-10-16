@@ -2163,6 +2163,7 @@
         "tests/feature_policy_core_test.php",
         "tests/feature_policy_inventory_test.php",
         "tests/feature_policy_stage13_contract_test.php",
+        "tests/feature_qualification_test.mjs",
         "tests/fixtures/admin_cooperative_galleries.html",
         "tests/fixtures/admin_cooperative_proposals.html",
         "tests/fixtures/admin_dashboard_workspace.html",

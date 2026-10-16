@@ -121,18 +121,19 @@ BASIC syntax and changed named-declaration docs. BASIC currently omits native
 headers and FULL inventory; review changed/new headers before commit. An early
 header gate needs a separate scanner/CI change and qualification.
 
-Maintainer-approved **Integrate into develop** selects exactly one candidate
-commit above observed develop, prepares generated artifacts and runs central FULL
-on final exact A before guarded non-force FF. Use the reviewed installed automatic
-feature squash/fresh-BASIC path or the separately authorized manual checkpoint
-when preparation changes SHA. FULL must retain that one-commit SHA. BASIC alone is
-not FULL/integration qualification. CI-authority changes need explicit maintenance
-qualification and protected installation before use.
+Maintainer-approved **Integrate into develop** runs from the main or feature ref
+explicitly selected in GitHub. Use that ref's workflow/tests; ordinary test and CI
+changes do not require prior main installation. Select one candidate above observed
+develop, prepare generated artifacts, obtain fresh BASIC and run central FULL on
+final exact A before guarded non-force FF. Seal successful execution before the
+write; an identical candidate/base may reuse that run after publication failure.
+Owner dispatch, all required native owners and protected writes remain mandatory.
 
-A separately authorized release prepares B from qualified A, checking BASIC at A
-plus release-owned A..B proof; functional integration is not replayed. Generation,
-human approval, merge/tag, draft and publication remain separate lifecycle stages.
-Protect existing origins, tags and published assets.
+A separately authorized release trusts its frozen source A from protected develop.
+It prepares notes, four manuals, inventory, manifest and attachments, then opens a
+PR; it does not repeat audits or reopen historical BASIC/FULL qualification.
+Keep assembly integrity, exact Git leases, human approval, merge/tag, draft and
+manual publication distinct. Protect existing origins, tags and published assets.
 
 Hosted preparation owns runtime modules, index-based inventory and complete-file
 manifest hashes in dependency order. Stage all new/deleted membership, including

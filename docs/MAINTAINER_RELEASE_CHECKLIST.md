@@ -5,37 +5,23 @@ the protected integration, release, publication and separately approved cleanup
 below. BASIC alone is not FULL qualification; `plan` authorizes nothing unless
 its summary explicitly says `ELIGIBLE`.
 
-## Install CI authority changes before starting a release
+## Integrate the completed feature
 
-- [ ] For the approved evaluator update, complete stage 1 through the existing
-  main-owned **Integrate into develop** FULL workflow. Keep the entire pinned
-  BASIC evaluator closure unchanged and confirm the ordinary guarded FF has
-  established protected develop W*.
-- [ ] Dispatch the same action from **develop** with
-  `ci_authority_update: true`. Confirm the retained stage-1 integration proof
-  and exact W* are rechecked before each write, S is one commit above W*, and
-  only the six approved evaluator transition paths changed while scanner
-  closure stayed unchanged.
-- [ ] Confirm trusted inherited BASIC checks a clean candidate S with a
-  strictly validated root binding, and FULL from trusted W* covers exact S on
-  PHP 8.1 and 8.5. Require the resulting non-force FF and explicit
-  `authority_update` plus `inherited_basic` record. Keep acceptance PENDING until
-  both real hosted stages and write guards are inspected.
-- [ ] Preserve ordinary main review protections, separate recovery semantics,
-  human PR review and manual publication. No publisher exception or ruleset
-  bypass is part of installation.
-- [ ] Start the next normal release only from the develop SHA that already
-  contains the optimized authority. Preserve erroneous release 8 and its
-  immutable origin/evidence; supersede it with a later explicit release. Do not
-  make a release-before-develop bootstrap.
-
+- [ ] In **Integrate into develop -> Run workflow**, select main or the intended
+  feature in **Use workflow from**, then its source branch. Changed tests and CI
+  execute from that selected revision; no preliminary main installation is needed.
+- [ ] Require the complete exact-candidate FULL and guarded non-force develop FF.
+  `qualify_only` seals execution without writing develop; `qualified_run` reuses
+  identical candidate/tree/base after a publication failure without another FULL.
+- [ ] For an explicitly requested CI-only installation ahead of a release, base a
+  feature on main and dispatch **Basic source checks** with `install_ci`. Wait for
+  all FULL owners and release audit, then approve its bot-created main PR once.
 ## Create the release branch
 
 - [ ] Start from current FULL-qualified develop A. Create and push
   `release/v_X.Y[.Z]` for the intended next version.
-- [ ] Wait for automatic preparation, notes, all four manuals/PDFs, exact-Q BASIC
-  release delta checks and release-owned-input proof. The release delta does not
-  repeat A's functional FULL matrix.
+- [ ] Wait for automatic preparation, notes, all four manuals/PDFs, manifest and complete attachments. Release trusts protected develop and does
+  not repeat source audits or historical evidence validation.
 
 ## Review and approve the release PR
 

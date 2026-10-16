@@ -9,6 +9,7 @@
 #   - Preserve server protections, immutable tags and linear develop history
 #   - Fill the verified draft with authenticated assets; publication remains manual
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
 name: Automatic reviewed release completion
 run-name: Release completion ${{ inputs.mode || github.event_name }} at ${{ github.ref_name }}
 
@@ -45,6 +46,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  PHP_GALLERY_RELEASE_TRUST_DEVELOP: '1'
   RELEASE_PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
   CANDIDATE_SHA: ${{ inputs.candidate_sha || github.event.pull_request.head.sha }}
   REQUESTED_RUN: ${{ inputs.qualification_run }}

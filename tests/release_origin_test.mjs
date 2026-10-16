@@ -34,11 +34,13 @@ assert.throws(()=>originPath('1.2.03'),/BLOCKED/);
 assert.doesNotThrow(()=>validateOriginRecord(original,version));
 for (const record of [
     {...original,version:'1.2.2'}, {...original,release_branch:'release/v_1.2.2'},
-    {...original,previous_stable_sha:selected}, {...original,selected_develop_sha:'HEAD'},
+    {...original,selected_develop_sha:'HEAD'},
     {...original,previous_stable_tag:'v_1.2.3'}, {...original,previous_stable_tag:'v_2.0'},
     {...original,previous_stable_tag:'heads/develop'}, {...original,unexpected:'x'},
     {...original,schema_version:2}
 ]) assert.throws(()=>validateOriginRecord(record,version),/BLOCKED/);
+assert.doesNotThrow(()=>validateOriginRecord({...original,previous_stable_sha:selected},version),
+    'main/stable ancestry is verified against Git rather than a structural equality shortcut');
 
 /** Create independent Git and GitHub state to exercise release origin tampering.
  * @returns {{state:object,api:function(string,string=,object=):object,git:function(string,string[]):string}} Hermetic mutable source and server adapters.
@@ -125,8 +127,19 @@ process.stdout.write('PASS explicit release origin monotonicity, blob immutabili
     for (const changed of [{version:'0.132.10'},{initial_main_sha:'f'.repeat(40)},
         {previous_stable_sha:'f'.repeat(40)},{previous_stable_tag:'v_0.132.7'}]) {
         assert.equal(isMaintenanceMainBridge({...f.record,...changed}),false);
-        assert.throws(()=>validateOriginRecord({...f.record,...changed},changed.version??'0.132.9'),/BLOCKED/);
-        assert.throws(()=>verifyMaintenanceMainBridge({...f.record,...changed},'klusik/PHP_gallery',f),/BLOCKED/);
+        if (changed.version) {
+            assert.throws(()=>validateOriginRecord({...f.record,...changed},changed.version),/BLOCKED/,
+                'a mismatched version/branch remains structurally invalid');
+            const next={...f.record,...changed,release_branch:'release/v_'+changed.version};
+            assert.doesNotThrow(()=>validateOriginRecord(next,changed.version));
+            assert.doesNotThrow(()=>verifyMaintenanceMainBridge(next,'klusik/PHP_gallery',f),
+                'the same protected main ancestry needs no new version-specific pin');
+        } else {
+            assert.doesNotThrow(()=>validateOriginRecord({...f.record,...changed},'0.132.9'),
+                'structural validation does not pretend to authenticate external Git identities');
+            assert.throws(()=>verifyMaintenanceMainBridge({...f.record,...changed},'klusik/PHP_gallery',f),
+                'changed main/stable/tag identities still fail independent lineage verification');
+        }
     }
     const adverse=[
         ['moved stable tag',path=>path.includes('/git/ref/tags/'),value=>{value.object.sha=f.record.initial_main_sha;}],

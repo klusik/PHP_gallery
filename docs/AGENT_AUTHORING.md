@@ -307,8 +307,10 @@ Ordinary feature pushes and the final squash run hosted BASIC `--changed` in
 **Basic source checks**, freezing `git merge-base HEAD origin/main`. They do not
 prepare generated artifacts or run FULL. The maintainer-approved **Integrate into
 develop** action selects observed develop P, prepares and qualifies the final
-one-commit candidate with FULL. Release BASIC checks the release-owned delta
-against qualified origin A. Missing history/base blocks CI; substituting HEAD
+one-commit candidate with FULL using the owner's selected main or feature workflow.
+Seal execution before publication; identical inputs may reuse the sealed run.
+Release trusts qualified protected develop and assembles artifacts without another
+source audit. Missing history/base blocks integration; substituting HEAD
 would hide committed omissions. Keep candidate/base/dirty-state identity in
 central reports. Follow [.github instructions](../.github/AGENTS.md) and the
 [CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) for authority/installation.
