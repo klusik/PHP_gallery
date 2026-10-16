@@ -30,8 +30,8 @@ observations return 409. This is a drift guard,
 not a multi-request database snapshot. Same-second external image-only metadata
 writes can share an aggregate observation. The browser additionally rejects
 wrong galleries, duplicate IDs, inconsistent totals/revisions and incomplete
-end-of-list contracts. Canonical mutation refresh replaces the owning editor;
-the old task checks connection and drawer generation before every DOM effect.
+end-of-list contracts. When a mutation requests editor replacement, the old task
+checks connection and drawer generation before every DOM effect.
 No photo response reads or replaces the settings form or its unsaved values.
 
 CSRF state is initialized before the batch request closes its PHP session.
@@ -74,6 +74,10 @@ browser thumbnail cache. Closing, switching gallery or replacing the editor
 aborts its task through the existing drawer owner and fragment connection guard.
 Photo-owned successful local mutation events also restart the preload when
 canonical draft protection keeps the settings fragment mounted.
+Canonical `gallery.cover` completions retain the prepared table: the star owner
+already applies their authoritative state in place. They preserve row/thumbnail
+nodes, bulk selection and Images readiness while the shared coordinator refreshes
+public fragments. Other photo metadata/inventory mutations still restart preload.
 Existing image-specific initialization runs on the completed table; the
 side-panel owner marks its bulk form for the existing delegated AJAX pipeline.
 

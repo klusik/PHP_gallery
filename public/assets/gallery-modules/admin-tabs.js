@@ -33,7 +33,7 @@
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
 
-import {startGalleryImagesPreload} from './admin-gallery-images-preload.js?v=20261013-images-preload-v1';
+import {startGalleryImagesPreload} from './admin-gallery-images-preload.js?v=20261016-cover-in-place-v1';
 
 const adminSidePanelTabObservers = new WeakMap();
 

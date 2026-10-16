@@ -20,8 +20,8 @@ expectations strict.
 
 Resolve form destinations from the prepared endpoint or `action` attribute when
 named controls can shadow DOM properties. Exercise mounted and standalone forms
-through the production coordinator; assert the resulting public revision and
-retained editor nodes, not merely that a request or polling loop finished.
+through the production coordinator with their fragment loaders active; assert the
+resulting public revision and retained editor nodes, not merely request completion.
 
 Represent presentation choices as explicit value/label entries. Reserve literal
 `'page' => 'target'` maps for registered routes.

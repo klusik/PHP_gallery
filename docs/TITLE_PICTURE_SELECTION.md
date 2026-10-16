@@ -57,7 +57,9 @@ The star completion updates the affected row controls in place, then runs the
 existing canonical completion flow. It does not replace the whole editor panel;
 the open tab, scroll position, other form drafts, and already loaded/preloaded
 image rows remain available. The public gallery is refreshed through its
-existing fragment owner. If the response is lost or reports an error, the
+existing fragment owner. Cover completion does not restart Images metadata or
+thumbnail preparation, including its loading lock; bulk checkbox selection stays
+in place. If the response is lost or reports an error, the
 browser first makes a passive no-store GET for authoritative cover state. A
 changed revision is reconciled in the mounted editor before public completion;
 if reconciliation cannot prove a changed state, read the current editor state

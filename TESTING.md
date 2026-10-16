@@ -89,6 +89,10 @@ which unconditionally awaits `admin_side_panel_delegation/images_preload.mjs`.
 The protected BASIC registry remains unchanged. These fixtures separate source,
 queue and synthetic orchestration evidence from live browser/hosting acceptance;
 see `docs/ADMIN_IMAGES_PRELOAD.md` for the required measurement boundaries.
+The existing lifecycle Chromium scenario also dispatches canonical cover completion
+through a fully prepared Images editor, asserting no new batch fetch, row/thumbnail
+replacement or lost checkbox/tab/scroll/draft state. A following visibility completion
+must still refresh the table. The cover-star fixture separately verifies public revision refresh.
 
 Automatic browser-local iCloud import uses the centrally registered
 `browser_upload_zip_worker_test.mjs` owner, which unconditionally awaits the

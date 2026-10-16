@@ -109,6 +109,7 @@ async function fetchEditorBatch(url, signal) {
 /**
  * Start one fragment-owned background preparation after its settings are interactive.
  * Retry replaces only Images content; it never reads or rewrites the settings form.
+ * Acknowledged cover-only mutations retain the prepared rows and thumbnail resources.
  * @param {HTMLElement} widget Current editor's top progress widget and transport metadata.
  * @param {HTMLElement} imagesPanel Existing unselected Images tab panel.
  * @param {function():void} ready Initialize existing image controls and unlock the tab.
@@ -286,6 +287,10 @@ export function startGalleryImagesPreload(widget, imagesPanel, ready) {
         if (!current() || event.detail?.result?.ok !== true || event.detail?.panelOwner?.isCurrent?.() === false) return;
         if (event.type === 'php-gallery:side-panel-success' && !['gallery-edit', 'gallery-image-bulk'].includes(event.detail.source)) return;
         if (event.type === 'php-gallery:auxiliary-mutation-success' && !['gallery', 'image'].includes(event.detail.result.mutation?.entity)) return;
+        // Cover changes already project their authoritative state into the mounted stars.
+        // They do not alter the image inventory; restarting would replace rows, lose
+        // selection/scroll and flash the loading state while public refresh runs separately.
+        if (event.detail.result.mutation?.type === 'gallery.cover') return;
         // The existing save acknowledgment may preserve later typing instead of
         // replacing this editor. Restart photo metadata without touching that draft.
         cancel();
