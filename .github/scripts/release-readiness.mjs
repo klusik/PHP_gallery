@@ -15,12 +15,12 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {writeFileSync} from 'node:fs';
 import {api,output} from './release-promotion.mjs';
-import {requireOwnerRuleset} from './release-owner-authorization.mjs';
+import {requireOwnerRuleset,requireMainFollowingDevelop} from './release-owner-authorization.mjs';
 
 /** Inspect the live token's policy visibility and required branch controls without writes.
  * @param {string} repository Exact owner/repository.
  * @param {function(string,string=,(import('./release-promotion.mjs').JsonValue|null)=):import('./release-promotion.mjs').JsonValue} call Read-only API adapter whose response fields are independently checked by the policy owner.
- * @returns {{repository:string,main:{status:string,detail:string,policy?:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}},develop:{status:string,detail:string,policy?:{id:number,name:string,branch:string,bypass_inventory:string,current_actor_bypass:string}},publication:string,operational_acceptance:string}} Independently verified visible policies, explicit hidden-field visibility and unperformed live acceptance.
+ * @returns {{repository:string,main:{status:string,detail:string,policy?:ReturnType<typeof requireOwnerRuleset>},develop:{status:string,detail:string,policy?:ReturnType<typeof requireOwnerRuleset>},publication:string,operational_acceptance:string}} Independently verified visible policies, explicit hidden-field visibility and unperformed live acceptance.
  */
 export function inspectReadiness(repository,call=api) {
     const result={repository,main:{status:'BLOCKED',detail:''},develop:{status:'BLOCKED',detail:''},
@@ -28,7 +28,8 @@ export function inspectReadiness(repository,call=api) {
     for (const [branch,name,check] of [['main','Reviewed release promotion to main','Release qualification'],
         ['develop','Reviewed main-to-develop release reconciliation','Complete required CI matrix']]) {
         try {
-            const policy=requireOwnerRuleset(call,repository,branch,name,check);
+            const policy=branch==='develop' ? requireMainFollowingDevelop(call,repository)
+                : requireOwnerRuleset(call,repository,branch,name,check);
             result[branch]={status:'VERIFIED',policy,
                 detail:'Installed identity and effective protections verified. Bypass inventory: '+policy.bypass_inventory+'. Server protections remain authoritative.'};
         } catch (error) {result[branch]={status:'BLOCKED',detail:error.message};}

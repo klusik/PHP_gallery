@@ -109,11 +109,20 @@ separate. Parallel develop work blocks an unsafe synchronization, not a correct
 already completed tag/draft.
 
 Release preparation links the frozen main history before review without changing
-the prepared tree. Schema-4 completion publishes a single-parent equivalent tree
-above unchanged selected develop, using actual assembly qualification and scoped
-Actions status authority. The permanent receipt binds the result/tree/base;
+the prepared tree. Schema-4 completion fast-forwards unchanged selected develop
+to the actual tagged main commit, using verified source ancestry, assembly
+qualification and scoped Actions status authority. Equal trees with different
+histories do not qualify as synchronized. No commit is generated for this step.
+The permanent receipt binds the actual main result/tree/base;
 future initialization trusts protected develop instead of reopening historical
 reconciliation archives. Only the post-assembly observer handles approval.
+
+The target develop ruleset retains deletion/non-force protection, strict exact
+Actions checks and no bypass while admitting reviewed main merge ancestry.
+Historical linear policy remains readable for ordinary feature integration, but
+release readiness and PR creation explicitly block it. Installing the example
+policy or migrating already divergent refs needs separate maintainer action;
+candidate execution never changes GitHub settings or forces a protected ref.
 
 ## Compatibility and acceptance
 

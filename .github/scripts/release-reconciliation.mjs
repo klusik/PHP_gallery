@@ -513,7 +513,7 @@ export function inspectSync(request, repository, adapters = {}) {
     const plan = {tagSha:identity.commit_sha,candidateSha:evidence.candidate_sha,branch:request.branch,
         developSha,mainSha,syncBranch:syncBranchName(version,developSha),pr:null,qualificationRun:null,
         selectedDevelopSha:evidence.selected_develop_sha,state:'SYNC_PENDING',detail:'Owner-approved SHA-preserving FF remains pending.'};
-    if (!developProtected(call,repository)) return {...plan,state:'SYNC_BLOCKED',detail:'Develop requires active linear non-force full-CI protection without mandatory PR.'};
+    if (!developProtected(call,repository)) return {...plan,state:'SYNC_BLOCKED',detail:'Develop requires active non-force full-CI protection without mandatory PR.'};
     if (evidence.schema_version===1 && evidence.promotion_pr) {
         if (evidence.tag!=='v_'+version || evidence.tag_object_sha!==identity.tag_object_sha
             || evidence.tag_object_type!==identity.tag_object_type) {
@@ -521,23 +521,37 @@ export function inspectSync(request, repository, adapters = {}) {
         }
         const qualified=verifyAutomaticCompletion(evidence,repository,call,adapters);
         const synchronized=evidence.develop_synchronization;
-        if (evidence.lifecycle_schema===4 && synchronized?.state==='RECONCILED_EQUIVALENT') {
+        if (evidence.lifecycle_schema===4
+            && ['RECONCILED_FF','RECONCILED_EQUIVALENT'].includes(synchronized?.state)) {
             const result=call('repos/'+repository+'/commits/'+synchronized.result_sha);
             if (synchronized.result_tree!==identity.tree_sha || result.commit?.tree?.sha!==identity.tree_sha
-                || synchronized.develop_base_sha!==evidence.selected_develop_sha || result.parents?.length!==1
-                || result.parents[0]?.sha!==evidence.selected_develop_sha
+                || synchronized.develop_base_sha!==evidence.selected_develop_sha
                 || !isAncestor(call,repository,synchronized.result_sha,developSha)) {
-                throw new Error('BLOCKED reviewed release tree or linear synchronization history differs.');
+                throw new Error('BLOCKED reviewed release tree or retained synchronization history differs.');
             }
-            verifyFastForwardHistory(evidence.selected_develop_sha,synchronized.result_sha,developSha,adapters.git);
+            if (synchronized.state==='RECONCILED_FF') {
+                if (synchronized.result_sha!==identity.commit_sha || result.parents?.length!==2
+                    || result.parents[0]?.sha!==evidence.initial_main_sha
+                    || result.parents[1]?.sha!==evidence.candidate_sha
+                    || !isAncestor(call,repository,evidence.selected_develop_sha,synchronized.result_sha)) {
+                    throw new Error('BLOCKED develop synchronization is not the actual reviewed main merge.');
+                }
+            } else if (result.parents?.length!==1
+                || result.parents[0]?.sha!==evidence.selected_develop_sha) {
+                // Published schema-4 content-copy receipts remain immutable
+                // compatibility data, even after later reviewed main FFs.
+                throw new Error('BLOCKED historical content-copy synchronization parent differs.');
+            }
             const currentTag=peelReleaseTag(call,repository,'v_'+version);
             if (call('repos/'+repository+'/git/ref/heads/develop').object?.sha!==developSha
                 || call('repos/'+repository+'/git/ref/heads/main').object?.sha!==mainSha
                 || currentTag.commit_sha!==identity.commit_sha || currentTag.tag_object_sha!==identity.tag_object_sha) {
-                throw new Error('BLOCKED linear synchronization or tag raced during inspection.');
+                throw new Error('BLOCKED synchronization history or tag raced during inspection.');
             }
-            return {...plan,state:'RECONCILED_EQUIVALENT',resultSha:synchronized.result_sha,qualificationRun:qualified,
-                detail:'Protected linear develop retains the exact approved release tree and permanent assembly-bound synchronization receipt.'};
+            return {...plan,state:synchronized.state,resultSha:synchronized.result_sha,qualificationRun:qualified,
+                detail:synchronized.state==='RECONCILED_FF'
+                    ? 'Protected develop retains the actual reviewed main release and its assembly-bound receipt.'
+                    : 'Protected develop retains the historical content-copy result and its original assembly-bound receipt.'};
         }
         if (!isAncestor(call,repository,evidence.candidate_sha,developSha)) {
             return {...plan,state:'SYNC_PENDING',detail:'Automatically qualified Q is not retained in current develop; no cleanup is authorized.'};

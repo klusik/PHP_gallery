@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.133.3}
+\newcommand{\version}{0.133.4}
 \newcommand{\manualdate}{16.~října~2026}
 
 \hypersetup{
@@ -2664,11 +2664,19 @@ ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
 
-Před schválením PR sestavení připojí historii zafixovaného main a~zachová
-připravený strom. Po~schválení a~vytvoření tagu přenese stejný strom jedním
-lineárním commitem nad nezměněný develop. Jeho status představuje ověřené
-sestavení; funkční FULL se~neopakuje. Souběžná práce v~develop zůstává zachována.
-Trvalý záznam obsahuje výsledek, strom a~základ. Další vydání důvěřuje chráněnému
+Před schválením PR sestavení zachová historii zafixovaného main i~připravený
+strom. Po~schválení a~vytvoření tagu posune nezměněný develop přímo na~skutečný
+označený commit main pomocí fast-forward. Obě větve pak ukazují na~stejný commit;
+nevzniká další commit kopírující obsah. Status představuje ověřené sestavení
+a~kvalifikovanou historii zdroje; funkční FULL se~neopakuje. Souběžná práce
+v~develop zůstává zachována. Trvalý záznam obsahuje skutečný main, strom a~základ.
+Ochrana develop musí připouštět schválené merge commity main a~zachovat zákaz
+vynucených zápisů, povinné Actions kontroly a~zákaz bypassu. Starý požadavek
+lineární historie výslovně blokuje kontrolu připravenosti i~vytvoření PR;
+nastavení mění samostatně správce. Další vydání může spojit již rozdělené
+historie bez jejich přepisu. Staré záznamy o~kopii obsahu zůstávají čitelné;
+okamžité narovnání větví vyžaduje samostatné svolení.
+Další vydání důvěřuje chráněnému
 develop bez starých rekonciliačních archivů. Schválení včetně předčasného zachytí
 pozorovatel spuštěný po~sestavení; úspěšný Git push originu nepotřebuje okamžitý
 REST readback.

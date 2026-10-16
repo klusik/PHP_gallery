@@ -1,25 +1,36 @@
 # Compatibility lifecycle and retirement register
 
-## Linear synchronization of reviewed schema-4 releases
+## Reviewed main ancestry and historical synchronization receipts
 
-Owners: release assembly, completion, origin and reconciliation readers. Schema 4
-links frozen main before PR review, then copies exactly the approved release tree
-onto a single-parent result above unchanged selected develop. The permanent
-completion receipt adds an optional result/tree/base synchronization record;
-retirement verifies that tree, linear parent, retained ancestry and original
-assembly/owner approval. It does not invent FULL evidence for the copied tree.
-Historical schemas retain their original FF and reconciliation proof readers.
+Owners: release assembly, completion, policy, origin and reconciliation readers.
+Current schema-4 completion fast-forwards unchanged selected develop to the actual
+reviewed/tagged main merge M. A `RECONCILED_FF` receipt binds M/tree/source and
+retirement verifies original assembly, owner approval, source ancestry and retained
+M. Equal contents in a sibling commit are insufficient. Readiness and PR creation
+block the old merge prohibition; only the maintainer changes installed policy.
+Non-force updates, exact Actions checks, no bypass and concurrent-ref protection
+remain required. No content-copy commit or forced protected update is generated.
+
+Published schema-4 `RECONCILED_EQUIVALENT` receipts (observed through v_0.133.3)
+retain their original single-parent result above selected develop, complete tree
+and authenticated assembly/approval. Readers keep that historical format while
+its published receipts remain supported; later reviewed main FFs may descend from
+the retained result. Historical schemas retain their original linear-Q FF and
+reconciliation proof readers. Existing divergent refs are joined by a later
+release retaining current develop, or by a separately authorized migration.
+No published tag, origin, receipt or asset is rewritten to change the graph.
 
 Protected develop is the source authority for new initialization even when a
 prior release Q is not its ancestor; old reconciliation assets and historical
 test archives are not new-release prerequisites. Existing published origins,
 tags and assets stay immutable. This supports published releases whose manual
 conflict resolution added a merge to Q (observed in v_0.133); adoption outside
-that incident is unknown. Keep this general compatibility path while linear
-develop and non-linear main/release histories remain supported. Early approval
+that incident is unknown. Keep historical receipt readers for those published
+graphs; new completion retains main ancestry directly. Early approval
 uses the post-assembly observer; normal Git push acknowledges origin publication
-without a redundant cached REST readback. Live protected synchronization awaits
-the next separately human-approved release; registered real-Git regressions own
+without a redundant cached REST readback. Live main-following synchronization
+awaits reviewed policy installation and a separately human-approved release;
+registered real-Git regressions own
 tree preservation, concurrency refusal, idempotence and successor initialization.
 
 ## Gallery title-picture selection compatibility
