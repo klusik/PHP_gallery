@@ -234,3 +234,38 @@ function view_music_player_controls(bool $viewer): string
     return $html . '</div><span class="music-player-title" data-music-current-title></span>'
         . '<output data-music-playback-status role="status"></output></div>';
 }
+
+/**
+ * Open an accessible compact attachment disclosure with an owned popup body.
+ * @param string $id Unique gallery/surface presentation identity.
+ * @param string $title Localized document or playlist label.
+ * @param int $count Number of authorized entries supplied by the controller.
+ * @return void Emit the native disclosure, popup header and scroll container.
+ */
+function view_media_panel_start(string $id, string $title, int $count): void
+{
+    echo '<details class="gallery-media-widget" data-gallery-media-widget>'
+        . '<summary aria-controls="' . e($id) . '">'
+        . '<span>' . e($title) . '</span>'
+        . '<span class="gallery-media-count">' . $count . '</span>'
+        . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        . '<path d="m9 5 7 7-7 7"/></svg></summary>'
+        . '<div class="gallery-media-panel" id="' . e($id) . '"'
+        . ' data-gallery-media-panel role="region" aria-labelledby="'
+        . e($id) . '-title">'
+        . '<header><h3 id="' . e($id) . '-title">' . e($title) . '</h3>'
+        . '<button type="button" class="gallery-media-close"'
+        . ' data-media-close aria-label="' . e(t('lightbox.close'))
+        . '" title="' . e(t('lightbox.close')) . '">'
+        . '<span aria-hidden="true">&#215;</span></button></header>'
+        . '<div class="gallery-media-body">';
+}
+
+/**
+ * Close only the structural containers opened by the shared media renderer.
+ * @return void Emit the scroll-body, panel and native disclosure closing tags.
+ */
+function view_media_panel_end(): void
+{
+    echo '</div></div></details>';
+}

@@ -491,7 +491,16 @@ De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visn
 \subsubsection{Bifoga och konvertera ett PDF-dokument}
 Öppnade konverteringskontroller gör inte dokumentkolumnen bredare. Om det tidigare målet saknas eller har ändrats, bekräfta ett nytt privat resultat; tidigare filer och gallerier bevaras.
 
-Galleriet visar PDF i en kompakt tabell med storlek, sidantal och små åtgärdsikoner. Titeln och ögat öppnar visaren. Med beskrivning står texten till vänster och dokumenten till höger; utan text ligger tabellen till vänster. Administratörer kan öppna konverteringsinställningar, dölja eller visa PDF och bekräfta borttagning. Dolda dokument nekas besökare även via direkta länkar; skapade foton bevaras efter borttagning.
+PDF- och~musikknappar visar filantal bredvid beskrivningen,
+eller~under den~på~smala skärmar. Ett~klick öppnar en~liten överlagring.
+Listan är~högst 12rem hög~och~rullar separat. PDF-rader behåller storlek,
+sidantal och~små åtgärdsikoner; titel eller~öga öppnar den~skyddade visaren.
+Administratörer kan~öppna konvertering, dölja/visa eller~bekräfta radering.
+Dolda PDF:er förblir spärrade via~direktlänkar; skapade foton bevaras.
+Escape, stängikonen, knappen eller~ett~klick utanför stänger appleten.
+Utan JavaScript eller~Popover-stöd finns en~begränsad inbyggd lista
+på~sidan. Minskad rörelse stänger av~animation. Innehållsbyte behåller
+öppen lista och~rullningsläge.
 
 Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri accepterar också PDF. Som standard bifogas endast originaldokumentet; inga undergallerier eller PNG-sidor skapas. För konvertering vid uppladdningen öppnar du \ui{Avancerat} och markerar uttryckligen \ui{Konvertera även PDF-sidor till PNG}; välj sedan ett privat undergalleri eller att lägga till sidor sist, samt DPI. Att enbart öppna Avancerat aktiverar inte konvertering. Blandade val laddar upp foton först, bifogar sedan PDF och utför endast valda konverteringar. Panelen förblir öppen med förlopp och avbrytning. Nya försök behåller det ursprungliga konverteringsvalet; vid aktiverad konvertering återskapas ett saknat tomt undergalleri endast när ingen sida har bekräftats.
 
@@ -513,7 +522,12 @@ och~bildspelets sparade standard. Åtgärder stannar i~panelen. MP3, M4A, AAC,
 Ogg/Opus, WAV, FLAC och~WebM accepteras; webbläsarens kodekar avgör
 uppspelning. Galleriets synlighet, lösenord, delning och~NSFW-regler gäller.
 
-Tabellen visar spårlängd och~små Spela/Stoppa-ikoner. Kompakta
+Tabellen visar spårlängd och~en~Spela/Stoppa-ikon före titeln. Ikonen
+växlar med~uppspelningen; ingen paus eller~separat uppspelningskolumn finns.
+Långa titlar förkortas med~ellips och~fullständig verktygstips; endast
+det~spelande spårets titel rullar vågrätt. Minskad rörelse behåller statisk
+text. Stängning av~listan behåller musik och~den~befintliga minispelaren.
+Kompakta
 Föregående/Spela/Stoppa/Nästa-ikoner finns på~sidan och~i~fotovisaren när~ljud
 finns. En~gemensam spelare förhindrar överlappning mellan rader, redigerare
 och~bildspel. Hela listan upprepas och~navigeringen går runt vid~ändarna.

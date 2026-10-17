@@ -82,7 +82,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             if (status) status.textContent = own ? message : '';
         }
         const buttons = root.querySelectorAll(
-            '[data-music-action="play"], [data-music-action="stop"]'
+            '[data-music-action="play"], [data-music-action="stop"], '
+            + '[data-music-action="toggle"]'
         );
         for (const button of buttons) {
             const selected = !button.dataset.musicTrackId
@@ -93,14 +94,25 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
                 || group?.dataset.musicGallery;
             const own = identity === String(playlist.galleryId);
             const active = playing && selected && own;
-            if (button.dataset.musicAction === 'play') {
+            if (button.dataset.musicAction === 'toggle') {
+                const label = active ? button.dataset.musicStopLabel
+                    : button.dataset.musicPlayLabel;
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                button.setAttribute('aria-label', label || '');
+                button.title = label || '';
+                button.querySelector('[data-music-toggle-play]').hidden = active;
+                button.querySelector('[data-music-toggle-stop]').hidden = !active;
+            } else if (button.dataset.musicAction === 'play') {
                 button.setAttribute('aria-pressed', active ? 'true' : 'false');
             } else button.disabled = !active;
         }
         for (const row of root.querySelectorAll('[data-music-track]')) {
+            const own = row.closest('[data-gallery-music]')
+                ?.dataset.musicGallery === String(playlist.galleryId);
             row.classList.toggle('is-playing', playing
-                && row.dataset.musicTrack === tracks[index]?.id);
+                && own && row.dataset.musicTrack === tracks[index]?.id);
         }
+        observeMusicTitles(root);
     }
 
     /**
@@ -214,7 +226,7 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         },
         /**
          * Execute one explicit compact player or row-control action.
-         * @param {string} action Play, stop, next or previous.
+         * @param {string} action Play, stop, toggle, next or previous.
          * @param {string} trackId Optional opaque row track identity.
          * @param {boolean} viewer Whether the control belongs to the
          *     photo viewer.
@@ -224,9 +236,12 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         command(action, trackId = '', viewer = false) {
             if (disposed || tracks.length === 0) return;
             if (action === 'stop') { release(); sync(); return; }
-            if (!['play', 'next', 'previous'].includes(action)) return;
+            if (!['play', 'toggle', 'next', 'previous'].includes(action)) return;
             const selected = trackId ? tracks.findIndex(track => track.id === trackId) : -1;
             if (trackId && selected < 0) return;
+            if (action === 'toggle' && playing && selected === index) {
+                release(); sync(); return;
+            }
             if (selected >= 0) index = selected;
             else if (action === 'next') index = (index + 1) % tracks.length;
             else if (action === 'previous') index = (index - 1 + tracks.length) % tracks.length;
@@ -311,6 +326,11 @@ export function setupGalleryMusicPlayback() {
         else { currentPlayer?.destroy(); currentPlayer = null; currentSignature = ''; }
         scanGalleryMusicDurations();
     });
+    document.addEventListener('php-gallery:media-panel-open', () => {
+        currentPlayer?.refresh();
+        scanGalleryMusicDurations();
+    });
+    window.addEventListener('resize', () => observeMusicTitles(document));
     const observer = new MutationObserver(changes => {
         for (const change of changes) for (const node of change.addedNodes) {
             if (node instanceof Element && (node.matches('[data-gallery-music]')
@@ -324,15 +344,68 @@ export function setupGalleryMusicPlayback() {
         observer.observe(document.body, {childList: true, subtree: true});
         durationSeen = new WeakSet();
         durationObserver = null;
+        observeMusicTitles(document);
         scanGalleryMusicDurations();
     });
     window.addEventListener('pagehide', () => {
         currentPlayer?.destroy(); currentPlayer = null; currentSignature = '';
         observer.disconnect();
         durationObserver?.disconnect();
+        musicTitleObserver?.disconnect();
         durationQueue.length = 0;
         cancelDurationRead?.();
     });
+}
+
+/**
+ * Keep long active titles readable without rapid marquee motion.
+ * Type: number. Units: CSS pixels per second. Scope: overflowing track labels.
+ * Consumers: refreshMusicTitle.
+ * Rationale: Thirty pixels per second permits reading while titles traverse.
+ */
+const MUSIC_TITLE_SPEED = 30;
+/**
+ * Avoid a distracting rapid bounce for titles that only slightly overflow.
+ * Type: number. Units: seconds. Scope: one title animation direction.
+ * Consumers: refreshMusicTitle.
+ * Rationale: Eight seconds provides a calm minimum even for small overflows.
+ */
+const MUSIC_TITLE_MIN_SECONDS = 8;
+let musicTitleObserver = null;
+
+/**
+ * Measure only actual overflow and retain full text for tooltips/screen readers.
+ * @param {HTMLElement} title Clipped row-title viewport with its original text.
+ * @returns {void} Set the distance/duration consumed by playing-row CSS only.
+ */
+function refreshMusicTitle(title) {
+    const text = title.querySelector('[data-music-title-text]');
+    if (!text) return;
+    const distance = Math.max(0, text.scrollWidth - title.clientWidth);
+    title.classList.toggle('is-overflowing', title.clientWidth > 0 && distance > 0);
+    title.style.setProperty('--music-title-offset', `${-distance}px`);
+    title.style.setProperty('--music-title-duration', `${Math.max(
+        MUSIC_TITLE_MIN_SECONDS, distance / MUSIC_TITLE_SPEED
+    )}s`);
+}
+
+/**
+ * Observe title viewports across opening, resizing and card replacements.
+ * @param {Document|HTMLElement} root Current document or isolated player root.
+ * @returns {void} Refresh rows without touching the existing miniplayer.
+ */
+function observeMusicTitles(root) {
+    if (!musicTitleObserver && typeof ResizeObserver === 'function') {
+        musicTitleObserver = new ResizeObserver(entries => {
+            for (const entry of entries) refreshMusicTitle(entry.target);
+        });
+    }
+    // Permanent fallback: explicit playback/open/resize events still measure
+    // titles without ResizeObserver. Reduced-motion users retain static text.
+    for (const title of root.querySelectorAll('[data-music-title]')) {
+        refreshMusicTitle(title);
+        musicTitleObserver?.observe(title);
+    }
 }
 
 /**

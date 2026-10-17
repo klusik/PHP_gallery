@@ -495,7 +495,17 @@ Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{
 \subsubsection{PDF-Dokumente anhängen und umwandeln}
 Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt das bisherige Ziel oder wurde es geändert, bestätigen Sie ein neues privates Ergebnis; bisherige Dateien und Galerien bleiben erhalten.
 
-Die Galerie zeigt PDFs in einer kompakten Tabelle mit Größe, Seitenzahl und kleinen Aktionssymbolen. Titel und Auge öffnen den Betrachter. Mit Beschreibung steht der Text links und die Tabelle rechts; ohne Text bleibt die Tabelle links. Administratoren können die Konvertierung aufklappen, PDFs verbergen oder anzeigen und die Löschung bestätigen. Verborgene PDFs sind für Besucher auch über direkte Links gesperrt; erzeugte Fotos bleiben nach der Löschung erhalten.
+PDF- und~Musik-Schalter zeigen Dateizahlen neben der~Beschreibung,
+auf~schmalen Bildschirmen darunter. Ein~Klick öffnet ein~kleines Overlay.
+Die~Liste ist~höchstens 12rem hoch und~scrollt unabhängig. PDF-Zeilen
+behalten Größe, Seitenzahl und~kleine Aktionssymbole; Titel oder~Auge
+öffnen den~geschützten Betrachter. Administratoren können Umwandlung
+aufklappen, Dokumente ausblenden/einblenden oder~Löschen bestätigen.
+Verborgene PDFs bleiben auch per~Direktlink gesperrt; erzeugte Fotos
+bleiben erhalten. Escape, Schließen, der~Schalter oder~ein~Klick außerhalb
+schließt das~Applet. Ohne JavaScript oder~Popover-Unterstützung bleibt
+eine begrenzte native Aufklappliste. Reduzierte Bewegung deaktiviert
+Animation. Ein~Inhaltsaustausch behält offene Liste und~Scrollposition.
 
 Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzeptieren auch PDFs. Standardmäßig wird nur das Originaldokument angehängt; es entstehen weder Untergalerien noch PNG-Seiten. Öffnen Sie für eine Konvertierung beim Upload \ui{Erweitert} und aktivieren Sie ausdrücklich \ui{PDF-Seiten zusätzlich in PNG umwandeln}; wählen Sie danach eine private Untergalerie oder das Anhängen der Seiten sowie die DPI. Das Öffnen allein aktiviert keine Konvertierung. Gemischte Auswahlen laden zuerst Fotos hoch, hängen dann PDFs an und führen nur gewählte Konvertierungen aus. Das Panel bleibt mit Fortschritt und Abbruch geöffnet. Wiederholungen behalten die ursprüngliche Konvertierungswahl; bei aktivierter Konvertierung wird ein fehlendes leeres Untergalerieziel nur wiederhergestellt, wenn noch keine Seite bestätigt wurde.
 
@@ -518,7 +528,12 @@ Aktionen bleiben im~Panel. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC und~WebM werden
 akzeptiert; Browser-Codecs bestimmen die~Wiedergabe. Sichtbarkeit, Passwort,
 Freigabe und~NSFW-Regeln gelten weiterhin.
 
-Die~Tabelle zeigt Titeldauer und~kleine Abspielen/Stopp-Symbole. Kompakte
+Die~Tabelle zeigt Titeldauer und~ein~Abspielen/Stopp-Symbol vor~dem~Titel.
+Das~Symbol wechselt mit~der~Wiedergabe; es~gibt keine Pause oder~eigene
+Wiedergabespalte. Lange Titel erhalten Auslassung und~vollständigen Tooltip;
+nur~der~laufende Titel scrollt horizontal. Reduzierte Bewegung behält
+statischen Text. Schließen der~Liste lässt Musik und~den~bisherigen
+Miniplayer verfügbar. Kompakte
 Vorheriger/Abspielen/Stopp/Nächster-Symbole stehen auf~der~Seite
 und~im~Fotobetrachter bereit, sobald Audio vorhanden ist. Ein~gemeinsamer
 Player verhindert überlappende Musik zwischen Zeilen, Editor und~Diashow.

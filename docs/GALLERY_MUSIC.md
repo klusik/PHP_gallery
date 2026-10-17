@@ -11,8 +11,14 @@ attachment storage and never enters image decoding, thumbnails or PDF conversion
 Audio-only submissions work with image preparation disabled. The editor's
 Documents / PDFs tab also retains independent upload and playlist controls.
 
-The compact music table shows titles, browser-reported durations and icon-only
-Play/Stop actions for each track. An exclusive shared player also offers
+The music launcher shows the authorized track count. Clicking it opens a small
+overlay with a bounded, scrollable list; closing it leaves playback running.
+PDFs use the same disclosure. The existing miniplayer remains visible outside
+the list and retains its four controls. The table shows titles, browser-reported
+durations and one context-sensitive Play/Stop icon **before** each title, with
+no playback column or Pause action. Long titles use an ellipsis and full tooltip;
+only the playing, overflowing title scrolls horizontally. Reduced-motion users
+retain static ellipsis. An exclusive shared player also offers
 Previous/Play/Stop/Next on the page and in the photo-viewer HUD whenever music
 exists, including outside slideshow. Buttons expose translated accessible names
 and tooltips. No duplicate visitor enable checkbox is shown.
@@ -142,3 +148,30 @@ for connected rows. This permanent fallback preserves duration availability
 without concurrent metadata allocation. Removed cards and page teardown discard
 queued work and release the active reader. Metadata may transfer audio bytes as
 needed by the browser; the server performs no decoding or tag extraction.
+
+## Compact attachment presentation
+
+The existing shared lightbox view owns native disclosure markup; the new
+`gallery-media-panels.js` browser owner upgrades it to a manual top-layer popover
+without moving forms or playlist nodes out of their gallery. Only one applet is
+open. Escape, the close icon, its launcher or an outside click dismiss it;
+Escape/close restores launcher focus. PDF dialogs keep priority over Escape.
+The body is bounded to 12rem (roughly five compact rows) and scrolls independently;
+the floating panel also fits the current visual viewport. Public description
+layout groups PDF/music launchers in one column. Canonical attachment replacement
+reopens the same-identity applet and retains its last connected list scroll;
+removing a top-layer node otherwise resets its layout scroll to zero. Removing the last
+PDF preserves music and its surrounding layout.
+
+Without JavaScript or Popover API support, the native details disclosure keeps
+the same bounded list inline. Without Web Animations, opening/closing is immediate.
+Reduced-motion preference disables disclosure motion and title scrolling.
+ResizeObserver measures title overflow; without it, play, panel-open and window
+resize events provide the permanent measurement fallback. These paths retain
+one Audio owner, authorization and editor mutation semantics.
+
+This redesign adds one browser module and no PHP source file, route, schema or
+logical runtime owner. The existing attachment closure already contains the
+shared view helper. Expected PHP module/file deltas are zero against the prepared
+music baseline; global logical-module allowance remains fully consumed. Hosted
+preparation/FULL owns the actual unchanged-budget proof.

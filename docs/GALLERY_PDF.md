@@ -11,19 +11,27 @@ The gallery presents documents in a compact table with title, original byte size
 actual PDF page count and text-sized icons. The title and eye icon open the same
 protected viewer; the download icon retains the original filename. PDF.js reads
 page-count metadata sequentially without rasterizing pages. Unknown or unreadable
-counts remain an em dash. When a description exists, only that description and
-the PDF table share a desktop row (text left, documents right). With no description
-the table is left-aligned; narrow screens stack the two blocks. Tags, breadcrumbs,
+counts remain an em dash. PDF and music launchers share one compact column
+beside the description on desktop, or below it on narrow screens. Without a
+description they stay left-aligned. Clicking a launcher reveals a small overlay;
+the list body has a 12rem maximum height and scrolls independently. Its count
+reflects authorized documents, and the panel fits the visual viewport. Tags, breadcrumbs,
 dates and other gallery controls retain their existing placement.
 The text/document row spans the panel's inner width below the title/actions row.
 The document table aligns against its right padding, all action icons remain on
 one line, and long titles use an ellipsis with the complete title in a tooltip.
-The normal collapsed state has one compact row per PDF; expanded conversion
-controls remain available below the selected document. Very narrow screens allow
+The normal collapsed state shows only the launcher and document count. The open
+list has one compact row per PDF; expanded conversion controls remain below the
+selected document inside that scroll area. Very narrow screens allow
 horizontal scrolling within the document area rather than stacking action icons.
 Expanded controls use a fixed-layout table inside a bounded document column, so
 their descriptions and selects cannot increase the column's intrinsic width and
-compress or overlap the gallery description.
+compress or overlap the gallery description. Escape, the close icon, the launcher
+or an outside click dismisses the overlay. Native details retains the bounded
+inline list without JavaScript/Popover API; reduced motion disables animation.
+Forms stay inside their original gallery ownership. In-place card replacement
+retains the open applet and list scroll; deleting the last PDF preserves any
+music applet. See `docs/GALLERY_MUSIC.md` for the shared disclosure owner.
 
 When a child target is missing, changed away from private before completion, or
 its reserved path belongs to unrelated data, the browser offers explicit

@@ -23,6 +23,16 @@ namespace Gallery\Core {
     }
 
     /**
+     * Format a supplied document size without loading installation services.
+     * @param int $bytes Prepared original document byte count.
+     * @return string Deterministic size label for the isolated view fixture.
+     */
+    function format_bytes(int $bytes): string
+    {
+        return $bytes . ' B';
+    }
+
+    /**
      * Check canonical fixture containment without production configuration.
      * @param string $root Trusted fixture root.
      * @param string $path Candidate canonical path.
@@ -175,6 +185,47 @@ namespace {
             && str_contains($publicHtml, 'data-music-duration')
             && !str_contains($publicHtml, 'type="checkbox"'),
             'Public table must show allowed download/duration with no checkbox.');
+        music_assert(substr_count($publicHtml, 'data-music-action="toggle"') === 1
+            && strpos($publicHtml, 'data-music-action="toggle"')
+                < strpos($publicHtml, 'data-music-title title=')
+            && !str_contains($publicHtml, '>music.playback</th>')
+            && str_contains($publicHtml, 'id="gallery-music-list-1-public"'),
+            'Table must have one toggle before the title and no playback column.');
+        music_assert(strpos($publicHtml, '</details>')
+            < strpos($publicHtml, 'data-gallery-music-controls')
+            && substr_count($publicHtml, 'data-music-action="play"') === 1
+            && substr_count($publicHtml, 'data-music-action="stop"') === 1
+            && substr_count($publicHtml, 'data-music-action="previous"') === 1
+            && substr_count($publicHtml, 'data-music-action="next"') === 1,
+            'Original four-action miniplayer must remain outside the disclosure.');
+        require_once dirname(__DIR__) . '/app/views/gallery_pdf_documents.php';
+        require_once dirname(__DIR__) . '/app/views/public_gallery_controls.php';
+        ob_start();
+        \Gallery\Views\view_render_gallery_pdf_documents([
+            'gallery_id' => 1, 'admin' => false, 'editor' => false,
+            'action_url' => '/index.php', 'csrf_html' => '',
+            'operation_key' => '', 'dpi' => 150, 'browser_config' => '',
+            'language' => 'en', 'documents' => [[
+                'id' => 'fixture', 'title' => 'Document',
+                'filename' => 'document.pdf', 'size' => 1, 'hidden' => false,
+                'version' => 'fixture-version', 'view_url' => '/pdf',
+                'download_url' => '/pdf?download=1',
+            ]],
+        ]);
+        $pdfHtml = (string) ob_get_clean();
+        music_assert(str_contains($pdfHtml, 'id="gallery-pdf-list-1-public"')
+            && str_contains($pdfHtml, 'data-gallery-media-panel')
+            && str_contains($pdfHtml, 'data-pdf-page-count')
+            && str_contains($pdfHtml, 'data-simbrief-ofp-open'),
+            'PDF disclosure must retain protected viewer and metadata hooks.');
+        ob_start();
+        \Gallery\Views\view_render_public_gallery_description_documents([
+            'pdf_html' => $pdfHtml . $publicHtml,
+        ]);
+        $appletsHtml = (string) ob_get_clean();
+        music_assert(substr_count($appletsHtml,
+            'data-gallery-attachment-applets') === 1,
+            'PDF and music must share one compact presentation column.');
         $viewModel['tracks'][0]['download_url'] = '';
         $viewModel['tracks'][0]['downloadable'] = false;
         ob_start();

@@ -30,6 +30,14 @@ two successive fragment replacements using the production completion
 coordinator, with unchanged URL/open panel and fresh revisions. Audio outcomes
 and mutation responses are controlled adapters; this does not qualify real
 codec decoding, production PHP multipart handling or full lightbox geometry.
+The same fixture uses desktop and narrow portrait CSS viewports for compact
+attachment launchers, top-layer fitting, bounded PDF scrolling, exclusive
+Play/Stop row icons, title ellipsis/active scrolling and persistent miniplayer.
+It exercises Escape/outside/close dismissal, focus restoration, replacement
+scroll retention and a missing-Popover inline fallback. The isolated PHP view
+assertions retain protected PDF hooks and place the miniplayer outside details.
+No-JavaScript, reduced motion, screen readers, Safari and physical mobile devices
+remain manual acceptance; emulated Chromium dimensions do not establish those.
 The upload stream owner imports `gallery_music_upload_scenarios.mjs` to exercise
 original file partition, exact acknowledged retries, uncertain-write refusal,
 canonical response aggregation and audio-only admission with image preparation

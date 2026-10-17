@@ -26,6 +26,24 @@ The music model also owns permanent v1 compatibility: a missing download flag
 means false. New tracks always start locked; bulk permission affects current
 tracks only. This prevents old indexes or later uploads inheriting permission.
 
+## Compact attachment browser presentation
+
+Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.
+Native details is the permanent no-JavaScript and missing-Popover fallback: the
+bounded list opens inline while forms keep their original ownership. Optional
+Web Animations is feature-detected; missing support closes immediately. User
+reduced-motion preference disables both disclosure motion and row-title scrolling.
+ResizeObserver is optional: play/open/resize events still measure title overflow
+without it. These paths protect attachment access, keyboard dismissal and
+exclusive audio without requiring newer browser APIs.
+
+Live browser adoption and low-end device results are unknown. Required Chromium
+covers desktop/narrow popup bounds, toggled row state, single audio ownership,
+scroll-preserving replacement and missing-Popover presentation. Native
+no-JavaScript use, assistive technology, Safari/mobile and reduced-motion
+acceptance remain manual coverage. Retain these capability fallbacks permanently
+unless deployed support and regression evidence justify a deliberate retirement.
+
 ## Watch-folder UTC synchronization and packaged Python
 
 Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.

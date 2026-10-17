@@ -205,9 +205,12 @@ function view_render_public_gallery_branding_header(array $viewModel, bool $incl
 }
 
 /**
- * Render only description text and the document table in the full-width hero content row.
- * @param array{description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>,pdf_html?:string} $viewModel Prepared description, link metadata and protected document markup; absent fields render no content.
- * @return void Emit the text/document row, or the standalone text or left-aligned document table.
+ * Render description text beside the compact document and playlist launchers.
+ * @param array{description?:string,
+ *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
+ *     pdf_html?:string} $viewModel Prepared description, link metadata and
+ *     protected attachment markup; absent fields render no content.
+ * @return void Emit the hero row, standalone text or left-aligned applets.
  */
 function view_render_public_gallery_description_documents(array $viewModel): void
 {
@@ -220,11 +223,17 @@ function view_render_public_gallery_description_documents(array $viewModel): voi
     if (trim($description) !== '') {
         echo '<div class="hero-description gallery-description-rich">';
         if (trim($description) !== '') {
-            echo view_gallery_description_markdown_html($description, (array) ($viewModel['description_links'] ?? []));
+            echo view_gallery_description_markdown_html(
+                $description,
+                (array) ($viewModel['description_links'] ?? [])
+            );
         }
         echo '</div>';
     }
-    echo $pdfHtml;
+    if ($pdfHtml !== '') {
+        echo '<div class="gallery-attachment-applets"'
+            . ' data-gallery-attachment-applets>' . $pdfHtml . '</div>';
+    }
     if ($hasDescription && $pdfHtml !== '') {
         echo '</div>';
     }

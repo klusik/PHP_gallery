@@ -48,7 +48,7 @@
  */
 
 
-import {getGalleryMusicPlayer, stopGalleryMusicViewer} from './gallery-music-player.js?v=20261017-music-v3';
+import {getGalleryMusicPlayer, stopGalleryMusicViewer} from './gallery-music-player.js?v=20261017-media-applets-v1';
 
 /**
  * Return a translated browser string with simple placeholder replacement.

@@ -2150,7 +2150,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
-.gallery-music-row-actions { width: 3.5rem; }
+
 .gallery-music-download { width: 2rem; }
 .gallery-music[data-music-editor="1"] th:last-child { width: 5.25rem; }
 .gallery-music-table tr.is-playing { background: var(--color-border); }
@@ -2166,3 +2166,182 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
         justify-self: start;
     }
 }
+
+/* Attachment lists occupy one launcher row until explicitly disclosed. */
+.gallery-attachment-applets {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    align-items: stretch;
+}
+.gallery-description-documents > .gallery-attachment-applets {
+    grid-column: 2;
+    justify-self: end;
+    width: min(36rem, 100%);
+}
+.gallery-attachment-applets > :is(.gallery-music, .gallery-pdf-documents) {
+    margin: 0;
+}
+.gallery-pdf-documents { overflow: visible; }
+.gallery-media-widget { min-width: 0; }
+.gallery-media-widget > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+}
+.gallery-media-widget > summary::-webkit-details-marker { display: none; }
+.gallery-media-widget > summary:is(:hover, :focus-visible) {
+    background: var(--color-border);
+}
+.gallery-media-count {
+    padding: 0 0.3rem;
+    border-radius: 0.3rem;
+    background: var(--color-border);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+.gallery-media-widget > summary svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+}
+.gallery-media-widget[open] > summary svg { transform: rotate(90deg); }
+.gallery-media-panel {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    width: 100%;
+    margin-top: 0.4rem;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 0.65rem;
+    background: var(--color-surface, #fff);
+    color: var(--color-text, #181818);
+    box-shadow: 0 0.5rem 1.75rem #0003;
+    overflow: hidden;
+}
+.gallery-media-panel[popover] {
+    position: fixed;
+    inset: auto;
+    width: min(36rem, calc(100vw - 1rem));
+    margin: 0;
+}
+.gallery-media-panel[popover]:not(:popover-open) { display: none; }
+.gallery-media-panel > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    flex: 0 0 auto;
+}
+.gallery-media-panel > header h3 {
+    margin: 0;
+    font-size: 0.85rem;
+}
+.gallery-media-panel .gallery-media-close {
+    display: inline-grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: inherit;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.gallery-media-close:is(:hover, :focus-visible) {
+    background: var(--color-border);
+    outline: 1px solid currentColor;
+}
+.gallery-media-body {
+    /* Bound the applet to roughly five compact file rows.
+     * Type: length. Units: rem. Scope: each media applet body.
+     * Consumers: the PDF/music scroll container.
+     * Rationale: 12rem exposes a useful sample without dominating the gallery.
+     */
+    --media-list-max-height: 12rem;
+    min-height: 0;
+    max-height: var(--media-list-max-height);
+    padding: 0.25rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+.gallery-media-body :is(.gallery-pdf-table, .gallery-music-table) {
+    margin: 0;
+}
+.gallery-media-body thead {
+    position: sticky;
+    top: -0.25rem;
+    z-index: 1;
+    background: var(--color-surface, #fff);
+}
+.music-track-line {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.music-track-toggle > span { display: inline-grid; }
+.music-track-toggle > [hidden] { display: none; }
+.music-track-name {
+    display: block;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.music-track-name > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.is-playing .music-track-name.is-overflowing > span {
+    width: max-content;
+    overflow: visible;
+    text-overflow: clip;
+    animation: music-title-scroll var(--music-title-duration)
+        linear infinite alternate;
+}
+@keyframes music-title-scroll {
+    /* Holds at both edges are animation phases, not an additional timer. */
+    0%, 15% { transform: translateX(0); }
+    85%, 100% { transform: translateX(var(--music-title-offset)); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .is-playing .music-track-name.is-overflowing > span {
+        width: auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        animation: none;
+    }
+}
+@media (max-width: 760px) {
+    .gallery-description-documents > .gallery-attachment-applets {
+        grid-column: 1;
+        justify-self: start;
+    }
+}
+
+body:not([data-media-panels-bound]) .gallery-media-close { display: none; }

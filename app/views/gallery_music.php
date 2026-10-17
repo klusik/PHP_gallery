@@ -19,16 +19,14 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
- * Render music from a controller-prepared view model without discovering
- *     policy.
+ * Render a bounded playlist disclosure with the always-visible miniplayer.
  * @param array{gallery_id:int, editor:bool, action_url:string,
  *     csrf_html:string, revision:string, enabled:bool, error:string,
  *     tracks:list<array{id:string, title:string, filename:string,
  *     mime:string, size:int, sha256:string, downloadable:bool, url:string,
  *     download_url:string}>} $model Authorized playlist and optional editor
  *     controls.
- * @return void Emit a compact table, player data and independent multipart
- *     forms.
+ * @return void Emit row Play/Stop toggles, player data and independent forms.
  */
 function view_render_gallery_music(array $model): void
 {
@@ -36,30 +34,22 @@ function view_render_gallery_music(array $model): void
     echo '<section class="gallery-music" data-gallery-music data-music-editor="'
         . ($model['editor'] ? '1' : '0') . '" data-music-gallery="'
         . $model['gallery_id'] . '" data-music-error="'
-        . e(t('music.failed')) . '"><h3>' . e(t('music.title')) . '</h3>';
+        . e(t('music.failed')) . '">';
     if ($model['error'] !== '') {
         if ($model['editor']) echo '<p role="alert">' . e($model['error']) . '</p>';
         echo '</section>';
         return;
     }
-    if ($model['tracks'] !== []) {
-        $json = json_encode(['galleryId' => $model['gallery_id'], 'revision' => $model['revision'],
-            'enabled' => $model['enabled'], 'tracks' => array_map(
-            static fn(array $track): array => [
-                'id' => $track['id'],
-                'url' => $track['url'],
-                'title' => $track['title'],
-            ],
-            $model['tracks'])], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        echo '<script type="application/json" data-gallery-music-playlist data-music-gallery="'
-            . $model['gallery_id'] . '" data-music-editor="'
-            . ($model['editor'] ? '1' : '0') . '">' . $json . '</script>';
-        echo view_music_player_controls(false);
-    }
+    $surface = $model['editor'] ? 'editor' : 'public';
+    view_media_panel_start(
+        'gallery-music-list-' . $model['gallery_id'] . '-' . $surface,
+        t('music.title'),
+        count($model['tracks'])
+    );
     echo '<table class="gallery-music-table"><thead><tr><th scope="col">'
-        . e(t('music.track')) . '</th><th scope="col" class="gallery-music-duration">'
-        . e(t('music.duration')) . '</th><th scope="col" class="gallery-music-row-actions">'
-        . e(t('music.playback')) . '</th>';
+        . e(t('music.track'))
+        . '</th><th scope="col" class="gallery-music-duration">'
+        . e(t('music.duration')) . '</th>';
     echo '<th scope="col" class="gallery-music-download">';
     if ($model['editor'] && $model['tracks'] !== []) {
         $allAllowed = !in_array(false, array_column(
@@ -77,17 +67,24 @@ function view_render_gallery_music(array $model): void
     }
     echo '</tr></thead><tbody>';
     foreach ($model['tracks'] as $position => $track) {
-        echo '<tr data-music-track="' . e($track['id']) . '"><td><span title="'
-            . e($track['filename']) . '">' . e($track['title']) . '</span></td>'
-            . '<td class="gallery-music-duration" data-music-duration data-music-src="'
-            . e($track['url']) . '" title="' . e(t('music.duration_unknown')) . '">…</td><td>';
-        foreach (['play' => 'music.play', 'stop' => 'music.stop'] as $action => $key) {
-            echo '<button type="button" class="music-icon" data-music-action="'
-                . e($action) . '" data-music-track-id="' . e($track['id'])
-                . '" aria-label="' . e(t($key)) . '" title="' . e(t($key)) . '"'
-                . ($action === 'stop' ? ' disabled' : '') . '>'
-                . view_music_control_icon($action) . '</button>';
-        }
+        echo '<tr data-music-track="' . e($track['id']) . '">'
+            . '<td><div class="music-track-line">'
+            . '<button type="button" class="music-icon music-track-toggle"'
+            . ' data-music-action="toggle" data-music-track-id="'
+            . e($track['id']) . '" data-music-play-label="'
+            . e(t('music.play')) . '" data-music-stop-label="'
+            . e(t('music.stop')) . '" aria-label="' . e(t('music.play'))
+            . '" title="' . e(t('music.play')) . '" aria-pressed="false">'
+            . '<span data-music-toggle-play>'
+            . view_music_control_icon('play') . '</span>'
+            . '<span data-music-toggle-stop hidden>'
+            . view_music_control_icon('stop') . '</span></button>'
+            . '<span class="music-track-name" data-music-title title="'
+            . e($track['title']) . '"><span data-music-title-text>'
+            . e($track['title']) . '</span></span></div></td>'
+            . '<td class="gallery-music-duration" data-music-duration'
+            . ' data-music-src="' . e($track['url']) . '" title="'
+            . e(t('music.duration_unknown')) . '">…';
         echo '</td><td class="gallery-music-download">';
         if ($model['editor']) {
             view_render_gallery_music_form_start($model);
@@ -105,7 +102,8 @@ function view_render_gallery_music(array $model): void
         if ($model['editor']) {
             echo '<td>';
             view_render_gallery_music_form_start($model);
-            echo '<input type="hidden" name="track_id" value="' . e($track['id']) . '">';
+            echo '<input type="hidden" name="track_id" value="'
+                . e($track['id']) . '">';
             foreach ([
                 'previous' => 'music.up',
                 'next' => 'music.down',
@@ -132,16 +130,38 @@ function view_render_gallery_music(array $model): void
         echo '<label>' . e(t('music.upload'))
             . '<input type="file" name="music_file"'
             . ' accept=".mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.flac,.webm,.weba"'
-            . ' required></label>'
-            . '<p>' . e(t('music.upload_help')) . '</p>'
-            . '<button type="submit" name="music_action" value="upload">' . e(t('music.upload'))
+            . ' required></label>' . '<p>' . e(t('music.upload_help')) . '</p>'
+            . '<button type="submit" name="music_action" value="upload">'
+            . e(t('music.upload'))
             . '</button><output data-music-status role="status"></output></form>';
         view_render_gallery_music_form_start($model);
         echo '<label><input type="checkbox" name="music_enabled" value="1"'
-            . ($model['enabled'] ? ' checked' : '') . '> ' . e(t('music.default')) . '</label>'
+            . ($model['enabled'] ? ' checked' : '')
+            . '> ' . e(t('music.default')) . '</label>'
             . '<button type="submit" name="music_action" value="settings">'
             . e(t('music.save_default'))
             . '</button><output data-music-status role="status"></output></form>';
+    }
+    view_media_panel_end();
+    if ($model['tracks'] !== []) {
+        $json = json_encode([
+            'galleryId' => $model['gallery_id'],
+            'revision' => $model['revision'],
+            'enabled' => $model['enabled'],
+            'tracks' => array_map(
+                static fn(array $track): array => [
+                    'id' => $track['id'],
+                    'url' => $track['url'],
+                    'title' => $track['title'],
+                ],
+                $model['tracks']
+            ),
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        echo '<script type="application/json" data-gallery-music-playlist'
+            . ' data-music-gallery="'
+            . $model['gallery_id'] . '" data-music-editor="'
+            . ($model['editor'] ? '1' : '0') . '">' . $json . '</script>';
+        echo view_music_player_controls(false);
     }
     echo '</section>';
 }
@@ -157,10 +177,12 @@ function view_render_gallery_music(array $model): void
  */
 function view_render_gallery_music_form_start(array $model): void
 {
-    echo '<form method="post" enctype="multipart/form-data" action="' . e($model['action_url'])
+    echo '<form method="post" enctype="multipart/form-data" action="'
+        . e($model['action_url'])
         . '" data-gallery-music-form>' . $model['csrf_html']
         . '<input type="hidden" name="id" value="' . $model['gallery_id'] . '">'
-        . '<input type="hidden" name="music_revision" value="' . e($model['revision']) . '">';
+        . '<input type="hidden" name="music_revision" value="'
+        . e($model['revision']) . '">';
 }
 
 /**

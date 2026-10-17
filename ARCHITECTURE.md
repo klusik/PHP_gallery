@@ -38,6 +38,12 @@ historical `gallery-pdf-documents` machine name. Public presentation loads it
 only when attachments exist. This retains the complete routing/access closure
 without adding a logical module beyond the consumed global allowance.
 
+Shared view helpers render native attachment disclosures;
+`gallery-media-panels.js` owns bounded top-layer presentation without moving
+forms out of their gallery. It retains native inline capability fallback and
+reopens same-identity cards after canonical replacement. PDF/music launchers
+share one description column; the existing miniplayer stays outside the list.
+
 One exclusive page-wide Audio owner synchronously applies the saved slideshow
 preference before fullscreen awaits. Tables, editor cards and viewer HUD share
 icon controls; only one source can play. Duration uses one separate silent,

@@ -1,5 +1,8 @@
 # PHP Gallery Code Map
 
+- Compact PDF/music applets: shared markup in
+  `app/views/public_gallery_lightbox.php`; disclosure lifecycle in
+  `public/assets/gallery-modules/gallery-media-panels.js`.
 - Gallery music: `app/models/gallery_music.php` owns atomic playlist indexes;
   `app/services/gallery_music.php` owns audio validation and revisioned file
   workflows; `app/controllers/gallery_music.php` owns view models, Admin
