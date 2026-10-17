@@ -354,8 +354,70 @@ try {
     };
     $mediaGalleryRoute = '/index.php?page=gallery&gallery_path='
         . rawurlencode($gallery['folder_path']);
+    $stage = 'physical gallery presentation preferences';
+    $presentationBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $presentationEdit = [
+        'csrf_token' => $csrf, 'id' => $id,
+        'title' => $presentationBefore['title'],
+        'description' => $presentationBefore['description'],
+        'parent_id' => $presentationBefore['parent_id'] ?? 0,
+        'slug' => $presentationBefore['slug'], 'visibility' => 'public',
+        'folder_name' => basename($presentationBefore['folder_path']),
+        'edit_revision' => (string) $presentationBefore['edit_revision'],
+        'gallery_presentation_present' => '1',
+        'gallery_presentation_enabled' => '1',
+        'gallery_presentation_autoplay' => '1',
+        'gallery_presentation_interval' => 'fast',
+        'gallery_presentation_transition' => 'slow',
+        'return_tab' => 'admin-edit-documents',
+    ];
+    check($anonymous->request($mediaEditRoute, $presentationEdit, true)['status']
+        === 401, 'Anonymous presentation settings write must be refused.');
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Save presentation defaults');
+    $presentationSaved = row($pdo,
+        'SELECT presentation_json, edit_revision FROM galleries WHERE id = ?', [$id]);
+    $presentationState = json_decode($presentationSaved['presentation_json'],
+        true, 512, JSON_THROW_ON_ERROR);
+    check($presentationState['music'] === false
+        && $presentationState['autoplay'] === true
+        && $presentationState['interval'] === 'fast'
+        && $presentationState['transition'] === 'slow',
+        'Presentation preferences did not persist in their gallery row.');
+    $presentationSidecar = json_decode((string) file_get_contents(
+        $folder . '/gallery.json'
+    ), true, 512, JSON_THROW_ON_ERROR);
+    check($presentationSidecar['presentation'] === $presentationState,
+        'Gallery export lost presentation preferences.');
+    check($admin->request($mediaEditRoute, $presentationEdit, true)['status'] === 409,
+        'Stale presentation changes must not overwrite a newer revision.');
+    $presentationMarkup = $anonymous->request($mediaGalleryRoute)['body'];
+    check(str_contains($presentationMarkup, 'presentation_music=0')
+        && str_contains($presentationMarkup, 'presentation_interval=fast')
+        && str_contains($presentationMarkup, 'presentation_transition=slow')
+        && str_contains($presentationMarkup, 'data-presentation-music="0"'),
+        'Public launch/share URLs did not snapshot stored presentation defaults.');
+    $presentationEdit['edit_revision'] = (string) $presentationSaved['edit_revision'];
+    $presentationEdit['gallery_presentation_enabled'] = '0';
+    unset($presentationEdit['gallery_presentation_autoplay']);
+    $presentationEdit['gallery_presentation_music'] = '1';
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Hide public presentation actions');
+    check(json_decode(row($pdo,
+        'SELECT presentation_json FROM galleries WHERE id = ?', [$id]
+    )['presentation_json'], true)['autoplay'] === false,
+        'Explicit default autoplay-off did not persist.');
+    check(!str_contains($anonymous->request($mediaGalleryRoute)['body'],
+        'data-gallery-presentation-start'), 'Hidden presentation action remained.');
+    $presentationEdit['edit_revision'] = (string) row($pdo,
+        'SELECT edit_revision FROM galleries WHERE id = ?', [$id])['edit_revision'];
+    $presentationEdit['gallery_presentation_enabled'] = '1';
+    $presentationEdit['gallery_presentation_autoplay'] = '1';
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Restore public presentation actions');
     $presentationPage = $anonymous->request(
-        $mediaGalleryRoute . '&lang=en&presentation=1'
+        $mediaGalleryRoute . '&lang=en&autoplay=1&presentation_music=0'
+            . '&presentation_interval=fast&presentation_transition=slow'
     );
     check($presentationPage['status'] === 200
         && str_contains($presentationPage['body'],
@@ -390,8 +452,9 @@ try {
         check($mediaEditor['status'] === 200
             && str_contains($mediaEditor['body'],
                 'data-admin-tab-target="admin-edit-documents"')
-                === ($pdfEnabled || $musicEnabled),
-            'Both masters OFF left an empty editor tab or broke its fallback.');
+                && str_contains($mediaEditor['body'],
+                    'data-gallery-presentation-editor'),
+            'Core presentation settings must survive both attachment masters OFF.');
         check(str_contains($mediaEditor['body'], 'data-gallery-pdf-documents')
             === $pdfEnabled
             && str_contains($mediaEditor['body'], 'data-gallery-music-playlist')

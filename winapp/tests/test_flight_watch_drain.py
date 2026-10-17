@@ -19,7 +19,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 from unittest import mock
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
@@ -29,11 +29,12 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.flight_workflow import FinalizationWorker
 
 
-def load_main_module() -> Any:
+def load_main_module() -> ModuleType:
     """Import the .pyw entry point without running its desktop application.
 
     Returns:
-        Any: Loaded module containing the production watcher and state owners.
+        ModuleType: Module exposing WatcherThread, WatcherConfig,
+            UploadState, and read_document.
     """
     loader = importlib.machinery.SourceFileLoader(
         "gallery_flight_watch_drain_test",
@@ -47,6 +48,9 @@ def load_main_module() -> Any:
     return module
 
 
+MAIN: ModuleType
+
+
 class WatchDrainTests(unittest.TestCase):
     """Keep accepted photograph work durable across Stop, errors and restart."""
 
@@ -57,9 +61,11 @@ class WatchDrainTests(unittest.TestCase):
         Returns:
             None: Stores the imported module for isolated watcher fixtures.
         """
-        cls.main = load_main_module()
+        global MAIN
+        MAIN = load_main_module()
+        cls.main = MAIN
 
-    def make_watcher(self, folder: Path, workspace: Path) -> Any:
+    def make_watcher(self, folder: Path, workspace: Path) -> "MAIN.WatcherThread":
         """Build a real WatcherThread over isolated durable state.
 
         Args:
@@ -67,7 +73,8 @@ class WatchDrainTests(unittest.TestCase):
             workspace (Path): Temporary session folder for its drain manifest.
 
         Returns:
-            Any: Unstarted production watcher with network/native work replaced.
+            MAIN.WatcherThread: Unstarted watcher with network and native
+                work replaced.
         """
         config = self.main.WatcherConfig(
             gallery_url="https://gallery.example.test",
@@ -98,6 +105,9 @@ class WatchDrainTests(unittest.TestCase):
         watcher.drain_requested_at = 0.0
         watcher.drain_error = ""
         watcher.simconnect_client = mock.Mock()
+        watcher.simconnect_client.dll_resolution_message.return_value = (
+            "Fixture SimConnect.dll unavailable"
+        )
         watcher.simconnect_diagnostics = {}
         watcher.sim_camera_metadata_fields = mock.Mock(return_value={})
         watcher.upload_watched_file = mock.Mock(
@@ -173,9 +183,6 @@ class WatchDrainTests(unittest.TestCase):
 
     def test_app_resumes_empty_unfrozen_cutoff_and_finds_final_photo(self) -> None:
         """Resume a persisted Stop before its final cutoff scan completed.
-
-        Args:
-            self (WatchDrainTests): Test case instance running this check.
 
         Returns:
             None: The last pre-cutoff photo is restored, admitted and uploaded.

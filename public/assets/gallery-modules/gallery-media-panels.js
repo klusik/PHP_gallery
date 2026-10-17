@@ -11,6 +11,9 @@
 import {
     scanPdfPageCountCells,
 } from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
+import {
+    galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
+} from './gallery-presentation.js?v=20261017-presentation-sharing-v3';
 
 /**
  * Keep attachment disclosure motion brief without delaying media controls.
@@ -149,6 +152,9 @@ function openPanel(widget) {
     if (!(panel instanceof HTMLElement) || !(summary instanceof HTMLElement)) {
         return;
     }
+    if (panel.matches('[data-presentation-share-panel]')) {
+        preparePresentationShare(panel);
+    }
     for (const [other, state] of openPanels) {
         if (other !== widget) finishClose(other, state, false);
     }
@@ -212,12 +218,44 @@ export function setupGalleryMediaPanels() {
     if (bound) return;
     bound = true;
     document.body.dataset.mediaPanelsBound = '1';
+    document.addEventListener('change', event => {
+        if (event.target instanceof Element
+            && event.target.closest('[data-presentation-share-panel]')) return;
+        const editor = event.target instanceof Element
+            ? event.target.closest('[data-gallery-presentation-editor]') : null;
+        if (!editor) return;
+        const music = editor.querySelector('[name="gallery_presentation_music"]');
+        if (!music) return;
+        for (const link of editor.querySelectorAll('[data-presentation-preview]')) {
+            const url = new URL(link.href);
+            url.searchParams.set('autoplay', editor.querySelector(
+                '[name="gallery_presentation_autoplay"]'
+            )?.checked ? '1' : '0');
+            url.searchParams.set('presentation_music', music.checked ? '1' : '0');
+            for (const key of ['interval', 'transition']) {
+                const value = editor.querySelector(
+                    '[name="gallery_presentation_' + key + '"]'
+                )?.value;
+                if (GALLERY_PRESENTATION_SPEEDS.includes(value)) {
+                    url.searchParams.set('presentation_' + key, value);
+                }
+            }
+            link.href = url.href;
+            const share = editor.querySelector('[data-presentation-share-panel]');
+            if (share) share.dataset.presentationUrl = url.href;
+        }
+    });
+    document.addEventListener('input', event => {
+        const panel = event.target instanceof Element
+            ? event.target.closest('[data-presentation-share-panel]') : null;
+        if (panel) updatePresentationShare(panel);
+    });
     document.addEventListener('click', event => {
         const target = event.target instanceof Element ? event.target : null;
-        const share = target?.closest('[data-gallery-presentation-share]');
-        if (share instanceof HTMLAnchorElement) {
+        const copy = target?.closest('[data-presentation-copy-button]');
+        if (copy) {
             event.preventDefault();
-            void copyPresentationLink(share);
+            void copyPresentationLink(copy.closest('[data-presentation-share-panel]'));
             return;
         }
         const widget = target?.closest('[data-gallery-media-widget]');
@@ -273,24 +311,63 @@ export function setupGalleryMediaPanels() {
 }
 
 /**
- * Copy only the prepared canonical launch URL and expose a selectable fallback.
- * @param {HTMLAnchorElement} link Explicit share action beside Presentation.
+ * Load a share draft from the prepared URL without changing saved gallery values.
+ * @param {HTMLElement} panel Original public or injected editor applet.
+ * @returns {void} Set discrete sliders and switches before positioning the panel.
+ */
+function preparePresentationShare(panel) {
+    const intent = galleryPresentationOptions(null, panel.dataset.presentationUrl);
+    for (const input of panel.querySelectorAll('[data-share-option]')) {
+        const key = input.dataset.shareOption;
+        if (input.type === 'checkbox') input.checked = intent[key];
+        else input.value = String(GALLERY_PRESENTATION_SPEEDS.indexOf(intent[key]));
+    }
+    updatePresentationShare(panel);
+}
+
+/**
+ * Serialize a bounded share draft and update localized native range feedback.
+ * @param {HTMLElement} panel Applet owning the generated URL and its controls.
+ * @returns {void} Update only this copy field, keeping locale/access destination.
+ */
+function updatePresentationShare(panel) {
+    const url = new URL(panel.dataset.presentationUrl);
+    for (const input of panel.querySelectorAll('[data-share-option]')) {
+        const key = input.dataset.shareOption;
+        const parameter = key === 'autoplay' ? key : 'presentation_' + key;
+        if (input.type === 'checkbox') {
+            url.searchParams.set(parameter, input.checked ? '1' : '0');
+        } else {
+            const speed = GALLERY_PRESENTATION_SPEEDS[Number(input.value)];
+            if (!speed) continue;
+            url.searchParams.set(parameter, speed);
+            const label = input.closest('label');
+            const text = label.querySelector('[data-share-speed="' + speed + '"]')
+                .textContent;
+            label.querySelector('output').textContent = text;
+            input.setAttribute('aria-valuetext', text);
+        }
+    }
+    panel.querySelector('[data-presentation-copy]').value = url.href;
+    panel.dataset.presentationUrl = url.href;
+    panel.querySelector('[data-presentation-status]').textContent = '';
+}
+
+/**
+ * Copy the configured URL and retain its selectable native fallback.
+ * @param {HTMLElement} panel Share applet owning the current snapshot field.
  * @returns {Promise<void>} Report copy success or offer the URL for manual copy.
  */
-async function copyPresentationLink(link) {
-    const panel = link.closest('[data-gallery-presentation]');
+async function copyPresentationLink(panel) {
     const status = panel.querySelector('[data-presentation-status]');
     const input = panel.querySelector('[data-presentation-copy]');
     try {
-        await navigator.clipboard.writeText(link.href);
+        await navigator.clipboard.writeText(input.value);
         status.textContent = status.dataset.copied;
-        input.hidden = true;
     } catch {
         // Permanent browser capability fallback owned by this copy action:
         // denied clipboard access leaves the same URL selectable by keyboard.
         status.textContent = status.dataset.copyFailed;
-        input.value = link.href;
-        input.hidden = false;
         input.focus();
         input.select();
     }

@@ -26,6 +26,8 @@ import unittest
 from pathlib import Path
 from dataclasses import replace
 from typing import Optional
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -36,15 +38,20 @@ from uploader.flight_data import (
     Landing,
 )
 from uploader.flight_report import (
+    _COLOR_BLUE,
+    _COLOR_GREEN,
     _FONT_NAME,
     _REQUIRED_GLYPHS,
+    KNOTS_PER_MPS,
     _number,
     _register_font,
     _resource_directory,
     _contact_sensor_tables,
+    _draw_page,
     _landing_rows,
     _methodology_notes,
     _quality_notes,
+    _profile_chart,
     _recorded_flight_date,
     _route_chart,
     _styles,
@@ -59,6 +66,28 @@ from uploader.flight_report_translations import supported_languages, tr
 # and profile while remaining a small deterministic boundary; value: 2.
 SAMPLE_COUNT = 2
 
+# Type: int; Units: samples; Scope: optional hosted visual-QA flight fixture.
+# Consumers: _dense_multilanding_analysis. Rationale: provide enough profile
+# observations for multiple report pages; value: 360.
+DENSE_SAMPLE_COUNT = 360
+# Type: float; Units: seconds between samples; Scope: visual-QA fixture.
+# Consumers: _dense_multilanding_analysis. Rationale: create a compact but
+# readable continuous track; value: 0.5.
+DENSE_SAMPLE_INTERVAL_SECONDS = 0.5
+# Type: int; Units: observations per contact window; Scope: visual-QA fixture.
+# Consumers: _dense_multilanding_analysis. Rationale: force contact tables to
+# span pages and repeat their headers; value: 50.
+DENSE_CONTACT_SAMPLE_COUNT = 50
+# Type: float; Units: seconds between contact observations; Scope: visual-QA fixture.
+# Consumers: _dense_multilanding_analysis. Rationale: represent dense retained
+# contact evidence without expanding the full chart track; value: 0.1.
+DENSE_CONTACT_INTERVAL_SECONDS = 0.1
+# Type: tuple[float, float]; Units: seconds after recorded start.
+# Scope: visual-QA fixture; Consumers: _dense_multilanding_analysis.
+# Rationale: create two distinct landing windows in one long report;
+# value: (60.0, 140.0).
+DENSE_LANDING_STARTS_SECONDS = (60.0, 140.0)
+
 
 class FlightReportTests(unittest.TestCase):
     """Verify the renderer produces complete, stable multilingual reports."""
@@ -71,7 +100,6 @@ class FlightReportTests(unittest.TestCase):
         """Build a small normalized flight model for one simulator generation.
 
         Args:
-            self (FlightReportTests): Test case instance building the fixture.
             simulator (str): Simulator identity stored in the analysis.
             include_measurements (bool): Whether derived optional values are
                 present in samples and landing evidence.
@@ -183,17 +211,147 @@ class FlightReportTests(unittest.TestCase):
         ]
         return analysis
 
-    def test_all_languages_render_for_both_simulators(self) -> None:
-        """Render all four languages from each normalized simulator model.
+    def _dense_multilanding_analysis(
+        self,
+        simulator: str,
+    ) -> FlightAnalysis:
+        """Build the optional multi-page landing fixture for hosted visual QA.
 
         Args:
-            self (FlightReportTests): Test case instance running this check.
+            simulator (str): Simulator label used to select the artifact folder.
+
+        Returns:
+            FlightAnalysis: Continuous three-minute profile with two landings
+                and fifty retained observations for each contact window.
+        """
+        analysis = self._analysis(simulator)
+        template = analysis.samples[-1]
+        starts = DENSE_LANDING_STARTS_SECONDS
+        contact_window_seconds = (
+            DENSE_CONTACT_SAMPLE_COUNT - 1
+        ) * DENSE_CONTACT_INTERVAL_SECONDS
+        analysis.samples = [
+            replace(
+                template,
+                session_elapsed_seconds=(
+                    frame * DENSE_SAMPLE_INTERVAL_SECONDS
+                ),
+                latitude_deg=49.0 + frame * 0.0001,
+                longitude_deg=16.0 + frame * 0.0001,
+                altitude_m=(
+                    1200.0
+                    if not any(
+                        start
+                        <= frame * DENSE_SAMPLE_INTERVAL_SECONDS
+                        <= start + contact_window_seconds
+                        for start in starts
+                    )
+                    else 140.0
+                ),
+                agl_m=(
+                    1000.0
+                    if not any(
+                        start
+                        <= frame * DENSE_SAMPLE_INTERVAL_SECONDS
+                        <= start + contact_window_seconds
+                        for start in starts
+                    )
+                    else 0.0
+                ),
+                vertical_speed_mps=(
+                    -1.2
+                    if not any(
+                        start
+                        <= frame * DENSE_SAMPLE_INTERVAL_SECONDS
+                        <= start + contact_window_seconds
+                        for start in starts
+                    )
+                    else 0.0
+                ),
+                ground_speed_mps=35.0,
+                indicated_airspeed_mps=38.0,
+                on_ground=any(
+                    start
+                    <= frame * DENSE_SAMPLE_INTERVAL_SECONDS
+                    <= start + contact_window_seconds
+                    for start in starts
+                ),
+                discontinuity_before=None,
+            )
+            for frame in range(DENSE_SAMPLE_COUNT)
+        ]
+        contact_samples = lambda start: [
+            replace(
+                template,
+                session_elapsed_seconds=(
+                    start + index * DENSE_CONTACT_INTERVAL_SECONDS
+                ),
+                latitude_deg=49.2 + index * 0.00001,
+                longitude_deg=16.2 + index * 0.00001,
+                altitude_m=140.0,
+                agl_m=0.0,
+                vertical_speed_mps=0.2,
+                ground_speed_mps=30.0 - index * 0.2,
+                indicated_airspeed_mps=32.0 - index * 0.2,
+                pitch_deg=1.0 + index * 0.02,
+                bank_deg=0.1,
+                heading_deg=271.0,
+                on_ground=True,
+                discontinuity_before=None,
+            )
+            for index in range(DENSE_CONTACT_SAMPLE_COUNT)
+        ]
+        analysis.landings = [
+            replace(
+                analysis.landings[0],
+                index=index,
+                first_contact_elapsed_seconds=start,
+                last_contact_elapsed_seconds=(
+                    start + contact_window_seconds
+                ),
+                latitude_deg=49.2,
+                longitude_deg=16.2,
+                altitude_m=140.0,
+                descent_rate_fpm=245.0 + index,
+                contact_count=DENSE_CONTACT_SAMPLE_COUNT,
+                evidence=["on_ground", "retained contact observations"],
+                distance_from_previous_nm=(
+                    None if index == 1 else 15.6
+                ),
+                confidence="moderate",
+                contact_samples=contact_samples(start),
+                contact_descent_rates_fpm=[
+                    245.0 + index * 0.1
+                    for index in range(DENSE_CONTACT_SAMPLE_COUNT)
+                ],
+                rollout_seconds=35.0 + index,
+                rollout_distance_nm=0.6 + index * 0.1,
+            )
+            for index, start in enumerate(starts, start=1)
+        ]
+        analysis.duration_seconds = (
+            DENSE_SAMPLE_COUNT * DENSE_SAMPLE_INTERVAL_SECONDS
+        )
+        analysis.distance_nm = 42.0
+        analysis.events = [
+            replace(
+                analysis.events[0],
+                elapsed_seconds=start,
+                evidence=["on_ground", "retained contact observations"],
+            )
+            for start in starts
+        ]
+        return analysis
+
+    def test_all_languages_render_for_both_simulators(self) -> None:
+        """Render all four languages from each normalized simulator model.
 
         Returns:
             None: Assert PDF, font metadata and checksum manifests. If
                 PHP_GALLERY_FLIGHT_REPORT_QA_DIR is set, copy the eight
-                simulator/language PDFs and their manifests to that CI artifact
-                staging directory; no user telemetry is uploaded.
+                simulator/language PDFs and their manifests plus a dense
+                multi-landing Czech sample to CI artifacts; no user telemetry
+                is uploaded.
         """
         _register_font()
         with tempfile.TemporaryDirectory() as temporary:
@@ -230,6 +388,15 @@ class FlightReportTests(unittest.TestCase):
                             )
                         )
                         shutil.copy2(group_manifest, artifact_directory)
+                        if simulator == "MSFS 2024":
+                            dense_directory = (
+                                artifact_directory / "dense-multiple-landings"
+                            )
+                            render_reports(
+                                self._dense_multilanding_analysis(simulator),
+                                ("cs",),
+                                dense_directory,
+                            )
                     output_hashes = {
                         hashlib.sha256(path.read_bytes()).hexdigest()
                         for path in outputs
@@ -283,9 +450,6 @@ class FlightReportTests(unittest.TestCase):
     def test_rerender_is_idempotent_and_group_manifest_is_complete(self) -> None:
         """Keep report identities and bytes stable across retry calls.
 
-        Args:
-            self (FlightReportTests): Test case instance running this check.
-
         Returns:
             None: Assert filenames, bytes and grouped checksums are stable.
         """
@@ -324,9 +488,6 @@ class FlightReportTests(unittest.TestCase):
     def test_render_after_manifest_loss_keeps_server_receipt_hash(self) -> None:
         """Regenerate identical bytes when only the local sidecar was lost.
 
-        Args:
-            self (FlightReportTests): Test case instance running this check.
-
         Returns:
             None: Assert a retry keeps the previously acknowledged PDF checksum.
         """
@@ -352,9 +513,6 @@ class FlightReportTests(unittest.TestCase):
     def test_missing_measurement_stays_unavailable(self) -> None:
         """Preserve absent values as unavailable instead of displaying zero.
 
-        Args:
-            self (FlightReportTests): Test case instance running this check.
-
         Returns:
             None: Assert format behavior and a complete missing-data report.
         """
@@ -379,9 +537,6 @@ class FlightReportTests(unittest.TestCase):
 
     def test_contact_tables_use_full_resolution_sensor_rows(self) -> None:
         """Expose retained contact location, local rate and sensor context.
-
-        Args:
-            self (FlightReportTests): Test case instance running this check.
 
         Returns:
             None: Assert contact tables use dedicated retained observations.
@@ -410,9 +565,6 @@ class FlightReportTests(unittest.TestCase):
     def test_route_chart_unwraps_dateline_within_a_contiguous_track(self) -> None:
         """Keep a dateline crossing local to its continuous recorded segment.
 
-        Args:
-            self (FlightReportTests): Test case instance running this check.
-
         Returns:
             None: Assert adjacent positions draw in the same longitude direction.
         """
@@ -429,11 +581,91 @@ class FlightReportTests(unittest.TestCase):
         points = route_lines[0].points
         self.assertGreater(points[2], points[0])
 
+
+
+    def test_full_analysis_hash_is_present_on_every_page(self) -> None:
+        """Keep full report identity in the repeated footer.
+
+        Returns:
+            None: Assert the shared analysis checksum is drawn on each page.
+        """
+        canvas = Mock()
+        document = SimpleNamespace(page=2)
+        analysis_sha256 = "a" * 64
+        _draw_page(canvas, document, "en", analysis_sha256)
+        self.assertTrue(
+            any(
+                analysis_sha256 in str(call.args)
+                for call in canvas.drawString.call_args_list
+            )
+        )
+
+    def test_profile_titles_do_not_duplicate_units(self) -> None:
+        """Keep unit-bearing profile titles readable in every language.
+
+        Returns:
+            None: Assert chart titles contain the localized label once.
+        """
+        analysis = self._analysis("MSFS 2024")
+        for language in supported_languages():
+            altitude = _profile_chart(
+                analysis,
+                "altitude_m",
+                tr(language, "altitude"),
+                _COLOR_BLUE,
+                1.0,
+                "m",
+                language,
+            )
+            speed = _profile_chart(
+                analysis,
+                "ground_speed_mps",
+                tr(language, "ground_speed"),
+                _COLOR_GREEN,
+                KNOTS_PER_MPS,
+                "kt",
+                language,
+            )
+            titles = [
+                item.text
+                for item in altitude.contents + speed.contents
+                if getattr(item, "text", None) is not None
+            ]
+            self.assertIn(tr(language, "altitude"), titles)
+            self.assertIn(tr(language, "ground_speed"), titles)
+            self.assertNotIn(tr(language, "altitude") + " (m)", titles)
+            self.assertNotIn(
+                tr(language, "ground_speed") + " (kt)",
+                titles,
+            )
+
+    def test_contact_headers_are_compact_and_localized(self) -> None:
+        """Keep motion-table headers inside their columns in all languages.
+
+        Returns:
+            None: Assert each compact header is translated and rendered.
+        """
+        expected_keys = (
+            "contact_elapsed_short",
+            "latitude_short",
+            "longitude_short",
+            "contact_descent_short",
+            "contact_ias_short",
+            "contact_ground_speed_short",
+            "contact_vertical_speed_short",
+        )
+        for language in supported_languages():
+            table = _contact_sensor_tables(
+                self._analysis("MSFS 2024").landings[0],
+                language,
+                _styles(),
+            )[1]
+            actual = [cell.text for cell in table._cellvalues[0]]
+            expected = [tr(language, key) for key in expected_keys]
+            self.assertEqual(actual, expected)
+
     def test_report_notes_redact_paths_and_credential_values(self) -> None:
         """Keep local paths and credential values out of report paragraphs.
-
-        Args:
-            self (FlightReportTests): Test case instance running this check.
 
         Returns:
             None: Assert sanitized warning text contains no private source value.
@@ -450,9 +682,6 @@ class FlightReportTests(unittest.TestCase):
 
     def test_method_notes_use_localized_algorithm_limits(self) -> None:
         """Expose the descent fit and capture limits in every report language.
-
-        Args:
-            self (FlightReportTests): Test case instance running this check.
 
         Returns:
             None: Assert the method disclosures are available and localized.
@@ -485,9 +714,6 @@ class FlightReportTests(unittest.TestCase):
 
     def test_translation_fallback_and_central_european_glyphs(self) -> None:
         """Keep supported labels translated and required glyphs registered.
-
-        Args:
-            self (FlightReportTests): Test case instance running this check.
 
         Returns:
             None: Assert expected translations and bundled font registration.

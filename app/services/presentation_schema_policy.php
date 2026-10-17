@@ -347,6 +347,19 @@ function presentation_lightbox_override_schema_status(): array
     ]);
 }
 
+/**
+ * Observe optional physical-gallery playback settings without reading content.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,
+ *     object_type:string,table:string,object:string,error_code:string,
+ *     diagnostic:string}>} Aggregate available/missing/unknown storage state.
+ */
+function presentation_gallery_settings_schema_status(): array
+{
+    return presentation_schema_tables_status('presentation.gallery_settings', [
+        'galleries' => ['presentation_json'],
+    ]);
+}
+
 /** @return array{state:string,feature:string,requirements:array} */
 function presentation_openai_text_schema_status(): array
 {
@@ -463,7 +476,8 @@ function presentation_admin_gallery_report_schema_status(): array
  * its remote draft generation. A missing/unknown route-map schema may omit only
  * the map update; fetching and rendering a description draft remains independent.
  *
- * @return array<string,array{resolver:callable():array,flag:string}>
+ * @return array<string,array{resolver:callable():array,flag:string}> Lazy schema
+ *     resolvers and canonical capability gates, indexed by health identity.
  */
 function presentation_schema_health_definitions(): array
 {
@@ -475,6 +489,10 @@ function presentation_schema_health_definitions(): array
         'presentation_image_voting' => ['resolver' => static fn(): array => presentation_voting_schema_status(), 'flag' => 'image_voting'],
         'presentation_picture_game' => ['resolver' => static fn(): array => presentation_picture_game_schema_status(), 'flag' => 'picture_game'],
         'presentation_lightbox_override' => ['resolver' => static fn(): array => presentation_lightbox_override_schema_status(), 'flag' => 'lightbox_modes'],
+        'presentation_gallery_settings' => [
+            'resolver' => static fn(): array => presentation_gallery_settings_schema_status(),
+            'flag' => 'lightbox_modes',
+        ],
         'presentation_openai_text' => ['resolver' => static fn(): array => presentation_openai_text_schema_status(), 'flag' => 'openai_text_assist'],
         'presentation_openai_image_input' => ['resolver' => static fn(): array => presentation_openai_image_input_schema_status(), 'flag' => 'openai_text_assist'],
         'presentation_ai_image_analysis' => ['resolver' => static fn(): array => presentation_ai_image_analysis_schema_status(), 'flag' => 'ai_image_metadata'],

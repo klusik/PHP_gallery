@@ -10,7 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Deterministic persistent SimConnect flight-provider regression tests."""
 import ctypes
-from typing import Any, Callable
+from typing import Callable
 from pathlib import Path
 import sys
 import unittest
@@ -32,11 +32,11 @@ from uploader.simconnect_location import (
 class NativeCallable:
     """Callable fixture exposing writable ctypes signature attributes."""
 
-    def __init__(self, callback: Callable[..., Any]) -> None:
+    def __init__(self, callback: Callable[..., int]) -> None:
         """Store the callback and native signature metadata.
 
         Args:
-            callback (Callable[..., Any]): Fixture function forwarded to C API.
+            callback (Callable[..., int]): Fake export returning an HRESULT.
 
         Returns:
             None: The callable wrapper is ready for use.
@@ -45,14 +45,25 @@ class NativeCallable:
         self.argtypes = None
         self.restype = None
 
-    def __call__(self, *arguments: Any) -> Any:
+    def __call__(self, *arguments: object) -> int:
         """Forward native-style arguments.
 
         Args:
-            arguments (tuple[Any, ...]): Native arguments in SDK order.
+            arguments (tuple[object, ...]): Native arguments in SDK order. Open
+                receives a c_void_p by-reference output, client-name bytes,
+                optional window handle, event ID, optional event handle and
+                configuration index. Close receives one c_void_p handle.
+                CallDispatch receives a
+                handle, receive callback, and optional context. The packet-ID
+                export receives a handle and c_uint32 by-reference output.
+                AddToDataDefinition receives handle, definition ID, variable
+                bytes, optional units, datatype, epsilon and datum ID.
+                RequestDataOnSimObject receives handle, request ID, definition
+                ID, object ID, period, flags, origin, interval and limit.
+                Event and state subscriptions receive a handle, ID and name.
 
         Returns:
-            Any: Callback result or propagated fixture error.
+            int: Fake SDK HRESULT returned by the native export callback.
         """
         return self.callback(*arguments)
 
@@ -87,12 +98,20 @@ class FakeFlightDLL:
         for name, callback in exports.items():
             setattr(self, "SimConnect_" + name, NativeCallable(callback))
 
-    def next_send(self, name: str, arguments: tuple[Any, ...]) -> int:
+    def next_send(
+        self,
+        name: str,
+        arguments: tuple[object, ...],
+    ) -> int:
         """Record a native send and advance its send identity.
 
         Args:
             name (str): Export purpose label.
-            arguments (tuple[Any, ...]): Ordered arguments after the handle.
+            arguments (tuple[object, ...]): Values after the handle, varying by
+                export: Open has name/window/event/config values; definition
+                has ID/name/units/type/epsilon/datum ID; data request has
+                request/definition/object IDs, period, flags, origin, interval
+                and limit; event/state requests have ID/name. Close has none.
 
         Returns:
             int: Successful fake HRESULT.
@@ -101,12 +120,15 @@ class FakeFlightDLL:
         self.calls.append((name, arguments))
         return 0
 
-    def open(self, output_handle: Any, *arguments: Any) -> int:
+    def open(self, output_handle: ctypes.c_void_p, *arguments: object) -> int:
         """Set a native handle and queue a generation-specific OPEN packet.
 
         Args:
-            output_handle (Any): Pointer supplied by SimConnect_Open.
-            arguments (Any): Remaining native open parameters.
+            output_handle (ctypes.c_void_p): By-reference output slot for the
+                native SimConnect handle.
+            arguments (tuple[object, ...]): SimConnect_Open values after
+                output_handle, in order: client-name bytes, optional HWND,
+                Win32 event ID, optional event HANDLE and configuration index.
 
         Returns:
             int: Successful fake HRESULT.
@@ -128,11 +150,11 @@ class FakeFlightDLL:
         self.queue.append((packet, ctypes.sizeof(packet)))
         return 0
 
-    def close(self, _handle: Any) -> int:
+    def close(self, _handle: ctypes.c_void_p) -> int:
         """Count native close calls.
 
         Args:
-            _handle (Any): Native handle being closed.
+            _handle (ctypes.c_void_p): Native SimConnect handle being closed.
 
         Returns:
             int: Successful fake HRESULT.
@@ -140,13 +162,23 @@ class FakeFlightDLL:
         self.closed += 1
         return self.next_send("close", ())
 
-    def call_dispatch(self, _handle: Any, callback: Any, context: Any) -> int:
+    def call_dispatch(
+        self,
+        _handle: ctypes.c_void_p,
+        callback: Callable[
+            [ctypes.POINTER(_SimConnectRecv), int, ctypes.c_void_p], None
+        ],
+        context: ctypes.c_void_p | None,
+    ) -> int:
         """Deliver one packet through the actual receive-pointer callback.
 
         Args:
-            _handle (Any): Native handle being dispatched.
-            callback (Any): Receive callback supplied by the provider.
-            context (Any): Opaque callback context.
+            _handle (ctypes.c_void_p): Handle passed to SimConnect_CallDispatch.
+            callback (Callable[..., None]): Native callback receiving a
+                ctypes pointer to _SimConnectRecv, byte size (int), and optional
+                ctypes.c_void_p context, in that order.
+            context (ctypes.c_void_p | None): Optional callback context; fixture
+                dispatch passes None.
 
         Returns:
             int: Successful fake HRESULT.
@@ -160,12 +192,15 @@ class FakeFlightDLL:
             )
         return 0
 
-    def last_sent(self, _handle: Any, output: Any) -> int:
+    def last_sent(
+        self, _handle: ctypes.c_void_p, output: ctypes.c_uint32
+    ) -> int:
         """Return the most recent send ID through its output pointer.
 
         Args:
-            _handle (Any): Native handle being inspected.
-            output (Any): Pointer receiving the fixture packet ID.
+            _handle (ctypes.c_void_p): Handle being inspected.
+            output (ctypes.c_uint32): By-reference output slot receiving the
+                fixture packet ID.
 
         Returns:
             int: Successful fake HRESULT.
@@ -173,36 +208,49 @@ class FakeFlightDLL:
         ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32)).contents.value = self.sent
         return 0
 
-    def add_definition(self, _handle: Any, *arguments: Any) -> int:
+    def add_definition(
+        self, _handle: ctypes.c_void_p, *arguments: object
+    ) -> int:
         """Record one read-only SimVar definition.
 
         Args:
-            _handle (Any): Native handle.
-            arguments (Any): Definition parameters.
+            _handle (ctypes.c_void_p): Handle passed to
+                SimConnect_AddToDataDefinition.
+            arguments (tuple[object, ...]): SDK values after the handle, in order:
+                definition ID (uint32), SimVar-name bytes, optional unit bytes,
+                datatype enum, floating epsilon and datum ID (uint32).
 
         Returns:
             int: Successful fake HRESULT.
         """
         return self.next_send("definition", arguments)
 
-    def subscribe(self, _handle: Any, *arguments: Any) -> int:
+    def subscribe(
+        self, _handle: ctypes.c_void_p, *arguments: object
+    ) -> int:
         """Record one state-event subscription.
 
         Args:
-            _handle (Any): Native handle.
-            arguments (Any): Event subscription parameters.
+            _handle (ctypes.c_void_p): Handle passed to
+                SimConnect_SubscribeToSystemEvent.
+            arguments (tuple[object, ...]): Client event ID (uint32), then system-event
+                name bytes.
 
         Returns:
             int: Successful fake HRESULT.
         """
         return self.next_send("subscribe", arguments)
 
-    def request_state(self, _handle: Any, *arguments: Any) -> int:
+    def request_state(
+        self, _handle: ctypes.c_void_p, *arguments: object
+    ) -> int:
         """Queue an initial flight or aircraft identity response.
 
         Args:
-            _handle (Any): Native handle.
-            arguments (Any): State request ID and state name.
+            _handle (ctypes.c_void_p): Handle passed to
+                SimConnect_RequestSystemState.
+            arguments (tuple[object, ...]): Request ID (uint32), then system-state name
+                bytes.
 
         Returns:
             int: Successful fake HRESULT.
@@ -221,12 +269,17 @@ class FakeFlightDLL:
         self.queue.append((packet, ctypes.sizeof(packet)))
         return result
 
-    def request_data(self, _handle: Any, *arguments: Any) -> int:
+    def request_data(
+        self, _handle: ctypes.c_void_p, *arguments: object
+    ) -> int:
         """Queue a user-aircraft core frame for the periodic request.
 
         Args:
-            _handle (Any): Native handle.
-            arguments (Any): Data request parameters.
+            _handle (ctypes.c_void_p): Handle passed to
+                SimConnect_RequestDataOnSimObject.
+            arguments (tuple[object, ...]): Request ID, definition ID, object selector,
+                period, flags, origin, interval and request limit, each passed
+                as a uint32 in native SDK order.
 
         Returns:
             int: Successful fake HRESULT.
@@ -276,8 +329,10 @@ class FakeFlightDLL:
             key = flight.OPTIONAL_SIMVARS[index][0]
             packet.value = {
                 "rate": 1.0,
-                "gear": 0.75,
-                "flaps": 0.5,
+                "gear": 75.0,
+                "flaps": 50.0,
+                "brake_left": 25.0,
+                "brake_right": 50.0,
                 "fuel": 240.0,
                 "load_factor": 1.2,
             }.get(key, 1.0)
@@ -328,8 +383,10 @@ class SimConnectFlightTests(unittest.TestCase):
                     self.assertAlmostEqual(110 * flight.METRES_PER_SECOND_PER_KNOT, sample.indicated_airspeed_mps)
                     self.assertAlmostEqual(-500 * flight.METRES_PER_SECOND_PER_FPM, sample.vertical_speed_mps)
                     self.assertFalse(sample.on_ground)
-                    self.assertAlmostEqual(0.75, sample.gear_position)
-                    self.assertAlmostEqual(0.5, sample.flaps_position)
+                    self.assertAlmostEqual(75.0, sample.gear_position)
+                    self.assertAlmostEqual(50.0, sample.flaps_position)
+                    self.assertAlmostEqual(25.0, sample.left_brake_position)
+                    self.assertAlmostEqual(50.0, sample.right_brake_position)
                     self.assertAlmostEqual(1.2, sample.load_factor_g)
                     self.assertEqual(4, len(sample.engine_rpm))
                     self.assertEqual(provider.simulator, identity["simulator"])
@@ -346,6 +403,25 @@ class SimConnectFlightTests(unittest.TestCase):
                     self.assertEqual(1, len(core_requests))
                     self.assertEqual(flight.SIMCONNECT_PERIOD_SIM_FRAME, core_requests[0][3])
                     self.assertEqual(1, sum(name == "open" for name, _args in dll.calls))
+                    definitions = [
+                        arguments for name, arguments in dll.calls
+                        if name == "definition"
+                    ]
+                    percent_variables = {
+                        arguments[1] for arguments in definitions
+                        if arguments[2] == b"percent"
+                    }
+                    self.assertTrue({
+                        b"GEAR HANDLE POSITION",
+                        b"FLAPS HANDLE PERCENT",
+                        b"BRAKE LEFT POSITION",
+                        b"BRAKE RIGHT POSITION",
+                    }.issubset(percent_variables))
+                    total_weight = next(
+                        arguments for arguments in definitions
+                        if arguments[1] == b"TOTAL WEIGHT"
+                    )
+                    self.assertEqual(b"pounds", total_weight[2])
                     provider.stop()
                 self.assertEqual(1, dll.closed)
 
@@ -409,12 +485,17 @@ class SimConnectFlightTests(unittest.TestCase):
         provider, first_dll = self.provider(2024)
         second_dll = FakeFlightDLL(2020)
 
-        def open_without_handshake(output_handle: Any, *_arguments: Any) -> int:
+        def open_without_handshake(
+            output_handle: ctypes.c_void_p, *_arguments: object
+        ) -> int:
             """Return a handle without queueing the required OPEN response.
 
             Args:
-                output_handle (Any): Native output pointer for the handle.
-                *_arguments (Any): Remaining SimConnect_Open parameters.
+                output_handle (ctypes.c_void_p): By-reference native handle
+                    output slot.
+                _arguments (tuple[object, ...]): Open arguments in SDK order:
+                    client-name bytes, optional HWND, Win32 event ID, HANDLE and
+                    configuration index.
 
             Returns:
                 int: Successful HRESULT with an intentionally absent handshake.
@@ -497,7 +578,7 @@ class SimConnectFlightTests(unittest.TestCase):
             49.0, 14.0, 1000.0, 850.0, 120.0, 1.0,
             110.0, 130.0, 105.0, 0.0, 0.0, 0.0, 90.0,
         )
-        provider.values["gear"] = 0.75
+        provider.values["gear"] = 75.0
         provider.value_timestamps["gear"] = 100.0
         with mock.patch.object(
             flight.time,
@@ -517,7 +598,7 @@ class SimConnectFlightTests(unittest.TestCase):
         """
         provider, _dll = self.provider(2024)
         provider.aircraft = "previous aircraft"
-        provider.values["gear"] = 0.75
+        provider.values["gear"] = 75.0
         provider.value_timestamps["gear"] = 10.0
         provider.unavailable.add("fuel")
         event = flight._FlightFilenameEvent()

@@ -33,23 +33,54 @@ wrap according to the gallery's available width, including a resized window.
 
 Physical galleries with authorized photographs and enabled lightbox controls
 offer **Presentation** below the attachment cards, even without attachments.
-This explicit action opens photo one, resets both temporary speed controls to
-their rendered defaults, and enables the existing soundtrack for that launch.
+This explicit action opens photo one and applies its configured soundtrack and
+speed defaults. In **Edit gallery → PDF · Music · Presentation**, the translucent
+Presentation card configures public launcher visibility, autoplay, music and both
+speeds. Autoplay defaults ON for every gallery until explicitly changed.
+Its Save icon uses the same protected gallery form and stale-edit checks as the
+other settings. Preview and Share use the current selections, including before
+saving. Hiding public buttons does not revoke authorized links or hide photos.
 It does not change the saved slideshow music preference. Normal viewer slideshow
 controls continue honoring that preference. Photo one can be loaded through the
 existing sparse metadata endpoint when another pagination page is visible.
 
-The adjacent share icon copies the canonical gallery URL with the active language
-and `presentation=1`. Pagination, photo selection and administrator/preview state
-are omitted. The link retains ordinary gallery access requirements and starts
+The adjacent share icon opens a small translucent overlay with a selectable URL,
+two discrete speed sliders and switches for autoplay, music, fullscreen and
+**Without controls**. Copy uses the configured URL; changing a share draft does
+not save gallery settings. Autoplay defaults ON, while Without controls defaults
+OFF. The canonical gallery URL retains the active language and `presentation=1`,
+plus `autoplay=1|0`, `presentation_fullscreen=1|0`,
+`presentation_exclusive=1|0`, `presentation_music=1|0`,
+`presentation_interval=slow|medium|fast` and matching `presentation_transition`.
+The link snapshots these preferences even if the gallery defaults later change.
+`autoplay=1` is an equivalent launch flag. Legacy links without explicit presets
+use current gallery defaults. Pagination and administrator/preview state are
+omitted. The link retains ordinary gallery access requirements and starts
 the same presentation once after loading. Clipboard refusal exposes a selectable
 URL. Browser autoplay/fullscreen refusal keeps photo playback available with the
 existing explicit Play/fullscreen controls; a link cannot bypass browser policy.
+With autoplay OFF the link opens photo one paused and silent. Without controls
+hides all viewer controls, metadata and diagnostics; Esc exits. This changes
+presentation only and grants no access. Browser sound blocking still applies.
+
+Each launch holds a black stage for at least one second and until photo one is
+decoded. The selected transition then reveals it and starts requested music when
+autoplay is ON. The hold is not part of photo ordering and never repeats at a loop.
+Stop, Close and manual navigation cancel pending launch work. The existing
+slideshow timer owns both the opening hold and normal advances.
 The public request guard accepts the presentation flag only on gallery pages.
 Fresh anonymous sessions use the same visibility/password/share/NSFW checks as
 ordinary gallery links. When desktop native fullscreen is denied, the existing
 desktop viewer fills the browser viewport and continues displaying photographs.
 Explicit Play retries a soundtrack blocked by browser autoplay rules.
+The pending soundtrack also resumes on a trusted click on the photo. Its glass
+player hides with the idle HUD even while activation is required; movement restores
+the normal controls. A trusted photo/Play click also requests native fullscreen
+when the link requested it and the viewer is using the viewport fallback.
+Stop, Close, explicit silence and teardown cancel pending activation. A silent
+presentation releases already playing page music while preserving manual Play
+ownership during that presentation. No silent-audio trick or browser-policy
+bypass is used; fully automatic audible playback depends on browser permission.
 PDFs use the same disclosure. The existing miniplayer remains visible outside
 the list and retains its four controls. The table shows titles, browser-reported
 durations and one context-sensitive Play/Stop icon **before** each title, with

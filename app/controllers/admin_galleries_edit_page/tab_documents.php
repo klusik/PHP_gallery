@@ -44,22 +44,42 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  * multipart forms and JavaScript delegates. They must not be nested inside the
  * editor's shared settings form or displayed with the upload API configuration.
  *
- * @param array{id:int,folder_path:string} $gallery Authorized physical gallery identity and attachment storage path.
+ * @param array{id:int,folder_path:string,presentation_json?:string|null}
+ *     $gallery Authorized identity, attachment path and presentation preferences.
  * @param string $activeEditTab Currently selected editor tab.
- * @return void Emit the media tab when either capability is available;
- *     both OFF omit its empty panel entirely.
+ * @return void Emit independent attachment forms and presentation controls
+ *     associated with the existing guarded gallery settings form.
  */
 function admin_edit_gallery_render_documents_tab(array $gallery, string $activeEditTab): void
 {
     if (!feature_capability_effective_enabled('gallery_pdf_documents')
-        && !feature_capability_effective_enabled('gallery_music')) {
+        && !feature_capability_effective_enabled('gallery_music')
+        && !feature_capability_effective_enabled('lightbox_modes')) {
         return;
     }
-    ob_start();
-    echo admin_gallery_pdf_documents_html($gallery);
-    echo admin_gallery_music_html($gallery);
-    echo admin_edit_gallery_simbrief_legacy_panel_html($gallery);
-    render_admin_tab_panel('admin-edit-documents', (string) ob_get_clean(), $activeEditTab === 'admin-edit-documents');
+    $presentationHtml = '';
+    if (feature_capability_effective_enabled('lightbox_modes')) {
+        $settings = \Gallery\Services\gallery_presentation_settings($gallery);
+        $url = \Gallery\Core\gallery_public_url($gallery);
+        $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query([
+            'lang' => \Gallery\Services\translation_active_language(),
+        ] + \Gallery\Services\gallery_presentation_query($settings));
+        ob_start();
+        \Gallery\Views\view_render_admin_gallery_presentation([
+            'gallery_id' => (int) $gallery['id'],
+            'settings' => $settings,
+            'ready' => \Gallery\Services\gallery_presentation_schema_ready(),
+            'url' => $url,
+        ]);
+        $presentationHtml = (string) ob_get_clean();
+    }
+    \Gallery\Views\view_render_admin_gallery_media_tab([
+        'active' => $activeEditTab === 'admin-edit-documents',
+        'presentation_html' => $presentationHtml,
+        'documents_html' => admin_gallery_pdf_documents_html($gallery),
+        'music_html' => admin_gallery_music_html($gallery),
+        'simbrief_html' => admin_edit_gallery_simbrief_legacy_panel_html($gallery),
+    ]);
 }
 
 /**

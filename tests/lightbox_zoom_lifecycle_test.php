@@ -60,7 +60,7 @@ lightbox_zoom_lifecycle_assert(str_contains($closeSource, 'resetLightboxZoom(fal
 
 $slideshowStart = strpos(
     $lightboxSource,
-    'async function startLightboxSlideshow(forceMusic = false)'
+    'async function startLightboxSlideshow(musicOverride = null)'
 );
 $slideshowEnd = strpos($lightboxSource, 'function stopLightboxSlideshow', $slideshowStart === false ? 0 : $slideshowStart);
 lightbox_zoom_lifecycle_assert($slideshowStart !== false && $slideshowEnd !== false, 'Slideshow lifecycle functions are missing.');

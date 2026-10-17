@@ -253,10 +253,10 @@ function view_render_public_gallery_description_documents(array $viewModel): voi
 }
 
 /**
- * Render a soundtrack presentation launcher and its explicit copy action.
+ * Render a soundtrack presentation launcher and configurable share applet.
  * @param string $url Complete canonical, localized presentation launch URL.
  * @param bool $hasMusic Whether authorized music is available for this launch.
- * @return string Escaped links, accessible feedback and manual-copy fallback.
+ * @return string Escaped launcher and native share disclosure.
  */
 function view_public_gallery_presentation(string $url, bool $hasMusic): string
 {
@@ -270,21 +270,8 @@ function view_public_gallery_presentation(string $url, bool $hasMusic): string
         . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
         . '<path d="m8 4 13 8-13 8Z"/></svg>'
         . e(t('presentation.start')) . '</a>'
-        . '<a class="music-icon" href="' . e($url) . '"'
-        . ' data-gallery-presentation-share aria-label="'
-        . e(t('presentation.share')) . '" title="'
-        . e(t('presentation.share')) . '">'
-        . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-        . ' stroke-width="1.7" stroke-linecap="round"'
-        . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
-        . '<path d="M12 15V2m-4 4 4-4 4 4M5 10H3v12h18V10h-2"/>'
-        . '</svg></a></div><output role="status" aria-live="polite"'
-        . ' data-presentation-status data-copied="'
-        . e(t('presentation.copied')) . '" data-copy-failed="'
-        . e(t('presentation.copy_manually')) . '"></output>'
-        . '<input type="url" readonly hidden data-presentation-copy'
-        . ' aria-label="' . e(t('presentation.share')) . '" value="'
-        . e($url) . '"></div>';
+        . view_presentation_share($url, 'public-' . sha1($url))
+        . '</div></div>';
 }
 
 /**

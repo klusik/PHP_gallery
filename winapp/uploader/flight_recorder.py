@@ -23,6 +23,10 @@ from typing import Callable
 from uploader.flight_data import (
     AIRBORNE_AGL_MINIMUM_METRES,
     AIRBORNE_GROUND_SPEED_MINIMUM_MPS,
+    PHASE_AIRBORNE_CONFIRM_SAMPLES,
+    PHASE_APPROACH_AGL_METRES,
+    PHASE_CLIMB_MINIMUM_MPS,
+    PHASE_DESCENT_MAXIMUM_MPS,
     FlightAnalysis,
     FlightSample,
     analyze_session,
@@ -400,12 +404,12 @@ class FlightRecorder(threading.Thread):
             and sample.ground_speed_mps > AIRBORNE_GROUND_SPEED_MINIMUM_MPS
         ):
             vertical = sample.vertical_speed_mps
-            if vertical is not None and vertical > ACTIVITY_CLIMB_MINIMUM_MPS:
+            if vertical is not None and vertical > PHASE_CLIMB_MINIMUM_MPS:
                 phase = "climb"
-            elif vertical is not None and vertical < ACTIVITY_DESCENT_MAXIMUM_MPS:
+            elif vertical is not None and vertical < PHASE_DESCENT_MAXIMUM_MPS:
                 phase = (
                     "approach"
-                    if sample.agl_m <= ACTIVITY_APPROACH_AGL_METRES
+                    if sample.agl_m <= PHASE_APPROACH_AGL_METRES
                     else "descent"
                 )
             else:
@@ -420,7 +424,7 @@ class FlightRecorder(threading.Thread):
             self._activity_candidate = phase
             self._activity_candidate_count = 1
         if (
-            self._activity_candidate_count >= ACTIVITY_PHASE_CONFIRM_SAMPLES
+            self._activity_candidate_count >= PHASE_AIRBORNE_CONFIRM_SAMPLES
             and phase != self._activity_phase
         ):
             self._activity_phase = phase

@@ -93,6 +93,13 @@ namespace {
         ['admin', 'gallery', 'presentation', 200],
         ['public', 'gallery', 'unexpected', 404],
         ['public', 'gallery_lightbox_data', 'presentation', 404],
+        ['public', 'gallery', 'autoplay', 200],
+        ['public', 'gallery', 'presentation_music', 200],
+        ['public', 'gallery', 'presentation_interval', 200],
+        ['public', 'gallery', 'presentation_transition', 200],
+        ['public', 'gallery', 'presentation_fullscreen', 200],
+        ['public', 'gallery', 'presentation_exclusive', 200],
+        ['public', 'gallery_lightbox_data', 'presentation_music', 404],
     ];
     foreach ($cases as [$principal, $route, $parameter, $expectedStatus]) {
         $process = proc_open([PHP_BINARY, __FILE__, '--probe', $principal, $route, $parameter],
@@ -114,5 +121,5 @@ namespace {
             throw new RuntimeException("Unexpected guard result for $principal/$route/$parameter: $output");
         }
     }
-    echo "Lightbox target request guard: 11 public/Admin scenarios passed.\n";
+    echo "Lightbox target request guard: 18 public/Admin scenarios passed.\n";
 }

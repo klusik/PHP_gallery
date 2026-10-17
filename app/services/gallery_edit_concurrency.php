@@ -86,6 +86,7 @@ function gallery_edit_comparison(array $gallery): array
         'gallery_date_end', 'content_language', 'description_layout', 'grid_columns',
         'grid_rows', 'grid_use_for_subgalleries', 'thumbnail_min_size', 'thumbnail_max_size',
         'voting_enabled', 'show_filenames', 'count_badge_visibility', 'lightbox_browsing_mode',
+        'presentation_json',
         'picture_game_enabled', 'gps_map_enabled', 'background_source', 'cover_image_id',
     ]));
 }
@@ -104,7 +105,10 @@ function gallery_edit_review_draft(array $input): array
         'access_type', 'access_action', 'clear_access_password', 'access_token_expires_at',
         'grid_override_enabled', 'gallery_thumbnail_min_size', 'gallery_thumbnail_max_size',
         'gallery_thumbnail_bounds_recursive', 'remove_branding_banner', 'remove_branding_logo',
-        'remove_branding_separator'] as $key) {
+        'remove_branding_separator', 'gallery_presentation_present',
+        'gallery_presentation_autoplay',
+        'gallery_presentation_enabled', 'gallery_presentation_music',
+        'gallery_presentation_interval', 'gallery_presentation_transition'] as $key) {
         if (array_key_exists($key, $input)) {
             $draft[$key] = $input[$key];
         }

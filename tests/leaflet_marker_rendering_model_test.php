@@ -149,11 +149,11 @@ leaflet_marker_assert_contains($lightbox, 'preserveMapSplit: Boolean(', 'fullscr
 leaflet_marker_assert_contains($lightbox, 'window.location.assign(pageUrl);', 'canonical page fallback');
 leaflet_marker_assert_contains($lightbox, 'data-map-photo-page-url=', 'popup canonical fallback attribute');
 leaflet_marker_assert_contains(
-    $galleryEntrypoint, '20261017-presentation-link-v2',
+    $galleryEntrypoint, '20261017-presentation-sharing-v3',
     'authenticated entrypoint cache revision'
 );
 leaflet_marker_assert_contains(
-    $publicEntrypoint, '20261017-presentation-link-v2',
+    $publicEntrypoint, '20261017-presentation-sharing-v3',
     'public entrypoint cache revision'
 );
 leaflet_marker_assert_not_contains($lightboxCss, '.lightbox.is-fullscreen figure a', 'fullscreen popup anchor sizing');

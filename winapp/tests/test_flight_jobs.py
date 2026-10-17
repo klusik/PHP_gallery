@@ -50,7 +50,6 @@ class FlightJobsTests(unittest.TestCase):
         """Create and durably save one representative flight plan.
 
         Args:
-            self (FlightJobsTests): Test case creating the plan.
             directory (Path): Session folder owned by the fixture.
             binding (str): Secret-free endpoint/key fingerprint.
             languages (tuple[str, ...]): Required report editions.
@@ -80,9 +79,6 @@ class FlightJobsTests(unittest.TestCase):
     def test_connection_binding_is_stable_and_credential_free(self) -> None:
         """Bind exact endpoint and key without exposing either as the digest.
 
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
-
         Returns:
             None: Assert stable identity and sensitivity to either input.
         """
@@ -97,9 +93,6 @@ class FlightJobsTests(unittest.TestCase):
 
     def test_preferences_roundtrip_and_strict_boolean_restore(self) -> None:
         """Persist only recognized preferences and reject truthy string flags.
-
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
 
         Returns:
             None: Assert stable language selection and strict boolean handling.
@@ -128,9 +121,6 @@ class FlightJobsTests(unittest.TestCase):
     def test_corrupt_preferences_fail_closed(self) -> None:
         """Refuse malformed durable settings rather than guessing user choices.
 
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
-
         Returns:
             None: Assert invalid JSON and malformed language containers fail.
         """
@@ -146,9 +136,6 @@ class FlightJobsTests(unittest.TestCase):
 
     def test_completed_remote_restore_requires_every_receipt(self) -> None:
         """Require a validated receipt for each remotely completed language.
-
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
 
         Returns:
             None: Restore a valid plan and reject omitted or malformed receipts.
@@ -180,9 +167,6 @@ class FlightJobsTests(unittest.TestCase):
     def test_completed_plan_with_pending_photo_drain_is_rejected(self) -> None:
         """Reject completed state while a durable photograph queue is pending.
 
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
-
         Returns:
             None: Assert flight completion cannot hide accepted photo work.
         """
@@ -204,9 +188,6 @@ class FlightJobsTests(unittest.TestCase):
     def test_pending_sessions_are_connection_scoped_and_corruption_blocks(self) -> None:
         """Recover only matching unfinished tasks and fail closed on corruption.
 
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
-
         Returns:
             None: Assert stable ordering, connection filtering and corruption.
         """
@@ -227,9 +208,6 @@ class FlightJobsTests(unittest.TestCase):
 
     def test_local_only_and_abandonment_restore_as_explicit_choices(self) -> None:
         """Restore local-only and abandoned states without remote receipts.
-
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
 
         Returns:
             None: Assert decisions remain durable and leave no pending work.
@@ -257,9 +235,6 @@ class FlightJobsTests(unittest.TestCase):
     def test_manual_job_bindings_reject_another_connection(self) -> None:
         """Keep accepted upload jobs attached to their original gallery key.
 
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
-
         Returns:
             None: Assert idempotent binding, mismatch refusal and scoped resolve.
         """
@@ -278,9 +253,6 @@ class FlightJobsTests(unittest.TestCase):
 
     def test_workspace_lease_is_exclusive_and_releasable(self) -> None:
         """Ensure one live process owns a workspace until release.
-
-        Args:
-            self (FlightJobsTests): Test case instance running this check.
 
         Returns:
             None: Assert conflicting acquisition fails and later acquisition works.

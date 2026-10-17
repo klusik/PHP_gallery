@@ -8,7 +8,7 @@
  * Module Type: Service
  *
  * Purpose:
- *   Resolves public lightbox browsing mode settings.
+ *   Resolves public lightbox browsing modes and gallery presentation defaults.
  *
  * Responsibilities:
  *   - Keep the global Theme lightbox mode separate from optional per-gallery overrides
@@ -16,6 +16,7 @@
  *   - Keep legacy strip values compatible while storing the public picture_strip value
  *   - Provide readable labels for Theme and gallery editor controls
  *   - Keep upgraded installations safe before the newest gallery column migration is applied
+ *   - Normalize versioned playback snapshots and guard explicit preference writes
  *
  * Author:
  *   Rudolf Klusal
@@ -37,6 +38,94 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
+/**
+ * Normalize versioned defaults without changing existing gallery behavior.
+ * @param array{version?:int,enabled?:bool,autoplay?:bool,music?:bool,interval?:string,
+ *     transition?:string}|string|null $value Stored JSON, decoded settings,
+ *     or null for the existing enabled/music/medium defaults.
+ * @return array{version:int,enabled:bool,autoplay:bool,music:bool,interval:string,
+ *     transition:string} Complete bounded presentation preferences.
+ */
+function gallery_presentation_normalize(array|string|null $value): array
+{
+    $defaults = ['version' => 1, 'enabled' => true, 'autoplay' => true, 'music' => true,
+        'interval' => 'medium', 'transition' => 'medium'];
+    if (is_string($value)) $value = json_decode($value, true);
+    if (!is_array($value) || ($value['version'] ?? null) !== 1) {
+        // Permanent pre-settings/unknown-version compatibility. This owner
+        // preserves the established launcher, music and medium timings.
+        return $defaults;
+    }
+    foreach (['enabled', 'autoplay', 'music'] as $key) {
+        if (is_bool($value[$key] ?? null)) $defaults[$key] = $value[$key];
+    }
+    foreach (['interval', 'transition'] as $key) {
+        if (in_array($value[$key] ?? null, ['slow', 'medium', 'fast'], true)) {
+            $defaults[$key] = $value[$key];
+        }
+    }
+    return $defaults;
+}
+
+/**
+ * Resolve physical-gallery defaults from its already fetched row.
+ * @param array{presentation_json?:string|null} $gallery Authorized gallery row.
+ * @return array{version:int,enabled:bool,autoplay:bool,music:bool,interval:string,
+ *     transition:string} Defaults without an additional public schema probe.
+ */
+function gallery_presentation_settings(array $gallery): array
+{
+    return gallery_presentation_normalize($gallery['presentation_json'] ?? null);
+}
+
+/**
+ * Project complete supported preferences into shareable playback intent.
+ * @param array{version:int,enabled:bool,autoplay:bool,music:bool,interval:string,
+ *     transition:string} $settings Normalized physical-gallery preferences.
+ * @return array{presentation:string,autoplay:string,
+ *     presentation_fullscreen:string,presentation_music:string,
+ *     presentation_interval:string,presentation_transition:string}
+ *     Bounded URL values; controllers add the destination and active language.
+ */
+function gallery_presentation_query(array $settings): array
+{
+    return [
+        'presentation' => '1',
+        'autoplay' => $settings['autoplay'] ? '1' : '0',
+        'presentation_fullscreen' => '1',
+        'presentation_music' => $settings['music'] ? '1' : '0',
+        'presentation_interval' => $settings['interval'],
+        'presentation_transition' => $settings['transition'],
+    ];
+}
+
+/**
+ * Determine whether the editor can offer persisted presentation controls.
+ * @return bool True only after the shared observer verifies the new column.
+ */
+function gallery_presentation_schema_ready(): bool
+{
+    return presentation_schema_render_available(
+        presentation_gallery_settings_schema_status(),
+        'gallery_presentation_render'
+    );
+}
+
+/**
+ * Refuse explicit preference writes before any database or filesystem effects.
+ * @param string $operation Stable editor/import operation for safe diagnostics.
+ * @return void Continue only with verified current presentation storage.
+ * @throws PresentationSchemaUnavailableException On missing or unknown schema.
+ */
+function gallery_presentation_assert_writable(string $operation): void
+{
+    presentation_schema_assert_write_available(
+        presentation_gallery_settings_schema_status(),
+        $operation,
+        t('presentation.migration')
+    );
+}
 
 /**
  * Return true when per-gallery lightbox browsing-mode overrides can be stored.

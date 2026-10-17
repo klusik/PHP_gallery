@@ -15,13 +15,21 @@ import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 import {createLightboxNavigationLifecycle} from '../public/assets/gallery-modules/lightbox-navigation-lifecycle.js';
+import {
+    galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
+} from '../public/assets/gallery-modules/gallery-presentation.js';
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/lightbox.js', import.meta.url), 'utf8');
 
-test('explicit presentation resets timing and opens photo one with music', () => {
+test('presentation resets timing and prepares photo one before music', () => {
     const opened = [];
     const music = [];
     const context = vm.createContext({
+        presentationOptions: {music: true, autoplay: true, fullscreen: true,
+            exclusive: false, interval: 'medium', transition: 'medium'},
+        LIGHTBOX_PRESENTATION_INTRO_MS: 1000, performance: {now: () => 0},
+        lightboxPresentationIntro: null, lightboxSlideshowActive: false,
+        GALLERY_PRESENTATION_SPEEDS,
         cards: [{}, {}, {}], lightboxSlideshowEnabled: true,
         // Deliberately different live settings prove the launch resets them.
         lightboxSlideshowVisibleDuration: 4000,
@@ -29,7 +37,12 @@ test('explicit presentation resets timing and opens photo one with music', () =>
         lightboxSlideshowSpeedPresets: {
             interval: [4000, 2000, 1000], transition: [2000, 1000, 500],
         },
-        overlay: {hasAttribute: () => false, querySelectorAll: () => []},
+        overlay: {querySelectorAll: () => [],
+            classList: {add: () => {}, toggle: () => {}}},
+        musicPlayer: {start: (...args) => music.push(args)},
+        enterLightboxFullscreen: () => {},
+        syncLightboxSlideshowControls: () => {},
+        scheduleLightboxSlideshowNext: () => {},
         stopLightboxSlideshow: () => {}, refreshLightboxOrderFromDom: () => {},
         openAt: index => opened.push(index),
         startLightboxSlideshow: force => music.push(force),
@@ -37,15 +50,24 @@ test('explicit presentation resets timing and opens photo one with music', () =>
     vm.runInContext(productionFunction('presentGalleryFromStart'), context);
     context.presentGalleryFromStart();
     assert.deepEqual(opened, [0]);
-    assert.deepEqual(music, [true]);
+    assert.deepEqual(music, [[false, true]], 'Opening must hold music silent.');
+    assert.equal(context.lightboxPresentationIntro.music, true);
+    assert.equal(context.lightboxPresentationIntro.readyAt, 1000);
     assert.equal(context.lightboxSlideshowVisibleDuration, 2000);
     assert.equal(context.lightboxSlideshowTransitionDuration, 1000);
+    context.presentationOptions = {music: false, autoplay: false, fullscreen: false,
+        exclusive: false, interval: 'fast', transition: 'slow'};
+    context.presentGalleryFromStart();
+    assert.equal(context.lightboxSlideshowVisibleDuration, 1000);
+    assert.equal(context.lightboxSlideshowTransitionDuration, 2000);
+    assert.equal(context.lightboxPresentationIntro.music, false);
+    assert.equal(context.lightboxSlideshowActive, false, 'Paused link must stay paused.');
     context.lightboxSlideshowEnabled = false;
     context.presentGalleryFromStart();
-    assert.deepEqual(opened, [0], 'Disabled slideshow must remain unavailable.');
+    assert.deepEqual(opened, [0, 0], 'Disabled slideshow must remain unavailable.');
 });
 
-test('presentation links launch once and require an eligible gallery control', async () => {
+test('presentation links launch once and require an authorized viewer', async () => {
     const deferred = readFileSync(new URL(
         '../public/assets/gallery-modules/lightbox-deferred.js', import.meta.url
     ), 'utf8');
@@ -64,7 +86,7 @@ test('presentation links launch once and require an eligible gallery control', a
         deferredLightboxState: state,
         location: {search: '?lang=cs&presentation=1'}, window: {},
         document: {
-            querySelector: selector => selector === '[data-gallery-presentation-start]'
+            querySelector: selector => selector === '[data-lightbox]'
                 ? (eligible ? {} : null) : {},
             addEventListener: () => {},
         },
@@ -83,7 +105,40 @@ test('presentation links launch once and require an eligible gallery control', a
     eligible = false;
     context.setupGalleryLightbox();
     await Promise.resolve();
-    assert.equal(launches.length, 2, 'Missing authorization/control must not launch.');
+    assert.equal(launches.length, 2, 'Missing authorized viewer must not launch.');
+});
+
+test('link snapshots override saved defaults with a closed playback vocabulary', () => {
+    const original = globalThis.location;
+    globalThis.location = {href: 'https://gallery.test/album/'};
+    try {
+        const overlay = {dataset: {presentationMusic: '1',
+            presentationInterval: 'slow', presentationTransition: 'medium'}};
+        const intent = galleryPresentationOptions(overlay,
+            '?autoplay=1&presentation_music=0&presentation_interval=fast'
+                + '&presentation_transition=slow');
+        assert.deepEqual(intent, {autoplay: true, fullscreen: true, exclusive: false,
+            music: false, interval: 'fast', transition: 'slow'});
+        const invalid = galleryPresentationOptions(overlay,
+            '?presentation=1&presentation_music=invalid'
+                + '&presentation_interval=-1&presentation_transition=999999');
+        assert.deepEqual(invalid, {autoplay: true, fullscreen: true, exclusive: false,
+            music: true, interval: 'slow', transition: 'medium'});
+        const paused = galleryPresentationOptions(overlay,
+            '?presentation=1&autoplay=0&presentation_fullscreen=0'
+                + '&presentation_exclusive=1');
+        assert.equal(paused.autoplay, false);
+        assert.equal(paused.fullscreen, false);
+        assert.equal(paused.exclusive, true);
+        assert.deepEqual(galleryPresentationOptions(overlay,
+            '?presentation_music=0&presentation_interval=fast'),
+        {autoplay: true, fullscreen: true, exclusive: false,
+            music: true, interval: 'slow', transition: 'medium'},
+        'Ordinary gallery parameters must not change playback defaults.');
+    } finally {
+        if (original === undefined) delete globalThis.location;
+        else globalThis.location = original;
+    }
 });
 
 /**
@@ -172,6 +227,9 @@ function fixture() {
         lightboxSlideshowTimer: null, lightboxSlideshowScheduleToken: 0,
         lightboxSlideshowPreloadController: null, lightboxSlideshowActive: true,
         musicPlayer: {stop: () => {}},
+        syncLightboxSlideshowControls: () => {},
+        lightboxPresentationIntro: null, stageLink: null,
+        performance: {now: () => 0},
         lightboxDefaultTransitionDuration: 160,
         overlay: {
             hidden: false, dataset: {}, querySelector: () => panel,
@@ -201,7 +259,9 @@ function fixture() {
     assert.ok(start >= 0 && end > start, 'Production timing state must be extracted intact.');
     const declarations = ['readLightboxTimingSetting', 'currentLightboxTransitionDuration',
         'updateLightboxSlideshowSpeed', 'clearLightboxSlideshowTimer', 'scheduleLightboxSlideshowNext',
-        'stopLightboxSlideshow', 'shouldKeepLightboxHudVisible', 'finishLightboxSlideshowSpeedPointer'].map(productionFunction).join('\n');
+        'stopLightboxSlideshow', 'cancelLightboxPresentationIntro',
+        'scheduleLightboxPresentationIntro', 'shouldKeepLightboxHudVisible',
+        'finishLightboxSlideshowSpeedPointer'].map(productionFunction).join('\n');
     vm.runInContext(`${declarations}\n${source.slice(start, end)}`, context);
     const transaction = context.lightboxNavigation.begin(0, '0');
     context.lightboxNavigation.settle(0, transaction.generation, 'displayed');
@@ -218,6 +278,38 @@ async function settle() {
     await Promise.resolve();
     await Promise.resolve();
 }
+
+test('black intro waits for decode and never becomes a repeated slide', async () => {
+    const context = fixture();
+    const started = [];
+    context.musicPlayer.start = (...args) => started.push(args);
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: true, animation: null,
+    };
+    context.lightboxNavigation.begin(0, '0');
+    context.scheduleLightboxSlideshowNext();
+    assert.equal(context.timers.size, 0, 'Decode must gate the opening hold.');
+    context.lightboxNavigation.settle(0, context.lightboxNavigation.generation, 'displayed');
+    context.scheduleLightboxSlideshowNext();
+    const [id, hold] = [...context.timers][0];
+    assert.equal(hold.duration, 1000);
+    assert.equal(started.length, 0, 'Audio must wait for the reveal.');
+    context.timers.delete(id);
+    hold.callback();
+    await settle();
+    assert.deepEqual(started, [[true, false]]);
+    assert.equal(context.lightboxPresentationIntro, null);
+    assert.equal(context.loads.length, 1, 'Reveal must hand off to the existing scheduler.');
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: true, animation: null,
+    };
+    context.scheduleLightboxSlideshowNext();
+    const cancelled = [...context.timers.values()][0];
+    context.stopLightboxSlideshow();
+    cancelled.callback();
+    await settle();
+    assert.equal(started.length, 1, 'Cancelled intro must not restart audio.');
+});
 
 /**
  * Open exactly one timer gate without letting an older timer run twice.

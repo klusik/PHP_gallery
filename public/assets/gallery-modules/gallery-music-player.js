@@ -22,8 +22,10 @@ let currentSignature = '';
  *     in saved order.
  * @param {HTMLAudioElement} audio Native audio instance, injectable for
  *     lifecycle fixtures.
- * @returns {{refresh:function():void,start:function(boolean=):void, stop:function():void,
+ * @returns {{refresh:function():void,start:function(boolean=, boolean=):void,
+ *     stop:function():void,
  *     closeViewer:function():void, destroy:function():void,
+ *     resumeRequested:function():void,
  *     command:function(string, string=, boolean=):void}} Shared activation,
  *     slideshow boundaries, disposal and explicit control actions.
  */
@@ -44,6 +46,7 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     let generation = 0;
     let handledFailure = -1;
     let message = '';
+    let awaitingGesture = false;
     const failed = new Set();
     audio.preload = 'none';
 
@@ -54,6 +57,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
      *     selected track.
      */
     function release() {
+        awaitingGesture = false;
+        message = '';
         generation += 1;
         playing = false;
         audio.pause();
@@ -76,6 +81,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             const own = card ? card.dataset.musicGallery === String(playlist.galleryId)
                 : group.dataset.musicGallery === String(playlist.galleryId);
             group.hidden = card ? false : !group.dataset.musicGallery;
+            group.classList.toggle('is-awaiting-gesture', own
+                && awaitingGesture && owner === 'slideshow' && slideshow);
             const title = group.querySelector('[data-music-current-title]');
             if (title) title.textContent = own ? tracks[index]?.title || '' : '';
             const status = group.querySelector('[data-music-playback-status]');
@@ -126,17 +133,21 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     function failure(error, token) {
         if (token !== generation || handledFailure === token || disposed || !playing) return;
         handledFailure = token;
-        message = root.querySelector(
+        const failureMessage = root.querySelector(
             '[data-music-playback-error]'
         )?.dataset.musicPlaybackError || '';
         if (error?.name === 'NotAllowedError') {
             release();
+            awaitingGesture = true;
+            message = root.querySelector('[data-music-activation-required]')
+                ?.dataset.musicActivationRequired || failureMessage;
             sync();
             return;
         }
         failed.add(index);
         if (failed.size >= tracks.length) {
             release();
+            message = failureMessage;
             sync();
             return;
         }
@@ -152,6 +163,7 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
      */
     function play() {
         if (disposed || tracks.length === 0) return;
+        awaitingGesture = false;
         audio.pause();
         const token = ++generation;
         audio.src = tracks[index].url;
@@ -184,14 +196,33 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         /**
          * Apply the saved default or the visitor's explicit soundtrack launch.
          * @param {boolean} force Whether this launch explicitly requests music.
+         * @param {boolean} silent Whether an explicit presentation mutes even
+         *     default-on or already playing page music while retaining its owner.
          * @returns {void} Start the first track without persisting preferences.
          */
-        start(force = false) {
+        start(force = false, silent = false) {
             slideshow = true;
+            if (silent) {
+                owner = 'slideshow';
+                release();
+                sync();
+                return;
+            }
             if (disposed || (!force && playlist.enabled !== true)) return;
             owner = 'slideshow';
             index = 0;
             failed.clear();
+            message = '';
+            play();
+        },
+        /**
+         * Retry only a requested slideshow soundtrack after visitor activation.
+         * @returns {void} Preserve track/owner; stopped or closed music stays off.
+         */
+        resumeRequested() {
+            if (disposed || !awaitingGesture || !slideshow
+                || owner !== 'slideshow') return;
+            awaitingGesture = false;
             message = '';
             play();
         },
@@ -308,6 +339,15 @@ export function setupGalleryMusicPlayback() {
     if (document.body.dataset.musicPlaybackBound === '1') return;
     document.body.dataset.musicPlaybackBound = '1';
     document.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : null;
+        const viewer = target?.closest('[data-lightbox]');
+        const control = target?.closest(
+            'button,a,input,select,textarea,[role="button"]'
+        );
+        if (event.isTrusted && viewer && !viewer.hidden
+            && control?.matches('[data-lightbox-stage]')) {
+            currentPlayer?.resumeRequested();
+        }
         const button = event.target instanceof Element
             ? event.target.closest('[data-music-action]') : null;
         if (!button || button.disabled) return;

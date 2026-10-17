@@ -20,8 +20,9 @@ default ON when no preference exists, including upgrades; fresh seeding preserve
 explicit OFF. OFF retains files, indexes, preferences and the incomplete-PDF-child
 publication guard. The historical `media&ofp=1` alias remains supported and applies
 the same PDF master. Stored page photos retain their normal image ownership.
-Both masters OFF omit the shared editor media tab; an old selected-tab URL
-normalizes to the available Identity default rather than an empty panel.
+Both attachment masters OFF retain the core Presentation card when lightbox is
+enabled. The tab is omitted only when all three capabilities are OFF; an old
+selected-tab URL then normalizes to Identity rather than an empty panel.
 
 Photo-only cached snapshots/jobs are derived state and cannot establish complete
 attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
@@ -101,6 +102,32 @@ filenames or duration. Hosted service, actual HTTP/DB and browser owners cover
 these boundaries; real codecs/devices and large deployed unions remain manual.
 
 ## Compact attachment browser presentation
+
+The physical-gallery presentation settings owner is the existing lightbox service,
+gallery model and guarded editor writer. Nullable version-1 JSON keeps pre-feature
+galleries enabled with autoplay, music and medium timings. Unknown versions/types render
+those compatible defaults. Public reads need no new schema probes; explicit
+editor/import writes fail before filesystem effects on missing or unknown schema.
+Older forms preserve the stored field. Sidecars, Organizer children and Trash
+retain preferences. Live usage statistics for the new settings are unknown.
+
+New links snapshot all supported playback options. Legacy `presentation=1` links
+remain supported and `autoplay=1` is an alias. Invalid values cannot introduce
+arbitrary timers or change gallery/media grants. Browser autoplay refusal retains
+a glass player that follows ordinary HUD hiding and a trusted-photo-click retry
+of the requested soundtrack. Photo/Play activation can also request native fullscreen.
+Stop/Close/explicit silence cancel it. This permanent shared-player fallback
+protects browsers requiring activation; retire only with supported-browser and
+deployment evidence that audible autoplay is assured. Required Chromium covers
+allowed/refused/muted starts and idle-HUD hiding/restoration with controlled audio; real
+codecs, Safari and physical devices remain manual acceptance.
+Autoplay defaults ON until explicitly changed. Share applets snapshot it alongside
+music, speeds and link-only fullscreen/exclusive choices. Exclusive mode defaults
+OFF, hides controls/metadata/diagnostics when selected, and retains Escape exit;
+it grants no access and does not bypass browser sound policy. A one-second minimum
+black opening also waits for first-photo decode, uses the existing slideshow timer
+and never repeats as a gallery item. These are permanent supported behaviors;
+live usage statistics and real-device permission behavior remain unknown.
 
 The gallery-only `presentation` query flag is allowed through the SEO guard;
 it grants no visitor authority. Public direct links must reach the same gallery

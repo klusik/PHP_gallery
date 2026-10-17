@@ -37,9 +37,6 @@ class FlightUITests(unittest.TestCase):
     def _host(self) -> SimpleNamespace:
         """Create an app-shaped host with workers but no native Tk objects.
 
-        Args:
-            self (FlightUITests): Test case creating the host.
-
         Returns:
             SimpleNamespace: Fake host with saved config and observable workers.
         """
@@ -74,7 +71,6 @@ class FlightUITests(unittest.TestCase):
         """Create a controller without invoking Tk construction.
 
         Args:
-            self (FlightUITests): Test case creating the adapter.
             host (SimpleNamespace): Fake existing uploader host.
 
         Returns:
@@ -122,9 +118,6 @@ class FlightUITests(unittest.TestCase):
     def test_start_session_fails_closed_when_preferences_do_not_save(self) -> None:
         """Require durable preferences before starting any recorder or queue.
 
-        Args:
-            self (FlightUITests): Test case instance running this check.
-
         Returns:
             None: Assert a failed save admits no session work.
         """
@@ -142,9 +135,6 @@ class FlightUITests(unittest.TestCase):
     def test_corrupt_recovery_state_refuses_new_session(self) -> None:
         """Fail closed when a durable plan cannot be safely recovered.
 
-        Args:
-            self (FlightUITests): Test case instance running this check.
-
         Returns:
             None: Assert admission is denied and a warning is queued.
         """
@@ -157,9 +147,6 @@ class FlightUITests(unittest.TestCase):
 
     def test_stop_stops_watcher_and_utc_but_leaves_ai_and_manual_alone(self) -> None:
         """Keep ordinary Stop within watcher and accepted-photo ownership.
-
-        Args:
-            self (FlightUITests): Test case instance running this check.
 
         Returns:
             None: Assert recorder/watcher Stop while AI/import workers continue.
@@ -195,9 +182,6 @@ class FlightUITests(unittest.TestCase):
 
     def test_revoke_stops_other_producers_and_dispatches_off_tk(self) -> None:
         """Stop authenticated producers before starting the background barrier.
-
-        Args:
-            self (FlightUITests): Test case instance running this check.
 
         Returns:
             None: Assert revoke joins the worker path without synchronous network.
@@ -238,15 +222,16 @@ class FlightUITests(unittest.TestCase):
     def test_revoke_wait_adapter_observes_all_authenticated_blockers(self) -> None:
         """Wait for current auth blockers only when final revoke is requested.
 
-        Args:
-            self (FlightUITests): Test case instance running this check.
-
         Returns:
             None: Assert Revoke waits and ordinary Stop omits auth blockers.
         """
         host = self._host()
         ui = self._ui(host)
-        ui.operation = SimpleNamespace(wants_revoke=True)
+        ui.operation = SimpleNamespace(
+            wants_revoke=True,
+            plans=[],
+            update=Mock(),
+        )
         host.api_key_request_blockers.side_effect = [["manual upload"], []]
         cancel = threading.Event()
         flight_ui.FlightUI.wait_for_workers(
@@ -267,9 +252,6 @@ class FlightUITests(unittest.TestCase):
 
     def test_late_revoke_join_runs_a_second_final_wait(self) -> None:
         """Recheck auth workers when Revoke joins an already draining Stop.
-
-        Args:
-            self (FlightUITests): Test case instance running this check.
 
         Returns:
             None: Assert the late consent path re-enters the adapter drain.
@@ -295,7 +277,6 @@ class FlightUITests(unittest.TestCase):
             def delayed_analysis(path: Path) -> SimpleNamespace:
                 """Hold analysis so explicit Revoke joins after the first drain.
 
-                Args:
                     path (Path): Session directory supplied by finalization.
 
                 Returns:
@@ -335,9 +316,6 @@ class FlightUITests(unittest.TestCase):
     def test_unknown_eta_uses_activity_animation_without_percent_guess(self) -> None:
         """Show unknown ETA and animate only the indeterminate activity bar.
 
-        Args:
-            self (FlightUITests): Test case instance running this check.
-
         Returns:
             None: Assert unknown duration never becomes a percentage estimate.
         """
@@ -371,9 +349,6 @@ class FlightUITests(unittest.TestCase):
 
     def test_terminal_cleanup_updates_existing_host_controls(self) -> None:
         """Clear adapter ownership flags only after its worker is terminal.
-
-        Args:
-            self (FlightUITests): Test case instance running this check.
 
         Returns:
             None: Assert terminal progress refreshes existing connection UI.

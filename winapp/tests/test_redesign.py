@@ -892,7 +892,9 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.flights.binding.assert_not_called()
         worker_factory.assert_not_called()
         app.write_log.assert_called_once()
-        self.assertIn("revocation", app.write_log.call_args.args[0].lower())
+        log_message = app.write_log.call_args.args[0].lower()
+        self.assertIn("finishing", log_message)
+        self.assertNotIn("revocation", log_message)
 
     def test_late_connection_ready_does_not_persist_during_revocation(self) -> None:
         """Do not replace the captured connection while accepted work drains.

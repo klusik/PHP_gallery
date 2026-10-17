@@ -350,16 +350,16 @@ def _recorded_flight_date(
     return tr(language, "unavailable")
 
 
-def _safe_source_text(value: object) -> str:
+def _safe_source_text(value: str) -> str:
     """Redact local paths and credential assignments from recorded evidence.
 
     Args:
-        value (object): Warning, event evidence or diagnostic reason string.
+        value (str): Warning, event evidence or diagnostic reason string.
 
     Returns:
         str: Text safe to include in a locally generated or uploaded report.
     """
-    return redact_text(str(value), redact_paths=True)
+    return redact_text(value, redact_paths=True)
 
 
 def _paragraph(
@@ -648,11 +648,15 @@ def _profile_chart(
     drawing = Drawing(CHART_WIDTH, CHART_HEIGHT)
     left, bottom = 48, 30
     plot_width, plot_height = CHART_WIDTH - 62, CHART_HEIGHT - 52
+    chart_title = label
+    unit_suffix = " (" + unit + ")"
+    if not chart_title.rstrip().endswith(unit_suffix):
+        chart_title += unit_suffix
     drawing.add(
         String(
             0,
             CHART_HEIGHT - 12,
-            label + " (" + unit + ")",
+            chart_title,
             fontName=_FONT_NAME,
             fontSize=8,
             fillColor=_COLOR_INK,
@@ -1531,13 +1535,13 @@ def _contact_sensor_tables(
     samples = getattr(landing, "contact_samples", ())
     rates = getattr(landing, "contact_descent_rates_fpm", ())
     motion_headings = [
-        "contact_time",
-        "latitude",
-        "longitude",
-        "contact_descent",
-        "indicated_airspeed",
-        "ground_speed",
-        "vertical_speed",
+        "contact_elapsed_short",
+        "latitude_short",
+        "longitude_short",
+        "contact_descent_short",
+        "contact_ias_short",
+        "contact_ground_speed_short",
+        "contact_vertical_speed_short",
     ]
     state_headings = [
         "contact_time",
@@ -1649,7 +1653,7 @@ def _contact_sensor_tables(
             ])
     motion_table = Table(
         motion_rows,
-        colWidths=[18 * mm, 23 * mm, 23 * mm, 27 * mm, 20 * mm, 20 * mm, 23 * mm],
+        colWidths=[18 * mm, 20 * mm, 20 * mm, 25 * mm, 18 * mm, 18 * mm, 22 * mm],
         repeatRows=1,
         hAlign="LEFT",
     )
@@ -1928,13 +1932,13 @@ def _draw_page(
     language: str,
     analysis_sha256: str,
 ) -> None:
-    """Draw a restrained page footer and report identity on each page.
+    """Draw the page footer and full source hash on every page.
 
     Args:
         canvas (Canvas): ReportLab PDF canvas supplied by SimpleDocTemplate.
         document (SimpleDocTemplate): ReportLab document with current page number.
         language (str): Language used for the footer.
-        analysis_sha256 (str): Stable checksum prefix identifying source data.
+        analysis_sha256 (str): Full canonical checksum identifying source data.
 
     Returns:
         None: Draw the footer without changing document flow.
@@ -1954,6 +1958,12 @@ def _draw_page(
         A4[0] - 18 * mm,
         9 * mm,
         analysis_sha256[:12] + "  ·  " + str(document.page),
+    )
+    canvas.setFont(_FONT_NAME, 5.5)
+    canvas.drawString(
+        18 * mm,
+        4 * mm,
+        tr(language, "shared_checksum") + ": " + analysis_sha256,
     )
     canvas.restoreState()
 
@@ -2062,10 +2072,6 @@ def _build_story(
             tr(language, "report_template") + ": " + REPORT_TEMPLATE_VERSION
             + " · " + tr(language, "analysis_version") + ": "
             + str(ANALYSIS_VERSION),
-            styles["small"],
-        ),
-        _paragraph(
-            tr(language, "shared_checksum") + ": " + analysis_sha256,
             styles["small"],
         ),
     ])

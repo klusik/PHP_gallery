@@ -33,9 +33,10 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import {galleryPresentationOptions} from './gallery-presentation.js?v=20261017-presentation-sharing-v3';
 import {
-    getGalleryMusicPlayer, stopGalleryMusicViewer,
-} from './gallery-music-player.js?v=20261017-media-summary-v1';
+    stopGalleryMusicViewer,
+} from './gallery-music-player.js?v=20261017-presentation-sharing-v3';
 
 const lightboxModuleUrl = (() => {
     const moduleUrl = new URL('./lightbox.js', import.meta.url);
@@ -310,19 +311,17 @@ export function setupGalleryLightbox() {
         if (target.matches('[data-gallery-presentation-start]')) {
             if (deferredLightboxState.presentationPending) return;
             deferredLightboxState.presentationPending = true;
-            // Audio starts in the native click task, before the heavy viewer
-            // import. The existing player keeps its source through handoff.
-            const player = getGalleryMusicPlayer();
-            player?.start(true);
-            if (player) document.querySelector('[data-lightbox]')
-                ?.setAttribute('data-presentation-audio-started', '');
+            const intent = galleryPresentationOptions();
+            // Native fullscreen needs this original trusted click, before the
+            // deferred import. Audio waits for the decoded first-photo reveal.
+            if (intent.fullscreen && document.documentElement.requestFullscreen) {
+                void document.documentElement.requestFullscreen().catch(() => {});
+            }
         }
         showDeferredLightboxLoader(target);
         activateFullLightbox(setupToken, target).catch(() => {
             hideDeferredLightboxLoader();
             stopGalleryMusicViewer();
-            document.querySelector('[data-lightbox]')
-                ?.removeAttribute('data-presentation-audio-started');
         }).finally(() => {
             deferredLightboxState.presentationPending = false;
         });
@@ -334,8 +333,9 @@ export function setupGalleryLightbox() {
 
     scheduleIdleLightboxActivation(setupToken);
     if (!deferredLightboxState.presentationConsumed
-        && new URLSearchParams(location.search).get('presentation') === '1'
-        && document.querySelector('[data-gallery-presentation-start]')) {
+        && ['presentation', 'autoplay'].some(key =>
+            new URLSearchParams(location.search).get(key) === '1')
+        && document.querySelector('[data-lightbox]')) {
         deferredLightboxState.presentationConsumed = true;
         void activateFullLightbox(setupToken).then(() => {
             if (setupToken === deferredLightboxState.setupToken) {

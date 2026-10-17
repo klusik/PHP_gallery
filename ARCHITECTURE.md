@@ -38,7 +38,19 @@ copy and its selectable-URL fallback belong to the existing media-panel module.
 The SEO guard allows `presentation` on gallery pages while the controller keeps
 ordinary visitor authorization. Desktop native-fullscreen refusal retains the
 desktop CSS shell and image stage; mobile presentation keeps its existing shell.
-No persistence or media delivery route change is involved.
+Physical-gallery defaults live in nullable versioned `galleries.presentation_json`
+and use the ordinary gallery revision/CSRF writer. The media tab associates its
+controls with that same native form, including in the mounted drawer and without
+JavaScript. Autoplay defaults ON and can be disabled per gallery. A retained native
+share disclosure configures a URL snapshot (autoplay, music, fullscreen, exclusive
+controls and both speed presets) without persistence. Public URLs snapshot these
+options; explicit
+link values override later gallery edits. Missing/unknown settings retain prior
+enabled/music/medium behavior. Media delivery and visitor authorization are unchanged.
+The single slideshow timer also gates a launch-only one-second black hold on
+decoded photo one, then hands off after its reveal. It never adds a synthetic
+gallery item. Exclusive links hide controls by default only when explicitly
+requested and retain Escape exit. Native fullscreen/sound remain browser-owned.
 
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.

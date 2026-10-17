@@ -46,7 +46,6 @@ class FlightWorkflowTests(unittest.TestCase):
         """Create one pending durable task for a worker test.
 
         Args:
-            self (FlightWorkflowTests): Test case creating the task.
             directory (Path): Session directory owned by this test.
             languages (tuple[str, ...]): Required report editions.
             reports_enabled (bool): Whether a report must be rendered.
@@ -68,7 +67,6 @@ class FlightWorkflowTests(unittest.TestCase):
         """Create the smallest analysis shape consumed by the workflow.
 
         Args:
-            self (FlightWorkflowTests): Test case creating the analysis.
             samples (bool): Whether recorder samples exist.
             landings (bool): Whether verified landing evidence exists.
 
@@ -97,15 +95,15 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def _render_report(
         self,
-        analysis: object,
+        analysis: SimpleNamespace,
         language: str,
         destination: Path,
     ) -> Path:
         """Write deterministic renderer-stub bytes at the requested destination.
 
         Args:
-            self (FlightWorkflowTests): Test case supplying the stub.
-            analysis (object): Shared analysis object, unused by this stub.
+            analysis (SimpleNamespace): Fixture with samples, landings,
+                completed and to_payload fields; unused by this stub.
             language (str): Report language encoded in fixture bytes.
             destination (Path): Exact report path requested by the worker.
 
@@ -118,9 +116,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def _report_modules(self) -> tuple[ModuleType, ModuleType]:
         """Create importable delivery and report stubs for one test.
-
-        Args:
-            self (FlightWorkflowTests): Test case building module stubs.
 
         Returns:
             tuple[ModuleType, ModuleType]: Delivery module and report module.
@@ -135,9 +130,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def test_no_samples_completes_without_creating_blank_report(self) -> None:
         """Turn empty telemetry into photograph-only completion without a PDF.
-
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
 
         Returns:
             None: Assert no renderer call and no fabricated report.
@@ -164,9 +156,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def test_missing_landing_requires_explicit_local_only_choice(self) -> None:
         """Keep partial flight evidence until the user chooses local completion.
-
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
 
         Returns:
             None: Assert error first, then local PDF without remote delivery.
@@ -208,9 +197,6 @@ class FlightWorkflowTests(unittest.TestCase):
     def test_second_language_failure_keeps_first_durable_receipt(self) -> None:
         """Retain a confirmed first-language receipt when the next upload fails.
 
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
-
         Returns:
             None: Assert receipt persistence and incomplete retry state.
         """
@@ -248,9 +234,6 @@ class FlightWorkflowTests(unittest.TestCase):
     def test_revoke_waits_for_every_plan_and_cleanup_ack(self) -> None:
         """Submit key revocation only after plans and receipts are complete.
 
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
-
         Returns:
             None: Assert task barrier and no 100 percent before key cleanup.
         """
@@ -286,9 +269,6 @@ class FlightWorkflowTests(unittest.TestCase):
     def test_stop_without_revoke_completes_work_and_never_calls_revoke(self) -> None:
         """Keep ordinary Stop separate from the optional revoke final step.
 
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
-
         Returns:
             None: Assert Stop drains and completes without key revocation.
         """
@@ -314,9 +294,6 @@ class FlightWorkflowTests(unittest.TestCase):
     def test_revoke_consent_can_join_then_withdraw_during_drain(self) -> None:
         """Withdraw the final revoke step while accepted work keeps running.
 
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
-
         Returns:
             None: Assert no drain cancellation and no revoke submission.
         """
@@ -334,7 +311,6 @@ class FlightWorkflowTests(unittest.TestCase):
             ) -> None:
                 """Hold the worker at its accepted-work drain barrier.
 
-                Args:
                     cancel (threading.Event): Worker cancellation signal.
                     deadline (float): Monotonic deadline supplied by workflow.
 
@@ -367,9 +343,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def test_local_cleanup_ack_during_revoke_is_not_overwritten(self) -> None:
         """Preserve fast GUI cleanup acknowledgement after revoke returns.
-
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
 
         Returns:
             None: Assert the worker remains completed at full progress.
@@ -410,9 +383,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def test_post_submission_cancel_and_progress_snapshot_do_not_deadlock(self) -> None:
         """Protect submitted revoke from consent reversal without locking the UI.
-
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
 
         Returns:
             None: Assert cancellation is refused and snapshots remain responsive.
@@ -461,9 +431,6 @@ class FlightWorkflowTests(unittest.TestCase):
 
     def test_eta_uses_observed_transfer_rate_and_unknown_stays_unknown(self) -> None:
         """Estimate remaining upload time only from actual byte progress.
-
-        Args:
-            self (FlightWorkflowTests): Test case instance running this check.
 
         Returns:
             None: Assert measured estimate and no estimate without throughput.

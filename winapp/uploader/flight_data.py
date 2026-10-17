@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterator
 
+from uploader.models import JsonValue
+
 # Identify the JSON analysis schema used by saved flight reports.
 # Type: str. Units: schema version. Scope: one analysis payload.
 # Consumers: FlightAnalysis.to_payload and report rendering.
@@ -301,11 +303,12 @@ class FlightAnalysis:
         }
 
 
-def _number(value: Any) -> float | None:
+def _number(value: JsonValue) -> float | None:
     """Return finite numeric values as floats.
 
     Args:
-        value (Any): Candidate JSON value.
+        value (JsonValue): JSON scalar, list of JSON values, or string-keyed
+            JSON object; only finite integer/float scalars are accepted.
 
     Returns:
         float | None: Finite float or None for invalid/missing values.
@@ -316,14 +319,20 @@ def _number(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _rows(directory: Path) -> Iterator[dict[str, Any] | None]:
+def _rows(directory: Path) -> Iterator[dict[str, JsonValue] | None]:
     """Yield sample mappings and corruption markers from the JSONL stream.
 
     Args:
         directory (Path): Session directory containing samples.jsonl.
 
+    Returns:
+        Iterator[dict[str, JsonValue] | None]: Lazy stream of sample objects
+            containing host/session/simulator timing, SI telemetry and optional
+            configuration fields, or None markers for corrupt JSON rows.
+
     Yields:
-        dict[str, Any] | None: Sample row or None for malformed JSON records.
+        dict[str, JsonValue] | None: Recorded FlightSample fields or a
+            corruption marker; values retain their concrete JSON shapes.
     """
     try:
         stream = (directory / "samples.jsonl").open("r", encoding="utf-8")

@@ -475,13 +475,14 @@ function render_public_gallery_branding_header(
     // Build complete localized launch intent at the HTTP/view-model boundary.
     // The view consumes the final URL without reading locale/session policy.
     $presentationUrl = '';
-    if ($hasPhotos && feature_capability_effective_enabled('lightbox_modes')) {
+    $presentation = \Gallery\Services\gallery_presentation_settings($gallery);
+    if ($hasPhotos && $presentation['enabled']
+        && feature_capability_effective_enabled('lightbox_modes')) {
         $presentationUrl = gallery_public_url($gallery);
         $presentationUrl .= (str_contains($presentationUrl, '?') ? '&' : '?')
             . http_build_query([
                 'lang' => \Gallery\Services\translation_active_language(),
-                'presentation' => '1',
-            ]);
+            ] + \Gallery\Services\gallery_presentation_query($presentation));
     }
     $viewModel = [
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
@@ -494,7 +495,7 @@ function render_public_gallery_branding_header(
         // A launch URL carries presentation intent only; ordinary access
         // gates still run before this public gallery can be rendered.
         'presentation_url' => $presentationUrl,
-        'presentation_music' => $hasMusic,
+        'presentation_music' => $hasMusic && $presentation['music'],
     ];
     \Gallery\Views\view_render_public_gallery_branding_header($viewModel, false);
     ob_start();

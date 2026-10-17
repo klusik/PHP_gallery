@@ -61,7 +61,7 @@ slideshow_preload_assert(str_contains($prepareSource, 'fetchLightboxWindowAround
 $scheduleStart = strpos($source, 'function scheduleLightboxSlideshowNext()');
 $scheduleEnd = strpos(
     $source,
-    'async function startLightboxSlideshow(forceMusic = false)',
+    'async function startLightboxSlideshow(musicOverride = null)',
     $scheduleStart === false ? 0 : $scheduleStart
 );
 slideshow_preload_assert($scheduleStart !== false && $scheduleEnd !== false, 'Slideshow scheduler is missing.');

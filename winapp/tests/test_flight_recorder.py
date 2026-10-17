@@ -44,6 +44,18 @@ RECORDER_FRAME_INTERVAL_SECONDS = 0.05
 # Type: int. Units: frames. Scope: approach and contact fixture.
 # Consumers: longhaul persistence test. Rationale: retain four seconds of evidence.
 RECORDER_APPROACH_FRAME_COUNT = 80
+# Type: int. Units: frames. Scope: touchdown-analysis fixture.
+# Consumers: test_taxi_is_ignored_and_descent_uses_simulator_clock.
+# Rationale: require sustained airborne evidence before the flare samples.
+APPROACH_AIRBORNE_PREROLL_COUNT = 4
+# Type: float. Units: metres AGL. Scope: touchdown-analysis fixture.
+# Consumers: test_taxi_is_ignored_and_descent_uses_simulator_clock.
+# Rationale: exceed the production airborne threshold for each preroll frame.
+APPROACH_AIRBORNE_PREROLL_AGL_METRES = 4.0
+# Type: float. Units: metres per second. Scope: touchdown-analysis fixture.
+# Consumers: test_taxi_is_ignored_and_descent_uses_simulator_clock.
+# Rationale: keep synthetic altitude and simulator-clock slopes consistent.
+APPROACH_FIXTURE_VERTICAL_SPEED_MPS = -4.0
 
 
 def make_sample(
@@ -254,6 +266,28 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             for index in range(TAXI_SAMPLE_COUNT)
         ]
         approach_start = TAXI_SAMPLE_COUNT
+        for offset in range(APPROACH_AIRBORNE_PREROLL_COUNT):
+            rows.append(make_sample(
+                float(approach_start + offset),
+                on_ground=False,
+                agl_m=(
+                    APPROACH_AIRBORNE_PREROLL_AGL_METRES
+                    + APPROACH_FIXTURE_VERTICAL_SPEED_MPS
+                    * offset * RECORDER_FRAME_INTERVAL_SECONDS
+                ),
+                vertical_speed_mps=APPROACH_FIXTURE_VERTICAL_SPEED_MPS,
+                altitude_m=(
+                    100.0
+                    + APPROACH_AIRBORNE_PREROLL_AGL_METRES
+                    + APPROACH_FIXTURE_VERTICAL_SPEED_MPS
+                    * offset * RECORDER_FRAME_INTERVAL_SECONDS
+                ),
+                simulator_elapsed=(
+                    TAXI_SAMPLE_COUNT
+                    + offset * RECORDER_FRAME_INTERVAL_SECONDS
+                ),
+            ))
+        approach_start += APPROACH_AIRBORNE_PREROLL_COUNT
         for index in range(
             approach_start,
             approach_start + LANDING_APPROACH_SAMPLE_COUNT,
@@ -264,14 +298,20 @@ class FlightAnalysisReplayTests(unittest.TestCase):
                 float(index),
                 on_ground=False,
                 agl_m=agl,
-                vertical_speed_mps=-4.0,
+                vertical_speed_mps=APPROACH_FIXTURE_VERTICAL_SPEED_MPS,
                 altitude_m=100.0 + agl,
                 simulator_elapsed=(
-                    float(approach_start)
-                    + (index - approach_start) * 0.05
+                    TAXI_SAMPLE_COUNT
+                    + APPROACH_AIRBORNE_PREROLL_COUNT
+                    * RECORDER_FRAME_INTERVAL_SECONDS
+                    + (index - approach_start)
+                    * RECORDER_FRAME_INTERVAL_SECONDS
                 ),
             ))
         touchdown = float(approach_start + LANDING_APPROACH_SAMPLE_COUNT)
+        touchdown_simulator_elapsed = (
+            APPROACH_AIRBORNE_PREROLL_COUNT + LANDING_APPROACH_SAMPLE_COUNT
+        ) * RECORDER_FRAME_INTERVAL_SECONDS + TAXI_SAMPLE_COUNT
         for offset in range(2):
             rows.append(make_sample(
                 touchdown + offset,
@@ -279,7 +319,10 @@ class FlightAnalysisReplayTests(unittest.TestCase):
                 agl_m=0.0,
                 vertical_speed_mps=-1.0 if offset == 0 else 0.0,
                 altitude_m=100.0,
-                simulator_elapsed=4.8 + offset * 0.05,
+                simulator_elapsed=(
+                    touchdown_simulator_elapsed
+                    + offset * RECORDER_FRAME_INTERVAL_SECONDS
+                ),
             ))
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

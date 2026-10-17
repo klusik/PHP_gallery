@@ -42,7 +42,7 @@ SIMCONNECT_DATATYPE_STRING256 = 9
 # Private definition/request identities for the isolated SDK TITLE string.
 FLIGHT_TITLE_DEFINITION_ID = 400
 FLIGHT_TITLE_REQUEST_ID = 401
-# Exact mass-unit conversion for the optional standard TOTAL_WEIGHT signal.
+# Exact mass-unit conversion for the optional standard TOTAL WEIGHT signal.
 POUNDS_TO_KILOGRAMS = 0.45359237
 SIMCONNECT_OBJECT_ID_USER = 0
 FLIGHT_CORE_DEFINITION_ID = 300
@@ -114,6 +114,8 @@ CORE_SIMVARS = (
     (b"PLANE BANK DEGREES", b"degrees"),
     (b"PLANE HEADING DEGREES TRUE", b"degrees"),
 )
+# SimConnect unit "percent" requests values from 0 to 100; this explicit
+# conversion differs from SimVars whose default is Percent Over 100 (0 to 1).
 OPTIONAL_SIMVARS = (
     ("rate", b"SIMULATION RATE", b"number"),
     ("light_nav", b"LIGHT NAV", b"bool"),
@@ -129,7 +131,7 @@ OPTIONAL_SIMVARS = (
     ("fuel", b"FUEL TOTAL QUANTITY", b"gallons"),
     ("wind_velocity", b"AMBIENT WIND VELOCITY", b"knots"),
     ("wind_direction", b"AMBIENT WIND DIRECTION", b"degrees"),
-    ("total_weight", b"TOTAL_WEIGHT", b"pounds"),
+    ("total_weight", b"TOTAL WEIGHT", b"pounds"),
     ("brake_left", b"BRAKE LEFT POSITION", b"percent"),
     ("brake_right", b"BRAKE RIGHT POSITION", b"percent"),
     ("autopilot", b"AUTOPILOT MASTER", b"bool"),

@@ -122,7 +122,7 @@ function cms_admin_edit_gallery(): void
     admin_edit_gallery_render_media_tab($gallery, $activeEditTab);
     view_render_admin_gallery_editor_form_close([
         'save_label' => t('admin.gallery_editor.save_gallery', 'Save gallery'),
-        'help' => t('admin.gallery_editor.savebar_help', 'Saves all settings from Identity, Access, Display, and Media.'),
+        'help' => t('admin.gallery_editor.savebar_help', 'Saves gallery settings, including presentation defaults.'),
     ]);
 
     // The remaining tabs own their own forms and panels outside the editor form.

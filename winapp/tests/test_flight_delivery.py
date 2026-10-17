@@ -15,7 +15,16 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+)
 from unittest import mock
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
@@ -23,6 +32,61 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader import flight_delivery as DELIVERY
+
+
+class FlightReportReceipt(TypedDict):
+    """Describe the protected document metadata returned by the Gallery."""
+
+    id: str
+    sha256: str
+    size: int
+    filename: str
+
+
+class FlightReportStatusRequest(TypedDict):
+    """Describe the JSON identity and checksum used for reconciliation."""
+
+    action: Literal["flight_report_status"]
+    report_id: str
+    language: str
+    sha256: str
+
+
+class FlightReportUploadFields(TypedDict):
+    """Describe the multipart fields sent with one report PDF."""
+
+    action: Literal["flight_report"]
+    report_id: str
+    session_id: str
+    language: str
+    sha256: str
+
+
+class FlightReportStatusResponse(TypedDict):
+    """Describe the server's identity lookup and optional document receipt."""
+
+    ok: bool
+    action: Literal["flight_report_status"]
+    found: bool
+    conflict: bool
+    report: Optional[FlightReportReceipt]
+
+
+class FlightReportUploadResponse(TypedDict):
+    """Describe an accepted report attachment receipt."""
+
+    ok: bool
+    action: Literal["flight_report"]
+    found: bool
+    conflict: bool
+    report: FlightReportReceipt
+
+
+class FlightInventoryResponse(TypedDict):
+    """Describe inventory capability flags returned by the uploader API."""
+
+    ok: bool
+    capabilities: Dict[str, bool]
 
 
 class FakeResponse:
@@ -200,14 +264,14 @@ class FlightDeliveryTests(unittest.TestCase):
     def _status_response(
         self: "FlightDeliveryTests",
         found: bool,
-    ) -> Dict[str, Any]:
+    ) -> FlightReportStatusResponse:
         """Build one matching status response for the current PDF.
 
         Args:
             found (bool): Whether the server already has the report.
 
         Returns:
-            Dict[str, Any]: Status response with an optional stored receipt.
+            FlightReportStatusResponse: Status result with an optional typed document receipt.
         """
         report = {
             "id": "a" * 32,
@@ -231,13 +295,14 @@ class FlightDeliveryTests(unittest.TestCase):
         Returns:
             None: Verifies both advertised and older-gallery responses.
         """
+        inventory_responses: List[FlightInventoryResponse] = [
+            {"ok": True, "capabilities": {"flight_reports_v1": True}},
+            {"ok": True, "capabilities": {}},
+        ]
         with mock.patch.object(
             DELIVERY,
             "_perform_request",
-            side_effect=[
-                {"ok": True, "capabilities": {"flight_reports_v1": True}},
-                {"ok": True, "capabilities": {}},
-            ],
+            side_effect=inventory_responses,
         ):
             self.assertTrue(
                 DELIVERY.check_report_capability("https://gallery.test/upload", "key")
@@ -346,20 +411,44 @@ class FlightDeliveryTests(unittest.TestCase):
             self._status_response(True),
         ]
 
+        typed_responses: List[
+            Union[FlightReportStatusResponse, BaseException]
+        ] = responses
+
         def request(
-            *args: Any,
-            **kwargs: Any,
-        ) -> Dict[str, Any]:
-            """Return pending fixture responses in request order.
+            url: str,
+            api_key: str,
+            payload: Optional[FlightReportStatusRequest] = None,
+            pdf_path: Optional[Path] = None,
+            fields: Optional[FlightReportUploadFields] = None,
+            emit: Optional[Callable[[int, int], None]] = None,
+            file_size: int = 0,
+        ) -> Union[FlightReportStatusResponse, FlightReportUploadResponse]:
+            """Return typed status or receipt responses in request order.
 
             Args:
-                *args (Any): Positional transport arguments.
-                **kwargs (Any): Request payload and optional PDF arguments.
+                url (str): Upload endpoint used by the delivery client.
+                api_key (str): Gallery-scoped key supplied to the request.
+                payload (Optional[FlightReportStatusRequest]): Status identity,
+                    language and SHA-256, or None for multipart transfer.
+                pdf_path (Optional[Path]): PDF source for a multipart request.
+                fields (Optional[FlightReportUploadFields]): Report identity,
+                    session, language and checksum form fields.
+                emit (Optional[Callable[[int, int], None]]): Optional byte
+                    progress callback supplied to the transport.
+                file_size (int): PDF byte count used for multipart framing.
 
             Returns:
-                Dict[str, Any]: Status response or a raised transport failure.
+                Union[FlightReportStatusResponse, FlightReportUploadResponse]:
+                    Status fields or a report receipt with document id,
+                    checksum, size and filename.
+
+            Raises:
+                ConnectionResetError: When the simulated upload response is
+                    lost after the server write.
             """
-            result = responses.pop(0)
+            del url, api_key, payload, pdf_path, fields, emit, file_size
+            result = typed_responses.pop(0)
             if isinstance(result, BaseException):
                 raise result
             return result
