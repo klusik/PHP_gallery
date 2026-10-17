@@ -1099,7 +1099,7 @@ def _landing_event_table(
     previous: Optional[FlightSample] = None
     for sample in samples:
         elapsed = float(sample.session_elapsed_seconds)
-        relative = _relative_time(elapsed, contact_start)
+        relative = _precise_elapsed(elapsed, contact_start, language)
         if sample.discontinuity_before is not None:
             events.append(
                 (
@@ -1180,7 +1180,7 @@ def _landing_event_table(
 
     rows: List[List[Union[Paragraph, str]]] = [
         [
-            _paragraph(tr(language, "time"), styles["small"]),
+            _paragraph(tr(language, "contact_elapsed_short"), styles["small"]),
             _paragraph(tr(language, "recorded_events"), styles["small"]),
             _paragraph(tr(language, "detail"), styles["small"]),
         ]
@@ -1198,7 +1198,7 @@ def _landing_event_table(
             rows.append(
                 [
                     _paragraph(
-                        _relative_time(elapsed, contact_start),
+                        _precise_elapsed(elapsed, contact_start, language),
                         styles["small"],
                     ),
                     _paragraph(event_name, styles["small"]),

@@ -47,6 +47,7 @@ from uploader.flight_report import (
     _register_font,
     _resource_directory,
     _contact_sensor_tables,
+    _landing_event_table,
     _draw_page,
     _landing_rows,
     _methodology_notes,
@@ -599,6 +600,7 @@ class FlightReportTests(unittest.TestCase):
             replace(template, session_elapsed_seconds=10.15),
         ]
         landing.first_contact_elapsed_seconds = 10.0
+        landing.last_contact_elapsed_seconds = 10.15
         contact_tables = _contact_sensor_tables(
             landing,
             "en",
@@ -613,6 +615,16 @@ class FlightReportTests(unittest.TestCase):
         self.assertEqual(
             [row[0].text for row in state_table._cellvalues[1:]],
             ["+0.00 s", "+0.05 s", "+0.15 s"],
+        )
+        contact_events = _landing_event_table(
+            landing.contact_samples,
+            landing,
+            "en",
+            _styles(),
+        )
+        self.assertIn(
+            "+0.15 s",
+            [row[0].text for row in contact_events._cellvalues[1:]],
         )
         analysis.events = [
             FlightPhaseEvent(
