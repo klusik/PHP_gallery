@@ -101,6 +101,8 @@ use function Gallery\Services\upload_automation_sim_camera_metadata;
 use function Gallery\Services\upload_automation_tokens_for_manager;
 use function Gallery\Services\upload_automation_uploaded_files;
 use function Gallery\Services\upload_automation_with_gallery_lock;
+use function Gallery\Services\upload_flight_report_attach;
+use function Gallery\Services\upload_flight_report_status;
 use function Gallery\Services\admin_log_event;
 
 /**
@@ -395,7 +397,198 @@ function upload_automation_stream_ai_asset(int $galleryId): void
 }
 
 /**
+ * Read one scalar flight-report field without accepting array-shaped input.
+ *
+ * @param array<string,mixed> $input Decoded JSON or multipart request fields.
+ * @param string $name Exact field name to read.
+ * @return string Trimmed scalar value, or an empty string for invalid input.
+ */
+function upload_automation_flight_report_field(array $input, string $name): string
+{
+    $value = $input[$name] ?? null;
+    return is_string($value) ? trim($value) : '';
+}
+
+/**
+ * Dispatch one report status or upload action for the token's gallery only.
+ *
+ * @param string $action Authenticated flight-report action name.
+ * @param int $galleryId Gallery scope authorized by the current API key.
+ * @param array{id:int,folder_path:string} $gallery Gallery row for the authorized scope.
+ * @param array{id:int,gallery_id:int} $tokenRow Upload token metadata for this gallery.
+ * @param array{report_id?:string,language?:string,sha256?:string} $jsonPayload JSON report status fields.
+ * @return void Sends one JSON response and ends this action.
+ */
+function upload_automation_handle_flight_report_action(
+    string $action,
+    int $galleryId,
+    array $gallery,
+    array $tokenRow,
+    array $jsonPayload
+): void {
+    // The authenticated route defers this attachment closure until a report action needs it.
+    \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+
+    if ($action === 'flight_report_status') {
+        if ($jsonPayload === []) {
+            upload_automation_json(
+                ['ok' => false, 'error' => 'Report status requires a JSON request.'],
+                400
+            );
+            return;
+        }
+        upload_automation_handle_flight_report_status(
+            $gallery,
+            $tokenRow,
+            $jsonPayload
+        );
+        return;
+    }
+
+    upload_automation_handle_flight_report_upload(
+        $galleryId,
+        $gallery,
+        $tokenRow
+    );
+}
+
+/**
+ * Return a report receipt or absence for one stable report identity.
+ *
+ * @param array{id:int,folder_path:string} $gallery Gallery row authorized by the API key.
+ * @param array{id:int,gallery_id:int} $tokenRow Upload token metadata for this gallery.
+ * @param array{report_id?:string,language?:string,sha256?:string} $jsonPayload JSON report status fields.
+ * @return void Sends one JSON status response.
+ */
+function upload_automation_handle_flight_report_status(
+    array $gallery,
+    array $tokenRow,
+    array $jsonPayload
+): void {
+    try {
+        $status = upload_flight_report_status(
+            $gallery,
+            upload_automation_flight_report_field($jsonPayload, 'report_id'),
+            upload_automation_flight_report_field($jsonPayload, 'language'),
+            strtolower(upload_automation_flight_report_field($jsonPayload, 'sha256'))
+        );
+        try {
+            mark_upload_automation_token_used((int) ($tokenRow['id'] ?? 0));
+        } catch (Throwable) {
+            // A passive status receipt must survive last-used bookkeeping failure.
+        }
+        if ($status['conflict']) {
+            upload_automation_json([
+                'ok' => false,
+                'action' => 'flight_report_status',
+                'conflict' => true,
+                'error' => 'A different PDF is already stored for this report identity.',
+            ], 409);
+            return;
+        }
+        upload_automation_json([
+            'ok' => true,
+            'action' => 'flight_report_status',
+            'found' => $status['found'],
+            'conflict' => false,
+            'report' => $status['report'],
+        ]);
+    } catch (Throwable) {
+        upload_automation_json([
+            'ok' => false,
+            'action' => 'flight_report_status',
+            'error' => 'Report status could not be verified.',
+        ], 422);
+    }
+}
+
+/**
+ * Validate and attach one multipart PDF through existing protected storage.
+ *
+ * @param int $galleryId Gallery scope authorized by the current API key.
+ * @param array{id:int,folder_path:string} $gallery Gallery row for the authorized scope.
+ * @param array{id:int,gallery_id:int} $tokenRow Upload token metadata for this gallery.
+ * @return void Sends one JSON attachment receipt or safe failure response.
+ */
+function upload_automation_handle_flight_report_upload(
+    int $galleryId,
+    array $gallery,
+    array $tokenRow
+): void {
+    $reportId = upload_automation_flight_report_field($_POST, 'report_id');
+    $sessionId = upload_automation_flight_report_field($_POST, 'session_id');
+    $language = upload_automation_flight_report_field($_POST, 'language');
+    $sha256 = strtolower(upload_automation_flight_report_field($_POST, 'sha256'));
+    $upload = $_FILES['report'] ?? null;
+    $uploadError = is_array($upload) ? ($upload['error'] ?? null) : null;
+    $uploadPath = is_array($upload) ? ($upload['tmp_name'] ?? null) : null;
+    if (!is_array($upload) || !is_int($uploadError)
+        || $uploadError !== UPLOAD_ERR_OK
+        || !is_string($uploadPath) || $uploadPath === ''
+        || !is_uploaded_file($uploadPath)) {
+        upload_automation_json([
+            'ok' => false,
+            'action' => 'flight_report',
+            'error' => 'The flight report PDF upload is missing or incomplete.',
+        ], 422);
+        return;
+    }
+
+    try {
+        $result = upload_automation_with_gallery_lock(
+            $galleryId,
+            static function () use (
+                $gallery,
+                $uploadPath,
+                $reportId,
+                $sessionId,
+                $language,
+                $sha256
+            ): array {
+                return upload_flight_report_attach(
+                    $gallery,
+                    $uploadPath,
+                    $reportId,
+                    $sessionId,
+                    $language,
+                    $sha256
+                );
+            }
+        );
+        if ($result['conflict']) {
+            upload_automation_json([
+                'ok' => false,
+                'action' => 'flight_report',
+                'conflict' => true,
+                'error' => 'A different PDF is already stored for this report identity.',
+            ], 409);
+            return;
+        }
+        try {
+            mark_upload_automation_token_used((int) ($tokenRow['id'] ?? 0));
+        } catch (Throwable) {
+            // The stored report receipt remains authoritative if bookkeeping fails.
+        }
+        upload_automation_json([
+            'ok' => true,
+            'action' => 'flight_report',
+            'found' => true,
+            'conflict' => false,
+            'report' => $result['report'],
+        ]);
+    } catch (Throwable) {
+        upload_automation_json([
+            'ok' => false,
+            'action' => 'flight_report',
+            'error' => 'The flight report could not be validated or stored.',
+        ], 422);
+    }
+}
+
+/**
  * Handle POST uploads from the Windows folder watcher app.
+ *
+ * @return void Sends the authenticated action response or exits on invalid input.
  */
 function cms_upload_automation_upload(): void
 {
@@ -450,7 +643,30 @@ function cms_upload_automation_upload(): void
         // $deepCheck enables the bounded filesystem fallback only for ambiguous upload recovery.
         $deepCheck = ($jsonPayload['deep_check'] ?? false) === true;
         mark_upload_automation_token_used((int) $tokenRow['id']);
-        upload_automation_json(upload_automation_gallery_inventory_response($galleryId, $gallery, $candidates, $deepCheck));
+        $inventoryResponse = upload_automation_gallery_inventory_response(
+            $galleryId,
+            $gallery,
+            $candidates,
+            $deepCheck
+        );
+        $inventoryResponse['capabilities'] = array_merge(
+            is_array($inventoryResponse['capabilities'] ?? null)
+                ? $inventoryResponse['capabilities']
+                : [],
+            ['flight_reports_v1' => true]
+        );
+        upload_automation_json($inventoryResponse);
+        return;
+    }
+
+    if ($action === 'flight_report_status' || $action === 'flight_report') {
+        upload_automation_handle_flight_report_action(
+            $action,
+            $galleryId,
+            $gallery,
+            $tokenRow,
+            $jsonPayload
+        );
         return;
     }
 

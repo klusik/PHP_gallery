@@ -1,0 +1,492 @@
+# Project: PHP Gallery
+# Module Type: Windows Tooling Regression Test
+# Purpose: Verify multilingual postflight PDF output and retry identity.
+# Responsibilities:
+#   - Exercise the normalized renderer with both supported simulator labels.
+#   - Verify embedded Unicode font metadata and checksummed output manifests.
+#   - Guard unavailable measurements and localization behavior.
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: winapp/tests/test_flight_report.py
+#
+# Author:
+#   Rudolf Klusal
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+
+"""Focused regression coverage for local multilingual postflight reports."""
+
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from dataclasses import replace
+from typing import Optional
+
+from reportlab.pdfbase.ttfonts import TTFont
+
+from uploader.flight_data import (
+    FlightAnalysis,
+    FlightPhaseEvent,
+    FlightSample,
+    Landing,
+)
+from uploader.flight_report import (
+    _FONT_NAME,
+    _REQUIRED_GLYPHS,
+    _number,
+    _register_font,
+    _resource_directory,
+    _contact_sensor_tables,
+    _landing_rows,
+    _methodology_notes,
+    _quality_notes,
+    _recorded_flight_date,
+    _route_chart,
+    _styles,
+    render_report,
+    render_reports,
+)
+from uploader.flight_report_translations import supported_languages, tr
+
+
+# Type: int; Units: samples; Scope: synthetic report fixture;
+# Consumers: _analysis; Rationale: two samples produce a visible vector track
+# and profile while remaining a small deterministic boundary; value: 2.
+SAMPLE_COUNT = 2
+
+
+class FlightReportTests(unittest.TestCase):
+    """Verify the renderer produces complete, stable multilingual reports."""
+
+    def _analysis(
+        self,
+        simulator: str,
+        include_measurements: bool = True,
+    ) -> FlightAnalysis:
+        """Build a small normalized flight model for one simulator generation.
+
+        Args:
+            self (FlightReportTests): Test case instance building the fixture.
+            simulator (str): Simulator identity stored in the analysis.
+            include_measurements (bool): Whether derived optional values are
+                present in samples and landing evidence.
+
+        Returns:
+            FlightAnalysis: Deterministic flight with one landing window.
+        """
+        optional_speed: Optional[float] = 45.0 if include_measurements else None
+        optional_altitude: Optional[float] = 950.0 if include_measurements else None
+        samples = [
+            FlightSample(
+                session_elapsed_seconds=0.0,
+                recorded_utc="2026-05-10T12:30:00Z",
+                simulator_elapsed_seconds=None,
+                simulator_rate=1.0,
+                latitude_deg=49.2,
+                longitude_deg=16.6,
+                altitude_m=optional_altitude,
+                agl_m=None,
+                vertical_speed_mps=None,
+                ground_speed_mps=optional_speed,
+                true_airspeed_mps=None,
+                indicated_airspeed_mps=optional_speed,
+                load_factor_g=1.0 if include_measurements else None,
+                pitch_deg=-1.0 if include_measurements else None,
+                bank_deg=0.5 if include_measurements else None,
+                heading_deg=270.0 if include_measurements else None,
+                on_ground=False,
+                lights={},
+                gear_position=100.0,
+                flaps_position=0.0,
+                engine_rpm=(),
+                fuel_gallons=38.0 if include_measurements else None,
+                discontinuity_before=None,
+                wind_velocity_mps=5.0 if include_measurements else None,
+                wind_direction_deg=180.0 if include_measurements else None,
+                left_brake_position=0.0 if include_measurements else None,
+                right_brake_position=0.0 if include_measurements else None,
+                autopilot_master=False if include_measurements else None,
+            ),
+            FlightSample(
+                session_elapsed_seconds=120.0,
+                recorded_utc="2026-05-10T12:30:00Z",
+                simulator_elapsed_seconds=None,
+                latitude_deg=49.3,
+                longitude_deg=16.8,
+                altitude_m=optional_altitude,
+                agl_m=None,
+                vertical_speed_mps=None,
+                ground_speed_mps=optional_speed,
+                true_airspeed_mps=None,
+                indicated_airspeed_mps=optional_speed,
+                load_factor_g=1.0 if include_measurements else None,
+                pitch_deg=1.0 if include_measurements else None,
+                bank_deg=0.0 if include_measurements else None,
+                heading_deg=271.0 if include_measurements else None,
+                on_ground=True,
+                lights={},
+                gear_position=25.0,
+                flaps_position=50.0,
+                engine_rpm=(),
+                fuel_gallons=35.0 if include_measurements else None,
+                discontinuity_before=None,
+                wind_velocity_mps=4.0 if include_measurements else None,
+                wind_direction_deg=190.0 if include_measurements else None,
+                left_brake_position=0.75 if include_measurements else None,
+                right_brake_position=0.75 if include_measurements else None,
+                autopilot_master=False if include_measurements else None,
+            ),
+        ]
+        landing = Landing(
+            index=1,
+            first_contact_elapsed_seconds=118.0,
+            last_contact_elapsed_seconds=120.0,
+            latitude_deg=49.3 if include_measurements else None,
+            longitude_deg=16.8 if include_measurements else None,
+            altitude_m=optional_altitude,
+            descent_rate_fpm=250.0 if include_measurements else None,
+            contact_count=2,
+            bounce_possible=False,
+            evidence=["on_ground", "vertical_speed"],
+            distance_from_previous_nm=None,
+            confidence="medium",
+            contact_samples=[samples[-1]] if include_measurements else [],
+            contact_descent_rates_fpm=[250.0] if include_measurements else [],
+            rollout_seconds=2.0 if include_measurements else None,
+            rollout_distance_nm=None,
+        )
+        self.assertEqual(len(samples), SAMPLE_COUNT)
+        analysis = FlightAnalysis(
+            session_id="session-flight-254",
+            simulator=simulator,
+            aircraft="Cessna 172",
+            completed=True,
+            duration_seconds=120.0,
+            distance_nm=12.5,
+            samples=samples,
+            landings=[landing],
+            warnings=[],
+            simulator_build="SimConnect API 1.0",
+        )
+        analysis.events = [
+            FlightPhaseEvent(
+                phase="touchdown",
+                elapsed_seconds=118.0,
+                confidence="moderate",
+                evidence=["on_ground", "vertical_speed"],
+            )
+        ]
+        return analysis
+
+    def test_all_languages_render_for_both_simulators(self) -> None:
+        """Render all four languages from each normalized simulator model.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert PDF, font metadata and checksum manifests. If
+                PHP_GALLERY_FLIGHT_REPORT_QA_DIR is set, copy the eight
+                simulator/language PDFs and their manifests to that CI artifact
+                staging directory; no user telemetry is uploaded.
+        """
+        _register_font()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for simulator in ("MSFS 2020", "MSFS 2024"):
+                with self.subTest(simulator=simulator):
+                    analysis = self._analysis(simulator)
+                    outputs = render_reports(
+                        analysis,
+                        supported_languages(),
+                        root / simulator.replace(" ", "_"),
+                    )
+                    self.assertEqual(len(outputs), len(supported_languages()))
+                    qa_directory = os.environ.get(
+                        "PHP_GALLERY_FLIGHT_REPORT_QA_DIR"
+                    )
+                    if qa_directory:
+                        artifact_directory = (
+                            Path(qa_directory).expanduser().resolve()
+                            / simulator.replace(" ", "_")
+                        )
+                        artifact_directory.mkdir(parents=True, exist_ok=True)
+                        for report_path in outputs:
+                            shutil.copy2(report_path, artifact_directory)
+                            shutil.copy2(
+                                report_path.with_suffix(
+                                    report_path.suffix + ".manifest.json"
+                                ),
+                                artifact_directory,
+                            )
+                        group_manifest = next(
+                            (root / simulator.replace(" ", "_")).glob(
+                                "postflight-manifest-*.json"
+                            )
+                        )
+                        shutil.copy2(group_manifest, artifact_directory)
+                    self.assertEqual(
+                        len({path.read_bytes() for path in outputs}),
+                        len(supported_languages()),
+                    )
+                    for path, language in zip(outputs, supported_languages()):
+                        pdf_bytes = path.read_bytes()
+                        self.assertTrue(pdf_bytes.startswith(b"%PDF-"))
+                        self.assertIn(b"DejaVuSans", pdf_bytes)
+                        self.assertIn(b"/FontFile2", pdf_bytes)
+                        self.assertIn(b"/ToUnicode", pdf_bytes)
+                        self.assertIn(
+                            b"/Lang (" + language.encode("ascii") + b")",
+                            pdf_bytes,
+                        )
+                        self.assertEqual(
+                            hashlib.sha256(pdf_bytes).hexdigest(),
+                            json.loads(
+                                path.with_suffix(
+                                    path.suffix + ".manifest.json"
+                                ).read_text(encoding="utf-8")
+                            )["pdf_sha256"],
+                        )
+                        manifest = json.loads(
+                            path.with_suffix(
+                                path.suffix + ".manifest.json"
+                            ).read_text(encoding="utf-8")
+                        )
+                        self.assertEqual(manifest["language"], language)
+                        self.assertIn(b"/Title", pdf_bytes)
+
+    def test_rerender_is_idempotent_and_group_manifest_is_complete(self) -> None:
+        """Keep report identities and bytes stable across retry calls.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert filenames, bytes and grouped checksums are stable.
+        """
+        analysis = self._analysis("MSFS 2024")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            first = render_reports(analysis, ("en", "cs", "de", "sv"), directory)
+            first_bytes = [path.read_bytes() for path in first]
+            second = render_reports(analysis, ("en", "cs", "de", "sv"), directory)
+            self.assertEqual(first, second)
+            self.assertEqual(first_bytes, [path.read_bytes() for path in second])
+            manifest_path = next(directory.glob("postflight-manifest-*.json"))
+            manifest = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["session_id"], analysis.session_id)
+            self.assertEqual(
+                [entry["language"] for entry in manifest["reports"]],
+                ["en", "cs", "de", "sv"],
+            )
+            self.assertEqual(
+                [entry["pdf_sha256"] for entry in manifest["reports"]],
+                [
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in second
+                ],
+            )
+
+    def test_render_after_manifest_loss_keeps_server_receipt_hash(self) -> None:
+        """Regenerate identical bytes when only the local sidecar was lost.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert a retry keeps the previously acknowledged PDF checksum.
+        """
+        analysis = self._analysis("MSFS 2024")
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "flight-en.pdf"
+            first_path = render_report(analysis, "en", destination)
+            first_bytes = first_path.read_bytes()
+            first_manifest = first_path.with_suffix(
+                first_path.suffix + ".manifest.json"
+            )
+            first_manifest.unlink()
+            second_path = render_report(analysis, "en", destination)
+            self.assertEqual(second_path.read_bytes(), first_bytes)
+            self.assertEqual(
+                hashlib.sha256(second_path.read_bytes()).hexdigest(),
+                json.loads(first_manifest.read_text(encoding="utf-8"))["pdf_sha256"],
+            )
+
+    def test_missing_measurement_stays_unavailable(self) -> None:
+        """Preserve absent values as unavailable instead of displaying zero.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert format behavior and a complete missing-data report.
+        """
+        self.assertEqual(_number(None, "en"), "Unavailable")
+        self.assertNotEqual(_number(None, "en"), _number(0.0, "en"))
+        analysis = self._analysis("MSFS 2020", include_measurements=False)
+        self.assertIsNone(analysis.samples[0].altitude_m)
+        second_landing = replace(
+            analysis.landings[0],
+            index=2,
+            first_contact_elapsed_seconds=119.0,
+            last_contact_elapsed_seconds=120.0,
+        )
+        analysis.landings.append(second_landing)
+        rows = _landing_rows(analysis, "en", _styles())
+        self.assertEqual(len(rows), 5)
+        self.assertIn("Latitude", rows[2][0].text)
+        self.assertIn("Latitude", rows[4][0].text)
+        with tempfile.TemporaryDirectory() as temporary:
+            outputs = render_reports(analysis, ("en", "cs", "de", "sv"), Path(temporary))
+            self.assertEqual(len(outputs), 4)
+
+    def test_contact_tables_use_full_resolution_sensor_rows(self) -> None:
+        """Expose retained contact location, local rate and sensor context.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert contact tables use dedicated retained observations.
+        """
+        analysis = self._analysis("MSFS 2024")
+        tables = _contact_sensor_tables(
+            analysis.landings[0],
+            "en",
+            _styles(),
+        )
+        table_values = []
+        for table in tables:
+            if hasattr(table, "_cellvalues"):
+                for row in table._cellvalues:
+                    for cell in row:
+                        if hasattr(cell, "text"):
+                            table_values.append(cell.text)
+        self.assertTrue(any("49.30000" in value for value in table_values))
+        self.assertTrue(any("250.0 ft/min" in value for value in table_values))
+        self.assertTrue(any("87.5 kt" in value for value in table_values))
+        self.assertTrue(any("271.0°" in value for value in table_values))
+        self.assertTrue(any("190.0°" in value for value in table_values))
+        self.assertTrue(any("Gear position 25.0%" in value for value in table_values))
+        self.assertTrue(any("1.0 g" in value for value in table_values))
+
+    def test_route_chart_unwraps_dateline_within_a_contiguous_track(self) -> None:
+        """Keep a dateline crossing local to its continuous recorded segment.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert adjacent positions draw in the same longitude direction.
+        """
+        analysis = self._analysis("MSFS 2024")
+        analysis.samples[0].longitude_deg = 179.8
+        analysis.samples[1].longitude_deg = -179.8
+        chart = _route_chart(analysis, "en")
+        route_lines = [
+            item
+            for item in chart.contents
+            if hasattr(item, "points")
+        ]
+        self.assertEqual(len(route_lines), 1)
+        points = route_lines[0].points
+        self.assertGreater(points[2], points[0])
+
+    def test_report_notes_redact_paths_and_credential_values(self) -> None:
+        """Keep local paths and credential values out of report paragraphs.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert sanitized warning text contains no private source value.
+        """
+        analysis = self._analysis("MSFS 2024")
+        analysis.warnings = [
+            r"Failed at C:\Users\Rudolf\flight.dll",
+            "api_key=secret-marker",
+        ]
+        notes = _quality_notes(analysis, "en", _styles())
+        rendered_text = "\n".join(note.text for note in notes)
+        self.assertNotIn(r"C:\Users\Rudolf\flight.dll", rendered_text)
+        self.assertNotIn("secret-marker", rendered_text)
+
+    def test_method_notes_use_localized_algorithm_limits(self) -> None:
+        """Expose the descent fit and capture limits in every report language.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert the method disclosures are available and localized.
+        """
+        for language in supported_languages():
+            notes = _methodology_notes(language, _styles())
+            rendered_notes = "\n".join(note.text for note in notes)
+            separator = "," if language in ("cs", "de", "sv") else "."
+            for key in (
+                "descent_method",
+                "reference_method",
+                "runway_method",
+                "gap_method",
+                "sampling_method",
+                "contact_method",
+                "landing_window_method",
+            ):
+                expected = tr(
+                    language,
+                    key,
+                ).format(
+                    window="1" + separator + "00",
+                    minimum="0" + separator + "30",
+                    maximum_gap="0" + separator + "25",
+                    rate="20",
+                    precontact="60" + separator + "00",
+                    rollout="120" + separator + "00",
+                )
+                self.assertIn(expected, rendered_notes)
+
+    def test_translation_fallback_and_central_european_glyphs(self) -> None:
+        """Keep supported labels translated and required glyphs registered.
+
+        Args:
+            self (FlightReportTests): Test case instance running this check.
+
+        Returns:
+            None: Assert expected translations and bundled font registration.
+        """
+        self.assertEqual(tr("cs", "title"), "Zpráva po letu")
+        self.assertEqual(tr("de", "title"), "Flugbericht")
+        self.assertEqual(tr("sv", "title"), "Flygrapport")
+        self.assertEqual(tr("xx", "title"), "Postflight report")
+        for language in supported_languages():
+            for key in (
+                "flight_date",
+                "analysis_version",
+                "shared_checksum",
+                "contact_observations",
+                "location_caveat",
+                "descent_method",
+                "landing_window_method",
+                "rollout_duration",
+                "rollout_distance",
+            ):
+                self.assertNotEqual(tr(language, key), key)
+        _register_font()
+        font_path = _resource_directory() / "DejaVuSans.ttf"
+        font = TTFont(_FONT_NAME, str(font_path))
+        glyph_map = font.face.charToGlyph
+        for character in _REQUIRED_GLYPHS:
+            if character != " ":
+                self.assertNotEqual(glyph_map.get(ord(character), 0), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

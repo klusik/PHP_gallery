@@ -845,6 +845,40 @@ Den installerade uppladdaren kontrollerar sin egen stabila GitHub-installationsv
 \ui{Update} hämtar installationsprogrammet med förlopp och avbrottsmöjlighet, verifierar det, stoppar nytt arbete och väntar högst 120 sekunder på att bakgrundsuppgifter avslutas säkert. Ett misslyckat avslut nekar installationen och uppladdaren förblir tillgänglig. En extern hjälpprocess kontrollerar filen igen och begär Windows UAC-godkännande. Självuppdateringen tvångsavslutar aldrig arbetare; vanliga manuellt startade installationsprogram behåller sin avslutningspolicy. Det verkliga installationsförloppet kommer genom en lokal kanal för den aktuella sessionen. Efter framgång startar uppladdaren som ursprunglig användare med sparade inställningar och uppgifter. Ingen automatisk återställning till tidigare version finns. Körning från Python eller källkod erbjuder det verifierade installationsprogrammet för manuell start. Om Windows kräver omstart ska Windows startas om innan uppladdaren öppnas igen; avbruten UAC öppnar den befintliga installationen på nytt.
 
 
+\subsection{Flygregistrering och rapporter}
+
+Windows-uppladdaren registrerar flygplanstelemetri i MSFS 2020 och 2024 genom
+en gemensam skrivskyddad provider. Registrering och rapportskapande är aktiverade
+som standard; registreringen kan stängas av separat och de sparade språkvalen
+omfattar först engelska, tjeckiska, tyska och svenska. Den medföljande
+ReportLab-renderaren och DejaVu-teckensnitten skapar en separat diagram-PDF per
+valt språk från samma analys. Rapporter sparas lokalt för nytt försök. Signaler
+som saknas förblir otillgängliga; liveverifiering av simulator, flygplan och
+build görs separat för varje generation.
+
+Båda åtgärderna använder samma beständiga samordnare. Ett fristående Stop
+avslutar mappbevakningen, dess egen UTC-synkronisering och flygregistreringen,
+och slutför sedan accepterade fotografier och nödvändig rapportleverans;
+oberoende AI-, manuella import- och förhandsgranskningsarbetare fortsätter.
+Stop lämnar nyckeln kvar. En bekräftad återkallelse utför samma Stop, avslutar
+även andra autentiserade producenter, slutför accepterat arbete och begär
+återkallelse av den galleribundna servernyckeln först efter nödvändiga kvittenser.
+Förloppet visar fas och förfluten tid; återstående tid visas bara när den kan
+mätas. Fel bevarar uppgifter och lokala filer för återhämtning; uttryckligt
+lokalt slutförande finns som val. Efter omstart återställs arbetet, men inte
+samtycket till återkallelse; en ny bekräftelse krävs. Ingen tom rapport skapas.
+
+Den galleriavgränsade nyckeln annonserar den valfria funktionen
+\texttt{flight\_reports\_v1}. JSON-åtgärden
+\texttt{flight\_report\_status} tar \texttt{report\_id},
+\texttt{language} och \texttt{sha256}; multipart-åtgärden
+\texttt{flight\_report} tar dessa fält, \texttt{session\_id} och
+PDF-fältet \texttt{report}. Servern begränsar skrivningen till nyckelns galleri
+och återanvänder allmän PDF-validering, lagring och skyddad visning utan nytt
+schema. Identitet, kontrollsumma och statusavstämning gör återförsök idempotenta.
+Rapporter är skilda från OFP, följer galleriets synlighet och innehåller ingen
+råtelemetri.
+
 \section{Lägga till, beskriva och organisera fotografier}
 \label{sec:photo-workflow}
 \index{f00084@fotografiarbetsflöde}
@@ -1126,10 +1160,10 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.4.1. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.5.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.4.1/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.5.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

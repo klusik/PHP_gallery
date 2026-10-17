@@ -1,0 +1,413 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/tests/test_flight_ui.py
+# Module Type: Windows Tooling Regression Test
+# Purpose: Verify flight GUI adapter lifecycle using host fakes without Tk windows.
+# Responsibilities:
+#   - Guard Stop/Revoke worker ownership, asynchronous dispatch and drain scope.
+#   - Exercise late Revoke joining, fail-closed admission and terminal cleanup.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+"""Behavior tests for the flight Tk adapter without constructing a Tk root."""
+
+import queue
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import uploader.flight_ui as flight_ui
+import uploader.flight_workflow as flight_workflow
+from uploader.flight_jobs import SessionPlan, connection_binding
+
+
+# Type: float; Units: seconds; Scope: flight UI worker race tests.
+# Consumers: event synchronization and thread joins below.
+# Rationale: a broken background barrier must fail without a long suite hang.
+EVENT_WAIT_SECONDS = 3.0
+
+
+class FlightUITests(unittest.TestCase):
+    """Exercise adapter behavior through unbound methods and fake app hosts."""
+
+    def _host(self) -> SimpleNamespace:
+        """Create an app-shaped host with workers but no native Tk objects.
+
+        Args:
+            self (FlightUITests): Test case creating the host.
+
+        Returns:
+            SimpleNamespace: Fake host with saved config and observable workers.
+        """
+        return SimpleNamespace(
+            root=SimpleNamespace(after=Mock()),
+            config=SimpleNamespace(
+                gallery_url="https://gallery.test/api",
+                api_key="test-key",
+                simconnect_dll_path="",
+            ),
+            events=queue.Queue(),
+            worker=None,
+            manual_worker=None,
+            preflight_worker=None,
+            ai_worker=None,
+            utc_sync=Mock(),
+            current_job=None,
+            job_store=Mock(),
+            connection_test_running=False,
+            semantic_ai_install_running=False,
+            ai_worker_stop_requested=False,
+            api_key_revoke_running=False,
+            api_key_revoke_thread=None,
+            status_var=Mock(),
+            watcher_activity_var=Mock(),
+            api_key_request_blockers=Mock(return_value=[]),
+            refresh_connection_controls=Mock(),
+            open_local_path=Mock(),
+        )
+
+    def _ui(self, host: SimpleNamespace) -> flight_ui.FlightUI:
+        """Create a controller without invoking Tk construction.
+
+        Args:
+            self (FlightUITests): Test case creating the adapter.
+            host (SimpleNamespace): Fake existing uploader host.
+
+        Returns:
+            FlightUI: Uninitialized Tk adapter with nonvisual dependencies set.
+        """
+        ui = flight_ui.FlightUI.__new__(flight_ui.FlightUI)
+        host.utc_sync.is_alive.return_value = False
+        ui.host = host
+        ui.directory = Path(tempfile.gettempdir()) / "flight-ui-test"
+        ui.normalize = lambda value: value
+        ui.revoke_transport = Mock(return_value={"message": "revoked"})
+        ui.resume_photos = Mock(return_value=None)
+        ui.import_bindings = SimpleNamespace(entries=lambda: {})
+        ui.operation = None
+        ui.text = lambda key: key
+        ui.recorder = None
+        ui.plan = None
+        ui.dialog = None
+        ui.bar = None
+        ui.lease = None
+        ui.load_error = ""
+        ui.manual_job_id = None
+        ui.resume_workers = []
+        ui.phase_var = Mock()
+        ui.detail_var = Mock()
+        ui.time_var = Mock()
+        ui._last_terminal = ""
+        ui.activity_bar = None
+        ui.task_tree = None
+        ui._animation_running = False
+        ui.pending = Mock(return_value=[])
+        ui.binding = Mock(return_value=connection_binding(
+            "https://gallery.test/api", "test-key"
+        ))
+        ui.busy = Mock(return_value=False)
+        ui.stop = Mock()
+        ui.wait_for_workers = Mock()
+        ui.submit_revoke = Mock()
+        ui.show_progress = Mock()
+        ui.refresh_tasks = flight_ui.FlightUI.refresh_tasks.__get__(
+            ui, flight_ui.FlightUI
+        )
+        return ui
+
+    def test_start_session_fails_closed_when_preferences_do_not_save(self) -> None:
+        """Require durable preferences before starting any recorder or queue.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert a failed save admits no session work.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.load_error = ""
+        ui.lease = object()
+        ui.save_preferences = Mock(return_value=False)
+        with self.assertRaises(ValueError):
+            flight_ui.FlightUI.start_session(ui)
+        ui.save_preferences.assert_called_once_with()
+        self.assertIsNone(ui.recorder)
+        self.assertIsNone(ui.plan)
+
+    def test_corrupt_recovery_state_refuses_new_session(self) -> None:
+        """Fail closed when a durable plan cannot be safely recovered.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert admission is denied and a warning is queued.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.pending.side_effect = ValueError("flight state needs recovery")
+        admitted = flight_ui.FlightUI.can_start(ui)
+        self.assertFalse(admitted)
+        self.assertEqual(host.events.get_nowait()[0], "warning")
+
+    def test_stop_stops_watcher_and_utc_but_leaves_ai_and_manual_alone(self) -> None:
+        """Keep ordinary Stop within watcher and accepted-photo ownership.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert recorder/watcher Stop while AI/import workers continue.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        watcher = Mock()
+        watcher.is_alive.return_value = True
+        host.worker = watcher
+        host.utc_sync.is_alive.return_value = True
+        host.manual_worker = Mock()
+        host.manual_worker.is_alive.return_value = True
+        host.ai_worker = Mock()
+        host.ai_worker.is_alive.return_value = True
+        host.preflight_worker = Mock()
+        host.preflight_worker.is_alive.return_value = True
+        operation = SimpleNamespace(wants_revoke=False, start=Mock())
+        with patch.object(
+            flight_ui, "FinalizationWorker", return_value=operation
+        ) as worker_factory:
+            flight_ui.FlightUI.begin(ui, revoke=False)
+        host.utc_sync.stop.assert_called_once()
+        ui.stop.assert_called_once()
+        watcher.request_drain.assert_called_once()
+        host.ai_worker.stop.assert_not_called()
+        host.preflight_worker.stop.assert_not_called()
+        host.manual_worker.stop.assert_not_called()
+        host.manual_worker.resume.assert_not_called()
+        self.assertFalse(worker_factory.call_args.args[-1])
+        operation.start.assert_called_once()
+        ui.wait_for_workers.assert_not_called()
+        ui.submit_revoke.assert_not_called()
+
+    def test_revoke_stops_other_producers_and_dispatches_off_tk(self) -> None:
+        """Stop authenticated producers before starting the background barrier.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert revoke joins the worker path without synchronous network.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        watcher = Mock()
+        watcher.is_alive.return_value = True
+        watcher.request_drain = Mock()
+        host.worker = watcher
+        host.manual_worker = Mock()
+        host.manual_worker.is_alive.return_value = True
+        host.ai_worker = Mock()
+        host.ai_worker.is_alive.return_value = True
+        host.preflight_worker = Mock()
+        host.preflight_worker.is_alive.return_value = True
+        operation = SimpleNamespace(wants_revoke=True, start=Mock())
+        with (
+            patch.object(
+                flight_ui.messagebox, "askyesno", return_value=True
+            ),
+            patch.object(
+                flight_ui, "FinalizationWorker", return_value=operation
+            ) as worker_factory,
+        ):
+            flight_ui.FlightUI.begin(ui, revoke=True)
+        host.ai_worker.stop.assert_called_once()
+        host.preflight_worker.stop.assert_called_once()
+        host.manual_worker.resume.assert_called_once()
+        self.assertTrue(host.ai_worker_stop_requested)
+        self.assertTrue(worker_factory.call_args.args[-1])
+        self.assertIs(worker_factory.call_args.args[3], ui.wait_for_workers)
+        operation.start.assert_called_once()
+        ui.wait_for_workers.assert_not_called()
+        ui.submit_revoke.assert_not_called()
+        ui.revoke_transport.assert_not_called()
+
+    def test_revoke_wait_adapter_observes_all_authenticated_blockers(self) -> None:
+        """Wait for current auth blockers only when final revoke is requested.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert Revoke waits and ordinary Stop omits auth blockers.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.operation = SimpleNamespace(wants_revoke=True)
+        host.api_key_request_blockers.side_effect = [["manual upload"], []]
+        cancel = threading.Event()
+        flight_ui.FlightUI.wait_for_workers(
+            ui,
+            cancel,
+            time.monotonic() + flight_workflow.FINALIZATION_DRAIN_SECONDS,
+        )
+        self.assertEqual(host.api_key_request_blockers.call_count, 2)
+
+        host.api_key_request_blockers.reset_mock()
+        ui.operation.wants_revoke = False
+        flight_ui.FlightUI.wait_for_workers(
+            ui,
+            cancel,
+            time.monotonic() + flight_workflow.FINALIZATION_DRAIN_SECONDS,
+        )
+        host.api_key_request_blockers.assert_not_called()
+
+    def test_late_revoke_join_runs_a_second_final_wait(self) -> None:
+        """Recheck auth workers when Revoke joins an already draining Stop.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert the late consent path re-enters the adapter drain.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "flight-late-revoke"
+            directory.mkdir()
+            plan = SessionPlan(
+                directory=directory,
+                binding=connection_binding("https://gallery.test/api", "test-key"),
+                languages=(),
+                reports_enabled=False,
+            )
+            host = self._host()
+            ui = self._ui(host)
+            ui.pending = Mock(return_value=[plan])
+            ui.wait_for_workers = flight_ui.FlightUI.wait_for_workers.__get__(
+                ui, flight_ui.FlightUI
+            )
+            entered = threading.Event()
+            release = threading.Event()
+
+            def delayed_analysis(path: Path) -> SimpleNamespace:
+                """Hold analysis so explicit Revoke joins after the first drain.
+
+                Args:
+                    path (Path): Session directory supplied by finalization.
+
+                Returns:
+                    SimpleNamespace: Empty analysis after the join is registered.
+                """
+                entered.set()
+                if not release.wait(EVENT_WAIT_SECONDS):
+                    raise TimeoutError("late-join analysis timed out")
+                return SimpleNamespace(samples=[], landings=[])
+
+            revoke = Mock()
+            worker = flight_workflow.FinalizationWorker(
+                [plan],
+                "https://gallery.test/api",
+                "test-key",
+                ui.wait_for_workers,
+                revoke,
+                False,
+            )
+            ui.operation = worker
+            with patch.object(
+                flight_workflow, "analyze_session", side_effect=delayed_analysis
+            ):
+                worker.start()
+                self.assertTrue(entered.wait(EVENT_WAIT_SECONDS))
+                self.assertTrue(worker.request_revoke())
+                release.set()
+                worker.join(EVENT_WAIT_SECONDS)
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(plan.completed)
+            revoke.assert_called_once()
+            self.assertGreaterEqual(
+                host.api_key_request_blockers.call_count,
+                1,
+            )
+
+    def test_unknown_eta_uses_activity_animation_without_percent_guess(self) -> None:
+        """Show unknown ETA and animate only the indeterminate activity bar.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert unknown duration never becomes a percentage estimate.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        activity_bar = Mock()
+        activity_bar.winfo_exists.return_value = True
+        ui.activity_bar = activity_bar
+        now = time.monotonic()
+        progress = SimpleNamespace(
+            phase="uploading",
+            detail="",
+            error="",
+            done=1,
+            total=4,
+            bytes_done=12,
+            bytes_total=0,
+            started=now - 8,
+            phase_started=now - 3,
+            eta_seconds=None,
+        )
+        ui.operation = SimpleNamespace(snapshot=lambda: progress)
+        with patch.object(flight_ui.time, "monotonic", return_value=now):
+            flight_ui.FlightUI.tick(ui)
+        activity_bar.start.assert_called_once()
+        self.assertTrue(ui._animation_running)
+        timing = ui.time_var.set.call_args.args[0]
+        self.assertIn("estimating", timing)
+        self.assertEqual(ui.bar, None)
+        host.root.after.assert_called_once()
+
+    def test_terminal_cleanup_updates_existing_host_controls(self) -> None:
+        """Clear adapter ownership flags only after its worker is terminal.
+
+        Args:
+            self (FlightUITests): Test case instance running this check.
+
+        Returns:
+            None: Assert terminal progress refreshes existing connection UI.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        activity_bar = Mock()
+        activity_bar.winfo_exists.return_value = True
+        ui.activity_bar = activity_bar
+        ui._animation_running = True
+        ui.operation = SimpleNamespace(
+            snapshot=lambda: SimpleNamespace(
+                phase="completed",
+                detail="",
+                error="",
+                done=2,
+                total=2,
+                bytes_done=0,
+                bytes_total=0,
+                started=time.monotonic(),
+                phase_started=time.monotonic(),
+                eta_seconds=None,
+            )
+        )
+        host.api_key_revoke_running = True
+        host.api_key_revoke_thread = object()
+        flight_ui.FlightUI.tick(ui)
+        activity_bar.stop.assert_called_once()
+        self.assertFalse(ui._animation_running)
+        self.assertFalse(host.api_key_revoke_running)
+        self.assertIsNone(host.api_key_revoke_thread)
+        host.refresh_connection_controls.assert_called_once()
+        host.root.after.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

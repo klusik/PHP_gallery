@@ -129,6 +129,40 @@ no-JavaScript use, assistive technology, Safari/mobile and reduced-motion
 acceptance remain manual coverage. Retain these capability fallbacks permanently
 unless deployed support and regression evidence justify a deliberate retirement.
 
+## Windows flight recorder, report delivery and revocation lifecycle
+
+Owners: `winapp/uploader/flight_jobs.py`, `flight_workflow.py`,
+`flight_ui.py`, `flight_recorder.py`, `simconnect_flight.py`,
+`flight_data.py`, `flight_report.py`, `flight_delivery.py`, and the
+gallery-scoped upload automation controller/service.
+
+Recording and analysis support the shared MSFS 2020/2024 provider path; missing
+aircraft/build signals remain explicit unavailable data. Recording defaults on
+with an independent opt-out. Report creation defaults on and language selection
+defaults to EN/CS/DE/SV; local output uses bundled ReportLab and DejaVu fonts.
+The gallery report capability is optional and negotiated. Reports are separate
+protected PDF documents, inherit gallery visibility and do not replace OFP.
+Stable report identity/language/checksum and status reconciliation protect
+retries; no raw telemetry is uploaded and no database schema is added.
+
+Standalone Stop uses the durable coordinator to stop the watcher, its owned UTC
+synchronizer and flight recorder, then drain accepted photographs and complete
+required report delivery. Unrelated AI, manual-import and preflight workers
+remain active, and the key stays configured. Confirmed Revoke uses that same
+Stop flow, additionally stops other authenticated producers and finishes
+accepted work before requesting scoped server revocation. Failures retain local
+data and task state; the UI shows phase, elapsed time and an ETA only when
+remaining work is measurable. After restart the app restores work but requires
+renewed confirmation before irreversible Revoke. Local-only resolution is
+explicit and does not count as server delivery.
+
+Automated provider and transport fixtures are not live qualification. Actual
+MSFS 2020 and 2024 simulator/aircraft/build coverage, achieved sampling cadence,
+installed-app recovery and report rendering acceptance remain pending until
+recorded separately for each generation. Retain both provider paths and local
+report recovery unless live evidence and deployed-usage evidence support a
+deliberate retirement.
+
 ## Watch-folder UTC synchronization and packaged Python
 
 Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.

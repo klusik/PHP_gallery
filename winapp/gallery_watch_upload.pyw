@@ -125,6 +125,8 @@ from uploader.models import (
 )
 from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.simconnect_time import UtcSyncManager
+from uploader.flight_jobs import read_document
+from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.state_store import (
     JobStateStore,
     atomic_write_json,
@@ -3397,15 +3399,120 @@ class WatcherThread(threading.Thread):
         self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
         self.remote_skipped_paths: Set[Tuple[Path, str]] = set()
         self.initial_paths: Set[Path] = set()
+        self._admission_lock = threading.RLock()
+        self.initial_captured = False
+        self.accepted_paths: Set[Path] = set()
+        self.drain_event = threading.Event()
+        self.drain_only = False
+        self.drain_manifest: Optional[Path] = None
+        self.drain_requested_at = 0.0
+        self.drain_started_monotonic = 0.0
+        self.drain_error = ""
         self.simconnect_client = SimConnectCameraClient(config.simconnect_dll_path, event_sink=self.emit)
         # Publish a complete snapshot by assignment; the UI never probes SimConnect.
         self.simconnect_diagnostics = self.simconnect_client.diagnostics_snapshot()
 
     def stop(self) -> None:
-        """
-        Request the worker to stop.
+        """Request cancellation while retaining the durable photograph queue.
+
+        Returns:
+            None: Stops observation without acknowledging unfinished files.
         """
         self.stop_event.set()
+
+    def configure_drain(
+        self, directory: Path, initial: Iterable[Path], resume: bool = False
+    ) -> None:
+        """Persist photograph admission before starting the watcher thread.
+
+        Args:
+            directory (Path): Connection-bound flight session workspace.
+            initial (Iterable[Path]): Files present at explicit watcher start.
+            resume (bool): Restore only a previously frozen accepted file set.
+
+        Returns:
+            None: Binds a durable queue without scanning historical files.
+
+        Raises:
+            ValueError: A resumed path escapes the original watched folder.
+        """
+        self.drain_manifest = directory / "watch-drain.json"
+        self.initial_paths = set(initial)
+        self.initial_captured = True
+        if resume:
+            row = read_document(self.drain_manifest)
+            paths = row.get("pending")
+            if not isinstance(paths, list):
+                raise ValueError("Pending photograph queue is malformed.")
+            folder = Path(self.config.watched_folder).resolve()
+            for value in paths:
+                if not isinstance(value, str):
+                    raise ValueError("Pending photograph path is malformed.")
+                path = Path(value)
+                if path.is_symlink() or not path.resolve().is_relative_to(folder):
+                    raise ValueError("Pending photograph escaped its folder.")
+                self.accepted_paths.add(path)
+            initial_values = row.get("initial", [])
+            if not isinstance(initial_values, list) or any(
+                not isinstance(value, str) for value in initial_values
+            ):
+                raise ValueError("Initial photograph boundary is malformed.")
+            self.initial_paths = {Path(value) for value in initial_values}
+            self.drain_only = row.get("frozen") is True
+            self.drain_event.set()
+            self.drain_requested_at = float(
+                row.get("cutoff") or row.get("checkpoint") or time.time()
+            )
+            self.drain_started_monotonic = time.monotonic()
+        self.persist_drain()
+
+    def persist_drain(self) -> None:
+        """Atomically retain acceptance, startup exclusions and Stop admission.
+
+        Returns:
+            None: Writes no credentials and never acknowledges a failed file.
+        """
+        with self._admission_lock:
+            if self.drain_manifest is not None:
+                atomic_write_json(self.drain_manifest, {
+                    "schema_version": 1,  # First explicit queue wire format.
+                    "folder": self.config.watched_folder,
+                    "recursive": self.config.watch_recursive,
+                    "initial": sorted(str(path) for path in self.initial_paths),
+                    "pending": sorted(str(path) for path in self.accepted_paths),
+                    "frozen": self.drain_only,
+                    "cutoff": self.drain_requested_at,
+                    "checkpoint": time.time(),
+                    "error": self.drain_error,
+                })
+
+    def acknowledge_photo(self, path: Path) -> None:
+        """Remove one file only after upload history or gallery evidence agrees.
+
+        Args:
+            path (Path): Accepted local photograph with confirmed disposition.
+
+        Returns:
+            None: Atomically advances the recoverable photograph queue.
+        """
+        with self._admission_lock:
+            self.accepted_paths.discard(path)
+            self.persist_drain()
+
+    def request_drain(self) -> None:
+        """Stop discovery and safely finish photographs accepted by the boundary.
+
+        Returns:
+            None: Records one cutoff without interrupting current network work.
+        """
+        with self._admission_lock:
+            if not self.drain_event.is_set():
+                self.drain_requested_at = time.time()
+                self.drain_started_monotonic = time.monotonic()
+                self.drain_event.set()
+                # Persist intent before returning to Tk; the worker performs
+                # the potentially long final folder reconciliation off-thread.
+                self.persist_drain()
 
     def emit(self, level: str, message: str) -> None:
         """
@@ -3423,40 +3530,65 @@ class WatcherThread(threading.Thread):
         log_method(message)
 
     def run(self) -> None:
-        """
-        Run the polling loop until stopped.
-        
-        Existing files are captured before the first scan and ignored for the
-        lifetime of this worker. That makes the app behave like a live import
-        bridge: only files added after Start watching are uploaded.
+        """Observe new photographs, then drain a frozen recoverable queue.
+
+        Returns:
+            None: Pending/error state survives cancellation, timeout and restart.
         """
         folder = Path(self.config.watched_folder)
         upload_url = normalize_upload_url(self.config.gallery_url)
-
-        if not folder.is_dir():
-            self.emit("error", f"Watched folder does not exist: {folder}")
+        if not folder.is_dir() or not upload_url or not self.config.api_key.strip():
+            self.drain_error = "Readable watch folder and saved connection required."
+            self.persist_drain()
+            self.emit("error", self.drain_error)
             return
-        if not upload_url or not self.config.api_key.strip():
-            self.emit("error", "Gallery URL and API key are required.")
-            return
-
-        self.initial_paths = set(iter_candidate_files(folder, self.config.watch_recursive))
+        if not self.initial_captured:
+            self.initial_paths = set(
+                iter_candidate_files(folder, self.config.watch_recursive)
+            )
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
-        self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
-        if self.config.attach_sim_camera_metadata:
-            self.emit("info", "[simconnect] Flight Simulator location metadata enabled. " + self.simconnect_client.dll_resolution_message())
-        else:
-            self.emit("info", "[simconnect] Flight Simulator location metadata disabled.")
-        if self.initial_paths:
-            self.emit("info", f"Ignoring {len(self.initial_paths)} existing image file(s); only files added after watcher start will upload.")
-
+        self.emit(
+            "info",
+            f"Ignoring {len(self.initial_paths)} existing image file(s).",
+        )
         while not self.stop_event.is_set():
+            if self.drain_event.is_set() and not self.drain_only:
+                # On Windows ctime is creation time: include files already
+                # being copied at Stop, but never admit later creations.
+                # Previously observed files remain accepted even if modified.
+                for path in iter_candidate_files(
+                    folder, self.config.watch_recursive
+                ):
+                    try:
+                        before_stop = path.stat().st_ctime <= self.drain_requested_at
+                    except OSError:
+                        before_stop = False
+                    if path not in self.initial_paths and before_stop:
+                        with self._admission_lock:
+                            self.accepted_paths.add(path)
+                with self._admission_lock:
+                    self.drain_only = True
+                    self.persist_drain()
             self.scan_once(folder, upload_url)
-            self.events.put({"kind": "watch_scan", "payload": {"timestamp": time.time()}})
+            self.events.put({
+                "kind": "watch_scan", "payload": {"timestamp": time.time()}
+            })
+            if self.drain_only:
+                if not self.accepted_paths:
+                    break
+                if (
+                    time.monotonic() - self.drain_started_monotonic
+                    >= FINALIZATION_DRAIN_SECONDS
+                ):
+                    self.drain_error = (
+                        "Accepted photographs remain unfinished; retry required."
+                    )
+                    self.emit("error", self.drain_error)
+                    break
             self.stop_event.wait(max(0.2, self.config.scan_interval_seconds))
-
-        self.emit("info", "Watcher stopped.")
+        self.persist_drain()
+        self.emit("info", "Watcher stopped; pending photographs are retained.")
 
     def scan_once(self, folder: Path, upload_url: str) -> None:
         """
@@ -3470,7 +3602,25 @@ class WatcherThread(threading.Thread):
             None: Scan the watched folder once and process files that are
                 ready.
         """
-        for path in iter_candidate_files(folder, self.config.watch_recursive):
+        candidates = (
+            sorted(self.accepted_paths) if self.drain_only
+            else iter_candidate_files(folder, self.config.watch_recursive)
+        )
+        admitted: List[Path] = []
+        with self._admission_lock:
+            for path in candidates:
+                if path in self.initial_paths:
+                    continue
+                if self.drain_event.is_set() and path not in self.accepted_paths:
+                    try:
+                        if path.stat().st_ctime > self.drain_requested_at:
+                            continue
+                    except OSError:
+                        continue
+                admitted.append(path)
+            self.accepted_paths.update(admitted)
+            self.persist_drain()
+        for path in admitted:
             if self.stop_event.is_set():
                 return
 
@@ -3491,10 +3641,13 @@ class WatcherThread(threading.Thread):
                 continue
 
             if (path, file_hash) in self.remote_skipped_paths:
+                self.acknowledge_photo(path)
                 continue
             if self.state.already_uploaded_path(path, file_hash):
+                self.acknowledge_photo(path)
                 continue
             if self.state.already_uploaded_hash(file_hash):
+                self.acknowledge_photo(path)
                 self.state.mark_duplicate(path, file_hash, size)
                 self.emit("info", f"Skipped duplicate content: {path.name}")
                 continue
@@ -3505,6 +3658,7 @@ class WatcherThread(threading.Thread):
             candidate = inventory_candidate(path, file_hash, size)
             self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
             if self.remote_inventory.has_hash(file_hash):
+                self.acknowledge_photo(path)
                 self.remote_skipped_paths.add((path, file_hash))
                 self.emit("info", f"Skipped already present on gallery: {path.name}")
                 continue
@@ -3517,6 +3671,7 @@ class WatcherThread(threading.Thread):
                 metadata_fields = self.sim_camera_metadata_fields(path)
                 payload = self.upload_watched_file(upload_url, path, metadata_fields)
                 self.state.mark_uploaded(path, file_hash, size, payload)
+                self.acknowledge_photo(path)
                 uploaded = payload.get("uploaded", 0)
                 scanned = payload.get("scanned", 0)
                 renamed = int(payload.get("renamed", 0) or 0)
@@ -3539,6 +3694,7 @@ class WatcherThread(threading.Thread):
                 if upload_failure_needs_inventory_reconciliation(exc):
                     if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
                         self.remote_skipped_paths.add((path, file_hash))
+                        self.acknowledge_photo(path)
                         self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {message}")
                         if self.config.delete_uploaded_files:
                             self.delete_uploaded_file(path, {"uploaded": 1, "filenames": [path.name]})
@@ -4818,6 +4974,11 @@ class WatcherApp:
 
         from uploader.update_ui import UpdateController
         self.updates = UpdateController(self, APP_VERSION)
+        from uploader.flight_ui import FlightUI
+        self.flights = FlightUI(
+            self, CONFIG_DIR / "flights", normalize_upload_url,
+            revoke_upload_key, self.resume_flight_photos,
+        )
         self.build_ui()
         self.configure_window_icon()
         self.start_tray_icon()
@@ -5498,7 +5659,7 @@ class WatcherApp:
             parent (tk.Misc): Tkinter frame that receives the controls.
 
         Returns:
-            None: Adds watcher controls and the opt-in UTC synchronization.
+            None: Adds watcher, UTC and optional flight/report controls.
         """
         parent.columnconfigure(0, weight=1)
         hero = GlassCard(parent, padding=(18, 12))
@@ -5597,6 +5758,7 @@ class WatcherApp:
         )
         self.watch_delete_warning.grid(row=6, column=0, sticky="ew", pady=(5, 0))
         self.refresh_watch_delete_warning()
+        self.flights.controls(card)
 
     def open_watcher_settings(self) -> None:
         """Open focused watcher preferences with explicit save or cancel.
@@ -6684,6 +6846,46 @@ class WatcherApp:
             self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
 
 
+    def connection_change_allowed(self, config: WatcherConfig) -> bool:
+        """Preserve captured connection ownership while accepted work is pending.
+
+        Args:
+            config (WatcherConfig): Proposed saved settings from current UI fields.
+
+        Returns:
+            bool: True for the same connection or an idle resolved connection.
+        """
+        if (
+            normalize_upload_url(config.gallery_url)
+            == normalize_upload_url(self.config.gallery_url)
+            and config.api_key == self.config.api_key
+        ):
+            return True
+        try:
+            unresolved = bool(self.flights.pending())
+            for job_id, binding in self.flights.import_bindings.entries().items():
+                if binding != self.flights.binding():
+                    continue
+                job = self.job_store.get_job(job_id)
+                if job is None:
+                    unresolved = True
+                    continue
+                counts = job.counts()
+                if counts["active"] or counts["failed"] or counts["cancelled"]:
+                    unresolved = True
+                else:
+                    self.flights.import_bindings.resolve(job_id)
+        except (OSError, ValueError):
+            unresolved = True
+        if self.background_work_active() or unresolved or self.flights.is_alive():
+            messagebox.showwarning(
+                "Connection",
+                "Finish or explicitly resolve current work before replacing "
+                "its gallery connection.",
+            )
+            return False
+        return True
+
     def save_config(self) -> bool:
         """
         Persist current settings to the local config file.
@@ -6698,6 +6900,8 @@ class WatcherApp:
             return False
         try:
             config = self.current_config()
+            if not self.connection_change_allowed(config):
+                return False
             self.config_store.save(config)
             self.config = config
             self.write_log("Configuration saved.", "success")
@@ -6727,6 +6931,8 @@ class WatcherApp:
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
+        if not self.flights.can_start():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting watcher.")
             return
@@ -6736,6 +6942,8 @@ class WatcherApp:
 
         try:
             config = self.current_config()
+            if not self.connection_change_allowed(config):
+                return
             self.config_store.save(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
@@ -6755,6 +6963,14 @@ class WatcherApp:
         self.watch_last_scan_var.set("Last scan: starting now")
         self.utc_sync.stop()
         self.worker = WatcherThread(config, self.events)
+        try:
+            directory = self.flights.start_session()
+            self.worker.configure_drain(directory, existing)
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.flights.stop()
+            messagebox.showerror("Watcher state", str(exc))
+            self.worker = None
+            return
         self.worker.start()
         self.refresh_utc_sync()
         self.status_var.set("Running")
@@ -6765,18 +6981,40 @@ class WatcherApp:
         self.refresh_revoke_button_state()
 
     def stop(self) -> None:
-        """
-        Stop the watcher worker if one exists.
+        """Stop observation and finish accepted photographs and flight reports.
 
         Returns:
-            None: Revokes UTC writes before requesting watcher shutdown.
+            None: Shows the shared progress view without requesting revocation.
         """
-        self.utc_sync.stop()
-        if self.worker:
-            self.worker.stop()
-        self.status_var.set("Stopped")
-        self.update_monitor_state("disabled", "Watcher stopped.")
-        self.refresh_revoke_button_state()
+        self.flights.begin(False)
+
+    def resume_flight_photos(self, directory: Path) -> Optional[WatcherThread]:
+        """Resume only unfinished photographs from the bound session queue.
+
+        Args:
+            directory (Path): Owned, connection-matching flight session folder.
+
+        Returns:
+            Optional[WatcherThread]: Started drain worker, or None for no queue.
+
+        Raises:
+            ValueError: A durable queue cannot be interpreted safely.
+        """
+        path = directory / "watch-drain.json"
+        if not path.exists():
+            return None
+        row = read_document(path)
+        if not row.get("pending") and row.get("frozen") is True:
+            return None
+        # A persisted Stop can precede the final scan while a new screenshot
+        # is still being copied. Reconcile that cutoff even with no queued path.
+        config = WatcherConfig.from_dict(self.config.to_dict())
+        config.watched_folder = str(row.get("folder", ""))
+        config.watch_recursive = row.get("recursive") is True
+        worker = WatcherThread(config, self.events)
+        worker.configure_drain(directory, (), resume=True)
+        worker.start()
+        return worker
 
     def emit_utc_activity(self, level: str, message: str) -> None:
         """Queue UTC activity without accessing Tk from a native worker.
@@ -6840,6 +7078,10 @@ class WatcherApp:
     def start_manual_upload(self) -> None:
         """
         Start the explicitly reviewed import plan.
+        
+
+        Returns:
+            None: Applies this action only after lifecycle admission succeeds.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -6858,6 +7100,8 @@ class WatcherApp:
 
         try:
             config = self.current_config()
+            if not self.connection_change_allowed(config):
+                return
             self.config_store.save(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
@@ -6933,6 +7177,10 @@ class WatcherApp:
     def start_ai_worker(self) -> None:
         """
         Start the optional AI metadata worker using current shared connection fields.
+        
+
+        Returns:
+            None: Applies this action only after lifecycle admission succeeds.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -6945,6 +7193,8 @@ class WatcherApp:
 
         try:
             config = self.current_config()
+            if not self.connection_change_allowed(config):
+                return
             self.config_store.save(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
@@ -6971,6 +7221,10 @@ class WatcherApp:
     def stop_ai_worker(self) -> None:
         """
         Request the optional AI metadata worker to stop after current work is safely reported.
+        
+
+        Returns:
+            None: Applies this action only after lifecycle admission succeeds.
         """
         if self.ai_worker and self.ai_worker.is_alive():
             self.ai_worker.stop()
@@ -6983,7 +7237,11 @@ class WatcherApp:
         self.refresh_revoke_button_state()
 
     def refresh_connection_controls(self) -> None:
-        """Refresh API-key presence, revocation blockers, and related controls."""
+        """Refresh connection controls while allowing Revoke to initiate Stop.
+
+        Returns:
+            None: Displays active work and keeps the combined action available.
+        """
         current_url = self.gallery_url_var.get().strip()
         current_key = self.api_key_var.get().strip()
         saved_url = self.config.gallery_url.strip()
@@ -6998,9 +7256,12 @@ class WatcherApp:
             self.api_key_status_var.set("API key or gallery URL changed, not saved")
         blockers = self.api_key_request_blockers()
         if self.api_key_revoke_running:
-            blocker_text = "Revocation in progress. Do not close the app until the server response returns."
+            blocker_text = (
+                "Finishing accepted work. Open Flight progress for the current "
+                "stage; the key is retained until required work is confirmed."
+            )
         elif blockers:
-            blocker_text = "Revocation unavailable while: " + "; ".join(blockers) + "."
+            blocker_text = "Revoke will stop and finish: " + "; ".join(blockers) + "."
         elif key_present and not credentials_saved:
             blocker_text = "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
         elif key_present:
@@ -7008,7 +7269,7 @@ class WatcherApp:
         else:
             blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
         self.revoke_blocker_var.set(blocker_text)
-        enabled = key_present and credentials_saved and not blockers and not self.api_key_revoke_running
+        enabled = key_present and credentials_saved
         for attr in ("revoke_button", "import_revoke_button"):
             button = getattr(self, attr, None)
             if button is not None:
@@ -7025,6 +7286,10 @@ class WatcherApp:
     def refresh_revoke_button_state(self) -> None:
         """
         Compatibility wrapper that refreshes all connection and revocation controls.
+        
+
+        Returns:
+            None: Applies this action only after lifecycle admission succeeds.
         """
         self.refresh_connection_controls()
 
@@ -7162,7 +7427,7 @@ class WatcherApp:
         ttk.Button(buttons, text="Save", command=lambda: apply_values(False)).pack(side="left", padx=8)
         revoke = ttk.Button(buttons, text="Revoke saved API key...", command=lambda: (dialog.destroy(), self.revoke_api_key()))
         revoke.pack(side="left", padx=(8, 0))
-        if not self.api_key_var.get().strip() or self.api_key_request_blockers() or self.api_key_revoke_running:
+        if not self.api_key_var.get().strip():
             revoke.state(["disabled"])
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -7199,59 +7464,26 @@ class WatcherApp:
         dialog.grab_set()
 
     def revoke_api_key(self) -> None:
-        """
-        Revoke the currently configured API key on the gallery asynchronously.
+        """Confirm one combined stop, finish, upload and key-revocation action.
 
-        Revocation is permitted only when no worker can still issue an
-        authenticated request with the key. The key is cleared locally only
-        after the server confirms revocation.
+        Returns:
+            None: Reuses finalization progress and never revokes before receipts.
         """
-        if getattr(self, "updates", None) is not None and self.updates.blocked():
+        if self.updates.blocked():
             return
-        if self.api_key_revoke_running:
-            messagebox.showinfo("Revoke API key", "API-key revocation is already in progress.")
-            return
-        blockers = self.api_key_request_blockers()
-        if blockers:
-            messagebox.showwarning("Revoke API key", "Cannot revoke the API key while: " + "; ".join(blockers) + ".")
-            self.refresh_connection_controls()
-            return
-
-        current_url = self.gallery_url_var.get().strip()
-        current_key = self.api_key_var.get().strip()
-        saved_url = self.config.gallery_url.strip()
-        saved_key = self.config.api_key.strip()
-        if current_url != saved_url or current_key != saved_key:
-            messagebox.showwarning("Revoke API key", "The connection fields contain unsaved changes. Save them or restore the saved values before revoking a key.")
-            self.refresh_connection_controls()
-            return
-        upload_url = normalize_upload_url(saved_url)
-        api_key = saved_key
-        if not upload_url or not api_key:
-            messagebox.showwarning("Revoke API key", "A saved HTTP(S) Gallery URL and API key are required.")
-            return
-        if not messagebox.askyesno(
-            "Revoke API key",
-            "Permanently revoke this gallery-scoped API key on the server?\n\nAfter confirmation, the key will also be removed from this Windows app. This cannot be undone; a new key must be generated in PHP Gallery Admin.",
+        if (
+            self.gallery_url_var.get().strip() != self.config.gallery_url.strip()
+            or self.api_key_var.get().strip() != self.config.api_key.strip()
         ):
+            messagebox.showwarning(
+                "Revoke API key",
+                "Save or restore connection fields before revoking the saved key.",
+            )
             return
-
-        self.api_key_revoke_running = True
-        self.connection_status_var.set("Revoking API key")
-        self.connection_detail_var.set("Waiting for the gallery to confirm permanent API-key revocation...")
-        self.write_log("API-key revocation requested. Waiting for server confirmation.", "system")
-        self.refresh_connection_controls()
-
-        def revoke_worker() -> None:
-            """Perform network revocation off the Tkinter UI thread."""
-            try:
-                result = revoke_upload_key(upload_url, api_key)
-                self.events.put({"kind": "api_key_revoked", "payload": {"message": str(result.get("message") or "API key revoked.")}})
-            except Exception as exc:  # noqa: BLE001
-                self.events.put({"kind": "api_key_revoke_error", "payload": {"message": str(exc)}})
-
-        self.api_key_revoke_thread = threading.Thread(target=revoke_worker, name="PHPGalleryKeyRevoke", daemon=True)
-        self.api_key_revoke_thread.start()
+        if not normalize_upload_url(self.config.gallery_url) or not self.config.api_key:
+            messagebox.showwarning("Revoke API key", "A saved connection is required.")
+            return
+        self.flights.begin(True)
 
     def close(self) -> None:
         """Coordinate shutdown while preserving update and import state.
@@ -7260,11 +7492,16 @@ class WatcherApp:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
         """
+        self.flights.stop()
         self.utc_sync.stop()
         if getattr(self, "updates", None) is not None and self.updates.request_close():
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("API-key revocation", "Wait for API-key revocation to finish before closing the app. This prevents a server-revoked key from remaining stored locally.")
+            messagebox.showwarning(
+                "Finishing current work",
+                "Wait for accepted work and any server response to finish. "
+                "Flight progress shows the remaining tasks.",
+            )
             return
         if self.exiting:
             return
@@ -7283,7 +7520,7 @@ class WatcherApp:
 
         deadline = time.monotonic() + 5.0
         for worker in (
-            self.utc_sync, self.preflight_worker, self.worker,
+            self.flights, self.utc_sync, self.preflight_worker, self.worker,
             self.manual_worker, self.ai_worker, self.api_key_revoke_thread,
         ):
             if worker is None or not worker.is_alive():
@@ -7296,6 +7533,7 @@ class WatcherApp:
         still_running = [
             label
             for label, worker in (
+                ("flight recording", self.flights),
                 ("UTC synchronization", self.utc_sync),
                 ("preflight", self.preflight_worker),
                 ("watcher", self.worker),
@@ -7488,7 +7726,16 @@ class WatcherApp:
         self.record_activity("info", detail, "watcher")
 
     def launch_manual_job(self, job: ImportJob, paths: List[Path], config: WatcherConfig) -> None:
-        """Launch one durable manual-import job over the supplied recoverable paths."""
+        """Bind and launch accepted manual-import work for the saved connection.
+
+        Args:
+            job (ImportJob): Durable job containing accepted source items.
+            paths (List[Path]): Recoverable originals selected for this attempt.
+            config (WatcherConfig): Saved connection and upload settings snapshot.
+
+        Returns:
+            None: Starts the worker after binding, or reports a recovery error.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if not paths:
@@ -7497,6 +7744,11 @@ class WatcherApp:
         if self.manual_local_thumbnails_var.get() and not local_thumbnail_supported():
             self.write_log("Local thumbnail generation is unavailable. Server thumbnail generation will be used.", "warning")
             use_local_thumbnails = False
+        try:
+            self.flights.import_bindings.bind(job.id, self.flights.binding())
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Import recovery", str(exc))
+            return
         self.current_job = job
         self.job_store.save_job(job)
         self.manual_worker = ManualUploadThread(
@@ -7543,7 +7795,11 @@ class WatcherApp:
             self.resume_import_button.configure(state="disabled")
 
     def retry_failed_import(self) -> None:
-        """Explicitly retry failed/cancelled or crash-interrupted items in the selected job."""
+        """Explicitly retry failed/cancelled or crash-interrupted items in the selected job.
+
+        Returns:
+            None: Applies this action only after lifecycle admission succeeds.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
@@ -7580,6 +7836,8 @@ class WatcherApp:
         refreshed.finished_at = 0.0
         try:
             config = self.current_config()
+            if not self.connection_change_allowed(config):
+                return
             self.config_store.save(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
@@ -7904,18 +8162,30 @@ class WatcherApp:
                     self.api_key_var.set("")
                     cleared_config = WatcherConfig.from_dict(self.config.to_dict())
                     cleared_config.api_key = ""
+                    cleanup_error = ""
                     try:
                         self.config_store.save(cleared_config)
                         self.config = cleared_config
                     except Exception as exc:  # noqa: BLE001
                         self.config.api_key = ""
+                        cleanup_error = str(exc)
                         self.write_log("API key was revoked on the server, but clearing local configuration failed: " + str(exc), "error")
+                    self.flights.revoked(cleanup_error)
                     message = str(payload.get("message", "API key revoked.") or "API key revoked.")
                     self.connection_status_var.set("Not configured")
                     self.gallery_label_var.set("Target gallery: unknown")
-                    self.connection_detail_var.set("API key was revoked by the gallery and removed from local configuration.")
+                    self.connection_detail_var.set(
+                        "Server revocation confirmed; local cleanup needs retry."
+                        if cleanup_error else
+                        "API key was revoked and removed from local configuration."
+                    )
                     self.write_log(message, "success")
-                    self.record_activity("success", "API key revoked and removed from local configuration.", "system")
+                    self.record_activity(
+                        "error" if cleanup_error else "success",
+                        "Server key revoked; local cleanup failed." if cleanup_error
+                        else "API key revoked and removed from local configuration.",
+                        "system",
+                    )
                     self.refresh_connection_controls()
                     messagebox.showinfo("Revoke API key", message)
                 elif kind == "api_key_revoke_error":

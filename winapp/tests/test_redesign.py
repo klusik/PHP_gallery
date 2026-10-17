@@ -1192,6 +1192,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms a rejected close retains the available version.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.updates = mock.Mock()
         app.updates.request_close.return_value = False
@@ -1204,6 +1206,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
 
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertFalse(app.exiting)
         self.assertEqual("0.4.1", app.update_available_version)
@@ -1216,6 +1219,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms the keep-running choice leaves app and offer active.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()
@@ -1239,6 +1244,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             dialogs.askyesno.return_value = True
             MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertFalse(app.exiting)
         self.assertEqual("0.4.1", app.update_available_version)
@@ -1253,6 +1259,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms confirmed shutdown clears the version and destroys Tk.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()
@@ -1278,6 +1286,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         )
 
         MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertTrue(app.exiting)
         self.assertIsNone(app.update_available_version)

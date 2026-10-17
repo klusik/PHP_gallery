@@ -162,6 +162,8 @@ function release_file_policy_is_winapp_source_path(string $relativePath): bool
         'winapp/install.bat', 'winapp/run_gallery_watcher.bat',
         'winapp/requirements.txt', 'winapp/requirements-build.txt',
         'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
+        'winapp/uploader/resources/DejaVuSans.ttf',
+        'winapp/uploader/resources/LICENSE_DEJAVU',
     ], true)) {
         return true;
     }
