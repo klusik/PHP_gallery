@@ -689,9 +689,13 @@ redigovanou diagnostiku a~protokol. Kompaktní zápatí s~poslední událostí o
 \ui{Activity} po kliknutí. Ovládací ikony mají popisky a~lze na ně přejít
 klávesnicí; otazník otevře nápovědu. Změna vzhledu zachovává
 dosavadní ochranu nastavení, tray, aktualizací a~klíče API.
-Zaoblené lesklé prvky tlačítek a~karet používají Pillow, je-li dostupné;
-nativní ovládací prvky Tk a~provoz ve zdrojovém režimu včetně \texttt{--once}
-fungují i~bez něj.
+Pillow doplňuje chladný barevný přechod pozadí a~neprůhledné prvky inspirované
+matným sklem pro karty, zápatí a~pilulková tlačítka. Vrstvení simuluje matné sklo
+bez skutečné průhlednosti alfa nebo rozostření pozadí operačního systému; text
+zůstává ostrý a~plochy polí a~tabulek zůstávají neprůhledné a~kontrastní. Nepoužívá se
+průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow zůstávají
+čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
+\texttt{--once} zůstávají podporované.
 
 \subsection{Poloha simulátoru ve Windows}
 

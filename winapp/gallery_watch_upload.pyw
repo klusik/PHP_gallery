@@ -151,6 +151,7 @@ if tk is not None:
         configure_theme,
         help_button,
         icon_button,
+        paint_backdrop,
     )
 
 try:
@@ -4451,8 +4452,9 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
             background=self.winfo_toplevel().cget("background"),
         )
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.content = ttk.Frame(self.canvas, style="App.TFrame")
+        self.content = ttk.Frame(self.canvas, style="Backdrop.TFrame")
         self.window_id = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
+        paint_backdrop(self.content)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
@@ -4712,7 +4714,12 @@ class WatcherApp:
         )
         self.root.geometry(WATCHER_WINDOW_GEOMETRY)
         self.root.minsize(*WATCHER_WINDOW_MINIMUM)
-        outer = ttk.Frame(self.root, padding=(24, 16, 24, 12), style="App.TFrame")
+        outer = ttk.Frame(
+            self.root,
+            padding=(24, 16, 24, 12),
+            style="Backdrop.TFrame",
+        )
+        paint_backdrop(outer)
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(2, weight=1)
@@ -4778,7 +4785,8 @@ class WatcherApp:
             ("ai", "✦  AI"),
             ("settings", "⚙  Settings"),
         ]:
-            host = ttk.Frame(self.notebook, style="App.TFrame")
+            host = ttk.Frame(self.notebook, style="Backdrop.TFrame")
+            paint_backdrop(host)
             host.rowconfigure(0, weight=1)
             host.columnconfigure(0, weight=1)
             scroll = ScrollableFrame(host)

@@ -192,9 +192,13 @@ The sheet requires the watcher to be stopped before edits. Saving stores those
 settings for the next start; **Cancel**, Escape, or closing the sheet restores its
 opening folder, ignored-file count, last-scan status, and preferences.
 
-Rounded glossy button and card artwork uses Pillow when it is available. Native
-Tkinter controls and source-mode operation, including `--once`, remain supported
-without Pillow; the presentation does not add a runtime dependency.
+Pillow adds an ambient cool gradient and opaque glass-inspired card, footer, and
+pill-button artwork. This composited treatment simulates frosted glass without
+true alpha transparency or operating-system backdrop blur; text and input/table
+surfaces stay solid, high-contrast, and sharp. It uses no whole-window opacity
+and adds no runtime dependencies. Without Pillow, readable flat ttk surfaces
+remain, and native controls and source-mode operation, including `--once`, stay
+supported.
 
 Manual **Import** still requires preflight review and an explicit start. **Activity**
 shows the filtered recent-event list, retry controls, redacted diagnostics, and

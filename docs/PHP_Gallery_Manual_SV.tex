@@ -688,9 +688,13 @@ omförsökskontroller, redigerad diagnostik och loggen. En kompakt sidfot med de
 senaste händelsen öppnar \ui{Activity} när den väljs. Ikoner har verktygstips och
 kan nås med tangentbordet; frågetecknet öppnar hjälp.
 Utformningen bevarar befintliga skydd för inställningar, tray, uppdateringar och
-API-nycklar. Rundade, blanka knappar och kort använder Pillow när det är
-tillgängligt; Tk:s inbyggda kontroller och källäget, inklusive \texttt{--once},
-fungerar fortfarande utan Pillow.
+API-nycklar. Pillow lägger till en sval färgövergång i bakgrunden och ogenomskinlig
+glasinspirerad grafik för kort, sidfot och pillformade knappar. Den sammansatta
+stilen simulerar frostat glas utan verklig alfatransparens eller oskärpa från
+operativsystemet; texten förblir skarp, medan inmatnings- och tabellområden
+förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret används och inga
+körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
+inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
 
 \subsection{Simulatorposition i Windows}
 

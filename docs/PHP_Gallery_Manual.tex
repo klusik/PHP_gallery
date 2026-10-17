@@ -693,8 +693,13 @@ diagnostics, and~log. A~compact latest-event footer opens \ui{Activity} when
 selected. Icon controls expose tooltips and~keyboard focus; the~question-mark help
 opens usage guidance. These presentation changes preserve the
 existing persistence, tray, update, and~API-key safeguards.
-Rounded button and~card artwork uses Pillow when available; native Tk controls
-and~source-mode operation, including \texttt{--once}, remain usable without it.
+Pillow adds an~ambient cool gradient and~opaque glass-inspired card, footer,
+and~pill-button artwork. This~composited treatment simulates frosted glass
+without true alpha transparency or~operating-system backdrop blur; text stays
+sharp, and~input and~table surfaces stay solid and~high-contrast. It~uses no~whole-window
+opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
+surfaces remain, and~native controls and~source-mode operation, including
+\texttt{--once}, stay supported.
 
 \subsection{Windows simulator location}
 
