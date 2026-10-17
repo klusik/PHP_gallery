@@ -498,7 +498,8 @@ Installationen ohne gespeicherte Wahl starten mit beiden Funktionen an;
 eine ausdrückliche Abschaltung bleibt erhalten. OFF verbirgt die zugehörigen
 Tabellen/Player und~sperrt Upload, Auslieferung und~PDF-Konvertierung, auch aus
 alten Formularen. Dateien, Listen und~Einstellungen bleiben erhalten.
-Bei beiden OFF entfällt auch der Medienreiter; alte Reiter-URLs wählen Identität.
+Bei beiden OFF bleiben Präsentationsvorgaben bei~aktivem Lightbox erhalten.
+Ist~auch Lightbox OFF, entfällt der~leere Reiter; alte URLs wählen Identität.
 Bereits erzeugte Seitenfotos behalten ihre normalen Zugriffsregeln.
 SimBrief kann Beschreibungen/Routen weiter aktualisieren und~behält alte PDFs.
 
@@ -512,8 +513,8 @@ Die~verfügbare Galeriebreite bestimmt das~Layout: breite Fenster zeigen
 Karten nebeneinander, schmale Fenster untereinander und~unter der~Beschreibung.
 
 Unter den~Karten startet \ui{Präsentation} beim ersten Foto mit
-Standardgeschwindigkeit und~Musik für~diesen Start. Die~gespeicherte
-Musikvorgabe bleibt unverändert. Das~Teilen-Symbol kopiert einen Galerielink
+eingestellten Geschwindigkeiten und~Musik für~diesen Start. Die~gespeicherte
+Musikvorgabe bleibt unverändert. Das~Teilen-Symbol öffnet ein~Overlay mit~Galerielink
 mit~aktiver Sprache und~\codeword{presentation=1}, ohne Seitenauswahl
 oder~Administratorvorschau. Nach normalen Zugriffskontrollen startet
 derselbe Ablauf. Browserregeln können \ui{Abspielen} erfordern;
@@ -521,6 +522,33 @@ bei~verweigerter Zwischenablage erscheint ein~markierbarer Link.
 Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.
 Wird natives Vollbild verweigert, füllen Desktopfotos das~Browserfenster
 und~wechseln weiter; \ui{Abspielen} versucht blockierte Musik erneut.
+Unter \ui{Galerie bearbeiten > PDF / Musik / Präsentation} bietet die~transparente
+Karte \ui{Präsentationseinstellungen} öffentliche Schalter, Musik und~beide
+Geschwindigkeiten. Das~Speichern-Symbol verwendet das~geschützte Galerieformular.
+Vorschau und~Teilen verwenden aktuelle, auch ungespeicherte Werte. Neue Links
+enthalten Musik und~beide Geschwindigkeiten; spätere Galerieänderungen ändern
+diese Vorgaben nicht. Besucher können die~Wiedergabe vorübergehend anpassen.
+Auch \codeword{autoplay=1} startet die~Präsentation. Bei~blockiertem Ton bleibt
+der~Player Teil der~ausblendbaren Steuerung; Bewegung zeigt sie~wieder.
+Ein~Klick auf~\ui{Abspielen} oder~das~Foto versucht Ton und~natives Vollbild.
+Stoppen oder~Schließen verwirft wartende Musik. Verborgene Schalter widerrufen
+keine geteilten Links.
+Vorgaben verwenden versioniertes \codeword{galleries.presentation_json} nach
+der~Spaltenmigration. Explizite Änderungen erfordern verifiziertes Schema;
+alte Galerien behalten aktivierte Präsentation, Musik und~mittlere Geschwindigkeiten.
+Autoplay ist~für~alle Galerien standardmäßig ON und~in~der~Karte abschaltbar.
+Das~Teilen-Overlay bietet Geschwindigkeitsregler und~Schalter für~Autoplay,
+Musik, Vollbild und~\ui{Ohne Bedienelemente}. Kopieren übernimmt die~aktuelle URL;
+Linkänderungen speichern keine Galerieeinstellungen.
+\codeword{autoplay=0} öffnet Foto eins pausiert und~stumm. Vollbild und~exklusive
+Ansicht verwenden \codeword{presentation_fullscreen=1|0}
+und~\codeword{presentation_exclusive=1|0}.
+Ohne Bedienelemente ist~standardmäßig OFF; bei~ON fehlen Schalter, Metadaten
+und~Diagnose. Esc beendet die~Ansicht. Tonregeln des~Browsers gelten weiterhin.
+Jeder Start zeigt mindestens eine Sekunde Schwarz und~wartet auf~das~dekodierte
+erste Foto. Dann beginnen der~gewählte Übergang und~die~angeforderte Musik.
+Dieser Anfang wiederholt sich nicht beim Galerieumlauf. Schließen bricht ihn~ab.
+Natives Vollbild kann einen Klick erfordern; sonst wird das~Browserfenster gefüllt.
 
 PDF- und~Musik-Schalter zeigen Dateizahlen neben der~Beschreibung,
 auf~schmalen Bildschirmen darunter. Ein~Klick öffnet ein~kleines Overlay.

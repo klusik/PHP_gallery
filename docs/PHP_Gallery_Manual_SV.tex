@@ -493,7 +493,8 @@ och~\ui{Gallerimusik} separata reglage. Båda är på för nya och~uppdaterade
 installationer utan sparat val; ett uttryckligt OFF bevaras. OFF döljer
 motsvarande tabeller/spelare och~stoppar uppladdning, leverans och~PDF-konvertering,
 även från gamla formulär. Filer, spellistor och~inställningar bevaras.
-Med båda OFF döljs även mediefliken; gamla fliklänkar väljer Identitet.
+Med båda OFF finns presentationsval kvar om~Lightbox är~aktivt.
+Är~även Lightbox OFF döljs den~tomma fliken; gamla länkar väljer Identitet.
 Redan skapade sidfoton behåller sina vanliga åtkomstregler. SimBrief kan
 fortsätta uppdatera beskrivningar/rutter och~behåller gamla PDF-original.
 
@@ -507,8 +508,8 @@ Galleriets tillgängliga bredd styr layouten: breda fönster visar korten
 bredvid varandra, smalare fönster staplar dem~och~flyttar dem~under texten.
 
 Under korten startar \ui{Presentation} från första fotot med
-standardhastigheter och~musik för~denna start. Den~sparade musikinställningen
-ändras inte. Delningsikonen kopierar en~gallerilänk med~aktivt språk
+inställda hastigheter och~musik för~denna start. Den~sparade musikinställningen
+ändras inte. Delningsikonen öppnar en~överlagring med~gallerilänk med~aktivt språk
 och~\codeword{presentation=1}, utan sidval eller~administratörsförhandsvisning.
 Länken startar samma presentation efter vanliga åtkomstkontroller.
 Webbläsaren kan~kräva \ui{Spela}; nekad urklippsåtkomst visar
@@ -516,6 +517,32 @@ en~markerbar länk för~manuell kopiering.
 Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
 Om~äkta helskärm nekas fyller skrivbordsbilder webbläsarfönstret
 och~fortsätter växla; \ui{Spela} försöker starta blockerad musik igen.
+I~\ui{Redigera galleri > PDF / Musik / Presentation} finns det~genomskinliga
+kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
+hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
+Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
+innehåller musik och~båda hastigheterna; senare galleriändringar ändrar inte
+dessa förval. Besökare kan~ändra uppspelningen tillfälligt.
+Även \codeword{autoplay=1} startar presentationen. Vid~blockerat ljud förblir
+spelaren med~de~kontroller som~döljs vid~inaktivitet; rörelse visar dem~igen.
+Klicka på~\ui{Spela} eller~fotot för~ljud och~önskad äkta helskärm.
+Stopp eller~stängning avbryter väntande musik. Dolda knappar återkallar inte
+delade länkar.
+Förval använder versionerat \codeword{galleries.presentation_json} efter
+kolumnmigreringen. Uttryckliga ändringar kräver verifierat schema;
+äldre gallerier behåller aktiv presentation, musik och~medelhastigheter.
+Autoplay är~på~som standard för~alla gallerier och~kan~stängas av~i~kortet.
+Delningspanelen har~hastighetsreglage och~val för~autoplay, musik, helskärm
+och~\ui{Utan kontroller}. Kopiera använder den~aktuella länken; länkändringar
+sparar inga galleriinställningar. \codeword{autoplay=0} öppnar första fotot
+pausat och~tyst. Helskärm och~exklusivt läge använder
+\codeword{presentation_fullscreen=1|0} och~\codeword{presentation_exclusive=1|0}.
+Utan kontroller är~av~som standard; när det~aktiveras döljs kontroller,
+metadata och~diagnostik. Esc avslutar. Webbläsarens ljudregler gäller fortfarande.
+Varje start håller svart minst en~sekund och~tills första fotot är~avkodat.
+Sedan börjar vald övergång och~önskad musik. Inledningen upprepas inte vid~varv.
+Stängning avbryter väntande arbete. Äkta helskärm kan~kräva ett~klick;
+reservläget fyller webbläsarfönstret.
 
 PDF- och~musikknappar visar filantal bredvid beskrivningen,
 eller~under den~på~smala skärmar. Ett~klick öppnar en~liten överlagring.

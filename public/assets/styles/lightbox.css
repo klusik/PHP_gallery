@@ -2456,3 +2456,178 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
 }
 
 body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
+
+/* Media editor cards wrap with their container, including the narrow drawer. */
+.gallery-editor-media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+.gallery-editor-media-grid > section {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0.4rem 1.5rem rgba(0, 0, 0, 0.07);
+    backdrop-filter: blur(16px);
+}
+.gallery-presentation-settings header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.gallery-presentation-settings h3 { margin: 0; }
+.gallery-presentation-setting {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.15);
+}
+.gallery-presentation-setting select {
+    width: auto;
+    min-width: 7rem;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gallery-presentation-setting input[role="switch"] {
+    appearance: none;
+    flex: 0 0 auto;
+    position: relative;
+    width: 2.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 2rem;
+    background: color-mix(in srgb, var(--ink) 22%, transparent);
+    cursor: pointer;
+}
+.gallery-presentation-setting input[role="switch"]::after {
+    content: '';
+    position: absolute;
+    top: 0.1rem;
+    left: 0.1rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0.1rem 0.25rem #0003;
+}
+.gallery-presentation-setting input[role="switch"]:checked {
+    background: var(--accent, #4664df);
+}
+.gallery-presentation-setting input[role="switch"]:checked::after {
+    left: auto;
+    right: 0.1rem;
+}
+.gallery-presentation-settings .music-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.65rem;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gallery-presentation-settings .music-icon svg,
+.admin-edit-gallery-savebar .music-icon svg {
+    width: 1.2rem;
+    height: 1.2rem;
+}
+.admin-edit-gallery-savebar .music-icon {
+    min-width: 0;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0.5rem;
+}
+/* Share uses the same retained native disclosure and top-layer lifecycle. */
+.gallery-presentation-actions > .presentation-share-widget { order: initial; }
+.presentation-share-widget > summary.music-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
+}
+.presentation-share-widget > summary.music-icon svg {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin: 0;
+}
+.presentation-share-widget[open] > summary svg:last-child { transform: none; }
+.presentation-share-panel.gallery-media-panel {
+    width: min(21rem, calc(100vw - 1rem));
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    backdrop-filter: blur(24px);
+    box-shadow: 0 0.75rem 3rem #0003;
+    text-align: left;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+.presentation-share-panel .gallery-media-body {
+    max-height: none;
+    padding: 0.45rem 0.65rem;
+}
+.presentation-share-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.15rem 0.8rem;
+}
+.presentation-share-options .gallery-presentation-setting {
+    gap: 0.35rem;
+    padding-block: 0.3rem;
+    border: 0;
+    font-size: 0.75rem;
+}
+.presentation-share-options input[role="switch"] {
+    width: 2.1rem;
+    height: 1.4rem;
+}
+.presentation-share-speed {
+    display: grid;
+    grid-template-columns: 4.8rem minmax(0, 1fr) 3.6rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding-block: 0.35rem;
+    margin: 0;
+    font-size: 0.75rem;
+}
+.presentation-share-speed input {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    accent-color: var(--accent);
+}
+.presentation-share-speed output { text-align: right; }
+.presentation-share-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+.presentation-share-link { min-width: 0; margin: 0; }
+.presentation-share-link input { width: 100%; min-width: 0; box-sizing: border-box; }
+.presentation-share-panel .presentation-share-help {
+    font-size: 0.7rem;
+    margin: 0.3rem 0 0;
+}
+.presentation-share-panel [data-presentation-status]:empty { display: none; }
+/* The launch hold never enters gallery ordering or repeats with the last slide.
+   Keep geometry and decode active behind black; Close/HUD remain accessible. */
+.lightbox.is-presentation-intro :is(.lightbox-stage-link, .lightbox-picture-strip) {
+    opacity: 0;
+    pointer-events: none;
+}
+.lightbox.is-presentation-exclusive :is(
+    .lightbox-hud, .lightbox-controls, .lightbox-strip, .lightbox-picture-strip,
+    .lightbox-meta, .gallery-dev-overlay,
+    [data-lightbox-action], [data-lightbox-dev-dashboard], .lightbox-dev-dashboard
+) { display: none !important; }
+.lightbox.is-presentation-exclusive .lightbox-stage-link { pointer-events: none; }

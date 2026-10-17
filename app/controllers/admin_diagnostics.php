@@ -153,6 +153,7 @@ function cms_admin_diagnostics(): void
         'presentation_image_voting' => 'Image voting',
         'presentation_picture_game' => 'Picture game',
         'presentation_lightbox_override' => 'Lightbox mode overrides',
+        'presentation_gallery_settings' => 'Gallery presentation settings',
         'presentation_openai_text' => 'OpenAI text assistance',
         'presentation_openai_image_input' => 'OpenAI image input',
         'presentation_ai_image_analysis' => 'AI image metadata',

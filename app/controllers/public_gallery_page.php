@@ -766,7 +766,11 @@ function cms_gallery(): void
     $lightboxHtml = '';
     if ($lightboxFeatureEnabled) {
         ob_start();
-        render_lightbox($votingAllowed, $mapsAllowed, $galleryMapUrl, (string) $gallery['title'], $lightboxBrowsingMode);
+        render_lightbox(
+            $votingAllowed, $mapsAllowed, $galleryMapUrl,
+            (string) $gallery['title'], $lightboxBrowsingMode, true,
+            \Gallery\Services\gallery_presentation_settings($gallery)
+        );
         $lightboxHtml = (string) ob_get_clean();
     }
     if ($requestedImage && $lightboxFeatureEnabled) {

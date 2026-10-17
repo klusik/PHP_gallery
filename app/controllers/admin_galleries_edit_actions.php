@@ -936,6 +936,26 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
  */
 function admin_save_gallery_owned_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm): array
 {
+    // Validate explicit presentation writes before any folder/upload effects.
+    // Older forms omit the marker and preserve the exact stored preferences.
+    $presentationJson = null;
+    if (array_key_exists('gallery_presentation_present', $input)
+        && feature_capability_effective_enabled('lightbox_modes')) {
+        \Gallery\Services\gallery_presentation_assert_writable(
+            'gallery.presentation.save'
+        );
+        $presentationJson = json_encode(
+            \Gallery\Services\gallery_presentation_normalize([
+                'version' => 1,
+                'enabled' => ($input['gallery_presentation_enabled'] ?? '') === '1',
+                'music' => ($input['gallery_presentation_music'] ?? '') === '1',
+                'autoplay' => ($input['gallery_presentation_autoplay'] ?? '') === '1',
+                'interval' => (string) ($input['gallery_presentation_interval'] ?? ''),
+                'transition' => (string) ($input['gallery_presentation_transition'] ?? ''),
+            ]),
+            JSON_THROW_ON_ERROR
+        );
+    }
     // Refuse explicit optional modes before folder, upload or branding effects.
     // A missing migration must never silently turn Automatic into a cleared
     // legacy cover; unknown inspection cannot authorize the optional write.
@@ -1341,6 +1361,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
     if ($lightboxModeReady) {
         $fields['lightbox_browsing_mode'] = $lightboxBrowsingMode;
+    }
+    if ($presentationJson !== null) {
+        $fields['presentation_json'] = $presentationJson;
     }
     if (nsfw_guard_schema_ready()) {
         $fields['nsfw_enabled'] = $nsfwEnabled;

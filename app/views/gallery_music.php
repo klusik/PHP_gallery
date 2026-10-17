@@ -141,15 +141,19 @@ function view_render_gallery_music(array $model): void
             . '<input type="file" name="music_file"'
             . ' accept=".mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.flac,.webm,.weba"'
             . ' required></label>' . '<p>' . e(t('music.upload_help')) . '</p>'
-            . '<button type="submit" name="music_action" value="upload">'
-            . e(t('music.upload'))
+            . '<button type="submit" class="music-icon" name="music_action"'
+            . ' value="upload" title="' . e(t('music.upload'))
+            . '" aria-label="' . e(t('music.upload')) . '">'
+            . view_music_control_icon('upload')
             . '</button><output data-music-status role="status"></output></form>';
         view_render_gallery_music_form_start($model);
         echo '<label><input type="checkbox" name="music_enabled" value="1"'
             . ($model['enabled'] ? ' checked' : '')
             . '> ' . e(t('music.default')) . '</label>'
-            . '<button type="submit" name="music_action" value="settings">'
-            . e(t('music.save_default'))
+            . '<button type="submit" class="music-icon" name="music_action"'
+            . ' value="settings" title="' . e(t('music.save_default'))
+            . '" aria-label="' . e(t('music.save_default')) . '">'
+            . view_music_control_icon('save')
             . '</button><output data-music-status role="status"></output></form>';
     }
     view_media_panel_end();

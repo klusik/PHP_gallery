@@ -998,8 +998,10 @@ function view_render_admin_image_move_pending_card(array $health, string $classN
  * Render one Phase 9 security/authentication schema diagnosis.
  *
  * @param string $feature Bounded capability key.
- * @param array $status Normalized Admin schema-health result.
+ * @param array{state?:string,request_id?:string,affected_objects?:list<string>}
+ *     $status Bounded Admin state, safe correlation and database object names.
  * @param string $className CSS class name for the card wrapper.
+ * @return void Emit one escaped diagnosis with actionable readiness details.
  */
 function view_render_admin_dashboard_security_schema_card(string $feature, array $status, string $className): void
 {
@@ -1098,8 +1100,10 @@ function view_render_admin_dashboard_mutation_schema_card(string $feature, array
  * Render one Phase 11 optional presentation/reporting schema diagnosis.
  *
  * @param string $feature Bounded capability key.
- * @param array $status Normalized Admin schema-health result.
+ * @param array{state?:string,request_id?:string,affected_objects?:list<string>}
+ *     $status Bounded Admin readiness, correlation and affected object names.
  * @param string $className CSS class name for the card wrapper.
+ * @return void Emit an escaped diagnosis with actionable readiness details.
  */
 function view_render_admin_dashboard_presentation_schema_card(string $feature, array $status, string $className): void
 {
@@ -1111,6 +1115,7 @@ function view_render_admin_dashboard_presentation_schema_card(string $feature, a
         'presentation_image_voting' => t('admin.dashboard.presentation_schema_feature_image_voting', 'Image voting'),
         'presentation_picture_game' => t('admin.dashboard.presentation_schema_feature_picture_game', 'Picture game'),
         'presentation_lightbox_override' => t('admin.dashboard.presentation_schema_feature_lightbox_override', 'Lightbox mode overrides'),
+        'presentation_gallery_settings' => t('presentation.settings'),
         'presentation_openai_text' => t('admin.dashboard.presentation_schema_feature_openai_text', 'OpenAI text assistance'),
         'presentation_openai_image_input' => t('admin.dashboard.presentation_schema_feature_openai_image_input', 'OpenAI image input'),
         'presentation_ai_image_analysis' => t('admin.dashboard.presentation_schema_feature_ai_image_analysis', 'AI image metadata'),

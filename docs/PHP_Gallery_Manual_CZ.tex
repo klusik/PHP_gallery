@@ -493,7 +493,8 @@ galerií} nezávislé přepínače. Nové i~aktualizované instalace bez uložen
 mají oba zapnuté; výslovné vypnutí zůstane uložené. Vypnutí skryje příslušné
 tabulky či~přehrávače a~zakáže nahrávání, přístup k~souborům i~převod PDF,
 včetně starých otevřených formulářů. Soubory, playlisty a~předvolby zůstanou
-pro opětovné zapnutí. Při vypnutí obou funkcí zmizí také záložka médií;
+pro opětovné zapnutí. Při vypnutí obou funkcí zůstává nastavení prezentace,
+pokud je~zapnutý lightbox. Při jeho vypnutí zmizí prázdná záložka;
 starý odkaz vybere Identitu. Vytvořené fotografie stránek zachovají přístupová
 pravidla. SimBrief může dál aktualizovat popis a~trasu a~zachová staré PDF.
 
@@ -506,9 +507,9 @@ zůstává pomlčkou; nečitelný soubor se~ze~součtu tiše nevynechá.
 Rozložení sleduje skutečnou šířku galerie: v~širokém okně jsou karty
 vedle sebe, při zúžení se~skládají pod sebe a~pod popis.
 
-Pod kartami tlačítko \ui{Prezentace} spustí první fotografii, výchozí
-rychlosti a~hudbu pro toto spuštění. Uloženou předvolbu hudby nezmění.
-Ikona sdílení zkopíruje odkaz na~galerii s~aktuálním jazykem
+Pod kartami tlačítko \ui{Prezentace} spustí první fotografii, nastavené
+rychlosti a~hudbu pro toto spuštění. Uloženou předvolbu běžné prezentace nezmění.
+Ikona sdílení otevře panel s~odkazem na~galerii s~aktuálním jazykem
 a~\codeword{presentation=1}, bez stránkování či~náhledu administrátora.
 Otevření odkazu spustí stejnou prezentaci po~běžné kontrole přístupu.
 Prohlížeč může vyžadovat kliknutí na~\ui{Přehrát}; odmítnutí schránky
@@ -516,6 +517,30 @@ zobrazí označitelný odkaz pro ruční kopírování.
 Stejný odkaz funguje i~anonymně po~běžné kontrole přístupu.
 Pokud prohlížeč odmítne celou obrazovku, fotografie na~počítači vyplní
 okno a~dále se~střídají; \ui{Přehrát} znovu spustí blokovanou hudbu.
+V~\ui{Upravit galerii > PDF / Hudba / Prezentace} najdete průhlednou kartu
+\ui{Nastavení prezentace}: viditelnost tlačítek, hudbu a~obě rychlosti.
+Ikona uložení používá běžný chráněný formulář galerie. Náhled a~sdílení
+použijí aktuální volby i~před uložením. Nové odkazy obsahují hudbu i~rychlosti;
+pozdější úpravy galerie je~nezmění. Návštěvník může ovládání dočasně změnit.
+Také \codeword{autoplay=1} spouští prezentaci. Při blokování zvuku zůstane
+přehrávač součástí mizejícího ovládání; pohyb jej opět ukáže.
+Kliknutí na~\ui{Přehrát} nebo fotografii zkusí zvuk i~požadovaný fullscreen.
+Zastavení či~zavření čekající hudbu zruší. Skrytí tlačítek neruší sdílené odkazy.
+Předvolby ukládá verzované \codeword{galleries.presentation_json} po~migraci
+sloupce. Výslovný zápis vyžaduje ověřené schéma; staré galerie mají zapnutou
+prezentaci, hudbu a~střední rychlosti, dokud je~nenastavíte.
+Autoplay je~ve~všech galeriích výchozí zapnutý; v~kartě jej lze vypnout.
+Panel sdílení obsahuje šoupátka rychlostí a~přepínače autoplay, hudby,
+celé obrazovky a~\ui{Bez ovládacích prvků}. Ikona kopírování zkopíruje aktuální
+adresu. Změny odkazu neukládají galerii. \codeword{autoplay=0} otevře první
+fotografii pozastavenou a~bez hudby. Volby celé obrazovky a~čistého režimu jsou
+\codeword{presentation_fullscreen=1|0} a~\codeword{presentation_exclusive=1|0}.
+Režim bez ovládání je~výchozí vypnutý; po~zapnutí skryje tlačítka, metadata
+i~diagnostiku. Ukončuje jej Esc. Omezení zvuku prohlížečem zůstávají platná.
+Každý start drží černou plochu alespoň sekundu a~do~dekódování první fotografie,
+poté ji~odhalí zvoleným přechodem a~spustí požadovanou hudbu.
+Úvod se~při opakování galerie nevrací. Zavření čekající práci zruší.
+Nativní fullscreen může vyžadovat kliknutí; náhradní režim vyplní okno prohlížeče.
 
 Spouštěče PDF a~Hudba ukazují počty souborů vedle popisu, na~úzké
 obrazovce pod ním. Kliknutí otevře malý překryvný panel. Seznam má

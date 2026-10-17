@@ -211,10 +211,13 @@ function view_render_gallery_pdf_documents(array $model): void
             echo '<label><input type="checkbox" name="allow_new" value="1"> '
                 . e(t('pdf.confirm_new', 'Create a new result if the source, DPI or destination'
                 . ' differs; preserve earlier results.')) . '</label>';
-            echo '<button type="submit" class="button secondary">'
-                . e(t('pdf.convert', 'Convert PDF pages to PNG')) . '</button>'
-                . '<button type="button" class="button secondary"'
-                . ' data-pdf-cancel hidden>' . e(t('pdf.cancel', 'Cancel'))
+            echo '<button type="submit" class="gallery-pdf-icon" title="'
+                . e(t('pdf.convert')) . '" aria-label="' . e(t('pdf.convert'))
+                . '">' . view_gallery_pdf_icon('convert') . '</button>'
+                . '<button type="button" class="gallery-pdf-icon"'
+                . ' title="' . e(t('pdf.cancel')) . '" aria-label="'
+                . e(t('pdf.cancel')) . '" data-pdf-cancel hidden>'
+                . view_gallery_pdf_icon('cancel')
                 . '</button><div data-upload-progress hidden></div>'
                 . '<output role="status" aria-live="polite" data-pdf-status>'
                 . '</output></form>';
@@ -234,10 +237,14 @@ function view_render_gallery_pdf_documents(array $model): void
                     . e(t('pdf.confirm_manage', 'Confirm replacement or deletion'
                         . ' of this PDF. Generated photos are preserved.'))
                     . '</label>';
-                echo '<button name="pdf_action" value="replace" type="submit">'
-                    . e(t('pdf.replace', 'Replace PDF')) . '</button>'
-                    . '<button name="pdf_action" value="delete" type="submit">'
-                    . e(t('pdf.delete', 'Delete PDF')) . '</button>'
+                echo '<button name="pdf_action" value="replace" type="submit"'
+                    . ' class="gallery-pdf-icon" title="' . e(t('pdf.replace'))
+                    . '" aria-label="' . e(t('pdf.replace')) . '">'
+                    . view_gallery_pdf_icon('replace') . '</button>'
+                    . '<button name="pdf_action" value="delete" type="submit"'
+                    . ' class="gallery-pdf-icon" title="' . e(t('pdf.delete'))
+                    . '" aria-label="' . e(t('pdf.delete')) . '">'
+                    . view_gallery_pdf_icon('delete') . '</button>'
                     . '<output data-pdf-status role="status" aria-live="polite">'
                     . '</output></form></details>';
             }
@@ -259,7 +266,9 @@ function view_render_gallery_pdf_documents(array $model): void
             . ' accept=".pdf,application/pdf" required></label>';
         view_render_gallery_pdf_destination(true);
         view_render_gallery_pdf_resolution($model['dpi']);
-        echo '<button type="submit">' . e(t('pdf.upload', 'Upload PDF'))
+        echo '<button type="submit" class="gallery-pdf-icon" title="'
+            . e(t('pdf.upload')) . '" aria-label="' . e(t('pdf.upload')) . '">'
+            . view_gallery_pdf_icon('upload')
             . '</button>'
             . '<output data-pdf-status role="status" aria-live="polite">'
             . '</output></form>';
@@ -270,12 +279,16 @@ function view_render_gallery_pdf_documents(array $model): void
 
 /**
  * Return a decorative text-sized SVG for one gallery PDF action.
- * @param string $action View, download, convert, delete, show or hide action identifier.
+ * @param string $action View, download, convert, upload, replace, cancel,
+ *     delete, show or hide action identifier.
  * @return string Static SVG markup; accessible names belong to the enclosing control.
  */
 function view_gallery_pdf_icon(string $action): string
 {
     $path = match ($action) {
+        'upload' => '<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
+        'replace' => '<path d="M4 10a8 8 0 0 1 14-4l2 2M20 3v5h-5M20 14a8 8 0 0 1-14 4l-2-2M4 21v-5h5"/>',
+        'cancel' => '<path d="m6 6 12 12M6 18 18 6"/>',
         'download' => '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
         'convert' => '<path d="M4 4h11v6M4 4v16h16v-9M14 3l6 6h-6M8 13h8m-8 4h5"/>',
         'delete' => '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',

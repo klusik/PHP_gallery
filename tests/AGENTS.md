@@ -51,6 +51,7 @@ require a browser/database only when the behavior needs one.
   and scroll assertions after completion, accounting for prior validation reflow.
 - Audit every source-extraction dependency against its adapter table, including
   single/bulk owned delegates and argument shapes. Name missing adapters safely.
+  Include stop/cleanup delegates reached only by a newly added terminal path.
 - Assert negative HTTP status, error contract and unchanged persistence separately;
   report safe test-authored expected/actual values and assertion call sites.
 

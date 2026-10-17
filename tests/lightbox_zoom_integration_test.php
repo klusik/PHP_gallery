@@ -123,8 +123,8 @@ foreach (['fetch(', 'localStorage', 'sessionStorage', 'document.cookie', 'XMLHtt
 }
 
 lightbox_zoom_integration_assert(
-    str_contains($publicEntrypointSource, 'lightbox-deferred.js?v=20261017-presentation-link-v2')
-        && str_contains($authenticatedEntrypointSource, 'lightbox-deferred.js?v=20261017-presentation-link-v2'),
+    str_contains($publicEntrypointSource, 'lightbox-deferred.js?v=20261017-presentation-sharing-v3')
+        && str_contains($authenticatedEntrypointSource, 'lightbox-deferred.js?v=20261017-presentation-sharing-v3'),
     'Anonymous and authenticated browser entrypoints must invalidate the deferred lightbox cache together.'
 );
 lightbox_zoom_integration_assert(

@@ -404,6 +404,9 @@ function write_gallery_sidecar(array $gallery): bool
             $data['lightbox_browsing_mode'] = $lightboxBrowsingMode;
         }
     }
+    if (($gallery['presentation_json'] ?? null) !== null) {
+        $data['presentation'] = gallery_presentation_settings($gallery);
+    }
     $breadcrumbStyle = gallery_breadcrumb_style_override((int) $gallery['id']);
     if ($breadcrumbStyle !== BREADCRUMB_STYLE_INHERIT) {
         $data['breadcrumb_style'] = $breadcrumbStyle;
@@ -472,7 +475,16 @@ function write_gallery_sidecar(array $gallery): bool
  * hierarchy, even when those parent folders contain no direct photos.
  *
  * @param string $folderPath Folder path filesystem path.
- * @return array{folder_path:string,title:mixed,description:mixed,content_language:?string,translations:array<array-key,mixed>,gallery_date:?string,gallery_date_end:?string,visibility:string,voting_enabled:int,show_filenames:int,description_layout:?string,count_badge_visibility:?string,lightbox_browsing_mode:?string,breadcrumb_style:string,grid_columns:?int,grid_rows:?int,grid_use_for_subgalleries:int,thumbnail_min_size:?int,thumbnail_max_size:?int,banner_image_path:mixed,logo_image_path:mixed,separator_image_path:mixed,access_mode:mixed,access_listing:mixed,sort_order:int} Normalized metadata for one candidate gallery folder.
+ * @return array{folder_path:string,title:mixed,description:mixed,
+ *     content_language:?string,translations:array<array-key,mixed>,
+ *     gallery_date:?string,gallery_date_end:?string,visibility:string,
+ *     voting_enabled:int,show_filenames:int,description_layout:?string,
+ *     count_badge_visibility:?string,lightbox_browsing_mode:?string,
+ *     presentation_json:?string,breadcrumb_style:string,grid_columns:?int,
+ *     grid_rows:?int,grid_use_for_subgalleries:int,thumbnail_min_size:?int,
+ *     thumbnail_max_size:?int,banner_image_path:mixed,logo_image_path:mixed,
+ *     separator_image_path:mixed,access_mode:mixed,access_listing:mixed,
+ *     sort_order:int} Normalized metadata for one candidate gallery folder.
  */
 function gallery_folder_candidate_metadata(string $folderPath): array
 {
@@ -497,6 +509,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
         'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
         'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value($metadata['lightbox_browsing_mode'] ?? null),
+        'presentation_json' => is_array($metadata['presentation'] ?? null)
+            ? json_encode(gallery_presentation_normalize($metadata['presentation']),
+                JSON_THROW_ON_ERROR) : null,
         'breadcrumb_style' => breadcrumb_style_normalize($metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
@@ -557,6 +572,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
 
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
+    if (($candidate['presentation_json'] ?? null) !== null) {
+        gallery_presentation_assert_writable('gallery_sidecar_import.presentation');
+    }
     if ((int) ($candidate['voting_enabled'] ?? 0) === 1) {
         presentation_schema_assert_write_available(
             presentation_voting_schema_status(),
@@ -626,6 +644,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     }
     if (gallery_lightbox_browsing_mode_schema_ready()) {
         $fields['lightbox_browsing_mode'] = $lightboxBrowsingMode;
+    }
+    if (($candidate['presentation_json'] ?? null) !== null) {
+        $fields['presentation_json'] = $candidate['presentation_json'];
     }
     if (gallery_date_schema_ready()) {
         $fields['gallery_date'] = $galleryDate;
@@ -714,6 +735,13 @@ function create_empty_gallery(array $input): array
  */
 function create_empty_gallery_owned(array $input): array
 {
+    $presentation = array_key_exists('presentation', $input)
+        ? gallery_presentation_normalize(
+            is_array($input['presentation']) ? $input['presentation'] : null
+        ) : null;
+    if ($presentation !== null) {
+        gallery_presentation_assert_writable('gallery_create.presentation');
+    }
     // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = trim((string) ($input['title'] ?? ''));
     if ($title === '') {
@@ -822,6 +850,9 @@ function create_empty_gallery_owned(array $input): array
     }
     if ($lightboxBrowsingMode !== null) {
         $sidecarData['lightbox_browsing_mode'] = $lightboxBrowsingMode;
+    }
+    if ($presentation !== null) {
+        $sidecarData['presentation'] = $presentation;
     }
     // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, $sidecarData);

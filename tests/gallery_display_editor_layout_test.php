@@ -50,6 +50,7 @@ namespace Gallery\Views {
 
 namespace {
     require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
+    require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
     require_once dirname(__DIR__) . '/app/views/admin_gallery_forms.php';
 
     /** Reject a missing Display editor postcondition. @param bool $condition Observed HTML result. @param string $message Failure explanation. @return void Throw on failure. */

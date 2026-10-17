@@ -27,11 +27,25 @@ License: MIT License (see LICENSE file in repository)
  data-preview-src="/presentation-image.svg?photo=2"
  data-full-src="/presentation-image.svg?photo=2" data-title="Photo two">Two</a>
 <script type="application/json" data-gallery-music-playlist data-music-gallery="42">
-{"galleryId":42,"enabled":false,"tracks":[
+{"galleryId":42,"enabled":true,"tracks":[
   {"id":"one","url":"/track-one","title":"One"}
 ]}
 </script>
-<div class="lightbox" data-lightbox data-lightbox-slideshow-enabled="1" hidden>
+<div class="lightbox" data-lightbox data-lightbox-slideshow-enabled="1"
+ data-presentation-music="0" data-presentation-interval="slow"
+ data-presentation-transition="slow" hidden>
+ <div class="lightbox-slideshow-speeds lightbox-hud" data-lightbox-slideshow-speeds>
+  <label>Interval<input type="range" min="0" max="2" value="1"
+   data-lightbox-slideshow-speed="interval">
+   <span data-lightbox-speed-option>Slow</span>
+   <span data-lightbox-speed-option>Medium</span>
+   <span data-lightbox-speed-option>Fast</span></label>
+  <label>Transition<input type="range" min="0" max="2" value="1"
+   data-lightbox-slideshow-speed="transition">
+   <span data-lightbox-speed-option>Slow</span>
+   <span data-lightbox-speed-option>Medium</span>
+   <span data-lightbox-speed-option>Fast</span></label>
+ </div>
  <button class="lightbox-close" data-lightbox-action="close">Close</button>
  <button class="lightbox-nav prev" data-lightbox-action="previous">Previous</button>
  <figure>
@@ -54,6 +68,7 @@ License: MIT License (see LICENSE file in repository)
 </div>
 <script type="module">
 const overlay = document.querySelector('[data-lightbox]');
+const fixtureMode = new URLSearchParams(location.search).get('fixture_audio');
 const check = (condition, message) => {
     if (!condition) throw new Error(message);
 };
@@ -82,7 +97,7 @@ class PresentationAudio extends parent.Audio {
      * @returns {Promise<void>} Initial refusal or successful explicit playback.
      */
     play() {
-        if (!this.attempted) {
+        if (!this.attempted && fixtureMode === 'blocked') {
             this.attempted = true;
             return Promise.reject(new DOMException('Gesture', 'NotAllowedError'));
         }
@@ -99,10 +114,17 @@ try {
     // owned node rather than retaining the initially empty placeholder.
     const activeImage = () => overlay.querySelector('[data-lightbox-img]');
     const counter = overlay.querySelector('[data-lightbox-counter]');
-    await until(() => overlay.classList.contains('is-slideshow')
-        && activeImage().dataset.lightboxImageId === '1'
+    await until(() => !overlay.hidden, 'launch shell');
+    check(overlay.classList.contains('is-presentation-intro')
+        && PresentationAudio.instances.every(item => item.paused),
+        'Opening hold did not keep the photo and soundtrack black/silent');
+    await until(() => activeImage().dataset.lightboxImageId === '1'
         && activeImage().complete && activeImage().naturalWidth > 0,
         'first decoded photo');
+    await until(() => !overlay.classList.contains('is-presentation-intro'),
+        'decoded first-photo reveal');
+    await Promise.all(overlay.querySelector('[data-lightbox-stage]')
+        .getAnimations().map(item => item.finished));
     check(counter.textContent === '1 / 2'
         && activeImage().dataset.lightboxImageId === '1',
         'Link did not start at photo one');
@@ -117,28 +139,71 @@ try {
         && activeImage().getBoundingClientRect().width > 0,
         'Decoded photo was clipped in an empty stage');
     const status = overlay.querySelector('[data-music-playback-status]');
-    await until(() => status.textContent === 'Press Play to retry',
-        'autoplay refusal');
-    overlay.querySelector('[data-music-action="play"]').click();
-    await until(() => status.textContent === '', 'explicit Play retry');
-    check(PresentationAudio.instances.some(item => !item.paused),
-        'Explicit Play did not recover from autoplay refusal');
-    // The counter records navigation intent before the decoded target commits.
-    await until(() => counter.textContent === '2 / 2'
-        && activeImage().dataset.lightboxImageId === '2'
-        && activeImage().complete && activeImage().naturalWidth > 0,
-        'scheduled second photo');
-    check(activeImage().dataset.lightboxImageId === '2'
-        && stage.getBoundingClientRect().height > 0,
-        'Scheduled photo lost the fullscreen stage: id='
-            + activeImage().dataset.lightboxImageId
-            + ', height=' + stage.getBoundingClientRect().height
-            + ', classes=' + overlay.className);
-    overlay.querySelector('[data-lightbox-action="close"]').click();
-    check(overlay.hidden && !overlay.classList.contains('is-css-fullscreen')
-        && PresentationAudio.instances.every(item => item.paused),
-        'Closing presentation retained its shell or soundtrack');
-    parent.postMessage({kind: 'presentation-fixture', ok: true}, location.origin);
+    check(Array.from(overlay.querySelectorAll(
+        '[data-lightbox-slideshow-speed]'
+    )).every(input => input.value === '2'),
+        'Link did not override the saved slow speeds');
+    const music = overlay.querySelector('[data-lightbox-music]');
+    if (fixtureMode === 'blocked') {
+        await until(() => status.textContent === 'Press Play to retry',
+            'autoplay refusal');
+        overlay.classList.remove('is-ui-visible');
+        check(music.classList.contains('is-awaiting-gesture')
+            && getComputedStyle(music).visibility === 'hidden',
+            'Blocked audio player did not hide with the idle HUD');
+        overlay.dispatchEvent(new MouseEvent('mousemove', {bubbles: true}));
+        check(getComputedStyle(music).visibility === 'visible',
+            'HUD activity did not restore the requested audio controls');
+        overlay.querySelector('[data-music-action="play"]').click();
+        await until(() => status.textContent === '', 'explicit Play retry');
+    }
+    const ownedAudio = PresentationAudio.instances.filter(
+        item => item instanceof PresentationAudio
+    );
+    if (fixtureMode === 'muted' || fixtureMode === 'paused') {
+        check(ownedAudio.every(item => item.calls.length === 0 && item.paused)
+            && !music.classList.contains('is-awaiting-gesture'),
+            'Explicit link silence did not override default-on music');
+    } else {
+        check(ownedAudio.some(item => !item.paused),
+            'Requested soundtrack did not start or recover');
+    }
+    if (fixtureMode === 'paused') {
+        check(!overlay.classList.contains('is-slideshow')
+            && counter.textContent === '1 / 2',
+            'Autoplay-off link did not open paused at photo one');
+        overlay.querySelector('[data-lightbox-action="close"]').click();
+        parent.postMessage({kind: 'presentation-fixture', ok: true}, location.origin);
+    } else {
+        // The counter records navigation intent before the decoded target commits.
+        await until(() => counter.textContent === '2 / 2'
+            && activeImage().dataset.lightboxImageId === '2'
+            && activeImage().complete && activeImage().naturalWidth > 0,
+            'scheduled second photo');
+        check(activeImage().dataset.lightboxImageId === '2'
+            && stage.getBoundingClientRect().height > 0,
+            'Scheduled photo lost the fullscreen stage: id='
+                + activeImage().dataset.lightboxImageId
+                + ', height=' + stage.getBoundingClientRect().height
+                + ', classes=' + overlay.className);
+        if (fixtureMode === 'exclusive') {
+            overlay.classList.add('is-ui-visible');
+            check(Array.from(overlay.querySelectorAll('[data-lightbox-action]'))
+                .every(control => getComputedStyle(control).display === 'none'),
+                'Exclusive link exposed controls after HUD activity');
+            await until(() => counter.textContent === '1 / 2'
+                && activeImage().dataset.lightboxImageId === '1', 'first loop');
+            check(!overlay.classList.contains('is-presentation-intro'),
+                'Loop replayed the black opening');
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Escape', bubbles: true, cancelable: true,
+            }));
+        } else overlay.querySelector('[data-lightbox-action="close"]').click();
+        check(overlay.hidden && !overlay.classList.contains('is-css-fullscreen')
+            && PresentationAudio.instances.every(item => item.paused),
+            'Closing presentation retained its shell or soundtrack');
+        parent.postMessage({kind: 'presentation-fixture', ok: true}, location.origin);
+    }
 } catch (error) {
     parent.postMessage({kind: 'presentation-fixture', ok: false,
         message: error.stack || String(error)}, location.origin);

@@ -286,16 +286,27 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
 }
 
 /**
- * Handles render lightbox logic for the gallery application.
+ * Render the authorized photo viewer with prepared gallery playback defaults.
  *
- * @param mixed $votingAllowed Input used by this operation.
+ * @param bool $votingAllowed Whether vote controls are available.
  * @param bool $mapsAllowed Maps allowed value.
  * @param string $galleryMapUrl Gallery map url URL.
  * @param string $galleryMapTitle Gallery map title value.
  * @param string $lightboxBrowsingMode Lightbox browsing mode value.
  * @param bool $slideshowAllowed Whether slideshow controls and keyboard activation are available.
+ * @param array{autoplay?:bool,music?:bool,interval?:string,transition?:string} $presentation
+ *     Gallery presentation defaults; omitted fields preserve existing behavior.
+ * @return void Emit the authorized viewer with bounded playback defaults.
  */
-function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, string $galleryMapUrl = '', string $galleryMapTitle = '', string $lightboxBrowsingMode = 'single', bool $slideshowAllowed = true): void
+function render_lightbox(
+    bool $votingAllowed = true,
+    bool $mapsAllowed = false,
+    string $galleryMapUrl = '',
+    string $galleryMapTitle = '',
+    string $lightboxBrowsingMode = 'single',
+    bool $slideshowAllowed = true,
+    array $presentation = []
+): void
 {
     // $lightboxBrowsingMode stores the effective public mode already resolved by the gallery controller.
     $lightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($lightboxBrowsingMode);
@@ -308,6 +319,7 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, 
         'gallery_map_title' => $galleryMapTitle,
         'browsing_mode' => $lightboxBrowsingMode,
         'slideshow_allowed' => $slideshowAllowed,
+        'presentation' => $presentation,
         'viewer_favourite_html' => $viewerFavouriteHtml,
     ]);
 }

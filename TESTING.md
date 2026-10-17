@@ -32,6 +32,23 @@ startup, waits for scheduled photo two, retries controlled autoplay refusal and
 asserts close/audio cleanup. This covers desktop and narrow viewport dimensions.
 The real anonymous HTTP gallery workflow accepts `presentation=1`; guard probes
 retain unknown-parameter and non-gallery-route rejection.
+The music browser fixture runs denied, allowed, muted, paused and exclusive URL launches,
+asserts that link presets override saved defaults, and verifies blocked-audio controls
+hide with the HUD and return on movement. It also checks that explicit silence stops existing page
+music and that Stop cancels pending activation. The production slideshow closure
+covers independent link-selected timing presets and bounded invalid-value fallback.
+The database workflow persists versioned preferences, checks stale/anonymous
+refusal, verifies sidecar export and tests public launcher visibility plus complete
+snapshot parameters. Native form association is asserted by the isolated gallery
+edit fixture. Manual acceptance additionally covers saving from the mounted drawer,
+preview/copy after changing values, window resizing, and real sound activation.
+The configurable share disclosure must open before copy, preserve the locale,
+default autoplay ON/exclusive OFF, serialize every control, and retain selectable
+clipboard fallback. The production closure checks decode-gated black hold,
+audio timing, scheduler handoff and cancellation. Browser coverage checks initial
+silence, fullscreen geometry, paused launch, hidden exclusive controls, Escape
+cleanup and no repeated black hold on loop. Native browser-chrome fullscreen and
+real audible autoplay permissions remain manual device checks.
 
 Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
 and music count/duration against the opened lists, including unknown metadata;
@@ -117,8 +134,9 @@ The existing real database/HTTP gallery workflow saves both switches through
 the rendered Admin Features form. Each independent OFF combination must hide
 the matching physical/Smart player or document table, remove disabled picker
 formats and conversion controls, keep galleries working and leave no empty
-attachment column. Both masters OFF omit the shared editor media tab and
-normalize an old selected-tab URL back to the available default.
+attachment column. Both attachment masters OFF retain core presentation settings.
+With lightbox OFF as well, the empty media tab is omitted and an old tab URL
+normalizes back to the available default.
 Direct/legacy PDF and audio GET/HEAD requests are denied;
 stale PDF/music upload forms, conversion actions and prepared page batches fail
 at the server boundary without changing retained hashes. Re-enable restores

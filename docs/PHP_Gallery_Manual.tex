@@ -496,7 +496,8 @@ are~independent switches. Both default ON for~new installations and~upgrades
 without a~saved choice; an~explicit OFF remains saved. OFF hides the~matching
 tables/players and~prevents uploads, delivery and~PDF conversion, including
 stale forms. Files, playlists and~preferences remain stored for~re-enabling.
-With both OFF, the~editor omits its~media tab; old tab URLs select Identity.
+With both OFF, core Presentation settings remain when lightbox is~enabled.
+With lightbox also OFF, the~empty tab is~omitted; old tab URLs select Identity.
 Existing converted page photographs keep their normal access rules. SimBrief
 can~still refresh descriptions/routes with PDF OFF and~keeps an~old original.
 
@@ -509,9 +510,9 @@ remains a~dash; totals never silently omit an~unreadable original.
 Cards use~the~gallery's available width: wide windows place them beside
 each other, narrower windows stack them and~move them below the~description.
 
-Below the~cards, \ui{Presentation} starts at~the~first photo with default
-speeds and~music enabled for~that launch. The~saved music preference stays
-unchanged. The~share icon copies a~gallery link with the~active language
+Below the~cards, \ui{Presentation} starts at~the~first photo with configured
+speeds and~soundtrack for~that launch. The~saved slideshow music preference stays
+unchanged. The~share icon opens an~overlay with a~gallery link with the~active language
 and~\codeword{presentation=1}, omitting pagination and~preview state.
 Opening it~starts the~same presentation after ordinary access checks.
 Browser autoplay restrictions may~require \ui{Play}; denied clipboard
@@ -519,6 +520,31 @@ access reveals a~selectable link for~manual copying.
 Anonymous visitors can~use~the~same link after ordinary access checks.
 If~native fullscreen is~denied, desktop photos fill the~browser viewport
 and~continue advancing; \ui{Play} retries audio blocked by~browser rules.
+Use~\ui{Edit gallery > PDF / Music / Presentation} and~its~transparent
+\ui{Presentation settings} card to~choose public button visibility, music,
+photo speed and~transition speed. The~Save icon uses the~ordinary guarded
+gallery form. Preview and~Share use current selections, including unsaved ones.
+New links embed music and~both speeds; later gallery edits do~not~change
+those snapshots. Visitors can~change playback controls temporarily.
+\codeword{autoplay=1} also starts a~presentation. If~sound needs activation,
+the~player hides with the~idle HUD; movement shows it~again.
+Click \ui{Play} or~the~photo to~retry sound and~requested native fullscreen.
+Stop or~Close cancels pending audio. Hiding public buttons does~not~revoke links.
+Defaults use versioned \codeword{galleries.presentation_json} after the~column
+migration. Explicit writes require verified schema; older galleries retain
+enabled, music and~medium defaults until configured.
+Autoplay defaults ON for~every gallery until explicitly disabled in~the~card.
+The~share overlay has~speed sliders and~switches for~autoplay, music,
+fullscreen and~\ui{Without controls}; its~Copy icon copies the~current URL.
+Share drafts do~not~save gallery settings. \codeword{autoplay=0} opens photo
+one paused and~silent. Fullscreen and~exclusive choices use
+\codeword{presentation_fullscreen=1|0} and~\codeword{presentation_exclusive=1|0}.
+Without controls defaults OFF; enabling it~hides controls, metadata
+and~diagnostics while Esc exits. Browser sound restrictions still apply.
+Each launch holds black for~at~least one second and~until photo one decodes,
+then reveals it~with the~selected transition and~starts requested music.
+This opening never repeats at~the~gallery loop. Closing cancels pending work.
+Native fullscreen may~need a~click; the~fallback fills the~browser viewport.
 
 PDF and~Music launchers show file counts beside the~description,
 or~below it~on~narrow screens. Click a~launcher to~open a~small overlay.

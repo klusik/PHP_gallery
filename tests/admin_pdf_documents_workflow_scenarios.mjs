@@ -436,18 +436,23 @@ const editorSources = await Promise.all(editorSourcePaths.map(path =>
 const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
 assert.match(overviewSource,
-    /'id' => 'admin-edit-documents',\s*'label' => t\('pdf\.documents'/,
-    'A dedicated, already localized Documents / PDFs tab must exist.');
+    /'id' => 'admin-edit-documents',\s*'label' => t\('presentation\.media_tab'/,
+    'A dedicated localized PDF/Music/Presentation tab must exist.');
 assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
     'The gallery editor must load the Documents tab controller.');
 assert.match(editActionsSource, /'admin-edit-documents'/,
     'The server must recognize Documents as a valid redirect/selected tab.');
-assert.match(documentsSource, /echo admin_gallery_pdf_documents_html\(\$gallery\)/,
+assert.match(documentsSource, /'documents_html' => admin_gallery_pdf_documents_html\(\$gallery\)/,
     'The document manager must belong to the Documents tab.');
-assert.match(documentsSource, /echo admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
+assert.match(documentsSource, /'simbrief_html' => admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
     'The historical SimBrief PDF attachment must also belong to Documents.');
-assert.match(documentsSource, /render_admin_tab_panel\('admin-edit-documents'/,
-    'The Documents contents must be enclosed in their own tab panel.');
+assert.match(documentsSource, /view_render_admin_gallery_media_tab\(/,
+    'The prepared media fragments must use the presentation-owned tab wrapper.');
+const mediaView = await readFile(new URL(
+    '../app/views/admin_gallery_edit_tabs.php', import.meta.url
+), 'utf8');
+assert.match(mediaView, /view_render_admin_tab_panel\('admin-edit-documents'/,
+    'The media view must retain its existing native tab identity.');
 assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
     'The API tab must not render PDF or SimBrief document forms.');
 const closeSettingsFormAt = editorSource.indexOf('    view_render_admin_gallery_editor_form_close([');

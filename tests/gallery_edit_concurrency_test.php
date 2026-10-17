@@ -18,6 +18,7 @@ require_once __DIR__ . '/support/gallery_workflow_safety.php';
 require_once dirname(__DIR__) . '/app/views/admin_chrome.php';
 require_once dirname(__DIR__) . '/app/views/admin_ui.php';
 require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
+require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
 
 use Gallery\Services\GalleryEditUnavailable;
 use function Gallery\Services\gallery_edit_begin;
@@ -43,10 +44,15 @@ $comparison = gallery_edit_comparison($gallery);
 check($comparison === ['id' => 8, 'edit_revision' => '17', 'title' => 'Original'], 'Comparison exposed non-allowlisted fields.');
 $draft = gallery_edit_review_draft($gallery + ['access_password' => 'private-submitted-password',
     'csrf_token' => 'private-csrf', 'folder_name' => '</textarea><script>unsafe</script>', 'tags' => 'keep these tags',
-    'gallery_thumbnail_bounds_recursive' => '1', 'remove_branding_logo' => '1']);
+    'gallery_thumbnail_bounds_recursive' => '1', 'remove_branding_logo' => '1',
+    'gallery_presentation_present' => '1', 'gallery_presentation_music' => '0',
+    'gallery_presentation_interval' => 'fast']);
 check(!isset($draft['id'], $draft['edit_revision'], $draft['access_password']), 'Draft contains transport or credential fields.');
 check(($draft['gallery_thumbnail_bounds_recursive'] ?? '') === '1' && ($draft['remove_branding_logo'] ?? '') === '1',
     'Review dropped an entered recursive or asset-removal choice.');
+check(($draft['gallery_presentation_music'] ?? '') === '0'
+    && ($draft['gallery_presentation_interval'] ?? '') === 'fast',
+    'Conflict review dropped entered presentation preferences.');
 ob_start();
 view_render_admin_gallery_editor_form_open(['gallery_id' => 8, 'edit_revision' => gallery_edit_revision($gallery)]);
 view_render_admin_gallery_identity_tab([
@@ -58,6 +64,19 @@ view_render_admin_gallery_identity_tab([
 ]);
 view_render_admin_gallery_editor_form_close(['save_label' => 'Save gallery', 'help' => 'Save every shared tab.']);
 $form = (string) ob_get_clean();
+ob_start();
+\Gallery\Views\view_render_admin_gallery_presentation([
+    'gallery_id' => 8, 'ready' => true,
+    'settings' => ['version' => 1, 'enabled' => true, 'autoplay' => true, 'music' => false,
+        'interval' => 'fast', 'transition' => 'slow'],
+    'url' => 'https://gallery.test/?presentation=1&presentation_music=0',
+]);
+$presentation = (string) ob_get_clean();
+check(str_contains($form, 'id="admin-gallery-settings-8"')
+    && substr_count($presentation, 'form="admin-gallery-settings-8"') === 7
+    && !str_contains($presentation, '<form')
+    && str_contains($presentation, 'data-gallery-presentation-editor'),
+    'Presentation must use native association with the existing guarded form.');
 check(str_contains($form, 'name="edit_revision" value="17"'), 'Form omitted exact prepared revision.');
 check(str_contains($form, 'data-admin-gallery-settings-form')
     && str_contains($form, 'id="admin-edit-identity"')

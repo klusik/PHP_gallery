@@ -12,6 +12,21 @@ Version 0.120 adds no schema migration, table, column or index. Its database cha
 
 ## Gallery music storage
 
+Physical-gallery presentation defaults use nullable `galleries.presentation_json`,
+added by `202610170001_gallery_presentation_settings.php`. Its version-1 object
+contains launcher visibility, default-ON autoplay, presentation music and the slow/medium/fast interval
+and transition presets. Missing, malformed or unknown versions render the prior
+enabled/music/medium defaults. Public reads consume the fetched gallery row without
+new schema probes. Explicit writes require verified column readiness before any
+editor filesystem effects and advance the existing edit revision in the same
+gallery update. Older forms omit the marker and preserve stored settings.
+Gallery sidecars, folder import, Organizer-created children and Trash restoration
+retain the supported preferences. The migration uses ordinary ALTER TABLE only;
+duplicate-column recovery remains owned by the existing migration runner.
+The lazy `presentation_gallery_settings` health resolver shares the same schema
+authority and lightbox capability gate. Link-only fullscreen/exclusive choices
+do not require additional persistence.
+
 PDF/music capability and accounting changes add no tables, columns or migrations.
 The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
 `feature_flag.gallery_music.enabled` use existing `app_settings` storage.

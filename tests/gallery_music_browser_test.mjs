@@ -32,11 +32,27 @@ body { margin: 8px; font: 16px sans-serif; }
 <aside data-admin-side-panel data-open="1"><div data-music-mount></div></aside>
 <div data-fixture-music></div>
 <div data-fixture-presentation data-gallery-presentation>
-<a href="/gallery?lang=en&amp;presentation=1"
- data-gallery-presentation-share>Share presentation</a>
+<details data-gallery-media-widget data-presentation-share-widget>
+<summary>Share presentation</summary>
+<section id="share-fixture" data-gallery-media-panel data-presentation-share-panel
+ data-presentation-url="http://127.0.0.1/gallery?lang=en&amp;presentation=1">
+<input type="checkbox" data-share-option="autoplay">
+<input type="checkbox" data-share-option="music">
+<input type="checkbox" data-share-option="fullscreen">
+<input type="checkbox" data-share-option="exclusive">
+<label><input type="range" min="0" max="2" data-share-option="interval">
+<output></output><span hidden data-share-speed="slow">Slow</span>
+<span hidden data-share-speed="medium">Medium</span>
+<span hidden data-share-speed="fast">Fast</span></label>
+<label><input type="range" min="0" max="2" data-share-option="transition">
+<output></output><span hidden data-share-speed="slow">Slow</span>
+<span hidden data-share-speed="medium">Medium</span>
+<span hidden data-share-speed="fast">Fast</span></label>
 <output data-presentation-status data-copied="Copied"
  data-copy-failed="Copy manually"></output>
-<input type="url" readonly hidden data-presentation-copy>
+<input type="url" readonly data-presentation-copy>
+<button type="button" data-presentation-copy-button>Copy</button>
+</section></details>
 </div>
 <div data-lightbox><div data-lightbox-music data-music-gallery="42"
  data-music-playback-error="Press Play to retry">
@@ -50,7 +66,7 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261017-media-summary-v1';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261017-presentation-sharing-v3';
 import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
@@ -139,6 +155,14 @@ try {
     check(audio.src === '/track-two', 'Row play did not select its original');
     player.stop();
     check(audio.src === '' && audio.paused, 'Slideshow stop left audio active');
+    player.command('play', 'two');
+    player.start(false, true);
+    check(audio.src === '' && audio.paused,
+        'Explicit silent presentation retained existing page music');
+    player.command('play', '', true);
+    player.stop();
+    check(audio.src === '' && audio.paused,
+        'Silent presentation lost ownership of a later visitor Play action');
     player.start();
     check(audio.src === '/track-one', 'Restart did not reset track');
     player.destroy();
@@ -169,8 +193,19 @@ try {
     check(silentAudio.paused && silentAudio.src === ''
         && controls.querySelector('output').textContent !== '',
         'Autoplay rejection was not contained');
-    silent.command('play', '', true);
+    silent.resumeRequested();
     check(silentAudio.src === '/track-one', 'Gesture retry failed');
+    silentAudio.results.push(Promise.reject(
+        new DOMException('Gesture required', 'NotAllowedError')
+    ));
+    silent.start(true);
+    await turn();
+    silent.stop();
+    const stoppedCalls = silentAudio.calls.length;
+    silent.resumeRequested();
+    check(silentAudio.calls.length === stoppedCalls && silentAudio.src === '',
+        'A stopped soundtrack resumed from an obsolete activation request');
+    silent.start(true);
     let rejectStale;
     silentAudio.results.push(new Promise((_resolve, reject) => {
         rejectStale = reject;
@@ -366,8 +401,10 @@ try {
         'Duration observation started audible playback');
 
     const presentation = document.querySelector('[data-fixture-presentation]');
-    const share = presentation.querySelector('a');
-    const copyInput = presentation.querySelector('input');
+    const share = presentation.querySelector('summary');
+    const copyInput = presentation.querySelector('[data-presentation-copy]');
+    const copyButton = presentation.querySelector('[data-presentation-copy-button]');
+    const shareStatus = presentation.querySelector('[data-presentation-status]');
     let copiedUrl = '';
     Object.defineProperty(navigator, 'clipboard', {configurable: true,
         value: {writeText: async value => { copiedUrl = value; }},
@@ -375,18 +412,40 @@ try {
     const sharePage = location.href;
     share.click();
     await turn();
-    check(copiedUrl === share.href && location.href === sharePage
-        && presentation.querySelector('output').textContent === 'Copied',
-        'Share did not copy the prepared URL without navigation');
+    check(!copiedUrl && presentation.querySelector('details').open,
+        'Share must open a configurable applet before copying');
+    check(presentation.querySelector('[data-share-option="autoplay"]').checked
+        && !presentation.querySelector('[data-share-option="exclusive"]').checked,
+        'Autoplay must default on and exclusive playback off');
+    for (const key of ['autoplay', 'music', 'exclusive', 'interval', 'transition']) {
+        const input = presentation.querySelector('[data-share-option="' + key + '"]');
+        if (input.type === 'checkbox') input.checked = key === 'exclusive';
+        else input.value = '2';
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+    }
+    const configured = new URL(copyInput.value);
+    check(configured.searchParams.get('autoplay') === '0'
+        && configured.searchParams.get('presentation_music') === '0'
+        && configured.searchParams.get('presentation_exclusive') === '1'
+        && configured.searchParams.get('presentation_interval') === 'fast'
+        && configured.searchParams.get('presentation_transition') === 'fast'
+        && configured.searchParams.get('lang') === 'en',
+        'Share controls did not serialize the bounded localized snapshot');
+    copyButton.click();
+    await turn();
+    check(copiedUrl === copyInput.value && location.href === sharePage
+        && shareStatus.textContent === 'Copied',
+        'Copy did not use the configured URL without navigation');
     navigator.clipboard.writeText = async () => {
         throw new DOMException('Denied', 'NotAllowedError');
     };
-    share.click();
+    copyButton.click();
     await turn();
-    check(!copyInput.hidden && copyInput.value === share.href
+    check(!copyInput.hidden && copyInput.value === copiedUrl
         && document.activeElement === copyInput
-        && presentation.querySelector('output').textContent === 'Copy manually',
+        && shareStatus.textContent === 'Copy manually',
         'Denied clipboard did not expose a keyboard-selectable launch URL');
+    share.click();
 
     // Eight rows exceed the five-row applet sample; this is a layout vector.
     const documents = document.createElement('section');
@@ -517,23 +576,36 @@ try {
     layout.remove();
     // A fresh document exercises URL startup without dispatching a launch click.
     // Its actual CSS and decoded images catch a zero-sized fullscreen stage.
-    const directLink = document.createElement('iframe');
-    directLink.style.cssText = 'width:100%;height:100vh;border:0';
-    const directResult = new Promise(resolve => {
-        const receive = event => {
-            if (event.origin !== location.origin
-                || event.source !== directLink.contentWindow
-                || event.data?.kind !== 'presentation-fixture') return;
-            window.removeEventListener('message', receive);
-            resolve(event.data);
-        };
-        window.addEventListener('message', receive);
-    });
-    directLink.src = '/presentation?lang=en&presentation=1';
-    document.body.prepend(directLink);
-    const launched = await directResult;
-    check(launched.ok, launched.message || 'Direct presentation failed');
-    directLink.remove();
+    for (const [launchFlag, music, mode] of [
+        ['presentation', '1', 'blocked'],
+        ['presentation', '1', 'allowed'],
+        ['autoplay', '0', 'muted'],
+        ['presentation', '1', 'paused'],
+        ['presentation', '1', 'exclusive'],
+    ]) {
+        const directLink = document.createElement('iframe');
+        directLink.style.cssText = 'width:100%;height:100vh;border:0';
+        const directResult = new Promise(resolve => {
+            const receive = event => {
+                if (event.origin !== location.origin
+                    || event.source !== directLink.contentWindow
+                    || event.data?.kind !== 'presentation-fixture') return;
+                window.removeEventListener('message', receive);
+                resolve(event.data);
+            };
+            window.addEventListener('message', receive);
+        });
+        directLink.src = '/presentation?lang=en&' + launchFlag + '=1'
+            + '&presentation_music=' + music
+            + '&presentation_interval=fast&presentation_transition=fast'
+            + (mode === 'paused' ? '&autoplay=0' : '')
+            + (mode === 'exclusive' ? '&presentation_exclusive=1' : '')
+            + '&fixture_audio=' + mode;
+        document.body.prepend(directLink);
+        const launched = await directResult;
+        check(launched.ok, launched.message || 'Direct presentation failed');
+        directLink.remove();
+    }
     document.getElementById('results').textContent = 'BROWSER PASS gallery music repeat-all, controls, rejection, teardown and dynamic panel';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + (error.stack || String(error));

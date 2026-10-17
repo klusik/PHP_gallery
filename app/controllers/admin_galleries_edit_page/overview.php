@@ -137,10 +137,11 @@ function admin_edit_gallery_render_overview(
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount, 'disabled' => $deferredImages],
     ];
     if (feature_capability_effective_enabled('gallery_pdf_documents')
-        || feature_capability_effective_enabled('gallery_music')) {
+        || feature_capability_effective_enabled('gallery_music')
+        || feature_capability_effective_enabled('lightbox_modes')) {
         $adminTabs[] = [
             'id' => 'admin-edit-documents',
-            'label' => t('pdf.documents', 'Documents / PDFs'),
+            'label' => t('presentation.media_tab'),
         ];
     }
     if (feature_capability_effective_enabled('metadata_organizer')) {

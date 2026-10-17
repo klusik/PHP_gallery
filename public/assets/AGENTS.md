@@ -12,6 +12,9 @@ control execution.
 Always document JavaScript callback parameters with JSDoc callable syntax, for
 example `@param {function(number, string):void} onProgress`, and describe what each
 callback argument means in the parameter description.
+Document exported preset arrays with the complete policy fields as well as scalar
+timings. Preserve native failure messages across cleanup by capturing the message
+before release and assigning the relevant feedback after release.
 
 Whenever a revisioned module's bytes change, including formatting-only edits,
 advance its owning import URL and the complete upstream import/re-export chain.

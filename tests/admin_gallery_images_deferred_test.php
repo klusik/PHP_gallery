@@ -229,6 +229,7 @@ namespace {
     require_once dirname(__DIR__) . '/app/services/gallery_edit_concurrency.php';
     require_once dirname(__DIR__) . '/app/views/admin_chrome.php';
     require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
+    require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
     require_once dirname(__DIR__) . '/app/models/schema_inspection.php';
     require_once dirname(__DIR__) . '/app/services/schema_inspection.php';
     require_once dirname(__DIR__) . '/app/services/gallery_covers.php';

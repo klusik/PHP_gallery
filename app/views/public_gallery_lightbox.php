@@ -120,7 +120,8 @@ function view_render_lightbox_source_nodes(array $nodes): void
  *
  * @param array{voting_allowed?:bool, maps_allowed?:bool,
  *     slideshow_allowed?:bool, browsing_mode?:string, gallery_map_url?:string,
- *     gallery_map_title?:string, viewer_favourite_html?:string} $viewModel
+ *     gallery_map_title?:string, viewer_favourite_html?:string,
+ *     presentation?:array{autoplay?:bool,music?:bool,interval?:string,transition?:string}} $viewModel
  *     Prepared visibility flags, browsing mode, map labels/URL and escaped
  *     favourite markup.
  * @return void Emits the existing viewer shell and permitted runtime controls.
@@ -130,6 +131,15 @@ function view_render_lightbox(array $viewModel): void
     $votingAllowed = !empty($viewModel['voting_allowed']);
     $mapsAllowed = !empty($viewModel['maps_allowed']);
     $slideshowAllowed = !empty($viewModel['slideshow_allowed']);
+    $presentation = (array) ($viewModel['presentation'] ?? []);
+    $presentationAttributes = ' data-presentation-autoplay="'
+        . (($presentation['autoplay'] ?? true) ? '1' : '0') . '"'
+        . ' data-presentation-music="'
+        . (($presentation['music'] ?? true) ? '1' : '0') . '"'
+        . ' data-presentation-interval="'
+        . e((string) ($presentation['interval'] ?? 'medium')) . '"'
+        . ' data-presentation-transition="'
+        . e((string) ($presentation['transition'] ?? 'medium')) . '"';
     $lightboxBrowsingMode = (string) ($viewModel['browsing_mode'] ?? 'single');
     $galleryMapUrl = (string) ($viewModel['gallery_map_url'] ?? '');
     $galleryMapTitle = (string) ($viewModel['gallery_map_title'] ?? '');
@@ -167,7 +177,7 @@ function view_render_lightbox(array $viewModel): void
     }
     $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
 
-    echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
+    echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . $presentationAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
@@ -198,6 +208,11 @@ function view_music_control_icon(string $action): string
         'previous' => '<path d="M5 5v14m13-14L7 12l11 7Z"/>',
         'next' => '<path d="M19 5v14M6 5l11 7-11 7Z"/>',
         'download' => '<path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/>',
+        'upload' => '<path d="M12 16V3m-5 5 5-5 5 5M5 16v5h14v-5"/>',
+        'save' => '<path d="M4 3h14l3 3v15H3V3ZM7 3v6h10V3M7 21v-8h10v8"/>',
+        'share' => '<path d="M12 15V2m-5 5 5-5 5 5M7 11H4v10h16V11h-3"/>',
+        'copy' => '<rect x="8" y="8" width="13" height="13" rx="2"/>'
+            . '<path d="M16 8V3H3v13h5"/>',
         'document' => '<path d="M5 3h9l5 5v13H5ZM14 3v6h5M8 13h8m-8 4h6"/>',
         'music' => '<path d="M9 18V5l11-2v13M9 9l11-2"/>'
             . '<ellipse cx="6" cy="18" rx="3" ry="2"/>'
@@ -217,6 +232,77 @@ function view_music_control_icon(string $action): string
 }
 
 /**
+ * Render one configurable link disclosure without a new persistence surface.
+ * @param string $url Controller-prepared localized presentation snapshot URL.
+ * @param string $identity Safe unique public/editor identity for fragment reuse.
+ * @return string Native disclosure, playback controls and selectable copy field.
+ */
+function view_presentation_share(string $url, string $identity): string
+{
+    $label = t('presentation.share');
+    $html = '<details class="gallery-media-widget presentation-share-widget"'
+        . ' data-gallery-media-widget data-presentation-share-widget>'
+        . '<summary class="music-icon" aria-label="' . e($label)
+        . '" title="' . e($label) . '" aria-expanded="false">'
+        . view_music_control_icon('share') . '</summary>'
+        . '<section class="gallery-media-panel presentation-share-panel" id="'
+        . e('presentation-share-' . $identity) . '" data-gallery-media-panel'
+        . ' data-presentation-share-panel data-presentation-url="' . e($url)
+        . '"><header><h3>' . e($label) . '</h3><button type="button"'
+        . ' class="gallery-media-close" data-media-close aria-label="'
+        . e(t('lightbox.close')) . '">×</button></header>'
+        . '<div class="gallery-media-body"><div class="presentation-share-options">';
+    foreach (['autoplay' => 'presentation.autoplay',
+        'music' => 'presentation.music',
+        'fullscreen' => 'lightbox.fullscreen',
+        'exclusive' => 'presentation.exclusive'] as $key => $translation) {
+        $compact = match ($key) {
+            'autoplay' => 'presentation.autoplay_short',
+            'music' => 'music.title',
+            default => $translation,
+        };
+        $html .= '<label class="gallery-presentation-setting" title="'
+            . e(t($translation)) . '"><span>' . e(t($compact))
+            . '</span><input type="checkbox" role="switch"'
+            . ' aria-label="' . e(t($translation)) . '"'
+            . ' data-share-option="' . $key . '"'
+            . ($key === 'exclusive' ? '' : ' checked') . '></label>';
+    }
+    $html .= '</div>';
+    foreach (['interval' => 'lightbox.slideshow_photo_speed',
+        'transition' => 'lightbox.slideshow_transition_speed'] as $key => $translation) {
+        $html .= '<label class="presentation-share-speed" title="'
+            . e(t($translation)) . '"><span>'
+            . e(t('presentation.' . $key . '_short'))
+            . '</span><input type="range" min="0" max="2"'
+            . ' aria-label="' . e(t($translation)) . '"'
+            . ' step="1" value="1" data-share-option="' . $key . '">'
+            . '<output data-share-speed-label="' . $key . '"></output>';
+        foreach (['slow', 'medium', 'fast'] as $speed) {
+            $html .= '<span hidden data-share-speed="' . $speed . '">'
+                . e(t('lightbox.slideshow_speed_' . $speed)) . '</span>';
+        }
+        $html .= '</label>';
+    }
+    $html .= '<div class="presentation-share-link-row">'
+        . '<label class="presentation-share-link"><span class="visually-hidden">'
+        . e(t('presentation.link')) . '</span><input type="url" readonly'
+        . ' data-presentation-copy value="' . e($url) . '"></label>'
+        . '<button type="button"'
+        . ' class="music-icon" data-presentation-copy-button title="'
+        . e(t('presentation.copy')) . '" aria-label="'
+        . e(t('presentation.copy')) . '">' . view_music_control_icon('copy')
+        . '</button></div><output role="status" aria-live="polite"'
+        . ' data-presentation-status data-copied="'
+        . e(t('presentation.copied')) . '" data-copy-failed="'
+        . e(t('presentation.copy_manually')) . '"></output>'
+        . '<p class="presentation-share-help muted">'
+        . e(t('presentation.exclusive_help')) . '</p>'
+        . '</div></section></details>';
+    return $html;
+}
+
+/**
  * Render shared icon-only playlist controls for a table or the photo viewer.
  * @param bool $viewer Whether this group belongs to the viewer HUD rather than a table.
  * @return string Accessible compact controls with no automatic playback.
@@ -225,7 +311,9 @@ function view_music_player_controls(bool $viewer): string
 {
     $html = '<div class="music-player' . ($viewer ? ' lightbox-music lightbox-hud' : '')
         . '" ' . ($viewer ? 'data-lightbox-music hidden' : 'data-gallery-music-controls')
-        . ' data-music-playback-error="' . e(t('music.playback_error')) . '">'
+        . ' data-music-playback-error="' . e(t('music.playback_error')) . '"'
+        . ' data-music-activation-required="'
+        . e(t('presentation.enable_sound')) . '">'
         . '<div class="music-player-actions" role="group" aria-label="'
         . e(t('music.title')) . '">';
     foreach (['previous' => 'music.previous', 'play' => 'music.play',
