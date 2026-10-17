@@ -79,6 +79,11 @@ KNOTS_PER_MPS = 1.9438444924406
 # Consumers: _number; Rationale: readable flight summaries without implying
 # instrument precision beyond the captured values; value: 1.
 DISPLAY_DECIMALS = 1
+# Type: int; Units: decimal places; Scope: contact and event timestamps.
+# Consumers: _precise_elapsed; Rationale: distinguish retained 20 Hz
+# observations without implying finer precision than two decimal places;
+# value: 2.
+PRECISE_TIME_DECIMALS = 2
 # Type: int; Units: decimal places; Scope: reported GPS coordinates.
 # Consumers: _coordinate; Rationale: show useful position precision without
 # implying gear-impact accuracy; value: 5.
@@ -610,6 +615,29 @@ def _relative_time(value: float, zero_time: float) -> str:
     total = abs(offset)
     minutes, seconds = divmod(total, 60)
     return "T" + sign + "{:d}:{:02d}".format(minutes, seconds)
+
+
+def _precise_elapsed(
+    value: float,
+    zero_time: float,
+    language: str,
+) -> str:
+    """Format signed elapsed seconds without rounding contact samples to seconds.
+
+    Args:
+        value (float): Session elapsed timestamp in seconds.
+        zero_time (float): Reference timestamp in session elapsed seconds.
+        language (str): Language used for decimal punctuation.
+
+    Returns:
+        str: Signed seconds rounded to the configured hundredth-second display.
+    """
+    offset = float(value) - float(zero_time)
+    sign = "+" if offset >= 0 else "-"
+    number = format(abs(offset), ".{}f".format(PRECISE_TIME_DECIMALS))
+    if language in ("cs", "de", "sv"):
+        number = number.replace(".", ",")
+    return sign + number + " s"
 
 
 def _profile_chart(
@@ -1429,7 +1457,7 @@ def _phase_event_table(
     Returns:
         Table: Localized timeline; absent events are stated without inference.
     """
-    headings = ["time", "phase", "confidence", "evidence"]
+    headings = ["phase_time_seconds", "phase", "confidence", "evidence"]
     rows: List[List[Union[Paragraph, str]]] = [
         [_paragraph(tr(language, key), styles["small"]) for key in headings]
     ]
@@ -1452,7 +1480,7 @@ def _phase_event_table(
             ) or tr(language, "unavailable")
             rows.append([
                 _paragraph(
-                    _format_duration(event.elapsed_seconds, language),
+                    _precise_elapsed(event.elapsed_seconds, 0.0, language),
                     styles["small"],
                 ),
                 _paragraph(_translate_phase_event(event.phase, language), styles["small"]),
@@ -1544,7 +1572,7 @@ def _contact_sensor_tables(
         "contact_vertical_speed_short",
     ]
     state_headings = [
-        "contact_time",
+        "contact_elapsed_short",
         "pitch",
         "bank",
         "heading",
@@ -1567,9 +1595,10 @@ def _contact_sensor_tables(
         state_rows.append(["", empty, "", "", "", "", "", ""])
     else:
         for index, sample in enumerate(samples):
-            elapsed = _relative_time(
+            elapsed = _precise_elapsed(
                 float(sample.session_elapsed_seconds),
                 float(landing.first_contact_elapsed_seconds),
+                language,
             )
             latitude = _coordinate(
                 getattr(sample, "latitude_deg", None), language
@@ -2004,6 +2033,13 @@ def _build_story(
             ),
             styles["small"],
         ),
+        _paragraph(
+            tr(language, "report_template") + ": "
+            + REPORT_TEMPLATE_VERSION + " · "
+            + tr(language, "analysis_version") + ": "
+            + str(ANALYSIS_VERSION),
+            styles["small"],
+        ),
         _paragraph(tr(language, "summary"), styles["heading"]),
         _metric_grid(analysis, language, styles),
         Spacer(1, 2 * mm),
@@ -2064,17 +2100,6 @@ def _build_story(
     if analysis.warnings:
         story.append(_paragraph(tr(language, "warnings"), styles["small"]))
     story.extend(_quality_notes(analysis, language, styles))
-    story.append(
-        Spacer(1, 2 * mm)
-    )
-    story.extend([
-        _paragraph(
-            tr(language, "report_template") + ": " + REPORT_TEMPLATE_VERSION
-            + " · " + tr(language, "analysis_version") + ": "
-            + str(ANALYSIS_VERSION),
-            styles["small"],
-        ),
-    ])
     return story
 
 

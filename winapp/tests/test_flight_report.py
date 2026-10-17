@@ -52,6 +52,7 @@ from uploader.flight_report import (
     _methodology_notes,
     _quality_notes,
     _profile_chart,
+    _phase_event_table,
     _recorded_flight_date,
     _route_chart,
     _styles,
@@ -349,9 +350,9 @@ class FlightReportTests(unittest.TestCase):
         Returns:
             None: Assert PDF, font metadata and checksum manifests. If
                 PHP_GALLERY_FLIGHT_REPORT_QA_DIR is set, copy the eight
-                simulator/language PDFs and their manifests plus a dense
-                multi-landing Czech sample to CI artifacts; no user telemetry
-                is uploaded.
+                simulator/language PDFs and their manifests plus dense
+                multi-landing samples in all four languages to CI artifacts;
+                no user telemetry is uploaded.
         """
         _register_font()
         with tempfile.TemporaryDirectory() as temporary:
@@ -394,7 +395,7 @@ class FlightReportTests(unittest.TestCase):
                             )
                             render_reports(
                                 self._dense_multilanding_analysis(simulator),
-                                ("cs",),
+                                supported_languages(),
                                 dense_directory,
                             )
                     output_hashes = {
@@ -582,6 +583,56 @@ class FlightReportTests(unittest.TestCase):
         self.assertGreater(points[2], points[0])
 
 
+
+    def test_contact_and_event_times_preserve_hundredths(self) -> None:
+        """Keep 20 Hz contact and phase observations temporally distinct.
+
+        Returns:
+            None: Assert adjacent 0.05-second samples remain distinguishable.
+        """
+        analysis = self._analysis("MSFS 2024")
+        landing = analysis.landings[0]
+        template = landing.contact_samples[0]
+        landing.contact_samples = [
+            replace(template, session_elapsed_seconds=10.0),
+            replace(template, session_elapsed_seconds=10.05),
+            replace(template, session_elapsed_seconds=10.15),
+        ]
+        landing.first_contact_elapsed_seconds = 10.0
+        contact_tables = _contact_sensor_tables(
+            landing,
+            "en",
+            _styles(),
+        )
+        motion_table = contact_tables[1]
+        state_table = contact_tables[2]
+        self.assertEqual(
+            [row[0].text for row in motion_table._cellvalues[1:]],
+            ["+0.00 s", "+0.05 s", "+0.15 s"],
+        )
+        self.assertEqual(
+            [row[0].text for row in state_table._cellvalues[1:]],
+            ["+0.00 s", "+0.05 s", "+0.15 s"],
+        )
+        analysis.events = [
+            FlightPhaseEvent(
+                phase="touchdown",
+                elapsed_seconds=10.0,
+                confidence="high",
+                evidence=["contact"],
+            ),
+            FlightPhaseEvent(
+                phase="rollout",
+                elapsed_seconds=10.05,
+                confidence="high",
+                evidence=["groundspeed"],
+            ),
+        ]
+        timeline = _phase_event_table(analysis, "en", _styles())
+        self.assertEqual(
+            [row[0].text for row in timeline._cellvalues[1:]],
+            ["+10.00 s", "+10.05 s"],
+        )
 
     def test_full_analysis_hash_is_present_on_every_page(self) -> None:
         """Keep full report identity in the repeated footer.

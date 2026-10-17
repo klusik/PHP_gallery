@@ -10,7 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Deterministic persistent SimConnect flight-provider regression tests."""
 import ctypes
-from typing import Callable
+from typing import Callable, TypeAlias
 from pathlib import Path
 import sys
 import unittest
@@ -26,6 +26,29 @@ from uploader.simconnect_location import (
     SIMCONNECT_RECV_ID_QUIT,
     _SimConnectRecv,
     _SimConnectRecvOpen,
+)
+
+
+
+# Type: TypeAlias. Units: not applicable. Scope: fake SimConnect exports.
+# Consumers: NativeCallable, FakeFlightDLL and their variadic SDK fixtures.
+# Rationale: model only values actually passed through the native test seam.
+# Members are int SDK IDs/enums, float epsilon, bytes names, None optional
+# arguments, c_void_p handles, c_uint32 values, byref c_void_p/c_uint32 slots,
+# or the receive callback taking (pointer to _SimConnectRecv, uint32 size,
+# c_void_p context) and returning None. Each Args block states SDK order.
+NativeFlightArgument: TypeAlias = (
+    int
+    | float
+    | bytes
+    | None
+    | ctypes.c_void_p
+    | ctypes.c_uint32
+    | type(ctypes.byref(ctypes.c_void_p()))
+    | Callable[
+        [ctypes.POINTER(_SimConnectRecv), int, ctypes.c_void_p],
+        None,
+    ]
 )
 
 
@@ -45,11 +68,11 @@ class NativeCallable:
         self.argtypes = None
         self.restype = None
 
-    def __call__(self, *arguments: object) -> int:
+    def __call__(self, *arguments: NativeFlightArgument) -> int:
         """Forward native-style arguments.
 
         Args:
-            arguments (object): Native arguments in SDK order. Open
+            arguments (NativeFlightArgument): Each native value in SDK order. Open
                 receives a c_void_p by-reference output, client-name bytes,
                 optional window handle, event ID, optional event handle and
                 configuration index. Close receives one c_void_p handle.
@@ -101,13 +124,13 @@ class FakeFlightDLL:
     def next_send(
         self,
         name: str,
-        arguments: tuple[object, ...],
+        arguments: tuple[NativeFlightArgument, ...],
     ) -> int:
         """Record a native send and advance its send identity.
 
         Args:
             name (str): Export purpose label.
-            arguments (tuple[object, ...]): Values after the handle, varying by
+            arguments (tuple[NativeFlightArgument, ...]): Values after the handle, varying by
                 SDK export. Open has name/window/event/config values; definition
                 has ID/name/units/type/epsilon/datum ID; data request has
                 request/definition/object IDs, period, flags, origin, interval
@@ -120,13 +143,17 @@ class FakeFlightDLL:
         self.calls.append((name, arguments))
         return 0
 
-    def open(self, output_handle: ctypes.c_void_p, *arguments: object) -> int:
+    def open(
+        self,
+        output_handle: ctypes.c_void_p,
+        *arguments: NativeFlightArgument,
+    ) -> int:
         """Set a native handle and queue a generation-specific OPEN packet.
 
         Args:
             output_handle (ctypes.c_void_p): By-reference output slot for the
                 native SimConnect handle.
-            arguments (object): SimConnect_Open values after
+            arguments (NativeFlightArgument): SimConnect_Open values after
                 output_handle, in order: client-name bytes, optional HWND,
                 Win32 event ID, optional event HANDLE and configuration index.
 
@@ -209,16 +236,16 @@ class FakeFlightDLL:
         return 0
 
     def add_definition(
-        self, _handle: ctypes.c_void_p, *arguments: object
+        self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
     ) -> int:
         """Record one read-only SimVar definition.
 
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_AddToDataDefinition.
-            arguments (object): SDK values after the handle, in order:
-                definition ID (uint32), SimVar-name bytes, optional unit bytes,
-                datatype enum, floating epsilon and datum ID (uint32).
+            arguments (NativeFlightArgument): Values after the handle in order:
+                definition ID, SimVar-name bytes, optional unit bytes, datatype
+                enum, floating epsilon and datum ID.
 
         Returns:
             int: Successful fake HRESULT.
@@ -226,14 +253,14 @@ class FakeFlightDLL:
         return self.next_send("definition", arguments)
 
     def subscribe(
-        self, _handle: ctypes.c_void_p, *arguments: object
+        self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
     ) -> int:
         """Record one state-event subscription.
 
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_SubscribeToSystemEvent.
-            arguments (object): Client event ID (uint32), then system-event
+            arguments (NativeFlightArgument): Client event ID, then system-event
                 name bytes.
 
         Returns:
@@ -242,15 +269,15 @@ class FakeFlightDLL:
         return self.next_send("subscribe", arguments)
 
     def request_state(
-        self, _handle: ctypes.c_void_p, *arguments: object
+        self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
     ) -> int:
         """Queue an initial flight or aircraft identity response.
 
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_RequestSystemState.
-            arguments (object): Request ID (uint32), then system-state name
-                bytes.
+            arguments (NativeFlightArgument): Request ID, then system-state
+                name bytes.
 
         Returns:
             int: Successful fake HRESULT.
@@ -270,16 +297,16 @@ class FakeFlightDLL:
         return result
 
     def request_data(
-        self, _handle: ctypes.c_void_p, *arguments: object
+        self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
     ) -> int:
         """Queue a user-aircraft core frame for the periodic request.
 
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_RequestDataOnSimObject.
-            arguments (object): Request ID, definition ID, object selector,
-                period, flags, origin, interval and request limit, each passed
-                as a uint32 in native SDK order.
+            arguments (NativeFlightArgument): Request ID, definition ID, object
+                selector, period, flags, origin, interval and request limit, in
+                native SDK order.
 
         Returns:
             int: Successful fake HRESULT.
@@ -486,14 +513,14 @@ class SimConnectFlightTests(unittest.TestCase):
         second_dll = FakeFlightDLL(2020)
 
         def open_without_handshake(
-            output_handle: ctypes.c_void_p, *_arguments: object
+            output_handle: ctypes.c_void_p, *_arguments: NativeFlightArgument
         ) -> int:
             """Return a handle without queueing the required OPEN response.
 
             Args:
                 output_handle (ctypes.c_void_p): By-reference native handle
                     output slot.
-                _arguments (object): Open arguments in SDK order:
+                _arguments (NativeFlightArgument): Open arguments in SDK order:
                     client-name bytes, optional HWND, Win32 event ID, HANDLE and
                     configuration index.
 
