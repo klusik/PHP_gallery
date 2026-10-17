@@ -37,7 +37,13 @@ def quarantine_malformed(path: Path) -> Optional[Path]:
     """
     Preserve an unreadable state/config file for diagnostics.
 
-    @return: Quarantine path when a copy was created, otherwise ``None``.
+    Args:
+        path (Path): Existing state/configuration JSON path to preserve as a
+            timestamped diagnostic copy.
+
+    Returns:
+        Optional[Path]: Quarantine path when a copy was created, otherwise
+            ``None``.
     """
     if not path.is_file():
         return None

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.133.5}
+\newcommand{\version}{0.134}
 \newcommand{\manualdate}{17.~října~2026}
 
 \hypersetup{
@@ -659,7 +659,66 @@ Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu
 
 Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
+\section{Windows uploader}
+\subsection{Rozvržení}
+
+Uploader se otevírá na kartě \ui{Watcher}; pořadí karet je \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}. Horní ovládací prvek
+připojení otevře kompaktní dialog klíče API se skrytým klíčem a~volbou
+\ui{Save \& Test}; ovládání připojení zůstává v~záhlaví dostupné na každé
+obrazovce. Neuložené změny nenahradí uložený klíč. Hlavička aplikace
+nabízí také Nastavení, aktualizace a~nápovědu. Obrazovka Watcher zobrazuje
+cílovou galerii, vybranou cestu složky, stav sledování a~varování před smazáním
+zdrojů.
+\ui{Start Watcher} začne pracovat až po výslovném kliknutí; při běhu stejné
+kontextové tlačítko nabízí \ui{Stop Watcher}. \ui{Check folder only} provede
+kontrolu složky bez nahrávání a~bez spuštění trvalého sledování. Ozubené kolo
+Watcher otevře nastavení výběru složky, podsložek, intervalu kontroly, stability
+souborů, metadat simulátoru
+a~volitelného mazání zdrojů. Při běžícím sledování nelze nastavení měnit; nejprve
+je nutné sledování zastavit. \ui{Save watcher settings} uloží změny pro příští
+spuštění. \ui{Cancel}, klávesa Escape nebo zavření okna obnoví původní cestu,
+počet ignorovaných souborů, čas kontroly a~nastavení.
+\ui{Sync UTC time} zůstává volitelná a~je vedle hlavních tlačítek.
+Dlouhé stránky a~dialogy lze posouvat kolečkem myši nebo posuvníkem; textová
+pole a~tabulky si zachovávají vlastní posouvání.
+
+Ruční \ui{Import} stále vyžaduje kontrolu výsledků předběžné kontroly a~výslovné
+spuštění. \ui{Activity} obsahuje filtrovanou historii událostí, opakování,
+redigovanou diagnostiku a~protokol. Kompaktní zápatí s~poslední událostí otevře
+\ui{Activity} po kliknutí. Ovládací ikony mají popisky a~lze na ně přejít
+klávesnicí; otazník otevře nápovědu. Změna vzhledu zachovává
+dosavadní ochranu nastavení, tray, aktualizací a~klíče API.
+Pillow doplňuje chladný barevný přechod pozadí a~neprůhledné prvky inspirované
+matným sklem pro karty, zápatí a~pilulková tlačítka. Vrstvení simuluje matné sklo
+bez skutečné průhlednosti alfa nebo rozostření pozadí operačního systému; text
+zůstává ostrý a~plochy polí a~tabulek zůstávají neprůhledné a~kontrastní. Nepoužívá se
+průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow zůstávají
+čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
+\texttt{--once} zůstávají podporované.
+
 \subsection{Poloha simulátoru ve Windows}
+
+\ui{Sync UTC time} u~ovládání sledované složky je ve výchozím stavu vypnuté
+a~ukládá vlastní předvolbu. Při sledování samostatný pracovní proces kontroluje
+MSFS 2020 i~2024 každých 10 sekund. Porovnává celé datum a~čas UTC simulátoru
+s~Windows UTC; pouze absolutní odchylka nad 60 sekund vyvolá nastavení roku,
+pořadového dne v~roce, hodiny a~minuty a~následné nové čtení výsledku.
+Vyžaduje načtený nepozastavený let, rychlost 1x a~pět sekund ustáleného stavu.
+Menu, načítání, pauza a~jiné rychlosti zápisy pozastaví. Zastavení z~okna či traye
+a~úplné ukončení práci UTC zruší; skrytí do traye ji zachová. Volba se pamatuje.
+Tři neověřené opravy s~odstupem 30 sekund pozastaví dané spojení do opětovného
+připojení. Nahrávání a~získávání polohy fotografie zůstávají nezávislé.
+
+Obě generace používají stejné časové události. Jedničkové číslování dne v~roce
+pro setter a~vliv na Live Time/Live Weather vyžadují ověření ve dvou samostatných
+letech každého dostupného simulátoru a~sestavení; simulované testy výsledek
+neprokazují. Viz \filepath{winapp/README.md}. Hostované instalátory výslovně
+používají x64 CPython 3.14.x. Před zabalením se kontroluje sestavovací interpret
+i~skutečná patch verze, implementace a~šířka ukazatele uvnitř EXE pomocí výpisu
+před spuštěním GUI. Nesprávný či chybějící výpis přípravu odmítne. Nezávislá
+verze aplikace se nemění.
+
 WinApp 0.3.2 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
 
 Zabalený aktualizátor načítá rozhraní Windows výslovně ze System32, aby soubor VERSION nekolidoval s~knihovnou Windows pro verze. Při přechodu z~0.3.1 ručně spusťte ověřený instalátor 0.3.2. Běžící starší aplikace kopíruje vlastní pomocný proces před instalací, takže starý pomocník může i~po výměně aplikace ohlásit původní chybu DLL. Další aktualizace spuštěné z~opravené aplikace 0.3.2 používají opraveného pomocníka; ověřte předání na nainstalovaných Windows.
@@ -2418,6 +2477,12 @@ Unicode/tabulátorů a~cílené příklady popisuje
 je~\codeword{readability}. Povinná kvalifikace zůstává stejná.
 
 Kanonický \filepath{AGENTS.md} vyžaduje pojmenovanou deklaraci a~její úplnou dokumentaci ve~stejné úpravě. Před značkami uveďte věcný účel, popište každý explicitní parametr včetně výchozích a~přidaných parametrů, skutečné návratové varianty a~konkrétní prvky kolekcí či~pole objektů. Nativní typy PHP/Python jsou samostatný požadavek. Anonymní callbacky dokumentační řetězec nepotřebují; pojmenované deklarace uvnitř ano. Běhové zásady samostatně vyžadují účel, typ, jednotky, rozsah, konzumenty a~zdůvodnění přímo před daným místem. Příklady v~\filepath{docs/AGENT_AUTHORING.md} ověřuje registrovaný test existujícími analyzátory; negativní fixtury zachovávají selhání neúplných kontraktů.
+
+Python zdroje jednotně používají typované sekce Google stylu \texttt{Args:}
+a~\texttt{Returns:}. Každá položka uvádí název parametru, jeho typ a~skutečný
+význam; procedury dokumentují \texttt{None}. Nativní anotace jsou samostatným
+požadavkem. Parser zachovává podporu starých tagových vstupů kvůli kompatibilitě,
+ale autorské Python docstringy používají jednotný formát.
 
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 

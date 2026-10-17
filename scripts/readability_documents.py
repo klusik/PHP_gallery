@@ -20,9 +20,12 @@ if TYPE_CHECKING:
 def group_end(source: str, start: int) -> int:
     """Find a nested bracket group's end without interpreting escaped brackets.
 
-    @param str source Complete document source.
-    @param int start Offset of an opening brace, bracket or parenthesis.
-    @return int Exclusive end, or end of source for an unterminated group.
+    Args:
+        source (str): Complete document source.
+        start (int): Offset of an opening brace, bracket or parenthesis.
+
+    Returns:
+        int: Exclusive end, or end of source for an unterminated group.
     """
     closing = {"{": "}", "[": "]", "(": ")"}
     opening = source[start]
@@ -48,9 +51,14 @@ def document_structure(
 ) -> "Structure":
     """Mask ordered literal spans while keeping exact prose line coordinates.
 
-    @param str source Complete TeX or Markdown document.
-    @param list[tuple[int,int]] spans Disjoint start/exclusive-end literal offsets.
-    @return Structure Prose skeleton, original literal fragments and no declarations.
+    Args:
+        source (str): Complete TeX or Markdown document.
+        spans (list[tuple[int, int]]): Disjoint start/exclusive-end literal
+            offsets.
+
+    Returns:
+        Structure: Prose skeleton, original literal fragments and no
+            declarations.
     """
     pieces = []
     literals = {}
@@ -77,8 +85,12 @@ def document_structure(
 def tex_structure(source: str) -> "Structure":
     """Recognize ordinary TeX prose without proposing splits inside syntax.
 
-    @param str source Authored TeX document; commands are never executed.
-    @return Structure Prose outside comments, command arguments, math and literals.
+    Args:
+        source (str): Authored TeX document; commands are never executed.
+
+    Returns:
+        Structure: Prose outside comments, command arguments, math and
+            literals.
     """
     literal_environments = {
         "verbatim", "verbatim*", "Verbatim", "BVerbatim", "LVerbatim",
@@ -152,8 +164,12 @@ def tex_structure(source: str) -> "Structure":
 def markdown_structure(source: str) -> "Structure":
     """Recognize Markdown prose without reflowing structural or literal blocks.
 
-    @param str source Authored Markdown source, including optional fenced examples.
-    @return Structure Prose outside code, tables, headings, HTML and links.
+    Args:
+        source (str): Authored Markdown source, including optional fenced
+            examples.
+
+    Returns:
+        Structure: Prose outside code, tables, headings, HTML and links.
     """
     spans = []
     offset = 0

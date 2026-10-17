@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.133.5}
+\newcommand{\version}{0.134}
 \newcommand{\manualdate}{17~oktober~2026}
 
 \hypersetup{
@@ -659,7 +659,66 @@ Efter aktivering öppnas gemensamma fotografier från panelen eller länken i de
 
 Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
+\section{Windows-uppladdaren}
+\subsection{Layout}
+
+Uppladdaren öppnas på fliken \ui{Watcher}; ordningen är \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Den övre
+anslutningsknappen öppnar en kompakt dialog för API-nyckeln med
+maskerad nyckel och \ui{Save \& Test}; anslutningskontrollen finns kvar i
+sidhuvudet på alla skärmar. Osparade ändringar ersätter inte den
+sparade nyckeln. Appens sidhuvud har även inställningar, uppdateringar och hjälp.
+Watcher-skärmen visar målgalleriet, den valda mappsökvägen, bevakningsstatus och
+varningen om källborttagning. \ui{Start Watcher} startar först efter ett uttryckligt klick;
+medan bevakningen pågår heter samma kontextknapp \ui{Stop Watcher}.
+\ui{Check folder only} kontrollerar mappen utan att ladda upp eller starta
+kontinuerlig bevakning. Watcher-hjulet öppnar ett inställningsblad för mappval,
+undermappar, skanningsintervall, filstabilitet, simulatorns metadata och det frivilliga valet att ta bort
+källfilen. Om bevakningen är aktiv kräver en dialog att den stoppas innan några
+ändringar görs. \ui{Save watcher settings} sparar inställningarna till nästa
+start; \ui{Cancel}, Escape och stängning återställer den tidigare mappen,
+antalet ignorerade filer, senaste genomsökning och inställningarna.
+\ui{Sync UTC time} är fortsatt frivilligt och ligger intill huvudåtgärderna.
+Långa sidor och dialoger kan rullas med mushjulet eller rullningslisten;
+text- och tabellkontroller behåller sin egen rullning.
+
+Manuell \ui{Import} kräver fortfarande granskning av förkontrollen och ett
+uttryckligt startval. \ui{Activity} innehåller filtrerad händelsehistorik,
+omförsökskontroller, redigerad diagnostik och loggen. En kompakt sidfot med den
+senaste händelsen öppnar \ui{Activity} när den väljs. Ikoner har verktygstips och
+kan nås med tangentbordet; frågetecknet öppnar hjälp.
+Utformningen bevarar befintliga skydd för inställningar, tray, uppdateringar och
+API-nycklar. Pillow lägger till en sval färgövergång i bakgrunden och ogenomskinlig
+glasinspirerad grafik för kort, sidfot och pillformade knappar. Den sammansatta
+stilen simulerar frostat glas utan verklig alfatransparens eller oskärpa från
+operativsystemet; texten förblir skarp, medan inmatnings- och tabellområden
+förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret används och inga
+körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
+inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
+
 \subsection{Simulatorposition i Windows}
+
+\ui{Sync UTC time} vid mappbevakningens knappar är av som standard och sparar
+en egen inställning. Under bevakning kontrollerar en separat arbetare MSFS 2020
+och 2024 var tionde sekund. Hela simulatorns UTC-datum och tid jämförs med
+Windows UTC. Endast en absolut avvikelse över 60 sekunder ställer in år,
+årets dagnummer, timme och minut och kräver sedan en ny avläsning.
+En laddad, opausad flygning, hastighet 1x och fem sekunders stabilt tillstånd
+krävs. Menyer, laddning, paus och andra hastigheter stoppar skrivningar.
+Stopp från fönstret/tray och fullständig avslutning avbryter UTC-arbetet;
+döljning till tray behåller det. Valet sparas. Tre misslyckade korrigeringar med
+30 sekunders väntan spärrar anslutningen tills den återansluts. Uppladdning och
+positionshämtning för bilder är oberoende.
+
+Båda generationerna använder samma tidshändelser. Ettbaserat dagnummer för
+setter och påverkan på Live Time/Live Weather måste verifieras i två separata
+flygningar per tillgänglig simulator/version; simulerade tester bevisar inte
+detta. Se \filepath{winapp/README.md}. Värdbaserade installationsbyggen använder
+uttryckligen x64 CPython 3.14.x. Före paketering kontrolleras byggtolken och
+den faktiska patchversionen, implementationen och pekarbredden i EXE genom en
+rapport före GUI-start. Felaktig eller saknad rapport blockerar förberedelsen.
+Den oberoende programversionen ändras inte.
+
 WinApp 0.3.2 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
 
 Den paketerade uppdateraren laddar Windows-API:er uttryckligen från System32 för att undvika en kollision mellan textfilen VERSION och Windows versionsbibliotek. Starta det verifierade installationsprogrammet 0.3.2 manuellt vid uppgradering från 0.3.1. Den äldre appen kopierar sin egen hjälpprocess före installationen, så den gamla hjälparen kan fortfarande rapportera DLL-felet efter att appen ersatts. Framtida uppdateringar från den korrigerade appen 0.3.2 använder den reparerade hjälparen; verifiera den installerade överlämningen i Windows.
@@ -2421,6 +2480,12 @@ den~valfria centrala auditprofilen heter \codeword{readability}.
 Obligatorisk kvalificering är~oförändrad.
 
 Den~kanoniska filen \filepath{AGENTS.md} kräver namngivna deklarationer och~fullständig dokumentation i~samma ändring. Börja med ett sakligt syfte före taggarna; beskriv varje uttrycklig parameter inklusive standardvärden och~nya parametrar, verkliga returvarianter samt konkreta samlingselement och~objektfält. Inbyggda PHP/Python-typer är ett separat krav. Anonyma callbackar behöver ingen deklarationsdocstring; namngivna deklarationer inuti dem behöver det. Körningspolicyer behöver dessutom syfte, typ, enheter, omfattning, konsumenter och~motivering direkt före platsen. Exemplen i~\filepath{docs/AGENT_AUTHORING.md} kontrolleras med befintliga analysverktyg i~ett registrerat regressionstest; negativa fixturer bevarar fel för ofullständiga kontrakt.
+
+Python-källor använder konsekvent typade Google-avsnitt \texttt{Args:} och
+\texttt{Returns:}. Varje parameterpost anger argumentets namn, typ och faktiska
+betydelse; procedurer dokumenterar \texttt{None}. Inbyggda annotationer är ett
+separat krav. Parsern stöder äldre taggindata för kompatibilitet, medan skrivna
+Python-docstrings använder ett gemensamt format.
 
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 

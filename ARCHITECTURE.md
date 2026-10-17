@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.133.5';
+const CMS_VERSION = '0.134';
 ```
 
 Update-related code uses:
@@ -2002,6 +2002,37 @@ The Admin migration endpoint is a JSON-only enhanced workflow. Authentication, C
 `admin-gallery-migration.js` owns transfer progress, reconnect/status handling, cancellation, and log markup while transfer is active. When it runs inside the gallery side panel, it forwards canonical local pull results through `php-gallery:auxiliary-mutation-success`. The result also identifies the `gallery-edit` panel fragment. Final target-pull completion, and partial failure after manifest acceptance, explicitly request a server-rendered editor refresh through `admin-side-panel.js`; the active API tab and drawer remain mounted while stale Identity/Access/Display/Media values are replaced. This prevents a later Save from writing pre-import form values back over imported metadata. Public invalidation and panel refresh remain separate coordinator responsibilities, and a partial transfer failure is reported in the persistent drawer status after already-applied local state is synchronized. Source-push completion emits a typed remote mutation result but declares no local public contexts.
 
 ## Upload Automation and Windows Watcher
+
+The optional Watch folder **Sync UTC time** control persists `sync_utc_time`,
+defaulting to false. `winapp/uploader/simconnect_time.py` owns the manager,
+cancellable worker and independent native handle. It reuses the location
+client's DLL discovery, ctypes setup, safe callback wrapper, OPEN identity and
+exception attribution; it never invokes coordinate acquisition or shares the
+photo client's handle. Both 2020/2024 use one UTC strategy. No new Gallery API
+requests are introduced.
+
+Tk owns the manager; status/activity uses the existing queue. Cancelled workers
+remain visible to shutdown/update drain. Cancellation and each native time send
+share a lock, preventing later writes after admission is revoked. Admission
+captures the exact active watcher. Tray start/stop uses the same window actions;
+hiding to tray preserves active work.
+
+Sim, SimStart/Stop, FlightLoaded and Pause_EX1 notifications track state. An
+initial FlightLoaded query supports attaching during a flight. Fresh ABSOLUTE
+TIME, SIMULATION RATE and CAMERA STATE replies correlate request IDs and state
+revisions. Queued transitions drain before writes; uncertain, paused,
+menu/loading/replay and non-1x states fail closed. Five settled seconds precede
+correction. Ten-second checks compare aware Windows UTC with the explicit year-1
+epoch. Deltas above 60 seconds set year, one-based ordinal day, hour and minute,
+then require fresh readback. Three failures with 30-second backoff suspend the
+connection; reconnecting resets capability. Generation-specific fallbacks await
+actual runtime evidence. Live 2020/2024 day-setter and Weather-mode acceptance
+remain unknown; `winapp/README.md` describes the live matrix.
+
+Installer workflows select x64 CPython 3.14.x explicitly. The builder/frozen EXE
+share `uploader/runtime_check.py`; a fresh pre-GUI report must confirm the actual
+embedded patch/implementation/pointer width before Inno Setup. Build mocks prove
+refusal/ordering. An actual hosted installer build is separate qualification.
 
 Upload automation is implemented by:
 

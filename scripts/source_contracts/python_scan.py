@@ -22,8 +22,11 @@ from pathlib import Path
 def normalize_doc(documentation: str) -> str:
     """Convert typed Google sections into the shared parameter/return contract.
 
-    @param str documentation Native Python docstring, already dedented by AST.
-    @return str Summary and typed tags; existing tag-style docstrings stay intact.
+    Args:
+        documentation (str): Native Python docstring, already dedented by AST.
+
+    Returns:
+        str: Summary and typed tags; existing tag-style docstrings stay intact.
     """
     if re.search(r"@(param|return|returns)\b", documentation):
         return documentation
@@ -62,8 +65,11 @@ def normalize_doc(documentation: str) -> str:
 def annotation_text(annotation: ast.expr | None) -> str:
     """Read an annotation without evaluating forward references or runtime names.
 
-    @param ast.expr|None annotation Parsed annotation or absent syntax.
-    @return str Native type spelling with string forward references unwrapped.
+    Args:
+        annotation (ast.expr | None): Parsed annotation or absent syntax.
+
+    Returns:
+        str: Native type spelling with string forward references unwrapped.
     """
     if annotation is None:
         return ""
@@ -75,8 +81,11 @@ def annotation_text(annotation: ast.expr | None) -> str:
 def builtin_alias(match: re.Match[str]) -> str:
     """Lowercase a known typing container alias during lexical normalization.
 
-    @param re.Match[str] match Matched legacy builtin container spelling.
-    @return str Equivalent modern builtin spelling.
+    Args:
+        match (re.Match[str]): Matched legacy builtin container spelling.
+
+    Returns:
+        str: Equivalent modern builtin spelling.
     """
     return match[0].lower()
 
@@ -84,8 +93,12 @@ def builtin_alias(match: re.Match[str]) -> str:
 def known_type(type_name: str) -> str:
     """Canonicalize only known builtin typing expressions for definite comparison.
 
-    @param str type_name Native or documented annotation expression.
-    @return str Canonical type, or empty string for aliases requiring human review.
+    Args:
+        type_name (str): Native or documented annotation expression.
+
+    Returns:
+        str: Canonical type, or empty string for aliases requiring human
+            review.
     """
     # Nested forward references and Literal values need context-sensitive resolution;
     # compare neither rather than reporting a definite mismatch from string contents.
@@ -133,8 +146,13 @@ def known_type(type_name: str) -> str:
 def union_members(node: ast.expr) -> list[str]:
     """Flatten only unions at the current level while preserving nested generics.
 
-    @param ast.expr node Known annotation expression or individual union member.
-    @return list[str] Canonical outer members without splitting nested type arguments.
+    Args:
+        node (ast.expr): Known annotation expression or individual union
+            member.
+
+    Returns:
+        list[str]: Canonical outer members without splitting nested type
+            arguments.
     """
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return union_members(node.left) + union_members(node.right)
@@ -150,8 +168,11 @@ def union_members(node: ast.expr) -> list[str]:
 def canonical_type(node: ast.expr) -> str:
     """Normalize union ordering, Optional and nested generic arguments recursively.
 
-    @param ast.expr node Parsed known builtin annotation expression.
-    @return str Comparable type expression with sorted union members.
+    Args:
+        node (ast.expr): Parsed known builtin annotation expression.
+
+    Returns:
+        str: Comparable type expression with sorted union members.
     """
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return "|".join(sorted(set(union_members(node))))
@@ -171,10 +192,15 @@ def type_issues(
 ) -> list[str]:
     """Find missing native annotations and definite builtin documentation mismatches.
 
-    @param list[dict[str,str]] parameters Explicit parameters excluding bound receivers.
-    @param str return_type Native return annotation, empty when absent.
-    @param str documentation Normalized summary and typed contract tags.
-    @return list[str] Stable rule identifiers without source values or type spellings.
+    Args:
+        parameters (list[dict[str, str]]): Explicit parameters excluding bound
+            receivers.
+        return_type (str): Native return annotation, empty when absent.
+        documentation (str): Normalized summary and typed contract tags.
+
+    Returns:
+        list[str]: Stable rule identifiers without source values or type
+            spellings.
     """
     issues: list[str] = []
     tags: dict[str, str] = {}
@@ -201,8 +227,12 @@ def type_issues(
 def executable_fingerprint(node: ast.AST) -> str:
     """Hash executable AST fields while removing all nested declaration docstrings.
 
-    @param ast.AST node Class or function whose implementation is compared.
-    @return str SHA-256 identity used internally; never included in user diagnostics.
+    Args:
+        node (ast.AST): Class or function whose implementation is compared.
+
+    Returns:
+        str: SHA-256 identity used internally; never included in user
+            diagnostics.
     """
     executable = copy.deepcopy(node)
     for child in ast.walk(executable):
@@ -217,7 +247,8 @@ class DeclarationScanner(ast.NodeVisitor):
     def __init__(self) -> None:
         """Initialize isolated declaration and lexical owner state.
 
-        @return None No project code or runtime modules are imported.
+        Returns:
+            None: No project code or runtime modules are imported.
         """
         self.snapshots: list[dict[str, object]] = []
         self.owners: list[str] = []
@@ -226,16 +257,24 @@ class DeclarationScanner(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Visit a class docstring and each nested declaration independently.
 
-        @param ast.ClassDef node Parsed class with its original source coordinates.
-        @return None Appends stable class and method snapshots.
+        Args:
+            node (ast.ClassDef): Parsed class with its original source
+                coordinates.
+
+        Returns:
+            None: Appends stable class and method snapshots.
         """
         self.collect(node, "class", [], "")
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         """Collect all positional, keyword-only, variadic and asynchronous signatures.
 
-        @param ast.FunctionDef|ast.AsyncFunctionDef node Parsed callable declaration.
-        @return None Appends callable evidence and visits nested definitions.
+        Args:
+            node (ast.FunctionDef | ast.AsyncFunctionDef): Parsed callable
+                declaration.
+
+        Returns:
+            None: Appends callable evidence and visits nested definitions.
         """
         arguments = list(node.args.posonlyargs) + list(node.args.args)
         decorators = {ast.unparse(decorator).split("(", 1)[0] for decorator in node.decorator_list}
@@ -253,8 +292,11 @@ class DeclarationScanner(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Route asynchronous functions through the same complete signature collector.
 
-        @param ast.AsyncFunctionDef node Parsed async callable declaration.
-        @return None Preserves async syntax in its executable fingerprint.
+        Args:
+            node (ast.AsyncFunctionDef): Parsed async callable declaration.
+
+        Returns:
+            None: Preserves async syntax in its executable fingerprint.
         """
         self.visit_FunctionDef(node)
 
@@ -267,11 +309,15 @@ class DeclarationScanner(ast.NodeVisitor):
     ) -> None:
         """Record one declaration and descend with its containing lexical identity.
 
-        @param ast.ClassDef|ast.FunctionDef|ast.AsyncFunctionDef node Class or callable.
-        @param str kind Shared class or callable declaration category.
-        @param list[dict[str,str]] parameters Explicit signature parameters.
-        @param str return_type Native return type, absent for classes.
-        @return None Appends internal snapshots without executing the source.
+        Args:
+            node (ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef): Class
+                or callable.
+            kind (str): Shared class or callable declaration category.
+            parameters (list[dict[str, str]]): Explicit signature parameters.
+            return_type (str): Native return type, absent for classes.
+
+        Returns:
+            None: Appends internal snapshots without executing the source.
         """
         documentation = normalize_doc(ast.get_docstring(node) or "")
         identity = "/".join(self.owners + [kind + ":" + node.name])
@@ -305,8 +351,12 @@ class DeclarationScanner(ast.NodeVisitor):
 def import_findings(tree: ast.AST) -> list[dict[str, object]]:
     """Find forbidden annotation future imports in parsed executable syntax.
 
-    @param ast.AST tree Parsed source tree, never evaluated or imported.
-    @return list[dict[str,object]] File-level line numbers and stable policy rules.
+    Args:
+        tree (ast.AST): Parsed source tree, never evaluated or imported.
+
+    Returns:
+        list[dict[str, object]]: File-level line numbers and stable policy
+            rules.
     """
     findings: list[dict[str, object]] = []
     for node in ast.walk(tree):
@@ -319,8 +369,12 @@ def import_findings(tree: ast.AST) -> list[dict[str, object]]:
 def import_finding_line(finding: dict[str, object]) -> int:
     """Read the source coordinate used to order file-level import diagnostics.
 
-    @param dict[str,object] finding Import policy finding created by the AST scanner.
-    @return int One-based line number of the forbidden import statement.
+    Args:
+        finding (dict[str, object]): Import policy finding created by the AST
+            scanner.
+
+    Returns:
+        int: One-based line number of the forbidden import statement.
     """
     return int(str(finding["line"]))
 
@@ -328,8 +382,13 @@ def import_finding_line(finding: dict[str, object]) -> int:
 def scan_sources(sources: dict[str, str]) -> dict[str, dict[str, list[dict[str, object]]]]:
     """Parse a batch of sources without following paths or evaluating annotations.
 
-    @param dict[str,str] sources Opaque source IDs mapped to already discovered contents.
-    @return dict[str,dict[str,list[dict[str,object]]]] Declaration and import reports per source ID.
+    Args:
+        sources (dict[str, str]): Opaque source IDs mapped to already
+            discovered contents.
+
+    Returns:
+        dict[str, dict[str, list[dict[str, object]]]]: Declaration and import
+            reports per source ID.
     """
     result: dict[str, dict[str, list[dict[str, object]]]] = {}
     for identity, source in sources.items():
@@ -343,7 +402,9 @@ def scan_sources(sources: dict[str, str]) -> dict[str, dict[str, list[dict[str, 
 def main() -> int:
     """Read one temporary JSON request and emit bounded parser results.
 
-    @return int Zero for complete AST coverage, two for an unreadable or invalid source.
+    Returns:
+        int: Zero for complete AST coverage, two for an unreadable or invalid
+            source.
     """
     try:
         request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))

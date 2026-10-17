@@ -641,9 +641,24 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.candidate_sha }}
           persist-credentials: false
+      - name: Select x64 CPython 3.14 for the installer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          architecture: 'x64'
+          check-latest: true
       - name: Build canonical installer with hosted Inno Setup
         shell: pwsh
         run: |
+          $runtimeProbe = @'
+          import json
+          import sys
+          sys.path.insert(0, 'winapp')
+          from uploader.runtime_check import runtime_info
+          print(json.dumps(runtime_info()))
+          '@
+          $runtimeProbe | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (!(Test-Path -LiteralPath $compiler)) { throw 'BLOCKED hosted Inno Setup 6 is unavailable.' }
           python winapp/build_installer.py --iscc $compiler

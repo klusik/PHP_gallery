@@ -27,6 +27,8 @@ import subprocess
 import sys
 import tempfile
 
+from uploader.runtime_check import runtime_info, validate_runtime_info
+
 
 WINAPP_DIR = Path(__file__).resolve().parent
 APP_EXE = "PHPGalleryUploader.exe"
@@ -36,7 +38,13 @@ SIMCONNECT_EXPORTS = {
     "SimConnect_GetLastSentPacketID", "SimConnect_AddToDataDefinition",
     "SimConnect_RequestDataOnSimObject", "SimConnect_CameraAcquire",
     "SimConnect_CameraRelease", "SimConnect_CameraGetStatus", "SimConnect_CameraGet",
+    "SimConnect_SubscribeToSystemEvent", "SimConnect_RequestSystemState",
+    "SimConnect_MapClientEventToSimEvent", "SimConnect_TransmitClientEvent",
 }
+
+# Type: int; Units: seconds; Scope: build; Consumers: frozen runtime smoke.
+# Rationale: 60 seconds bounds cold onefile extraction and runtime attestation.
+FROZEN_RUNTIME_TIMEOUT_SECONDS = 60
 
 
 def validate_simconnect_runtime(path):
@@ -196,7 +204,11 @@ def write_version_resource(path: Path, version: str) -> None:
     )
 
 
-def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_dependencies: bool = False) -> Path:
+def build_installer(
+    iscc: str | Path,
+    source: Path = WINAPP_DIR,
+    use_installed_dependencies: bool = False,
+) -> Path:
     """Publish a complete installer and matching metadata in one version folder.
 
     ``iscc`` selects an existing Inno Setup compiler and ``source`` identifies
@@ -209,6 +221,9 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
 
     Validate the source runtime, embed it at runtime/simconnect inside the
     single application EXE, verify its archived digest, and package that EXE.
+    Validate x64 CPython 3.14.x in both this interpreter and the actual frozen
+    executable before invoking Inno Setup; their concrete patch versions are
+    printed separately. A missing/incorrect frozen report refuses publication.
     Return the installer Path under dist/<version>, beside winapp-update.json
     containing its filename, version, byte size and SHA-256 digest. Source files
     and the DLL are read only; final files are replaced after every check passes.
@@ -229,6 +244,7 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
     if not re.fullmatch(r"\d+\.\d+\.\d+", version) or any(int(p) > 65535 for p in version.split(".")):
         raise RuntimeError("winapp/VERSION must contain a numeric major.minor.patch version.")
     runtime_hash = validate_simconnect_runtime(source / "SimConnect.dll")
+    print("Build interpreter: " + json.dumps(runtime_info()), flush=True)
     output_name = f"PHPGalleryUploader-{version}-Setup.exe"
     # Everything is staged on the destination volume, including the venv, pip
     # cache, PyInstaller cache/spec/work files and the unpublished installer.
@@ -268,6 +284,12 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
 
             Convert Path arguments to strings and propagate a nonzero exit so
             the enclosing temporary-directory context cleans incomplete output.
+
+            Args:
+                arguments (list[str|Path]): Ordered executable and arguments.
+
+            Returns:
+                None: Runs successfully or propagates the subprocess error.
             """
             subprocess.run([str(arg) for arg in arguments], cwd=work, env=env, check=True)
 
@@ -299,6 +321,17 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
         if not app.is_file():
             raise RuntimeError("PyInstaller did not produce the application EXE.")
         run([python, "-c", archive_verification_code(), app, SIMCONNECT_ARCHIVE_PATH, runtime_hash])
+        runtime_report = work / "frozen-runtime.json"
+        subprocess.run(
+            [str(app), "--runtime-info", str(runtime_report)],
+            cwd=work,
+            check=True,
+            timeout=FROZEN_RUNTIME_TIMEOUT_SECONDS,
+            env={**env, "APPDATA": str(work / "smoke-profile")},
+        )
+        frozen_runtime = json.loads(runtime_report.read_text(encoding="utf-8"))
+        validate_runtime_info(frozen_runtime)
+        print("Frozen interpreter: " + json.dumps(frozen_runtime), flush=True)
         # Import/startup smoke check without opening the GUI or reading the
         # developer's saved gallery credentials. Logs stay inside staging.
         subprocess.run(

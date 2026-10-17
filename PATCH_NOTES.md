@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.134
+
+Redesigned the Windows uploader around a Watcher-first workflow, added opt-in MSFS UTC synchronization, and prepared the uploader for version 0.4.0. Updated runtime checks, authoring guidance, release records, and documentation alongside the changes.
+
+### Highlights
+
+#### Watcher-first uploader and UTC synchronization
+- Redesigned the uploader with Watcher, Import, Activity, AI, and Settings views; opened the app on Watcher and added focused, save-or-cancel watcher settings. [#120](https://github.com/klusik/PHP_gallery/issues/120)
+- Added an opt-in, saved UTC synchronization setting, disabled by default. While watching, a separate worker checked MSFS 2020 and 2024 and attempted correction only after safe, settled flight-state checks; it verified corrections with fresh readback and bounded retries. [#245](https://github.com/klusik/PHP_gallery/issues/245)
+- Added scrollable views, activity and diagnostics controls, and themed frosted-glass surfaces. Kept Pillow artwork optional and retained flat styling without adding a runtime dependency.
+
+#### Runtime and release preparation
+- Set the independent Windows uploader version to `0.4.0`.
+- Added x64 CPython 3.14 runtime checks and installer validation of the frozen executable before packaging.
+
+### Technical Details
+
+#### Windows uploader
+- Added `winapp/uploader/simconnect_time.py` for the independent UTC synchronization worker and `winapp/uploader/runtime_check.py` for runtime attestation.
+- Added `winapp/uploader/ui_theme.py` and updated `winapp/gallery_watch_upload.pyw` with the redesigned navigation, controls, scrolling, help, and activity presentation.
+- Persisted the `sync_utc_time` preference separately from unsaved connection settings. Updated updater shutdown to stop the UTC worker.
+- Added `--runtime-info <path>` to write runtime details as JSON before configuration or GUI startup.
+- Updated installer workflows and `winapp/build_installer.py` to select x64 CPython 3.14 and reject invalid build or frozen-runtime details before packaging.
+
+#### Tooling, tests, and documentation
+- Added tests for UTC synchronization, cancellation, unsafe simulator states, reconnection, runtime attestation, installer refusal ordering, and UI interaction.
+- Standardized Python authoring guidance on typed Google-style `Args:` and `Returns:` docstrings while preserving scanner compatibility with legacy inputs.
+- Updated `winapp/README.md`, repository guidance, lifecycle and architecture documentation, and all four TeX manual sources.
+- Added immutable origin and predecessor records for `v_0.134`. No database migration was added.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing PHP Gallery behavior did not change.
+
+#### For administrators
+- PHP Gallery administration behavior did not change. Windows uploader users gained the redesigned workflow and could opt in to UTC synchronization while watching; live simulator behavior remained unverified.
+
+#### For maintainers
+- Installer preparation gained explicit Python runtime checks, and updated authoring guidance and tests documented the related source and fixture contracts.
+
 ## Version 0.133.5
 
 Prepared immutable release origin and predecessor records for v_0.133.5. Reflowed Admin and tooling source contracts, and refreshed Admin module cache versions after readability edits without changing product behavior. The release references [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).

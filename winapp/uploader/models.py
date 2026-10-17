@@ -21,9 +21,21 @@ Data models used by the Windows uploader import and activity workflows.
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import time
 import uuid
+
+# Decoded AI/JSON inputs may contain scalars, recursive lists or string-keyed
+# dictionaries. Name that complete contract instead of using an opaque Any.
+JsonValue = Union[
+    str,
+    int,
+    float,
+    bool,
+    None,
+    List["JsonValue"],
+    Dict[str, "JsonValue"],
+]
 
 ITEM_ACTIVE_STATES = {
     "discovered",
@@ -59,12 +71,13 @@ class ActivityEvent:
     """
     One durable human-readable activity event.
 
-    @param level: Event severity such as info, warning, error, or success.
-    @param message: Human-readable activity description.
-    @param operation: Logical subsystem, for example import, watcher, or ai.
-    @param filename: Optional file name associated with the event.
-    @param job_id: Optional manual-import job identifier.
-    @param timestamp: Unix timestamp captured when the event was created.
+    Args:
+        level (str): Event severity such as info, warning, error, or success.
+        message (str): Human-readable activity description.
+        operation (str): Logical subsystem, for example import, watcher, or ai.
+        filename (str): Optional file name associated with the event.
+        job_id (str): Optional manual-import job identifier.
+        timestamp (float): Unix timestamp captured when the event was created.
     """
 
     level: str
@@ -96,18 +109,21 @@ class ImportItem:
     """
     Durable state for one source item in a manual import job.
 
-    @param id: Stable item identifier.
-    @param path: Local source or staged file path.
-    @param source_label: Original local path or archive-relative entry name.
-    @param size: Source size in bytes.
-    @param sha256: Content hash when known.
-    @param state: Current item state.
-    @param attempt_count: Number of upload attempts made.
-    @param reason: Human-readable skip/failure detail.
-    @param server_result: Small server result object safe to persist locally.
-    @param last_update: Unix timestamp of the last state transition.
-    @param from_archive: Whether the local path is temporary ZIP staging data.
-    @param local_decode: local, server_only, failed, or unknown.
+    Args:
+        id (str): Stable item identifier.
+        path (str): Local source or staged file path.
+        source_label (str): Original local path or archive-relative entry name.
+        size (int): Source size in bytes.
+        sha256 (str): Content hash when known.
+        state (str): Current item state.
+        attempt_count (int): Number of upload attempts made.
+        reason (str): Human-readable skip/failure detail.
+        server_result (Dict[str, Any]): Small server result object safe to
+            persist locally.
+        last_update (float): Unix timestamp of the last state transition.
+        from_archive (bool): Whether the local path is temporary ZIP staging
+            data.
+        local_decode (str): local, server_only, failed, or unknown.
     """
 
     id: str
@@ -142,7 +158,17 @@ class ImportItem:
         """
         Move the item to a valid state and refresh its timestamp.
 
-        @raises ValueError: Raised for unknown states.
+        Args:
+            state (str): New durable item state from the allowed ITEM_STATES
+                set.
+            reason (str): Optional human-readable skip/failure reason; empty
+                clears the previous reason.
+
+        Returns:
+            None: Move the item to a valid state and refresh its timestamp.
+
+        Raises:
+            ValueError: Raised for unknown states.
         """
         if state not in ITEM_STATES:
             raise ValueError("Unknown import item state: " + state)
@@ -181,20 +207,25 @@ class ImportJob:
     """
     Durable manual-import job summary and item collection.
 
-    @param id: Stable job identifier.
-    @param source_kind: files, folder, or zip.
-    @param source_label: Human-readable source description.
-    @param target_gallery_label: Target endpoint/gallery label without secrets.
-    @param items: Accepted item records.
-    @param skipped: Number of unsupported/unsafe items rejected during preflight.
-    @param bytes_total: Total accepted source bytes.
-    @param bytes_sent: Confirmed source bytes completed or remotely confirmed.
-    @param started_at: Unix timestamp for upload start.
-    @param finished_at: Unix timestamp for terminal job completion.
-    @param created_at: Unix timestamp for preflight creation.
-    @param staging_dir: Optional ZIP staging directory owned by this job.
-    @param source_zip: Optional original ZIP path.
-    @param delete_source_zip_after_success: Whether the original archive may be deleted after all accepted entries succeed.
+    Args:
+        id (str): Stable job identifier.
+        source_kind (str): files, folder, or zip.
+        source_label (str): Human-readable source description.
+        target_gallery_label (str): Target endpoint/gallery label without
+            secrets.
+        items (List[ImportItem]): Accepted item records.
+        skipped (int): Number of unsupported/unsafe items rejected during
+            preflight.
+        bytes_total (int): Total accepted source bytes.
+        bytes_sent (int): Confirmed source bytes completed or remotely
+            confirmed.
+        started_at (float): Unix timestamp for upload start.
+        finished_at (float): Unix timestamp for terminal job completion.
+        created_at (float): Unix timestamp for preflight creation.
+        staging_dir (str): Optional ZIP staging directory owned by this job.
+        source_zip (str): Optional original ZIP path.
+        delete_source_zip_after_success (bool): Whether the original archive
+            may be deleted after all accepted entries succeed.
     """
 
     id: str
@@ -287,13 +318,17 @@ class ImportPlan:
     """
     Result of manual import discovery and preflight.
 
-    @param job: Durable job record containing accepted files.
-    @param unsupported: Mapping of extension/reason labels to counts.
-    @param unsafe_entries: Archive entries rejected for path/symlink/limit reasons.
-    @param duplicate_local: Number of files matching locally known hashes.
-    @param duplicate_remote: Number of files confirmed by remote inventory.
-    @param capability_notes: Human-readable local media capability lines.
-    @param warnings: Additional preflight warnings.
+    Args:
+        job (ImportJob): Durable job record containing accepted files.
+        unsupported (Dict[str, int]): Mapping of extension/reason labels to
+            counts.
+        unsafe_entries (List[str]): Archive entries rejected for
+            path/symlink/limit reasons.
+        duplicate_local (int): Number of files matching locally known hashes.
+        duplicate_remote (int): Number of files confirmed by remote inventory.
+        capability_notes (List[str]): Human-readable local media capability
+            lines.
+        warnings (List[str]): Additional preflight warnings.
     """
 
     job: ImportJob

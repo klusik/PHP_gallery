@@ -1059,9 +1059,12 @@
         "winapp/uploader/discovery.py",
         "winapp/uploader/media.py",
         "winapp/uploader/models.py",
+        "winapp/uploader/runtime_check.py",
         "winapp/uploader/self_update.py",
         "winapp/uploader/simconnect_location.py",
+        "winapp/uploader/simconnect_time.py",
         "winapp/uploader/state_store.py",
+        "winapp/uploader/ui_theme.py",
         "winapp/uploader/update_helper.py",
         "winapp/uploader/update_ui.py"
     ],

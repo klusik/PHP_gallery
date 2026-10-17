@@ -150,7 +150,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.133.5. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.134. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -561,6 +561,26 @@ redaction preserving the primary failure and one displayed SimConnect marker.
 Build tests verify the x64 runtime, required exports, embedded DLL
 hash and the installer entry that distributes only the application EXE with its
 embedded runtime. These tests run through the central WinApp regression suite.
+
+`winapp/tests/test_simconnect_time.py` extends the native fake layer for both
+OPEN identities, UTC epoch/calendar conversion, the 60/61-second boundary,
+ordinal date setters, fresh readback, bounded ignored/rejected setters, queued
+flight changes, pause/active pause, menus and non-1x states, malformed/foreign
+packets, cancellation and saved watcher/tray admission. The manager retains
+draining workers for application/update shutdown. `test_runtime_check.py` and
+build fixtures cover x64 CPython 3.14.patch attestation, early frozen reporting
+and refusal before installer publication. Central discovery owns these fixtures;
+YAML adds no test registry.
+
+Portable SimConnect UTC fixtures emulate Windows only inside the transport
+module. Host profile/path lookup and the real diagnostic redactor remain active
+through disconnect/reconnect coverage on Linux and Windows runners.
+
+Live MSFS 2020 and MSFS 2024 remain separate acceptance: record exact build,
+before/after UTC in two distinct flights, pause/rate transitions, checkbox/tray
+stop, reconnect and observed Live Time/Live Weather selections. Confirm the
+one-based ZULU_DAY_SET convention per available runtime, particularly leap day
+and year rollover. Native mocks do not establish live/installed acceptance.
 
 The installer contract also covers forced shutdown before file replacement,
 exact installation-path matching, verified exit, and refusal on unknown state.

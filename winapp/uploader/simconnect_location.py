@@ -57,10 +57,12 @@ class SimCameraLocation:
     """
     Flight Simulator camera world position captured through SimConnect.
 
-    @param latitude: Camera latitude in degrees.
-    @param longitude: Camera longitude in degrees.
-    @param altitude: Camera altitude in feet.
-    @param source: Actual provider; aircraft results share the historical DTO.
+    Args:
+        latitude (float): Camera latitude in degrees.
+        longitude (float): Camera longitude in degrees.
+        altitude (float): Camera altitude in feet.
+        source (str): Actual provider; aircraft results share the historical
+            DTO.
     """
 
     latitude: float
@@ -72,7 +74,8 @@ class SimCameraLocation:
         """
         Convert the camera position into upload automation metadata fields.
 
-        @return Dict[str, str] Multipart form fields accepted by PHP Gallery.
+        Returns:
+            Dict[str, str]: Multipart form fields accepted by PHP Gallery.
         """
         # Existing servers accept only this historical source value. Actual
         # camera/aircraft provenance stays in local results and diagnostic logs.
@@ -166,8 +169,11 @@ def simconnect_hresult_failed(value: int) -> bool:
     """
     Return whether a signed HRESULT indicates failure.
 
-    @param int value: HRESULT returned by SimConnect.
-    @return bool True when the HRESULT is a failure code.
+    Args:
+        value (int): HRESULT returned by SimConnect.
+
+    Returns:
+        bool: True when the HRESULT is a failure code.
     """
     return int(value) < 0
 
@@ -176,8 +182,11 @@ def simconnect_camera_position_valid(location: SimCameraLocation) -> bool:
     """
     Validate a world camera position before sending it to PHP Gallery.
 
-    @param SimCameraLocation location: Candidate camera position.
-    @return bool True when latitude, longitude, and altitude are usable.
+    Args:
+        location (SimCameraLocation): Candidate camera position.
+
+    Returns:
+        bool: True when latitude, longitude, and altitude are usable.
     """
     return (
         math.isfinite(location.latitude)
@@ -262,8 +271,13 @@ class SimulatorInfo:
         application version is an internal API/server version and may differ
         from the retail simulator version displayed to the user.
 
-        @param _SimConnectRecvOpen packet: Size-validated OPEN packet from this connection.
-        @return SimulatorInfo Raw identity/versions, family and optional generation.
+        Args:
+            packet (_SimConnectRecvOpen): Size-validated OPEN packet from this
+                connection.
+
+        Returns:
+            SimulatorInfo: Raw identity/versions, family and optional
+                generation.
         """
         name = bytes(packet.szApplicationName).split(b"\0", 1)[0].decode("utf-8", "replace")[:256]
         identity = name.casefold()
@@ -307,10 +321,18 @@ class SimConnectLocationClient:
         """
         Create a camera client with aircraft-location support.
 
-        @param str dll_path: Optional explicit SimConnect.dll path selected by the user.
-        @param float timeout_seconds: Maximum response-wait budget shared by all providers.
-        @param Optional[Path] app_dir: Application root for source/bundled DLL discovery.
-        @param Optional[Callable] event_sink: Thread-safe diagnostic event receiver.
+        Args:
+            dll_path (str): Optional explicit SimConnect.dll path selected by
+                the user.
+            timeout_seconds (float): Maximum response-wait budget shared by all
+                providers.
+            app_dir (Optional[Path]): Application root for source/bundled DLL
+                discovery.
+            event_sink (Optional[Callable[[str, str], None]]): Thread-safe
+                diagnostic event receiver.
+
+        Returns:
+            None: Create a camera client with aircraft-location support.
         """
         self.configured_dll_path = Path(dll_path.strip().strip('"')) if dll_path.strip().strip('"') else None
         self.timeout_seconds = max(0.2, float(timeout_seconds))
@@ -376,7 +398,9 @@ class SimConnectLocationClient:
         """
         Find a usable SimConnect client DLL on the local machine.
 
-        @return Tuple[Optional[Path], List[Path]] Tuple of the selected DLL path and every absolute candidate checked.
+        Returns:
+            Tuple[Optional[Path], List[Path]]: Tuple of the selected DLL path
+                and every absolute candidate checked.
         """
         tried: List[Path] = []
         roots = [self.app_dir]
@@ -423,7 +447,8 @@ class SimConnectLocationClient:
         """
         Describe which SimConnect DLL path would be used without opening the sim.
 
-        @return str Human-readable DLL resolution summary.
+        Returns:
+            str: Human-readable DLL resolution summary.
         """
         path, tried = self.resolve_dll_path()
         return f"Using SimConnect.dll: {path}" if path else "No SimConnect.dll found. Tried: " + ", ".join(map(str, tried))
@@ -437,7 +462,9 @@ class SimConnectLocationClient:
         new acquisition. Closed transport and last successful handshake are
         reported separately. Reasons and native-call history are bounded.
 
-        @return Dict[str, Any] Runtime, identity, provider, provenance and failure data.
+        Returns:
+            Dict[str, Any]: Runtime, identity, provider, provenance and failure
+                data.
         """
         with self._lock:
             return {
@@ -476,8 +503,12 @@ class SimConnectLocationClient:
         """
         Build one compact diagnostic message for the watcher console.
 
-        @param str reason: Primary reason camera or aircraft coordinates were not returned.
-        @return str Human-readable diagnostic summary.
+        Args:
+            reason (str): Primary reason camera or aircraft coordinates were
+                not returned.
+
+        Returns:
+            str: Human-readable diagnostic summary.
         """
         details = [
             f"Simulator={self.simulator_info.display_name}, server={self.simulator_info.app_name}, "
@@ -489,12 +520,23 @@ class SimConnectLocationClient:
         ]
         return reason + " Details: " + "; ".join(detail for detail in details if detail)
 
-    def configure_functions(self, dll: Any, dispatch_type: Any) -> None:
+    def configure_functions(
+        self,
+        dll: ctypes.CDLL,
+        dispatch_type: type[ctypes._CFuncPtr],
+    ) -> None:
         """
         Configure ctypes signatures for the SimConnect functions used here.
 
-        @param Any dll: Loaded SimConnect.dll handle.
-        @param Any dispatch_type: Callback type used by SimConnect_CallDispatch.
+        Args:
+            dll (ctypes.CDLL): Loaded SimConnect DLL exposing native transport,
+                data and optional camera functions with writable signatures.
+            dispatch_type (type[ctypes._CFuncPtr]): ctypes callback class for
+                receive-header pointer, byte count and context arguments.
+
+        Returns:
+            None: Configure ctypes signatures for the SimConnect functions used
+                here.
         """
         signatures = {
             "Open": [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32],
@@ -551,7 +593,10 @@ class SimConnectLocationClient:
         Query the current Flight Simulator camera location.
 
         This compatibility entry point also uses the selected aircraft fallback.
-        @return Tuple[Optional[SimCameraLocation], str] Tuple containing the location or None, plus a diagnostic string.
+
+        Returns:
+            Tuple[Optional[SimCameraLocation], str]: Tuple containing the
+                location or None, plus a diagnostic string.
         """
         return self.current_location()
 
@@ -569,7 +614,9 @@ class SimConnectLocationClient:
         close run independently in finally. API/dispatch failures return None,
         allowing the watcher to upload the photo without simulator metadata.
 
-        @return Tuple[Optional[SimCameraLocation], str] Location or soft failure, plus diagnostics.
+        Returns:
+            Tuple[Optional[SimCameraLocation], str]: Location or soft failure,
+                plus diagnostics.
         """
         with self._lock:
             self._reset()
@@ -734,9 +781,15 @@ class SimConnectLocationClient:
         """
         Receive one SimConnect dispatch packet and correlate active requests.
 
-        @param ctypes.POINTER(_SimConnectRecv) data: Pointer to the base SimConnect receive structure.
-        @param int size: Packet byte length.
-        @param ctypes.c_void_p _context: Unused callback context.
+        Args:
+            data (ctypes.POINTER(_SimConnectRecv)): Pointer to the base
+                SimConnect receive structure.
+            size (int): Packet byte length.
+            _context (ctypes.c_void_p): Unused callback context.
+
+        Returns:
+            None: Receive one SimConnect dispatch packet and correlate active
+                requests.
         """
         if not data or size < ctypes.sizeof(_SimConnectRecv):
             self.error_message = "SimConnect receive header was too small."
