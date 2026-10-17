@@ -354,6 +354,13 @@ try {
     };
     $mediaGalleryRoute = '/index.php?page=gallery&gallery_path='
         . rawurlencode($gallery['folder_path']);
+    $presentationPage = $anonymous->request(
+        $mediaGalleryRoute . '&lang=en&presentation=1'
+    );
+    check($presentationPage['status'] === 200
+        && str_contains($presentationPage['body'],
+            'data-gallery-presentation-start'),
+        'Fresh anonymous presentation link must reach the public gallery.');
     foreach ([[false, true], [true, false], [false, false]]
         as [$pdfEnabled, $musicEnabled]) {
         $mediaSetCapabilities($pdfEnabled, $musicEnabled);

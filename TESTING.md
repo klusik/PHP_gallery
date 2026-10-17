@@ -25,6 +25,13 @@ production metadata queue for totals, exact-version reuse, version changes,
 serial disposal and unreadable originals. The slideshow speed fixture exercises
 the production presentation launcher for photo one, default timing and disabled
 slideshow behavior. Hosted central integration owns execution.
+The same Chromium fixture opens a fresh presentation iframe through the public
+entrypoint with production desktop/mobile CSS and real decoded synthetic images.
+It rejects native fullscreen, checks nonzero photo-stage geometry and photo-one
+startup, waits for scheduled photo two, retries controlled autoplay refusal and
+asserts close/audio cleanup. This covers desktop and narrow viewport dimensions.
+The real anonymous HTTP gallery workflow accepts `presentation=1`; guard probes
+retain unknown-parameter and non-gallery-route rejection.
 
 Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
 and music count/duration against the opened lists, including unknown metadata;
@@ -67,7 +74,7 @@ Native DOM forms are submitted through
 two successive fragment replacements using the production completion
 coordinator, with unchanged URL/open panel and fresh revisions. Audio outcomes
 and mutation responses are controlled adapters; this does not qualify real
-codec decoding, production PHP multipart handling or full lightbox geometry.
+codec decoding, production PHP multipart handling or every lightbox layout.
 The same fixture uses desktop and narrow portrait CSS viewports for compact
 attachment launchers, top-layer fitting, bounded PDF scrolling, exclusive
 Play/Stop row icons, title ellipsis/active scrolling and persistent miniplayer.

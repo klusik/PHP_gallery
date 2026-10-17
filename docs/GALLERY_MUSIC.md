@@ -45,6 +45,11 @@ are omitted. The link retains ordinary gallery access requirements and starts
 the same presentation once after loading. Clipboard refusal exposes a selectable
 URL. Browser autoplay/fullscreen refusal keeps photo playback available with the
 existing explicit Play/fullscreen controls; a link cannot bypass browser policy.
+The public request guard accepts the presentation flag only on gallery pages.
+Fresh anonymous sessions use the same visibility/password/share/NSFW checks as
+ordinary gallery links. When desktop native fullscreen is denied, the existing
+desktop viewer fills the browser viewport and continues displaying photographs.
+Explicit Play retries a soundtrack blocked by browser autoplay rules.
 PDFs use the same disclosure. The existing miniplayer remains visible outside
 the list and retains its four controls. The table shows titles, browser-reported
 durations and one context-sensitive Play/Stop icon **before** each title, with

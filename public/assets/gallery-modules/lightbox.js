@@ -1079,7 +1079,7 @@ export function setupGalleryLightbox() {
             fetch_transfers: resources.activeFetchTransfers,
             preload_generation: lightboxPreloads.generation,
             slideshow_active: lightboxSlideshowActive,
-            fullscreen_active: document.fullscreenElement === overlay || overlay.classList.contains('is-mobile-fullscreen'),
+            fullscreen_active: isLightboxFullscreen(),
             image: currentImage ? {
                 src_present: currentImage.hasAttribute('src'),
                 complete: currentImage.complete,
@@ -1186,6 +1186,7 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow', 'is-picture-strip-animating', 'is-3d-carousel-mode');
         overlay.classList.toggle('is-picture-strip-mode', pictureStripEnabled);
         overlay.classList.toggle('is-3d-carousel-mode', threeDCarouselEnabled);
@@ -5517,10 +5518,12 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles enter lightbox fullscreen behavior for the gallery UI.
+     * Enter native fullscreen or retain the device's complete CSS viewer shell.
+     * @returns {Promise<void>} Preserve visible photos if native entry is denied.
      */
     async function enterLightboxFullscreen() {
         overlay.classList.add('is-fullscreen');
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-ui-visible');
         if (isMobileTouchDevice) {
             enterMobileLightboxFullscreen();
@@ -5535,19 +5538,26 @@ export function setupGalleryLightbox() {
                 return;
             }
         } catch {
-            // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
+            // Shared links have no activation gesture. Native fullscreen may
+            // be denied even though normal authorized photo playback works.
         }
-        enterMobileLightboxFullscreen();
+        // Permanent desktop capability fallback, owned by this viewer:
+        // retain desktop stage geometry rather than mobile-only media rules.
+        // Retire only with supported-browser proof that native entry is assured.
+        overlay.classList.add('is-css-fullscreen');
+        scheduleLightboxZoomReclamp();
         debugLightbox('enter:fallback-css');
         showLightboxHud();
     }
 
         /**
-     * Handles exit lightbox fullscreen behavior for the gallery UI.
+     * Exit native or CSS fullscreen and stop the same slideshow owner.
+     * @returns {Promise<void>} Restore the ordinary viewer and release its shell.
      */
     async function exitLightboxFullscreen() {
         stopLightboxSlideshow();
         overlay.classList.remove('is-fullscreen');
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         closeLightboxMapSplit();
         document.documentElement.classList.remove('has-mobile-lightbox');
@@ -5565,13 +5575,16 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles sync lightbox fullscreen state behavior for the gallery UI.
+     * Synchronize native fullscreen changes without dismissing a CSS-only shell.
+     * @returns {void} Stop playback only after an actual native fullscreen exit.
      */
     function syncLightboxFullscreenState() {
         if (isMobileTouchDevice) {
             return;
         }
-        if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
+        if (!document.fullscreenElement
+            && overlay.classList.contains('is-fullscreen')
+            && !overlay.classList.contains('is-css-fullscreen')) {
             cancelMapPhotoNavigation();
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
@@ -5586,6 +5599,7 @@ export function setupGalleryLightbox() {
         }
         if (document.fullscreenElement === overlay) {
             overlay.classList.add('is-fullscreen');
+            overlay.classList.remove('is-css-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');

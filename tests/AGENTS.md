@@ -75,6 +75,12 @@ separate from retained regional observations and lifetime removal receipts.
 
 ## Browser and isolated rendering fixtures
 
+After a production media swap, query the currently owned image node again before
+asserting decode or geometry. Keep identity/source assertions: a detached initial
+placeholder cannot establish the state of its decoded replacement.
+When a counter announces navigation intent before media commit, await the target
+image identity and completed decode before asserting its final geometry.
+
 Hold a follow-up passive read while asserting a mutation response, then release
 it separately to test refresh without racing snapshots. For live filtering,
 exercise old responses during debounce and old JSON bodies finishing after newer

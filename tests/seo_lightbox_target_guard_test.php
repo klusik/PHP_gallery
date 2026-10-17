@@ -50,8 +50,11 @@ namespace {
         $GLOBALS['guardAdmin'] = ($argv[2] ?? '') === 'admin';
         $route = $argv[3];
         $_GET = ['page' => $route, 'id' => '1', 'limit' => '60', 'offset' => '0'];
+        if ($route === 'gallery') {
+            $_GET = ['page' => $route, 'public_path' => 'album', 'lang' => 'en'];
+        }
         if (($argv[4] ?? '') !== 'none') {
-            $_GET[$argv[4]] = '123';
+            $_GET[$argv[4]] = $argv[4] === 'presentation' ? '1' : '123';
         }
         $reached = false;
         http_response_code(200);
@@ -86,6 +89,10 @@ namespace {
         ['public', 'smart_gallery_lightbox_data', 'source_gallery_id', 200],
         ['admin', 'gallery_lightbox_data', 'target_image_id', 200],
         ['admin', 'gallery_lightbox_data', 'unexpected', 200],
+        ['public', 'gallery', 'presentation', 200],
+        ['admin', 'gallery', 'presentation', 200],
+        ['public', 'gallery', 'unexpected', 404],
+        ['public', 'gallery_lightbox_data', 'presentation', 404],
     ];
     foreach ($cases as [$principal, $route, $parameter, $expectedStatus]) {
         $process = proc_open([PHP_BINARY, __FILE__, '--probe', $principal, $route, $parameter],
@@ -107,5 +114,5 @@ namespace {
             throw new RuntimeException("Unexpected guard result for $principal/$route/$parameter: $output");
         }
     }
-    echo "Lightbox target request guard: 7 public/Admin scenarios passed.\n";
+    echo "Lightbox target request guard: 11 public/Admin scenarios passed.\n";
 }

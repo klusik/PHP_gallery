@@ -200,7 +200,7 @@ function seo_request_guard_ignored_tracking_parameters(): array
 }
 
 /**
- * Return public query parameters accepted by each route, including the protected preview marker.
+ * Return accepted public query keys, including gallery presentation intent.
  *
  * @param string $page Public route identifier.
  * @return array<int,string> Allowed query parameter names for this route.
@@ -210,7 +210,24 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
     $global = ['page', 'lang', 'preview'];
     $map = [
         'home' => ['gallery_page', 'view_as'],
-        'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust', 'benchmark_phase'],
+        // Presentation changes client playback only; the gallery controller
+        // still enforces the same visibility, password, share and NSFW gates.
+        'gallery' => [
+            'public_path',
+            'gallery_path',
+            'slug',
+            'gallery_page',
+            'photo_page',
+            'share',
+            'token',
+            'q',
+            'view_as',
+            'presentation',
+            'benchmark_token',
+            'benchmark_run',
+            'benchmark_cache_bust',
+            'benchmark_phase',
+        ],
         'smart_gallery' => ['slug', 'photo_page', 'source_gallery_id', 'view_as'],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id', 'phase'],

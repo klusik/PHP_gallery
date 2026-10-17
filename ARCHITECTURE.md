@@ -35,7 +35,10 @@ PDF metadata queue and serialized audio metadata reader complete their totals.
 Deferred presentation activation hands off to the existing lightbox scheduler,
 including sparse photo-one loading and temporary soundtrack enablement. Clipboard
 copy and its selectable-URL fallback belong to the existing media-panel module.
-No persistence, delivery route or access-policy change is involved.
+The SEO guard allows `presentation` on gallery pages while the controller keeps
+ordinary visitor authorization. Desktop native-fullscreen refusal retains the
+desktop CSS shell and image stage; mobile presentation keeps its existing shell.
+No persistence or media delivery route change is involved.
 
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.

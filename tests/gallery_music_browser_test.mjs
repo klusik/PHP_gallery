@@ -515,6 +515,25 @@ try {
     check(layout.scrollWidth <= 340,
         'Narrow media cards overflowed the gallery container');
     layout.remove();
+    // A fresh document exercises URL startup without dispatching a launch click.
+    // Its actual CSS and decoded images catch a zero-sized fullscreen stage.
+    const directLink = document.createElement('iframe');
+    directLink.style.cssText = 'width:100%;height:100vh;border:0';
+    const directResult = new Promise(resolve => {
+        const receive = event => {
+            if (event.origin !== location.origin
+                || event.source !== directLink.contentWindow
+                || event.data?.kind !== 'presentation-fixture') return;
+            window.removeEventListener('message', receive);
+            resolve(event.data);
+        };
+        window.addEventListener('message', receive);
+    });
+    directLink.src = '/presentation?lang=en&presentation=1';
+    document.body.prepend(directLink);
+    const launched = await directResult;
+    check(launched.ok, launched.message || 'Direct presentation failed');
+    directLink.remove();
     document.getElementById('results').textContent = 'BROWSER PASS gallery music repeat-all, controls, rejection, teardown and dynamic panel';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + (error.stack || String(error));
@@ -526,6 +545,21 @@ const server = createServer(async (request, response) => {
         const url = new URL(request.url || '/', 'http://127.0.0.1');
         if (url.pathname === '/') {
             response.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'}).end(html);
+            return;
+        }
+        if (url.pathname === '/presentation') {
+            response.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+            response.end(await readFile(path.join(
+                root, 'tests/fixtures/gallery_presentation.html'
+            )));
+            return;
+        }
+        if (url.pathname === '/presentation-image.svg') {
+            // A real decoded landscape source, with distinct scheduled URLs.
+            response.writeHead(200, {'Content-Type': 'image/svg+xml'});
+            response.end('<svg xmlns="http://www.w3.org/2000/svg"'
+                + ' width="800" height="600"><rect width="800" height="600"'
+                + ' fill="slateblue"/></svg>');
             return;
         }
         const file = path.resolve(root, '.' + url.pathname);

@@ -102,6 +102,17 @@ these boundaries; real codecs/devices and large deployed unions remain manual.
 
 ## Compact attachment browser presentation
 
+The gallery-only `presentation` query flag is allowed through the SEO guard;
+it grants no visitor authority. Public direct links must reach the same gallery
+controller in a fresh anonymous session. Desktop native fullscreen rejection
+keeps `.is-fullscreen` geometry with `.is-css-fullscreen` stacking rather than
+entering a mobile-only CSS shell. This permanent viewer-owned capability fallback
+protects links without user activation. Retire only with supported-browser proof
+that native fullscreen is assured. Actual Chromium regressions decode synthetic
+images, assert nonzero stage geometry, advance from photo one and close/release
+audio after controlled native fullscreen/autoplay rejection. Live browser policy,
+codec and mobile-device coverage remains manual; adoption statistics are unknown.
+
 Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.
 Native details is the permanent no-JavaScript and missing-Popover fallback: the
 bounded list opens inline while forms keep their original ownership. Optional

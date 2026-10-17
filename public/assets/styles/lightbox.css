@@ -53,6 +53,14 @@
     grid-template-columns: 1fr;
     grid-template-areas: "stage";
 }
+/* Keep denied native fullscreen above Admin UI using the mobile viewer's layer.
+   Type: integer. Units: stacking order. Scope: CSS desktop fullscreen.
+   Consumers: .lightbox.is-css-fullscreen z-index.
+   Rationale: 1400 matches the supported CSS mobile overlay and covers Admin UI. */
+.lightbox.is-css-fullscreen {
+    --lightbox-css-fullscreen-layer: 1400;
+    z-index: var(--lightbox-css-fullscreen-layer);
+}
 .lightbox.is-fullscreen figure {
     width: 100%;
     height: 100%;

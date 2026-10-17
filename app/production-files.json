@@ -2228,6 +2228,7 @@
         "tests/fixtures/early_runtime_probe.php",
         "tests/fixtures/gallery_creation.html",
         "tests/fixtures/gallery_picker_parent_integration.js",
+        "tests/fixtures/gallery_presentation.html",
         "tests/fixtures/gallery_tags.html",
         "tests/fixtures/lightbox_dev_dashboard.html",
         "tests/fixtures/lightbox_map_navigation.html",

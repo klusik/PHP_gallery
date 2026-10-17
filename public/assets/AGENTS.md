@@ -42,6 +42,10 @@ The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with on
 `PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
 
 ## Public Lightbox Zoom Guidelines
+Always exercise shared-link query flags through the anonymous request guard.
+For native fullscreen refusal, use the production CSS in a browser and assert
+decoded photographs have a nonzero stage on desktop and narrow viewports.
+
 The public lightbox zoom is a single-viewer feature. Keep `data-lightbox-stage`, `.lightbox-zoom-surface`, and
 `data-lightbox-img` as one coordinated presentation path rather than adding a parallel fullscreen viewer or a second
 media authorization route. Scale is bounded to 100-400%. The fitted 100% photograph is explicitly centered; the zoom
