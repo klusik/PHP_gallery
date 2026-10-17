@@ -149,6 +149,136 @@ try {
     check(is_file($original) && hash_file('sha256', $original) === hash_file('sha256', $sample), 'Uploaded original hash mismatch.');
     echo "PASS gallery workflow multipart upload metadata and original hash\n";
 
+    $stage = 'real Smart Gallery source music union';
+    // PCM header/sample dimensions and IDs are exact audio-format vectors.
+    $audioSamples = str_repeat("\x80", 8);
+    $audioBytes = 'RIFF' . pack('V', 36 + strlen($audioSamples)) . 'WAVEfmt '
+        . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8)
+        . 'data' . pack('V', strlen($audioSamples)) . $audioSamples;
+    $otherAudio = substr($audioBytes, 0, -1) . "\x81";
+    $musicSources = [
+        $seed['root_id'] => [[$audioBytes, 'Shared.wav', false]],
+        $id => [
+            [$audioBytes, 'Renamed.wav', false],
+            [$otherAudio, 'Shared.wav', false],
+            [substr($audioBytes, 0, -1) . "\x82", 'Hidden.wav', true],
+        ],
+        $seed['protected_id'] => [
+            [substr($audioBytes, 0, -1) . "\x83", 'Denied.wav', false],
+        ],
+    ];
+    $musicFolders = [];
+    $musicFiles = [];
+    foreach ($musicSources as $sourceId => $originals) {
+        $sourceRow = row($pdo,
+            'SELECT folder_path FROM galleries WHERE id = ?', [$sourceId]);
+        $musicFolder = $directory . '/galleries/'
+            . $sourceRow['folder_path'] . '/.gallery-music';
+        check(!file_exists($musicFolder) && mkdir($musicFolder, 0700),
+            'Smart audio seed must own an initially absent sidecar.');
+        $musicFolders[] = $musicFolder;
+        $musicTracks = [];
+        foreach ($originals as $position => [$bytes, $name, $hidden]) {
+            $trackId = sprintf('%032x', $position + 1);
+            $file = $musicFolder . '/' . $trackId . '.bin';
+            check(file_put_contents($file, $bytes) === strlen($bytes),
+                'Could not seed exact source audio.');
+            $musicFiles[] = $file;
+            $musicTracks[] = [
+                'id' => $trackId, 'filename' => $name, 'title' => $name,
+                'mime' => 'audio/wav', 'size' => strlen($bytes),
+                'sha256' => hash('sha256', $bytes), 'hidden' => $hidden,
+                'downloadable' => $hidden,
+            ];
+        }
+        $indexFile = $musicFolder . '/index.json';
+        file_put_contents($indexFile, json_encode([
+            'format' => 'gallery_music_v1', 'revision' => str_repeat('a', 32),
+            'enabled' => false, 'tracks' => $musicTracks,
+        ], JSON_THROW_ON_ERROR));
+        $musicFiles[] = $indexFile;
+    }
+    $conditions = [];
+    foreach (array_keys($musicSources) as $sourceId) {
+        $conditions[] = ['type' => 'condition', 'field' => 'gallery',
+            'operator' => 'equals', 'value' => $sourceId];
+    }
+    $smartCreated = envelope($admin->request(
+        '/index.php?page=admin_smart_galleries', [
+            'csrf_token' => $csrf, 'action' => 'save',
+            'title' => 'Smart music workflow', 'slug' => 'smart-music-workflow',
+            'enabled' => '1', 'visibility' => 'public',
+            'placement_mode' => 'unlisted', 'sort_mode' => 'capture_date',
+            'sort_direction' => 'desc',
+            'rules_json' => json_encode(['version' => 1, 'root' => [
+                'type' => 'group', 'operator' => 'OR', 'children' => $conditions,
+            ]], JSON_THROW_ON_ERROR),
+            // One photo per page proves music membership is not page-local.
+            'presentation_override_enabled' => '1',
+            'presentation_grid_columns' => '1', 'presentation_grid_rows' => '1',
+            'presentation_pagination_enabled' => '1',
+            'presentation_lightbox_enabled' => '1',
+            'presentation_slideshow_enabled' => '1',
+            'presentation_music_enabled' => '1',
+        ], true
+    ), 'Create Smart music gallery');
+    $smartId = (int) $smartCreated['smart_gallery_id'];
+    $savedSmart = row($pdo,
+        'SELECT presentation_json FROM smart_galleries WHERE id = ?', [$smartId]);
+    check(json_decode($savedSmart['presentation_json'], true)['music_enabled']
+        === true, 'Smart music autoplay preference was not persisted.');
+    $smartRoute = '/index.php?page=smart_gallery&slug=smart-music-workflow';
+    $sourceAudioUrl = '';
+    foreach (['', '&photo_page=2', '&source_gallery_id=' . $id] as $view) {
+        $smartPage = $anonymous->request($smartRoute . $view);
+        check($smartPage['status'] === 200,
+            'Real runtime Smart music page did not render.');
+        $document = new DOMDocument();
+        check(@$document->loadHTML($smartPage['body']),
+            'Smart music page HTML cannot be parsed.');
+        $xpath = new DOMXPath($document);
+        $scripts = $xpath->query('//script[@data-gallery-music-playlist]');
+        check($scripts->length === 1, 'Smart page must own one merged playlist.');
+        $playlist = json_decode($scripts->item(0)->textContent, true,
+            flags: JSON_THROW_ON_ERROR);
+        check($playlist['galleryId'] === -$smartId && $playlist['enabled']
+            && count($playlist['tracks']) === 2,
+            'Pagination/filtering lost source music, visibility or deduplication.');
+        $actualHashes = [];
+        foreach ($playlist['tracks'] as $track) {
+            $audio = $anonymous->request($track['url']);
+            check($audio['status'] === 200,
+                'Merged source audio failed its real protected delivery route.');
+            $actualHashes[] = hash('sha256', $audio['body']);
+            parse_str((string) parse_url($track['url'], PHP_URL_QUERY), $params);
+            if ((int) $params['id'] === $id) $sourceAudioUrl = $track['url'];
+        }
+        sort($actualHashes);
+        $expectedHashes = [hash('sha256', $audioBytes), hash('sha256', $otherAudio)];
+        sort($expectedHashes);
+        check($actualHashes === $expectedHashes,
+            'Hidden/protected audio leaked or renamed bytes were not deduplicated.');
+    }
+    check($sourceAudioUrl !== '', 'Missing independently addressable source audio.');
+    $pdo->prepare('UPDATE galleries SET visibility = ? WHERE id = ?')
+        ->execute(['private', $id]);
+    check($anonymous->request($sourceAudioUrl)['status'] === 404,
+        'Old merged audio URL bypassed a revoked source-gallery grant.');
+    $afterRevocation = $anonymous->request($smartRoute);
+    check($afterRevocation['status'] === 200
+        && !str_contains($afterRevocation['body'], 'Renamed.wav')
+        && !str_contains($afterRevocation['body'], 'Hidden.wav')
+        && !str_contains($afterRevocation['body'], 'Denied.wav'),
+        'Smart presentation retained inaccessible source metadata.');
+    $pdo->prepare('UPDATE galleries SET visibility = ? WHERE id = ?')
+        ->execute(['public', $id]);
+    envelope($admin->request('/index.php?page=admin_smart_galleries', [
+        'csrf_token' => $csrf, 'action' => 'delete', 'id' => $smartId,
+    ], true), 'Remove owned Smart music gallery');
+    foreach ($musicFiles as $file) check(unlink($file), 'Cannot retire audio seed.');
+    foreach ($musicFolders as $path) check(rmdir($path), 'Cannot retire audio sidecar.');
+    echo "PASS gallery workflow real Smart music union and source authorization\n";
+
     $stage = 'real runtime OFP public HTTP and anonymous preflight';
     $ofpBytes = galleryWorkflowOfpFixturePdf();
     check(file_put_contents($folder . '/simbrief-ofp.pdf', $ofpBytes) === strlen($ofpBytes),

@@ -37,7 +37,7 @@ require_once __DIR__ . '/../views/gallery_music.php';
  *         mime:string,
  *         size:int,
  *         sha256:string,
- *         downloadable:bool,
+ *         hidden:bool, downloadable:bool,
  *         url:string,
  *         download_url:string
  *     }>
@@ -52,15 +52,65 @@ function gallery_music_view_model(array $gallery, bool $editor = false): array
     } catch (\Throwable) {
         $error = \Gallery\Services\t('music.failed');
     }
+    return gallery_music_present_playlist(
+        (int) $gallery['id'], $editor, $state, $error
+    );
+}
+
+/**
+ * Prepare protected URLs and existing controls for a physical or merged playlist.
+ * @param int $galleryId Physical ID or negative Smart Gallery presentation ID.
+ * @param bool $editor Whether authenticated physical-gallery forms are available.
+ * @param array{revision:string,enabled:bool,tracks:list<array{id:string,
+ *     source_gallery_id?:int,title:string,filename:string,mime:string,size:int,
+ *     sha256:string,hidden:bool,downloadable:bool}>} $state Prepared snapshot;
+ *     merged records retain their physical source IDs for delivery.
+ * @param string $error Localized optional-storage failure, otherwise empty.
+ * @return array{
+ *     gallery_id:int,
+ *     editor:bool,
+ *     action_url:string,
+ *     csrf_html:string,
+ *     revision:string,
+ *     enabled:bool,
+ *     error:string,
+ *     tracks:list<array{
+ *         id:string,
+ *         title:string,
+ *         filename:string,
+ *         mime:string,
+ *         size:int,
+ *         sha256:string,
+ *         hidden:bool, downloadable:bool,
+ *         url:string,
+ *         download_url:string
+ *     }>
+ * } Escaped-by-view presentation with no local paths.
+ */
+function gallery_music_present_playlist(
+    int $galleryId,
+    bool $editor,
+    array $state,
+    string $error = ''
+): array {
     $base = rtrim(\Gallery\Core\request_script_base_path(), '/') . '/index.php';
     $tracks = [];
     $audience = \Gallery\Core\admin_anonymous_preview_active()
         ? ['view_as' => 'anonymous'] : [];
     foreach ($state['tracks'] as $track) {
+        if (!$editor && !\Gallery\Services\gallery_music_track_visible($track)) {
+            continue;
+        }
+        $sourceId = $track['source_gallery_id'] ?? $galleryId;
+        $originalId = $track['id'];
+        if (isset($track['source_gallery_id'])) {
+            $track['id'] = $sourceId . ':' . $originalId;
+            unset($track['source_gallery_id']);
+        }
         $url = $base . '?' . http_build_query([
             'page' => 'gallery_music',
-            'id' => (int) $gallery['id'],
-            'track' => $track['id'],
+            'id' => $sourceId,
+            'track' => $originalId,
         ] + $audience, '', '&', PHP_QUERY_RFC3986);
         $tracks[] = $track + [
             'url' => $url,
@@ -69,17 +119,56 @@ function gallery_music_view_model(array $gallery, bool $editor = false): array
         ];
     }
     return [
-        'gallery_id' => (int) $gallery['id'],
+        'gallery_id' => $galleryId,
         'editor' => $editor,
-        'action_url' => $base . '?' . http_build_query([
-            'page' => 'admin_edit_gallery', 'id' => (int) $gallery['id'],
-        ], '', '&', PHP_QUERY_RFC3986),
+        'action_url' => $galleryId > 0 ? $base . '?' . http_build_query([
+            'page' => 'admin_edit_gallery', 'id' => $galleryId,
+        ], '', '&', PHP_QUERY_RFC3986) : '',
         'csrf_html' => $editor ? \Gallery\Core\csrf_field() : '',
         'revision' => $state['revision'],
         'enabled' => $state['enabled'],
         'error' => $error,
         'tracks' => $tracks,
     ];
+}
+
+/**
+ * Prepare an independent Smart Gallery player without creating music storage.
+ * @param int $smartGalleryId Authorized positive Smart Gallery identity.
+ * @param list<array{id:int,folder_path:string}> $sources Complete authorized
+ *     physical sources containing music, supplied by the Smart Gallery service.
+ * @param bool $enabled Saved Smart Gallery slideshow preference, initially off.
+ * @return array{
+ *     gallery_id:int,
+ *     editor:bool,
+ *     action_url:string,
+ *     csrf_html:string,
+ *     revision:string,
+ *     enabled:bool,
+ *     error:string,
+ *     tracks:list<array{
+ *         id:string,
+ *         title:string,
+ *         filename:string,
+ *         mime:string,
+ *         size:int,
+ *         sha256:string,
+ *         hidden:bool, downloadable:bool,
+ *         url:string,
+ *         download_url:string
+ *     }>
+ * } Escaped-by-view presentation with no local paths.
+ */
+function gallery_music_smart_view_model(
+    int $smartGalleryId,
+    array $sources,
+    bool $enabled
+): array {
+    $state = \Gallery\Services\gallery_music_merge_playlists($sources);
+    $state['enabled'] = $enabled;
+    // Physical IDs are positive; a negative presentation ID prevents a Smart
+    // Gallery from sharing controls with an unrelated physical gallery.
+    return gallery_music_present_playlist(-$smartGalleryId, false, $state);
 }
 
 /**
@@ -235,6 +324,10 @@ function cms_gallery_music(): void
         } catch (\Throwable) {
             $document = null;
         }
+    }
+    if ($document !== null && !$admin
+        && !\Gallery\Services\gallery_music_track_visible($document['track'])) {
+        $document = null;
     }
     $download = (string) ($_GET['download'] ?? '') === '1';
     if ($download && $document !== null

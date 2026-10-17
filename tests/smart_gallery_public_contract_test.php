@@ -64,8 +64,23 @@ smart_gallery_public_contract_assert(str_contains($service, 'const SMART_GALLERY
 smart_gallery_public_contract_assert(str_contains($controller, 'function cms_smart_gallery_lightbox_data()') && str_contains($controller, 'smart_gallery_lightbox_fetch_images($gallery, true'), 'Public Smart Gallery lightbox uses the authorized bounded lazy endpoint.');
 smart_gallery_public_contract_assert(str_contains($smartGalleryView, 'data-lightbox-total="') && str_contains($smartGalleryView, 'data-lightbox-endpoint="'), 'Public Smart Gallery page exposes total ordering metadata without embedding every image row.');
 smart_gallery_public_contract_assert(str_contains($controller, '$offset + $index') && str_contains($controller, '$offset + $rowIndex'), 'Rendered cards and lazy metadata share global ordered indexes across pagination boundaries.');
-smart_gallery_public_contract_assert(str_contains($service, "'source_gallery_visible' => true") && str_contains($service, "'source_gallery_visible', 'map_enabled', 'lightbox_enabled'"), 'Smart Gallery source context is an inherited presentation preference and supports explicit overrides.');
-smart_gallery_public_contract_assert(str_contains($service, "'map_enabled' => true") && str_contains($service, "'source_gallery_visible', 'map_enabled', 'lightbox_enabled'") && str_contains($service, "'maps' => \$capabilityEnabled('gallery_maps')"), 'Smart Gallery aggregate map is an inherited preference suppressed by the site-wide GPS map capability.');
+// The same explicit allowlist may span readable source lines. Keep every
+// preference identity and ordering assertion independent of whitespace.
+$presentationBooleanAllowlist = preg_match(
+    "/'source_gallery_visible',\\s*'map_enabled',\\s*'lightbox_enabled'/",
+    $service
+) === 1;
+smart_gallery_public_contract_assert(
+    str_contains($service, "'source_gallery_visible' => true")
+        && $presentationBooleanAllowlist,
+    'Source context is inherited and supports explicit overrides.'
+);
+smart_gallery_public_contract_assert(
+    str_contains($service, "'map_enabled' => true")
+        && $presentationBooleanAllowlist
+        && str_contains($service, "'maps' => \$capabilityEnabled('gallery_maps')"),
+    'Aggregate map preference respects the site-wide GPS map capability.'
+);
 smart_gallery_public_contract_assert(str_contains($controller, "'source_gallery_visible' => isset(\$_POST['presentation_source_gallery_visible'])") && str_contains($smartGalleryView, 'presentation_source_gallery_visible'), 'Admin Smart Gallery presentation persists a source-gallery visibility preference.');
 smart_gallery_public_contract_assert(str_contains($controller, "'map_enabled' => isset(\$_POST['presentation_map_enabled'])") && str_contains($smartGalleryView, 'presentation_map_enabled'), 'Admin Smart Gallery presentation persists the aggregate-map preference.');
 smart_gallery_public_contract_assert(str_contains($controller, "'source_gallery' => \$sourceGalleryContext") && str_contains($smartGalleryView, 'smart-gallery-source-badge') && str_contains($smartGalleryView, 'data-smart-gallery-source-link'), 'Smart Gallery cards expose localized physical-source context through a dedicated provenance badge.');

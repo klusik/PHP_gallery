@@ -3,6 +3,9 @@
 - Compact PDF/music applets: shared markup in
   `app/views/public_gallery_lightbox.php`; disclosure lifecycle in
   `public/assets/gallery-modules/gallery-media-panels.js`.
+- Smart music: complete source IDs in `app/services/smart_galleries.php`;
+  read-only union/deduplication in the existing music service; source URLs in
+  `app/controllers/gallery_music.php`.
 - Gallery music: `app/models/gallery_music.php` owns atomic playlist indexes;
   `app/services/gallery_music.php` owns audio validation and revisioned file
   workflows; `app/controllers/gallery_music.php` owns view models, Admin

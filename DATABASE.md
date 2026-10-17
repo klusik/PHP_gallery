@@ -1343,7 +1343,26 @@ Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `
 
 Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
 
-Migration `202608170001_smart_gallery_presentation.php` adds nullable `smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned separately from `rules_json`; version 1 stores only Smart Gallery presentation overrides. Supported normalized keys are `grid_columns`, `grid_rows`, `pagination_enabled`, `thumbnail_min_size`, `thumbnail_max_size`, `thumbnail_rendering_mode`, `card_layout`, `metadata_visible`, `lightbox_enabled`, `lightbox_browsing_mode`, `slideshow_enabled`, `download_enabled`, and `voting_enabled`. Missing, malformed, unknown-version, or invalid values are treated as absent so current Theme/site defaults remain authoritative. An override-free document is stored as `{"version":1}`.
+Migration `202608170001_smart_gallery_presentation.php` adds nullable
+`smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned
+separately from `rules_json`; version 1 stores only Smart Gallery presentation
+overrides. Supported normalized keys are `grid_columns`, `grid_rows`,
+`pagination_enabled`, `thumbnail_min_size`, `thumbnail_max_size`,
+`thumbnail_rendering_mode`, `card_layout`, `metadata_visible`,
+`lightbox_enabled`, `lightbox_browsing_mode`, `slideshow_enabled`,
+`music_enabled`, `download_enabled`, and `voting_enabled`. Missing, malformed,
+unknown-version, or invalid values are treated as absent so current Theme/site
+defaults remain authoritative. An override-free document is stored as
+`{"version":1}`.
+
+Smart Gallery music adds no SQL table or source-membership copy. The existing
+version-1 presentation JSON accepts `music_enabled` as an independent boolean
+override (absent means false). Physical sidecar indexes retain original tracks,
+visibility and download permission; the music model maps missing `hidden` to
+false and missing `downloadable` to false without rewriting existing records.
+The public source union is derived from canonical grouped photo membership and
+visitor access, not persisted into Smart rows.
+
 
 Migration `202608170002_smart_gallery_attachment_ordering.php` extends the canonical `smart_gallery_placements` junction rather than adding a parallel relationship table. `placement ENUM('top','bottom') NOT NULL DEFAULT 'bottom'` preserves the previous below-content behavior for every existing row. `placement_order INT NOT NULL DEFAULT 0` stores per-parent order, and the `(gallery_id, placement, placement_order, smart_gallery_id)` index supports deterministic grouped reads. The existing composite primary key `(smart_gallery_id, gallery_id)` continues to prevent duplicate attachment instances under one physical parent while allowing the same Smart Gallery under multiple parents.
 

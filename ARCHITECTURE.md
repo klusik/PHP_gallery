@@ -44,6 +44,13 @@ forms out of their gallery. It retains native inline capability fallback and
 reopens same-identity cards after canonical replacement. PDF/music launchers
 share one description column; the existing miniplayer stays outside the list.
 
+Smart music resolves complete canonical source-summary IDs before optional
+attachment loading. The existing music service merges visible indexed tracks
+by stored content digest, without SQL or audio decoding. Source authorization
+and track visibility remain enforced by protected physical delivery. Smart
+presentation owns its independent default-off autoplay flag; no Smart music
+filesystem is created. See `docs/SMART_GALLERIES.md` for union semantics.
+
 One exclusive page-wide Audio owner synchronously applies the saved slideshow
 preference before fullscreen awaits. Tables, editor cards and viewer HUD share
 icon controls; only one source can play. Duration uses one separate silent,

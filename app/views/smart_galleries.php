@@ -186,10 +186,21 @@ function view_render_smart_gallery_editor(array $viewModel): void
 }
 
 /**
- * Render canonical Smart Gallery presentation controls, including breadcrumb inheritance.
- *
- * @param array<string,mixed> $viewModel Controller-prepared presentation state.
- * @return void Emits the presentation fieldset from controller-prepared data.
+ * Render canonical Smart Gallery presentation and independent music defaults.
+ * @param array{presentation?:array<string,int|bool|string|null>,
+ *     has_override?:bool,source_label?:string,max_columns?:int,max_rows?:int,
+ *     items_per_page?:int,pagination_safety_limit?:int,
+ *     thumbnail_bounds?:array{values:list<int>,min_index:int,max_index:int},
+ *     thumbnail_modes?:list<array{value:string,label:string,selected:bool}>,
+ *     card_layouts?:list<array{value:string,label:string,selected:bool}>,
+ *     lightbox_modes?:list<array{value:string,label:string,selected:bool}>,
+ *     capability_masters?:array{maps:bool,lightbox:bool,voting:bool,
+ *     downloads:bool},breadcrumb_style_picker?:array{field_name:string,
+ *     label:string,current:string,options:list<array{value:string,label:string,
+ *     preview:array{style_class?:string,
+ *     items?:list<array{label:string,current?:bool}>}}>}} $viewModel Prepared
+ *     controls, inherited values and presentation-only option previews.
+ * @return void Emit the independent presentation fieldset without domain reads.
  */
 function view_render_smart_gallery_presentation_controls(array $viewModel): void
 {
@@ -264,6 +275,10 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
     }
     echo '</select></label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_slideshow_enabled" value="1"' . (!empty($presentation['slideshow_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.slideshow_enabled', 'Enable slideshow controls')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox"'
+        . ' name="presentation_music_enabled" value="1"'
+        . (!empty($presentation['music_enabled']) ? ' checked' : '') . '> '
+        . e(t('music.default')) . '</label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_voting_enabled" value="1"' . (!empty($presentation['voting_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.voting_enabled', 'Enable visitor voting where the source gallery allows it')) . '</label>';
     if (empty($masters['voting'])) {
         echo '<p class="muted">' . e(t('smart_gallery.voting_master_suppressed', 'Currently suppressed by the site-wide Image Voting capability. The Smart Gallery preference is preserved.')) . '</p>';
@@ -376,10 +391,27 @@ function view_render_smart_gallery_source_summary(array $summary): void
 }
 
 /**
- * Render a published Smart Gallery page.
- *
- * @param array<string,mixed> $viewModel Controller-prepared public page state.
- * @return void
+ * Render a published Smart Gallery with prepared source music and photo controls.
+ * @param array{title?:string,description?:string,total?:int,
+ *     breadcrumbs?:array{aria_label?:string,style_class?:string,
+ *     items?:list<array{label:string,url:?string,current:bool}>},
+ *     download?:array{id:int,action_url?:string,capability:string,
+ *     start_url:string,label:string}|null,map_available?:bool,map_url?:string,
+ *     source_summary?:array{gallery_count?:int,total_images?:int,
+ *     selected_gallery_id?:int,selected_valid?:bool,clear_url?:string,
+ *     items?:list<array{gallery_id:int,title:string,breadcrumb:string,
+ *     breadcrumb_compact:string,source_url:string,image_count:int,
+ *     selected:bool,filter_url?:string}>},pagination_html?:string,
+ *     lightbox_enabled?:bool,lightbox_endpoint?:string,
+ *     lightbox_browsing_mode?:string,lightbox_html?:string,music_html?:string,
+ *     cards?:array{grid_class?:string,cards?:list<array{attributes_html?:string,
+ *     favourite_attribute_html?:string,url?:string,thumbnail_html?:string,
+ *     favourite_html?:string,collection_html?:string,vote_html?:string,
+ *     source_gallery?:array{title:string,url:string,breadcrumb?:string,
+ *     breadcrumb_compact?:string}|null,metadata_visible?:bool,title?:string,
+ *     description?:string,tags_html?:string}>}} $viewModel Authorized page,
+ *     source provenance and prepared card/attachment markup.
+ * @return void Emit the public hero, playlist, image grid and existing viewer.
  */
 function view_render_public_smart_gallery(array $viewModel): void
 {
@@ -394,7 +426,9 @@ function view_render_public_smart_gallery(array $viewModel): void
         $mapLabel = t('smart_gallery.show_map', 'Show Smart Gallery map');
         echo '<button type="button" class="button secondary hero-icon-button smart-gallery-map-button" data-gallery-map-url="' . e((string) $viewModel['map_url']) . '" data-gallery-map-title="' . e((string) ($viewModel['title'] ?? '')) . '" aria-label="' . e($mapLabel) . '" title="' . e($mapLabel) . '"><span aria-hidden="true">&#128205;</span><span class="visually-hidden">' . e($mapLabel) . '</span></button>';
     }
-    echo '</div></div></div></section>';
+    echo '</div></div></div>';
+    echo (string) ($viewModel['music_html'] ?? '');
+    echo '</section>';
 
     view_render_smart_gallery_source_summary((array) ($viewModel['source_summary'] ?? []));
     echo (string) ($viewModel['pagination_html'] ?? '');

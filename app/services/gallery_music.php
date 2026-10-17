@@ -144,11 +144,79 @@ function gallery_music_validate_source(string $source, string $filename): array
  *     identity/path.
  * @return array{revision:string, enabled:bool, tracks:list<array{id:string,
  *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     downloadable:bool}>} Complete playlist and slideshow default.
+ *     hidden:bool, downloadable:bool}>} Complete playlist and slideshow default.
  */
 function gallery_music_playlist(array $gallery): array
 {
     return \Gallery\Models\gallery_music_model_read(gallery_music_directory($gallery));
+}
+
+/**
+ * Keep track visibility independent of permission to download the original.
+ * @param array{hidden?:bool} $track Normalized visibility or an older record.
+ * @return bool Whether visitors may see/play this track after source access.
+ */
+function gallery_music_track_visible(array $track): bool
+{
+    return empty($track['hidden']);
+}
+
+/**
+ * Merge visible tracks from an already authorized physical-source union.
+ * @param list<array{id:int,folder_path:string}> $sources Complete canonical
+ *     Smart Gallery sources, independent of photo pagination/view filtering.
+ * @return array{revision:string,enabled:bool,unavailable:int,
+ *     tracks:list<array{source_gallery_id:int,id:string,filename:string,
+ *     title:string,mime:string,size:int,sha256:string,hidden:bool,
+ *     downloadable:bool}>} Stable source/track order, one original per digest,
+ *     and the number of unreadable indexes omitted without modifying storage.
+ */
+function gallery_music_merge_playlists(array $sources): array
+{
+    usort($sources, static fn(array $left, array $right): int =>
+        $left['id'] <=> $right['id']);
+    $tracks = [];
+    $versions = [];
+    $seen = [];
+    $unavailable = 0;
+    foreach ($sources as $source) {
+        $galleryId = $source['id'];
+        if ($galleryId <= 0 || isset($versions[$galleryId])) continue;
+        try {
+            $playlist = gallery_music_playlist($source);
+        } catch (\RuntimeException) {
+            // Independent optional sources remain usable when one index is
+            // damaged. Preserve its bytes; this service owns this permanent
+            // omission rather than inventing an empty writable playlist.
+            $unavailable += 1;
+            $versions[$galleryId] = 'unavailable';
+            continue;
+        }
+        $versions[$galleryId] = $playlist['revision'];
+        foreach ($playlist['tracks'] as $track) {
+            if (!gallery_music_track_visible($track)) continue;
+            $key = $track['sha256'];
+            $candidate = ['source_gallery_id' => $galleryId] + $track;
+            if (isset($seen[$key])) {
+                $position = $seen[$key];
+                // A downloadable visible copy may represent the same bytes.
+                // Its own protected endpoint remains the permission owner.
+                if ($track['downloadable']
+                    && !$tracks[$position]['downloadable']) {
+                    $tracks[$position] = $candidate;
+                }
+                continue;
+            }
+            $seen[$key] = count($tracks);
+            $tracks[] = $candidate;
+        }
+    }
+    return [
+        'revision' => hash('sha256', json_encode($versions, JSON_THROW_ON_ERROR)),
+        'enabled' => false,
+        'unavailable' => $unavailable,
+        'tracks' => $tracks,
+    ];
 }
 
 /**
@@ -157,7 +225,7 @@ function gallery_music_playlist(array $gallery): array
  * @param string $id Opaque gallery-scoped track identity.
  * @return array{path:string, track:array{id:string, filename:string,
  *     title:string, mime:string, size:int, sha256:string,
- *     downloadable:bool}}|null Verified source and metadata, or null when
+ *     hidden:bool, downloadable:bool}}|null Verified source and metadata, or null when
  *     absent/unsafe.
  */
 function gallery_music_track(array $gallery, string $id): ?array
@@ -269,6 +337,7 @@ function gallery_music_mutate(
             $state['tracks'][] = [
                 'id' => $id,
                 'title' => $validated['filename'],
+                'hidden' => false,
                 'downloadable' => false,
             ] + $validated;
         } elseif ($action === 'settings') {

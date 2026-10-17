@@ -181,6 +181,17 @@ namespace Gallery\Services {
     $GLOBALS['smart_gallery_breadcrumb_theme_style'] = 'chevron';
 
     $defaults = smart_gallery_presentation_defaults();
+    smart_gallery_presentation_assert($defaults['music_enabled'] === false,
+        'Smart Gallery slideshow music must initially be off.');
+    $musicJson = smart_gallery_presentation_json(['music_enabled' => true]);
+    $musicPresentation = smart_gallery_effective_presentation([
+        'presentation_json' => $musicJson,
+    ]);
+    smart_gallery_presentation_assert($musicPresentation['music_enabled'] === true,
+        'Smart music preference must survive normalized JSON persistence.');
+    smart_gallery_presentation_assert(smart_gallery_normalize_presentation([
+        'music_enabled' => 'inherit',
+    ]) === [], 'Inherited music must retain the default silent slideshow.');
     smart_gallery_presentation_assert($defaults['grid_columns'] === 5 && $defaults['grid_rows'] === 7, 'Smart Gallery defaults inherit the current site grid.');
     smart_gallery_presentation_assert($defaults['thumbnail_rendering_mode'] === 'progressive', 'Smart Gallery defaults inherit the current site thumbnail renderer.');
     smart_gallery_presentation_assert($defaults['card_layout'] === 'horizontal', 'Smart Gallery defaults inherit the canonical Theme gallery-card layout.');

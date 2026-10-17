@@ -11,6 +11,12 @@ discovers this test.
 Synthetic bytes do not establish browser codec support or live-host acceptance.
 See [the music contract](docs/GALLERY_MUSIC.md).
 
+The same service owner exercises complete-source discovery with controlled
+listing/visitor grants, renamed byte deduplication, distinct same-name/duration
+WAV samples, hidden-copy exclusion, representative download permission, corrupt
+index preservation and mounted anonymous-preview Smart URLs. The existing Smart
+presentation test checks default-off music and normalized JSON persistence.
+
 The existing isolated attachment HTTP fixture also exercises music originals
 under root and subdirectory mounts, exact bytes, GET/HEAD, suffix/closed byte
 ranges, invalid ranges, administrator and anonymous-preview authority, sharing,
@@ -47,6 +53,16 @@ image-only replay/cancellation assertions retain their original boundaries.
 
 The existing speed fixture retains a narrow music-stop adapter so its real
 scheduler/HUD assertions remain independent.
+
+The existing real database/HTTP workflow creates a Smart definition through the
+actual Admin save endpoint and verifies its persisted music preference. Its
+canonical OR scope contains multiple visible sources plus a password-protected
+source, renamed duplicate bytes, different equal-duration samples and hidden
+audio. Actual paginated/filtered public pages must retain one complete merged
+playlist, stream exact protected originals and deny an old URL after source
+visibility is revoked. Owned test sidecars/definition are removed before the
+remaining workflow stages. Chromium also exercises negative Smart presentation
+and composite track identities through the existing exclusive player.
 
 Manual acceptance must exercise real MP3/M4A/Ogg/WAV files on current desktop
 and mobile browsers, gallery default on/off, keyboard and touch HUD controls,

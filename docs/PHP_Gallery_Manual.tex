@@ -541,6 +541,17 @@ independently requested table playback can~continue. Photo and~speed changes
 leave music running. Browser refusal permits an~explicit Play retry;
 a~completely unplayable playlist stops after one pass.
 
+Smart Galleries merge visible music from~all~accessible physical sources
+contributing matching photos. Pagination and~temporary source filters do~not
+narrow this union; no~Smart audio folder is~created. SHA-256 deduplicates
+identical original bytes even after renaming. Equal names or~durations alone
+never remove different audio; changed encodings or~embedded tags need future
+fingerprinting. Hidden tracks are~excluded, while visible download-locked
+tracks remain playable. Existing and~new tracks default visible. Protected
+source URLs recheck access and~visibility. In~the~Smart editor's presentation
+overrides, enable its~independent slideshow music preference; it~starts off
+and~does not~inherit source autoplay settings.
+
 Each uploaded track initially forbids downloads. Small administrator icons
 beside each track allow or~lock its download; the~header icon changes all
 current tracks. Later uploads still start locked. Public download icons appear

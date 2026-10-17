@@ -55,6 +55,7 @@ return [
             'Gallery\\Views\\view_render_gallery_pdf_documents',
             'Gallery\\Controllers\\cms_gallery_music',
             'Gallery\\Controllers\\gallery_music_view_model',
+            'Gallery\\Controllers\\gallery_music_smart_view_model',
             'Gallery\\Views\\view_render_gallery_music',
         ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
@@ -184,6 +185,12 @@ return [
             'Gallery\\Views\\view_render_gallery_music',
             'Gallery\\Controllers\\gallery_pdf_documents_view_model',
             'Gallery\\Views\\view_render_gallery_pdf_documents',
+        ],
+        // Smart music uses the same complete attachment owner only after
+        // canonical public source membership and index presence are resolved.
+        'Gallery\\Controllers\\cms_smart_gallery' => [
+            'Gallery\\Controllers\\gallery_music_smart_view_model',
+            'Gallery\\Views\\view_render_gallery_music',
         ],
         'Gallery\\Controllers\\gallery_pdf_documents_view_model' => [
             'Gallery\\Controllers\\gallery_pdf_documents_admin_controls',

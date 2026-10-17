@@ -53,7 +53,9 @@ const SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE = 20;
 /**
  * Return inherited Smart Gallery preferences before runtime capability suppression.
  *
- * @return array<string,mixed> Current Theme and site defaults for every Smart Gallery presentation control.
+ * @return array<string,int|bool|string|null> Named grid dimensions, quality
+ *     bounds, renderer/layout/breadcrumb modes, viewer feature flags and source
+ *     label. Music autoplay is independent and initially false.
  */
 function smart_gallery_presentation_defaults(): array
 {
@@ -74,6 +76,7 @@ function smart_gallery_presentation_defaults(): array
         'lightbox_enabled' => true,
         'lightbox_browsing_mode' => theme_lightbox_browsing_mode(),
         'slideshow_enabled' => true,
+        'music_enabled' => false,
         'download_enabled' => true,
         'voting_enabled' => true,
         'source' => 'theme',
@@ -101,8 +104,11 @@ function smart_gallery_presentation_master_status(): array
 /**
  * Normalize a stored or submitted Smart Gallery presentation document.
  *
- * @param array|string|null $value Stored JSON text, decoded presentation map, or absent value.
- * @return array<string,mixed> Valid explicit overrides; omitted entries inherit current defaults.
+ * @param array<string,int|bool|string|null>|string|null $value Stored JSON,
+ *     scalar presentation overrides or absent input; unsupported values/keys
+ *     are discarded by their individual validation rules.
+ * @return array<string,int|bool|string|null> Valid named dimensions, bounds,
+ *     modes and feature flags; omitted entries inherit current defaults.
  */
 function smart_gallery_normalize_presentation(mixed $value): array
 {
@@ -126,7 +132,17 @@ function smart_gallery_normalize_presentation(mixed $value): array
         $rows = filter_var($value['grid_rows'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => CMS_PAGINATION_MAX_ROWS]]);
         if ($rows !== false) $normalized['grid_rows'] = (int) $rows;
     }
-    foreach (['pagination_enabled', 'metadata_visible', 'source_gallery_visible', 'map_enabled', 'lightbox_enabled', 'slideshow_enabled', 'download_enabled', 'voting_enabled'] as $booleanKey) {
+    foreach ([
+        'pagination_enabled',
+        'metadata_visible',
+        'source_gallery_visible',
+        'map_enabled',
+        'lightbox_enabled',
+        'slideshow_enabled',
+        'music_enabled',
+        'download_enabled',
+        'voting_enabled',
+    ] as $booleanKey) {
         if (array_key_exists($booleanKey, $value) && $value[$booleanKey] !== null && $value[$booleanKey] !== 'inherit') {
             $normalized[$booleanKey] = filter_var($value[$booleanKey], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
             if ($normalized[$booleanKey] === null) unset($normalized[$booleanKey]);
@@ -1139,6 +1155,29 @@ function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
     }
     $cache[$cacheKey] = $ids;
     return $ids;
+}
+
+/**
+ * Resolve music-bearing physical sources from the complete canonical result.
+ * @param list<int> $sourceIds Grouped public-result source IDs, independent of
+ *     pagination and the temporary source-gallery filter.
+ * @return list<array{id:int,folder_path:string}> Listed sources still accessible
+ *     to the current visitor and containing an existing music index.
+ */
+function smart_gallery_music_sources(array $sourceIds): array
+{
+    $rows = smart_gallery_all_source_gallery_rows();
+    $sources = [];
+    foreach (array_unique($sourceIds) as $id) {
+        $source = $rows[$id] ?? null;
+        if ($source === null || !gallery_is_public_listed($source)
+            || !visitor_can_access_gallery($source)) continue;
+        $folder = (string) $source['folder_path'];
+        if (is_file(gallery_abs_path($folder) . '/.gallery-music/index.json')) {
+            $sources[] = ['id' => $id, 'folder_path' => $folder];
+        }
+    }
+    return $sources;
 }
 
 /** Return normalized semantic query inputs without exposing SQL fragments outside the model. */

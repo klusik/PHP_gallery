@@ -281,11 +281,13 @@ try {
         . 'data' . pack('V', 8) . str_repeat("\x80", 8);
     $musicId = str_repeat('b', 32);
     $downloadId = str_repeat('c', 32);
+    $hiddenMusicId = str_repeat('d', 32);
     foreach (['public', 'unpublished', 'private', 'password', 'nsfw', 'share'] as $folder) {
         $directory = $root . '/galleries/' . $folder . '/.gallery-music';
         ofp_http_assert(mkdir($directory, 0700), 'Cannot create music fixture sidecar.');
         file_put_contents($directory . '/' . $musicId . '.bin', $musicBytes);
         file_put_contents($directory . '/' . $downloadId . '.bin', $musicBytes);
+        file_put_contents($directory . '/' . $hiddenMusicId . '.bin', $musicBytes);
         file_put_contents($directory . '/index.json', json_encode([
             'format' => 'gallery_music_v1', 'revision' => str_repeat('a', 32),
             'enabled' => true, 'tracks' => [[
@@ -298,12 +300,33 @@ try {
                 'size' => strlen($musicBytes),
                 'sha256' => hash('sha256', $musicBytes),
                 'downloadable' => true,
+            ], [
+                'id' => $hiddenMusicId, 'filename' => 'hidden.wav',
+                'title' => 'Hidden', 'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'hidden' => true, 'downloadable' => true,
             ]],
         ], JSON_THROW_ON_ERROR));
     }
     foreach (['', '/galerie'] as $base) {
         $musicUrl = $origin . $base . '/index.php?page=gallery_music&id=1&track=' . $musicId;
         $music = ofp_http_request($musicUrl);
+        $hiddenMusicUrl = str_replace($musicId, $hiddenMusicId, $musicUrl);
+        foreach (['', '&download=1'] as $mode) {
+            $hiddenMusic = ofp_http_request($hiddenMusicUrl . $mode);
+            ofp_http_assert($hiddenMusic['status'] === 404
+                && $hiddenMusic['body'] === 'Not found',
+                'Hidden audio must not play/download despite download permission.');
+        }
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl, 'HEAD')['status'] === 404,
+            'HEAD must enforce track visibility too.');
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl, 'GET',
+            'ofp_test_admin=1')['body'] === $musicBytes,
+            'Verified administrator must retain hidden-track inspection.');
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl . '&view_as=anonymous',
+            'GET', 'ofp_test_admin=1')['status'] === 404,
+            'Anonymous preview must not inherit hidden-track authority.');
         foreach (['', 'ofp_test_admin=1'] as $cookie) {
             $denied = ofp_http_request($musicUrl . '&download=1', 'GET', $cookie);
             ofp_http_assert($denied['status'] === 404

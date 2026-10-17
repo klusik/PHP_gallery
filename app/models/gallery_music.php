@@ -35,8 +35,8 @@ const GALLERY_MUSIC_FILE_MODE = 0600;
  * @param string $directory Confined music directory selected by the service.
  * @return array{revision:string, enabled:bool, tracks:list<array{id:string,
  *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     downloadable:bool}>} Stored playlist, or initial disabled state when
- *     no index exists.
+ *     hidden:bool, downloadable:bool}>} Stored playlist, or initial disabled
+ *     state when no index exists.
  * @throws \RuntimeException When existing storage cannot be safely interpreted.
  */
 function gallery_music_model_read(string $directory): array
@@ -68,6 +68,8 @@ function gallery_music_model_read(string $directory): array
             || isset($seen[$track['id']]) || !is_string($track['filename'] ?? null)
             || !is_string($track['title'] ?? null) || !is_string($track['mime'] ?? null)
             || !is_int($track['size'] ?? null) || $track['size'] < 1
+            || (array_key_exists('hidden', $track)
+                && !is_bool($track['hidden']))
             || (array_key_exists('downloadable', $track)
                 && !is_bool($track['downloadable']))
             || !is_string($track['sha256'] ?? null)
@@ -76,8 +78,10 @@ function gallery_music_model_read(string $directory): array
         }
         $seen[$track['id']] = true;
     }
-    // Permanent v1 compatibility: records written before download controls
-    // existed grant no download permission. This model owns that safe default.
+    // Permanent v1 compatibility: missing visibility means visible.
+    // Future hiding controls remain independent of download permission.
+    // Records written before download controls existed grant no download
+    // permission. This model owns that safe default.
     // Map both vintages to the same closed field shape and key order so a
     // legacy read and a newly written playlist have identical row semantics.
     $state['tracks'] = array_map(static function (array $track): array {
@@ -88,6 +92,7 @@ function gallery_music_model_read(string $directory): array
             'mime' => $track['mime'],
             'size' => $track['size'],
             'sha256' => $track['sha256'],
+            'hidden' => $track['hidden'] ?? false,
             'downloadable' => $track['downloadable'] ?? false,
         ];
     }, $state['tracks']);
@@ -100,7 +105,7 @@ function gallery_music_model_read(string $directory): array
  * @param string $directory Existing confined music directory.
  * @param array{revision:string, enabled:bool, tracks:list<array{id:string,
  *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     downloadable:bool}>} $state Complete next playlist.
+ *     hidden:bool, downloadable:bool}>} $state Complete next playlist.
  * @return void Replace the index atomically, preserving its previous bytes
  *     on failure.
  * @throws \RuntimeException When staging or publication fails.

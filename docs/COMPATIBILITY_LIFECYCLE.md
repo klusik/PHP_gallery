@@ -26,6 +26,25 @@ The music model also owns permanent v1 compatibility: a missing download flag
 means false. New tracks always start locked; bulk permission affects current
 tracks only. This prevents old indexes or later uploads inheriting permission.
 
+## Smart Gallery music and visibility compatibility
+
+Owners: music model/service/controller and existing Smart source/presentation
+services. V1 records without `hidden` remain visible, preserving historical
+behavior; missing download permission still means locked. New uploads explicitly
+start visible and locked. Public view/stream boundaries enforce hidden state,
+including anonymous preview; administrator hiding controls remain future work.
+No SQL migration or format rewrite is required to read existing indexes.
+
+Smart music uses canonical complete source membership and protected source URLs.
+Its own `music_enabled` presentation override is absent/false for existing Smart
+galleries. A corrupt source index is omitted read-only by the merge service,
+retaining original bytes and other sources. Both paths are permanent supported
+behavior; deployed adoption is unknown, so retirement needs explicit stored-data
+and supported-installation proof. SHA-256 only proves identical original bytes;
+acoustic equality across encodings/tags is unknown and is not inferred from
+filenames or duration. Hosted service, actual HTTP/DB and browser owners cover
+these boundaries; real codecs/devices and large deployed unions remain manual.
+
 ## Compact attachment browser presentation
 
 Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.

@@ -33,6 +33,24 @@ namespace Gallery\Core {
     }
 
     /**
+     * Preserve the mounted installation in prepared source-audio URLs.
+     * @return string Owned fixture script directory without a trailing slash.
+     */
+    function request_script_base_path(): string
+    {
+        return '/galerie';
+    }
+
+    /**
+     * Select the fixture's explicit anonymous-preview audience.
+     * @return bool Whether source URLs must retain anonymous-preview policy.
+     */
+    function admin_anonymous_preview_active(): bool
+    {
+        return !empty($GLOBALS['music_anonymous_preview']);
+    }
+
+    /**
      * Check canonical fixture containment without production configuration.
      * @param string $root Trusted fixture root.
      * @param string $path Candidate canonical path.
@@ -44,6 +62,27 @@ namespace Gallery\Core {
     }
 }
 namespace Gallery\Services {
+    /**
+     * Keep source discovery subordinate to canonical public listing policy.
+     * @param array{visibility:string} $gallery Prepared fixture access state.
+     * @return bool Whether the source may participate in public Smart results.
+     */
+    function gallery_is_public_listed(array $gallery): bool
+    {
+        return $gallery['visibility'] === 'public';
+    }
+
+    /**
+     * Model already resolved password/NSFW visitor grants without a database.
+     * @param array{id:int} $gallery Source identity from canonical fixture rows.
+     * @return bool Whether this visitor may access the physical source.
+     */
+    function visitor_can_access_gallery(array $gallery): bool
+    {
+        return !in_array($gallery['id'],
+            $GLOBALS['music_denied_sources'] ?? [], true);
+    }
+
     /**
      * Resolve the fixture gallery path.
      * @param string $relative Fixture-relative gallery folder.
@@ -161,7 +200,9 @@ namespace {
             === [false, false], 'Bulk revocation must remove every permission.');
         // The pre-permission v1 shape remains readable with a denied default.
         $legacy = $second;
-        foreach ($legacy['tracks'] as &$track) unset($track['downloadable']);
+        foreach ($legacy['tracks'] as &$track) {
+            unset($track['downloadable'], $track['hidden']);
+        }
         unset($track);
         \Gallery\Models\gallery_music_model_write(
             \Gallery\Services\gallery_music_directory($gallery), $legacy
@@ -337,6 +378,93 @@ namespace {
             music_assert(\Gallery\Services\gallery_music_byte_range($range, 5) === null,
                 'Malformed or unsatisfiable range must be refused: ' . $range);
         }
+        // Independent sources preserve the preceding corruption/symlink cases.
+        mkdir($root . '/merge-a', 0700);
+        mkdir($root . '/merge-b', 0700);
+        $a = ['id' => 101, 'folder_path' => 'merge-a'];
+        $b = ['id' => 102, 'folder_path' => 'merge-b'];
+        $mergeSource = $root . '/merge.wav';
+        file_put_contents($mergeSource, $wav);
+        foreach ([$a, $b] as $item) {
+            $state = \Gallery\Services\gallery_music_playlist($item);
+            \Gallery\Services\gallery_music_mutate(
+                $item, $state['revision'], 'upload', '', $mergeSource,
+                $item === $a ? 'same.wav' : 'renamed.wav'
+            );
+        }
+        // Same duration/container length and name, different actual audio data.
+        file_put_contents($mergeSource, substr($wav, 0, -1) . "\x81");
+        $state = \Gallery\Services\gallery_music_playlist($b);
+        \Gallery\Services\gallery_music_mutate(
+            $b, $state['revision'], 'upload', '', $mergeSource, 'same.wav'
+        );
+        require_once dirname(__DIR__) . '/app/services/smart_galleries.php';
+        $cache = &\Gallery\Services\smart_gallery_graph_request_cache();
+        $cache['source_gallery_rows'] = [
+            101 => $a + ['visibility' => 'public'],
+            102 => $b + ['visibility' => 'public'],
+            103 => ['id' => 103, 'folder_path' => 'merge-b',
+                'visibility' => 'private'],
+            104 => ['id' => 104, 'folder_path' => 'merge-b',
+                'visibility' => 'public'],
+        ];
+        $GLOBALS['music_denied_sources'] = [104];
+        $sources = \Gallery\Services\smart_gallery_music_sources([
+            102, 103, 104, 101, 101, 999,
+        ]);
+        music_assert(array_column($sources, 'id') === [102, 101],
+            'Source discovery must exclude private/denied/missing sources.');
+        $merged = \Gallery\Services\gallery_music_merge_playlists($sources);
+        music_assert(count($merged['tracks']) === 2
+            && !$merged['enabled'] && $merged['unavailable'] === 0
+            && array_column($merged['tracks'], 'source_gallery_id') === [101, 102]
+            && array_column($merged['tracks'], 'downloadable') === [false, false],
+            'Union must keep locked music, dedupe renamed bytes and retain'
+                . ' different same-name/duration audio in stable source order.');
+        $bState = \Gallery\Services\gallery_music_playlist($b);
+        \Gallery\Services\gallery_music_mutate(
+            $b, $bState['revision'], 'download', $bState['tracks'][0]['id'],
+            '', '', false, true
+        );
+        $merged = \Gallery\Services\gallery_music_merge_playlists($sources);
+        music_assert($merged['tracks'][0]['source_gallery_id'] === 102
+            && $merged['tracks'][0]['downloadable'],
+            'An allowed visible copy must represent the duplicate download.');
+        $bState = \Gallery\Services\gallery_music_playlist($b);
+        foreach ($bState['tracks'] as &$track) $track['hidden'] = true;
+        unset($track);
+        $bDirectory = \Gallery\Services\gallery_music_directory($b);
+        \Gallery\Models\gallery_music_model_write($bDirectory, $bState);
+        $merged = \Gallery\Services\gallery_music_merge_playlists($sources);
+        music_assert(count($merged['tracks']) === 1
+            && $merged['tracks'][0]['source_gallery_id'] === 101
+            && !$merged['tracks'][0]['downloadable'],
+            'Hidden copies must contribute neither tracks nor download rights.');
+        require_once dirname(__DIR__) . '/app/controllers/gallery_music.php';
+        $GLOBALS['music_anonymous_preview'] = true;
+        $smartModel = \Gallery\Controllers\gallery_music_smart_view_model(
+            101, $sources, true
+        );
+        $query = [];
+        parse_str((string) parse_url($smartModel['tracks'][0]['url'],
+            PHP_URL_QUERY), $query);
+        music_assert($smartModel['gallery_id'] === -101
+            && $smartModel['enabled'] && $smartModel['action_url'] === ''
+            && $query['id'] === '101' && $query['view_as'] === 'anonymous'
+            && $query['track'] !== $smartModel['tracks'][0]['id']
+            && str_starts_with($smartModel['tracks'][0]['url'],
+                '/galerie/index.php?'),
+            'Smart presentation must isolate identity and retain physical'
+                . ' source delivery, mount path and anonymous-preview policy.');
+        $GLOBALS['music_anonymous_preview'] = false;
+        music_assert(\Gallery\Controllers\gallery_music_view_model($b)['tracks']
+            === [], 'Physical public presentation must also exclude hidden tracks.');
+        file_put_contents($bDirectory . '/index.json', '{broken');
+        $partial = \Gallery\Services\gallery_music_merge_playlists($sources);
+        music_assert($partial['unavailable'] === 1
+            && count($partial['tracks']) === 1
+            && file_get_contents($bDirectory . '/index.json') === '{broken',
+            'One damaged index must preserve bytes and other visible sources.');
         echo "PASS: gallery music exact bytes, revisions, ordering, validation and confinement\n";
     } finally {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,

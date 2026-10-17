@@ -62,7 +62,11 @@ preference (initially off), and track identities, names, titles, MIME types,
 sizes, SHA-256 digests and per-track download permission (initially false).
 Older v1 records without that field remain locked; no rewrite or migration is
 needed. The model owns this permanent conservative compatibility default.
-It maps old and current records to the same closed field shape and key order;
+Visibility is independent: missing `hidden` means false (visible), and new
+tracks remain visible and locked for downloads. Public presentation/streaming
+exclude hidden tracks; verified administrators can inspect them. Hiding editor
+controls are future work. The model maps old and current records to the same
+closed field shape and key order;
 merely reading a legacy index does not rewrite its stored bytes. Invalid existing
 indexes are preserved and refused, never reset to an empty playlist.
 
@@ -120,8 +124,9 @@ Hosted preparation/FULL must establish final counts and loaded-route behavior.
 
 `gallery-music-player.js` owns a single audible native Audio instance per page,
 shared across public/editor tables, the photo viewer and slideshow. Selecting
-another track or gallery releases the old source before playback. There is no
-cross-gallery or Smart Gallery soundtrack inheritance, transcoding or artwork.
+another track or gallery releases the old source before playback. Physical
+galleries remain the storage owners. Smart Galleries use the read-only source
+union below; no transcoding or artwork is added.
 
 Gallery autoplay defaults off and changes only through the editor preference.
 Slideshow startup applies that preference synchronously before fullscreen awaits,
@@ -175,3 +180,40 @@ logical runtime owner. The existing attachment closure already contains the
 shared view helper. Expected PHP module/file deltas are zero against the prepared
 music baseline; global logical-module allowance remains fully consumed. Hosted
 preparation/FULL owns the actual unchanged-budget proof.
+
+## Smart Gallery source union
+
+Smart Galleries have no audio directory. Their complete canonical grouped photo
+result supplies source IDs, including sources outside the current photo page.
+Temporary source filtering changes photos, not this union. The Smart service
+rechecks public listing and visitor access against the request-cached source
+inventory, and only sources with an index load the existing attachment owner.
+A source must contribute a matching accessible photo to the canonical result;
+an unrelated or empty physical gallery contributes no music merely because it
+exists. Protected source URLs recheck access when audio is requested.
+
+`gallery_music_merge_playlists()` reads bounded indexes in ascending source-ID
+order, preserving each source's track order. Hidden tracks are excluded; visible
+locked tracks are included. Existing SHA-256 digests identify identical original
+bytes without decoding or hashing every original during page rendering. Renamed
+copies appear once; different same-name/same-duration files remain separate.
+A visible downloadable copy may represent a duplicate at its first list position;
+its own endpoint remains the permission authority. Re-encoded songs or changed
+embedded tags have different digests: acoustic/content fingerprinting is future
+work, and matching name or duration alone is deliberately insufficient.
+
+A damaged source index is counted as unavailable and omitted without rewriting
+it; other independent sources remain playable. The merge service owns this
+permanent read-only degradation. Output memory/markup scales with distinct tracks
+and source count; per-source admission limits remain unchanged. No gallery-wide
+audio download/decoding, metadata-reader fan-out or additional codec is introduced.
+
+The same applet, miniplayer and exclusive slideshow owner render the union.
+Negative Smart presentation IDs and source-qualified row IDs avoid collisions
+with physical galleries; delivery always uses the positive physical ID and
+original track ID. Subdirectory mounts and anonymous preview are preserved.
+`music_enabled` in existing Smart presentation JSON independently controls
+automatic slideshow music and initially defaults false. Enable presentation
+overrides and the music preference in the Smart editor; manual Play remains
+available when music exists. This does not inherit a source's autoplay setting,
+copy originals or alter per-source download permission.

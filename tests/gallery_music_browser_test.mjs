@@ -182,6 +182,21 @@ try {
         'Unsupported playlist did not stop after one bounded pass');
     broken.destroy();
 
+    const smartAudio = new AudioAdapter();
+    controls.dataset.musicGallery = '-42';
+    const smartPlayer = createGalleryMusicPlayer(overlay, {
+        galleryId: -42, enabled: true,
+        tracks: tracks.map(track => ({...track, id: 'physical:' + track.id})),
+    }, smartAudio);
+    smartPlayer.start();
+    smartPlayer.command('play', 'physical:two', true);
+    check(smartAudio.src === '/track-two'
+        && controls.querySelector('[data-music-current-title]').textContent
+            === tracks[1].title,
+        'Smart identity/composite rows did not reuse slideshow playback');
+    smartPlayer.destroy();
+    controls.dataset.musicGallery = '42';
+
     window.Audio = AudioAdapter;
     const publicMount = document.querySelector('[data-fixture-music]');
     const mediaPanel = (id, content) =>

@@ -192,6 +192,11 @@ and slideshow; the playlist repeats in saved order. Enabled slideshow starts at
 the first track and replaces other music. Stopping/closing the viewer releases
 its owned music. Independently started table playback can continue.
 
+Smart Galleries merge visible music from all accessible canonical photo sources,
+independent of pagination/filtering. Identical original bytes appear once even
+when renamed; equal names/durations do not remove different audio. The Smart
+editor has its own default-off slideshow music preference. No originals are copied.
+
 Downloads start locked for every upload. Administrator row/header icons allow
 individual/all current tracks; visitors see download icons only when allowed.
 The endpoint enforces that permission and normal gallery access. Playable bytes

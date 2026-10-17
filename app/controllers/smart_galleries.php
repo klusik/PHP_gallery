@@ -486,7 +486,11 @@ function smart_gallery_admin_json_error(string $message, string $errorCode, stri
 /**
  * Normalize the Smart Gallery editor POST payload.
  *
- * @return array<string,mixed> Validated request fields ready for service-level normalization and persistence.
+ * @return array{title:string,slug:string,description:string,rules_json:string,
+ *     enabled:bool,visibility:string,placement_mode:string,sort_mode:string,
+ *     sort_direction:string,presentation:array<string,int|bool|string|null>,
+ *     presentation_json:array<string,int|bool|string|null>} Request intent for
+ *     canonical service validation and persistence; no source files are copied.
  */
 function smart_gallery_admin_input(): array
 {
@@ -508,6 +512,7 @@ function smart_gallery_admin_input(): array
             'lightbox_enabled' => isset($_POST['presentation_lightbox_enabled']),
             'lightbox_browsing_mode' => (string) ($_POST['presentation_lightbox_browsing_mode'] ?? ''),
             'slideshow_enabled' => isset($_POST['presentation_slideshow_enabled']),
+            'music_enabled' => isset($_POST['presentation_music_enabled']),
             'download_enabled' => isset($_POST['presentation_download_enabled']),
             'voting_enabled' => isset($_POST['presentation_voting_enabled']),
         ];
@@ -1102,6 +1107,22 @@ function cms_smart_gallery(): void
     $lightboxEndpointParams = ['id' => (int) $gallery['id']];
     if ($sourceGalleryId > 0) $lightboxEndpointParams['source_gallery_id'] = $sourceGalleryId;
 
+    $musicHtml = '';
+    $musicSources = \Gallery\Services\smart_gallery_music_sources(array_map(
+        static fn(array $item): int => (int) $item['gallery_id'],
+        $sourceSummary['items']
+    ));
+    if ($musicSources !== []) {
+        \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        $musicModel = gallery_music_smart_view_model(
+            (int) $gallery['id'], $musicSources,
+            !empty($presentation['music_enabled'])
+        );
+        ob_start();
+        \Gallery\Views\view_render_gallery_music($musicModel);
+        $musicHtml = (string) ob_get_clean();
+    }
+
     $cardsViewModel = smart_gallery_image_cards_view_model($images, $sourceGalleries, $presentation, $votes, $tags, $offset, true);
     $sourceContextCardCount = 0;
     foreach ((array) ($cardsViewModel['cards'] ?? []) as $card) {
@@ -1131,6 +1152,7 @@ function cms_smart_gallery(): void
         'lightbox_browsing_mode' => (string) $presentation['lightbox_browsing_mode'],
         'cards' => $cardsViewModel,
         'lightbox_html' => $lightboxHtml,
+        'music_html' => $musicHtml,
     ]);
 
     if ($testRunActive) {

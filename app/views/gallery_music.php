@@ -23,7 +23,7 @@ use function Gallery\Services\t;
  * @param array{gallery_id:int, editor:bool, action_url:string,
  *     csrf_html:string, revision:string, enabled:bool, error:string,
  *     tracks:list<array{id:string, title:string, filename:string,
- *     mime:string, size:int, sha256:string, downloadable:bool, url:string,
+ *     mime:string, size:int, sha256:string, hidden:bool, downloadable:bool, url:string,
  *     download_url:string}>} $model Authorized playlist and optional editor
  *     controls.
  * @return void Emit row Play/Stop toggles, player data and independent forms.
@@ -171,7 +171,7 @@ function view_render_gallery_music(array $model): void
  * @param array{gallery_id:int, editor:bool, action_url:string,
  *     csrf_html:string, revision:string, enabled:bool, error:string,
  *     tracks:list<array{id:string, title:string, filename:string,
- *     mime:string, size:int, sha256:string, downloadable:bool, url:string,
+ *     mime:string, size:int, sha256:string, hidden:bool, downloadable:bool, url:string,
  *     download_url:string}>} $model Prepared authenticated editor data.
  * @return void Emit the opening form and hidden transport controls.
  */
