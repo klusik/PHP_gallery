@@ -38,6 +38,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     Flowable,
+    KeepTogether,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -68,9 +69,9 @@ REPORT_TEMPLATE_VERSION = "1"
 # the printable A4 content width while retaining legible axes; value: 470.
 CHART_WIDTH = 470
 # Type: int; Units: PDF points; Scope: chart drawing geometry;
-# Consumers: _profile_chart and _route_chart; Rationale: leaves room for
-# headings and landing detail on the first page; value: 150.
-CHART_HEIGHT = 150
+# Consumers: _profile_chart and _route_chart; Rationale: three profiles fit
+# with flight/version metadata in the A4 frame; value: 144 (two inches).
+CHART_HEIGHT = 144
 # Type: float; Units: knots per metre per second; Scope: displayed speeds;
 # Consumers: _format_speed; Rationale: convert SI capture values to aviation
 # units without changing source data; value: 1.9438444924406.
@@ -417,6 +418,7 @@ def _styles() -> Dict[str, ParagraphStyle]:
         "heading": ParagraphStyle(
             "FlightHeading",
             parent=base["Heading2"],
+            keepWithNext=True,
             fontName=_FONT_NAME,
             fontSize=13,
             leading=17,
@@ -2095,8 +2097,12 @@ def _build_story(
     ]
     for landing in analysis.landings:
         story.extend(_landing_section(analysis, landing, language, styles))
-    story.append(_paragraph(tr(language, "method_notes"), styles["heading"]))
-    story.extend(_methodology_notes(language, styles))
+    story.append(
+        KeepTogether([
+            _paragraph(tr(language, "method_notes"), styles["heading"]),
+            *_methodology_notes(language, styles),
+        ])
+    )
     if analysis.warnings:
         story.append(_paragraph(tr(language, "warnings"), styles["small"]))
     story.extend(_quality_notes(analysis, language, styles))
