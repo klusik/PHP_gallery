@@ -969,5 +969,320 @@ class ScrollableFrameWheelTests(unittest.TestCase):
         frame.canvas.yview_scroll.assert_not_called()
 
 
+class TrayUpdateIndicatorTests(unittest.TestCase):
+    """Keep an available update visible and actionable on app and tray surfaces."""
+
+    def test_badge_uses_fresh_pixels_without_mutating_or_accumulating(self) -> None:
+        """Compose marked and unmarked images from the unchanged source art.
+
+        Returns:
+            None: Confirms badge pixels are deterministic and source art survives.
+        """
+        if MAIN.Image is None or MAIN.ImageDraw is None:
+            # Pillow remains optional for portable app runtimes; the dedicated
+            # CI job sets this flag so pixel coverage cannot silently skip.
+            if os.environ.get("PHP_GALLERY_REQUIRE_PILLOW") == "1":
+                self.fail(
+                    "Pillow is required for tray badge pixel coverage in this CI job."
+                )
+            self.skipTest("Pillow is unavailable")
+        base = MAIN.Image.new("RGBA", (32, 32), "#203040")
+        original_pixels = base.tobytes()
+
+        marked = MAIN.render_tray_icon(base, True)
+        marked_again = MAIN.render_tray_icon(base, True)
+        plain = MAIN.render_tray_icon(base, False)
+
+        self.assertIsNot(marked, base)
+        self.assertEqual(original_pixels, base.tobytes())
+        self.assertEqual(marked.tobytes(), marked_again.tobytes())
+        self.assertEqual(base.convert("RGBA").tobytes(), plain.tobytes())
+        self.assertNotEqual(plain.tobytes(), marked.tobytes())
+        self.assertEqual((217, 45, 63, 255), marked.getpixel((22, 11)))
+
+        # The bundled artwork is 256 px; Windows tray display downsamples it
+        # to 16 px, so inspect the rendered badge at its actual target size.
+        large_base = MAIN.Image.new("RGBA", (256, 256), "#203040")
+        large_original_pixels = large_base.tobytes()
+        large_marked = MAIN.render_tray_icon(large_base, True)
+        large_plain = MAIN.render_tray_icon(large_base, False)
+        resampling = MAIN.Image.Resampling.LANCZOS
+        marked_16 = large_marked.resize((16, 16), resampling)
+        plain_16 = large_plain.resize((16, 16), resampling)
+        red_pixels = [
+            marked_16.getpixel((x, y))
+            for x in range(9, 16)
+            for y in range(0, 8)
+        ]
+        glyph_pixels = [
+            marked_16.getpixel((x, y))
+            for x in range(12, 14)
+            for y in range(3, 6)
+        ]
+
+        self.assertEqual(large_original_pixels, large_base.tobytes())
+        self.assertNotEqual(plain_16.tobytes(), marked_16.tobytes())
+        # Red dominance detects the badge; a bright interior pixel detects the
+        # exclamation stem or dot away from the circle's outer rim.
+        self.assertTrue(
+            any(red > green * 1.35 and red > blue * 1.2 for red, green, blue, _ in red_pixels)
+        )
+        self.assertTrue(
+            any(red > 180 and green > 180 and blue > 180 for red, green, blue, _ in glyph_pixels)
+        )
+
+    def test_header_state_and_notice_route_survive_later_until_cleared(self) -> None:
+        """Expose known version and route its click to the shared updater entry.
+
+        Returns:
+            None: Confirms Later leaves state and a clean check clears it.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.update_available_version = None
+        app.check_updates_button = mock.Mock()
+        app.update_banner = mock.Mock()
+        app.update_banner_label = mock.Mock()
+        app.tray_icon = mock.Mock()
+        app.make_tray_icon_image = mock.Mock(
+            side_effect=("marked-image", "plain-image")
+        )
+        app.tray_tooltip_text = mock.Mock(return_value="Update 0.4.1")
+        app.build_tray_menu = mock.Mock(return_value="update-menu")
+        app.updates = mock.Mock()
+        app.restore_from_tray = mock.Mock()
+
+        MAIN.WatcherApp.set_update_available(app, "  0.4.1  ")
+
+        self.assertEqual("0.4.1", app.update_available_version)
+        self.assertEqual("↑", app.check_updates_button.configure.call_args.kwargs["text"])
+        header_command = app.check_updates_button.configure.call_args.kwargs["command"]
+        self.assertIs(header_command.__self__, app)
+        self.assertIs(header_command.__func__, MAIN.WatcherApp.open_update_notice)
+        app.update_banner.grid.assert_called_once_with()
+        self.assertEqual(
+            "Update 0.4.1 available",
+            app.update_banner_label.configure.call_args.kwargs["text"],
+        )
+        self.assertEqual("marked-image", app.tray_icon.icon)
+        self.assertEqual("Update 0.4.1", app.tray_icon.title)
+        self.assertEqual("update-menu", app.tray_icon.menu)
+        app.tray_icon.update_menu.assert_called_once_with()
+        MAIN.WatcherApp.open_update_notice(app)
+        app.restore_from_tray.assert_called_once_with()
+        app.updates.open_updates.assert_called_once_with()
+        self.assertEqual("0.4.1", app.update_available_version)
+
+        MAIN.WatcherApp.set_update_available(app, None)
+
+        self.assertIsNone(app.update_available_version)
+        self.assertEqual(
+            "↻",
+            app.check_updates_button.configure.call_args.kwargs["text"],
+        )
+        self.assertIs(
+            app.updates.check,
+            app.check_updates_button.configure.call_args.kwargs["command"],
+        )
+        app.update_banner.grid_remove.assert_called_once_with()
+        self.assertEqual("plain-image", app.tray_icon.icon)
+        self.assertEqual(2, app.tray_icon.update_menu.call_count)
+
+    def test_tray_menu_and_tooltip_expose_version_within_windows_budget(self) -> None:
+        """Show the version in the first tray action and bounded tooltip text.
+
+        Returns:
+            None: Confirms both available and no-update tray captions.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.update_available_version = "0.4.1"
+        app.worker = None
+        app.manual_worker = None
+        app.ai_worker = None
+        app.ai_worker_stop_requested = False
+        app.current_job = None
+        app.tray_open_updates = mock.Mock()
+        app.tray_restore_window = mock.Mock()
+        app.tray_open_activity = mock.Mock()
+        app.tray_open_connection = mock.Mock()
+        app.tray_revoke_api_key = mock.Mock()
+        app.tray_toggle_import_pause = mock.Mock()
+        app.tray_start_watching = mock.Mock()
+        app.tray_stop_watching = mock.Mock()
+        app.tray_start_ai_worker = mock.Mock()
+        app.tray_stop_ai_worker = mock.Mock()
+        app.tray_open_log_folder = mock.Mock()
+        app.tray_exit_application = mock.Mock()
+
+        menu_factory = mock.Mock(return_value="built-menu")
+        menu_item_factory = mock.Mock(
+            side_effect=lambda text, action, **kwargs: (text, action, kwargs)
+        )
+        menu_factory.SEPARATOR = object()
+        with mock.patch.object(
+            MAIN,
+            "pystray",
+            types.SimpleNamespace(Menu=menu_factory, MenuItem=menu_item_factory),
+        ):
+            menu = MAIN.WatcherApp.build_tray_menu(app)
+
+        self.assertEqual("built-menu", menu)
+        first_item = menu_item_factory.call_args_list[0].args
+        self.assertEqual("Update 0.4.1", first_item[0])
+        self.assertIs(app.tray_open_updates, first_item[1])
+        self.assertIn("Update 0.4.1", MAIN.WatcherApp.tray_tooltip_text(app))
+        self.assertLessEqual(
+            len(MAIN.WatcherApp.tray_tooltip_text(app)),
+            MAIN.TRAY_TOOLTIP_MAX_LENGTH,
+        )
+
+        app.update_available_version = "v" * 200
+        self.assertLessEqual(
+            len(MAIN.WatcherApp.tray_tooltip_text(app)),
+            MAIN.TRAY_TOOLTIP_MAX_LENGTH,
+        )
+        app.update_available_version = None
+        self.assertEqual("Check for updates", MAIN.WatcherApp.tray_update_menu_label(app))
+
+    def test_tray_menu_activation_queues_shared_update_notice(self) -> None:
+        """Marshal tray menu activation onto the Tk UI thread.
+
+        Returns:
+            None: Confirms the tray callback schedules the shared notice route.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.schedule_ui = mock.Mock()
+        app.open_update_notice = mock.Mock()
+
+        MAIN.WatcherApp.tray_open_updates(app)
+
+        app.schedule_ui.assert_called_once_with(app.open_update_notice)
+
+    def test_monitor_refresh_updates_tooltip_without_replacing_badged_icon(self) -> None:
+        """Keep operational status refreshes from replacing update pixels.
+
+        Returns:
+            None: Confirms routine worker updates refresh only tray text.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.worker = None
+        app.manual_worker = None
+        app.ai_worker = None
+        app.preflight_worker = None
+        app.ai_worker_stop_requested = False
+        app.watcher_activity_var = mock.Mock()
+        app.watcher_activity_var.get.return_value = "Watch: stopped"
+        app.import_activity_var = mock.Mock()
+        app.import_activity_var.get.return_value = "Import: idle"
+        app.ai_activity_var = mock.Mock()
+        app.refresh_watcher_action = mock.Mock()
+        app.update_monitor_state = mock.Mock()
+        app.tray_icon = mock.Mock()
+        app.tray_icon.icon = "badged-image"
+        app.tray_tooltip_text = mock.Mock(return_value="Update 0.4.1")
+
+        MAIN.WatcherApp.refresh_activity_monitor_state(app)
+
+        self.assertEqual("badged-image", app.tray_icon.icon)
+        self.assertEqual("Update 0.4.1", app.tray_icon.title)
+
+    def test_close_blocked_by_key_revocation_keeps_update_offer(self) -> None:
+        """Keep the verified update visible when key revocation blocks exit.
+
+        Returns:
+            None: Confirms a rejected close retains the available version.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.utc_sync = mock.Mock()
+        app.updates = mock.Mock()
+        app.updates.request_close.return_value = False
+        app.api_key_revoke_running = True
+        app.exiting = False
+        app.update_available_version = "0.4.1"
+        app.check_updates_button = None
+        app.update_banner = None
+        app.tray_icon = None
+
+        with mock.patch.object(MAIN, "messagebox") as dialogs:
+            MAIN.WatcherApp.close(app)
+
+        self.assertFalse(app.exiting)
+        self.assertEqual("0.4.1", app.update_available_version)
+        dialogs.showwarning.assert_called_once()
+
+    def test_close_canceled_to_keep_tray_keeps_update_offer(self) -> None:
+        """Keep update state when a worker timeout cancels application exit.
+
+        Returns:
+            None: Confirms the keep-running choice leaves app and offer active.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.utc_sync = mock.Mock()
+        app.utc_sync.is_alive.return_value = False
+        app.updates = mock.Mock()
+        app.updates.request_close.return_value = False
+        app.api_key_revoke_running = False
+        app.exiting = False
+        app.update_available_version = "0.4.1"
+        app.preflight_worker = None
+        app.worker = mock.Mock()
+        app.worker.is_alive.return_value = True
+        app.manual_worker = None
+        app.ai_worker = None
+        app.api_key_revoke_thread = None
+        app.ai_worker_stop_requested = False
+        app.tray_icon = mock.Mock()
+        app.write_log = mock.Mock()
+        app.hide_to_tray = mock.Mock()
+        app.root = mock.Mock()
+        app.stop_tray_icon = mock.Mock()
+
+        with mock.patch.object(MAIN, "messagebox") as dialogs:
+            dialogs.askyesno.return_value = True
+            MAIN.WatcherApp.close(app)
+
+        self.assertFalse(app.exiting)
+        self.assertEqual("0.4.1", app.update_available_version)
+        app.hide_to_tray.assert_called_once_with()
+        app.stop_tray_icon.assert_not_called()
+        app.root.destroy.assert_not_called()
+
+    def test_confirmed_close_clears_update_offer_before_teardown(self) -> None:
+        """Clear the persistent offer only when shutdown reaches teardown.
+
+        Returns:
+            None: Confirms confirmed shutdown clears the version and destroys Tk.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.utc_sync = mock.Mock()
+        app.utc_sync.is_alive.return_value = False
+        app.updates = mock.Mock()
+        app.updates.request_close.return_value = False
+        app.api_key_revoke_running = False
+        app.exiting = False
+        app.update_available_version = "0.4.1"
+        app.check_updates_button = None
+        app.update_banner = None
+        app.tray_icon = None
+        app.preflight_worker = None
+        app.worker = None
+        app.manual_worker = None
+        app.ai_worker = None
+        app.api_key_revoke_thread = None
+        app.write_log = mock.Mock()
+        app.stop_tray_icon = mock.Mock(
+            side_effect=lambda: self.assertIsNone(app.update_available_version)
+        )
+        app.root = mock.Mock()
+        app.root.destroy.side_effect = lambda: self.assertIsNone(
+            app.update_available_version
+        )
+
+        MAIN.WatcherApp.close(app)
+
+        self.assertTrue(app.exiting)
+        self.assertIsNone(app.update_available_version)
+        app.stop_tray_icon.assert_called_once_with()
+        app.root.destroy.assert_called_once_with()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

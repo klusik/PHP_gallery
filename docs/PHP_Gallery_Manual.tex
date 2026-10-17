@@ -701,6 +701,22 @@ opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
 
+\subsection{Update notice and~indicators}
+
+The~app checks for~uploader releases at~startup and~at~most once an~hour;
+\ui{Check for updates} requests a~manual check. A~validated offer appears as~a
+version banner and~marked update control in~the~main header on~every screen.
+\ui{Later} hides the~notice but~leaves both indicators available to~reopen it.
+When tray support is~available, its~icon shows a~red update badge, its~tooltip
+identifies the~offered version, and~the~first menu action names that version
+and~opens the~same notice. Without tray support, the~in-app indicators remain
+available. The~app does~not~set a~Windows taskbar overlay or~show
+operating-system toast notifications.
+
+A~failed network recheck preserves the~validated cached offer across restart;
+the~offer is~validated again before it~is~restored. A~successful check with
+no~current offer clears the~banner, header mark, and~tray badge.
+
 \subsection{Windows simulator location}
 
 \ui{Sync UTC time}, beside the~Watch folder actions, is~off by~default and~saves
@@ -2509,6 +2525,11 @@ for~compatibility, while authored Python docstrings use one consistent format.
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
 Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+
+The~hosted portable WinApp job installs the~existing Pillow requirement into
+the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage
+runs instead of skipping. Local runs without Pillow may~still skip this
+optional visual fixture; the~headless hosted job does~not~install pystray.
 
 The~title-picture regression extends the~already registered Admin side-panel delegation and~browser lifecycle suites, plus the~existing gallery edit concurrency HTTP/database suite. These fixtures remain under \filepath{scripts/audit.php}; they add no~YAML test owner or~alternate runner, and~the~protected evaluator registry is~unchanged.
 

@@ -594,10 +594,18 @@ Self-update regression uses fake releases/transports to cover numeric versions
 across paginated CMS releases, stable filtering, identical/conflicting duplicates,
 highest-version missing hashes, metadata/URL limits, same-release manifests,
 streaming hash/size refusal, cancellation and unrelated partial-file preservation.
-UI/helper fixtures exercise hourly scheduling, safe drain, ticket ownership, exact
-target identity and elevated installation. AST contracts enforce documented,
-typed definitions and absence of future imports in new updater modules/tests.
+UI fixtures cover the persistent version banner/header mark, Later/reopen behavior,
+tray badge/menu/tooltip routing, clearing after a successful no-offer check, and
+retaining a validated cached offer after failed rechecks and restart. Helper
+fixtures exercise hourly scheduling, safe drain, ticket ownership, exact target
+identity and elevated installation. AST contracts enforce documented, typed
+definitions and absence of future imports in new updater modules/tests.
 The central WinApp suite owns these checks; tests never download a live installer.
+The hosted portable job installs only the existing Pillow requirement into the
+Python interpreter selected for the audit and sets
+`PHP_GALLERY_REQUIRE_PILLOW=1`, so the tray-badge pixel fixture must run there.
+Local runs without Pillow may still skip that optional visual fixture; the
+headless hosted job does not install pystray.
 
 Frozen updater regression must distinguish the bundled `VERSION` text file from
 Windows `version.dll`. Source tests cover explicit `version.dll`, `kernel32.dll`

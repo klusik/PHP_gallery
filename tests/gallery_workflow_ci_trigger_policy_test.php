@@ -272,6 +272,13 @@ namespace {
         && str_contains($portableOwner, 'name: Portable Node and WinApp')
         && str_contains($portableOwner, 'PHP_GALLERY_AUDIT_CANDIDATE: ${{ inputs.checkout_ref || github.sha }}')
         && str_contains($portableOwner, 'PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp')
+        && str_contains($portableOwner, "PHP_GALLERY_REQUIRE_PILLOW: '1'")
+        && str_contains($portableOwner, 'uses: actions/setup-python@v6')
+        && str_contains($portableOwner, "python-version: '3.14'")
+        && str_contains($portableOwner, 'Install the declared Pillow test dependency')
+        && str_contains($portableOwner, 'winapp/requirements.txt')
+        && str_contains($portableOwner, 'sys.executable, "-m", "pip", "install"')
+        && str_contains($portableOwner, "- name: Central portable Node and WinApp coverage\n        env:\n          PHP_GALLERY_PYTHON: \${{ steps.python.outputs.python-path }}\n        run: php scripts/audit.php --profile=portable")
         && str_contains($portableOwner, 'php scripts/audit.php --profile=portable')
         && str_contains($nativeGate, "const required = ['preflight','source-contracts','portable'"),
         'Manifest delegation requires same-candidate preflight, shared source and portable owners, and the native aggregate gate.');

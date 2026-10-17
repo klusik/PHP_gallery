@@ -155,11 +155,12 @@ if tk is not None:
     )
 
 try:
-    from PIL import Image, ImageOps, ImageStat
+    from PIL import Image, ImageDraw, ImageOps, ImageStat
 except ImportError:  # pragma: no cover
     # Pillow is optional for the watcher. Manual client-side thumbnail generation
     # requires it, while normal watch-folder uploads keep working without it.
     Image = None
+    ImageDraw = None
     ImageOps = None
     ImageStat = None
 
@@ -182,6 +183,62 @@ REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 ASSETS_DIR = APP_DIR / "assets"
 TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
 TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
+# Purpose: Keep the update badge visible at common tray-icon resolutions.
+# Type: int; Units: minimum pixels; Scope: Windows tray update badge.
+# Consumers: render_tray_icon.
+# Rationale: 3 px yields a distinct mark on a 16 px notification icon.
+TRAY_BADGE_MIN_RADIUS = 3
+# Purpose: Scale the update badge to larger tray source artwork.
+# Type: int; Units: pixels per badge radius divisor; Scope: Windows tray icon.
+# Consumers: render_tray_icon.
+# Rationale: One fifth of the smaller icon edge keeps the badge compact.
+TRAY_BADGE_RADIUS_DIVISOR = 5
+# Purpose: Keep the badge edge clear of the source icon boundary.
+# Type: int; Units: pixels; Scope: Windows tray update badge.
+# Consumers: render_tray_icon.
+# Rationale: A 1 px inset avoids clipping the outer white rim.
+TRAY_BADGE_EDGE_INSET = 1
+# Purpose: Keep a crisp white outline around the red update badge.
+# Type: int; Units: pixels; Scope: tray badge boundary.
+# Consumers: render_tray_icon.
+# Rationale: One pixel preserves a clean boundary at standard tray sizes.
+TRAY_BADGE_OUTLINE_WIDTH = 1
+# Purpose: Scale the white update glyph stroke to the badge radius.
+# Type: int; Units: pixels per radius divisor; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: Half the radius yields about a 1.5 px stem after 256-to-16 px
+#     tray downsampling, preserving a bright center pixel in the exclamation.
+TRAY_BADGE_GLYPH_STROKE_DIVISOR = 2
+# Purpose: Keep the exclamation stem centered within the badge.
+# Type: int; Units: radius divisor; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: Starting halfway above center leaves room for the lower dot.
+TRAY_BADGE_GLYPH_LINE_START_DIVISOR = 2
+# Purpose: Stop the exclamation stem before its separate dot.
+# Type: int; Units: radius divisor; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: Ending one sixth below center separates stem and dot at small sizes.
+TRAY_BADGE_GLYPH_LINE_END_DIVISOR = 6
+# Purpose: Place the exclamation dot within the red badge interior.
+# Type: int; Units: radius divisor; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: Half a radius below center keeps the dot clear of the outer rim.
+TRAY_BADGE_GLYPH_DOT_OFFSET_DIVISOR = 2
+# Purpose: Ensure the update glyph remains visible on the smallest badges.
+# Type: int; Units: minimum pixels; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: One pixel is the smallest crisp stroke supported by Pillow.
+TRAY_BADGE_GLYPH_MIN_STROKE = 1
+# Purpose: Keep the exclamation dot proportional to its stem.
+# Type: int; Units: stroke-width divisor; Scope: tray badge glyph.
+# Consumers: render_tray_icon.
+# Rationale: Half the stem width forms a compact round dot after downsampling.
+TRAY_BADGE_GLYPH_DOT_RADIUS_DIVISOR = 2
+# Purpose: Respect the Windows notification-area tooltip text limit.
+# Type: int; Units: visible characters; Scope: pystray icon title.
+# Consumers: WatcherApp.tray_tooltip_text.
+# Rationale: 127 visible characters reserve one character for the native null.
+TRAY_TOOLTIP_MAX_LENGTH = 127
 # Purpose: Keep the first-launch window within common laptop display bounds.
 # Type: str; Units: pixels; Scope: Tkinter watcher main window.
 # Consumers: WatcherApp.build_ui.
@@ -235,6 +292,77 @@ LATEST_ACTIVITY_PREVIEW_LENGTH = 150
 # Consumers: ScrollableFrame._on_mousewheel.
 # Rationale: Windows reports 120 delta units for one standard wheel notch.
 WINDOWS_MOUSEWHEEL_DELTA = 120
+
+
+def render_tray_icon(
+    base_image: "Image.Image",
+    update_available: bool,
+) -> "Image.Image":
+    """Return a fresh tray image with a contrasting update mark when needed.
+
+    Args:
+        base_image (Image.Image): Unmodified source artwork loaded from the
+            bundled tray icon asset.
+        update_available (bool): Whether to draw the red and white update badge.
+
+    Returns:
+        Image.Image: A new RGBA image, either identical to the source artwork
+            or carrying one badge in its upper-right corner.
+    """
+    icon_image = base_image.convert("RGBA")
+    if not update_available or ImageDraw is None:
+        return icon_image
+
+    width, height = icon_image.size
+    radius = max(
+        TRAY_BADGE_MIN_RADIUS,
+        min(width, height) // TRAY_BADGE_RADIUS_DIVISOR,
+    )
+    inset = TRAY_BADGE_EDGE_INSET
+    center_x = width - radius - inset - 1
+    center_y = radius + inset
+    bounds = (
+        center_x - radius,
+        center_y - radius,
+        center_x + radius,
+        center_y + radius,
+    )
+    draw = ImageDraw.Draw(icon_image)
+    draw.ellipse(
+        bounds,
+        fill="#D92D3F",
+        outline="#FFFFFF",
+        width=TRAY_BADGE_OUTLINE_WIDTH,
+    )
+    glyph_stroke = max(
+        TRAY_BADGE_GLYPH_MIN_STROKE,
+        radius // TRAY_BADGE_GLYPH_STROKE_DIVISOR,
+    )
+    draw.line(
+        (
+            center_x,
+            center_y - radius // TRAY_BADGE_GLYPH_LINE_START_DIVISOR,
+            center_x,
+            center_y + radius // TRAY_BADGE_GLYPH_LINE_END_DIVISOR,
+        ),
+        fill="#FFFFFF",
+        width=glyph_stroke,
+    )
+    dot_y = center_y + radius // TRAY_BADGE_GLYPH_DOT_OFFSET_DIVISOR
+    dot_radius = max(
+        TRAY_BADGE_GLYPH_MIN_STROKE,
+        glyph_stroke // TRAY_BADGE_GLYPH_DOT_RADIUS_DIVISOR,
+    )
+    draw.ellipse(
+        (
+            center_x - dot_radius,
+            dot_y - dot_radius,
+            center_x + dot_radius,
+            dot_y + dot_radius,
+        ),
+        fill="#FFFFFF",
+    )
+    return icon_image
 
 _AI_TRANSFORMERS_PIPELINES: Dict[Tuple[str, str], Any] = {}
 _AI_TRANSFORMERS_LOCK = threading.Lock()
@@ -4595,6 +4723,11 @@ class WatcherApp:
         self.current_job: Optional[ImportJob] = None
         self.tray_icon: Optional[Any] = None
         self.tray_thread: Optional[threading.Thread] = None
+        self.update_available_version: Optional[str] = None
+        self.update_banner: Optional["ttk.Frame"] = None
+        self.update_banner_label: Optional["ttk.Label"] = None
+        self.update_banner_action: Optional["ttk.Button"] = None
+        self.check_updates_button: Optional["ttk.Button"] = None
         self.window_hidden_to_tray = False
         self.exiting = False
         self.activity_events: List[ActivityEvent] = self.job_store.list_events()
@@ -4701,7 +4834,8 @@ class WatcherApp:
         Create the themed navigation, primary watcher view, and live footer.
 
         Returns:
-            None: Builds the application window and selects Watcher by default.
+            None: Builds navigation, update notice, and application views;
+            Watcher remains selected by default.
         """
         configure_theme(self.root)
         ttk.Style(self.root).configure(
@@ -4752,22 +4886,50 @@ class WatcherApp:
         ttk.Label(status, textvariable=self.connection_status_var, style="App.Muted.TLabel").pack(side="left", padx=(0, 12))
         icon_button(
             header,
-            "info",
-            self.open_connection_dialog,
-            "Gallery connection and API key",
-        ).grid(row=0, column=4, rowspan=2, padx=4)
-        icon_button(
-            header,
             "settings",
             lambda: self.select_tab("settings"),
             "Settings",
         ).grid(row=0, column=2, rowspan=2, padx=(12, 4))
-        icon_button(
+        self.check_updates_button = icon_button(
             header,
             "refresh",
             self.updates.check,
-            "Check for updates",
-        ).grid(row=0, column=3, rowspan=2, padx=4)
+            "Check for updates or open the available update",
+        )
+        self.check_updates_button.grid(
+            row=0,
+            column=3,
+            rowspan=2,
+            padx=4,
+        )
+        icon_button(
+            header,
+            "info",
+            self.open_connection_dialog,
+            "Gallery connection and API key",
+        ).grid(row=0, column=4, rowspan=2, padx=4)
+        self.update_banner = GlassCard(outer, padding=(12, 6))
+        self.update_banner.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(0, 8),
+        )
+        self.update_banner.columnconfigure(0, weight=1)
+        self.update_banner_label = ttk.Label(
+            self.update_banner,
+            text="",
+            style="Section.TLabel",
+        )
+        self.update_banner_label.grid(row=0, column=0, sticky="w")
+        self.update_banner_action = ttk.Button(
+            self.update_banner,
+            text="Open update",
+            command=self.open_update_notice,
+            style="Primary.TButton",
+        )
+        self.update_banner_action.grid(row=0, column=1, sticky="e", padx=(12, 0))
+        self.update_banner.grid_remove()
         help_button(
             header,
             "Watcher help",
@@ -4826,6 +4988,70 @@ class WatcherApp:
         self.write_log(thumbnail_runtime_status(), "system")
         self.refresh_connection_controls()
         self.update_monitor_state("disabled", "No background worker is active.")
+        self.set_update_available(self.update_available_version)
+
+    def set_update_available(self, version: Optional[str]) -> None:
+        """Show or clear the verified uploader update across app surfaces.
+
+        Args:
+            version (Optional[str]): Available uploader release version, or
+                None after a successful check finds no current offer.
+
+        Returns:
+            None: Updates the global banner, marked check icon, tray image,
+                tooltip and menu while preserving verified state on Later.
+        """
+        normalized_version = version.strip() if version is not None else ""
+        self.update_available_version = normalized_version or None
+        has_update = self.update_available_version is not None
+        if self.check_updates_button is not None:
+            self.check_updates_button.configure(
+                text="↑" if has_update else "↻",
+                command=(
+                    self.open_update_notice
+                    if has_update
+                    else self.updates.check
+                ),
+            )
+        if self.update_banner is not None:
+            if has_update:
+                self.update_banner_label.configure(
+                    text=f"Update {self.update_available_version} available"
+                )
+                self.update_banner.grid()
+            else:
+                self.update_banner.grid_remove()
+
+        tray_icon = self.tray_icon
+        if tray_icon is None:
+            return
+        try:
+            tray_icon.icon = self.make_tray_icon_image()
+            tray_icon.title = self.tray_tooltip_text()
+            tray_icon.menu = self.build_tray_menu()
+            tray_icon.update_menu()
+        except Exception:  # noqa: BLE001
+            logging.debug("Could not refresh tray update indication.", exc_info=True)
+
+    def open_update_notice(self) -> None:
+        """Restore the app and open the controller's current update notice.
+
+        Returns:
+            None: Shows the known offer or begins a manual check when idle.
+        """
+        self.restore_from_tray()
+        self.updates.open_updates()
+
+    def tray_update_menu_label(self) -> str:
+        """Return the tray menu's current update action caption.
+
+        Returns:
+            str: ``Update <version>`` for an available offer, otherwise
+                ``Check for updates``.
+        """
+        if self.update_available_version is None:
+            return "Check for updates"
+        return f"Update {self.update_available_version}"
 
     def select_tab(self, name: str) -> None:
         """Select a named view in the application navigation.
@@ -4876,9 +5102,57 @@ class WatcherApp:
         except Exception as exc:  # noqa: BLE001
             logging.warning("Window icon could not be loaded: %s", exc)
 
-    def start_tray_icon(self) -> None:
+    def make_tray_icon_image(self) -> "Image.Image":
+        """Load the bundled base art and compose the current update badge.
+
+        Raises:
+            RuntimeError: Tray image support is unavailable without Pillow.
+            OSError: The bundled tray image cannot be read.
+
+        Returns:
+            Image.Image: Fresh RGBA tray artwork derived from the bundled base.
         """
-        Start the Windows tray icon in a background thread.
+        if Image is None:
+            raise RuntimeError("Pillow is required to compose the tray icon.")
+        with Image.open(TRAY_ICON_PNG_PATH) as opened:
+            base_image = opened.convert("RGBA")
+        return render_tray_icon(
+            base_image,
+            self.update_available_version is not None,
+        )
+
+    def build_tray_menu(self) -> Optional["pystray.Menu"]:
+        """Create the tray menu with an update-aware first action.
+
+        Returns:
+            Optional[pystray.Menu]: Current native tray menu, or None when
+                pystray is unavailable in this runtime.
+        """
+        if pystray is None:
+            return None
+        return pystray.Menu(
+            pystray.MenuItem(self.tray_update_menu_label(), self.tray_open_updates),
+            pystray.MenuItem("Open", self.tray_restore_window, default=True),
+            pystray.MenuItem("Open activity", self.tray_open_activity),
+            pystray.MenuItem("Connection / API key...", self.tray_open_connection),
+            pystray.MenuItem("Revoke API key...", self.tray_revoke_api_key),
+            pystray.MenuItem("Pause/resume current import", self.tray_toggle_import_pause),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Start watching", self.tray_start_watching),
+            pystray.MenuItem("Stop watching", self.tray_stop_watching),
+            pystray.MenuItem("Start AI metadata worker", self.tray_start_ai_worker),
+            pystray.MenuItem("Stop AI metadata worker", self.tray_stop_ai_worker),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Open log folder", self.tray_open_log_folder),
+            pystray.MenuItem("Exit", self.tray_exit_application),
+        )
+
+    def start_tray_icon(self) -> None:
+        """Start the Windows tray icon with current update state.
+
+        Returns:
+            None: Starts a tray thread with fresh base artwork, current update
+                badge, bounded tooltip text and update-aware menu when available.
         """
         if pystray is None or Image is None:
             self.write_log("System tray unavailable. Run install.bat to install pystray and Pillow.", "warning")
@@ -4888,24 +5162,12 @@ class WatcherApp:
             return
 
         try:
-            with Image.open(TRAY_ICON_PNG_PATH) as opened:
-                icon_image = opened.convert("RGBA").copy()
-            menu = pystray.Menu(
-                pystray.MenuItem("Open", self.tray_restore_window, default=True),
-                pystray.MenuItem("Open activity", self.tray_open_activity),
-                pystray.MenuItem("Connection / API key...", self.tray_open_connection),
-                pystray.MenuItem("Revoke API key...", self.tray_revoke_api_key),
-                pystray.MenuItem("Pause/resume current import", self.tray_toggle_import_pause),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Start watching", self.tray_start_watching),
-                pystray.MenuItem("Stop watching", self.tray_stop_watching),
-                pystray.MenuItem("Start AI metadata worker", self.tray_start_ai_worker),
-                pystray.MenuItem("Stop AI metadata worker", self.tray_stop_ai_worker),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Open log folder", self.tray_open_log_folder),
-                pystray.MenuItem("Exit", self.tray_exit_application),
+            self.tray_icon = pystray.Icon(
+                APP_NAME,
+                self.make_tray_icon_image(),
+                self.tray_tooltip_text(),
+                self.build_tray_menu(),
             )
-            self.tray_icon = pystray.Icon(APP_NAME, icon_image, self.tray_tooltip_text(), menu)
             self.tray_thread = threading.Thread(target=self.tray_icon.run, name="PHPGalleryTray", daemon=True)
             self.tray_thread.start()
             self.write_log("System tray icon is active.", "system")
@@ -4946,6 +5208,20 @@ class WatcherApp:
             None: Schedules the tray action on the Tk thread.
         """
         self.schedule_ui(self.restore_from_tray)
+
+    def tray_open_updates(
+        self, *_args: "pystray.Icon | pystray.MenuItem"
+    ) -> None:
+        """Restore the application and open the existing update notice.
+
+        Args:
+            *_args (pystray.Icon | pystray.MenuItem): Native tray callback
+                arguments supplied by pystray; direct calls may omit them.
+
+        Returns:
+            None: Schedules the updater entry point on Tk's UI thread.
+        """
+        self.schedule_ui(self.open_update_notice)
 
     def tray_open_activity(
         self, *_args: "pystray.Icon | pystray.MenuItem"
@@ -6978,11 +7254,11 @@ class WatcherApp:
         self.api_key_revoke_thread.start()
 
     def close(self) -> None:
-        """
-        Coordinate shutdown with bounded worker waits and preserve recoverable state.
+        """Coordinate shutdown while preserving update and import state.
 
         Returns:
-            None: Closes the tray/window or retains the existing guarded wait.
+            None: Retains the update indicator when shutdown is deferred or
+                canceled, and clears it only before confirmed app teardown.
         """
         self.utc_sync.stop()
         if getattr(self, "updates", None) is not None and self.updates.request_close():
@@ -7043,6 +7319,7 @@ class WatcherApp:
                 self.hide_to_tray()
                 self.root.after(200, self.drain_events)
                 return
+        self.set_update_available(None)
         self.stop_tray_icon()
         self.root.destroy()
 
@@ -7092,12 +7369,26 @@ class WatcherApp:
             logging.debug("Could not select Activity tab.", exc_info=True)
 
     def tray_tooltip_text(self) -> str:
-        """Return a concise independent activity summary for the tray tooltip."""
+        """Return the update version and activity within Windows' tooltip limit.
+
+        Returns:
+            str: One-line current update and activity summary capped to the
+                documented notification-area character budget.
+        """
         watch = 1 if self.worker and self.worker.is_alive() else 0
         importing = 1 if self.manual_worker and self.manual_worker.is_alive() else 0
         ai = 1 if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested else 0
         failures = self.current_job.counts()["failed"] if self.current_job is not None else 0
-        return f"PHP Gallery uploader | watch {watch} | import {importing} | AI {ai} | failures {failures}"
+        update = (
+            f" | Update {self.update_available_version}"
+            if self.update_available_version is not None
+            else ""
+        )
+        summary = (
+            f"PHP Gallery uploader{update} | watch {watch} | "
+            f"import {importing} | AI {ai} | failures {failures}"
+        )
+        return summary[:TRAY_TOOLTIP_MAX_LENGTH]
 
     def toggle_settings_advanced(self) -> None:
         """Show or hide low-level import/archive tuning settings.

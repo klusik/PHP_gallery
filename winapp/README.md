@@ -12,6 +12,19 @@ use no Gallery API key; their timestamp and any available offer are stored
 separately in `%LOCALAPPDATA%\PHPGalleryUploader\updates`, so restarting within
 the hourly interval can still display an already discovered update.
 
+A validated offer remains visible as a version banner and marked update control
+in the main header across all screens. **Later** hides the notice but leaves both
+indicators available to reopen it. When tray support is available, the tray icon
+shows a red update badge, its tooltip identifies the offered version, and its
+first menu action becomes **Update <version>** and opens the same notice. Without
+tray support, the full in-app indicator remains available. The app does not set
+a Windows taskbar overlay or show operating-system toast notifications.
+
+A failed network recheck preserves the validated cached offer across restart;
+cached release metadata passes the current validator before the offer is
+restored. A successful check that finds no current offer clears the banner,
+header mark, and tray badge.
+
 Discovery examines paginated releases for the highest newer
 `PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the uploader
 version. The highest candidate must have a trusted published SHA-256 digest;

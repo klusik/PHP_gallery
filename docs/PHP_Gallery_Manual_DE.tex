@@ -707,6 +707,24 @@ lesbare,
 flache ttk-Flächen sowie native Steuerelemente und der Quellmodus einschließlich
 \texttt{--once} unterstützt.
 
+\subsection{Updatehinweis und~Anzeigen}
+
+Die~App prüft beim Start und~danach höchstens einmal pro Stunde auf neue
+Uploader-Versionen; \ui{Check for updates} startet eine manuelle Prüfung. Ein
+validiertes Angebot erscheint als Versionshinweis und~markierte Update-Steuerung
+in~der~App-Kopfzeile auf~allen Bildschirmen. \ui{Later} blendet den~Hinweis aus,
+beide Anzeigen bleiben zum erneuten Öffnen verfügbar. Wenn die~Taskleistenablage
+verfügbar ist, zeigt ihr~Symbol eine rote Update-Markierung, der~Tooltip nennt
+die~angebotene Version und~der~erste Menüpunkt nennt diese Version und~öffnet
+denselben Hinweis. Ohne Ablageunterstützung bleiben die~Anzeigen in~der~App voll
+verfügbar. Die~App setzt kein Overlay in~der~Windows-Taskleiste und~zeigt keine
+Systembenachrichtigungen.
+
+Eine fehlgeschlagene Netzwerkprüfung behält das~validierte Angebot im~Cache,
+auch über einen Neustart hinweg; vor der~Wiederherstellung wird es erneut
+validiert. Eine erfolgreiche Prüfung ohne aktuelles Angebot entfernt den~Hinweis,
+die~Markierung in~der~Kopfzeile und~den~Ablage-Badge.
+
 \subsection{Simulatorposition unter Windows}
 
 \ui{Sync UTC time} bei den Überwachungsaktionen ist standardmäßig aus und
@@ -2510,6 +2528,12 @@ verwenden das einheitliche Format.
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.
 
 Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge, erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität und~Paketprüfungen auf~Linux, Windows und~macOS. Alle erforderlichen Jobs und~das~Gate für~das~exakte SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder Entwicklungsänderung.
+
+Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
+in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für
+das Tray-Badge ausgeführt und nicht übersprungen wird. Lokale Läufe ohne Pillow
+dürfen diesen optionalen visuellen Test überspringen; der gehostete Job ohne
+grafische Oberfläche installiert pystray nicht.
 
 Die~Regression für~das~Galerietitelbild erweitert die~bereits registrierten Admin-Seitenpanel- und~Browser-Lifecycle-Suiten sowie die~bestehende HTTP-/Datenbank-Suite zur Galerie-Editorkonkurrenz. Diese Fixtures bleiben Bestandteil von \filepath{scripts/audit.php}; sie~fügen weder einen YAML-Testeigentümer noch einen alternativen Runner hinzu, und~das~geschützte Evaluator-Register bleibt unverändert.
 

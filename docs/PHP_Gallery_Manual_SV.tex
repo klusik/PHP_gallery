@@ -696,6 +696,24 @@ förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret anv
 körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
 inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
 
+\subsection{Uppdateringsmeddelande och indikatorer}
+
+Appen söker efter nya uploader-versioner vid start och därefter högst en gång
+i timmen; \ui{Check for updates} startar en manuell kontroll. Ett validerat
+erbjudande visas som en versionsbanner och en markerad uppdateringsknapp i
+sidhuvudet på alla skärmar. \ui{Later} döljer meddelandet, men båda indikatorerna
+finns kvar och kan öppna det igen. När systemfältet är tillgängligt visar ikonen
+en röd uppdateringsmarkering, verktygstipset anger erbjuden version och den
+första menyåtgärden anger versionen och öppnar samma meddelande. Utan stöd för
+systemfältet finns indikatorerna i appen kvar med full funktion. Appen lägger
+inte till någon överläggsmarkering i Windows aktivitetsfält och visar inga
+systemaviseringar.
+
+En misslyckad nätverkskontroll bevarar det validerade erbjudandet i cachen även
+efter omstart; erbjudandet valideras på nytt innan det återställs. En lyckad
+kontroll utan ett aktuellt erbjudande tar bort bannern, markeringen i sidhuvudet
+och uppdateringsmärket i systemfältet.
+
 \subsection{Simulatorposition i Windows}
 
 \ui{Sync UTC time} vid mappbevakningens knappar är av som standard och sparar
@@ -2490,6 +2508,12 @@ Python-docstrings använder ett gemensamt format.
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 
 Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt, obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet och~paketkontroller på~Linux, Windows och~macOS. Alla obligatoriska jobb och~kontrollen av~exakt SHA måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter de~slutliga källändringarna, inte vid~rutinmässig utveckling.
+
+Det värdbaserade portabla WinApp-jobbet installerar det befintliga
+Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet
+för aktivitetsfältsmärket körs i stället för att hoppas över. Lokala körningar
+utan Pillow kan fortfarande hoppa över detta valfria visuella test; värdjobbet
+utan grafiskt gränssnitt installerar inte pystray.
 
 Regressionstesterna för~titelbilden utökar de~redan registrerade sviterna för~Admin-panelens delegering och~webbläsarens livscykel samt den~befintliga HTTP-/databassviten för~samtidiga galleriändringar. Testfixturerna körs via \filepath{scripts/audit.php}; de~lägger inte till någon YAML-testägare eller alternativ körning, och~det~skyddade evaluatorregistret förblir oförändrat.
 

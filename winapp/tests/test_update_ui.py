@@ -8,6 +8,8 @@
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Safe deterministic controller tests; no Tk windows, network or installer."""
+from dataclasses import asdict
+import json
 from pathlib import Path
 import queue
 import sys
@@ -27,20 +29,28 @@ class UpdateControllerTests(unittest.TestCase):
     """Admission remains closed until an acknowledged helper or explicit refusal."""
 
     def controller(self) -> UpdateController:
-        """Build an isolated controller with a fake root."""
+        """Build an isolated controller and app callback fixture.
+
+        Returns:
+            UpdateController: Controller with mocked Tk and persistent app hooks.
+        """
         controller = UpdateController.__new__(UpdateController)
         controller.root = SimpleNamespace(after=Mock(), destroy=Mock())
         controller.app = SimpleNamespace(root=controller.root, exiting=False,
-                                         stop_tray_icon=Mock(), write_log=Mock())
+                                         stop_tray_icon=Mock(), write_log=Mock(),
+                                         set_update_available=Mock())
+        controller.version = '1.0.0'
         controller.gate = InstallGate(timeout=10)
         controller.events = queue.Queue()
         controller.busy = False
         controller.close_pending = False
         controller.auto_install = False
+        controller.cached_offer_loaded = False
         controller.window = None
         controller.action = SimpleNamespace(configure=Mock())
         controller.status = SimpleNamespace(set=Mock())
         controller.cancel_button = SimpleNamespace(configure=Mock())
+        controller.check_result_pending = False
         controller.worker = None
         controller.cancel = threading.Event()
         controller.state_path = Path("updates") / "state.json"
@@ -150,12 +160,406 @@ class UpdateControllerTests(unittest.TestCase):
             path.write_text('broken', encoding='utf-8')
             self.assertTrue(check_due(path, 101))
 
+    def test_successful_no_offer_clears_persistent_indicator(self) -> None:
+        """A completed clean check removes the app-wide update indicator.
+
+        Returns:
+            None: Confirms the accepted no-offer transition clears the indicator.
+        """
+        controller = self.controller()
+        controller.app.set_update_available.reset_mock()
+        controller.window = object()
+        controller.events.put(('checked', None))
+        controller.poll()
+        controller.app.set_update_available.assert_called_once_with(None)
+        controller.action.configure.assert_any_call(
+            state='disabled', text='Update', command=controller.download
+        )
+        self.assertIsNone(controller.asset)
+
+    def test_checked_event_then_done_enables_offer_after_busy_clears(self) -> None:
+        """Production checked-before-done ordering eventually enables the offer.
+
+        Returns:
+            None: Confirms completion reconciles the offer after busy becomes false.
+        """
+        controller = self.controller()
+        controller.busy = True
+        controller.show = Mock()
+        controller.installer = None
+        asset = ReleaseAsset(
+            '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        controller.events.put(('checked', asset))
+        controller.events.put(('done', None))
+        controller.poll()
+        self.assertFalse(controller.busy)
+        self.assertIn(asset.version, controller.status.set.call_args.args[0])
+        controller.action.configure.assert_any_call(
+            state='normal', text='Update', command=controller.download
+        )
+
+    def test_error_then_done_keeps_failure_status_and_retained_offer(self) -> None:
+        """Worker completion re-enables a retained offer without hiding failure text.
+
+        Returns:
+            None: Confirms the error remains visible and the old offer is usable.
+        """
+        controller = self.controller()
+        controller.busy = True
+        controller.window = object()
+        controller.installer = None
+        controller.events.put(('error', 'offline'))
+        controller.events.put(('done', None))
+        controller.poll()
+        self.assertFalse(controller.busy)
+        self.assertEqual(controller.status.set.call_args.args[0], 'Update stopped: offline')
+        controller.action.configure.assert_any_call(
+            state='normal', text='Update', command=controller.download
+        )
+
+    def test_later_keeps_offer_and_manual_open_does_not_recheck(self) -> None:
+        """Hiding a known offer preserves it and reopening avoids network work.
+
+        Returns:
+            None: Confirms Later and open reuse the known offer.
+        """
+        controller = self.controller()
+        controller.show = Mock()
+        controller.check = Mock()
+        controller.installer = None
+        controller.later()
+        controller.asset = SimpleNamespace(version='1.2.3')
+        controller.open_updates()
+        controller.show.assert_called_once_with()
+        controller.check.assert_not_called()
+        self.assertEqual(controller.asset.version, '1.2.3')
+
+    def test_manual_open_checks_only_when_idle_without_known_offer(self) -> None:
+        """Manual open schedules a check only when no offer or operation exists.
+
+        Returns:
+            None: Confirms the idle manual-check request.
+        """
+        controller = self.controller()
+        controller.show = Mock()
+        controller.installer = None
+        controller.check = Mock()
+        controller.asset = None
+        controller.installer = None
+        controller.open_updates()
+        controller.check.assert_called_once_with(automatic=False)
+
+    def test_close_permission_preserves_app_wide_update_indicator(self) -> None:
+        """An allowed close decision leaves indicator cleanup to the app owner.
+
+        Returns:
+            None: Confirms updater admission does not mutate app-wide state.
+        """
+        controller = self.controller()
+        controller.app.set_update_available('1.2.3')
+        controller.app.set_update_available.reset_mock()
+        self.assertFalse(controller.request_close())
+        controller.app.set_update_available.assert_not_called()
+
+    def test_gated_close_preserves_app_wide_update_indicator(self) -> None:
+        """A refused close during install preparation preserves the indicator.
+
+        Returns:
+            None: Confirms install gating only presents the updater notice.
+        """
+        controller = self.controller()
+        controller.app.set_update_available('1.2.3')
+        controller.app.set_update_available.reset_mock()
+        controller.gate.begin(0)
+        controller.show = Mock()
+        self.assertTrue(controller.request_close())
+        controller.show.assert_called_once_with()
+        controller.app.set_update_available.assert_not_called()
+
+    def test_failed_recheck_preserves_cached_offer_and_advances_throttle(self) -> None:
+        """An offline check updates last_check without discarding a verified offer.
+
+        Returns:
+            None: Confirms the failed I/O leaves verified offer metadata intact.
+        """
+        controller = self.controller()
+        controller.show = Mock()
+        controller.installer = None
+        asset = ReleaseAsset(
+            '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        controller.asset = asset
+        controller.app.set_update_available(asset.version)
+        controller.app.set_update_available.reset_mock()
+        with tempfile.TemporaryDirectory() as directory:
+            controller.state_path = Path(directory) / 'state.json'
+            controller.state_path.write_text(json.dumps({
+                'last_check': 1,
+                'version': controller.version,
+                'available': asdict(asset),
+            }), encoding='utf-8')
+            operations: list[Callable[[], None]] = []
+            controller.run_worker = operations.append
+            with patch('uploader.update_ui.time.time', return_value=200):
+                controller.check(automatic=False)
+            self.assertEqual(len(operations), 1)
+            with patch('uploader.self_update.find_update', side_effect=OSError('offline')):
+                with self.assertRaisesRegex(OSError, 'offline'):
+                    operations[0]()
+            saved = json.loads(controller.state_path.read_text(encoding='utf-8'))
+            self.assertEqual(saved['last_check'], 200)
+            self.assertEqual(saved['available'], asdict(asset))
+            self.assertEqual(controller.asset, asset)
+            controller.app.set_update_available.assert_not_called()
+
+    def test_cache_write_failure_keeps_verified_installer(self) -> None:
+        """A failed replacement cache write cannot retire the usable installer.
+
+        Returns:
+            None: Confirms cleanup follows successful metadata persistence.
+        """
+        from uploader.self_update import _record_download_file, create_download_session
+
+        controller = self.controller()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller.state_path = root / 'state.json'
+            session = create_download_session(root)
+            installer = session / 'uploader-update-abcdefgh.exe'
+            installer.write_bytes(b'verified setup')
+            _record_download_file(session, installer.name)
+            controller.installer = installer
+            operations: list[Callable[[], None]] = []
+            controller.run_worker = operations.append
+            with patch('uploader.update_ui.time.time', return_value=4000):
+                controller.check(automatic=True)
+            asset = ReleaseAsset(
+                '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+                'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+                100, 'a' * 64, 1, 1,
+            )
+            with patch('uploader.self_update.find_update', return_value=asset), \
+                    patch('uploader.update_ui.atomic_write_json', side_effect=[None, OSError('cache write failed')]), \
+                    patch('uploader.self_update.retire_download_session') as retire:
+                with self.assertRaisesRegex(OSError, 'cache write failed'):
+                    operations[0]()
+            retire.assert_not_called()
+            self.assertTrue(installer.exists())
+
+    def test_cleanup_failure_still_accepts_check_and_clears_stale_installer(self) -> None:
+        """Cleanup failure warns but does not reject the completed check result.
+
+        Returns:
+            None: Confirms metadata acceptance clears the stale installer reference.
+        """
+        from uploader.self_update import _record_download_file, create_download_session
+
+        controller = self.controller()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller.state_path = root / 'state.json'
+            session = create_download_session(root)
+            installer = session / 'uploader-update-abcdefgh.exe'
+            installer.write_bytes(b'verified setup')
+            _record_download_file(session, installer.name)
+            controller.installer = installer
+
+            def capture(operation: Callable[[], None]) -> None:
+                """Capture the worker body and mirror its busy state.
+
+                Args:
+                    operation (Callable[[], None]): Background check body.
+                Returns:
+                    None: Stores the operation for deterministic event ordering.
+                """
+                controller.busy = True
+                operation()
+
+            controller.run_worker = capture
+            with patch('uploader.update_ui.time.time', return_value=4000), \
+                    patch('uploader.self_update.find_update', return_value=None), \
+                    patch('uploader.self_update.retire_download_session', side_effect=OSError('cleanup refused')):
+                controller.check(automatic=True)
+            controller.events.put(('done', None))
+            controller.poll()
+            saved = json.loads(controller.state_path.read_text(encoding='utf-8'))
+        self.assertIsNone(controller.installer)
+        self.assertIsNone(controller.asset)
+        self.assertIsNone(saved['available'])
+        controller.app.set_update_available.assert_called_once_with(None)
+        controller.app.write_log.assert_any_call(
+            'Previous installer cleanup refused: cleanup refused', 'warning'
+        )
+
+    def test_cached_offer_restores_after_restart_through_validator(self) -> None:
+        """A new process restores only a cache matching its current version.
+
+        Returns:
+            None: Confirms the validator-approved cached release is published.
+        """
+        controller = self.controller()
+        controller.installer = None
+        asset = ReleaseAsset(
+            '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller.state_path = Path(directory) / 'state.json'
+            controller.state_path.write_text(json.dumps({
+                'last_check': 100,
+                'version': controller.version,
+                'available': asdict(asset),
+            }), encoding='utf-8')
+            controller.restore_cached_offer()
+        self.assertEqual(controller.asset, asset)
+        controller.app.set_update_available.assert_called_once_with(asset.version)
+
+    def test_cached_offer_after_offline_startup_opens_actionable_notice(self) -> None:
+        """A restored offer remains usable after a failed fresh check.
+
+        Returns:
+            None: Confirms a newly created notice shows the cached version and action.
+        """
+        controller = self.controller()
+        controller.installer = None
+        asset = ReleaseAsset(
+            '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller.state_path = Path(directory) / 'state.json'
+            controller.state_path.write_text(json.dumps({
+                'last_check': 1,
+                'version': controller.version,
+                'available': asdict(asset),
+            }), encoding='utf-8')
+            controller.restore_cached_offer()
+            operations: list[Callable[[], None]] = []
+            controller.run_worker = lambda operation: (operations.append(operation), setattr(controller, 'busy', True))
+            with patch('uploader.update_ui.time.time', return_value=4000):
+                controller.check(automatic=True)
+            with patch('uploader.self_update.find_update', side_effect=OSError('offline')):
+                with self.assertRaisesRegex(OSError, 'offline'):
+                    operations[0]()
+            controller.events.put(('error', 'offline'))
+            controller.events.put(('done', None))
+            controller.poll()
+
+            window = Mock()
+            status = Mock()
+            button = Mock()
+            ttk_stub = SimpleNamespace(
+                Label=Mock(return_value=Mock()),
+                Progressbar=Mock(return_value=Mock()),
+                Frame=Mock(return_value=Mock()),
+                Button=Mock(return_value=button),
+            )
+            tkinter_stub = SimpleNamespace(
+                Toplevel=Mock(return_value=window),
+                StringVar=Mock(return_value=status),
+                ttk=ttk_stub,
+            )
+            with patch.dict(sys.modules, {'tkinter': tkinter_stub}):
+                controller.open_updates()
+            self.assertEqual(len(operations), 1)
+            self.assertIs(controller.window, window)
+            shown_text = str(status.set.call_args.args[0])
+            self.assertIn(asset.version, shown_text)
+            button.configure.assert_any_call(
+                state='normal', text='Update', command=controller.download
+            )
+
+    def test_cold_start_fresh_check_completes_after_done_event(self) -> None:
+        """A cold automatic check validates and presents its first release.
+
+        Returns:
+            None: Confirms fresh cache write and checked/done UI completion.
+        """
+        controller = self.controller()
+        controller.installer = None
+        controller.asset = None
+        controller.show = Mock()
+        asset = ReleaseAsset(
+            '1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller.state_path = Path(directory) / 'state.json'
+            operations: list[Callable[[], None]] = []
+
+            def capture(operation: Callable[[], None]) -> None:
+                """Capture the worker operation and mirror its busy admission state.
+
+                Args:
+                    operation (Callable[[], None]): Background check body.
+                Returns:
+                    None: Stores the operation for deterministic execution.
+                """
+                operations.append(operation)
+                controller.busy = True
+
+            controller.run_worker = capture
+            with patch('uploader.update_ui.time.time', return_value=4000):
+                controller.automatic_check()
+            self.assertTrue(controller.cached_offer_loaded)
+            with patch('uploader.self_update.find_update', return_value=asset):
+                operations[0]()
+            controller.events.put(('done', None))
+            controller.poll()
+            stored = json.loads(controller.state_path.read_text(encoding='utf-8'))
+        self.assertEqual(stored['available'], asdict(asset))
+        self.assertFalse(controller.busy)
+        self.assertIn(asset.version, controller.status.set.call_args.args[0])
+        controller.action.configure.assert_any_call(
+            state='normal', text='Update', command=controller.download
+        )
+
+    def test_actual_update_version_clears_old_cached_offer(self) -> None:
+        """A newer installed app version invalidates its old-process offer cache.
+
+        Returns:
+            None: Confirms the stale cache is cleared for the current version.
+        """
+        controller = self.controller()
+        controller.version = '1.2.3'
+        old_asset = ReleaseAsset(
+            '1.2.0', 'PHPGalleryUploader-1.2.0-Setup.exe',
+            'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.0-Setup.exe',
+            100, 'a' * 64, 1, 1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller.state_path = Path(directory) / 'state.json'
+            controller.state_path.write_text(json.dumps({
+                'last_check': 100,
+                'version': '1.0.0',
+                'available': asdict(old_asset),
+            }), encoding='utf-8')
+            controller.restore_cached_offer()
+            cached = json.loads(controller.state_path.read_text(encoding='utf-8'))
+        self.assertIsNone(cached['available'])
+        self.assertEqual(cached['version'], controller.version)
+        controller.app.set_update_available.assert_called_once_with(None)
+
     def test_close_cancels_download_and_waits_for_done_event(self) -> None:
-        """Normal shutdown cannot abandon a download or launch a late installer."""
+        """Shutdown waits for worker completion without changing the indicator.
+
+        Returns:
+            None: Confirms cancellation precedes close and preserves app-owned state.
+        """
         controller = self.controller()
         controller.cancel = threading.Event()
         controller.busy = True
         controller.app.close = Mock()
+        controller.app.set_update_available('1.2.3')
+        controller.app.set_update_available.reset_mock()
         self.assertTrue(controller.request_close())
         self.assertTrue(controller.cancel.is_set())
         controller.app.close.assert_not_called()
@@ -163,6 +567,7 @@ class UpdateControllerTests(unittest.TestCase):
         controller.poll()
         controller.app.close.assert_called_once()
         self.assertFalse(controller.auto_install)
+        controller.app.set_update_available.assert_not_called()
 
     def test_handoff_does_not_emit_ready_before_helper_acknowledgment(self) -> None:
         """A failed helper readiness handshake cannot trigger application shutdown."""
@@ -277,7 +682,11 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertFalse(any(kind == 'downloaded' for kind, value in list(controller.events.queue)))
 
     def test_cancel_before_processing_downloaded_does_not_install(self) -> None:
-        """Late main-thread cancellation rejects a queued verified installer event."""
+        """Late cancellation rejects installer handoff without clearing an offer.
+
+        Returns:
+            None: Confirms cancellation retires the download and retains the offer.
+        """
         from uploader.self_update import create_download_session
         controller = self.controller()
         controller.install = Mock()
@@ -285,11 +694,14 @@ class UpdateControllerTests(unittest.TestCase):
             controller.state_path = Path(directory) / 'state.json'
             owned = create_download_session(Path(directory))
             controller.cancel.set()
+            existing_asset = controller.asset
             controller.events.put(('downloaded', owned / 'uploader-update-abcdefgh.exe'))
             controller.events.put(('done', None))
             controller.poll()
             controller.install.assert_not_called()
             self.assertFalse(controller.auto_install)
+            self.assertIs(controller.asset, existing_asset)
+            controller.app.set_update_available.assert_not_called()
             self.assertFalse(owned.exists())
 
     def test_ready_handoff_retires_only_its_owned_download(self) -> None:

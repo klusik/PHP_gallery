@@ -697,6 +697,22 @@ průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow z
 čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
 \texttt{--once} zůstávají podporované.
 
+\subsection{Oznámení aktualizace a~indikátory}
+
+Aplikace kontroluje nová vydání uploaderu při spuštění a~poté nejvýše jednou
+za hodinu; \ui{Check for updates} spustí ruční kontrolu. Ověřená nabídka se
+zobrazí jako banner a~označené ovládání aktualizace v~hlavičce aplikace na všech
+obrazovkách. \ui{Later} skryje oznámení, ale oba indikátory zůstanou dostupné
+pro jeho opětovné otevření. Pokud je dostupná ikona tray, zobrazí červený odznak
+aktualizace, její tooltip uvede nabízenou verzi a~první položka nabídky pojmenuje
+tuto verzi a~otevře stejné oznámení. Bez podpory tray zůstávají plně dostupné
+indikátory v~aplikaci. Aplikace nenastavuje překryvnou značku hlavního panelu
+Windows ani nezobrazuje systémová oznámení toast.
+
+Neúspěšná síťová kontrola zachová ověřenou nabídku v~mezipaměti i~po restartu;
+před obnovením se nabídka znovu ověří. Úspěšná kontrola bez aktuální nabídky
+skryje banner, označení v~hlavičce i~odznak tray.
+
 \subsection{Poloha simulátoru ve Windows}
 
 \ui{Sync UTC time} u~ovládání sledované složky je ve výchozím stavu vypnuté
@@ -2487,6 +2503,11 @@ ale autorské Python docstringy používají jednotný formát.
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 
 Povinná hostovaná kvalifikace zahrnuje PHP/Node/WinApp testy, zdrojové kontrakty, Chromium, skutečné MySQL/MariaDB scénáře, kompatibilitu PHP a~balení na~Linuxu, Windows i~macOS. Všechny povinné joby a~kontrola přesného SHA musejí uspět. Release workflow sestaví všechny čtyři PDF příručky jednou po~posledních úpravách zdrojů, nikoli při běžném vývoji.
+
+Hostovaný přenosný job WinApp instaluje existující požadavek Pillow
+do~interpretu Pythonu vybraného pro~audit, takže test pixelů odznaku na~liště
+běží a~nepřeskočí se. Lokální běh bez Pillow může tento volitelný vizuální test
+přeskočit; hostovaný job bez grafického rozhraní neinstaluje pystray.
 
 Regresní pokrytí titulní fotografie rozšiřuje již registrované sady delegování postranního panelu Admin a~životního cyklu prohlížeče spolu se~stávající HTTP/databázovou sadou souběžných změn galerie. Testy zůstávají součástí \filepath{scripts/audit.php}; nepřidávají vlastníka YAML ani alternativní běh a~chráněný registr evaluátorů zůstává nezměněn.
 
