@@ -29,7 +29,8 @@ namespace Gallery\Core {
      */
     function admin_anonymous_preview_active(): bool
     {
-        return ($_GET['anonymous_preview'] ?? '') === '1';
+        return ($_GET['anonymous_preview'] ?? '') === '1'
+            || ($_GET['view_as'] ?? '') === 'anonymous';
     }
 
     /** Check the resolved attachment path against its fixture-owned root.
@@ -185,6 +186,7 @@ namespace {
     require_once dirname(__DIR__, 2) . '/app/services/gallery_pdf_documents.php';
     require_once dirname(__DIR__, 2) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_media.php';
+    require_once dirname(__DIR__, 2) . '/app/controllers/gallery_music.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_gallery_controls.php';
     require_once dirname(__DIR__, 2) . '/app/services/seo_request_guard.php';
 
@@ -220,7 +222,9 @@ namespace {
         return;
     }
 
-    if ($page === 'gallery_ofp_pdf') {
+    if ($page === 'gallery_music') {
+        \Gallery\Controllers\cms_gallery_music();
+    } elseif ($page === 'gallery_ofp_pdf') {
         \Gallery\Controllers\cms_gallery_ofp_pdf();
     } elseif ($page === 'media' && ($_GET['ofp'] ?? '') === '1') {
         \Gallery\Controllers\cms_media();

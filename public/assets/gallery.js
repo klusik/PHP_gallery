@@ -65,7 +65,9 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261008-legacy-ofp-dispatch-fl-v3';
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
-import { setupGalleryPdfDocuments } from './gallery-modules/admin-pdf-documents.js?v=20261016-three-state-covers-v1';
+import { setupGalleryPdfDocuments } from './gallery-modules/admin-pdf-documents.js?v=20261017-music-v3';
+import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261017-music-v3';
+import {setupGalleryMusicPlayback} from './gallery-modules/gallery-music-player.js?v=20261017-music-v3';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261016-three-state-covers-v1';
@@ -115,7 +117,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261016-cover-in-place-v1';
+} from './gallery-modules/admin-operations.js?v=20261017-music-v3';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -210,6 +212,8 @@ function bootGalleryBrowserFeatures() {
     setupGalleryLightbox();
     setupSimbriefOfpViewer();
     setupGalleryPdfDocuments();
+    setupGalleryMusic();
+    setupGalleryMusicPlayback();
     setupPictureManager();
     setupPublicHomeSearch();
     setupAdminSettingsWorkspace();

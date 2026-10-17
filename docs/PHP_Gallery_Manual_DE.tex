@@ -507,6 +507,57 @@ Administratoren können einer physischen Galerie auch ohne SimBrief-Daten ein al
 
 Wählen Sie entweder eine reservierte private Untergalerie oder das Anhängen nach dem letzten Foto der Quellgalerie. Eine Untergalerie bleibt privat, bis Sie ihre Sichtbarkeit ausdrücklich ändern; solange die PDF-Konvertierung unvollständig oder abgebrochen ist, bleibt die Veröffentlichung gesperrt. Schließen Sie die Konvertierung zuerst ab oder gleichen Sie sie sicher ab. Beim Anhängen bleiben Sichtbarkeit und vorhandene Fotos erhalten; die neuen Seiten stehen am Ende. Das Original-PDF wird nie ersetzt. Fortschrittsmarker liegen für beide Ziele im verborgenen Quellgalerie-Sidecar und enthalten die Zielgalerie-ID. Foto-ZIP-Exporte und die Galeriemigration übertragen diese allgemeinen PDF-Originale nicht. Eine vollständige Dateisystemsicherung muss die verborgenen Sidecar-Ordner einschließen. Vorhandene JPG-Seitengalerien bleiben eigenständig. Die frühere serverseitige OFP-Konvertierungsanfrage antwortet jetzt mit HTTP 409 und fordert zum Neuladen des Editors auf; der Rasterizer-Helfer dient nur noch der CLI- und Testkompatibilität und wird von keiner Browseraktion aufgerufen. Einzelheiten stehen in \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Musikspeicher}
+
+Über \ui{Fotos hochladen} lassen sich Fotos, PDFs und~Musik gemeinsam auswählen
+oder~ablegen. Audio bleibt unverändert und~wird nicht in~Fotos umgewandelt.
+Reine Audio-Uploads funktionieren auch bei~ausgeschalteter Bildvorbereitung.
+Im~Galerieeditor bietet \ui{Dokumente / PDFs} weiterhin eine eigene Tabelle
+\ui{Musik} für~Upload, Reihenfolge, Entfernen und~Diashow-Voreinstellung.
+Aktionen bleiben im~Panel. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC und~WebM werden
+akzeptiert; Browser-Codecs bestimmen die~Wiedergabe. Sichtbarkeit, Passwort,
+Freigabe und~NSFW-Regeln gelten weiterhin.
+
+Die~Tabelle zeigt Titeldauer und~kleine Abspielen/Stopp-Symbole. Kompakte
+Vorheriger/Abspielen/Stopp/Nächster-Symbole stehen auf~der~Seite
+und~im~Fotobetrachter bereit, sobald Audio vorhanden ist. Ein~gemeinsamer
+Player verhindert überlappende Musik zwischen Zeilen, Editor und~Diashow.
+Die~ganze Liste wiederholt sich; Navigation springt an~den~Enden um.
+Automatische Diashow-Musik ist~anfangs aus; ein~Administrator kann
+sie~für~die~Galerie aktivieren. Eine aktivierte Diashow ersetzt andere Musik
+und~beginnt beim ersten Titel. Stoppen oder~Schließen des~Betrachters gibt
+dessen Musik frei; unabhängig gestartete Tabellenmusik kann weiterlaufen. Foto-
+und~Tempoänderungen unterbrechen Musik nicht. Browser-Ablehnung erlaubt einen
+neuen Abspielen-Versuch; eine unspielbare Liste stoppt nach einem Durchlauf.
+
+Jeder neue Titel verbietet zunächst Downloads. Kleine Admin-Symbole je~Zeile
+erlauben oder~sperren Downloads; das~Kopfsymbol ändert alle aktuellen Titel.
+Spätere Uploads beginnen wieder gesperrt. Besucher sehen Download-Symbole
+nur~für~erlaubte Titel; der~Endpunkt prüft Erlaubnis und~Galeriezugang erneut.
+Wiedergabe liefert Audiodaten an~den~Browser; technisch versierte Besucher
+können diese Daten weiterhin erfassen.
+
+Ein~stummer Browser-Metadatenleser ermittelt die~Dauer, jeweils für~eine
+sichtbare Zeile mit~zehn Sekunden Frist. Unbekannte Dauer erscheint als~Strich.
+Ohne Sichtbarkeitsbeobachtung bedient derselbe Leser verbundene Zeilen
+nacheinander. Der~Server dekodiert kein Audio. Upload-Wiederholungen bewahren
+bestätigte Fotos, PDFs und~Musik; bei~unbekannter Audioantwort muss die~Galerie
+vor~einem erneuten Versuch geprüft werden.
+
+Originale und~geordneter JSON-Index liegen in~\filepath{.gallery-music/}.
+Der~Index speichert Namen, MIME-Typen, Größen, SHA-256, Revision,
+Diashow-Standard und~einzelne Download-Rechte. Ältere Datensätze ohne Recht
+bleiben gesperrt. Es~gelten 64~MiB je~Datei, 100 Titel und~512~MiB je~Galerie
+sowie niedrigere PHP-Grenzen. Sicherungen müssen versteckte Ordner enthalten.
+Foto-ZIP-Exporte und~Galerieübertragungen enthalten keine Musik. Siehe
+\filepath{docs/GALLERY_MUSIC.md}.
+
+Verwenden Sie nach Routenänderungen den~gehostet vorbereiteten Kandidaten. PDF
+und~Audio teilen den~bestehenden Laufzeitbesitzer für~Anhänge; Quellen
+mit~älterem generiertem Routenplan können Anfragen bis~zum~Laden
+des~vorbereiteten Plans ablehnen. Lokale Generierung ersetzt keine gehostete
+Qualifikation.
+
 \subsection{Identität und Kontext bearbeiten}
 \index{g00129@Galeriemetadaten}
 \index{d00070@Datumsbereich}

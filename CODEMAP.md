@@ -1,5 +1,17 @@
 # PHP Gallery Code Map
 
+- Gallery music: `app/models/gallery_music.php` owns atomic playlist indexes;
+  `app/services/gallery_music.php` owns audio validation and revisioned file
+  workflows; `app/controllers/gallery_music.php` owns view models, Admin
+  responses and the protected GET/HEAD/range route. The compact table lives in
+  `app/views/gallery_music.php`, delegated panel mutations in
+  `admin-gallery-music.js`, exclusive table/viewer audio in
+  `gallery-music-player.js`, and ordinary chooser
+  attachment retries in `gallery-music-upload.js`.
+  The lightbox owns activation/stop/teardown. See `docs/GALLERY_MUSIC.md` for
+  limits, backup boundaries, runtime closure review and browser compatibility.
+  PDF/audio runtime loading shares the existing `gallery-pdf-documents` owner.
+
 - Updater status diagnostics expose nonmutating worker-lock observation and
   server checkpoint age. Cache UI samples compare phase counters and retain one
   latest observation; retry preserves the prior owner-redacted failure separately.

@@ -10,6 +10,17 @@ Version 0.104.1 introduces no schema migration, table, column, index, or stored-
 
 Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
 
+## Gallery music storage
+
+Music playlists introduce no tables or columns. Each physical gallery's denied
+`.gallery-music/index.json` stores its ordered immutable-original metadata,
+optimistic revision, explicit slideshow-music default and per-track download
+permission. Both preferences default false. Older v1 records without a download
+field remain locked without a storage rewrite. Atomic index writes
+belong to `app/models/gallery_music.php`; validation and file lifecycle belong
+to the music service. Backups must include the entire hidden sidecar. See
+[the music contract](docs/GALLERY_MUSIC.md).
+
 ## Cache lifecycle regions
 
 Migration `202610150001_cache_lifecycle_regions.php` creates `cache_lifecycle_regions` with stable SHA-256 `region_key`, safe relative path and owner, last service/successful completion, indexed next-due/retry times, failure count, discovery generation, missing-since and drained state. Bounded JSON columns retain the authoritative working checkpoint, compact current finding and last completed measurement. Fixed discovery/root-file rows avoid per-file registration; the receipt row retains actual confirmed removals across cycles and tombstone retirement. Checkpoint and receipt writes commit in one model-owned transaction. Runtime workers never issue DDL.

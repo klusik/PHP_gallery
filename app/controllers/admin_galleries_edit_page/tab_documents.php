@@ -44,7 +44,7 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  * multipart forms and JavaScript delegates. They must not be nested inside the
  * editor's shared settings form or displayed with the upload API configuration.
  *
- * @param array<string, mixed> $gallery Authorized gallery row being edited.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery identity and attachment storage path.
  * @param string $activeEditTab Currently selected editor tab.
  * @return void Emits the Documents / PDFs tab and its existing action controls.
  */
@@ -52,6 +52,7 @@ function admin_edit_gallery_render_documents_tab(array $gallery, string $activeE
 {
     ob_start();
     echo admin_gallery_pdf_documents_html($gallery);
+    echo admin_gallery_music_html($gallery);
     echo admin_edit_gallery_simbrief_legacy_panel_html($gallery);
     render_admin_tab_panel('admin-edit-documents', (string) ob_get_clean(), $activeEditTab === 'admin-edit-documents');
 }

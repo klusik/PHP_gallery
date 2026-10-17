@@ -68,8 +68,8 @@ use function Gallery\Services\admin_log_event;
  * The caller returns immediately afterwards. Every branch either returns or
  * ends in redirect_to(), so this never falls through to page rendering.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
- * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery identity and storage path passed to domain handlers.
+ * @param array{media_renamer_feature_enabled:bool} $capabilities Resolved availability for the guarded rename action.
  * @return void Dispatches a guarded mutation and its JSON response or redirect.
  */
 function admin_edit_gallery_handle_post(array $gallery, array $capabilities): void
@@ -87,6 +87,10 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     }
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
+    if ((string) ($_POST['music_action'] ?? '') !== '') {
+        admin_edit_gallery_handle_music_action($gallery);
+        return;
+    }
     if ((string) ($_POST['pdf_action'] ?? '') !== '') {
         admin_edit_gallery_handle_pdf_action($gallery);
         return;

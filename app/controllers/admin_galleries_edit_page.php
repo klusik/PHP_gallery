@@ -42,6 +42,7 @@ namespace Gallery\Controllers;
 // This module is split into focused part files under app/controllers/admin_galleries_edit_page/.
 // Schema and feature readiness shared by every phase below.
 require_once __DIR__ . '/gallery_pdf_documents.php';
+require_once __DIR__ . '/gallery_music.php';
 require_once __DIR__ . '/admin_galleries_edit_page/pdf_documents.php';
 require_once __DIR__ . '/admin_galleries_edit_page/capabilities.php';
 // POST action dispatch, media rename, AI reprocess, and the generic gallery save.

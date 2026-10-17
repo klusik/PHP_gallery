@@ -1,5 +1,51 @@
 # Testing Guide
 
+## Gallery music
+
+`gallery_music_service_test.php` uses isolated real PCM WAV bytes to exercise
+exact-byte storage, gallery-scoped lookup, content rejection, ordered mutations,
+stale revisions, persistent preferences, deletion, damaged-index preservation,
+symlink refusal, exact upload receipts, per-track/bulk download permissions
+and conservative legacy-record defaults. The central PHP regression owner
+discovers this test.
+Synthetic bytes do not establish browser codec support or live-host acceptance.
+See [the music contract](docs/GALLERY_MUSIC.md).
+
+The existing isolated attachment HTTP fixture also exercises music originals
+under root and subdirectory mounts, exact bytes, GET/HEAD, suffix/closed byte
+ranges, invalid ranges, administrator and anonymous-preview authority, sharing,
+private/password/NSFW denials, locked/allowed download responses, restricted
+revision reads and read-only methods. It runs under the existing
+exclusive PHP owner. Access state is deterministic fixture policy; deployment
+schema, real session and inherited-access acceptance remain separate coverage.
+
+The required `gallery_music_browser_test.mjs` Chromium fixture imports the
+production player, anonymous public entrypoint and music manager. It verifies
+conditional public initialization, no eager playback, default on/off,
+repeat-all and both wrap directions, Stop/Play, restart, autoplay/unsupported
+failures, stale promises and disposal. Table/editor/viewer handover asserts
+exclusive playback; durations verify finite formatting and a silent reader.
+Native DOM forms are submitted through
+two successive fragment replacements using the production completion
+coordinator, with unchanged URL/open panel and fresh revisions. Audio outcomes
+and mutation responses are controlled adapters; this does not qualify real
+codec decoding, production PHP multipart handling or full lightbox geometry.
+The upload stream owner imports `gallery_music_upload_scenarios.mjs` to exercise
+original file partition, exact acknowledged retries, uncertain-write refusal,
+canonical response aggregation and audio-only admission with image preparation
+disabled. These VM adapters do not replace real multipart acceptance.
+The assisted-import VM explicitly supplies an empty music selection; its
+image-only replay/cancellation assertions retain their original boundaries.
+
+The existing speed fixture retains a narrow music-stop adapter so its real
+scheduler/HUD assertions remain independent.
+
+Manual acceptance must exercise real MP3/M4A/Ogg/WAV files on current desktop
+and mobile browsers, gallery default on/off, keyboard and touch HUD controls,
+speed/photo changes without audio restart, exit/close during a pending play,
+real multipart/PHP size failures, password/share/NSFW sessions and denied static
+originals. Include empty/one-track playlists and disabled slideshow. These checks
+remain unperformed unless separately reported with exact-candidate evidence.
 ## Optional readability report
 
 **Code readability report** is a manual, read-only advisory workflow. Select only

@@ -103,6 +103,7 @@ function fixture() {
         cards: [{}, {}, {}], lightboxNavigation: createLightboxNavigationLifecycle(),
         lightboxSlideshowTimer: null, lightboxSlideshowScheduleToken: 0,
         lightboxSlideshowPreloadController: null, lightboxSlideshowActive: true,
+        musicPlayer: {stop: () => {}},
         lightboxDefaultTransitionDuration: 160,
         overlay: {
             hidden: false, dataset: {}, querySelector: () => panel,
@@ -263,7 +264,9 @@ test('markup and keyboard routing expose exactly two localized native ranges', (
     assert.match(view, /aria-valuetext=/);
     const css = readFileSync(new URL('../public/assets/styles/lightbox.css', import.meta.url), 'utf8');
     assert.match(css, /\.lightbox\.is-fullscreen \.lightbox-hud,[^}]*\.gallery-dev-overlay\s*\{\s*opacity: 0;\s*visibility: hidden;[^}]*pointer-events: none;/);
-    const guard = source.indexOf("event.target.closest('[data-lightbox-slideshow-speeds]')");
+    const guard = source.indexOf(
+        "'[data-lightbox-slideshow-speeds], [data-lightbox-music]'"
+    );
     const navigation = source.indexOf("if (event.key === 'ArrowLeft')", guard);
     assert.ok(guard > 0 && navigation > guard);
     assert.match(source.slice(guard, navigation), /return;/);

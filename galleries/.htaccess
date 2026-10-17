@@ -43,7 +43,7 @@ Options -Indexes
 
     # Deny direct browser access to stored gallery files.
     # Media should be served by PHP routes so gallery visibility, password, share-link, and NSFW rules are applied.
-    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip|pdf)$">
+    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip|pdf|bin)$">
         Require all denied
     </FilesMatch>
 </IfModule>
@@ -60,7 +60,7 @@ Options -Indexes
         Order allow,deny
         Deny from all
     </FilesMatch>
-    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip|pdf)$">
+    <FilesMatch "\.(?:jpe?g|png|gif|webp|avif|svg|bmp|tiff?|heic|heif|dng|DNG|json|txt|zip|pdf|bin)$">
         Order allow,deny
         Deny from all
     </FilesMatch>

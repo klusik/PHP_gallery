@@ -503,6 +503,52 @@ Välj \ui{Konvertera PDF-sidor} för att rendera dokumentet i webbläsaren. PDF.
 
 Välj antingen ett reserverat privat undergalleri eller lägg till sidorna efter källgalleriets sista foto. Ett undergalleri förblir privat tills du uttryckligen ändrar synligheten; publicering är spärrad medan PDF-konverteringen är ofullständig eller avbruten. Slutför eller stäm av konverteringen på ett säkert sätt först. Vid tillägg behålls källgalleriets synlighet och befintliga foton, och de nya sidorna placeras sist. Original-PDF-filen ersätts aldrig. För båda målen lagras förloppsmarkörer i källgalleriets dolda sidokatalog och innehåller målgalleriets ID. Foto-ZIP-exporter och gallerimigrering överför inte dessa allmänna PDF-original. En fullständig filsystemsbackup måste ta med dolda sidokataloger. Befintliga JPG-sidgallerier är fortsatt separata. Den tidigare serverbaserade OFP-konverteringsbegäran svarar nu med HTTP 409 och ber dig läsa om redigeraren; rasteriseringshjälpen finns endast för CLI- och testkompatibilitet och anropas inte av webbläsaråtgärder. Mer information finns i \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Musiklagring}
+
+Använd \ui{Ladda upp foton} för~att~välja eller~släppa foton, PDF och~musik
+tillsammans. Ljud förblir original och~omvandlas inte till foton. Enbart ljud
+fungerar även med~bildförberedelsen avstängd. Galleriredigerarens \ui{Dokument
+/ PDF} behåller tabellen \ui{Musik} för~uppladdning, ordning, borttagning
+och~bildspelets sparade standard. Åtgärder stannar i~panelen. MP3, M4A, AAC,
+Ogg/Opus, WAV, FLAC och~WebM accepteras; webbläsarens kodekar avgör
+uppspelning. Galleriets synlighet, lösenord, delning och~NSFW-regler gäller.
+
+Tabellen visar spårlängd och~små Spela/Stoppa-ikoner. Kompakta
+Föregående/Spela/Stoppa/Nästa-ikoner finns på~sidan och~i~fotovisaren när~ljud
+finns. En~gemensam spelare förhindrar överlappning mellan rader, redigerare
+och~bildspel. Hela listan upprepas och~navigeringen går runt vid~ändarna.
+Automatisk bildspelsmusik är~avstängd från början; administratören kan~aktivera
+den~för~galleriet. Ett~aktiverat bildspel ersätter annan musik och~börjar
+med~första spåret. Stopp eller~stängning av~visaren frigör dess musik;
+oberoende startad tabellmusik kan~fortsätta. Foto- och~hastighetsändringar
+avbryter inte musiken. Webbläsaravslag tillåter ett~nytt Spela-försök;
+en~ospelbar lista stannar efter ett~varv.
+
+Varje nytt spår spärrar hämtning från början. Små administratörsikoner per~rad
+tillåter eller~spärrar hämtning; rubrikikonen ändrar alla aktuella spår. Senare
+uppladdningar börjar spärrade igen. Besökare ser hämtningsikoner enbart
+för~tillåtna spår; slutpunkten kontrollerar rättigheten och~galleritillgången
+igen. Uppspelning levererar ljuddata till webbläsaren, så~tekniskt kunniga
+besökare kan~fortfarande fånga dessa data.
+
+En~tyst metadataläsare i~webbläsaren hämtar längden, en~synlig rad åt~gången
+med~tio sekunders tidsgräns. Okänd längd visas som~ett~streck. Utan
+synlighetsobservation använder anslutna rader samma sekventiella läsare.
+Servern avkodar inget ljud. Uppladdningsförsök bevarar bekräftade foton, PDF
+och~musik; ett~okänt ljudsvar kräver kontroll av~galleriet före nästa försök.
+
+Original och~ordnat JSON-index ligger i~\filepath{.gallery-music/}. Indexet
+sparar namn, MIME-typer, storlekar, SHA-256, revision, bildspelsstandard
+och~spårens hämtningsrättigheter. Äldre poster utan rättighet förblir spärrade.
+Gränserna är~64~MiB per~fil, 100 spår och~512~MiB per~galleri; lägre
+PHP-gränser gäller. Säkerhetskopior måste inkludera dolda mappar. Foto-ZIP
+och~galleriöverföringar utelämnar musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
+
+Använd den~värdbaserat förberedda kandidaten efter ruttändringar. PDF och~ljud
+delar den~befintliga körningsägaren för~bilagor; källor med~en~äldre genererad
+ruttplan kan~avvisa anrop tills den~förberedda planen har~lästs in. Lokal
+generering ersätter inte värdbaserad kvalificering.
+
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
 \index{d00056@datumperiod}

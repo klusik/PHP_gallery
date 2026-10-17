@@ -174,6 +174,28 @@ drag holds the controls visible until release, and automatic advances do not sho
 Both ranges run from Slow on the left through Medium to Fast on the right.
 Choices remain only in the current viewer instance, including stop/resume and close/reopen; reloading resets them.
 
+### Gallery music and slideshow soundtrack
+
+Upload music through the ordinary Upload photos chooser/drop queue alongside
+photographs and PDFs, or through the gallery editor's separate Music table.
+Arrange tracks, remove them and save whether slideshow starts music automatically
+(initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
+subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per gallery.
+
+The table shows duration and small Play/Stop icons per track. Compact
+Previous/Play/Stop/Next controls are also available on the page and in the viewer
+whenever music exists. One shared player prevents overlap between rows, editor
+and slideshow; the playlist repeats in saved order. Enabled slideshow starts at
+the first track and replaces other music. Stopping/closing the viewer releases
+its owned music. Independently started table playback can continue.
+
+Downloads start locked for every upload. Administrator row/header icons allow
+individual/all current tracks; visitors see download icons only when allowed.
+The endpoint enforces that permission and normal gallery access. Playable bytes
+can still be captured by a technically capable visitor. Backups must include
+hidden `.gallery-music/` directories; photo ZIPs and gallery transfer packages
+omit music. See [the music contract](docs/GALLERY_MUSIC.md).
+
 ### Lightbox Image Zoom
 
 Open any public photograph and use the visible `−`, percentage/reset, and `+` controls to inspect details from 100% to

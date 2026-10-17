@@ -1,5 +1,31 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery soundtrack browser support
+
+Owners: gallery music service/model, protected controller and
+`gallery-music-player.js`. Music is additive, stored per physical gallery and
+defaults off. Existing galleries without a music index retain silent slideshows
+without loading attachment presentation. There is no SQL migration or change to
+existing gallery visibility, password/share or NSFW policy.
+
+Native codec and autoplay support varies by browser. The permanent compatibility
+path keeps photos running when optional music is refused, exposes an explicit
+Play retry for user-gesture rejection, and skips failed sources with one bounded
+pass rather than an unbounded retry loop. Viewer teardown retires pending audio
+generations and releases the source. Adopted formats/browser versions and live
+device usage are unknown; retain these behaviors until deployed browser and
+regression evidence proves a specific support path can be safely retired.
+Controlled browser and isolated HTTP fixtures are coverage, not live codec or
+installed-host acceptance. See `docs/GALLERY_MUSIC.md` and `TESTING.md`.
+
+The same player owns a permanent serialized metadata fallback when
+IntersectionObserver is unavailable: connected duration cells share one silent
+reader and ten-second deadlines. Unknown duration remains explicit. Live usage
+of this fallback is unknown; retire only with supported-browser/deployment proof.
+The music model also owns permanent v1 compatibility: a missing download flag
+means false. New tracks always start locked; bulk permission affects current
+tracks only. This prevents old indexes or later uploads inheriting permission.
+
 ## Watch-folder UTC synchronization and packaged Python
 
 Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.

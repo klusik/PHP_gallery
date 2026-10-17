@@ -118,7 +118,11 @@ function view_render_lightbox_source_nodes(array $nodes): void
 /**
  * Render the public lightbox shell.
  *
- * @param array{voting_allowed?:bool,maps_allowed?:bool,slideshow_allowed?:bool,browsing_mode?:string,gallery_map_url?:string,gallery_map_title?:string,viewer_favourite_html?:string} $viewModel Prepared visibility flags, browsing mode, map labels/URL and escaped favourite markup.
+ * @param array{voting_allowed?:bool, maps_allowed?:bool,
+ *     slideshow_allowed?:bool, browsing_mode?:string, gallery_map_url?:string,
+ *     gallery_map_title?:string, viewer_favourite_html?:string} $viewModel
+ *     Prepared visibility flags, browsing mode, map labels/URL and escaped
+ *     favourite markup.
  * @return void Emits the existing viewer shell and permitted runtime controls.
  */
 function view_render_lightbox(array $viewModel): void
@@ -172,9 +176,61 @@ function view_render_lightbox(array $viewModel): void
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
     echo $slideshowHudHtml;
     echo $slideshowSpeedHtml;
+    echo view_music_player_controls(true);
     echo '<button type="button" class="lightbox-map-hud-button lightbox-hud" data-lightbox-map aria-label="' . e(t('lightbox.map', 'Map')) . '" title="' . e(t('lightbox.map', 'Map')) . '" hidden>M</button>';
     echo $zoomHudControlsHtml;
     echo '<span class="visually-hidden" data-lightbox-zoom-announcement role="status" aria-live="polite">' . e(t('lightbox.zoom_status', 'Zoom {percent}', ['percent' => '100%'])) . '</span>';
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';
     echo '</div>';
+}
+
+/**
+ * Return one conventional compact player symbol from the fixed presentation set.
+ * @param string $action Fixed playback, download or editor action symbol.
+ * @return string Decorative SVG markup; unknown actions return an empty string.
+ */
+function view_music_control_icon(string $action): string
+{
+    $shape = match ($action) {
+        'play' => '<path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/>',
+        'stop' => '<rect x="6" y="6" width="12" height="12" rx="1"'
+            . ' fill="currentColor" stroke="none"/>',
+        'previous' => '<path d="M5 5v14m13-14L7 12l11 7Z"/>',
+        'next' => '<path d="M19 5v14M6 5l11 7-11 7Z"/>',
+        'download' => '<path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/>',
+        'locked' => '<rect x="5" y="10" width="14" height="11" rx="2"/>'
+            . '<path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
+        'up' => '<path d="M12 20V4m-6 6 6-6 6 6"/>',
+        'down' => '<path d="M12 4v16m-6-6 6 6 6-6"/>',
+        'delete' => '<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',
+        default => '',
+    };
+    return $shape === '' ? ''
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+            . ' stroke-width="1.7" stroke-linecap="round"'
+            . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
+            . $shape . '</svg>';
+}
+
+/**
+ * Render shared icon-only playlist controls for a table or the photo viewer.
+ * @param bool $viewer Whether this group belongs to the viewer HUD rather than a table.
+ * @return string Accessible compact controls with no automatic playback.
+ */
+function view_music_player_controls(bool $viewer): string
+{
+    $html = '<div class="music-player' . ($viewer ? ' lightbox-music lightbox-hud' : '')
+        . '" ' . ($viewer ? 'data-lightbox-music hidden' : 'data-gallery-music-controls')
+        . ' data-music-playback-error="' . e(t('music.playback_error')) . '">'
+        . '<div class="music-player-actions" role="group" aria-label="'
+        . e(t('music.title')) . '">';
+    foreach (['previous' => 'music.previous', 'play' => 'music.play',
+        'stop' => 'music.stop', 'next' => 'music.next'] as $action => $key) {
+        $html .= '<button type="button" class="music-icon" data-music-action="'
+            . e($action) . '" title="' . e(t($key)) . '" aria-label="' . e(t($key)) . '"'
+            . ($action === 'stop' ? ' disabled' : '') . '>'
+            . view_music_control_icon($action) . '</button>';
+    }
+    return $html . '</div><span class="music-player-title" data-music-current-title></span>'
+        . '<output data-music-playback-status role="status"></output></div>';
 }

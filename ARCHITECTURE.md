@@ -26,6 +26,28 @@ const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
 
+## Gallery music ownership
+
+Gallery music originals and ordered preferences use a confined hidden sidecar.
+`app/services/gallery_music.php` owns content admission and revisioned filesystem
+workflows; `app/models/gallery_music.php` owns atomic index persistence. No SQL
+schema is added. See [music storage and limits](docs/GALLERY_MUSIC.md).
+
+PDF and audio routes share the existing attachment runtime owner under its
+historical `gallery-pdf-documents` machine name. Public presentation loads it
+only when attachments exist. This retains the complete routing/access closure
+without adding a logical module beyond the consumed global allowance.
+
+One exclusive page-wide Audio owner synchronously applies the saved slideshow
+preference before fullscreen awaits. Tables, editor cards and viewer HUD share
+icon controls; only one source can play. Duration uses one separate silent,
+bounded metadata reader. Upload photos partitions audio before image decoding
+and retains acknowledged stages across exact retries. Download permission is
+per track, defaults false and is checked in the protected controller as well as
+presentation. See the music contract for lifecycle and byte-capture limitations.
+The independent editor card uses canonical mutation completion and delegated
+fragment replacement.
+
 ## Runtime slideshow timing controls
 
 `app/views/public_gallery_lightbox.php` renders exactly two native three-position ranges when the prepared

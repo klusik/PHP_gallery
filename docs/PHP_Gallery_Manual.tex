@@ -506,6 +506,54 @@ Choose \ui{Convert PDF pages} to~render the~document in~the~browser. PDF.js crea
 
 Choose either a~reserved private child gallery or~append after the~source gallery's last photograph. A~child stays private until you~change its visibility explicitly; publication is blocked while its PDF conversion is incomplete or~cancelled, so finish or~safely reconcile the conversion first. Appending keeps the~source gallery's visibility and~existing photographs, then places converted pages at~the~end. Conversion never replaces the~original PDF. Progress markers live in~the~source gallery's hidden conversion sidecar for~both destinations and~record the~target gallery ID. Photo ZIP exports and~gallery migration do~not~transfer these general PDF originals. A~full filesystem backup must include hidden sidecar folders. Existing JPG page galleries remain separate. The~former server-side OFP conversion request now returns HTTP 409 and~directs you~to~reload; its rasterizer helper is~for~CLI and~test compatibility only and~is~not~called by~browser actions. See \codeword{docs/GALLERY\_PDF.md} for~the~storage and~conversion contract.
 
+\subsubsection{Music storage}
+
+Use \ui{Upload photos} to~select or~drop photographs, PDFs and~music together.
+Audio remains an~original and~never enters image conversion. Audio-only uploads
+also work with image preparation off. The~gallery editor's \ui{Documents /
+PDFs} tab retains a~separate \ui{Music} table for~upload, ordering, removal
+and~the~saved slideshow default. Actions stay in~the~panel. MP3, M4A, AAC,
+Ogg/Opus, WAV, FLAC and~WebM are~accepted; browser codecs determine
+playability. Gallery visibility, password, sharing and~NSFW rules apply.
+
+The~table shows each track's duration and~small Play/Stop icons. Compact
+Previous/Play/Stop/Next icons are~available on~the~page and~in~the~photo viewer
+whenever audio exists. One shared player prevents overlapping music between
+rows, editor and~slideshow. The~whole playlist repeats and~navigation wraps.
+Automatic slideshow music is~initially off; an~administrator can~enable
+it~for~this gallery. An~enabled slideshow replaces other music and~starts
+at~the~first track. Stopping or~closing the~viewer releases its music;
+independently requested table playback can~continue. Photo and~speed changes
+leave music running. Browser refusal permits an~explicit Play retry;
+a~completely unplayable playlist stops after one pass.
+
+Each uploaded track initially forbids downloads. Small administrator icons
+beside each track allow or~lock its download; the~header icon changes all
+current tracks. Later uploads still start locked. Public download icons appear
+only for~allowed tracks, and~the~endpoint rechecks permission and~gallery
+access. Playback delivers audio bytes to~the~browser, so this setting cannot
+prevent a~technically capable visitor from capturing those bytes.
+
+Durations use a~silent browser metadata reader, one visible row at~a~time, with
+a~ten-second deadline. Unknown durations show a~dash. Browsers without
+visibility observation use the~same serialized reader for~connected rows. No
+server decoding occurs. Upload retries preserve acknowledged photos, PDFs
+and~audio; an~unknown audio response requires checking the~gallery before
+submitting again.
+
+Originals and~their ordered JSON index use the~hidden
+\filepath{.gallery-music/} folder. The~index stores names, MIME types, sizes,
+SHA-256 digests, revision, slideshow default and~individual download
+permissions. Older records without permission remain locked. Limits are~64~MiB
+per~file, 100 tracks and~512~MiB per~gallery; lower PHP limits apply. Backups
+must include hidden folders. Photo ZIP exports and~gallery transfers omit
+music. See \filepath{docs/GALLERY_MUSIC.md}.
+
+For~a~development checkout, use the~hosted prepared candidate after changing
+routes. PDF and~audio share the~existing attachment runtime owner; source with
+an~older generated route plan may~refuse requests until the~prepared plan
+is~loaded. Local generation does not~replace hosted qualification.
+
 \subsection{Edit identity and~context}
 \index{gallery metadata}
 \index{date range}

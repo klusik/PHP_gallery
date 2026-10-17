@@ -472,6 +472,14 @@ $registry = [
         'lightbox_navigation_lifecycle_test.mjs' => [],
         'lightbox_resource_lifecycle_test.mjs' => [],
         'lightbox_slideshow_speed_test.mjs' => [],
+        // Bound the isolated music browser fixture under the established browser
+        // child policy. Type: int. Units: seconds. Scope: one hosted child.
+        // Consumers: central Node/browser runner. Rationale: 60 seconds retains
+        // browser startup/teardown headroom above the shared fixture deadline.
+        'gallery_music_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_content_widget_floating_test.mjs' => [],

@@ -34,39 +34,64 @@
 
 import { appendUploadProgressLog, i18n, i18nForElement, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
+import {isBrowserUploadAudioFile, uploadGalleryMusicFiles} from './gallery-music-upload.js?v=20261017-music-v3';
 
 /**
  * Prepared uploader's existing session retained only for the current document's explicit retries.
  * @typedef {Object} PreparedSelectionUploadAttempt
- * @property {File[]} files Expanded immutable originals in upload order; no duplicate file-byte copy.
- * @property {ReturnType<typeof browserUploadConfig>} processingConfig Frozen-by-ownership preparation settings from the original attempt.
- * @property {ReturnType<typeof createBrowserProgressState>} progressState Pre-upload progress snapshot; byte counters use bytes.
- * @property {string} uploadSessionId Existing prepared-batch replay identity, not a classic operation key or credential.
- * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original package owner and acknowledged-cleanup callbacks.
- * @property {Array<{index: number, blob: Blob, itemCount: number, cleanup: function(): Promise<void>}>} batches Original indexed ZIP blobs and their existing cleanup callbacks.
- * @property {boolean} serverSideStarted Whether server work may have started and automatic package abandonment is unsafe.
- * @property {Record<string, unknown>} [acknowledgedPhotoResult] Canonical photo aggregate retained after package cleanup while subsequent PDFs are unresolved.
+ * @property {File[]} files Expanded immutable originals in upload order; no
+ *     duplicate file-byte copy.
+ * @property {ReturnType<typeof browserUploadConfig>} processingConfig
+ *     Frozen-by-ownership preparation settings from the original attempt.
+ * @property {ReturnType<typeof createBrowserProgressState>} progressState
+ *     Pre-upload progress snapshot; byte counters use bytes.
+ * @property {string} uploadSessionId Existing prepared-batch replay identity,
+ *     not a classic operation key or credential.
+ * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original
+ *     package owner and acknowledged-cleanup callbacks.
+ * @property {Array<{index: number, blob: Blob, itemCount: number, cleanup:
+ *     function(): Promise<void>}>} batches Original indexed ZIP blobs and their
+ *     existing cleanup callbacks.
+ * @property {boolean} serverSideStarted Whether server work may have started
+ *     and automatic package abandonment is unsafe.
+ * @property {Record<string, unknown>} [acknowledgedPhotoResult] Canonical photo
+ *     aggregate retained after package cleanup while subsequent PDFs are
+ *     unresolved.
  */
 
 /** Describe the retained state of an incremental PDF or ordinary-image upload.
  * @typedef {Object} PreparedFileStreamUploadAttempt
- * @property {'pdf-file-stream'|'image-file-stream'} kind Source preparation contract selected for this intent.
- * @property {ReturnType<typeof browserUploadConfig>} processingConfig Original image and batch preparation settings.
- * @property {ReturnType<typeof createBrowserProgressState>} progressState Mutable byte/count counters owned by this upload.
+ * @property {'pdf-file-stream'|'image-file-stream'} kind Source preparation
+ *     contract selected for this intent.
+ * @property {ReturnType<typeof browserUploadConfig>} processingConfig Original
+ *     image and batch preparation settings.
+ * @property {ReturnType<typeof createBrowserProgressState>} progressState
+ *     Mutable byte/count counters owned by this upload.
  * @property {string} uploadSessionId Stable prepared-batch replay identity.
- * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original IndexedDB package owner.
+ * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original
+ *     IndexedDB package owner.
  * @property {PdfUploadBatch[]} batches Original batch identities; acknowledged blobs are cleared.
- * @property {Set<number>} acknowledgedBatches Batch indices whose result has been merged exactly once.
+ * @property {Set<number>} acknowledgedBatches Batch indices whose result has
+ *     been merged exactly once.
  * @property {boolean} serverSideStarted Whether automatic abandonment is unsafe.
- * @property {Record<string,unknown>|null} gallerySeed Canonical acknowledged creation envelope, absent before creation or for an existing target.
+ * @property {Record<string, unknown>|null} gallerySeed Canonical acknowledged
+ *     creation envelope, absent before creation or for an existing target.
  * @property {number} galleryId Destination ID, zero until a new private gallery is acknowledged.
  * @property {string} endpoint Original checked same-origin upload endpoint.
  * @property {string} conversionToken PDF conversion token; empty for ordinary images.
  * @property {number} sourceGalleryId Source PDF gallery; zero for ordinary images.
  * @property {number} startPage One-based original starting source position.
  * @property {number} nextSourceIndex Zero-based next source item not yet persisted by the batcher.
- * @property {ReturnType<typeof emptyBrowserAggregate>} aggregate Canonical merged server result and counters.
- * @property {(PdfUploadStreamOptions & {endpoint:string,uploadSessionId:string,galleryId:number,conversionToken:string,sourceGalleryId:number,preparedThumbnailsRequired:boolean,processingConfig:ReturnType<typeof browserUploadConfig>,progressState:ReturnType<typeof createBrowserProgressState>,pageCount:number,dpi:number})|null} transportOptions Current attempt signal/callbacks and retained transport identity; null before transport setup.
+ * @property {ReturnType<typeof emptyBrowserAggregate>} aggregate Canonical
+ *     merged server result and counters.
+ * @property {(PdfUploadStreamOptions & {endpoint:string,
+ *     uploadSessionId:string, galleryId:number, conversionToken:string,
+ *     sourceGalleryId:number, preparedThumbnailsRequired:boolean,
+ *     processingConfig:ReturnType<typeof browserUploadConfig>,
+ *     progressState:ReturnType<typeof createBrowserProgressState>,
+ *     pageCount:number, dpi:number})|null} transportOptions Current attempt
+ *     signal/callbacks and retained transport identity; null before transport
+ *     setup.
  */
 
 /** Describe either existing selection packages or an incremental source retained for exact retry.
@@ -100,13 +125,15 @@ const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
 /**
  * Describe a pull-driven ordered File source; PDF callers provide generated PNG pages.
  * @typedef {Object} PdfUploadFileStream
- * @property {number|undefined} pageCount Total source File count when known; PDF counts pages and image streams count admitted images.
+ * @property {number|undefined} pageCount Total source File count when known;
+ *     PDF counts pages and image streams count admitted images.
  * @property {number|undefined} dpi Output resolution in dots per inch when known.
  * @property {string|undefined} sourceId Caller-owned source document identity.
  * @property {() => AsyncIterator<File>} [Symbol.asyncIterator] Create the ordered page iterator.
  * @property {(() => Promise<void>)|undefined} cancel Cancel current PDF work when supported.
  * @property {(() => Promise<void>)|undefined} dispose Release renderer resources when supported.
- * Image-mode callers provide supported originals; pageCount/startIndex retain the existing ordered stream cursor.
+ * Image-mode callers provide supported originals; pageCount/startIndex retain
+ *     the existing ordered stream cursor.
  */
 
 /**
@@ -121,14 +148,17 @@ const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
  * @property {number} [startPage] One-based first source page to upload.
  * @property {number} [startBatchIndex] First batch index for resumed upload.
  * @property {PdfUploadProgressHandler} [onProgress] Observe render, packaging and upload progress.
- * @property {PdfUploadAcknowledgmentHandler} [onBatchAcknowledged] Observe durable batch acknowledgment.
- * @property {'pdf'|'images'} [sourceKind] PDF retains strict PNG checks; images use the ordinary image worker and gallery creation path.
+ * @property {PdfUploadAcknowledgmentHandler} [onBatchAcknowledged] Observe
+ *     durable batch acknowledgment.
+ * @property {'pdf'|'images'} [sourceKind] PDF retains strict PNG checks; images
+ *     use the ordinary image worker and gallery creation path.
  */
 
 /**
  * Describe progress emitted while pages are rendered or uploaded.
  * @typedef {Object} PdfUploadProgress
- * @property {string} phase Current lifecycle phase such as prepared, packaging, uploading or acknowledged.
+ * @property {string} phase Current lifecycle phase such as prepared, packaging,
+ *     uploading or acknowledged.
  * @property {number} page One-based source page associated with the update.
  * @property {number} pages Total source PDF page count.
  * @property {number} dpi Output resolution in dots per inch.
@@ -175,10 +205,12 @@ const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
  * Return whether the browser-side upload path is enabled for this form submission.
  *
  * @param {HTMLFormElement} form Upload form.
- * @return {boolean} True when the browser-side preparation checkbox is checked or a PDF needs browser conversion.
+ * @return {boolean} True when image preparation is selected or PDF/audio
+ *     attachments require the protected browser workflow.
  */
 export function browserUploadRequested(form) {
-    if (selectedBrowserUploadPdfFiles(form).length > 0) return true;
+    if (selectedBrowserUploadPdfFiles(form).length > 0
+        || selectedBrowserUploadMusicFiles(form).length > 0) return true;
     const toggle = form.querySelector('[data-browser-upload-toggle]');
     return toggle instanceof HTMLInputElement && toggle.checked && !toggle.disabled;
 }
@@ -540,18 +572,25 @@ async function filesHaveSameBytes(preparedFile, inputFile) {
  *
  * @param {HTMLFormElement} form Upload form.
  * @param {HTMLElement} progress Progress container.
- * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original form intent; retains this uploader's own session/batches after uncertainty.
- * @param {AbortSignal|null} signal Optional assisted-import cancellation; retains uncertain prepared batches for exact replay.
- * @return {Promise<import('./admin-side-panel.js').AdminPanelResponse|{fallback:true,reason:string}>} Canonical upload response or no-files fallback request.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation
+ *     Original form intent; retains this uploader's own session/batches after
+ *     uncertainty.
+ * @param {AbortSignal|null} signal Optional assisted-import cancellation;
+ *     retains uncertain prepared batches for exact replay.
+ * @return
+ *     {Promise<import('./admin-side-panel.js').AdminPanelResponse|{fallback:true,
+ *     reason:string}>} Canonical upload response or no-files fallback request.
  */
 export async function runBrowserGalleryUpload(form, progress, operation, signal = null) {
     throwIfUploadStreamAborted(signal);
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
     const pdfFiles = selectedBrowserUploadPdfFiles(form);
+    const musicFiles = selectedBrowserUploadMusicFiles(form);
+    const hasAttachments = pdfFiles.length > 0 || musicFiles.length > 0;
     const archiveSelected = selectedFiles.some(isBrowserUploadZipFile);
     const prepareThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
-    if (pdfFiles.length > 0) {
+    if (hasAttachments) {
         if (!Object.prototype.hasOwnProperty.call(form.dataset, 'pdfOriginalCloseOnSuccess')) {
             form.dataset.pdfOriginalCloseOnSuccess = form.hasAttribute('data-gallery-panel-close-on-success')
                 ? form.getAttribute('data-gallery-panel-close-on-success') || ''
@@ -564,10 +603,10 @@ export async function runBrowserGalleryUpload(form, progress, operation, signal 
         else form.setAttribute('data-gallery-panel-close-on-success', originalValue);
         delete form.dataset.pdfOriginalCloseOnSuccess;
     }
-    if (selectedFiles.length === 0 && pdfFiles.length === 0) {
+    if (selectedFiles.length === 0 && !hasAttachments) {
         return {fallback: true, reason: 'no_files'};
     }
-    if (!config.enabled) {
+    if (!config.enabled && selectedFiles.length > 0) {
         throw new Error(i18n('admin.browser_upload.strict_unavailable', 'Browser-side processing is enabled for this upload, but it is unavailable. No files were uploaded. Uncheck browser-side processing to use the server path instead.'));
     }
     const capability = selectedFiles.length ? browserUploadCapability(config, selectedFiles) : {ok: true};
@@ -575,9 +614,12 @@ export async function runBrowserGalleryUpload(form, progress, operation, signal 
         if (archiveSelected) throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         throw new Error(browserUploadStrictCapabilityMessage(capability.reason));
     }
-    if (pdfFiles.length > 0 && operation.prepared?.acknowledgedPhotoResult) {
+    if (hasAttachments && operation.prepared?.acknowledgedPhotoResult) {
         assertAdminOperationCurrent(operation);
-        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, operation.prepared.acknowledgedPhotoResult);
+        return uploadSelectedGalleryAttachments(
+            form, progress, pdfFiles, musicFiles, operation,
+            operation.prepared.acknowledgedPhotoResult
+        );
     }
 
     const processingConfig = operation.prepared?.processingConfig || {
@@ -587,14 +629,18 @@ export async function runBrowserGalleryUpload(form, progress, operation, signal 
     };
 
     if (selectedFiles.length === 0) {
-        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
+        return uploadSelectedGalleryAttachments(
+            form, progress, pdfFiles, musicFiles, operation, null
+        );
     }
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
     const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, {...processingConfig, signal}, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
     const files = expanded.files;
-    if (files.length === 0 && pdfFiles.length > 0) {
-        return uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, null);
+    if (files.length === 0 && hasAttachments) {
+        return uploadSelectedGalleryAttachments(
+            form, progress, pdfFiles, musicFiles, operation, null
+        );
     }
     if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
     const progressState = operation.prepared ? {...operation.prepared.progressState} : createBrowserProgressState(files);
@@ -717,12 +763,14 @@ export async function runBrowserGalleryUpload(form, progress, operation, signal 
                 entity_ids: aggregate.image_ids.slice(),
             };
         }
-        if (pdfFiles.length > 0) {
+        if (hasAttachments) {
             // Photo batches have already been acknowledged and their temporary
             // packages cleaned. A PDF retry must reuse that response, not replay
             // the retired photo packages or create another photo upload.
             operation.prepared.acknowledgedPhotoResult = aggregate;
-            return await uploadSelectedGalleryPdfFiles(form, progress, pdfFiles, operation, aggregate);
+            return await uploadSelectedGalleryAttachments(
+                form, progress, pdfFiles, musicFiles, operation, aggregate
+            );
         }
         return aggregate;
     } catch (error) {
@@ -934,7 +982,7 @@ function appendServerUploadEvents(progress, events) {
 }
 
 /**
- * Return selected non-PDF photo files from the shared upload picker.
+ * Return selected photo/ZIP sources while excluding PDF and audio attachments.
  *
  * @param {HTMLFormElement} form Upload form.
  * @return {File[]} Selected photo sources in upload order.
@@ -944,11 +992,50 @@ function selectedBrowserUploadFiles(form) {
     if (!(input instanceof HTMLInputElement) || !input.files) {
         return [];
     }
-    const files = Array.from(input.files).filter((file) => file instanceof File && !isBrowserUploadPdfFile(file));
+    const files = Array.from(input.files).filter(file => file instanceof File
+        && !isBrowserUploadPdfFile(file) && !isBrowserUploadAudioFile(file));
     // Only the #118 drawer exposes explicit move controls. Honour their native
     // FileList order without changing the historical folder-order upload pages.
     return form.querySelector('[data-gallery-upload-preview]')
         ? files : files.sort(compareUploadFilesByDefaultFolderOrder);
+}
+
+/**
+ * Return music originals from the ordinary shared file chooser in queue order.
+ * @param {HTMLFormElement} form Existing-gallery upload form.
+ * @returns {File[]} Original audio occurrences, excluded from image decoding.
+ */
+function selectedBrowserUploadMusicFiles(form) {
+    const input = form.querySelector('input[type="file"][name="images[]"]');
+    return input instanceof HTMLInputElement && input.files
+        ? Array.from(input.files).filter(file => file instanceof File
+            && isBrowserUploadAudioFile(file)) : [];
+}
+
+/**
+ * Complete ordered PDF and music stages after acknowledged ordinary image work.
+ * @param {HTMLFormElement} form Existing-gallery upload form with attachment endpoints.
+ * @param {HTMLElement} progress Existing progress surface.
+ * @param {File[]} pdfFiles Original PDF occurrences.
+ * @param {File[]} musicFiles Original music occurrences.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Frozen retry owner.
+ * @param {import('./admin-side-panel.js').AdminPanelResponse|null} baseResult
+ *     Acknowledged photos, or null for attachment-only work.
+ * @returns {Promise<import('./admin-side-panel.js').AdminPanelResponse>}
+ *     Canonical aggregate preserving every acknowledged stage.
+ */
+async function uploadSelectedGalleryAttachments(
+    form, progress, pdfFiles, musicFiles, operation, baseResult
+) {
+    let result = baseResult;
+    if (pdfFiles.length) {
+        result = await uploadSelectedGalleryPdfFiles(
+            form, progress, pdfFiles, operation, result
+        );
+    }
+    if (musicFiles.length) result = await uploadGalleryMusicFiles(form, musicFiles,
+        selectedBrowserGalleryId(form), operation, result);
+    return result;
 }
 
 /**
@@ -989,7 +1076,7 @@ function isBrowserUploadPdfFile(file) {
  * @returns {Promise<Record<string, *>>} Canonical aggregate after the shared workflow acknowledges every PDF; clears its separate picker only after success.
  */
 async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
-    const helper = await import('./admin-pdf-documents.js?v=20261016-three-state-covers-v1');
+    const helper = await import('./admin-pdf-documents.js?v=20261017-music-v3');
     if (typeof helper.uploadGalleryPdfFiles !== 'function') {
         throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
     }
@@ -1234,8 +1321,16 @@ function browserUploadSessionId() {
  * @property {string} originalDetectedFormat Byte-detected original format.
  * @property {number} originalSize Original byte length.
  * @property {File} originalFile Unmodified selected file reference.
- * @property {{exif_taken_at:string|null,exif_camera_make:string|null,exif_camera_model:string|null,exif_lens_model:string|null,exif_focal_length:string|null,exif_aperture:string|null,exif_exposure_time:string|null,exif_iso:number|null,gps_lat:number|null,gps_lng:number|null,gps_altitude:number|null,exif_orientation:number}|null} clientExif Compact JPEG metadata, or null for unsupported or unreadable metadata.
- * @property {Array<{size:number,format:string,width:number,height:number,path:string,blob:Blob}>} variants Encoded thumbnail variants with pixel dimensions and unique ZIP paths.
+ * @property {{exif_taken_at:string|null, exif_camera_make:string|null,
+ *     exif_camera_model:string|null, exif_lens_model:string|null,
+ *     exif_focal_length:string|null, exif_aperture:string|null,
+ *     exif_exposure_time:string|null, exif_iso:number|null,
+ *     gps_lat:number|null, gps_lng:number|null, gps_altitude:number|null,
+ *     exif_orientation:number}|null} clientExif Compact JPEG metadata, or null
+ *     for unsupported or unreadable metadata.
+ * @property {Array<{size:number, format:string, width:number, height:number,
+ *     path:string, blob:Blob}>} variants Encoded thumbnail variants with pixel
+ *     dimensions and unique ZIP paths.
  */
 
 /**
@@ -1658,7 +1753,9 @@ function openPreparedBatchStore() {
 
 /**
  * Describe an IndexedDB operation on one prepared-image/batch store.
- * @typedef {(store: IDBObjectStore) => IDBRequest<Blob|PreparedWorkerImage|IDBValidKey|undefined>} IndexedDbOperation
+ * @typedef {(store: IDBObjectStore) =>
+ *     IDBRequest<Blob|PreparedWorkerImage|IDBValidKey|undefined>}
+ *     IndexedDbOperation
  */
 /**
  * Run one IndexedDB object store request and wait for its transaction to commit.

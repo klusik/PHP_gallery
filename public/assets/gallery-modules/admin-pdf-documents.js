@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {createPdfPngUploadStream} from './admin-pdf-conversion.js?v=20261012-pdf-dpi-warning-v3';
-import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261016-three-state-covers-v1';
+import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261017-music-v3';
 import {beginAdminOperation, finishAdminOperation, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 import {i18nForElement, appendUploadProgressLog} from './admin-core.js?v=20261003-scoped-i18n-v1';

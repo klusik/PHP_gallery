@@ -39,6 +39,7 @@ async function harness() {
         browserUploadConfig = () => ({enabled:true,endpoint:'/upload',thumbnailSizes:[],thumbnailFormats:[],workerCount:1,uploadLimitBytes:1000});
         selectedBrowserUploadFiles = () => files;
         selectedBrowserUploadPdfFiles = () => [];
+        selectedBrowserUploadMusicFiles = () => [];
         selectedBrowserGalleryId = () => 41;
         browserUploadCapability = () => ({ok:true});
         browserUploadSessionId = () => 'original-session';

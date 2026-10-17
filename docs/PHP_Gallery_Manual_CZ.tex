@@ -503,6 +503,53 @@ Volba \ui{Převést stránky PDF} vykreslí dokument v~prohlížeči. PDF.js vyt
 
 Zvolte vyhrazenou soukromou podřízenou galerii nebo připojení stránek za~poslední fotografii zdrojové galerie. Podřízená galerie zůstává soukromá, dokud výslovně nezměníte její viditelnost; dokud je převod PDF nedokončený nebo zrušený, nelze ji zveřejnit, proto převod nejprve dokončete nebo bezpečně uveďte do souladu. Připojení zachová viditelnost zdrojové galerie i~stávající fotografie a~vloží převedené stránky na~konec. Původní PDF se nikdy nepřepisuje. Značky průběhu jsou pro oba cíle uloženy v~skrytém úložišti zdrojové galerie a~obsahují ID cílové galerie. ZIP exporty fotografií ani migrace galerií tyto obecné originály PDF nepřenášejí. Úplná záloha souborového stromu musí zahrnout skryté složky s~bočními daty. Stávající JPG galerie se stránkami zůstávají samostatné. Dřívější požadavek na~serverový převod OFP nyní vrací HTTP 409 a~žádá o~obnovení editoru; rasterizační pomocná funkce je~určena pouze pro kompatibilitu CLI a~testů a~prohlížeč ji~nevolá. Podrobnosti: \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Úložiště hudby}
+
+Přes \ui{Nahrát fotografie} lze společně vybrat nebo přetáhnout fotografie, PDF
+a~hudbu. Zvuk zůstává originálem a~nepřevádí se na fotografie. Samotnou hudbu
+lze nahrát i~při vypnutém zpracování obrázků. Záložka \ui{Dokumenty / PDF}
+v~editoru zachovává samostatnou tabulku \ui{Hudba} pro nahrávání, řazení,
+odstranění a~výchozí volbu slideshow. Akce zůstávají v~panelu. Přijímají se
+MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM; přehratelnost závisí na kodecích
+prohlížeče. Platí viditelnost, heslo, sdílení a~NSFW pravidla galerie.
+
+Tabulka ukazuje délku skladby a~drobné ikonky Přehrát/Zastavit. Kompaktní
+ikonky Předchozí/Přehrát/Zastavit/Další jsou dostupné na stránce i~v~prohlížeči
+fotografií, kdykoliv galerie obsahuje zvuk. Jeden společný přehrávač zabrání
+překryvu mezi skladbami, editorem a~slideshow. Playlist se opakuje a~navigace
+přechází mezi oběma konci. Automatická hudba slideshow je výchozí vypnutá;
+admin ji může pro galerii zapnout. Zapnutá slideshow nahradí ostatní hudbu
+a~začne první skladbou. Zastavení či zavření prohlížeče uvolní jeho hudbu;
+nezávisle spuštěná hudba z~tabulky může pokračovat. Změny fotek a~rychlostí
+hudbu nepřerušují. Odmítnutí prohlížečem umožní nový pokus přes Přehrát; zcela
+nepřehratelný playlist se po jednom průchodu zastaví.
+
+Každá nahraná skladba má stahování výchozí zakázané. Drobná admin ikonka
+u~skladby stahování povolí či zamkne; ikonka v~záhlaví změní všechny aktuální
+skladby. Pozdější uploady začínají opět zamčené. Návštěvník vidí stažení pouze
+u~povolených skladeb a~endpoint znovu kontroluje povolení i~přístup do galerie.
+Přehrávání dodává zvuková data prohlížeči; toto nastavení proto nezabrání
+jejich zachycení technicky zdatným návštěvníkem.
+
+Délku zjišťuje tichá čtečka metadat v~prohlížeči, vždy pro jeden viditelný
+řádek, s~limitem deseti sekund. Neznámá délka se zobrazí pomlčkou. Bez podpory
+sledování viditelnosti stejná čtečka postupně obslouží připojené řádky. Server
+zvuk nedekóduje. Opakování uploadu zachovává potvrzené fotografie, PDF i~zvuk;
+neznámý výsledek nahrání hudby vyžaduje před dalším pokusem kontrolu galerie.
+
+Originály a~seřazený JSON index jsou ve skryté složce
+\filepath{.gallery-music/}. Index ukládá názvy, MIME, velikosti, SHA-256,
+revizi, výchozí volbu slideshow a~povolení stažení každé skladby. Starší
+záznamy bez povolení zůstávají zamčené. Limity jsou 64~MiB na soubor, 100
+skladeb a~512~MiB na galerii; platí i~nižší limity PHP. Zálohy musí obsahovat
+skryté složky. ZIP exporty fotek a~přenos galerie hudbu nezahrnují.
+Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
+
+Ve vývojovém checkoutu po změně rout použijte kandidáta připraveného hosted
+workflow. PDF a~zvuk sdílí existujícího runtime vlastníka příloh; samotné
+zdroje se starším generovaným plánem mohou odmítat požadavky do načtení
+připraveného plánu. Lokální generování nenahrazuje hosted kvalifikaci.
+
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
 \index{r00197@rozsah dat}

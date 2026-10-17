@@ -1,0 +1,144 @@
+# Gallery music
+
+Music belongs to one physical gallery. `app/services/gallery_music.php` owns
+validation, confinement, upload quotas and serialized playlist changes;
+`app/models/gallery_music.php` owns the versioned JSON index. No database
+migration is required. This foundation is tracked in issue #247.
+
+Administrators can use the ordinary Upload photos chooser/drop queue for a
+mixed selection of photographs, PDFs and music. Audio goes to protected original
+attachment storage and never enters image decoding, thumbnails or PDF conversion.
+Audio-only submissions work with image preparation disabled. The editor's
+Documents / PDFs tab also retains independent upload and playlist controls.
+
+The compact music table shows titles, browser-reported durations and icon-only
+Play/Stop actions for each track. An exclusive shared player also offers
+Previous/Play/Stop/Next on the page and in the photo-viewer HUD whenever music
+exists, including outside slideshow. Buttons expose translated accessible names
+and tooltips. No duplicate visitor enable checkbox is shown.
+
+Administrator icons in each row toggle download permission; the header icon
+allows or denies downloads for all **current** tracks. Every new upload starts
+locked even after a bulk allow. Public download icons appear only for allowed
+tracks. The download endpoint rechecks the saved permission as well as gallery
+access, returning an indistinct 404 when either fails. Playback still delivers
+original bytes to the browser: this controls download affordances and attachment
+responses, not capture of playable bytes by a technically capable visitor.
+
+With JavaScript, independent table forms replace only their card through
+canonical Admin completion; the panel and browser URL remain in place.
+Direct POST/redirect supports these editor forms without JavaScript. Mixed
+Upload photos submissions require the browser attachment workflow; classic
+server upload refuses audio/PDF before admitting any photograph.
+
+Upload retries retain exact original File identities and each acknowledged
+mutation envelope. A later refusal does not replay acknowledged photographs,
+PDFs or audio. A lost/invalid audio response remains unresolved and blocks
+another write until the administrator reconciles the gallery; it cannot safely
+infer success from the playlist tail. Revision reads are administrator-only;
+each upload returns its exact revision and new identity from the locked write.
+
+`gallery_music` is a read-only protected same-origin GET/HEAD route. Dispatcher
+schema preflight precedes output, then canonical no-admin-bypass visitor access
+enforces gallery visibility, password/share and NSFW policy. Verified adults
+with administrator authority retain the normal bypass outside anonymous preview.
+Denials and missing originals share a no-store plain-text 404. Public streaming
+uses indexed MIME, SHA-256 and size validation, nosniff and single byte ranges;
+malformed, multiple and unsatisfiable ranges return 416. HEAD ignores Range;
+If-Range requests receive the complete representation because no validators are
+published. Session locks are released before output. Static gallery protection
+also denies `.bin` originals in both Apache authorization modes.
+
+Original bytes are stored under the gallery's denied `.gallery-music/` sidecar
+as opaque 128-bit identities with a `.bin` suffix. Filenames remain metadata.
+The ordered index stores a revision, the gallery's default slideshow-music
+preference (initially off), and track identities, names, titles, MIME types,
+sizes, SHA-256 digests and per-track download permission (initially false).
+Older v1 records without that field remain locked; no rewrite or migration is
+needed. The model owns this permanent conservative compatibility default.
+It maps old and current records to the same closed field shape and key order;
+merely reading a legacy index does not rewrite its stored bytes. Invalid existing
+indexes are preserved and refused, never reset to an empty playlist.
+
+Admission requires a matching extension and server-detected MIME type using
+PHP fileinfo. Supported containers are MP3, M4A, AAC, Ogg/OGA/Opus, WAV, FLAC
+and WebM/WEBA. No transcoding is performed; browser codec support determines
+whether a particular original can play. See the
+[MDN audio codec reference](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs).
+
+Limits are 64 MiB per original, 100 tracks and 512 MiB of indexed audio per
+gallery, with a 256 KiB index and 240-byte filenames/titles. Lower PHP upload
+and request-body limits still apply. The limits bound shared-host storage and
+metadata work; they are not browser decoding guarantees.
+
+Every mutation takes an exclusive sidecar lock and requires the last observed
+revision. Stale edits refuse the complete operation. Originals are copied with
+a byte ceiling and verified digest before the atomic index replacement makes
+them visible. Removing a track publishes the new index before unlinking the
+original. A process crash or failed unlink can leave an inaccessible orphan;
+it never authorizes an unindexed original. There is no automatic orphan cleanup.
+Concurrent gallery moves are governed by the existing gallery mutation owner.
+
+Whole-gallery filesystem moves and Trash restoration carry this sidecar.
+Filesystem backups must include hidden directories. Photo-only ZIP exports,
+gallery transfer packages and sidecar metadata imports do not transfer music;
+there is no separate music restore/import pipeline. The static server must
+retain the existing hidden-directory denial for galleries.
+
+Hosted tests own executable validation. The feature remains unqualified until
+the final prepared candidate passes fresh BASIC and the complete hosted FULL
+matrix through the approved integration workflow. Live codec/browser/device
+acceptance remains separate from synthetic fixtures.
+
+## Runtime impact review
+
+Before adding the music owner, the tracked generated plan contains 98 modules,
+4,052 direct file entries, 431 unique files and 3,621 duplicated entries.
+The complete `public-gallery` closure contains eight modules / 164 files with
+zero internal duplicates; `public-home` contains six / 117 and `public-media`
+six / 85. The editor contains eight / 181. These are source-plan observations,
+not executed runtime evidence. The gallery baseline permits eight modules plus
+two and 156 files plus eight: its file allowance is already consumed.
+
+Music presentation is therefore deferred until a gallery index exists and does
+not add files to ordinary gallery closures. PDF and audio reuse the existing
+attachment owner, whose historical machine name is `gallery-pdf-documents`.
+Its whole routing/access closure is retained; no dependency edge borrows only
+part of an existing owner. The global baseline permits 96 logical modules plus
+two, already consumed by the pre-music plan. The combined attachment owner
+keeps the estimate at 98 modules
+and adds four unique PHP files, with unchanged probe roots, limits and ratchets.
+Hosted preparation/FULL must establish final counts and loaded-route behavior.
+
+## Playback and duration lifecycle
+
+`gallery-music-player.js` owns a single audible native Audio instance per page,
+shared across public/editor tables, the photo viewer and slideshow. Selecting
+another track or gallery releases the old source before playback. There is no
+cross-gallery or Smart Gallery soundtrack inheritance, transcoding or artwork.
+
+Gallery autoplay defaults off and changes only through the editor preference.
+Slideshow startup applies that preference synchronously before fullscreen awaits,
+preserving its initiating gesture. An enabled slideshow replaces any table music
+and starts at the first track. The playlist repeats in saved order; both navigation
+directions wrap. Stop releases its source. Closing/stopping slideshow releases
+music owned by that viewer; independently requested table playback can continue.
+Photo/speed changes do not restart audio. Manual Play remains available regardless
+of the autoplay preference and never changes the saved administrator setting.
+Page teardown releases the source and pending callbacks; back/forward restoration
+rebinds observation with no automatic playback.
+
+Native autoplay rejection exposes a translated explicit-Play retry. Failed sources
+advance through at most one bounded pass before stopping. Generation guards
+ignore late promise failures after stop/source changes. A successful track starts
+a fresh failure pass on natural advance. These are permanent browser compatibility
+behaviors owned by the music player. Live codec/device adoption remains unknown.
+
+Durations come from a separate **silent** metadata-only Audio reader, one visible
+row at a time, with a ten-second deadline. It never calls Play. Failed, infinite or
+unavailable durations show a dash rather than an estimate. IntersectionObserver
+admits visible rows; browsers without it use the same serialized bounded reader
+for connected rows. This permanent fallback preserves duration availability
+without concurrent metadata allocation. Removed cards and page teardown discard
+queued work and release the active reader. Metadata may transfer audio bytes as
+needed by the browser; the server performs no decoding or tag extraction.
