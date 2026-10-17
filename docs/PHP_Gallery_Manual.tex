@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.135}
+\newcommand{\version}{0.135.1}
 \newcommand{\manualdate}{17 October 2026}
 
 \hypersetup{
@@ -1242,6 +1242,13 @@ Only direct image files inside the~selected gallery folder are~eligible. Missing
 The~default pattern is~\codeword{\{gallery_path\}_\{seq4\}}. A~custom pattern may~use \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}}, \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}}, and~sequence placeholders \codeword{\{seq\}} through \codeword{\{seq5\}}. The~numbered sequence variants pad to~two, three, four, or~five digits. Textual components are~normalized to~lowercase filesystem-safe ASCII-style underscore stems, the~source extension is~preserved in~sanitized form, and~an~empty custom pattern falls back to~the~default.
 
 After a~successful physical rename, PHP Gallery keeps the~database row and~public path references aligned, updates derived titles where the~renamer owns them, moves or~invalidates generated derivatives as~appropriate, and~removes stale cached ZIP archive records that refer to~the~old source identity. Derivative cleanup warnings do~not~justify reverting an~otherwise completed source rename because reproducible derivatives can~be~generated again. For~site-wide selections, the~browser advances the~work in~bounded portions and~shows the~result for~each gallery.
+
+Temporary staging uses a~short internal filename independent of~the~original
+name, so~valid long source names remain usable during a~rename. Final filenames
+keep the~readable naming pattern. Sequence placeholders count the~complete
+gallery order, including photographs outside the~current batch. Changing
+the~gallery title preserves those positions; later uploads continue their
+numbering after the~existing photographs.
 
 \subsection{Image management}
 \label{sec:media}

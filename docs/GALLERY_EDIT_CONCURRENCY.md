@@ -143,6 +143,12 @@ review distinguishes intended input from mutable persistence snapshots:
 | Upload descriptors and WebDAV credential descriptor | Files/metadata are intended input; destination gallery ID is resolved through a fresh under-lock gallery lookup. Credential authentication remains the existing separate owner. |
 
 The rename planner records `selected_image_ids` even for hidden no-op rows.
+Sequence placeholders follow the complete persisted gallery image order, even
+for bounded upload/apply selections. A gallery-title change affects the naming
+context, not image positions; newly appended uploads keep their later numbers.
+Physical staging uses an 83-byte random-hash basename in the original directory,
+independent of the source basename. This preserves ordinary rename/rollback and
+avoids overflowing a valid long filename by appending temporary metadata.
 An empty saved selection stays empty; it cannot expand to newly added images.
 Missing selection metadata requires a new preview. Whole-row comparison is
 internal only, supports pre-revision rows without timestamp assumptions, and

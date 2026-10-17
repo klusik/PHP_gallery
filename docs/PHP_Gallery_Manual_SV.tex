@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.135}
+\newcommand{\version}{0.135.1}
 \newcommand{\manualdate}{17~oktober~2026}
 
 \hypersetup{
@@ -1236,6 +1236,13 @@ Endast bildfiler direkt i den valda gallerimappen kan behandlas. Saknade origina
 Standardmönstret är \codeword{\{gallery_path\}_\{seq4\}}. Ett eget mönster kan använda \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}}, \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}} och sekvensplatshållare från \codeword{\{seq\}} till \codeword{\{seq5\}}. De numrerade sekvensvarianterna fyller ut till två, tre, fyra eller fem siffror. Textkomponenter normaliseras till filsystemssäkra ASCII-liknande namn med gemener och understreck, originalets filändelse bevaras i rensad form och ett tomt eget mönster faller tillbaka på standarden.
 
 Efter ett lyckat fysiskt namnbyte håller PHP Gallery databasraden och referenser till offentliga sökvägar samordnade, uppdaterar härledda titlar där verktyget ansvarar för dem, flyttar eller ogiltigförklarar genererade derivat efter behov och tar bort inaktuella cacheposter för ZIP-arkiv som refererar till originalets gamla identitet. Varningar vid derivatrensning motiverar inte att ett annars slutfört namnbyte av original återställs, eftersom återskapbara derivat kan genereras igen. För webbplatsövergripande urval driver webbläsaren arbetet framåt i begränsade delar och visar resultatet för varje galleri.
+
+Den tillfälliga namnändringen använder ett kort internt filnamn oberoende av
+originalnamnet, så att även giltiga långa källfilnamn kan behandlas. De slutliga
+namnen behåller det läsbara mönstret. Sekvensplatshållare räknar hela galleriets
+bildordning, inklusive fotografier utanför den aktuella satsen. En ändrad
+gallerititel bevarar dessa positioner; senare uppladdningar fortsätter
+numreringen efter de befintliga fotografierna.
 
 \subsection{Bildhantering}
 \label{sec:media}

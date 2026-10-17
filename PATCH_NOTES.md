@@ -1,5 +1,38 @@
 # Patch notes
 
+## Version 0.135.1
+
+Fixed media renamer staging for long original filenames while preserving readable final names, rollback behavior, and upload ordering and numbering. Added regression coverage and updated testing, compatibility, concurrency, and manual documentation.
+
+### Highlights
+
+#### Long-filename media renaming
+- Used fixed-length, same-directory staging names independent of the original filename, avoiding temporary filename component overflow while retaining configured readable final filenames.
+- Preserved byte-for-byte rollback behavior when renaming could not be completed.
+- Kept image numbering based on the full persisted gallery order, including unpublished images and images outside the current batch. Gallery title changes preserved image positions, and later uploads continued numbering after existing images.
+
+### Technical Details
+
+#### Backend
+- Updated `app/services/media_renamer.php` to stage files under fixed-length hash names in the same directory, independent of the original basename.
+- Made no schema or API changes.
+
+#### Tests and documentation
+- Added `tests/media_renamer_staging_test.php` coverage for staging, finalization, and byte-preserving rollback with 171-, 172-, 240-, and 255-byte filenames.
+- Expanded `tests/upload_auto_rename_selection_test.php` to cover ordering and continued upload numbering.
+- Updated testing, compatibility lifecycle, gallery edit concurrency, and all four manual sources. Live-host rename and upload acceptance remained manual.
+
+### User Impact
+
+#### For visitors
+- Visitor-facing behavior did not change.
+
+#### For administrators
+- Administrators could rename media with long original filenames without temporary staging names exceeding filesystem component limits. Final filenames remained readable, and existing gallery image ordering and continued upload numbering were preserved.
+
+#### For maintainers
+- Regression coverage was added for long-filename staging and rollback, and testing and lifecycle documentation was updated.
+
 ## Version 0.135
 
 Added configurable gallery PDF and music features, playlist playback across galleries and slideshows, and PDF/music accounting in Admin storage statistics. Updated the Windows uploader’s update indicators and source version to 0.4.1, and expanded related tests and documentation.

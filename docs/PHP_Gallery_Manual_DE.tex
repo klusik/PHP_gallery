@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.135}
+\newcommand{\version}{0.135.1}
 \newcommand{\manualdate}{17.~Oktober~2026}
 
 \hypersetup{
@@ -1256,6 +1256,14 @@ Nur direkte Bilddateien im ausgewählten Galerieordner kommen infrage. Fehlende 
 Das Standardmuster ist \codeword{\{gallery_path\}_\{seq4\}}. Ein benutzerdefiniertes Muster darf \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}}, \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}} sowie Sequenzplatzhalter von \codeword{\{seq\}} bis \codeword{\{seq5\}} verwenden. Nummerierte Sequenzvarianten füllen auf zwei, drei, vier oder fünf Stellen auf. Textbestandteile werden zu kleingeschriebenen dateisystemsicheren ASCII-artigen Namensstämmen mit Unterstrichen normalisiert, die ursprüngliche Erweiterung bleibt in bereinigter Form erhalten, und ein leeres benutzerdefiniertes Muster fällt auf die Vorgabe zurück.
 
 Nach erfolgreicher physischer Umbenennung hält PHP Gallery Datenbankzeile und öffentliche Pfadreferenzen synchron, aktualisiert abgeleitete Titel, soweit der Umbenenner dafür zuständig ist, verschiebt oder verwirft erzeugte Ableitungen nach Bedarf und entfernt veraltete ZIP-Archivcachedatensätze mit Bezug auf die alte Originalkennung. Warnungen bei der Ableitungsbereinigung rechtfertigen keine Rücknahme einer ansonsten abgeschlossenen Originalumbenennung, weil reproduzierbare Ableitungen erneut erzeugt werden können. Bei websiteweiter Auswahl führt der Browser die Arbeit in begrenzten Teilen weiter und zeigt das Ergebnis für jede Galerie.
+
+Die temporäre Umbenennung verwendet einen kurzen internen Dateinamen unabhängig
+vom ursprünglichen Namen, sodass auch gültige lange Quelldateinamen verarbeitet
+werden können. Die endgültigen Namen behalten das lesbare Muster bei.
+Sequenzplatzhalter zählen die gesamte Galeriereihenfolge einschließlich der
+Fotos außerhalb des aktuellen Stapels. Eine Änderung des Galerietitels bewahrt
+diese Positionen; spätere Uploads setzen die Nummerierung nach den vorhandenen
+Fotos fort.
 
 \subsection{Bildverwaltung}
 \label{sec:media}

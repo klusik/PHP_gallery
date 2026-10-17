@@ -1,5 +1,17 @@
 # Compatibility lifecycle and retirement register
 
+## Media-renamer long original filenames
+
+Owner: `app/services/media_renamer.php`. Same-directory staging permanently uses
+a fixed 83-byte hash basename instead of appending the original name. Production
+logs reported staging refusal for 172-byte originals because the former
+temporary name grew to 256 bytes. The hosting filesystem type remains unverified.
+Existing source naming, image order, writer ownership, rollback and sidecars
+remain supported; no migration or metadata-dependent filename scheme is added.
+`media_renamer_staging_test.php` owns real long-name/rollback regression coverage;
+the upload-selection fixture owns gallery-context and continued-numbering checks.
+Live production acceptance and installation-wide incidence remain unknown.
+
 ## Attachment masters and accounting snapshots
 
 Owners: canonical capability registry, shared upload/editor controllers,
