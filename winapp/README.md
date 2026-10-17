@@ -171,17 +171,36 @@ tool remains a source-only utility.
 
 ## Main window
 
-The redesigned window is organized around five tasks:
+The window opens on **Watcher**, the first task in the navigation order:
+**Watcher**, **Import**, **Activity**, **AI**, and **Settings**. The Watcher view
+shows the gallery target. The persistent header connection control opens the
+compact API-key dialog from every view. The app header also has Settings,
+updates, and help controls. Icon controls have
+hover/focus tooltips and keyboard focus; help opens usage guidance.
+Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
+controls keep their own scrolling.
 
-- **Import**: confirm the target gallery/API key, choose files, a folder, or a ZIP archive, review preflight, then explicitly start the import.
-- **Watch folder**: configure and start or stop the live drop-folder watcher.
-- **Activity**: inspect the current durable job, per-file state, attempts, result/error, throughput, ETA, and recent job history.
-- **AI metadata**: optional server-leased image analysis. Disabled by default.
-- **Settings**: gallery connection, API key, runtime, SimConnect, tray behavior, diagnostics, and advanced limits.
+The Watcher screen keeps the selected folder path, watcher status, and source
+deletion warning visible. **▶ Start Watcher** starts only after an explicit
+click; while active it becomes **■ Stop Watcher**. **Check folder only** performs
+a non-uploading dry run and does not start watching. The dedicated Watcher gear
+opens a settings sheet for folder selection, recursion, scan interval, file
+stability, simulator metadata, and the opt-in source-delete setting, with explicit
+**Save watcher settings** and **Cancel** actions. **Sync UTC time** remains an
+opt-in control beside the primary actions, with a nearby **?** explanation.
+The sheet requires the watcher to be stopped before edits. Saving stores those
+settings for the next start; **Cancel**, Escape, or closing the sheet restores its
+opening folder, ignored-file count, last-scan status, and preferences.
 
-The header reports connection state, target gallery label when the endpoint returns it, and watcher/import/AI activity independently.
+Rounded glossy button and card artwork uses Pillow when it is available. Native
+Tkinter controls and source-mode operation, including `--once`, remain supported
+without Pillow; the presentation does not add a runtime dependency.
 
-The lower Recent activity panel keeps a bounded durable event history. It can be filtered by active, succeeded, skipped, failed, and warning events. Diagnostic copying removes credentials and local paths.
+Manual **Import** still requires preflight review and an explicit start. **Activity**
+shows the filtered recent-event list, retry controls, redacted diagnostics, and
+the log panel. A compact footer on each screen shows the latest event; selecting
+it opens Activity. AI metadata remains optional and disabled
+by default. The app header keeps the connection and watcher states visible.
 
 ## Setup
 
@@ -189,11 +208,12 @@ The lower Recent activity panel keeps a bounded durable event history. It can be
 2. Generate a gallery-scoped upload automation API key.
 3. Copy the key when it is shown.
 4. Run `install.bat` from `winapp`, or start `gallery_watch_upload.pyw` directly.
-5. On the default **Import** screen, use **Set / replace API key...** in the **Connection and API key** card. The same action is available from the header as **Connection / API key** and from the tray menu.
+5. On the default **Watcher** screen, select the top connection control.
 6. Enter the gallery site URL or upload endpoint.
 7. Paste the API key with the **Paste** button or type it into the masked field.
-8. Press **Save & Test**.
-9. Confirm that the header reports **Connected** and the expected target gallery.
+8. Press **Save & Test** in the compact connection dialog.
+9. Confirm that the header reports **Connected** and the Watcher view shows
+   the expected target gallery.
 
 PHP Gallery advertises the portable query-string front-controller endpoint as the canonical Windows-uploader URL:
 
@@ -205,13 +225,12 @@ A site root or the optional clean alias `https://example.com/api/upload` can sti
 
 ### API key insertion and replacement
 
-API-key setup is intentionally not hidden in advanced settings. It is available in three places:
-
-- the default **Import > Connection and API key** card through **Set / replace API key...**;
-- the always-visible header through **Connection / API key**;
-- **Settings > Connection**, which also has a direct masked API-key field and **Paste API key** button.
-
-The compact connection dialog keeps edits temporary until **Save** or **Save & Test** is pressed. Closing the dialog cannot replace a working saved key accidentally. The key is generated in PHP Gallery Admin and is gallery-scoped; the Windows app does not ask for or store an Admin password.
+API-key setup is available from the top connection control, from
+**Settings > Connection**, and from the tray menu. The compact dialog keeps edits
+temporary until **Save** or **Save & Test** is pressed. Closing the dialog cannot
+replace a working saved key accidentally. The key is masked by default, generated
+in PHP Gallery Admin, and gallery-scoped; the Windows app does not ask for or
+store an Admin password.
 
 If the Settings URL/key fields differ from the saved connection, the app marks them as unsaved. Upload work may use explicitly saved settings, and API-key revocation is blocked until the connection fields are saved or restored.
 
@@ -223,7 +242,7 @@ The API key is masked by default. Reveal and Copy require explicit button presse
 
 ### Revoke API key
 
-**Revoke API key...** is available directly on the Import connection card, in **Settings > Connection**, and in the tray menu. Revocation uses the existing saved key to authenticate an `action=revoke` JSON request through the same upload API used by connection/inventory operations, so no Admin credential or token ID is required in the Windows app. If the canonical `index.php?page=upload_automation_upload` endpoint is rejected by the hosting layer with a non-JSON HTTP 404, revocation may retry the corresponding `/api/upload` alias as a compatibility fallback. A gateway 502/503/504 is treated as an ambiguous upstream failure: the client waits briefly and retries exactly once. If that retry reports that the key is already invalid/revoked, the desired server state is accepted as confirmed. Otherwise the local key is retained and the app reports that server revocation could not be confirmed.
+**Revoke API key...** is available in the connection dialog, **Settings > Connection**, and the tray menu. Revocation uses the existing saved key to authenticate an `action=revoke` JSON request through the same upload API used by connection/inventory operations, so no Admin credential or token ID is required in the Windows app. If the canonical `index.php?page=upload_automation_upload` endpoint is rejected by the hosting layer with a non-JSON HTTP 404, revocation may retry the corresponding `/api/upload` alias as a compatibility fallback. A gateway 502/503/504 is treated as an ambiguous upstream failure: the client waits briefly and retries exactly once. If that retry reports that the key is already invalid/revoked, the desired server state is accepted as confirmed. Otherwise the local key is retained and the app reports that server revocation could not be confirmed.
 
 Revocation is deliberately guarded:
 
@@ -350,7 +369,9 @@ The Import and Activity views expose:
 - per-item result or error;
 - durable previous job history.
 
-The lower Recent activity drawer stores bounded human-readable events separately from the rotating log.
+The compact footer shows the latest human-readable event and opens **Activity**
+when selected. Activity displays a filtered recent-event list and stores bounded
+events separately from the rotating log.
 
 ## Thumbnail modes
 
@@ -397,7 +418,14 @@ Watch-folder behavior keeps the established safety semantics:
 - when Pillow can decode a watched JPG/PNG/GIF/WebP, responsive thumbnails are generated locally and uploaded with the original so PHP does not stay busy generating the full derivative set synchronously; unsupported local formats continue through the server path;
 - server-side validation remains authoritative.
 
-The Watch folder tab shows how many existing supported files will be ignored at startup, the last successful scan time, and a **Check folder only** dry run that performs no uploads.
+The **Watcher** screen shows the selected folder path, current status, and the
+source-deletion warning. **Check folder only** inspects existing files without
+uploading or changing upload history. Folder selection, recursion, stability,
+simulator metadata, and the opt-in deletion setting are in the dedicated Watcher
+gear sheet, where **Save watcher settings** and **Cancel** apply.
+The sheet does not permit edits while watching; it requires a stop first. Saved
+changes apply on the next start, while **Cancel**, Escape, and closing the sheet
+restore the opening folder and preference values.
 
 ### Optional source deletion
 

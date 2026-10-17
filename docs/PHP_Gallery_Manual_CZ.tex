@@ -659,6 +659,40 @@ Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu
 
 Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
+\section{Windows uploader}
+\subsection{Rozvržení}
+
+Uploader se otevírá na kartě \ui{Watcher}; pořadí karet je \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}. Horní ovládací prvek
+připojení otevře kompaktní dialog klíče API se skrytým klíčem a~volbou
+\ui{Save \& Test}; ovládání připojení zůstává v~záhlaví dostupné na každé
+obrazovce. Neuložené změny nenahradí uložený klíč. Hlavička aplikace
+nabízí také Nastavení, aktualizace a~nápovědu. Obrazovka Watcher zobrazuje
+cílovou galerii, vybranou cestu složky, stav sledování a~varování před smazáním
+zdrojů.
+\ui{Start Watcher} začne pracovat až po výslovném kliknutí; při běhu stejné
+kontextové tlačítko nabízí \ui{Stop Watcher}. \ui{Check folder only} provede
+kontrolu složky bez nahrávání a~bez spuštění trvalého sledování. Ozubené kolo
+Watcher otevře nastavení výběru složky, podsložek, intervalu kontroly, stability
+souborů, metadat simulátoru
+a~volitelného mazání zdrojů. Při běžícím sledování nelze nastavení měnit; nejprve
+je nutné sledování zastavit. \ui{Save watcher settings} uloží změny pro příští
+spuštění. \ui{Cancel}, klávesa Escape nebo zavření okna obnoví původní cestu,
+počet ignorovaných souborů, čas kontroly a~nastavení.
+\ui{Sync UTC time} zůstává volitelná a~je vedle hlavních tlačítek.
+Dlouhé stránky a~dialogy lze posouvat kolečkem myši nebo posuvníkem; textová
+pole a~tabulky si zachovávají vlastní posouvání.
+
+Ruční \ui{Import} stále vyžaduje kontrolu výsledků předběžné kontroly a~výslovné
+spuštění. \ui{Activity} obsahuje filtrovanou historii událostí, opakování,
+redigovanou diagnostiku a~protokol. Kompaktní zápatí s~poslední událostí otevře
+\ui{Activity} po kliknutí. Ovládací ikony mají popisky a~lze na ně přejít
+klávesnicí; otazník otevře nápovědu. Změna vzhledu zachovává
+dosavadní ochranu nastavení, tray, aktualizací a~klíče API.
+Zaoblené lesklé prvky tlačítek a~karet používají Pillow, je-li dostupné;
+nativní ovládací prvky Tk a~provoz ve zdrojovém režimu včetně \texttt{--once}
+fungují i~bez něj.
+
 \subsection{Poloha simulátoru ve Windows}
 
 \ui{Sync UTC time} u~ovládání sledované složky je ve výchozím stavu vypnuté

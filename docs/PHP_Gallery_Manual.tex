@@ -663,6 +663,39 @@ After activation, open the~shared photographs from the~collaboration panel or~th
 
 Withdrawal, changed source protection and~local friendship revocation block subsequent authorized reads. An~unreachable peer remains bounded by~the~maximum 120-second verification lease; downloaded pixels cannot be~recalled. Adding a~participant creates a~separate proposal requiring fresh approval from everyone. Ordinary use can~advance technical renewal on~demand; unattended renewal is~optional. Missing or~unknown required schema refuses sharing and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational limits and~deployment qualification.
 
+\section{Windows companion uploader}
+\subsection{Uploader layout}
+
+The~uploader opens on~\ui{Watcher}; its~navigation order is~\ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI}, and~\ui{Settings}. The~Watcher screen
+shows the~gallery target. Its~top connection control opens a~compact API-key
+dialog with a~masked key and~\ui{Save \& Test}; this~connection control remains
+available in~the~header on~every screen. Unsaved edits do~not~replace the~saved
+key. The~app header also has Settings,
+updates, and~help controls. The~Watcher screen keeps the~selected folder path,
+watcher status, and~source-delete warning visible.
+\ui{Start Watcher} starts only after an~explicit click; while active the~same
+contextual control is~\ui{Stop Watcher}. \ui{Check folder only} performs a~folder
+dry run without uploads or~starting continuous watching. The~Watcher gear opens
+a~settings sheet for~folder choice, recursion, scan interval, file stability,
+simulator metadata, and~the~opt-in deletion setting. The~sheet requires stopping
+the~watcher before
+edits; \ui{Save watcher settings} stores them for~the~next start. \ui{Cancel},
+Escape, or~closing the~sheet restores the~opening folder, ignore count, last
+scan, and~preferences.
+\ui{Sync UTC time} remains an~opt-in beside the~main actions.
+Long pages and~dialogs scroll with the~mouse wheel or~scrollbar; text and~table
+controls keep their own scrolling.
+
+Manual \ui{Import} still requires preflight review and~an~explicit start.
+\ui{Activity} contains the~filtered event history, retry controls, redacted
+diagnostics, and~log. A~compact latest-event footer opens \ui{Activity} when
+selected. Icon controls expose tooltips and~keyboard focus; the~question-mark help
+opens usage guidance. These presentation changes preserve the
+existing persistence, tray, update, and~API-key safeguards.
+Rounded button and~card artwork uses Pillow when available; native Tk controls
+and~source-mode operation, including \texttt{--once}, remain usable without it.
+
 \subsection{Windows simulator location}
 
 \ui{Sync UTC time}, beside the~Watch folder actions, is~off by~default and~saves

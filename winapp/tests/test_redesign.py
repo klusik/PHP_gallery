@@ -26,6 +26,7 @@ import shutil
 import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest import mock
 import zipfile
@@ -767,11 +768,16 @@ class SimConnectActivityTests(unittest.TestCase):
         app.record_activity.assert_any_call("success", "Watching folder", "watcher", job_id="")
 
     def test_simconnect_activity_persists_without_duplicate_marker(self) -> None:
-        """Store clean activity messages without changing their category or secrets."""
+        """Store clean activity and publish its safe text in the live footer.
+
+        Returns:
+            None: Confirms the event, footer, and durable store use the safe text.
+        """
         app = mock.Mock()
         app.api_key_var.get.return_value = "private-key"
         app.activity_events = []
         app.config.activity_history_limit = 50
+        app.latest_activity_var = mock.Mock()
 
         MAIN.WatcherApp.record_activity(app, "warning", "[simconnect] Failure private-key", "simconnect")
 
@@ -779,7 +785,188 @@ class SimConnectActivityTests(unittest.TestCase):
         self.assertEqual("simconnect", event.operation)
         self.assertEqual("warning", event.level)
         self.assertEqual("Failure [REDACTED]", event.message)
+        app.latest_activity_var.set.assert_called_once_with("Simconnect · Failure [REDACTED]")
         app.job_store.append_event.assert_called_once_with(event)
+
+
+class NavigationTests(unittest.TestCase):
+    """Keep screen navigation driven by stable task keys."""
+
+    def test_select_tab_uses_the_registered_navigation_index(self) -> None:
+        """Select a registered screen and ignore an unknown task key.
+
+        Returns:
+            None: Confirms selection is delegated to the registered notebook index.
+        """
+        app = mock.Mock()
+        # Notebook indices are zero-based and follow the Watcher-first task order.
+        app.tab_indices = {
+            "watch": 0,
+            "import": 1,
+            "activity": 2,
+            "ai": 3,
+            "settings": 4,
+        }
+
+        MAIN.WatcherApp.select_tab(app, "activity")
+        MAIN.WatcherApp.select_tab(app, "missing")
+
+        app.notebook.select.assert_called_once_with(2)
+
+
+class WatcherActionTests(unittest.TestCase):
+    """Keep the primary watcher action aligned with worker state."""
+
+    def test_primary_action_starts_when_the_worker_is_stopped(self) -> None:
+        """Start the watcher when no worker is active.
+
+        Returns:
+            None: Confirms the contextual action uses the existing start path.
+        """
+        app = mock.Mock()
+        app.worker = None
+
+        MAIN.WatcherApp.toggle_watcher(app)
+
+        app.start.assert_called_once_with()
+        app.stop.assert_not_called()
+
+    def test_primary_action_stops_an_active_worker(self) -> None:
+        """Stop the watcher when its worker is already active.
+
+        Returns:
+            None: Confirms the contextual action uses the existing stop path.
+        """
+        app = mock.Mock()
+        app.worker.is_alive.return_value = True
+
+        MAIN.WatcherApp.toggle_watcher(app)
+
+        app.stop.assert_called_once_with()
+        app.start.assert_not_called()
+
+    def test_watcher_settings_require_stopping_the_live_worker(self) -> None:
+        """Refuse edits while the watcher owns its active configuration.
+
+        Returns:
+            None: Confirms the stop-first message appears without opening a sheet.
+        """
+        app = mock.Mock()
+        app.updates = None
+        app.worker.is_alive.return_value = True
+
+        with mock.patch.object(MAIN, "messagebox") as dialogs, mock.patch.object(
+            MAIN,
+            "tk",
+        ) as tkinter:
+            MAIN.WatcherApp.open_watcher_settings(app)
+
+        dialogs.showinfo.assert_called_once()
+        self.assertIn("Stop the watcher", dialogs.showinfo.call_args.args[1])
+        tkinter.Toplevel.assert_not_called()
+
+
+class ScrollableFrameWheelTests(unittest.TestCase):
+    """Route page wheel input without stealing other controls' scrolling."""
+
+    def test_owned_child_wheel_scrolls_its_page_in_units(self) -> None:
+        """Send a full wheel notch from a child to the owning page canvas.
+
+        Returns:
+            None: Confirms owned wheel input scrolls the page canvas.
+        """
+        frame = mock.Mock()
+        frame._wheel_remainder = 0
+        child = mock.Mock()
+        child.master = frame
+        event = mock.Mock()
+        event.widget = child
+        event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+
+        # Built-in identities cover isinstance checks without loading Tk widgets.
+        fake_tk = types.SimpleNamespace(Text=list, Listbox=dict)
+        fake_ttk = types.SimpleNamespace(Treeview=set, Combobox=tuple)
+        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
+            MAIN,
+            "ttk",
+            fake_ttk,
+        ):
+            result = MAIN.ScrollableFrame._on_mousewheel(frame, event)
+
+        self.assertEqual("break", result)
+        frame.canvas.yview_scroll.assert_called_once_with(-1, "units")
+
+    def test_unrelated_view_wheel_does_not_scroll_this_page(self) -> None:
+        """Leave wheel events from another page unconsumed.
+
+        Returns:
+            None: Confirms unrelated widget ancestry is ignored.
+        """
+        frame = mock.Mock()
+        frame._wheel_remainder = 0
+        unrelated_view = mock.Mock()
+        unrelated_view.master = None
+        event = mock.Mock()
+        event.widget = unrelated_view
+        event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+
+        fake_tk = types.SimpleNamespace(Text=list, Listbox=dict)
+        fake_ttk = types.SimpleNamespace(Treeview=set, Combobox=tuple)
+        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
+            MAIN,
+            "ttk",
+            fake_ttk,
+        ):
+            result = MAIN.ScrollableFrame._on_mousewheel(frame, event)
+
+        self.assertIsNone(result)
+        frame.canvas.yview_scroll.assert_not_called()
+
+    def test_native_inner_scrollers_keep_their_wheel_input(self) -> None:
+        """Do not intercept wheel events owned by native scroll controls.
+
+        Returns:
+            None: Confirms Text, Listbox, Treeview and Combobox retain input.
+        """
+        frame = mock.Mock()
+        frame._wheel_remainder = 0
+        native_names = (
+            "TextWidget",
+            "ListboxWidget",
+            "TreeviewWidget",
+            "ComboboxWidget",
+        )
+        native_types = tuple(
+            type(name, (), {})
+            for name in native_names
+        )
+        fake_tk = types.SimpleNamespace(
+            Text=native_types[0],
+            Listbox=native_types[1],
+        )
+        fake_ttk = types.SimpleNamespace(
+            Treeview=native_types[2],
+            Combobox=native_types[3],
+        )
+
+        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
+            MAIN,
+            "ttk",
+            fake_ttk,
+        ):
+            for native_type in native_types:
+                with self.subTest(widget_type=native_type.__name__):
+                    child = native_type()
+                    child.master = frame
+                    event = mock.Mock()
+                    event.widget = child
+                    event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+
+                    result = MAIN.ScrollableFrame._on_mousewheel(frame, event)
+
+                    self.assertIsNone(result)
+
+        frame.canvas.yview_scroll.assert_not_called()
 
 
 if __name__ == "__main__":

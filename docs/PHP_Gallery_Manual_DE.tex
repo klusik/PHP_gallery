@@ -663,6 +663,44 @@ Nach Aktivierung öffnen Sie gemeinsame Fotos im Panel oder über den Link des l
 
 Rücknahme, geänderter Quellschutz und lokale Freundschaftswiderrufe sperren nachfolgende autorisierte Zugriffe. Unerreichbare Teilnehmer bleiben durch höchstens 120 Sekunden Prüfungsdauer begrenzt; bereits heruntergeladene Pixel lassen sich nicht zurückrufen. Neue Teilnehmer benötigen einen separaten Vorschlag mit neuer Zustimmung aller. Technische Erneuerung kann bei Nutzung erfolgen; ein Zeitplan ist optional. Fehlendes oder unbekanntes erforderliches Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
+\section{Windows-Uploader}
+\subsection{Aufbau}
+
+Der Uploader öffnet zunächst \ui{Watcher}; die Reihenfolge lautet
+\ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI} und \ui{Settings}. Die obere
+Verbindungssteuerung öffnet einen kompakten Dialog für den API-Schlüssel
+mit maskiertem Schlüssel und \ui{Save \& Test}; die Verbindungssteuerung bleibt
+in der Kopfzeile auf allen Bildschirmen verfügbar. Ungespeicherte Änderungen
+ersetzen den gespeicherten Schlüssel nicht. Die App-Kopfzeile enthält außerdem
+Einstellungen, Updates und Hilfe. Der Watcher-Bildschirm zeigt die Zielgalerie,
+den ausgewählten Ordnerpfad, den Überwachungsstatus und den Warnhinweis zur
+Quelldatei-Löschung.
+\ui{Start Watcher} startet erst nach ausdrücklichem Klick; während des Betriebs
+heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
+\ui{Check folder only} prüft den Ordner ohne Uploads und startet keine dauerhafte
+Überwachung. Das Watcher-Zahnrad öffnet ein Einstellungsblatt für Ordnerauswahl,
+Unterordner, Scanintervall, Dateistabilität, Simulatormetadaten und die optionale
+Quelldatei-Löschung.
+Bei laufender Überwachung fordert eine Meldung zuerst zum Stoppen auf und lässt
+keine Änderungen zu. \ui{Save watcher settings} speichert für den nächsten
+Start; \ui{Cancel}, Escape und Schließen stellen den zuvor geöffneten Ordner,
+Ignorierzahl, letzten Scan und die Einstellungen wieder her. \ui{Sync UTC time}
+bleibt eine freiwillige Option neben den Hauptaktionen.
+Lange Seiten und Dialoge lassen sich mit Mausrad oder Bildlaufleiste bewegen;
+Text- und Tabellenelemente behalten ihre eigene Scrollfunktion.
+
+Der manuelle \ui{Import} erfordert weiterhin die Prüfung der Vorprüfung und einen
+ausdrücklichen Start. \ui{Activity} enthält den gefilterten Ereignisverlauf,
+Wiederholungssteuerungen, bereinigte Diagnosen und das Protokoll. Eine kompakte
+Fußzeile mit dem neuesten Ereignis öffnet bei Auswahl \ui{Activity}.
+Symbolschaltflächen bieten Tooltips und Tastaturfokus; das Fragezeichen öffnet
+eine Hilfe zum
+Gebrauch. Die Darstellung bewahrt die vorhandenen Schutzmaßnahmen für
+Einstellungen, Infobereich, Updates und API-Schlüssel. Abgerundete, glänzende
+Schaltflächen- und Kartenbilder verwenden Pillow, wenn verfügbar; native
+Tk-Steuerelemente und der Quellmodus einschließlich \texttt{--once} funktionieren
+weiterhin ohne Pillow.
+
 \subsection{Simulatorposition unter Windows}
 
 \ui{Sync UTC time} bei den Überwachungsaktionen ist standardmäßig aus und

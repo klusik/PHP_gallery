@@ -659,6 +659,39 @@ Efter aktivering öppnas gemensamma fotografier från panelen eller länken i de
 
 Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
+\section{Windows-uppladdaren}
+\subsection{Layout}
+
+Uppladdaren öppnas på fliken \ui{Watcher}; ordningen är \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Den övre
+anslutningsknappen öppnar en kompakt dialog för API-nyckeln med
+maskerad nyckel och \ui{Save \& Test}; anslutningskontrollen finns kvar i
+sidhuvudet på alla skärmar. Osparade ändringar ersätter inte den
+sparade nyckeln. Appens sidhuvud har även inställningar, uppdateringar och hjälp.
+Watcher-skärmen visar målgalleriet, den valda mappsökvägen, bevakningsstatus och
+varningen om källborttagning. \ui{Start Watcher} startar först efter ett uttryckligt klick;
+medan bevakningen pågår heter samma kontextknapp \ui{Stop Watcher}.
+\ui{Check folder only} kontrollerar mappen utan att ladda upp eller starta
+kontinuerlig bevakning. Watcher-hjulet öppnar ett inställningsblad för mappval,
+undermappar, skanningsintervall, filstabilitet, simulatorns metadata och det frivilliga valet att ta bort
+källfilen. Om bevakningen är aktiv kräver en dialog att den stoppas innan några
+ändringar görs. \ui{Save watcher settings} sparar inställningarna till nästa
+start; \ui{Cancel}, Escape och stängning återställer den tidigare mappen,
+antalet ignorerade filer, senaste genomsökning och inställningarna.
+\ui{Sync UTC time} är fortsatt frivilligt och ligger intill huvudåtgärderna.
+Långa sidor och dialoger kan rullas med mushjulet eller rullningslisten;
+text- och tabellkontroller behåller sin egen rullning.
+
+Manuell \ui{Import} kräver fortfarande granskning av förkontrollen och ett
+uttryckligt startval. \ui{Activity} innehåller filtrerad händelsehistorik,
+omförsökskontroller, redigerad diagnostik och loggen. En kompakt sidfot med den
+senaste händelsen öppnar \ui{Activity} när den väljs. Ikoner har verktygstips och
+kan nås med tangentbordet; frågetecknet öppnar hjälp.
+Utformningen bevarar befintliga skydd för inställningar, tray, uppdateringar och
+API-nycklar. Rundade, blanka knappar och kort använder Pillow när det är
+tillgängligt; Tk:s inbyggda kontroller och källäget, inklusive \texttt{--once},
+fungerar fortfarande utan Pillow.
+
 \subsection{Simulatorposition i Windows}
 
 \ui{Sync UTC time} vid mappbevakningens knappar är av som standard och sparar

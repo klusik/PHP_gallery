@@ -10,6 +10,9 @@ and native types with every new/changed named function, method or class; describ
 all parameters, concrete structures and return variants. Preserve comments and
 complete native headers. Extend the existing owner instead of duplicating policy.
 
+For callbacks without explicit parameters, omit `Args:` and document `None`
+only under `Returns:`. List only parameters present in the native signature.
+
 Write Python parameters as Google-style `Args:` entries, for example
 `enabled (bool): Whether this watcher admits UTC synchronization.` Write the
 result under `Returns:`, including `None` for a procedure. Use the checked

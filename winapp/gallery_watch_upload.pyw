@@ -145,6 +145,14 @@ except ImportError:  # pragma: no cover
     messagebox = None
     ttk = None
 
+if tk is not None:
+    from uploader.ui_theme import (
+        GlassCard,
+        configure_theme,
+        help_button,
+        icon_button,
+    )
+
 try:
     from PIL import Image, ImageOps, ImageStat
 except ImportError:  # pragma: no cover
@@ -173,6 +181,59 @@ REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 ASSETS_DIR = APP_DIR / "assets"
 TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
 TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
+# Purpose: Keep the first-launch window within common laptop display bounds.
+# Type: str; Units: pixels; Scope: Tkinter watcher main window.
+# Consumers: WatcherApp.build_ui.
+# Rationale: Reserve enough room for the primary workflow without opening a
+# window taller than a typical 768-pixel desktop after system decorations.
+WATCHER_WINDOW_GEOMETRY = "1060x700"
+# Purpose: Preserve usable navigation and controls on smaller displays.
+# Type: tuple[int, int]; Units: pixels; Scope: Tkinter watcher main window.
+# Consumers: WatcherApp.build_ui.
+# Rationale: Keep the UI workable at compact laptop widths while allowing the
+# scrollable content views to handle longer forms.
+WATCHER_WINDOW_MINIMUM = (840, 560)
+# Purpose: Keep credential entry comfortably sized while remaining compact.
+# Type: str; Units: pixels; Scope: gallery connection dialog.
+# Consumers: WatcherApp.open_connection_dialog.
+# Rationale: The URL and masked key fields fit with the explicit save actions.
+CONNECTION_DIALOG_GEOMETRY = "640x300"
+# Purpose: Keep the credential dialog usable on smaller displays.
+# Type: tuple[int, int]; Units: pixels; Scope: gallery connection dialog.
+# Consumers: WatcherApp.open_connection_dialog.
+# Rationale: URL and API-key fields retain enough room for editing.
+CONNECTION_DIALOG_MINIMUM = (560, 280)
+# Purpose: Leave room for system borders and taskbars around the connection dialog.
+# Type: tuple[int, int]; Units: pixels; Scope: gallery connection dialog.
+# Consumers: WatcherApp.open_connection_dialog.
+# Rationale: Keep the resizable credential editor inside the usable display area.
+CONNECTION_DIALOG_SCREEN_MARGIN = (80, 100)
+# Purpose: Keep watcher preferences readable while allowing shorter screens to scroll.
+# Type: tuple[int, int]; Units: pixels; Scope: watcher settings sheet.
+# Consumers: WatcherApp.open_watcher_settings.
+# Rationale: The sheet remains compact and scrolls when content exceeds display.
+WATCHER_SETTINGS_MINIMUM = (560, 340)
+# Purpose: Keep the resizable watcher sheet inside the usable desktop area.
+# Type: tuple[int, int]; Units: pixels; Scope: watcher settings sheet.
+# Consumers: WatcherApp.open_watcher_settings.
+# Rationale: Leave room for system borders and taskbars around the dialog.
+WATCHER_SETTINGS_SCREEN_MARGIN = (80, 100)
+# Purpose: Provide a geometry floor on unusually small displays.
+# Type: tuple[int, int]; Units: pixels; Scope: watcher settings sheet.
+# Consumers: WatcherApp.open_watcher_settings.
+# Rationale: Avoid zero or negative dimensions when display work area is tight.
+WATCHER_SETTINGS_FALLBACK_SIZE = (420, 300)
+# Purpose: Keep the persistent latest-event footer readable on one line.
+# Type: int; Units: characters; Scope: Main-window event footer.
+# Consumers: WatcherApp.record_activity.
+# Rationale: The footer is a compact status hint; full messages remain in
+# Activity and the rotating log.
+LATEST_ACTIVITY_PREVIEW_LENGTH = 150
+# Purpose: Convert native Windows wheel deltas into whole scroll increments.
+# Type: int; Units: delta units per notch; Scope: ScrollableFrame wheel routing.
+# Consumers: ScrollableFrame._on_mousewheel.
+# Rationale: Windows reports 120 delta units for one standard wheel notch.
+WINDOWS_MOUSEWHEEL_DELTA = 120
 
 _AI_TRANSFORMERS_PIPELINES: Dict[Tuple[str, str], Any] = {}
 _AI_TRANSFORMERS_LOCK = threading.Lock()
@@ -4371,27 +4432,116 @@ class ImportPreflightThread(threading.Thread):
 class ScrollableFrame(ttk.Frame if ttk is not None else object):
     """Simple ttk scroll container used by the redesigned task views."""
 
-    def __init__(self, parent: Any) -> None:
-        """Create a vertical canvas-backed frame without external UI dependencies."""
+    def __init__(self, parent: "tk.Misc") -> None:
+        """Create a themed vertical canvas-backed frame.
+
+        Args:
+            parent (tk.Misc): Tk widget that owns the scroll container.
+
+        Returns:
+            None: Creates the canvas, content frame, and vertical scrollbar.
+        """
         if ttk is None or tk is None:
             raise RuntimeError("Tkinter is not available.")
         super().__init__(parent)
-        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
+        self.canvas = tk.Canvas(
+            self,
+            highlightthickness=0,
+            borderwidth=0,
+            background=self.winfo_toplevel().cget("background"),
+        )
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.content = ttk.Frame(self.canvas)
+        self.content = ttk.Frame(self.canvas, style="App.TFrame")
         self.window_id = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         self.content.bind("<Configure>", self._sync_scrollregion, add="+")
         self.canvas.bind("<Configure>", self._sync_width, add="+")
+        self._wheel_remainder = 0
+        self._wheel_toplevel = self.winfo_toplevel()
+        self._wheel_binding_id = self._wheel_toplevel.bind(
+            "<MouseWheel>",
+            self._on_mousewheel,
+            add="+",
+        )
+        self.bind("<Destroy>", self._on_destroy, add="+")
 
-    def _sync_scrollregion(self, _event: Any = None) -> None:
-        """Refresh the canvas scroll region after content geometry changes."""
+    def _on_mousewheel(
+        self,
+        event: "tk.Event[tk.Misc]",
+    ) -> Optional[str]:
+        """Scroll this page when the pointer is over its non-native controls.
+
+        Args:
+            event (tk.Event[tk.Misc]): Windows wheel event with a delta and
+                originating widget.
+
+        Returns:
+            Optional[str]: ``break`` when this page consumes a full wheel
+                increment; otherwise None so another widget can handle it.
+        """
+        widget = event.widget
+        if tk is None or ttk is None:
+            return None
+        if isinstance(widget, (tk.Text, tk.Listbox, ttk.Treeview, ttk.Combobox)):
+            return None
+
+        while widget is not None and widget is not self:
+            widget = getattr(widget, "master", None)
+        if widget is not self:
+            return None
+
+        accumulated_delta = self._wheel_remainder + int(event.delta)
+        steps = int(accumulated_delta / WINDOWS_MOUSEWHEEL_DELTA)
+        self._wheel_remainder = (
+            accumulated_delta - steps * WINDOWS_MOUSEWHEEL_DELTA
+        )
+        if steps == 0:
+            return None
+
+        self.canvas.yview_scroll(-steps, "units")
+        return "break"
+
+    def _on_destroy(self, event: "tk.Event[tk.Misc]") -> None:
+        """Remove this page's additive top-level wheel binding when destroyed.
+
+        Args:
+            event (tk.Event[tk.Misc]): Destroy event used to ignore child
+                teardown notifications.
+
+        Returns:
+            None: Unbinds only this ScrollableFrame's registered callback.
+        """
+        if event.widget is self and self._wheel_binding_id:
+            self._wheel_toplevel.unbind(
+                "<MouseWheel>",
+                self._wheel_binding_id,
+            )
+            self._wheel_binding_id = None
+
+    def _sync_scrollregion(self, _event: Optional["tk.Event[tk.Misc]"] = None) -> None:
+        """Refresh the canvas scroll region after content geometry changes.
+
+        Args:
+            _event (Optional[tk.Event[tk.Misc]]): Optional geometry event from
+                the embedded content frame.
+
+        Returns:
+            None: Updates the canvas scrollable bounds.
+        """
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    def _sync_width(self, event: Any) -> None:
-        """Keep the embedded content frame at least as wide as the viewport."""
+    def _sync_width(self, event: "tk.Event[tk.Misc]") -> None:
+        """Keep the embedded content frame at least as wide as the viewport.
+
+        Args:
+            event (tk.Event[tk.Misc]): Canvas resize event with the viewport
+                width in pixels.
+
+        Returns:
+            None: Resizes the embedded content frame to match the viewport.
+        """
         self.canvas.itemconfigure(self.window_id, width=max(1, int(event.width)))
 
 
@@ -4420,8 +4570,6 @@ class WatcherApp:
 
         self.root = tk.Tk()
         self.root.title(f"{APP_DISPLAY_NAME} {APP_VERSION}")
-        self.root.geometry("1180x820")
-        self.root.minsize(900, 650)
 
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
@@ -4451,6 +4599,11 @@ class WatcherApp:
         self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
+        self.watch_folder_display_var = tk.StringVar(
+            value=self.config.watched_folder
+            or "Choose a folder in Watcher settings"
+        )
+        self.watched_folder_var.trace_add("write", self.update_watch_folder_display)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
         self.api_key_var = tk.StringVar(value=self.config.api_key)
         self.api_key_visible_var = tk.BooleanVar(value=False)
@@ -4516,10 +4669,14 @@ class WatcherApp:
         self.import_activity_var = tk.StringVar(value="Import: idle")
         self.ai_activity_var = tk.StringVar(value="AI: stopped")
         self.activity_filter_var = tk.StringVar(value="all")
+        self.import_details_visible_var = tk.BooleanVar(value=False)
         self.activity_job_summary_var = tk.StringVar(value="No import job selected")
+        self.latest_activity_var = tk.StringVar(value="Ready when you are")
         self.monitor_state = "disabled"
         self.monitor_detail = "No background worker is active."
         self.log_tags_ready = False
+        self.watcher_action_button: Optional["ttk.Button"] = None
+        self.latest_activity_label: Optional["ttk.Label"] = None
 
         recoverable_ids = [job.id for job in self.job_store.recoverable_jobs()]
         removed_staging = cleanup_stale_staging(STAGING_ROOT, self.config.staging_cleanup_age_hours, recoverable_ids)
@@ -4539,98 +4696,165 @@ class WatcherApp:
 
     def build_ui(self) -> None:
         """
-        Create the visible controls and initial status text.
+        Create the themed navigation, primary watcher view, and live footer.
+
+        Returns:
+            None: Builds the application window and selects Watcher by default.
         """
-        outer = ttk.Frame(self.root, padding=(14, 10))
+        configure_theme(self.root)
+        ttk.Style(self.root).configure(
+            "Footer.Warning.TLabel",
+            foreground="#A85E12",
+        )
+        ttk.Style(self.root).configure(
+            "Footer.Error.TLabel",
+            foreground="#B42335",
+        )
+        self.root.geometry(WATCHER_WINDOW_GEOMETRY)
+        self.root.minsize(*WATCHER_WINDOW_MINIMUM)
+        outer = ttk.Frame(self.root, padding=(24, 16, 24, 12), style="App.TFrame")
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(2, weight=1)
 
-        header = ttk.Frame(outer)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         header.columnconfigure(1, weight=1)
-        ttk.Label(header, text=APP_DISPLAY_NAME, font=("Segoe UI", 16, "bold")).grid(row=0, column=0, sticky="w")
-        status = ttk.Frame(header)
-        status.grid(row=0, column=1, sticky="e")
-        self.monitor_light = tk.Canvas(status, width=14, height=14, highlightthickness=0, bd=0)
-        self.monitor_light.pack(side="left", padx=(0, 5))
-        ttk.Label(status, textvariable=self.connection_status_var).pack(side="left", padx=(0, 14))
-        ttk.Label(status, textvariable=self.watcher_activity_var).pack(side="left", padx=(0, 10))
-        ttk.Label(status, textvariable=self.import_activity_var).pack(side="left", padx=(0, 10))
-        ttk.Label(status, textvariable=self.ai_activity_var).pack(side="left")
-        ttk.Button(header, text="Connection / API key", command=self.open_connection_dialog).grid(row=0, column=2, sticky="e", padx=(12, 0))
-        ttk.Button(header, text="Open app folder", command=self.open_config_folder).grid(row=0, column=3, sticky="e", padx=(8, 0))
+        ttk.Label(
+            header,
+            text="PHP Gallery",
+            style="Brand.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            header,
+            text="UPLOADER  ·  " + APP_VERSION,
+            style="App.Eyebrow.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        status = ttk.Frame(header, style="App.TFrame")
+        status.grid(row=0, column=1, rowspan=2, sticky="e")
+        self.monitor_light = tk.Canvas(
+            status,
+            width=16,
+            height=16,
+            highlightthickness=0,
+            bd=0,
+            background="#EAF1FA",
+        )
+        self.monitor_light.pack(side="left", padx=(0, 6))
+        ttk.Label(status, textvariable=self.watcher_activity_var, style="App.Status.TLabel").pack(side="left", padx=(0, 12))
+        ttk.Label(status, textvariable=self.connection_status_var, style="App.Muted.TLabel").pack(side="left", padx=(0, 12))
+        icon_button(
+            header,
+            "info",
+            self.open_connection_dialog,
+            "Gallery connection and API key",
+        ).grid(row=0, column=4, rowspan=2, padx=4)
+        icon_button(
+            header,
+            "settings",
+            lambda: self.select_tab("settings"),
+            "Settings",
+        ).grid(row=0, column=2, rowspan=2, padx=(12, 4))
+        icon_button(
+            header,
+            "refresh",
+            self.updates.check,
+            "Check for updates",
+        ).grid(row=0, column=3, rowspan=2, padx=4)
+        help_button(
+            header,
+            "Watcher help",
+            "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled.",
+        ).grid(row=0, column=5, rowspan=2, padx=(4, 0))
 
-        ttk.Button(header, text="Check for updates", command=self.updates.check).grid(row=0, column=4, sticky="e", padx=(8, 0))
-
-        subheader = ttk.Frame(outer)
-        subheader.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        subheader.columnconfigure(0, weight=1)
-        ttk.Label(subheader, textvariable=self.gallery_label_var, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(subheader, textvariable=self.connection_detail_var, foreground="#666666").grid(row=1, column=0, sticky="w")
-
-        self.notebook = ttk.Notebook(outer)
+        self.notebook = ttk.Notebook(outer, style="App.TNotebook")
         self.notebook.grid(row=2, column=0, sticky="nsew")
-
         tabs: Dict[str, ScrollableFrame] = {}
+        self.tab_indices: Dict[str, int] = {}
         for key, label in [
-            ("import", "Import"),
-            ("watch", "Watch folder"),
-            ("activity", "Activity"),
-            ("ai", "AI metadata"),
-            ("settings", "Settings"),
+            ("watch", "◉  Watcher"),
+            ("import", "⇧  Import"),
+            ("activity", "≡  Activity"),
+            ("ai", "✦  AI"),
+            ("settings", "⚙  Settings"),
         ]:
-            host = ttk.Frame(self.notebook)
+            host = ttk.Frame(self.notebook, style="App.TFrame")
             host.rowconfigure(0, weight=1)
             host.columnconfigure(0, weight=1)
             scroll = ScrollableFrame(host)
             scroll.grid(row=0, column=0, sticky="nsew")
+            self.tab_indices[key] = len(tabs)
             self.notebook.add(host, text=label)
             tabs[key] = scroll
         self.tab_hosts = tabs
 
-        self.build_manual_tab(tabs["import"].content)
         self.build_watch_tab(tabs["watch"].content)
+        self.build_manual_tab(tabs["import"].content)
         self.build_activity_tab(tabs["activity"].content)
         self.build_ai_tab(tabs["ai"].content)
         self.build_settings_tab(tabs["settings"].content)
+        self.notebook.select(self.tab_indices["watch"])
 
-        drawer = ttk.LabelFrame(outer, text="Recent activity")
-        drawer.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        drawer.columnconfigure(0, weight=1)
-        controls = ttk.Frame(drawer)
-        controls.grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 2))
-        ttk.Label(controls, text="Filter").pack(side="left")
-        activity_filter = ttk.Combobox(
-            controls,
-            textvariable=self.activity_filter_var,
-            values=("all", "active", "succeeded", "skipped", "failed", "warnings"),
-            width=12,
-            state="readonly",
+        footer = ttk.Frame(outer, style="Footer.TFrame", padding=(12, 8))
+        footer.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        footer.columnconfigure(1, weight=1)
+        ttk.Label(footer, text="LATEST", style="Eyebrow.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        self.latest_activity_label = ttk.Label(
+            footer,
+            textvariable=self.latest_activity_var,
+            style="Footer.TLabel",
         )
-        activity_filter.pack(side="left", padx=(6, 10))
-        activity_filter.bind("<<ComboboxSelected>>", lambda _event: self.refresh_activity_drawer())
-        ttk.Button(controls, text="Copy diagnostic details", command=self.copy_diagnostics).pack(side="right")
-        ttk.Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="right", padx=(0, 8))
-        self.activity_drawer = ttk.Treeview(drawer, columns=("time", "level", "filename", "operation", "message"), show="headings", height=5)
-        for column, title, width in [
-            ("time", "Time", 75),
-            ("level", "Status", 80),
-            ("filename", "File", 150),
-            ("operation", "Operation", 95),
-            ("message", "Event", 550),
-        ]:
-            self.activity_drawer.heading(column, text=title)
-            self.activity_drawer.column(column, width=width, stretch=column == "message")
-        self.activity_drawer.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.latest_activity_label.grid(row=0, column=1, sticky="ew")
+        icon_button(
+            footer,
+            "≡",
+            lambda: self.select_tab("activity"),
+            "Open full activity history",
+        ).grid(row=0, column=2, padx=(8, 0))
 
-        self.refresh_activity_drawer()
         self.write_log(f"Configuration: {CONFIG_PATH}", "system")
         self.write_log(f"State: {STATE_PATH}", "system")
         self.write_log(f"Log: {LOG_PATH}", "system")
         self.write_log(thumbnail_runtime_status(), "system")
         self.refresh_connection_controls()
         self.update_monitor_state("disabled", "No background worker is active.")
+
+    def select_tab(self, name: str) -> None:
+        """Select a named view in the application navigation.
+
+        Args:
+            name (str): Stable tab key from ``tab_indices``.
+
+        Returns:
+            None: Changes the selected notebook page when the key is known.
+        """
+        index = self.tab_indices.get(name)
+        if index is not None:
+            self.notebook.select(index)
+
+    def toggle_watcher(self) -> None:
+        """Start or stop the watched-folder worker from the primary action.
+
+        Returns:
+            None: Dispatches to the existing start or stop lifecycle method.
+        """
+        if self.worker is not None and self.worker.is_alive():
+            self.stop()
+        else:
+            self.start()
+
+    def refresh_watcher_action(self) -> None:
+        """Match the primary watcher caption to the worker's current state.
+
+        Returns:
+            None: Updates the visible Start or Stop action caption.
+        """
+        if self.watcher_action_button is None:
+            return
+        running = bool(self.worker and self.worker.is_alive())
+        self.watcher_action_button.configure(
+            text="■  Stop Watcher" if running else "▶  Start Watcher",
+        )
 
 
     def configure_window_icon(self) -> None:
@@ -4993,115 +5217,266 @@ class WatcherApp:
             None: Adds watcher controls and the opt-in UTC synchronization.
         """
         parent.columnconfigure(0, weight=1)
-        intro = ttk.Label(
-            parent,
-            text=(
-                "Watch a drop folder for new photos. Files already present "
-                "when Start watching is pressed are ignored, and partially "
-                "copied files wait until they remain stable."
-            ),
-            wraplength=950,
+        hero = GlassCard(parent, padding=(18, 12))
+        hero.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 5))
+        hero.columnconfigure(0, weight=1)
+        ttk.Label(hero, text="WATCHER", style="Eyebrow.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(hero, text="Your gallery, on autopilot.", style="Hero.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(2, 0)
         )
-        intro.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
-
-        card = ttk.LabelFrame(parent, text="Watch folder")
-        card.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
-        card.columnconfigure(1, weight=1)
-        ttk.Label(card, text="Folder").grid(
-            row=0, column=0, sticky="w", padx=8, pady=7
-        )
-        ttk.Entry(card, textvariable=self.watched_folder_var).grid(
-            row=0, column=1, sticky="ew", padx=8, pady=7
-        )
-        ttk.Button(card, text="Choose", command=self.browse_folder).grid(
-            row=0, column=2, padx=4, pady=7
+        ttk.Label(hero, textvariable=self.gallery_label_var, style="HeroTarget.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(3, 0)
         )
         ttk.Button(
-            card, text="Open folder", command=self.open_watched_folder
-        ).grid(row=0, column=3, padx=(4, 8), pady=7)
-        ttk.Checkbutton(
-            card,
-            text="Include subfolders",
-            variable=self.watch_recursive_var,
-        ).grid(row=1, column=1, sticky="w", padx=8, pady=5)
+            hero,
+            text="＋  Connect gallery",
+            command=self.open_connection_dialog,
+        ).grid(row=0, column=1, rowspan=3, sticky="e", padx=(16, 0))
 
-        policy = ttk.LabelFrame(parent, text="Safety policy")
-        policy.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
-        policy.columnconfigure(3, weight=1)
-        ttk.Label(policy, text="Stable for").grid(
-            row=0, column=0, sticky="w", padx=8, pady=7
+        card = GlassCard(parent, padding=(18, 12))
+        card.grid(row=1, column=0, sticky="ew", padx=12, pady=5)
+        card.columnconfigure(0, weight=1)
+        heading = ttk.Frame(card, style="Card.TFrame")
+        heading.grid(row=0, column=0, sticky="ew")
+        heading.columnconfigure(0, weight=1)
+        ttk.Label(heading, text="WATCH FOLDER", style="Eyebrow.TLabel").grid(
+            row=0, column=0, sticky="w"
         )
-        ttk.Entry(policy, textvariable=self.stable_var, width=8).grid(
-            row=0, column=1, sticky="w", pady=7
-        )
-        ttk.Label(policy, text="seconds before upload").grid(
-            row=0, column=2, sticky="w", padx=(4, 18), pady=7
-        )
+        icon_button(
+            heading,
+            "settings",
+            self.open_watcher_settings,
+            "Watcher settings",
+        ).grid(row=0, column=1, padx=(4, 0))
+        help_button(
+            heading,
+            "Watcher behavior",
+            "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings.",
+        ).grid(row=0, column=2, padx=(4, 0))
+        folder_row = ttk.Frame(card, style="Card.TFrame")
+        folder_row.grid(row=1, column=0, sticky="ew", pady=(3, 5))
+        folder_row.columnconfigure(0, weight=1)
         ttk.Label(
-            policy,
-            text=(
-                "This protects against files that are visible "
-                "before a copy finishes."
-            ),
-            foreground="#666666",
-        ).grid(row=0, column=3, sticky="w", pady=7)
+            folder_row,
+            textvariable=self.watch_folder_display_var,
+            style="Body.TLabel",
+            wraplength=700,
+        ).grid(row=0, column=0, sticky="w")
+        icon_button(
+            folder_row,
+            "↗",
+            self.open_watched_folder,
+            "Open watched folder",
+        ).grid(row=0, column=1, padx=(8, 0))
+        ttk.Label(card, textvariable=self.status_var, style="Status.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(1, 3)
+        )
+        state = ttk.Frame(card, style="Card.TFrame")
+        state.grid(row=3, column=0, sticky="ew", pady=(0, 5))
+        ttk.Label(state, textvariable=self.watch_ignored_var, style="Muted.TLabel").pack(side="left")
+        ttk.Label(state, textvariable=self.watch_last_scan_var, style="Muted.TLabel").pack(side="left", padx=(18, 0))
+        actions = ttk.Frame(card, style="Card.TFrame")
+        actions.grid(row=4, column=0, sticky="ew")
+        self.watcher_action_button = ttk.Button(
+            actions,
+            text="▶  Start Watcher",
+            command=self.toggle_watcher,
+            style="Primary.TButton",
+            takefocus=True,
+        )
+        self.watcher_action_button.pack(side="left")
+        icon_button(
+            actions,
+            "⌕",
+            self.dry_run_watch_folder,
+            "Check existing files without uploading or changing saved state",
+        ).pack(side="left", padx=(8, 0))
         ttk.Checkbutton(
-            policy,
-            text="Attach current Flight Simulator location when available",
-            variable=self.attach_sim_camera_metadata_var,
-        ).grid(row=1, column=0, columnspan=4, sticky="w", padx=8, pady=5)
-        ttk.Checkbutton(
-            policy,
-            text=(
-                "Delete source only after the gallery confirms "
-                "a successful upload"
-            ),
-            variable=self.delete_uploaded_files_var,
-            command=self.refresh_watch_delete_warning,
-        ).grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=5)
-        self.watch_delete_warning = ttk.Label(policy, text="", foreground="#b36b00")
-        self.watch_delete_warning.grid(
-            row=3, column=0, columnspan=4, sticky="w", padx=28, pady=(0, 6)
-        )
-        self.refresh_watch_delete_warning()
-
-        summary = ttk.LabelFrame(parent, text="Current folder state")
-        summary.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
-        ttk.Label(summary, textvariable=self.watch_ignored_var).pack(
-            side="left", padx=8, pady=7
-        )
-        ttk.Label(summary, textvariable=self.watch_last_scan_var).pack(
-            side="left", padx=18, pady=7
-        )
-        ttk.Label(summary, textvariable=self.status_var).pack(
-            side="right", padx=8, pady=7
-        )
-
-        actions = ttk.Frame(parent)
-        actions.grid(row=4, column=0, sticky="ew", padx=10, pady=(8, 14))
-        ttk.Button(
-            actions, text="Check folder only", command=self.dry_run_watch_folder
-        ).pack(side="left")
-        ttk.Button(actions, text="Start watching", command=self.start).pack(
-            side="left", padx=(8, 0)
-        )
-        ttk.Button(actions, text="Stop watcher", command=self.stop).pack(
-            side="left", padx=8
-        )
-
-        utc_controls = ttk.Frame(parent)
-        utc_controls.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 8))
-        ttk.Checkbutton(
-            utc_controls,
+            actions,
             text="Sync UTC time",
             variable=self.sync_utc_time_var,
             command=self.toggle_utc_sync,
-        ).pack(side="left")
+        ).pack(side="left", padx=(16, 0))
+        help_button(
+            actions,
+            "UTC sync",
+            "Optional Microsoft Flight Simulator time correction. It runs only while the watcher is active. The saved preference starts off.",
+        ).pack(side="left", padx=(2, 0))
+        ttk.Label(card, textvariable=self.utc_sync_status_var, style="Muted.TLabel").grid(
+            row=5, column=0, sticky="w", pady=(7, 0)
+        )
+        self.watch_delete_warning = ttk.Label(
+            card,
+            text="",
+            style="Warning.TLabel",
+            wraplength=760,
+        )
+        self.watch_delete_warning.grid(row=6, column=0, sticky="ew", pady=(5, 0))
+        self.refresh_watch_delete_warning()
+
+    def open_watcher_settings(self) -> None:
+        """Open focused watcher preferences with explicit save or cancel.
+
+        Returns:
+            None: Shows folder, scan interval, stability and upload policy
+            controls without leaving the primary Watcher workflow.
+        """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
+        if self.worker is not None and self.worker.is_alive():
+            messagebox.showinfo(
+                "Watcher settings",
+                "Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts.",
+                parent=self.root,
+            )
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Watcher settings")
+        dialog.transient(self.root)
+        dialog.resizable(True, True)
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+
+        previous = {
+            "folder": self.watched_folder_var.get(),
+            "ignored": self.watch_ignored_var.get(),
+            "last_scan": self.watch_last_scan_var.get(),
+            "interval": self.interval_var.get(),
+            "recursive": self.watch_recursive_var.get(),
+            "stable": self.stable_var.get(),
+            "sim_location": self.attach_sim_camera_metadata_var.get(),
+            "delete": self.delete_uploaded_files_var.get(),
+        }
+        scroller = ScrollableFrame(dialog)
+        scroller.grid(row=0, column=0, sticky="nsew")
+        scroller.content.columnconfigure(0, weight=1)
+        panel = GlassCard(scroller.content, padding=(20, 18))
+        panel.grid(row=0, column=0, sticky="ew", padx=12, pady=12)
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text="WATCHER PREFERENCES", style="Eyebrow.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Label(panel, text="Watch folder").grid(row=1, column=0, sticky="w", pady=(12, 5))
+        folder_row = ttk.Frame(panel, style="Card.TFrame")
+        folder_row.grid(row=2, column=0, sticky="ew")
+        folder_row.columnconfigure(0, weight=1)
+        folder_entry = ttk.Entry(
+            folder_row,
+            textvariable=self.watched_folder_var,
+            style="Large.TEntry",
+        )
+        folder_entry.grid(row=0, column=0, sticky="ew")
+        icon_button(folder_row, "add", self.browse_folder, "Choose watched folder").grid(
+            row=0, column=1, padx=(7, 0)
+        )
+        ttk.Checkbutton(
+            panel,
+            text="Include subfolders",
+            variable=self.watch_recursive_var,
+        ).grid(row=3, column=0, sticky="w", pady=(10, 0))
+        interval_row = ttk.Frame(panel, style="Card.TFrame")
+        interval_row.grid(row=4, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(interval_row, text="Scan folder every").pack(side="left")
+        ttk.Entry(interval_row, textvariable=self.interval_var, width=8).pack(
+            side="left", padx=7
+        )
+        ttk.Label(interval_row, text="seconds").pack(side="left")
+        stable_row = ttk.Frame(panel, style="Card.TFrame")
+        stable_row.grid(row=5, column=0, sticky="w", pady=(5, 0))
+        ttk.Label(stable_row, text="Wait for files to stay stable for").pack(side="left")
+        ttk.Entry(stable_row, textvariable=self.stable_var, width=8).pack(side="left", padx=7)
+        ttk.Label(stable_row, text="seconds").pack(side="left")
+        ttk.Checkbutton(
+            panel,
+            text="Attach Flight Simulator location when available",
+            variable=self.attach_sim_camera_metadata_var,
+        ).grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(
+            panel,
+            text="Delete sources only after confirmed successful upload",
+            variable=self.delete_uploaded_files_var,
+            command=self.refresh_watch_delete_warning,
+        ).grid(row=7, column=0, sticky="w", pady=(6, 0))
         ttk.Label(
-            utc_controls,
-            textvariable=self.utc_sync_status_var,
-            wraplength=650,
-        ).pack(side="left", padx=8)
+            panel,
+            text="Duplicates, skipped files, and failures are always kept.",
+            style="Muted.TLabel",
+        ).grid(row=8, column=0, sticky="w", padx=(24, 0), pady=(1, 0))
+        footer = GlassCard(dialog, padding=(14, 10))
+        footer.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+
+        def cancel_changes() -> None:
+            """Restore saved form values and close without saving.
+
+            Returns:
+                None: Restores the opening snapshot of watcher preferences.
+            """
+            self.watched_folder_var.set(previous["folder"])
+            self.watch_ignored_var.set(previous["ignored"])
+            self.watch_last_scan_var.set(previous["last_scan"])
+            self.interval_var.set(previous["interval"])
+            self.watch_recursive_var.set(previous["recursive"])
+            self.stable_var.set(previous["stable"])
+            self.attach_sim_camera_metadata_var.set(previous["sim_location"])
+            self.delete_uploaded_files_var.set(previous["delete"])
+            self.refresh_watch_delete_warning()
+            dialog.destroy()
+
+        def save_changes() -> None:
+            """Persist watcher preferences and close after a successful save.
+
+            Returns:
+                None: Closes the sheet only when the configuration is saved.
+            """
+            if self.save_config():
+                dialog.destroy()
+
+        ttk.Button(footer, text="Cancel", command=cancel_changes).pack(side="right")
+        ttk.Button(
+            footer,
+            text="Save watcher settings",
+            command=save_changes,
+            style="Primary.TButton",
+        ).pack(side="right", padx=(0, 8))
+        self.refresh_watch_delete_warning()
+        dialog.protocol("WM_DELETE_WINDOW", cancel_changes)
+        dialog.bind("<Escape>", lambda _event: cancel_changes())
+        dialog.update_idletasks()
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+        margin_width, margin_height = WATCHER_SETTINGS_SCREEN_MARGIN
+        fallback_width, fallback_height = WATCHER_SETTINGS_FALLBACK_SIZE
+        minimum_width, minimum_height = WATCHER_SETTINGS_MINIMUM
+        content_height = (
+            scroller.content.winfo_reqheight()
+            + footer.winfo_reqheight()
+            + 20
+        )
+        width = min(
+            max(dialog.winfo_reqwidth(), minimum_width),
+            max(fallback_width, screen_width - margin_width),
+        )
+        height = min(
+            max(content_height, minimum_height),
+            max(fallback_height, screen_height - margin_height),
+        )
+        dialog.geometry(f"{width}x{height}")
+        dialog.update_idletasks()
+        parent_x = self.root.winfo_rootx()
+        parent_y = self.root.winfo_rooty()
+        parent_width = self.root.winfo_width()
+        parent_height = self.root.winfo_height()
+        x = min(
+            max(0, parent_x + (parent_width - width) // 2),
+            max(0, screen_width - width - margin_width),
+        )
+        y = min(
+            max(0, parent_y + (parent_height - height) // 2),
+            max(0, screen_height - height - margin_height),
+        )
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        dialog.grab_set()
+        folder_entry.focus_set()
 
 
     def build_manual_tab(self, parent: "tk.Misc") -> None:
@@ -5119,123 +5494,211 @@ class WatcherApp:
             None: Build controls dedicated to manual bulk uploading.
         """
         parent.columnconfigure(0, weight=1)
+        card = GlassCard(parent, padding=(18, 16))
+        card.grid(row=0, column=0, sticky="ew", padx=12, pady=(14, 9))
+        card.columnconfigure(0, weight=1)
+        target = ttk.Frame(card, style="Card.TFrame")
+        target.grid(row=0, column=0, sticky="ew")
+        target.columnconfigure(0, weight=1)
+        ttk.Label(target, textvariable=self.gallery_label_var, style="Section.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Label(target, textvariable=self.api_key_status_var, style="Muted.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(2, 0)
+        )
+        icon_button(target, "add", self.open_connection_dialog, "Set or replace the gallery API key").grid(
+            row=0, column=1, rowspan=2, padx=(8, 0)
+        )
+        self.import_revoke_button = ttk.Button(
+            target,
+            text="Revoke key…",
+            command=self.revoke_api_key,
+        )
+        self.import_revoke_button.grid(row=0, column=2, rowspan=2, padx=(6, 0))
+
+        ttk.Label(card, text="CHOOSE SOURCE", style="Eyebrow.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(17, 5)
+        )
+        toolbar = ttk.Frame(card, style="Card.TFrame")
+        toolbar.grid(row=3, column=0, sticky="ew")
+        icon_button(toolbar, "upload", self.select_manual_files, "Choose image files").pack(side="left")
+        ttk.Label(toolbar, text="Files", style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "add", self.select_manual_folder, "Choose a folder").pack(side="left")
+        ttk.Label(toolbar, text="Folder", style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "info", self.select_manual_zip, "Choose a ZIP archive").pack(side="left")
+        ttk.Label(toolbar, text="ZIP", style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "close", self.clear_manual_files, "Clear the selected source").pack(side="right")
+        ttk.Label(card, textvariable=self.manual_selection_var, style="Body.TLabel", wraplength=800).grid(
+            row=4, column=0, sticky="w", pady=(9, 0)
+        )
+
+        ttk.Label(card, text="REVIEW", style="Eyebrow.TLabel").grid(
+            row=5, column=0, sticky="w", pady=(16, 5)
+        )
         ttk.Label(
-            parent,
-            text="Confirm the gallery connection, choose a source, review exactly what will be imported, then start the job. Selection and ZIP inspection never upload anything by themselves.",
-            wraplength=950,
-        ).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
-
-        connection = ttk.LabelFrame(parent, text="1. Connection and API key")
-        connection.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
-        connection.columnconfigure(0, weight=1)
-        connection_summary = ttk.Frame(connection)
-        connection_summary.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
-        connection_summary.columnconfigure(0, weight=1)
-        ttk.Label(connection_summary, textvariable=self.gallery_label_var, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(connection_summary, textvariable=self.api_key_status_var).grid(row=1, column=0, sticky="w", pady=(2, 0))
-        ttk.Label(connection_summary, textvariable=self.connection_detail_var, foreground="#666666", wraplength=760).grid(row=2, column=0, sticky="w", pady=(2, 0))
-        connection_actions = ttk.Frame(connection)
-        connection_actions.grid(row=1, column=0, sticky="ew", padx=8, pady=(4, 4))
-        ttk.Button(connection_actions, text="Set / replace API key...", command=self.open_connection_dialog).pack(side="left")
-        ttk.Button(connection_actions, text="Test connection", command=self.test_connection).pack(side="left", padx=(8, 0))
-        self.import_revoke_button = ttk.Button(connection_actions, text="Revoke API key...", command=self.revoke_api_key)
-        self.import_revoke_button.pack(side="left", padx=(8, 0))
-        ttk.Button(connection_actions, text="Open Settings", command=lambda: self.notebook.select(4)).pack(side="right")
-        ttk.Label(connection, textvariable=self.revoke_blocker_var, foreground="#666666", wraplength=900).grid(row=2, column=0, sticky="w", padx=8, pady=(0, 8))
-
-        source = ttk.LabelFrame(parent, text="2. Choose source")
-        source.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
-        source.columnconfigure(3, weight=1)
-        ttk.Button(source, text="Choose files", command=self.select_manual_files).grid(row=0, column=0, padx=8, pady=8)
-        ttk.Button(source, text="Choose folder", command=self.select_manual_folder).grid(row=0, column=1, padx=4, pady=8)
-        ttk.Button(source, text="Choose ZIP archive", command=self.select_manual_zip).grid(row=0, column=2, padx=4, pady=8)
-        ttk.Button(source, text="Clear", command=self.clear_manual_files).grid(row=0, column=4, padx=8, pady=8)
-        ttk.Label(source, textvariable=self.manual_selection_var, wraplength=760).grid(row=1, column=0, columnspan=5, sticky="w", padx=8, pady=(0, 6))
-        ttk.Checkbutton(source, text="Include subfolders when importing a folder", variable=self.manual_folder_recursive_var, command=self.rebuild_manual_preflight).grid(row=2, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
-        ttk.Checkbutton(source, text="Delete original ZIP only after every accepted entry succeeds", variable=self.delete_source_zip_var, command=self.rebuild_manual_preflight).grid(row=2, column=3, columnspan=2, sticky="w", padx=8, pady=(0, 6))
-
-        preflight = ttk.LabelFrame(parent, text="3. Review import")
-        preflight.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
-        preflight.columnconfigure(0, weight=1)
-        ttk.Label(preflight, textvariable=self.manual_preflight_var, wraplength=950, justify="left").grid(row=0, column=0, sticky="w", padx=8, pady=8)
-        self.preflight_progress = ttk.Progressbar(preflight, mode="indeterminate")
-        self.preflight_progress.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+            card,
+            textvariable=self.manual_preflight_var,
+            style="Body.TLabel",
+            wraplength=820,
+            justify="left",
+        ).grid(row=6, column=0, sticky="w")
+        self.preflight_progress = ttk.Progressbar(card, mode="indeterminate")
+        self.preflight_progress.grid(row=7, column=0, sticky="ew", pady=(7, 0))
         self.preflight_progress.grid_remove()
+        self.manual_progress = ttk.Progressbar(
+            card,
+            variable=self.manual_progress_var,
+            maximum=100.0,
+            mode="determinate",
+        )
+        self.manual_progress.grid(row=8, column=0, sticky="ew", pady=(10, 4))
+        ttk.Label(card, textvariable=self.manual_progress_text_var, style="Muted.TLabel").grid(
+            row=9, column=0, sticky="w"
+        )
+        actions = ttk.Frame(card, style="Card.TFrame")
+        actions.grid(row=10, column=0, sticky="ew", pady=(11, 0))
+        self.start_import_button = ttk.Button(
+            actions,
+            text="▶  Start import",
+            command=self.start_manual_upload,
+            state="disabled",
+            style="Primary.TButton",
+            takefocus=True,
+        )
+        self.start_import_button.pack(side="left")
+        self.pause_import_button = icon_button(
+            actions,
+            "pause",
+            self.pause_manual_upload,
+            "Pause import after active requests finish",
+        )
+        self.pause_import_button.state(["disabled"])
+        self.pause_import_button.pack(side="left", padx=(7, 0))
+        self.resume_import_button = icon_button(
+            actions,
+            "play",
+            self.resume_manual_upload,
+            "Resume the paused import",
+        )
+        self.resume_import_button.state(["disabled"])
+        self.resume_import_button.pack(side="left", padx=(5, 0))
+        self.cancel_import_button = icon_button(
+            actions,
+            "close",
+            self.stop_manual_upload,
+            "Cancel the active import",
+        )
+        self.cancel_import_button.state(["disabled"])
+        self.cancel_import_button.pack(side="left", padx=(5, 0))
+        self.retry_failed_button = ttk.Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
+        self.retry_failed_button.pack(side="left", padx=(7, 0))
+        ttk.Label(actions, textvariable=self.manual_status_var, style="Muted.TLabel").pack(side="right")
 
-        self.import_item_tree = ttk.Treeview(preflight, columns=("file", "size", "decode", "state", "reason"), show="headings", height=8)
+        advanced_toggle = ttk.Checkbutton(
+            card,
+            text="Import options and item details",
+            variable=self.import_details_visible_var,
+            command=self.toggle_import_details,
+        )
+        advanced_toggle.grid(row=11, column=0, sticky="w", pady=(12, 0))
+        self.import_details_frame = ttk.Frame(card, style="Card.TFrame")
+        self.import_details_frame.columnconfigure(0, weight=1)
+        ttk.Checkbutton(
+            self.import_details_frame,
+            text="Include subfolders",
+            variable=self.manual_folder_recursive_var,
+            command=self.rebuild_manual_preflight,
+        ).grid(row=0, column=0, sticky="w", pady=3)
+        ttk.Checkbutton(
+            self.import_details_frame,
+            text="Delete the source ZIP after every accepted entry succeeds",
+            variable=self.delete_source_zip_var,
+            command=self.rebuild_manual_preflight,
+        ).grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Radiobutton(
+            self.import_details_frame,
+            text="Server creates thumbnails",
+            variable=self.manual_local_thumbnails_var,
+            value=False,
+        ).grid(row=2, column=0, sticky="w", pady=3)
+        self.thumbnail_check = ttk.Radiobutton(
+            self.import_details_frame,
+            text="This PC creates thumbnails when supported",
+            variable=self.manual_local_thumbnails_var,
+            value=True,
+        )
+        self.thumbnail_check.grid(row=3, column=0, sticky="w", pady=3)
+        self.import_item_tree = ttk.Treeview(
+            self.import_details_frame,
+            columns=("file", "size", "decode", "state", "reason"),
+            show="headings",
+            height=6,
+        )
         for column, title, width in [
-            ("file", "File", 260),
-            ("size", "Size", 90),
-            ("decode", "Local media", 105),
-            ("state", "Preflight", 120),
-            ("reason", "Detail", 370),
+            ("file", "File", 190),
+            ("size", "Size", 70),
+            ("decode", "Media", 85),
+            ("state", "Review", 95),
+            ("reason", "Detail", 290),
         ]:
             self.import_item_tree.heading(column, text=title)
             self.import_item_tree.column(column, width=width, stretch=column in {"file", "reason"})
-        self.import_item_tree.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
-
-        thumbnails = ttk.LabelFrame(parent, text="Thumbnail handling")
-        thumbnails.grid(row=4, column=0, sticky="ew", padx=10, pady=6)
-        ttk.Radiobutton(thumbnails, text="Server creates thumbnails (simplest and most compatible)", variable=self.manual_local_thumbnails_var, value=False).grid(row=0, column=0, sticky="w", padx=8, pady=5)
-        self.thumbnail_check = ttk.Radiobutton(thumbnails, text="This PC creates thumbnails when a local decoder is available", variable=self.manual_local_thumbnails_var, value=True)
-        self.thumbnail_check.grid(row=1, column=0, sticky="w", padx=8, pady=5)
-        ttk.Label(thumbnails, text="Originals and server validation remain authoritative. A rejected or failed client thumbnail falls back to server generation.", foreground="#666666", wraplength=900).grid(row=2, column=0, sticky="w", padx=28, pady=(0, 7))
-
-        run = ttk.LabelFrame(parent, text="4. Import")
-        run.grid(row=5, column=0, sticky="ew", padx=10, pady=6)
-        run.columnconfigure(0, weight=1)
-        self.manual_progress = ttk.Progressbar(run, variable=self.manual_progress_var, maximum=100.0, mode="determinate")
-        self.manual_progress.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 3))
-        ttk.Label(run, textvariable=self.manual_progress_text_var).grid(row=1, column=0, sticky="w", padx=8, pady=(0, 7))
-        actions = ttk.Frame(run)
-        actions.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
-        self.start_import_button = ttk.Button(actions, text="Start import", command=self.start_manual_upload, state="disabled")
-        self.start_import_button.pack(side="left")
-        self.pause_import_button = ttk.Button(actions, text="Pause", command=self.pause_manual_upload, state="disabled")
-        self.pause_import_button.pack(side="left", padx=(8, 0))
-        self.resume_import_button = ttk.Button(actions, text="Resume", command=self.resume_manual_upload, state="disabled")
-        self.resume_import_button.pack(side="left", padx=(8, 0))
-        self.cancel_import_button = ttk.Button(actions, text="Cancel", command=self.stop_manual_upload, state="disabled")
-        self.cancel_import_button.pack(side="left", padx=(8, 0))
-        self.retry_failed_button = ttk.Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
-        self.retry_failed_button.pack(side="left", padx=(8, 0))
-        ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
-
+        self.import_item_tree.grid(row=4, column=0, sticky="ew", pady=(9, 0))
+        self.import_details_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        self.import_details_frame.grid_remove()
         self.refresh_thumbnail_controls()
         self.refresh_revoke_button_state()
 
-    def build_activity_tab(self, parent: Any) -> None:
-        """Build current-job details and durable recent job history."""
+    def toggle_import_details(self) -> None:
+        """Show or hide detailed import options and per-item preflight rows.
+
+        Returns:
+            None: Keeps advanced controls collapsed until explicitly requested.
+        """
+        if self.import_details_visible_var.get():
+            self.import_details_frame.grid()
+        else:
+            self.import_details_frame.grid_remove()
+
+    def build_activity_tab(self, parent: "tk.Misc") -> None:
+        """Build the full event, job-history, retry, and diagnostics workspace.
+
+        Args:
+            parent (tk.Misc): Scrollable page receiving the activity controls.
+
+        Returns:
+            None: Creates persistent job and operational event views.
+        """
         parent.columnconfigure(0, weight=1)
-        ttk.Label(parent, text="Current and recoverable imports are kept in upload_state.json so a restart does not silently resend or discard work.", wraplength=950).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
+        ttk.Label(parent, text="Live events, durable import history, retry controls, and support diagnostics.", style="Muted.TLabel", wraplength=820).grid(row=0, column=0, sticky="w", padx=12, pady=(14, 8))
         current = ttk.LabelFrame(parent, text="Current import")
-        current.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        current.grid(row=1, column=0, sticky="ew", padx=12, pady=6)
         current.columnconfigure(0, weight=1)
-        ttk.Label(current, textvariable=self.activity_job_summary_var, wraplength=930).grid(row=0, column=0, sticky="w", padx=8, pady=8)
+        ttk.Label(current, textvariable=self.activity_job_summary_var, wraplength=800).grid(row=0, column=0, sticky="w", padx=8, pady=8)
         activity_actions = ttk.Frame(current)
         activity_actions.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
-        ttk.Button(activity_actions, text="Open Import tab", command=lambda: self.notebook.select(0)).pack(side="left")
+        ttk.Button(activity_actions, text="Open Import", command=lambda: self.select_tab("import")).pack(side="left")
         ttk.Button(activity_actions, text="Retry failed", command=self.retry_failed_import).pack(side="left", padx=8)
         self.activity_item_tree = ttk.Treeview(current, columns=("file", "state", "attempts", "detail"), show="headings", height=7)
         for column, title, width in [
-            ("file", "File", 280),
-            ("state", "State", 135),
-            ("attempts", "Attempts", 75),
-            ("detail", "Result / error", 430),
+            ("file", "File", 175),
+            ("state", "State", 105),
+            ("attempts", "Tries", 65),
+            ("detail", "Result / error", 330),
         ]:
             self.activity_item_tree.heading(column, text=title)
             self.activity_item_tree.column(column, width=width, stretch=column in {"file", "detail"})
         self.activity_item_tree.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
 
         history = ttk.LabelFrame(parent, text="Job history")
-        history.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
+        history.grid(row=2, column=0, sticky="ew", padx=12, pady=6)
         history.columnconfigure(0, weight=1)
         self.job_history_tree = ttk.Treeview(history, columns=("created", "source", "target", "status"), show="headings", height=10)
         for column, title, width in [
-            ("created", "Created", 145),
-            ("source", "Source", 300),
-            ("target", "Target", 220),
-            ("status", "Result", 300),
+            ("created", "Created", 125),
+            ("source", "Source", 190),
+            ("target", "Target", 140),
+            ("status", "Result", 270),
         ]:
             self.job_history_tree.heading(column, text=title)
             self.job_history_tree.column(column, width=width, stretch=column in {"source", "status"})
@@ -5243,50 +5706,145 @@ class WatcherApp:
         self.job_history_tree.bind("<<TreeviewSelect>>", self.select_history_job)
         self.refresh_job_history()
 
-    def build_settings_tab(self, parent: Any) -> None:
-        """Build connection, runtime, thumbnail, SimConnect, tray, and advanced diagnostic settings."""
+        events = ttk.LabelFrame(parent, text="Recent events")
+        events.grid(row=3, column=0, sticky="ew", padx=12, pady=6)
+        events.columnconfigure(0, weight=1)
+        controls = ttk.Frame(events)
+        controls.grid(row=0, column=0, sticky="ew", padx=8, pady=(7, 5))
+        ttk.Label(controls, text="Show").pack(side="left")
+        activity_filter = ttk.Combobox(
+            controls,
+            textvariable=self.activity_filter_var,
+            values=("all", "active", "succeeded", "skipped", "failed", "warnings"),
+            width=12,
+            state="readonly",
+        )
+        activity_filter.pack(side="left", padx=(6, 10))
+        activity_filter.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.refresh_activity_drawer(),
+        )
+        ttk.Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
+        ttk.Button(controls, text="Copy diagnostics", command=self.copy_diagnostics).pack(side="right")
+        event_table = ttk.Frame(events, style="Card.TFrame")
+        event_table.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        event_table.columnconfigure(0, weight=1)
+        event_table.rowconfigure(0, weight=1)
+        self.activity_drawer = ttk.Treeview(
+            event_table,
+            columns=("time", "level", "filename", "operation", "message"),
+            show="headings",
+            height=9,
+            yscrollcommand=lambda first, last: event_scroll_y.set(first, last),
+            xscrollcommand=lambda first, last: event_scroll_x.set(first, last),
+        )
+        for column, title, width in [
+            ("time", "Time", 75),
+            ("level", "Status", 75),
+            ("filename", "File", 125),
+            ("operation", "Type", 85),
+            ("message", "Event", 390),
+        ]:
+            self.activity_drawer.heading(column, text=title)
+            self.activity_drawer.column(
+                column,
+                width=width,
+                stretch=column in {"filename", "message"},
+            )
+        self.activity_drawer.grid(row=0, column=0, sticky="nsew")
+        event_scroll_y = ttk.Scrollbar(event_table, orient="vertical", command=self.activity_drawer.yview)
+        event_scroll_y.grid(row=0, column=1, sticky="ns")
+        event_scroll_x = ttk.Scrollbar(event_table, orient="horizontal", command=self.activity_drawer.xview)
+        event_scroll_x.grid(row=1, column=0, sticky="ew")
+        self.refresh_activity_drawer()
+
+        diagnostics = ttk.LabelFrame(parent, text="Live diagnostics log")
+        diagnostics.grid(row=4, column=0, sticky="ew", padx=12, pady=(6, 14))
+        diagnostics.columnconfigure(0, weight=1)
+        diagnostic_actions = ttk.Frame(diagnostics)
+        diagnostic_actions.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
+        ttk.Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
+        ttk.Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
+        ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
+        self.log_text = tk.Text(diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6)
+        self.log_text.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.log_text.configure(state="disabled")
+        self.configure_log_tags()
+
+    def build_settings_tab(self, parent: "tk.Misc") -> None:
+        """Build compact connection and operator preferences sections.
+
+        Args:
+            parent (tk.Misc): Scrollable Settings page receiving the controls.
+
+        Returns:
+            None: Creates connection, runtime, and advanced sections.
+        """
         parent.columnconfigure(0, weight=1)
-        connection = ttk.LabelFrame(parent, text="Connection")
-        connection.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+        connection = GlassCard(parent, padding=(18, 15))
+        connection.grid(row=0, column=0, sticky="ew", padx=12, pady=(14, 8))
         connection.columnconfigure(1, weight=1)
-        ttk.Label(connection, text="Gallery URL or upload endpoint").grid(row=0, column=0, sticky="w", padx=8, pady=7)
+        ttk.Label(connection, text="GALLERY CONNECTION", style="Eyebrow.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        ttk.Label(connection, text="Gallery URL").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=5)
         self.gallery_url_entry = ttk.Entry(connection, textvariable=self.gallery_url_var)
-        self.gallery_url_entry.grid(row=0, column=1, columnspan=4, sticky="ew", padx=8, pady=7)
-        ttk.Label(connection, text="API key").grid(row=1, column=0, sticky="w", padx=8, pady=7)
+        self.gallery_url_entry.grid(row=1, column=1, columnspan=3, sticky="ew", pady=5)
+        ttk.Label(connection, text="API key").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=5)
         self.api_key_entry = ttk.Entry(connection, textvariable=self.api_key_var, show="*")
-        self.api_key_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=7)
-        ttk.Button(connection, text="Reveal", command=self.toggle_api_key_visibility).grid(row=1, column=2, padx=4, pady=7)
-        ttk.Button(connection, text="Paste API key", command=self.paste_api_key_from_clipboard).grid(row=1, column=3, padx=4, pady=7)
-        ttk.Button(connection, text="Copy", command=self.copy_api_key).grid(row=1, column=4, padx=(4, 8), pady=7)
-        ttk.Label(connection, textvariable=self.api_key_status_var, foreground="#666666").grid(row=2, column=1, sticky="w", padx=8, pady=(0, 3))
-        ttk.Label(connection, textvariable=self.connection_detail_var, foreground="#666666", wraplength=850).grid(row=3, column=1, columnspan=4, sticky="w", padx=8, pady=(0, 7))
-        actions = ttk.Frame(connection)
-        actions.grid(row=4, column=1, columnspan=4, sticky="ew", padx=8, pady=(0, 4))
-        ttk.Button(actions, text="Save settings", command=self.save_config).pack(side="left")
-        ttk.Button(actions, text="Test connection", command=self.test_connection).pack(side="left", padx=8)
-        ttk.Button(actions, text="Set / replace API key...", command=self.open_connection_dialog).pack(side="left")
-        self.revoke_button = ttk.Button(actions, text="Revoke API key...", command=self.revoke_api_key)
-        self.revoke_button.pack(side="left", padx=8)
-        ttk.Label(connection, textvariable=self.revoke_blocker_var, foreground="#666666", wraplength=850).grid(row=5, column=1, columnspan=4, sticky="w", padx=8, pady=(0, 8))
+        self.api_key_entry.grid(row=2, column=1, sticky="ew", pady=5)
+        icon_button(connection, "info", self.toggle_api_key_visibility, "Reveal or mask API key").grid(row=2, column=2, padx=(6, 2), pady=5)
+        icon_button(connection, "add", self.paste_api_key_from_clipboard, "Paste API key").grid(row=2, column=3, padx=(2, 0), pady=5)
+        ttk.Label(connection, textvariable=self.api_key_status_var, style="Muted.TLabel").grid(
+            row=3, column=1, sticky="w", pady=(1, 0)
+        )
+        ttk.Label(connection, textvariable=self.connection_detail_var, style="Muted.TLabel", wraplength=760).grid(
+            row=4, column=1, columnspan=3, sticky="w", pady=(5, 0)
+        )
+        actions = ttk.Frame(connection, style="Card.TFrame")
+        actions.grid(row=5, column=1, columnspan=3, sticky="ew", pady=(10, 0))
+        ttk.Button(actions, text="✓  Save & Test", command=self.save_and_test_connection, style="Primary.TButton").pack(side="left")
+        icon_button(actions, "add", self.open_connection_dialog, "Open protected credential editor").pack(side="left", padx=(7, 0))
+        self.revoke_button = ttk.Button(actions, text="Revoke key…", command=self.revoke_api_key)
+        self.revoke_button.pack(side="left", padx=(7, 0))
+        ttk.Label(connection, textvariable=self.revoke_blocker_var, style="Muted.TLabel", wraplength=760).grid(
+            row=6, column=1, columnspan=3, sticky="w", pady=(6, 0)
+        )
 
-        runtime = ttk.LabelFrame(parent, text="Runtime and integrations")
-        runtime.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        runtime = GlassCard(parent, padding=(18, 15))
+        runtime.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
         runtime.columnconfigure(1, weight=1)
-        ttk.Label(runtime, text="Python runtime").grid(row=0, column=0, sticky="nw", padx=8, pady=7)
-        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=1, sticky="w", padx=8, pady=7)
-        ttk.Button(runtime, text="Install or repair dependencies", command=self.repair_dependencies).grid(row=0, column=2, padx=8, pady=7)
-        ttk.Label(runtime, text="SimConnect.dll override").grid(row=1, column=0, sticky="w", padx=8, pady=7)
-        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=1, column=1, sticky="ew", padx=8, pady=7)
-        ttk.Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=1, column=2, padx=8, pady=7)
-        ttk.Checkbutton(runtime, text="Close/minimize window to system tray when tray support is available", variable=self.close_to_tray_var).grid(row=2, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 7))
+        ttk.Label(runtime, text="APP & INTEGRATIONS", style="Eyebrow.TLabel").grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 7)
+        )
+        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=650).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=5
+        )
+        ttk.Button(runtime, text="Repair dependencies", command=self.repair_dependencies).grid(row=1, column=2, padx=(8, 0), pady=5)
+        ttk.Label(runtime, text="SimConnect.dll override").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=2, column=2, pady=5)
+        ttk.Checkbutton(runtime, text="Keep working in the system tray when the window closes", variable=self.close_to_tray_var).grid(
+            row=3, column=1, columnspan=2, sticky="w", pady=(5, 0)
+        )
+        ttk.Button(
+            runtime,
+            text="✓  Save settings",
+            command=self.save_config,
+            style="Primary.TButton",
+        ).grid(row=4, column=1, sticky="w", pady=(10, 0))
 
-        advanced_toggle = ttk.Checkbutton(parent, text="Show advanced settings", variable=self.settings_advanced_visible_var, command=self.toggle_settings_advanced)
-        advanced_toggle.grid(row=2, column=0, sticky="w", padx=10, pady=6)
-        advanced = ttk.LabelFrame(parent, text="Advanced settings")
+        advanced_toggle = ttk.Checkbutton(
+            parent,
+            text="Advanced import and archive settings",
+            variable=self.settings_advanced_visible_var,
+            command=self.toggle_settings_advanced,
+        )
+        advanced_toggle.grid(row=2, column=0, sticky="w", padx=14, pady=(8, 3))
+        advanced = GlassCard(parent, padding=(18, 14))
         self.settings_advanced_frame = advanced
         advanced.columnconfigure(1, weight=1)
         rows = [
-            ("Watcher scan interval seconds", self.interval_var),
             ("Remote inventory reconnect seconds", self.inventory_refresh_var),
             ("ZIP max entries", self.archive_max_entries_var),
             ("ZIP max total uncompressed GiB", self.archive_max_total_gib_var),
@@ -5295,27 +5853,20 @@ class WatcherApp:
             ("Staging cleanup age hours", self.staging_cleanup_hours_var),
         ]
         for row, (label, variable) in enumerate(rows):
-            ttk.Label(advanced, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
-            ttk.Entry(advanced, textvariable=variable, width=18).grid(row=row, column=1, sticky="w", padx=8, pady=5)
+            ttk.Label(advanced, text=label).grid(row=row, column=0, sticky="w", padx=(0, 14), pady=4)
+            ttk.Entry(advanced, textvariable=variable, width=18).grid(row=row, column=1, sticky="w", pady=4)
         workers_row = len(rows)
-        ttk.Label(advanced, text="Local thumbnail processes").grid(row=workers_row, column=0, sticky="w", padx=8, pady=5)
-        ttk.Combobox(advanced, textvariable=self.manual_thumbnail_workers_var, values=worker_choice_values(MAX_THUMBNAIL_WORKERS), width=10, state="readonly").grid(row=workers_row, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(advanced, text="Upload threads").grid(row=workers_row + 1, column=0, sticky="w", padx=8, pady=5)
-        ttk.Combobox(advanced, textvariable=self.manual_upload_workers_var, values=worker_choice_values(MAX_UPLOAD_WORKERS), width=10, state="readonly").grid(row=workers_row + 1, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Local thumbnail processes").grid(row=workers_row, column=0, sticky="w", padx=(0, 14), pady=4)
+        ttk.Combobox(advanced, textvariable=self.manual_thumbnail_workers_var, values=worker_choice_values(MAX_THUMBNAIL_WORKERS), width=10, state="readonly").grid(row=workers_row, column=1, sticky="w", pady=4)
+        ttk.Label(advanced, text="Upload threads").grid(row=workers_row + 1, column=0, sticky="w", padx=(0, 14), pady=4)
+        ttk.Combobox(advanced, textvariable=self.manual_upload_workers_var, values=worker_choice_values(MAX_UPLOAD_WORKERS), width=10, state="readonly").grid(row=workers_row + 1, column=1, sticky="w", pady=4)
+        ttk.Button(
+            advanced,
+            text="✓  Save settings",
+            command=self.save_config,
+            style="Primary.TButton",
+        ).grid(row=workers_row + 2, column=0, columnspan=2, sticky="w", pady=(10, 0))
         self.toggle_settings_advanced()
-
-        diagnostics = ttk.LabelFrame(parent, text="Diagnostics")
-        diagnostics.grid(row=4, column=0, sticky="ew", padx=10, pady=6)
-        diagnostics.columnconfigure(0, weight=1)
-        diagnostic_actions = ttk.Frame(diagnostics)
-        diagnostic_actions.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
-        ttk.Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
-        ttk.Button(diagnostic_actions, text="Open log", command=self.open_log_file).pack(side="left", padx=8)
-        ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
-        self.log_text = tk.Text(diagnostics, height=9, wrap="word")
-        self.log_text.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
-        self.log_text.configure(state="disabled")
-        self.configure_log_tags()
 
 
     def build_ai_tab(self, parent: "tk.Misc") -> None:
@@ -5333,50 +5884,84 @@ class WatcherApp:
         Returns:
             None: Build controls for the optional AI metadata worker.
         """
-        parent.columnconfigure(1, weight=1)
-
-        intro = ttk.Label(
-            parent,
-            text="Optional server-assigned worker mode. The gallery server gives this PC one image job at a time. Heavy analysis runs locally and only internal searchable metadata is sent back.",
-            wraplength=880,
+        parent.columnconfigure(0, weight=1)
+        quick = GlassCard(parent, padding=(18, 16))
+        quick.grid(row=0, column=0, sticky="ew", padx=12, pady=(14, 8))
+        quick.columnconfigure(1, weight=1)
+        ttk.Label(quick, text="AI METADATA", style="Eyebrow.TLabel").grid(
+            row=0, column=0, columnspan=3, sticky="w"
         )
-        intro.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
-
+        ttk.Label(
+            quick,
+            text="Optional, server-assigned image analysis.",
+            style="Section.TLabel",
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 2))
+        ttk.Label(
+            quick,
+            text="The gallery assigns one job at a time; this PC returns internal search metadata.",
+            style="Muted.TLabel",
+            wraplength=780,
+        ).grid(row=2, column=0, columnspan=3, sticky="w")
         ttk.Checkbutton(
-            parent,
+            quick,
             text="Enable AI metadata worker on this PC",
             variable=self.ai_worker_enabled_var,
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=5)
-
-        quick = ttk.LabelFrame(parent, text="Normal use")
-        quick.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 8))
-        quick.columnconfigure(1, weight=1)
-
-        ttk.Label(quick, text="Vision backend").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.OptionMenu(quick, self.ai_vision_backend_var, normalize_ai_vision_backend(self.ai_vision_backend_var.get()), *AI_VISION_BACKEND_CHOICES).grid(row=0, column=1, sticky="w", padx=8, pady=6)
-        ttk.Label(quick, text="Use transformers for local semantic labels without a separate server. Auto keeps safe fallbacks.", foreground="#666666", wraplength=420).grid(row=0, column=2, sticky="w", padx=8, pady=6)
-
-        ttk.Label(quick, text="Model version").grid(row=1, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(quick, textvariable=self.ai_model_version_var, width=24).grid(row=1, column=1, sticky="w", padx=8, pady=6)
-        ttk.Label(quick, text="Change this when you want the server to treat results as a new generation.", foreground="#666666", wraplength=420).grid(row=1, column=2, sticky="w", padx=8, pady=6)
-
-        runtime_row = ttk.Frame(quick)
-        runtime_row.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(2, 8))
+        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(11, 6))
+        ttk.Label(quick, text="Backend").grid(row=4, column=0, sticky="w", pady=5)
+        ttk.OptionMenu(
+            quick,
+            self.ai_vision_backend_var,
+            normalize_ai_vision_backend(self.ai_vision_backend_var.get()),
+            *AI_VISION_BACKEND_CHOICES,
+        ).grid(row=4, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(quick, text="Model version").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Entry(quick, textvariable=self.ai_model_version_var, width=24).grid(
+            row=5, column=1, sticky="w", padx=8, pady=5
+        )
+        ttk.Label(quick, textvariable=self.ai_status_var, style="Status.TLabel").grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        runtime_row = ttk.Frame(quick, style="Card.TFrame")
+        runtime_row.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         runtime_row.columnconfigure(0, weight=1)
-        ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=560).grid(row=0, column=0, sticky="w")
-        self.semantic_ai_install_button = ttk.Button(runtime_row, text="Install local AI module", command=self.repair_semantic_ai_dependencies)
+        ttk.Label(
+            runtime_row,
+            textvariable=self.thumbnail_runtime_var,
+            style="Muted.TLabel",
+            wraplength=550,
+        ).grid(row=0, column=0, sticky="w")
+        self.semantic_ai_install_button = ttk.Button(
+            runtime_row,
+            text="Install local AI module",
+            command=self.repair_semantic_ai_dependencies,
+        )
         self.semantic_ai_install_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        ttk.Button(runtime_row, text="Install or repair basic dependencies", command=self.repair_dependencies).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        ttk.Button(
+            runtime_row,
+            text="Repair dependencies",
+            command=self.repair_dependencies,
+        ).grid(row=0, column=2, sticky="e", padx=(6, 0))
+        actions = ttk.Frame(quick, style="Card.TFrame")
+        actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        ttk.Button(
+            actions,
+            text="▶  Start AI worker",
+            command=self.start_ai_worker,
+            style="Primary.TButton",
+        ).pack(side="left")
+        icon_button(actions, "stop", self.stop_ai_worker, "Stop AI metadata worker").pack(
+            side="left", padx=(7, 0)
+        )
 
         advanced_toggle = ttk.Checkbutton(
             parent,
-            text="Show advanced AI settings",
+            text="Advanced AI settings",
             variable=self.ai_advanced_visible_var,
             command=self.toggle_ai_advanced_settings,
         )
-        advanced_toggle.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        advanced_toggle.grid(row=1, column=0, sticky="w", padx=14, pady=(5, 3))
 
-        advanced = ttk.LabelFrame(parent, text="Advanced AI settings")
+        advanced = GlassCard(parent, padding=(18, 14))
         self.ai_advanced_frame = advanced
         advanced.columnconfigure(1, weight=1)
 
@@ -5426,22 +6011,19 @@ class WatcherApp:
             wraplength=820,
         ).grid(row=11, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 6))
 
-        actions = ttk.Frame(parent)
-        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10, 0))
-        ttk.Button(actions, text="Start AI metadata worker", command=self.start_ai_worker).pack(side="left")
-        ttk.Button(actions, text="Stop AI metadata worker", command=self.stop_ai_worker).pack(side="left", padx=8)
-        ttk.Label(actions, textvariable=self.ai_status_var).pack(side="right")
-
         self.toggle_ai_advanced_settings()
 
     def toggle_ai_advanced_settings(self) -> None:
         """
         Show or hide low-level AI worker tuning controls.
+
+        Returns:
+            None: Keeps advanced AI fields collapsed until requested.
         """
         if not self.ai_advanced_frame:
             return
         if self.ai_advanced_visible_var.get():
-            self.ai_advanced_frame.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+            self.ai_advanced_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=6)
         else:
             self.ai_advanced_frame.grid_remove()
 
@@ -5552,9 +6134,26 @@ class WatcherApp:
         )
 
 
+    def update_watch_folder_display(self, *_trace_info: str) -> None:
+        """Refresh the read-only folder label as its edit field changes.
+
+        Args:
+            *_trace_info (str): Tk variable name, index, and write operation.
+
+        Returns:
+            None: Shows the selected path or a concise empty-state label.
+        """
+        folder = self.watched_folder_var.get().strip()
+        self.watch_folder_display_var.set(
+            folder or "Choose a folder in Watcher settings"
+        )
+
     def browse_folder(self) -> None:
         """
         Open a folder picker and store the selected path in the UI.
+
+        Returns:
+            None: Updates the selected folder and resets its scan summary.
         """
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
@@ -5823,6 +6422,15 @@ class WatcherApp:
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return False
+
+    def save_and_test_connection(self) -> None:
+        """Save the Settings connection fields and test authentication.
+
+        Returns:
+            None: Saves valid values before starting the existing test worker.
+        """
+        if self.save_config():
+            self.test_connection()
 
     def start(self) -> None:
         """
@@ -6161,6 +6769,9 @@ class WatcherApp:
 
         The dialog works with temporary values until Save or Save & Test is
         pressed, so closing it cannot accidentally replace a working key.
+
+        Returns:
+            None: Displays the protected URL and API-key editor.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -6168,29 +6779,45 @@ class WatcherApp:
         dialog = tk.Toplevel(self.root)
         dialog.title("Gallery connection and API key")
         dialog.transient(self.root)
+        dialog.geometry(CONNECTION_DIALOG_GEOMETRY)
+        dialog.minsize(*CONNECTION_DIALOG_MINIMUM)
         dialog.resizable(True, False)
         dialog.columnconfigure(0, weight=1)
-        frame = ttk.Frame(dialog, padding=14)
+        frame = GlassCard(dialog, padding=(18, 14))
         frame.grid(row=0, column=0, sticky="nsew")
         frame.columnconfigure(1, weight=1)
 
         url_var = tk.StringVar(value=self.gallery_url_var.get())
         key_var = tk.StringVar(value=self.api_key_var.get())
         reveal_var = tk.BooleanVar(value=False)
-        ttk.Label(frame, text="PHP Gallery connection", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
-        ttk.Label(frame, text="Generate a gallery-scoped upload API key in PHP Gallery Admin, then paste it here. The desktop app never needs your Admin password.", wraplength=680, foreground="#555555").grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 10))
+        ttk.Label(frame, text="PHP Gallery connection", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        ttk.Label(
+            frame,
+            text="Use a gallery-scoped API key from Admin. Your Admin password is never needed.",
+            wraplength=520,
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 8))
         ttk.Label(frame, text="Gallery URL").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
-        ttk.Entry(frame, textvariable=url_var, width=70).grid(row=2, column=1, columnspan=3, sticky="ew", pady=6)
+        url_entry = ttk.Entry(frame, textvariable=url_var, width=70)
+        url_entry.grid(row=2, column=1, columnspan=3, sticky="ew", pady=6)
         ttk.Label(frame, text="API key").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
         key_entry = ttk.Entry(frame, textvariable=key_var, show="*", width=54)
         key_entry.grid(row=3, column=1, sticky="ew", pady=6)
 
         def toggle_reveal() -> None:
-            """Reveal or mask the temporary API-key field."""
+            """Reveal or mask the temporary credential field.
+
+            Returns:
+                None: Updates only the dialog's API-key display mode.
+            """
             key_entry.configure(show="" if reveal_var.get() else "*")
 
         def paste_key() -> None:
-            """Paste clipboard text into the temporary API-key field."""
+            """Paste clipboard text into the dialog's temporary API-key field.
+
+            Returns:
+                None: Leaves stored credentials unchanged until a save action.
+            """
             try:
                 value = str(dialog.clipboard_get()).strip()
             except Exception:  # noqa: BLE001
@@ -6204,10 +6831,17 @@ class WatcherApp:
         ttk.Checkbutton(frame, text="Reveal", variable=reveal_var, command=toggle_reveal).grid(row=3, column=2, padx=6, pady=6)
         ttk.Button(frame, text="Paste", command=paste_key).grid(row=3, column=3, pady=6)
         status = "A key is currently stored locally." if self.api_key_var.get().strip() else "No API key is currently stored."
-        ttk.Label(frame, text=status, foreground="#666666").grid(row=4, column=1, columnspan=3, sticky="w", pady=(0, 10))
+        ttk.Label(frame, text=status, style="Muted.TLabel").grid(row=4, column=1, columnspan=3, sticky="w", pady=(0, 8))
 
         def apply_values(test_after: bool) -> None:
-            """Validate, store, and optionally test temporary connection values."""
+            """Validate, store, and optionally test temporary credentials.
+
+            Args:
+                test_after (bool): Whether to test authentication after saving.
+
+            Returns:
+                None: Preserves the current stored key when validation fails.
+            """
             if self.updates.blocked():
                 return
             if self.api_key_revoke_running:
@@ -6235,15 +6869,49 @@ class WatcherApp:
 
         buttons = ttk.Frame(frame)
         buttons.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-        ttk.Button(buttons, text="Save & Test", command=lambda: apply_values(True)).pack(side="left")
+        ttk.Button(
+            buttons,
+            text="✓  Save & Test",
+            command=lambda: apply_values(True),
+            style="Primary.TButton",
+        ).pack(side="left")
         ttk.Button(buttons, text="Save", command=lambda: apply_values(False)).pack(side="left", padx=8)
         revoke = ttk.Button(buttons, text="Revoke saved API key...", command=lambda: (dialog.destroy(), self.revoke_api_key()))
         revoke.pack(side="left", padx=(8, 0))
         if not self.api_key_var.get().strip() or self.api_key_request_blockers() or self.api_key_revoke_running:
             revoke.state(["disabled"])
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.update_idletasks()
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+        margin_width, margin_height = CONNECTION_DIALOG_SCREEN_MARGIN
+        minimum_width, minimum_height = CONNECTION_DIALOG_MINIMUM
+        width = min(
+            max(dialog.winfo_reqwidth(), minimum_width),
+            max(minimum_width, screen_width - margin_width),
+        )
+        height = min(
+            max(dialog.winfo_reqheight(), minimum_height),
+            max(minimum_height, screen_height - margin_height),
+        )
+        parent_x = self.root.winfo_rootx()
+        parent_y = self.root.winfo_rooty()
+        parent_width = self.root.winfo_width()
+        parent_height = self.root.winfo_height()
+        x = min(
+            max(0, parent_x + (parent_width - width) // 2),
+            max(0, screen_width - width - margin_width),
+        )
+        y = min(
+            max(0, parent_y + (parent_height - height) // 2),
+            max(0, screen_height - height - margin_height),
+        )
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
         if url_var.get().strip():
             key_entry.focus_set()
+        else:
+            url_entry.focus_set()
         dialog.grab_set()
 
     def revoke_api_key(self) -> None:
@@ -6404,10 +7072,14 @@ class WatcherApp:
         self.open_local_path(folder)
 
     def open_activity_tab(self) -> None:
-        """Restore the main window and show durable Activity history."""
+        """Restore the main window and show durable Activity history.
+
+        Returns:
+            None: Brings the Activity view into the foreground.
+        """
         self.restore_from_tray()
         try:
-            self.notebook.select(2)
+            self.select_tab("activity")
         except Exception:  # noqa: BLE001
             logging.debug("Could not select Activity tab.", exc_info=True)
 
@@ -6420,11 +7092,15 @@ class WatcherApp:
         return f"PHP Gallery uploader | watch {watch} | import {importing} | AI {ai} | failures {failures}"
 
     def toggle_settings_advanced(self) -> None:
-        """Show or hide low-level import/archive tuning settings."""
+        """Show or hide low-level import/archive tuning settings.
+
+        Returns:
+            None: Keeps detailed settings collapsed until requested.
+        """
         if self.settings_advanced_frame is None:
             return
         if self.settings_advanced_visible_var.get():
-            self.settings_advanced_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
+            self.settings_advanced_frame.grid(row=3, column=0, sticky="ew", padx=12, pady=6)
         else:
             self.settings_advanced_frame.grid_remove()
 
@@ -6478,13 +7154,24 @@ class WatcherApp:
         threading.Thread(target=tester, name="PHPGalleryConnectionTest", daemon=True).start()
 
     def refresh_watch_delete_warning(self) -> None:
-        """Explain destructive watch-folder deletion policy next to its toggle."""
+        """Explain the active source-deletion policy in the Watcher card.
+
+        Returns:
+            None: Displays whether originals are retained or safely eligible
+            for deletion after server confirmation.
+        """
         if not hasattr(self, "watch_delete_warning"):
             return
         if self.delete_uploaded_files_var.get():
-            self.watch_delete_warning.configure(text="Source deletion is destructive and occurs only after a server-confirmed stored upload. Duplicates and failures are kept.")
+            self.watch_delete_warning.configure(
+                text="Deletion is enabled: only server-confirmed uploads are removed. Duplicates and failures stay on this PC.",
+                style="Warning.TLabel",
+            )
         else:
-            self.watch_delete_warning.configure(text="Source files are kept after upload.")
+            self.watch_delete_warning.configure(
+                text="Source files are kept after upload.",
+                style="Muted.TLabel",
+            )
 
     def dry_run_watch_folder(self) -> None:
         """Inspect watcher candidates without hashing, uploading, or changing durable state."""
@@ -6606,7 +7293,11 @@ class WatcherApp:
         self.launch_manual_job(refreshed, paths, config)
 
     def offer_recoverable_jobs(self) -> None:
-        """Offer the newest unfinished import for explicit recovery after application restart."""
+        """Offer the newest unfinished import for explicit recovery after restart.
+
+        Returns:
+            None: Opens Import only after explicit recovery consent.
+        """
         if self.exiting or self.current_job is not None:
             return
         jobs = self.job_store.recoverable_jobs()
@@ -6629,7 +7320,7 @@ class WatcherApp:
         self.manual_zip = Path(job.source_zip) if job.source_zip else None
         self.manual_selection_var.set("Recovered import: " + job.source_label)
         self.render_preflight_plan(self.manual_plan)
-        self.notebook.select(0)
+        self.select_tab("import")
         self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
 
     def refresh_job_history(self) -> None:
@@ -6663,13 +7354,33 @@ class WatcherApp:
         )
 
     def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
-        """Persist one bounded activity event without credentials."""
+        """Persist one bounded, credential-redacted activity event.
+
+        Args:
+            level (str): Event severity such as info, success, warning, or error.
+            message (str): Event detail before credential redaction.
+            operation (str): Owning activity category.
+            filename (str): Optional local filename associated with the event.
+            job_id (str): Optional durable import job identifier.
+
+        Returns:
+            None: Persists the event and refreshes visible activity summaries.
+        """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         # The queue marker has already selected the structured operation.
         if operation == "simconnect" and message.startswith("[simconnect]"):
             message = message[len("[simconnect]"):].lstrip()
         safe_message = redact_text(message, [secret], redact_paths=False)
         event = ActivityEvent(level=level, message=safe_message, operation=operation, filename=filename, job_id=job_id)
+        one_line_message = " ".join(event.message.split())
+        footer_text = f"{event.operation.title()} · {one_line_message}"
+        self.latest_activity_var.set(footer_text[:LATEST_ACTIVITY_PREVIEW_LENGTH])
+        if self.latest_activity_label is not None:
+            footer_style = {
+                "warning": "Footer.Warning.TLabel",
+                "error": "Footer.Error.TLabel",
+            }.get(event.level.lower(), "Footer.TLabel")
+            self.latest_activity_label.configure(style=footer_style)
         self.activity_events.append(event)
         limit = max(50, int(getattr(self.config, "activity_history_limit", 500) or 500))
         self.activity_events = self.activity_events[-limit:]
@@ -6757,8 +7468,12 @@ class WatcherApp:
     def refresh_activity_monitor_state(self) -> None:
         """
         Refresh independent watcher, import, AI, connection, and tray indicators.
+
+        Returns:
+            None: Synchronizes visible worker captions and status indicators.
         """
         watcher_running = bool(self.worker and self.worker.is_alive())
+        self.refresh_watcher_action()
         manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
         ai_running = bool(self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested)
         preflight_running = bool(self.preflight_worker and self.preflight_worker.is_alive())
