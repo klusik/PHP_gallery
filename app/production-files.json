@@ -2365,6 +2365,7 @@
         "tests/login_return_target_security_test.php",
         "tests/maintenance_center_test.php",
         "tests/manifest_reproducible_timestamp_test.php",
+        "tests/media_renamer_staging_test.php",
         "tests/migration_consistency_test.php",
         "tests/migration_legacy_runner_compatibility_test.php",
         "tests/migration_schema_cache_reset_test.php",

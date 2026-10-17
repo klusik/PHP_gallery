@@ -54,6 +54,17 @@ use function Gallery\Models\media_renamer_model_image_gallery_rows;
 use function Gallery\Models\media_renamer_model_indexed_paths;
 
 /**
+ * Bound collision retries while allocating a same-directory staging path.
+ * Type: int.
+ * Units: candidate names per source file.
+ * Scope: media-renamer filesystem staging.
+ * Consumers: media_renamer_staging_path().
+ * Rationale: 100 preserves the existing bounded retry budget; full SHA-256
+ * names make accidental collisions exceptional without an unbounded loop.
+ */
+const MEDIA_RENAMER_STAGING_ATTEMPTS = 100;
+
+/**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
  *
  * @param bool $hideEmptyGalleries Hide empty galleries value.
@@ -1678,17 +1689,24 @@ function media_renamer_restore_staged_entry(array $entry): void
 }
 
 /**
- * Return a unique temporary path next to a source file.
+ * Return an unused, fixed-length temporary path next to a source file.
  *
- * @param string $sourcePath Source filesystem path.
- * @return string Text result for the caller.
+ * The 83-byte staging basename excludes the original basename, so a valid
+ * long original does not become invalid when temporary metadata is added.
+ * Same-directory staging retains the existing physical rename and rollback.
+ *
+ * @param string $sourcePath Absolute path of the original being staged.
+ * @return string Unused same-directory path; allocation does not create a file.
+ * @throws RuntimeException If every bounded candidate is already occupied.
  */
 function media_renamer_staging_path(string $sourcePath): string
 {
     $directory = dirname($sourcePath);
-    $base = basename($sourcePath);
-    for ($index = 0; $index < 100; $index++) {
-        $candidate = $directory . DIRECTORY_SEPARATOR . '.media-renamer-' . hash('sha256', $sourcePath . '|' . microtime(true) . '|' . random_int(1, PHP_INT_MAX) . '|' . $index) . '-' . $base . '.tmp';
+    for ($index = 0; $index < MEDIA_RENAMER_STAGING_ATTEMPTS; $index++) {
+        $identity = $sourcePath . '|' . microtime(true)
+            . '|' . random_int(1, PHP_INT_MAX) . '|' . $index;
+        $candidate = $directory . DIRECTORY_SEPARATOR
+            . '.media-renamer-' . hash('sha256', $identity) . '.tmp';
         if (!file_exists($candidate)) {
             return $candidate;
         }

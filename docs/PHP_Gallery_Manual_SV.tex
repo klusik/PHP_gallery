@@ -1237,6 +1237,13 @@ Standardmönstret är \codeword{\{gallery_path\}_\{seq4\}}. Ett eget mönster ka
 
 Efter ett lyckat fysiskt namnbyte håller PHP Gallery databasraden och referenser till offentliga sökvägar samordnade, uppdaterar härledda titlar där verktyget ansvarar för dem, flyttar eller ogiltigförklarar genererade derivat efter behov och tar bort inaktuella cacheposter för ZIP-arkiv som refererar till originalets gamla identitet. Varningar vid derivatrensning motiverar inte att ett annars slutfört namnbyte av original återställs, eftersom återskapbara derivat kan genereras igen. För webbplatsövergripande urval driver webbläsaren arbetet framåt i begränsade delar och visar resultatet för varje galleri.
 
+Den tillfälliga namnändringen använder ett kort internt filnamn oberoende av
+originalnamnet, så att även giltiga långa källfilnamn kan behandlas. De slutliga
+namnen behåller det läsbara mönstret. Sekvensplatshållare räknar hela galleriets
+bildordning, inklusive fotografier utanför den aktuella satsen. En ändrad
+gallerititel bevarar dessa positioner; senare uppladdningar fortsätter
+numreringen efter de befintliga fotografierna.
+
 \subsection{Bildhantering}
 \label{sec:media}
 \index{b00031@bilder}

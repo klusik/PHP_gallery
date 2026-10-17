@@ -1235,6 +1235,12 @@ Výchozí vzor je \codeword{\{gallery_path\}_\{seq4\}}. Vlastní vzor může pou
 
 Po úspěšném fyzickém přejmenování PHP Gallery zachovává soulad databázového řádku a~odkazů veřejných cest, aktualizuje odvozené názvy tam, kde je spravuje nástroj přejmenování, podle potřeby přesune nebo zneplatní generované odvozeniny a~odstraní zastaralé záznamy archivů ZIP v~mezipaměti odkazující na původní identitu zdroje. Upozornění na úklid odvozenin nejsou důvodem vracet jinak dokončené přejmenování zdroje, protože reprodukovatelné odvozeniny lze znovu vygenerovat. U~výběrů napříč webem prohlížeč postupuje po omezených částech a~ukazuje výsledek každé galerie.
 
+Dočasné přejmenování používá krátký interní název nezávislý na původním názvu,
+takže lze zpracovat i~platné dlouhé názvy zdrojových souborů. Konečné názvy
+zachovávají čitelný vzor. Pořadové značky počítají celé pořadí galerie včetně
+fotografií mimo aktuální dávku. Změna názvu galerie zachovává tyto pozice;
+další nahrané fotografie pokračují v~číslování za existujícími fotografiemi.
+
 \subsection{Správa obrázků}
 \label{sec:media}
 \index{o00115@obrázky}

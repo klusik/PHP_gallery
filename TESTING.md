@@ -1,5 +1,20 @@
 # Testing Guide
 
+## Media-renamer staging and continued uploads
+
+`media_renamer_staging_test.php` runs actual same-directory staging and rollback
+over owned temporary originals with 171-, 172-, 240- and 255-byte filenames.
+It covers the former overflow boundary, unique allocation without file changes,
+physical staging/finalization and byte-preserving rollback at both stages.
+The central full PHP suite discovers the test; feature BASIC checks syntax/docs.
+
+`upload_auto_rename_selection_test.php` also executes the production planner's
+selection/order loop with explicit row/path/item adapters. It proves that a
+gallery-title change preserves positions, unpublished images remain included,
+and later upload or apply batches continue full-gallery numbering even when old
+rows are hidden no-ops. Item adapters do not establish real database/upload or
+filesystem collision behavior. Live-host rename/upload acceptance remains manual.
+
 ## Gallery music
 
 `gallery_music_service_test.php` uses isolated real PCM WAV bytes to exercise

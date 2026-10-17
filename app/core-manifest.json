@@ -1,6 +1,6 @@
 {
     "version": "0.135",
-    "generated_at": "2026-10-17T15:44:07+00:00",
+    "generated_at": "2026-10-17T17:32:01+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -240,7 +240,7 @@
         "app/models/viewer_tokens.php": "sha256:8b5be31e2b6a02c08d2a52089577a794310d5b2b9222f7af4255d685254d1d41",
         "app/models/votes.php": "sha256:eb8a111c955bf14664482c5502a096006c34d3234fe265aa75bedfed1d545287",
         "app/policy_constants.php": "sha256:d4e99107c40dd625fc7407c13e366f0efbf58e0b96ebe28feba5cae040b8c882",
-        "app/production-files.json": "sha256:93e878ad525d99aa4465939964c48c2689bb3cbeb464ee41220ce5d182700127",
+        "app/production-files.json": "sha256:7a1a2bdf0c3e054c6eed84e95ad1ffba7a9554846a27549a366a82d8c881771d",
         "app/release_file_policy.php": "sha256:d05c0e8aa62e6e7a2e02df56fbcc9833ebc7a877ee7777c1d7b0fa137aa9ea1f",
         "app/request_data.php": "sha256:2adbeafcdca483d5e2aeba4f8b8463a2940ff214e8f04c77ac1ced687f078de7",
         "app/runtime/Kernel.php": "sha256:56706535cbbebe984314ba1e986af2b069a35a5205b7fc806a7ed631dd9fda37",
@@ -447,7 +447,7 @@
         "app/services/maintenance_center/execution.php": "sha256:980938cdd6eb0c260196d27c6f9c0d2e242d855c609ae48ab2dc2237a52e213a",
         "app/services/maintenance_center/registry.php": "sha256:101d0a28464fce688b7763f2d8614c922d9a602446ab0053f6ed52b2dfe8480f",
         "app/services/maintenance_center/status.php": "sha256:a8a4c340048c49c7f360c726f455ac80b5107a79b42f13c7516d6abeb6a38eb7",
-        "app/services/media_renamer.php": "sha256:3ed9bdb5d7b4d0f7dd3160e64bf48591b7c56c764c73173822cb529e7c18f75e",
+        "app/services/media_renamer.php": "sha256:8e5565acf4e29e9daaad56f467d5893fae419325b94c400e7a5b699b03c3572c",
         "app/services/mobile_webdav.php": "sha256:a63b9d83d40856555a43131b6b4f39992f4ad39cc70e35ae1a84f0d461cca880",
         "app/services/mutation_schema_policy.php": "sha256:e1cec96a23161652e857df5a4716fe14fbe9db30454b7f1ffb8bc5f4f4aadebe",
         "app/services/navigation_data.php": "sha256:74769eb6afa80843cc863df5b51749c9db0929c93474660362595237d48c53d4",
