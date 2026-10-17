@@ -106,15 +106,23 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
 /**
  * Render the gallery hero, summary metric grid, and editor tab strip.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
+ * @param array{id:int|string,title:string,folder_path:string,
+ *     visibility?:string,parent_id?:int|string|null,url_path?:string|null}
+ *     $gallery Persisted identity, localized title, path and summary fields.
  * @param int $imageCount Number of images attached to this gallery.
  * @param string $activeEditTab Tab selected by redirect query state.
- * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @param array{media_renamer_feature_enabled:bool} $capabilities Resolved
+ *     availability used for the optional rename tab.
  * @param bool $deferredImages Whether Images is unavailable until drawer preload settles.
  * @return void Emits the editor overview and its tab navigation.
  */
-function admin_edit_gallery_render_overview(array $gallery, int $imageCount, string $activeEditTab, array $capabilities, bool $deferredImages = false): void
-{
+function admin_edit_gallery_render_overview(
+    array $gallery,
+    int $imageCount,
+    string $activeEditTab,
+    array $capabilities,
+    bool $deferredImages = false
+): void {
     // Only the heading receives an overlay; the editor still owns source fields.
     $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
     // $activeVisibility stores the normalized gallery visibility label for summary cards.
@@ -127,8 +135,14 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount, 'disabled' => $deferredImages],
-        ['id' => 'admin-edit-documents', 'label' => t('pdf.documents', 'Documents / PDFs')],
     ];
+    if (feature_capability_effective_enabled('gallery_pdf_documents')
+        || feature_capability_effective_enabled('gallery_music')) {
+        $adminTabs[] = [
+            'id' => 'admin-edit-documents',
+            'label' => t('pdf.documents', 'Documents / PDFs'),
+        ];
+    }
     if (feature_capability_effective_enabled('metadata_organizer')) {
         $adminTabs[] = ['id' => 'admin-edit-organizer', 'label' => t('admin.metadata_organizer.tab_label', 'Organizer')];
     }

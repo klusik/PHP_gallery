@@ -50,6 +50,7 @@ return [
             'Gallery\\Services\\resolve_public_gallery_path',
             'Gallery\\Services\\simbrief_ofp_local_pdf_path',
             'Gallery\\Services\\gallery_pdf_documents_read',
+            'Gallery\\Services\\gallery_attachment_storage_summary',
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
             'Gallery\\Controllers\\gallery_pdf_documents_view_model',
             'Gallery\\Views\\view_render_gallery_pdf_documents',
@@ -169,6 +170,11 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Explicit storage jobs load the existing attachment owner. Cached
+        // Admin reads and ordinary public routes do not acquire its closure.
+        'Gallery\\Services\\admin_storage_statistics_attachment_batch' => [
+            'Gallery\\Services\\gallery_attachment_storage_summary',
+        ],
         // GitHub writes explicitly load the producer-lease owner immediately before
         // acquisition; read-only public routes do not need that storage module.
         'Gallery\\Services\\cms_github_api_write_cache' => [

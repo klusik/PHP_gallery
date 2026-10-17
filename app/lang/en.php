@@ -1224,4 +1224,64 @@ return [
     'music.lock_download' => 'Prevent downloading this track',
     'music.allow_all' => 'Allow downloading all current tracks',
     'music.lock_all' => 'Prevent downloading all current tracks',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'Gallery PDF documents',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Upload, display and convert gallery PDFs, including SimBrief '
+        . 'originals. Disabling preserves existing files and settings.',
+    'admin.features.gallery_music.label' =>
+        'Gallery music',
+    'admin.features.gallery_music.description' =>
+        'Upload and play gallery and Smart Gallery music. Disabling '
+        . 'preserves existing files, playlists and slideshow settings.',
+    'admin.upload.media_files_label' =>
+        'Files',
+    'admin.upload.media_files_help' =>
+        'Select or drop supported files. Enabled gallery media types are '
+        . 'shown in the file picker.',
+    'admin.storage.pdf_originals' =>
+        'PDF originals',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} gallery document(s), including SimBrief PDFs.',
+    'admin.storage.music_originals' =>
+        'Music originals',
+    'admin.storage.music_originals_hint' =>
+        '{count} stored audio file(s), including hidden and locked '
+        . 'tracks.',
+    'admin.storage.total_media' =>
+        'All media storage',
+    'admin.storage.total_media_hint' =>
+        'Pictures and their derivatives plus PDF and music originals.',
+    'admin.storage.attachment_warnings' =>
+        'Partial attachment accounting',
+    'admin.storage.attachment_warnings_hint' =>
+        'Some originals or indexes could not be read. Totals include only '
+        . 'measured files.',
+    'admin.storage.description' =>
+        'Photo sizes come from the database. Update all measures '
+        . 'derivatives and indexed PDF/music originals.',
+    'admin.storage.no_snapshot_hint' =>
+        'Use Update all to measure photos, derivatives, PDF/music '
+        . 'originals and charts.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'Gallery PDF documents',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Upload, display and convert gallery PDFs, including SimBrief '
+        . 'originals. Disabling preserves existing files and settings.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON permits this media type; OFF preserves files and can be '
+        . 'reversed.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Gallery music',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Upload and play gallery and Smart Gallery music. Disabling '
+        . 'preserves existing files, playlists and slideshow settings.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON permits this media type; OFF preserves files and can be '
+        . 'reversed.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} record(s)',
+    'admin.storage.tab_files_hint' =>
+        'Photos, derivatives, PDF and music originals',
 ];

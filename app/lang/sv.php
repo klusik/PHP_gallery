@@ -1163,4 +1163,64 @@ return [
     'music.lock_download' => 'Spärra hämtning av detta spår',
     'music.allow_all' => 'Tillåt hämtning av alla aktuella spår',
     'music.lock_all' => 'Spärra hämtning av alla aktuella spår',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'Galleriernas PDF-dokument',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Ladda upp, visa och konvertera galleri-PDF:er, inklusive '
+        . 'SimBrief-original. Avstängning bevarar filer och inställningar.',
+    'admin.features.gallery_music.label' =>
+        'Gallerimusik',
+    'admin.features.gallery_music.description' =>
+        'Ladda upp och spela musik i gallerier och smarta gallerier. '
+        . 'Avstängning bevarar filer, spellistor och '
+        . 'bildspelsinställningar.',
+    'admin.upload.media_files_label' =>
+        'Filer',
+    'admin.upload.media_files_help' =>
+        'Välj eller släpp filer som stöds. Filväljaren visar aktiverade '
+        . 'medietyper för gallerier.',
+    'admin.storage.pdf_originals' =>
+        'PDF-original',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} galleridokument, inklusive SimBrief-PDF:er.',
+    'admin.storage.music_originals' =>
+        'Musikoriginal',
+    'admin.storage.music_originals_hint' =>
+        '{count} lagrade ljudfiler, inklusive dolda spår och spår utan '
+        . 'nedladdning.',
+    'admin.storage.total_media' =>
+        'All medielagring',
+    'admin.storage.total_media_hint' =>
+        'Bilder och deras härledda filer samt PDF- och musikoriginal.',
+    'admin.storage.attachment_warnings' =>
+        'Ofullständig mätning av bilagor',
+    'admin.storage.attachment_warnings_hint' =>
+        'Vissa original eller index kunde inte läsas. Summorna omfattar '
+        . 'endast uppmätta filer.',
+    'admin.storage.description' =>
+        'Fotostorlekar hämtas från databasen. Uppdatera allt mäter '
+        . 'härledda filer och indexerade PDF-/musikoriginal.',
+    'admin.storage.no_snapshot_hint' =>
+        'Använd Uppdatera allt för att mäta foton, härledda filer och '
+        . 'PDF-/musikoriginal samt skapa diagram.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'Galleriernas PDF-dokument',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Ladda upp, visa och konvertera galleri-PDF:er, inklusive '
+        . 'SimBrief-original. Avstängning bevarar filer och inställningar.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON tillåter medietypen; OFF bevarar filer och kan återställas.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Gallerimusik',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Ladda upp och spela musik i gallerier och smarta gallerier. '
+        . 'Avstängning bevarar filer, spellistor och '
+        . 'bildspelsinställningar.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON tillåter medietypen; OFF bevarar filer och kan återställas.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} poster',
+    'admin.storage.tab_files_hint' =>
+        'Foton, härledda filer, PDF- och musikoriginal',
 ];

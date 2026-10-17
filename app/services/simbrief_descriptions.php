@@ -18,6 +18,9 @@
  *   - Generate concise Markdown compatible with the existing gallery renderer
  *   - Keep generated output editable and safe for the current description flow
  *
+ * @phpstan-type SimbriefJsonValue null|bool|int|float|string|
+ *     list<SimbriefJsonValue>|array<string,SimbriefJsonValue>
+ *
  * Author:
  *   Rudolf Klusal
  *
@@ -531,15 +534,22 @@ function simbrief_description_extract_details(array $payload): array
  * When the OFP payload exposes a PDF document URL, the original PDF is saved
  * beside it for direct long-term reference.
  *
- * @param array<string,mixed> $gallery Gallery row or gallery data.
- * @param array<string,mixed> $payload Payload value.
- * @param array<string,mixed> $identifier Identifier value.
- * @param array<string,mixed> $details Details value.
- * @param array<string,mixed> $routeResult Route result value.
+ * @param array{folder_path:string} $gallery Physical OFP destination.
+ * @param array<string,SimbriefJsonValue> $payload Complete JSON dispatch data.
+ * @param array{label?:string,kind?:string} $identifier Resolved pilot identity.
+ * @param array{origin_code?:string,destination_code?:string,flight_label?:string,
+ *     aircraft?:string,airac?:string} $details Normalized manifest summaries.
+ * @param array{route_text?:string,point_count?:int,unresolved_count?:int}
+ *     $routeResult Optional persisted route summary; empty by default.
  * @return array{saved:bool,path:string,manifest_path?:string,filename:string,pdf_saved?:bool,pdf_path?:string,pdf_filename?:string,pdf_url?:string,pdf_error?:string,error:string} Source OFP attachment paths and optional PDF download status.
  */
-function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
-{
+function simbrief_description_save_ofp_for_gallery(
+    array $gallery,
+    array $payload,
+    array $identifier,
+    array $details,
+    array $routeResult = []
+): array {
     $folderPath = function_exists('Gallery\\Core\\normalize_relative_path')
         ? normalize_relative_path((string) ($gallery['folder_path'] ?? ''))
         : trim(str_replace('\\', '/', (string) ($gallery['folder_path'] ?? '')), '/');
@@ -556,7 +566,8 @@ function simbrief_description_save_ofp_for_gallery(array $gallery, array $payloa
     $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
     $manifestPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
     $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
-    $pdfUrl = simbrief_description_pdf_url($payload);
+    $pdfEnabled = feature_capability_effective_enabled('gallery_pdf_documents');
+    $pdfUrl = $pdfEnabled ? simbrief_description_pdf_url($payload) : '';
     $pdfResult = $pdfUrl !== ''
         ? simbrief_description_save_pdf_for_gallery($pdfUrl, $pdfPath)
         : ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => '', 'error' => ''];
@@ -597,7 +608,10 @@ function simbrief_description_save_ofp_for_gallery(array $gallery, array $payloa
         'route_point_count' => (int) ($routeResult['point_count'] ?? 0),
         'route_unresolved_count' => (int) ($routeResult['unresolved_count'] ?? 0),
         'ofp_file' => 'simbrief-ofp.json',
-        'ofp_pdf_file' => !empty($pdfResult['saved']) ? 'simbrief-ofp.pdf' : '',
+        // PDF OFF preserves an old original for re-enable. Description and
+        // route JSON can still be refreshed without fetching any PDF bytes.
+        'ofp_pdf_file' => !empty($pdfResult['saved'])
+            || (!$pdfEnabled && is_file($pdfPath)) ? 'simbrief-ofp.pdf' : '',
         'ofp_pdf_url' => (string) ($pdfResult['url'] ?? ''),
     ];
     $manifestJson = json_encode($manifest, $jsonFlags);
@@ -772,12 +786,17 @@ function simbrief_description_normalize_pdf_url(string $candidate, string $fileR
 /**
  * Download and save the original SimBrief PDF when a safe URL is available.
  *
- * @param string $pdfUrl Pdf url URL.
- * @param string $targetPath Target filesystem path.
+ * @param string $pdfUrl Trusted-provider PDF URL selected from an OFP payload.
+ * @param string $targetPath Confined gallery attachment destination.
  * @return array{saved:bool,path:string,filename:string,url:string,error:string} Downloaded PDF attachment metadata or an actionable error.
  */
 function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targetPath): array
 {
+    if (!feature_capability_effective_enabled('gallery_pdf_documents')) {
+        return ['saved' => false, 'path' => '',
+            'filename' => 'simbrief-ofp.pdf', 'url' => '',
+            'error' => 'Gallery PDF documents are disabled.'];
+    }
     $safeUrl = simbrief_description_normalize_pdf_url($pdfUrl);
     if ($safeUrl === '') {
         return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => '', 'error' => 'SimBrief PDF URL was not trusted.'];
@@ -808,6 +827,8 @@ function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targe
         }
     }
 
+    require_once __DIR__ . '/gallery_pdf_settings.php';
+    gallery_attachment_storage_changed();
     return ['saved' => true, 'path' => $targetPath, 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => ''];
 }
 

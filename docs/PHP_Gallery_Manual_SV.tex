@@ -488,6 +488,15 @@ De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visn
 
 \ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} börjar med rutnätet och vanliga växlar för röstning och filnamn; EXIF/GPS, format för gallerikort, antalmarkering, ljuslådeläge, Bildspelet, miniatyrbildsgränser ligger under \ui{Avancerade visningsinställningar}; flygrutttext finns bredvid SimBrief under \ui{Identitet}.
 
+I~\ui{Admin > Funktioner} är \ui{Galleriernas PDF-dokument}
+och~\ui{Gallerimusik} separata reglage. Båda är på för nya och~uppdaterade
+installationer utan sparat val; ett uttryckligt OFF bevaras. OFF döljer
+motsvarande tabeller/spelare och~stoppar uppladdning, leverans och~PDF-konvertering,
+även från gamla formulär. Filer, spellistor och~inställningar bevaras.
+Med båda OFF döljs även mediefliken; gamla fliklänkar väljer Identitet.
+Redan skapade sidfoton behåller sina vanliga åtkomstregler. SimBrief kan
+fortsätta uppdatera beskrivningar/rutter och~behåller gamla PDF-original.
+
 \subsubsection{Bifoga och konvertera ett PDF-dokument}
 Öppnade konverteringskontroller gör inte dokumentkolumnen bredare. Om det tidigare målet saknas eller har ändrats, bekräfta ett nytt privat resultat; tidigare filer och gallerier bevaras.
 
@@ -2153,6 +2162,19 @@ Administrationsrutter och maskinadresser såsom installation, WebDAV, uppladdnin
 Databasundersökning inventerar schemaobjekt, referenser, ansvarskategorier, lagringspolicy och tillförlitligheten för rensning. Logisk rensning använder uttryckligen tillåtna regler med deterministiskt urval, begränsade omgångar och granskningsposter. Schemareparation ger en provkörning och en idempotent migreringsväg. \codeword{ANALYZE TABLE} kan uppdatera optimerarstatistik för valda tabeller. Fysisk \codeword{OPTIMIZE TABLE} finns bara som förhandsvisning följd av en separat bekräftad åtgärd för valda tabeller; den är aldrig ett automatiskt rensningssteg.\footnote{Lagringsmotorns allokeringsvärden såsom uppskattningar av ledigt datautrymme beskriver motorns tillstånd och garanterar inte ett exakt antal filsystemsbyte som frigörs efter optimering.}
 
 \subsection{Lagringsstatistik och fullständig rapport}
+
+Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
+samlad mediesumma. Efter fotobatcher mäter Uppdatera allt högst två fysiska
+gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
+filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
+smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
+som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
+och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
+synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
+bilageändringar markerar den som gammal när revisionsskrivningen lyckas.
+Efter uppgradering av äldre fotostatistik och~vid externa filändringar
+behövs Uppdatera allt för en ny mätning.
+
 \index{l00147@lagringsstatistik}
 \index{f00087@fullständig rapport}
 \index{g00107@gallerirapport}

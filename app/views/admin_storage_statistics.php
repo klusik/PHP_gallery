@@ -176,7 +176,15 @@ function view_render_admin_storage_statistics_notice(string $notice): void
  */
 function view_render_admin_storage_empty_panel(): void
 {
-    echo '<section class="admin-storage-panel panel admin-storage-empty-panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.storage.kicker', 'Storage')) . '</p><h2>' . e(t('admin.storage.no_snapshot_title', 'No detailed statistics yet')) . '</h2></div><details class="admin-storage-help"><summary aria-label="' . e(t('admin.storage.chart_help_label', 'Chart explanations')) . '">?</summary><div>' . e(t('admin.storage.no_snapshot_hint', 'Use Update all to populate source breakdowns, generated thumbnail totals, and charts.')) . '</div></details></div></section>';
+    echo '<section class="admin-storage-panel panel admin-storage-empty-panel">'
+        . '<div class="admin-panel-heading"><div><p class="admin-kicker">'
+        . e(t('admin.storage.kicker', 'Storage')) . '</p><h2>'
+        . e(t('admin.storage.no_snapshot_title', 'No detailed statistics yet'))
+        . '</h2></div><details class="admin-storage-help"><summary aria-label="'
+        . e(t('admin.storage.chart_help_label', 'Chart explanations'))
+        . '">?</summary><div>' . e(t('admin.storage.no_snapshot_hint',
+            'Use Update all to measure photos, derivatives, PDF/music'
+            . ' originals and charts.')) . '</div></details></div></section>';
 }
 
 /**
@@ -203,7 +211,11 @@ function view_admin_storage_snapshot_status(?array $statistics): string
 /**
  * Render the detailed storage statistics panel on the dashboard overview.
  *
- * @param array<string, mixed> $statistics Cached storage totals, counts, status, and chart row view model.
+ * @param array<string,int|float|string|bool|list<array{key:string,label:string,
+ *     count:int,bytes:int,percent?:float,extension?:string,mime_type?:string,
+ *     bucket_key?:string,label_key?:string,gallery_id?:int,folder_path?:string,
+ *     kind?:string,format?:string}>> $statistics Cached byte/count totals,
+ *     fingerprint/date/status scalars and source/derivative chart rows.
  * @return void Outputs the detailed storage statistics panel when a snapshot exists.
  */
 function view_render_admin_storage_statistics_panel(array $statistics): void
@@ -216,6 +228,14 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
     $thumbnailBytes = view_admin_storage_int($statistics, 'generated_thumbnail_bytes');
     $displayMasterBytes = view_admin_storage_int($statistics, 'display_master_bytes');
     $totalPictureBytes = view_admin_storage_int($statistics, 'total_picture_bytes');
+    $pdfBytes = view_admin_storage_int($statistics, 'pdf_bytes');
+    $musicBytes = view_admin_storage_int($statistics, 'music_bytes');
+    $pdfCount = view_admin_storage_int($statistics, 'pdf_count');
+    $musicCount = view_admin_storage_int($statistics, 'music_count');
+    $totalMediaBytes = view_admin_storage_int($statistics, 'total_media_bytes');
+    $attachmentErrors = view_admin_storage_int(
+        $statistics, 'attachment_scan_errors'
+    );
     $imageCount = view_admin_storage_int($statistics, 'image_count');
     $thumbnailCount = view_admin_storage_int($statistics, 'generated_thumbnail_count');
     $displayMasterCount = view_admin_storage_int($statistics, 'display_master_count');
@@ -230,7 +250,10 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
     echo '<section class="admin-storage-panel panel" aria-label="' . e(t('admin.storage.panel_aria', 'Storage statistics')) . '">';
     echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.storage.kicker', 'Storage')) . '</p><h2>' . e(t('admin.storage.title', 'Media storage details')) . '</h2></div>';
     view_render_admin_storage_chart_help([
-        [t('admin.storage.title', 'Media storage'), t('admin.storage.description', 'Source photos are counted from the database. Generated thumbnails and DNG display masters are counted from expected derivative files.')],
+        [t('admin.storage.title', 'Media storage'),
+            t('admin.storage.description',
+                'Photo sizes come from the database. Update all measures'
+                . ' derivatives and indexed PDF/music originals.')],
         [t('admin.storage.source_only', 'Source photos only'), t('admin.storage.source_only_hint', '{count} indexed image(s), excluding generated thumbnails.', ['count' => (string) $imageCount])],
         [t('admin.storage.generated_thumbnails', 'Generated thumbnails'), t('admin.storage.generated_thumbnails_hint', '{count} generated JPG/WebP thumbnail file(s).', ['count' => (string) $thumbnailCount])],
         [t('admin.storage.display_masters', 'Display masters'), t('admin.storage.display_masters_hint', '{count} generated DNG browser-display master file(s).', ['count' => (string) $displayMasterCount])],
@@ -247,6 +270,29 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
     view_render_admin_storage_summary_card(t('admin.storage.generated_thumbnails', 'Generated thumbnails'), format_bytes($thumbnailBytes), t('admin.storage.generated_thumbnails_hint', '{count} generated JPG/WebP thumbnail file(s).', ['count' => (string) $thumbnailCount]), 'smart');
     view_render_admin_storage_summary_card(t('admin.storage.display_masters', 'Display masters'), format_bytes($displayMasterBytes), t('admin.storage.display_masters_hint', '{count} generated DNG browser-display master file(s).', ['count' => (string) $displayMasterCount]), 'report');
     view_render_admin_storage_summary_card(t('admin.storage.total_with_generated', 'All picture storage'), format_bytes($totalPictureBytes), t('admin.storage.total_with_generated_hint', 'Source photos plus generated picture derivatives. Generated media is {percent}% of source size.', ['percent' => number_format($generatedPercent, 1)]), 'overview');
+    view_render_admin_storage_summary_card(
+        t('admin.storage.pdf_originals', 'PDF originals'),
+        format_bytes($pdfBytes),
+        t('admin.storage.pdf_originals_hint',
+            '{count} gallery document(s), including SimBrief PDFs.',
+            ['count' => (string) $pdfCount]),
+        'report'
+    );
+    view_render_admin_storage_summary_card(
+        t('admin.storage.music_originals', 'Music originals'),
+        format_bytes($musicBytes),
+        t('admin.storage.music_originals_hint',
+            '{count} stored audio file(s), including hidden and locked tracks.',
+            ['count' => (string) $musicCount]),
+        'galleries'
+    );
+    view_render_admin_storage_summary_card(
+        t('admin.storage.total_media', 'All media storage'),
+        format_bytes($totalMediaBytes),
+        t('admin.storage.total_media_hint',
+            'Pictures and their derivatives plus PDF and music originals.'),
+        'overview'
+    );
     echo '</div>';
 
     echo '<div class="admin-storage-facts">';
@@ -260,6 +306,15 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
     }
     if ($scanErrors > 0) {
         echo '<span><strong>' . e(t('admin.storage.scan_warnings', 'Scan warnings')) . '</strong> ' . (int) $scanErrors . '</span>';
+    }
+    if ($attachmentErrors > 0) {
+        echo '<span role="status" title="'
+            . e(t('admin.storage.attachment_warnings_hint',
+                'Some originals or indexes could not be read.'
+                . ' Totals include only measured files.')) . '"><strong>'
+            . e(t('admin.storage.attachment_warnings',
+                'Partial attachment accounting')) . '</strong> '
+            . $attachmentErrors . '</span>';
     }
     if ($generatedAt > 0) {
         echo '<span><strong>' . e(t('admin.storage.calculated', 'Calculated')) . '</strong> ' . e(date('Y-m-d H:i', $generatedAt)) . '</span>';

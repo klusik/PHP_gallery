@@ -444,7 +444,9 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     $pdfHtml = '';
     // Only attachment galleries load document presentation; the prepared HTML
     // joins the description in the view without moving unrelated hero controls.
-    if (\Gallery\Services\gallery_pdf_documents_present($gallery)) {
+    if (\Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    ) && \Gallery\Services\gallery_pdf_documents_present($gallery)) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
         \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery));
@@ -452,8 +454,10 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     }
     // Music presentation is deferred until a physical gallery has a playlist.
     // Keep its index/controller/view closure out of ordinary gallery requests.
-    if (is_file(\Gallery\Services\gallery_abs_path((string) $gallery['folder_path'])
-        . '/.gallery-music/index.json')) {
+    if (\Gallery\Services\feature_capability_effective_enabled('gallery_music')
+        && is_file(\Gallery\Services\gallery_abs_path(
+            (string) $gallery['folder_path']
+        ) . '/.gallery-music/index.json')) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
         \Gallery\Views\view_render_gallery_music(gallery_music_view_model($gallery));

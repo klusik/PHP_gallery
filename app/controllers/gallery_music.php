@@ -174,10 +174,16 @@ function gallery_music_smart_view_model(
 /**
  * Render the independently replaceable gallery music editor card.
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
- * @return string Music manager HTML with fresh CSRF and revision controls.
+ * @return string Music manager HTML with CSRF/revision controls, or empty
+ *     when the global music capability is off.
  */
 function admin_gallery_music_html(array $gallery): string
 {
+    if (!\Gallery\Services\feature_capability_effective_enabled(
+        'gallery_music'
+    )) {
+        return '';
+    }
     ob_start();
     \Gallery\Views\view_render_gallery_music(
         gallery_music_view_model($gallery, true)
@@ -229,6 +235,7 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
             (string) ($_POST['music_enabled'] ?? '') === '1',
             (string) ($_POST['music_download_enabled'] ?? '') === '1'
         );
+        \Gallery\Services\gallery_attachment_storage_changed();
         $message = \Gallery\Services\t('music.saved');
         $result = \Gallery\Core\admin_mutation_success_envelope(
             $message,

@@ -12,6 +12,22 @@ Version 0.120 adds no schema migration, table, column or index. Its database cha
 
 ## Gallery music storage
 
+PDF/music capability and accounting changes add no tables, columns or migrations.
+The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
+`feature_flag.gallery_music.enabled` use existing `app_settings` storage.
+Both missing-key upgrade fallbacks and fresh-install defaults are ON. An explicit
+OFF value is preserved, and no playlist/document metadata or original is deleted.
+
+Manual storage snapshots use `admin_storage_statistics_cache_v3`; resumable
+photo/gallery cursors use `admin_storage_statistics_job_v2`. Older derived keys
+are retained but are not reused as complete attachment measurements; run Update
+all after upgrading. `gallery_attachment_storage_revision` is an opaque advisory
+nonce changed after supported web attachment mutations. It marks cached totals
+and active jobs stale without scanning files. Failure to update that optional
+marker does not turn a committed attachment operation into a failed upload;
+the next explicit scan still measures actual files. Out-of-band filesystem edits
+also require Update all. Original storage remains under its existing owners.
+
 Music playlists introduce no tables or columns. Each physical gallery's denied
 `.gallery-music/index.json` stores its ordered immutable-original metadata,
 optimistic revision, explicit slideshow-music default and per-track download

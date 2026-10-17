@@ -1219,4 +1219,64 @@ return [
     'music.lock_download' => 'Zakázat stažení této skladby',
     'music.allow_all' => 'Povolit stažení všech aktuálních skladeb',
     'music.lock_all' => 'Zakázat stažení všech aktuálních skladeb',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'PDF dokumenty galerií',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Nahrávání, zobrazení a převod PDF galerií včetně originálů '
+        . 'SimBrief. Vypnutí zachová existující soubory a nastavení.',
+    'admin.features.gallery_music.label' =>
+        'Hudba galerií',
+    'admin.features.gallery_music.description' =>
+        'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
+        . 'zachová soubory, playlisty a nastavení slideshow.',
+    'admin.upload.media_files_label' =>
+        'Soubory',
+    'admin.upload.media_files_help' =>
+        'Vyberte nebo přetáhněte podporované soubory. Dialog nabízí '
+        . 'zapnuté typy médií galerie.',
+    'admin.storage.pdf_originals' =>
+        'Originály PDF',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} dokumentů galerií včetně PDF ze SimBrief.',
+    'admin.storage.music_originals' =>
+        'Originály hudby',
+    'admin.storage.music_originals_hint' =>
+        '{count} uložených hudebních souborů včetně skrytých a '
+        . 'nestáhnutelných skladeb.',
+    'admin.storage.total_media' =>
+        'Všechna média',
+    'admin.storage.total_media_hint' =>
+        'Obrázky a jejich odvozené soubory spolu s originály PDF a hudby.',
+    'admin.storage.attachment_warnings' =>
+        'Neúplné měření příloh',
+    'admin.storage.attachment_warnings_hint' =>
+        'Některé originály nebo indexy se nepodařilo načíst. Součty '
+        . 'zahrnují jen změřené soubory.',
+    'admin.storage.description' =>
+        'Velikosti fotografií pocházejí z databáze. Aktualizovat vše '
+        . 'změří odvozené soubory a indexované originály PDF a hudby.',
+    'admin.storage.no_snapshot_hint' =>
+        'Spusťte Aktualizovat vše pro změření fotografií, odvozených '
+        . 'souborů, originálů PDF a hudby i grafů.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'PDF dokumenty galerií',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Nahrávání, zobrazení a převod PDF galerií včetně originálů '
+        . 'SimBrief. Vypnutí zachová existující soubory a nastavení.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'Zapnutí povolí tento typ médií; vypnutí zachová soubory a je '
+        . 'vratné.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Hudba galerií',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
+        . 'zachová soubory, playlisty a nastavení slideshow.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'Zapnutí povolí tento typ médií; vypnutí zachová soubory a je '
+        . 'vratné.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} záznamů',
+    'admin.storage.tab_files_hint' =>
+        'Fotografie, odvozené soubory, originály PDF a hudby',
 ];

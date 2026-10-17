@@ -1,5 +1,18 @@
 # General gallery PDF documents
 
+**Admin → Features → Gallery PDF documents** controls original PDF uploads,
+document tables/viewers/downloads and browser PDF conversion independently of
+music. New installations and upgrades without a preference default ON; explicit
+OFF persists. OFF rejects stale editor forms, historical OFP uploads/conversion
+actions and prepared PDF-page batches before target work. Dedicated and legacy
+delivery links are denied. Existing originals, indexes, conversion markers and
+preferences remain stored. Existing indexed page photographs retain their normal
+photo behavior, and incomplete-child publication guards remain enforced.
+SimBrief descriptions/routes can still refresh with PDF OFF; no PDF is fetched,
+and an old original's manifest reference remains available on re-enable.
+When both PDF and music are OFF, the shared editor media tab and its empty panel
+are omitted. An old selected-tab URL falls back to Identity.
+
 In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
 upload, the attached-document table, browser PDF-to-PNG conversion, and any
 historical SimBrief OFP PDF/dispatch panel. These forms are independent of the
@@ -177,3 +190,35 @@ The service and browser lifecycle have focused regression fixtures in the
 repository. Hosted candidate qualification is authoritative. Real-device browser
 qualification and deployment-specific authorization checks remain separate
 acceptance steps; documentation or a fixture pass alone does not establish them.
+
+## Admin storage accounting
+
+**Storage statistics → Files → Update all** measures PDF and music originals
+alongside indexed photographs, thumbnails and DNG display masters. It shows
+separate original counts/bytes and an additive overall media total. The existing
+picture-only total and photograph charts keep their prior meanings.
+
+After bounded photo-derivative work, an independent gallery keyset observes at
+most two physical galleries per request. Galleries without images are included.
+The attachment owner reads the existing bounded indexes and stats only their
+expected opaque-ID originals plus a valid established SimBrief OFP path; it does
+not decode or hash complete payloads. Actual confined sizes count even when a
+size mismatch generates a warning. Hidden, private, locked and globally disabled
+attachments consume storage and are counted. Separate copies count separately;
+Smart Gallery unions never add copies. Generated PDF pages are already ordinary
+indexed photos and are not counted again as attachments.
+
+These are media totals, not an account quota or a recursive full-disk inventory.
+Index/manifest JSON, locks, conversion state, unindexed originals, staging/backup
+files, Trash and unrelated caches are excluded. Missing/unreadable originals,
+unsafe symlinks and corrupt indexes contribute explicit partial-accounting
+warnings; independent readable categories still count and no files are repaired.
+Size accounting is not content-integrity or codec validation.
+
+Ordinary Admin page loads only read cached results. Supported web attachment
+mutations update an advisory revision to mark old snapshots and active jobs
+stale. A failed optional revision write preserves the successful upload response;
+manual Update all still remeasures files. Out-of-band changes require that manual
+refresh. Photo-only snapshots/jobs from older installations are not reused for
+the new coverage; the first new snapshot requires Update all. No media rewrite
+or schema migration is involved.

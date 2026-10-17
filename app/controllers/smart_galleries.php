@@ -1108,10 +1108,13 @@ function cms_smart_gallery(): void
     if ($sourceGalleryId > 0) $lightboxEndpointParams['source_gallery_id'] = $sourceGalleryId;
 
     $musicHtml = '';
-    $musicSources = \Gallery\Services\smart_gallery_music_sources(array_map(
-        static fn(array $item): int => (int) $item['gallery_id'],
-        $sourceSummary['items']
-    ));
+    $musicSources = \Gallery\Services\feature_capability_effective_enabled(
+        'gallery_music'
+    )
+        ? \Gallery\Services\smart_gallery_music_sources(array_map(
+            static fn(array $item): int => (int) $item['gallery_id'],
+            $sourceSummary['items']
+        )) : [];
     if ($musicSources !== []) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         $musicModel = gallery_music_smart_view_model(

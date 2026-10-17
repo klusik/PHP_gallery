@@ -1,5 +1,18 @@
 # Gallery music
 
+**Admin → Features → Gallery music** is the independent global master. It starts
+ON on new installations and upgrades without a saved preference. Explicit OFF
+preserves all originals, playlist order, download permissions and gallery/Smart
+slideshow defaults, but hides players/tables, removes audio chooser hints and
+rejects music editor actions and protected audio/revision delivery. Enabling it
+again exposes the same stored playlist. The gallery's autoplay preference remains
+independently OFF by default. PDF availability uses its own separate capability.
+
+Storage statistics count each stored physical copy, including hidden and
+download-locked tracks, even when this master is OFF. Smart deduplication changes
+playback membership, never physical byte accounting. Run **Update all** to measure
+the originals; see [accounting scope](GALLERY_PDF.md#admin-storage-accounting).
+
 Music belongs to one physical gallery. `app/services/gallery_music.php` owns
 validation, confinement, upload quotas and serialized playlist changes;
 `app/models/gallery_music.php` owns the versioned JSON index. No database

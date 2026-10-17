@@ -57,6 +57,17 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Admit the attachment masters in this isolated access-policy fixture.
+     * Real configured OFF/ON persistence is covered by the database workflow.
+     * @param string $key Canonical attachment capability identity.
+     * @return bool True for the two explicitly owned attachment capabilities.
+     */
+    function feature_capability_effective_enabled(string $key): bool
+    {
+        return in_array($key, ['gallery_pdf_documents', 'gallery_music'], true);
+    }
+
     /** Keep the real SEO guard enabled without persisting fixture rejection logs.
      * @param string $key Application setting name.
      * @param string $default Setting default.

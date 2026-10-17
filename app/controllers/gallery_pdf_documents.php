@@ -80,12 +80,17 @@ function gallery_pdf_documents_admin_controls(): array
 
 /**
  * Render the editor-owned document fragment after an in-place attachment mutation.
- * @param array<string,mixed> $gallery Authorized physical gallery.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @param bool $editor Whether the refreshed fragment includes editor-only attachment controls; defaults to true.
- * @return string Documents card HTML including delegated forms.
+ * @return string Documents card HTML with delegated forms, or empty when OFF.
  */
 function admin_gallery_pdf_documents_html(array $gallery, bool $editor = true): string
 {
+    if (!\Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    )) {
+        return '';
+    }
     require_once __DIR__ . '/../views/gallery_pdf_documents.php';
     ob_start();
     \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery, $editor));

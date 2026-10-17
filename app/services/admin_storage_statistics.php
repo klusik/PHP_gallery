@@ -14,6 +14,46 @@
  *   - Separate source-photo byte totals from generated thumbnail byte totals
  *   - Aggregate image file types, source-size ranges, and largest galleries
  *   - Cache filesystem-derived thumbnail statistics briefly for shared hosting
+ *   - Measure indexed PDF/music originals during explicit gallery batches
+ *
+ * @phpstan-type StorageChartRow array{key:string,label:string,count:int,
+ *     bytes:int,percent?:float,extension?:string,mime_type?:string,
+ *     bucket_key?:string,label_key?:string,gallery_id?:int,folder_path?:string,
+ *     kind?:string,format?:string}
+ * @phpstan-type StorageSourceSummary array{image_count:int,
+ *     known_source_size_count:int,unknown_source_size_count:int,
+ *     original_bytes:int,average_original_bytes:int,largest_original_bytes:int,
+ *     largest_original_name:string,type_rows:list<StorageChartRow>,
+ *     size_bucket_rows:list<StorageChartRow>,
+ *     largest_gallery_rows:list<StorageChartRow>}
+ * @phpstan-type StorageGeneratedSummary array{thumbnail_bytes:int,
+ *     thumbnail_count:int,display_master_bytes:int,display_master_count:int,
+ *     generated_bytes:int,scan_errors:int,
+ *     generated_type_groups:array<string,StorageChartRow>}
+ * @phpstan-type StorageAttachmentSummary array{pdf_count:int,pdf_bytes:int,
+ *     music_count:int,music_bytes:int,errors:int}
+ * @phpstan-type StorageSnapshot array{fingerprint:string,generated_at:int,
+ *     image_count:int,known_source_size_count:int,unknown_source_size_count:int,
+ *     original_bytes:int,average_original_bytes:int,largest_original_bytes:int,
+ *     largest_original_name:string,generated_thumbnail_bytes:int,
+ *     generated_thumbnail_count:int,display_master_bytes:int,
+ *     display_master_count:int,generated_bytes:int,total_picture_bytes:int,
+ *     generated_to_original_percent:float,thumbnail_scan_errors:int,
+ *     type_rows:list<StorageChartRow>,size_bucket_rows:list<StorageChartRow>,
+ *     largest_gallery_rows:list<StorageChartRow>,
+ *     generated_type_rows:list<StorageChartRow>,pdf_count:int,pdf_bytes:int,
+ *     music_count:int,music_bytes:int,attachment_scan_errors:int,
+ *     attachment_bytes:int,total_media_bytes:int,cache_hit?:bool,
+ *     cache_stale?:bool}
+ * @phpstan-type StorageJob array{job_id:string,status:string,fingerprint:string,
+ *     started_at:int,updated_at:int,total:int,processed:int,last_image_id:int,
+ *     image_total:int,image_processed:int,last_gallery_id:int,
+ *     gallery_total:int,gallery_processed:int,source:StorageSourceSummary,
+ *     generated:StorageGeneratedSummary,attachments:StorageAttachmentSummary,
+ *     thumbnail_metadata_used:bool,snapshot?:StorageSnapshot}
+ * @phpstan-type StorageJobState array{ok:bool,job_id?:string,status:string,
+ *     total?:int,processed?:int,percent?:float,message:string,
+ *     snapshot?:StorageSnapshot|null}
  *
  * Author:
  *   Rudolf Klusal
@@ -42,10 +82,49 @@ use function Gallery\Models\admin_storage_statistics_model_image_rows_after_id;
 use function Gallery\Models\admin_storage_statistics_model_thumbnail_summary_rows;
 use Throwable;
 
-const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v2';
-const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v1';
+/**
+ * Version snapshots so old photo-only totals cannot claim attachment coverage.
+ * Type: string. Units: app_settings key. Scope: cached Admin media accounting.
+ * Consumers: statistics cache readers, writers and explicit cache invalidation.
+ * Rationale: v3 adds PDF/music measurements; preserve old v2 derived bytes and
+ *     require a new manual snapshot without rewriting original media.
+ */
+const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v3';
+/**
+ * Version resumable jobs to require independent photo and gallery cursors.
+ * Type: string. Units: app_settings key. Scope: one manual statistics job.
+ * Consumers: statistics job readers, writers and explicit invalidation.
+ * Rationale: v2 cannot safely resume a v1 photo-only state as complete media
+ *     accounting; old derived state is preserved for a fresh manual restart.
+ */
+const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v2';
+/**
+ * Keep ordinary derivative work responsive without changing its default.
+ * Type: int. Units: images per request. Scope: manual statistics photo phase.
+ * Consumers: process_job default and the controller's absent-input fallback.
+ * Rationale: The established 20-row batch balances progress and shared-host I/O.
+ */
 const ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE = 20;
+/**
+ * Retain the existing ceiling for administrator-selected photo batch sizes.
+ * Type: int. Units: images per request. Scope: manual statistics photo phase.
+ * Consumers: controller/service batch normalization and image keyset reads.
+ * Rationale: The unchanged 80-row ceiling bounds derivative probes; gallery
+ *     attachment work uses its separate smaller ceiling.
+ */
 const ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE = 80;
+
+/**
+ * Bound attachment metadata/stat work independently of photo-derivative batches.
+ * Type: int. Units: physical galleries per request. Scope: manual storage jobs.
+ * Consumers: admin_storage_statistics_process_job and synchronous build.
+ * Rationale: Two bounded indexes per gallery keep shared-host requests short;
+ *     the existing image batch size does not bound files inside a gallery.
+ */
+const ADMIN_STORAGE_STATISTICS_GALLERY_BATCH_SIZE = 2;
+
+// Shared constants and row shapes stay here; only this entry loads its parts.
+require_once __DIR__ . '/admin_storage_statistics/jobs.php';
 
 /**
  * Return detailed storage statistics for dashboard rendering.
@@ -110,100 +189,9 @@ function admin_storage_statistics_cached_snapshot(bool $allowStale = true): ?arr
 }
 
 /**
- * Start a manual, browser-driven storage statistics job.
+ * Combine database summaries and the advisory attachment mutation revision.
  *
- * Source-file statistics are calculated once from database rows. Filesystem
- * checks for generated images are then processed in small Ajax batches so the
- * admin page can display progress and shared hosting requests stay short.
- *
- * @return array<string mixed>.
- */
-function admin_storage_statistics_start_job(): array
-{
-    $fingerprint = admin_storage_statistics_fingerprint();
-    $rows = admin_storage_statistics_image_rows();
-    $source = admin_storage_statistics_source_summary($rows);
-
-    $job = [
-        'job_id' => admin_storage_statistics_job_id(),
-        'status' => 'running',
-        'fingerprint' => $fingerprint,
-        'started_at' => time(),
-        'updated_at' => time(),
-        'total' => count($rows),
-        'processed' => 0,
-        'last_image_id' => 0,
-        'source' => admin_storage_statistics_compact_source_summary($source),
-        'generated' => admin_storage_statistics_initial_generated_summary(),
-        'thumbnail_metadata_used' => admin_storage_statistics_thumbnail_metadata_available(),
-    ];
-
-    if ((int) $job['total'] <= 0) {
-        return admin_storage_statistics_finish_job($job);
-    }
-
-    admin_storage_statistics_job_write($job);
-    return admin_storage_statistics_job_public_state($job);
-}
-
-/**
- * Process one manual storage statistics job batch.
- *
- * @param int $batchSize Batch size value.
- * @return array<string mixed>.
- */
-function admin_storage_statistics_process_job(int $batchSize = ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE): array
-{
-    $job = admin_storage_statistics_job_read();
-    if ($job === null || (string) ($job['status'] ?? '') !== 'running') {
-        return [
-            'ok' => false,
-            'status' => 'missing',
-            'message' => 'No running storage statistics job was found.',
-        ];
-    }
-
-    $currentFingerprint = admin_storage_statistics_fingerprint();
-    if ($currentFingerprint !== '' && (string) ($job['fingerprint'] ?? '') !== '' && !hash_equals((string) $job['fingerprint'], $currentFingerprint)) {
-        $job['status'] = 'stale';
-        $job['updated_at'] = time();
-        admin_storage_statistics_job_write($job);
-        return admin_storage_statistics_job_public_state($job, null, 'Gallery data changed while statistics were being calculated. Start a new update.');
-    }
-
-    $batchSize = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $batchSize));
-    $lastImageId = max(0, (int) ($job['last_image_id'] ?? 0));
-    $rows = admin_storage_statistics_image_rows_after_id($lastImageId, $batchSize);
-    $generated = admin_storage_statistics_normalize_generated_summary(is_array($job['generated'] ?? null) ? $job['generated'] : []);
-    $thumbnailMetadataUsed = !empty($job['thumbnail_metadata_used']);
-
-    foreach ($rows as $row) {
-        if ($thumbnailMetadataUsed) {
-            admin_storage_statistics_accumulate_display_master_media_row($generated, $row);
-        } else {
-            admin_storage_statistics_accumulate_generated_media_row($generated, $row);
-        }
-        $lastImageId = max($lastImageId, (int) ($row['image_id'] ?? 0));
-    }
-
-    $processed = min(max(0, (int) ($job['total'] ?? 0)), max(0, (int) ($job['processed'] ?? 0)) + count($rows));
-    $job['generated'] = $generated;
-    $job['processed'] = $processed;
-    $job['last_image_id'] = $lastImageId;
-    $job['updated_at'] = time();
-
-    if ($rows === [] || $processed >= (int) ($job['total'] ?? 0)) {
-        return admin_storage_statistics_finish_job($job);
-    }
-
-    admin_storage_statistics_job_write($job);
-    return admin_storage_statistics_job_public_state($job);
-}
-
-/**
- * Build a stable database fingerprint used to invalidate cached statistics.
- *
- * @return string Text result for the caller.
+ * @return string SHA-256 fingerprint, or empty when database summaries fail.
  */
 function admin_storage_statistics_fingerprint(): string
 {
@@ -219,6 +207,7 @@ function admin_storage_statistics_fingerprint(): string
         (string) ($row['newest_image_update'] ?? ''),
         (string) ($galleryRow['gallery_count'] ?? '0'),
         (string) ($galleryRow['newest_gallery_update'] ?? ''),
+        (string) app_setting('gallery_attachment_storage_revision', ''),
     ]));
 }
 
@@ -285,21 +274,6 @@ function admin_storage_statistics_cache_clear(): void
         return;
     }
     delete_app_settings([ADMIN_STORAGE_STATISTICS_CACHE_KEY, ADMIN_STORAGE_STATISTICS_JOB_KEY]);
-}
-
-/**
- * Build uncached statistics from database rows and expected generated media paths.
- *
- * @param string $fingerprint Fingerprint value.
- * @return array<string mixed>.
- */
-function admin_storage_statistics_build(string $fingerprint): array
-{
-    $rows = admin_storage_statistics_image_rows();
-    $source = admin_storage_statistics_source_summary($rows);
-    $generated = admin_storage_statistics_generated_media_summary($rows);
-
-    return admin_storage_statistics_snapshot_from_summaries($fingerprint, admin_storage_statistics_compact_source_summary($source), $generated);
 }
 
 /**
@@ -750,64 +724,6 @@ function admin_storage_statistics_image_shape(array $row): array
         'mime_type' => (string) ($row['mime_type'] ?? ''),
         'thumbnail_derivative_version' => max(1, (int) ($row['thumbnail_derivative_version'] ?? 1)),
     ];
-}
-
-/**
- * Build the final statistics snapshot from compact source and generated summaries.
- *
- * @param string $fingerprint Fingerprint value.
- * @param array $source Source value.
- * @param array $generated Generated value.
- * @return array<string mixed>.
- */
-function admin_storage_statistics_snapshot_from_summaries(string $fingerprint, array $source, array $generated): array
-{
-    $generated = admin_storage_statistics_normalize_generated_summary($generated);
-    $originalBytes = (int) ($source['original_bytes'] ?? 0);
-    $generatedBytes = (int) ($generated['thumbnail_bytes'] ?? 0) + (int) ($generated['display_master_bytes'] ?? 0);
-    $totalPictureBytes = $originalBytes + $generatedBytes;
-
-    return [
-        'fingerprint' => $fingerprint,
-        'generated_at' => time(),
-        'image_count' => (int) ($source['image_count'] ?? 0),
-        'known_source_size_count' => (int) ($source['known_source_size_count'] ?? 0),
-        'unknown_source_size_count' => (int) ($source['unknown_source_size_count'] ?? 0),
-        'original_bytes' => $originalBytes,
-        'average_original_bytes' => (int) ($source['average_original_bytes'] ?? 0),
-        'largest_original_bytes' => (int) ($source['largest_original_bytes'] ?? 0),
-        'largest_original_name' => (string) ($source['largest_original_name'] ?? ''),
-        'generated_thumbnail_bytes' => (int) ($generated['thumbnail_bytes'] ?? 0),
-        'generated_thumbnail_count' => (int) ($generated['thumbnail_count'] ?? 0),
-        'display_master_bytes' => (int) ($generated['display_master_bytes'] ?? 0),
-        'display_master_count' => (int) ($generated['display_master_count'] ?? 0),
-        'generated_bytes' => $generatedBytes,
-        'total_picture_bytes' => $totalPictureBytes,
-        'generated_to_original_percent' => $originalBytes > 0 ? round(($generatedBytes / $originalBytes) * 100, 1) : 0.0,
-        'thumbnail_scan_errors' => (int) ($generated['scan_errors'] ?? 0),
-        'type_rows' => is_array($source['type_rows'] ?? null) ? $source['type_rows'] : [],
-        'size_bucket_rows' => is_array($source['size_bucket_rows'] ?? null) ? $source['size_bucket_rows'] : [],
-        'largest_gallery_rows' => is_array($source['largest_gallery_rows'] ?? null) ? $source['largest_gallery_rows'] : [],
-        'generated_type_rows' => admin_storage_statistics_finalize_group_rows(is_array($generated['generated_type_groups'] ?? null) ? $generated['generated_type_groups'] : [], 'bytes'),
-    ];
-}
-
-/**
- * Finish a manual job and store its statistics snapshot.
- *
- * @param array $job Job value.
- * @return array<string mixed>.
- */
-function admin_storage_statistics_finish_job(array $job): array
-{
-    $job['status'] = 'complete';
-    $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
-    $job['updated_at'] = time();
-    $snapshot = admin_storage_statistics_snapshot_from_summaries((string) ($job['fingerprint'] ?? ''), is_array($job['source'] ?? null) ? $job['source'] : [], is_array($job['generated'] ?? null) ? $job['generated'] : []);
-    admin_storage_statistics_cache_write($snapshot);
-    $job['snapshot'] = $snapshot;
-    admin_storage_statistics_job_write($job);
-    return admin_storage_statistics_job_public_state($job, $snapshot);
 }
 
 /**

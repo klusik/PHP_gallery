@@ -1,5 +1,35 @@
 # Compatibility lifecycle and retirement register
 
+## Attachment masters and accounting snapshots
+
+Owners: canonical capability registry, shared upload/editor controllers,
+attachment readers and Admin storage statistics. Independent PDF/music masters
+default ON when no preference exists, including upgrades; fresh seeding preserves
+explicit OFF. OFF retains files, indexes, preferences and the incomplete-PDF-child
+publication guard. The historical `media&ofp=1` alias remains supported and applies
+the same PDF master. Stored page photos retain their normal image ownership.
+Both masters OFF omit the shared editor media tab; an old selected-tab URL
+normalizes to the available Identity default rather than an empty panel.
+
+Photo-only cached snapshots/jobs are derived state and cannot establish complete
+attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
+or old derived bytes; the first new measurement requires explicit Update all.
+The existing optional snapshot argument remains supported for pure/legacy
+photo-only consumers and contributes zero attachment bytes when omitted.
+
+The attachment accounting owner omits corrupt indexes and unsafe/unreadable
+originals with visible partial-coverage warnings, preserving independent readable
+categories and all original bytes. This is permanent read-only reporting behavior,
+not permission to repair indexes. A post-commit advisory revision write may fail
+without failing the successful attachment response; the next manual scan still
+measures files. This permanent fallback avoids duplicate retries after optional
+reporting failures. Out-of-band file changes require manual refresh.
+
+Regression owners: canonical feature core/inventory, real MySQL/MariaDB HTTP
+workflow and the existing storage-statistics fixture. Real-host library sizes,
+permissions and media usage remain unknown; no performance/usage-based retirement
+of these compatibility paths is claimed.
+
 ## Gallery soundtrack browser support
 
 Owners: gallery music service/model, protected controller and

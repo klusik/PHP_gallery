@@ -87,6 +87,26 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     }
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
+    // This editor is shared with core photo settings. Gate attachment actions,
+    // including stale forms and legacy OFP conversion, before dispatching them.
+    $attachmentRoute = '';
+    if ((string) ($_POST['music_action'] ?? '') !== '') {
+        $attachmentRoute = 'gallery_music';
+    } elseif ((string) ($_POST['pdf_action'] ?? '') !== ''
+        || in_array((string) ($_POST['simbrief_action'] ?? ''), [
+            'upload_pdf', 'replace_pdf', 'convert_pdf_pages',
+        ], true)) {
+        $attachmentRoute = 'gallery_ofp_pdf';
+    }
+    if ($attachmentRoute !== ''
+        && !\Gallery\Services\feature_flag_route_enabled($attachmentRoute)) {
+        \Gallery\Core\cms_apply_feature_disabled_route_response(
+            \Gallery\Services\feature_flag_disabled_route_decision(
+                $attachmentRoute, admin_wants_json(), true
+            )
+        );
+        return;
+    }
     if ((string) ($_POST['music_action'] ?? '') !== '') {
         admin_edit_gallery_handle_music_action($gallery);
         return;
@@ -150,7 +170,7 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
  * checked CSRF before this handler is called. Uploads are not implicit gallery
  * saves: gallery metadata, media, route and old SimBrief JSON remain untouched.
  *
- * @param array<string,mixed> $gallery Persisted, authorized physical gallery.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @return void Render an AJAX in-place update or a standard POST redirect.
  */
 function admin_edit_gallery_handle_ofp_upload(array $gallery): void
@@ -178,6 +198,7 @@ function admin_edit_gallery_handle_ofp_upload(array $gallery): void
         require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
         $provenance = (string) ($_POST['ofp_provenance'] ?? 'retrospective_user_generated');
         $outcome = \Gallery\Services\simbrief_ofp_attach_manual_pdf($gallery, $upload['tmp_name'], $provenance, $replace);
+        \Gallery\Services\gallery_attachment_storage_changed();
         $message = t('admin.legacy_ofp.upload_complete', 'The OFP PDF was attached to this gallery. Existing photos, dates and routes were preserved.');
         admin_log_event('info', 'simbrief.ofp_manual_pdf_attached', 'Administrator attached an OFP PDF.', [
             'gallery_id' => $galleryId,

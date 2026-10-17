@@ -1163,4 +1163,68 @@ return [
     'music.lock_download' => 'Download dieses Titels sperren',
     'music.allow_all' => 'Download aller aktuellen Titel erlauben',
     'music.lock_all' => 'Download aller aktuellen Titel sperren',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'PDF-Dokumente der Galerien',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
+        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+        . 'Einstellungen.',
+    'admin.features.gallery_music.label' =>
+        'Galeriemusik',
+    'admin.features.gallery_music.description' =>
+        'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
+        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+        . 'Diashow-Einstellungen.',
+    'admin.upload.media_files_label' =>
+        'Dateien',
+    'admin.upload.media_files_help' =>
+        'Unterstützte Dateien auswählen oder ablegen. Der Dateidialog '
+        . 'zeigt aktivierte Galerie-Medientypen.',
+    'admin.storage.pdf_originals' =>
+        'PDF-Originale',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} Galeriedokument(e), einschließlich SimBrief-PDFs.',
+    'admin.storage.music_originals' =>
+        'Musikoriginale',
+    'admin.storage.music_originals_hint' =>
+        '{count} gespeicherte Audiodatei(en), einschließlich '
+        . 'ausgeblendeter und nicht herunterladbarer Titel.',
+    'admin.storage.total_media' =>
+        'Gesamter Medienspeicher',
+    'admin.storage.total_media_hint' =>
+        'Bilder und ihre Ableitungen sowie PDF- und Musikoriginale.',
+    'admin.storage.attachment_warnings' =>
+        'Unvollständige Anhangsmessung',
+    'admin.storage.attachment_warnings_hint' =>
+        'Einige Originale oder Indizes waren nicht lesbar. Summen '
+        . 'enthalten nur gemessene Dateien.',
+    'admin.storage.description' =>
+        'Fotogrößen stammen aus der Datenbank. Alles aktualisieren misst '
+        . 'Ableitungen und indexierte PDF-/Musikoriginale.',
+    'admin.storage.no_snapshot_hint' =>
+        'Alles aktualisieren misst Fotos, Ableitungen und '
+        . 'PDF-/Musikoriginale und erstellt Diagramme.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'PDF-Dokumente der Galerien',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
+        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+        . 'Einstellungen.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
+        . 'umkehrbar.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Galeriemusik',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
+        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+        . 'Diashow-Einstellungen.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
+        . 'umkehrbar.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} Datensätze',
+    'admin.storage.tab_files_hint' =>
+        'Fotos, Ableitungen, PDF- und Musikoriginale',
 ];

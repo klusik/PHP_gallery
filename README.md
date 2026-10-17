@@ -1,5 +1,13 @@
 # PHP Gallery CMS
 
+Gallery PDF documents and music have separate switches in **Admin → Features**.
+Both default ON for fresh and updated installations without a saved preference;
+OFF hides the corresponding media UI and rejects uploads/delivery while keeping
+stored files and preferences. **Storage statistics → Update all** includes
+PDF/music original counts and bytes, even while hidden, download-locked or
+globally disabled, plus an overall media total. See the
+[accounting scope](docs/GALLERY_PDF.md#admin-storage-accounting).
+
 Cache operations: [automatic visitor-driven retention, independent updater GC and safe incident remediation](docs/CACHE_MAINTENANCE.md). Installation/update enables the single Admin Features cache preference; explicit OFF survives updates. A suitable public visit starts authenticated server continuations with thirty-second opportunities and at most five seconds of work. A persistent database registry rotates due regions, resumes partial checkpoints and retains last-known measurements and confirmed deletion receipts. Healthy completed regions are rechecked hourly; an interrupted server chain needs a later restart opportunity. Cron is optional.
 Hosting cron can run `php scripts/site_maintenance.php --cache-only` every minute
 to drain already-staged updater trash independently of thumbnail maintenance.

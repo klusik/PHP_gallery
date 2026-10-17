@@ -366,6 +366,17 @@ function cms_admin_upload_browser_batch(): void
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
         $preparedThumbnailsRequired = (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1';
         $pdfToken = (string) ($_POST['pdf_conversion_token'] ?? '');
+        if ($pdfToken !== ''
+            && !\Gallery\Services\feature_capability_effective_enabled(
+                'gallery_pdf_documents'
+            )) {
+            \Gallery\Core\cms_apply_feature_disabled_route_response(
+                \Gallery\Services\feature_flag_disabled_route_decision(
+                    'gallery_ofp_pdf', true, true
+                )
+            );
+            return;
+        }
         $pdfParent = null;
         $pdfWriter = $pdfToken !== '' ? \Gallery\Services\gallery_edit_writer_begin() : null;
         try {
@@ -916,16 +927,26 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
 {
     require_once __DIR__ . '/../services/gallery_music.php';
     $targetGallery = $panelMode && $prefillGalleryId > 0 ? find_gallery($prefillGalleryId, true) : null;
+    $pdfEnabled = \Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    );
+    $musicEnabled = \Gallery\Services\feature_capability_effective_enabled(
+        'gallery_music'
+    );
     \Gallery\Views\view_render_admin_upload_existing_gallery_form([
         'panel_mode' => $panelMode,
         'action_url' => url_for('admin_upload'),
-        'pdf_attachment_url' => url_for('admin_edit_gallery'),
-        'music_attachment_url' => url_for('admin_edit_gallery'),
-        'music_playlist_url' => url_for('gallery_music'),
-        'music_accept_value' => implode(',', array_map(
+        'pdf_enabled' => $pdfEnabled,
+        'music_enabled' => $musicEnabled,
+        'pdf_attachment_url' => $pdfEnabled
+            ? url_for('admin_edit_gallery') : '',
+        'music_attachment_url' => $musicEnabled
+            ? url_for('admin_edit_gallery') : '',
+        'music_playlist_url' => $musicEnabled ? url_for('gallery_music') : '',
+        'music_accept_value' => $musicEnabled ? implode(',', array_map(
             static fn(string $extension): string => '.' . $extension,
             array_keys(\Gallery\Services\gallery_music_formats())
-        )),
+        )) : '',
         'csrf_html' => csrf_field(),
         'operation_key' => admin_operation_form_key($_POST['operation_key'] ?? null),
         'gallery_id' => $panelMode ? $prefillGalleryId : 0,

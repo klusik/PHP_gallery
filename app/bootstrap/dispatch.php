@@ -405,13 +405,15 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
 /**
  * Apply one disabled-feature decision at the HTTP dispatch boundary.
  *
- * @param array{status:int,representation:string,headers:array<string,string>,payload:array<string,mixed>,title:string,message:string,admin:bool} $decision Disabled-route decision.
+ * @param array{status:int,representation:string,headers:array<string,string>,
+ *     payload:array{ok:bool,error:string,features?:list<string>,
+ *         requirement?:string,message?:string},title:string,message:string,
+ *     admin:bool} $decision Canonical disabled-route response policy.
  * @param Kernel|null $kernel Optional request coordinator already selected by dispatch.
  * @return void Emits the existing disabled-feature representation.
  */
 function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $kernel = null): void
 {
-    ($kernel ?? cms_runtime_kernel())->load('feature-disabled-response');
     http_response_code((int) ($decision['status'] ?? 404));
     if (!headers_sent()) {
         foreach (($decision['headers'] ?? []) as $name => $value) {
@@ -427,6 +429,15 @@ function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $ker
         return;
     }
 
+    if (($decision['representation'] ?? '') === 'text') {
+        header('Content-Type: text/plain; charset=utf-8');
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'HEAD') {
+            echo 'Not found.';
+        }
+        return;
+    }
+
+    ($kernel ?? cms_runtime_kernel())->load('feature-disabled-response');
     $title = (string) ($decision['title'] ?? '');
     $message = (string) ($decision['message'] ?? '');
     render_header($title);

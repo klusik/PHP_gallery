@@ -1,5 +1,13 @@
 # PHP Gallery Code Map
 
+- Media masters: `app/services/feature_flags/registry.php` owns the independent
+  PDF/music capabilities. Shared editor actions and browser PDF batch admission
+  enforce them without disabling ordinary photo settings/uploads.
+- Media accounting: the existing `admin_storage_statistics` model/service/view
+  owns gallery keysets, resumable progress and cached totals;
+  `gallery_attachment_storage_summary()` in the PDF attachment service measures
+  original payload sizes. `gallery_pdf_settings.php` owns the advisory mutation
+  revision. The attachment runtime owner is deferred until explicit scan work.
 - Compact PDF/music applets: shared markup in
   `app/views/public_gallery_lightbox.php`; disclosure lifecycle in
   `public/assets/gallery-modules/gallery-media-panels.js`.

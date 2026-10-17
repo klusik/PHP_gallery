@@ -141,7 +141,11 @@ namespace {
     viewer_feature_wrapper_assert(viewer_registration_mode() === 'disabled', 'Disabling the wrapper must hide subordinate registration mode.');
 
     $definitions = feature_flag_definitions();
-    viewer_feature_wrapper_assert(count($definitions) === 35 && isset($definitions['automatic_cache_cleanup']), 'Feature registry audit expected all 35 canonical capabilities including automatic cache cleanup.');
+    // The 35 established capabilities plus independent PDF/music masters.
+    viewer_feature_wrapper_assert(count($definitions) === 37
+        && isset($definitions['automatic_cache_cleanup'],
+            $definitions['gallery_pdf_documents'], $definitions['gallery_music']),
+        'Feature registry must include all 37 canonical capabilities.');
     viewer_feature_wrapper_assert(!feature_flag_default_enabled('admin_test_runs'), 'Admin test-run diagnostics must remain disabled by default.');
 
     $routeMap = feature_flag_route_map();

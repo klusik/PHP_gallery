@@ -70,6 +70,36 @@ speed/photo changes without audio restart, exit/close during a pending play,
 real multipart/PHP size failures, password/share/NSFW sessions and denied static
 originals. Include empty/one-track playlists and disabled slideshow. These checks
 remain unperformed unless separately reported with exact-candidate evidence.
+## PDF/music masters and Admin storage accounting
+
+The canonical feature core/inventory fixtures enumerate both new masters,
+upgrade/fresh defaults, explicit-OFF preservation and independent route gating.
+The existing real database/HTTP gallery workflow saves both switches through
+the rendered Admin Features form. Each independent OFF combination must hide
+the matching physical/Smart player or document table, remove disabled picker
+formats and conversion controls, keep galleries working and leave no empty
+attachment column. Both masters OFF omit the shared editor media tab and
+normalize an old selected-tab URL back to the available default.
+Direct/legacy PDF and audio GET/HEAD requests are denied;
+stale PDF/music upload forms, conversion actions and prepared page batches fail
+at the server boundary without changing retained hashes. Re-enable restores
+the same originals and Smart playlist. The real manual storage job measures
+physical duplicates, hidden and globally disabled originals and proves the
+additive total without counting the Smart union again.
+
+`admin_storage_statistics_test.php` runs actual attachment readers and resumable
+statistics logic over private temporary files with model/settings adapters. It
+checks the gallery cap independently of image batch size, progress across phases,
+an installation with no photos, hidden/locked originals, manual/OFP separation,
+exact known byte totals, no passive scan, stale revisions, optional invalidation
+write failure, corrupt-index preservation and missing/symlink originals. It also
+calls actual SimBrief persistence with PDF OFF to retain JSON import and an old
+PDF manifest reference without permitting a direct PDF fetch/write. These tests
+do not establish full-disk allocated blocks, arbitrary external-file discovery
+or real-host performance. Manual acceptance includes a large media library,
+permission failures, OFF/ON after reload, mounted upload panels and all four
+languages. Hosted exact-candidate FULL remains the qualification owner.
+
 ## Optional readability report
 
 **Code readability report** is a manual, read-only advisory workflow. Select only

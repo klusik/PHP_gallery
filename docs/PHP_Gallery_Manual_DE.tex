@@ -492,6 +492,16 @@ Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{
 
 \ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} beginnt mit dem Raster und den üblichen Schaltern für Abstimmung und Dateinamen; EXIF/GPS, Galeriekartenformat, Anzahlkennzeichnung, Lightbox-Modus, Picture Game, Vorschaubildgrenzen liegen unter \ui{Erweiterte Anzeigeeinstellungen}; Flugroutentext ist neben SimBrief unter \ui{Identität} verfügbar.
 
+Unter \ui{Admin > Funktionen} sind \ui{PDF-Dokumente der Galerien}
+und~\ui{Galeriemusik} unabhängig schaltbar. Neue und~aktualisierte
+Installationen ohne gespeicherte Wahl starten mit beiden Funktionen an;
+eine ausdrückliche Abschaltung bleibt erhalten. OFF verbirgt die zugehörigen
+Tabellen/Player und~sperrt Upload, Auslieferung und~PDF-Konvertierung, auch aus
+alten Formularen. Dateien, Listen und~Einstellungen bleiben erhalten.
+Bei beiden OFF entfällt auch der Medienreiter; alte Reiter-URLs wählen Identität.
+Bereits erzeugte Seitenfotos behalten ihre normalen Zugriffsregeln.
+SimBrief kann Beschreibungen/Routen weiter aktualisieren und~behält alte PDFs.
+
 \subsubsection{PDF-Dokumente anhängen und umwandeln}
 Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt das bisherige Ziel oder wurde es geändert, bestätigen Sie ein neues privates Ergebnis; bisherige Dateien und Galerien bleiben erhalten.
 
@@ -2174,6 +2184,20 @@ Administrationsrouten und maschinelle Endpunkte wie Einrichtung, WebDAV, Uploada
 Die Datenbankprüfung erfasst Schemaobjekte, Referenzen, Zuordnungskategorien, Aufbewahrungsrichtlinie und Bereinigungssicherheit. Logische Bereinigung verwendet Regeln einer Positivliste mit deterministischer Auswahl, begrenzten Chargen und Auditdatensätzen. Schemareparatur bietet Probelauf und idempotenten Migrationsweg. \codeword{ANALYZE TABLE} kann Optimiererstatistiken ausgewählter Tabellen aktualisieren. Physisches \codeword{OPTIMIZE TABLE} ist nur als Vorschau mit anschließend separat bestätigtem Vorgang für ausgewählte Tabellen verfügbar; es ist niemals ein automatischer Bereinigungsschritt.\footnote{Zuweisungswerte der Speicherengine wie Schätzungen freien Datenspeichers beschreiben den Enginezustand und garantieren keine genaue Anzahl nach Optimierung freigegebener Dateisystembytes.}
 
 \subsection{Speicherstatistik und Gesamtbericht}
+
+Die Dateiansicht zeigt auch Anzahl und~Bytes der~PDF- und~Musikoriginale
+sowie eine Gesamtmediensumme. Nach Fotobatches prüft Alles aktualisieren
+höchstens zwei physische Galerien je Schritt, auch Galerien ohne Fotos.
+Verborgene, private, deaktivierte und~nicht herunterladbare Dateien zählen
+weiter. Physische Kopien zählen einzeln; Smart-Listen erzeugen keine Kopie.
+Konvertierte PDF-Seiten zählen bereits als Fotos. Indizes, Sperren,
+Konvertierungszustand, nicht indexierte Dateien, Papierkorb und~andere Caches
+sind ausgeschlossen. Unlesbare Indizes oder unsichere/fehlende Dateien
+führen zu~sichtbarer Teilmessung ohne Reparatur. Normale Seiten lesen den~Cache;
+Anhangsänderungen markieren ihn bei erfolgreicher Revisionsspeicherung als
+veraltet. Nach dem Upgrade alter Fotostatistiken sowie externen Dateiänderungen
+ist Alles aktualisieren für~eine neue Messung erforderlich.
+
 \index{s00229@Speicherstatistik}
 \index{g00139@Gesamtbericht}
 \index{g00120@Galeriebericht}

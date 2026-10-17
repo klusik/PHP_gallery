@@ -488,6 +488,15 @@ Běžné pracovní oblasti jsou \ui{Identita}, \ui{API}, \ui{Přístup}, \ui{Zob
 
 \ui{Identita} ponechává snadno dostupný název, popis, datum, zdrojový jazyk, SimBrief a~štítky. Její pokročilý oddíl obsahuje identifikátor v~URL, složku, nadřazenou galerii, pořadí a~text galerie od AI, je-li povolen. \ui{API} zobrazuje kopírovatelný koncový bod nahrávání, označení a~akci klíče a~nově vygenerovaný klíč pouze jednou; existující klíče se zobrazují, jen pokud nějaké jsou. Obnova metadat pomocí AI, migrace a~globální správce API jsou pod \ui{Pokročilé nástroje API}. \ui{Přístup} seskupuje viditelnost, heslo, ovládání odkazu pro sdílení a~zaškrtávací pole NSFW; delší vysvětlení pravidel jsou pod otazníky. \ui{Zobrazení} začíná mřížkou a~běžnými přepínači hlasování a~názvů souborů; EXIF/GPS, formát karty galerie, odznak počtu, režim lightboxu, hra s~fotografiemi, meze náhledů jsou pod \ui{Pokročilá nastavení zobrazení}; text letové trasy je dostupný vedle SimBrief v~oddílu \ui{Identita}.
 
+V~\ui{Administrace > Funkce} jsou \ui{PDF dokumenty galerií} a~\ui{Hudba
+galerií} nezávislé přepínače. Nové i~aktualizované instalace bez uložené volby
+mají oba zapnuté; výslovné vypnutí zůstane uložené. Vypnutí skryje příslušné
+tabulky či~přehrávače a~zakáže nahrávání, přístup k~souborům i~převod PDF,
+včetně starých otevřených formulářů. Soubory, playlisty a~předvolby zůstanou
+pro opětovné zapnutí. Při vypnutí obou funkcí zmizí také záložka médií;
+starý odkaz vybere Identitu. Vytvořené fotografie stránek zachovají přístupová
+pravidla. SimBrief může dál aktualizovat popis a~trasu a~zachová staré PDF.
+
 \subsubsection{Připojení a~převod dokumentu PDF}
 Rozbalení převodu nezvětší sloupec dokumentů. Pokud předchozí cíl chybí nebo byl změněn, potvrďte nový soukromý výsledek; dřívější soubory a galerie zůstanou zachovány.
 
@@ -2151,6 +2160,20 @@ Trasy administrace a~strojové koncové body, například nastavení, WebDAV, au
 Průzkum databáze inventarizuje objekty schématu, odkazy, kategorie vlastnictví, pravidla uchování a~jistotu úklidu. Logický úklid používá povolená pravidla s~deterministickým výběrem, omezenými dávkami a~auditními záznamy. Oprava schématu poskytuje plán nanečisto a~idempotentní migrační postup. \codeword{ANALYZE TABLE} může obnovit statistiky optimalizátoru vybraných tabulek. Fyzický \codeword{OPTIMIZE TABLE} je dostupný pouze jako náhled následovaný samostatně potvrzenou operací vybraných tabulek; nikdy není automatickým krokem úklidu.\footnote{Hodnoty alokace databázového stroje, například odhady volných dat, popisují stav stroje a~nezaručují přesný počet bajtů souborového systému uvolněných po optimalizaci.}
 
 \subsection{Statistiky úložiště a~Úplná zpráva}
+
+Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
+spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
+projde nejvýše dvě fyzické galerie za krok, včetně galerií bez fotografií.
+Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
+kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
+nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
+stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
+Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
+na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny
+příloh je označí za zastaralé, pokud se podaří zapsat pomocnou revizi.
+Po aktualizaci starých statistik pouze fotografií spusťte Aktualizovat vše.
+Ruční obnovení vyžadují také změny souborů mimo aplikaci.
+
 \index{s00225@statistiky úložiště}
 \index{u00243@úplná zpráva}
 \index{z00282@zpráva galerie}
