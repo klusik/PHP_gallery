@@ -1284,4 +1284,13 @@ return [
         '{processed} / {total} record(s)',
     'admin.storage.tab_files_hint' =>
         'Photos, derivatives, PDF and music originals',
+    'media_summary.files' => 'Files',
+    'media_summary.tracks' => 'Tracks',
+    'media_summary.duration' => 'Total duration',
+    'presentation.start' => 'Presentation',
+    'presentation.share' => 'Copy presentation link',
+    'presentation.copied' => 'Presentation link copied.',
+    'presentation.copy_manually' => 'Copy this presentation link manually.',
+    'presentation.description' => 'From the first photo · Music on',
+    'presentation.description_silent' => 'From the first photo',
 ];

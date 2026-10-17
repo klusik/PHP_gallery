@@ -41,10 +41,20 @@ function view_render_gallery_music(array $model): void
         return;
     }
     $surface = $model['editor'] ? 'editor' : 'public';
+    if (!$model['editor']) {
+        // The silent metadata reader fills the total even with a closed list.
+        echo '<dl class="gallery-media-summary">'
+            . '<div><dt>' . e(t('media_summary.tracks')) . '</dt><dd>'
+            . count($model['tracks']) . '</dd></div><div><dt>'
+            . e(t('media_summary.duration'))
+            . '</dt><dd data-music-duration-total title="'
+            . e(t('music.duration_unknown')) . '">…</dd></div></dl>';
+    }
     view_media_panel_start(
         'gallery-music-list-' . $model['gallery_id'] . '-' . $surface,
         t('music.title'),
-        count($model['tracks'])
+        count($model['tracks']),
+        view_music_control_icon('music')
     );
     echo '<table class="gallery-music-table"><thead><tr><th scope="col">'
         . e(t('music.track'))

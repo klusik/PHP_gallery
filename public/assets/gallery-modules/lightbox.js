@@ -48,7 +48,9 @@
  */
 
 
-import {getGalleryMusicPlayer, stopGalleryMusicViewer} from './gallery-music-player.js?v=20261017-media-applets-v1';
+import {
+    getGalleryMusicPlayer, stopGalleryMusicViewer,
+} from './gallery-music-player.js?v=20261017-media-summary-v1';
 
 /**
  * Return a translated browser string with simple placeholder replacement.
@@ -91,12 +93,23 @@ import {
 const galleryLightboxState = {
     controller: null,
     cleanup: null,
+    present: null,
 };
 
 /**
- * Releases lightbox listeners and viewer-held DOM references before public gallery content is replaced.
+ * Launch the current authorized gallery with the existing viewer scheduler.
+ * @returns {void} Start at photo one, or do nothing without an eligible viewer.
+ */
+export function startGalleryPresentation() {
+    galleryLightboxState.present?.();
+}
+
+/**
+ * Release viewer listeners and DOM references before public content replacement.
+ * @returns {void} Retire the current launch callback, resources and controller.
  */
 export function teardownGalleryLightbox() {
+    galleryLightboxState.present = null;
     if (typeof galleryLightboxState.cleanup === 'function') {
         galleryLightboxState.cleanup();
         galleryLightboxState.cleanup = null;
@@ -762,7 +775,7 @@ export function setupGalleryLightbox() {
     // Resolve the page-wide owner at activation time: an editor/table may have
     // selected a different gallery since this viewer was initialized.
     const musicPlayer = {
-        start: () => getGalleryMusicPlayer()?.start(),
+        start: (force = false) => getGalleryMusicPlayer()?.start(force),
         stop: () => stopGalleryMusicViewer(),
         closeViewer: () => stopGalleryMusicViewer(true),
     };
@@ -4793,11 +4806,12 @@ export function setupGalleryLightbox() {
         }, lightboxSlideshowVisibleDuration);
     }
 
-        /**
+    /**
      * Start fullscreen slideshow mode.
-     * @returns {Promise<void>} Activate slideshow and audio before awaiting fullscreen.
+     * @param {boolean} forceMusic Whether this launch explicitly enables audio.
+     * @returns {Promise<void>} Activate audio before awaiting fullscreen.
      */
-    async function startLightboxSlideshow() {
+    async function startLightboxSlideshow(forceMusic = false) {
         if (lightboxSlideshowActive) {
             scheduleLightboxSlideshowNext();
             return;
@@ -4805,7 +4819,13 @@ export function setupGalleryLightbox() {
         resetLightboxZoom(false);
         lightboxSlideshowActive = true;
         syncLightboxSlideshowControls();
-        musicPlayer.start();
+        // A deferred launch may already own audio from its original click.
+        // Preserve that gesture-started source instead of restarting it later.
+        const audioStarted = overlay.hasAttribute('data-presentation-audio-started');
+        if (!forceMusic || !audioStarted) {
+            musicPlayer.start(forceMusic);
+        }
+        overlay.removeAttribute('data-presentation-audio-started');
         if (!isLightboxFullscreen()) {
             await enterLightboxFullscreen();
         }
@@ -5097,8 +5117,41 @@ export function setupGalleryLightbox() {
     document.addEventListener('visibilitychange', handleLightboxVisibilityChange, {signal: controller.signal});
     resetLightboxZoom(false);
 
+    /**
+     * Reset temporary slideshow controls and open the first authorized photo.
+     * @returns {void} Reuse sparse metadata loading, fullscreen and soundtrack.
+     */
+    function presentGalleryFromStart() {
+        if (!lightboxSlideshowEnabled || cards.length === 0) return;
+        if (!overlay.hasAttribute('data-presentation-audio-started')) {
+            stopLightboxSlideshow();
+        }
+        const defaults = lightboxSlideshowSpeedPresets;
+        lightboxSlideshowVisibleDuration = defaults.interval[1];
+        lightboxSlideshowTransitionDuration = defaults.transition[1];
+        const inputs = overlay.querySelectorAll('[data-lightbox-slideshow-speed]');
+        inputs.forEach(input => {
+            input.value = '1';
+            const options = input.closest('label')
+                .querySelectorAll('[data-lightbox-speed-option]');
+            options.forEach((option, index) => {
+                option.classList.toggle('is-selected', index === 1);
+            });
+            input.setAttribute('aria-valuetext', options[1].textContent.trim());
+        });
+        refreshLightboxOrderFromDom();
+        openAt(0, {telemetryTrigger: 'slideshow'});
+        void startLightboxSlideshow(true);
+    }
+    galleryLightboxState.present = presentGalleryFromStart;
+
     document.addEventListener('click', (event) => {
         if (controller.signal.aborted || !(event.target instanceof Element)) {
+            return;
+        }
+        if (event.target.closest('[data-gallery-presentation-start]')) {
+            event.preventDefault();
+            presentGalleryFromStart();
             return;
         }
         const card = event.target.closest('[data-lightbox-image], [data-lightbox-source]');

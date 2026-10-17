@@ -18,6 +18,74 @@ import {createLightboxNavigationLifecycle} from '../public/assets/gallery-module
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/lightbox.js', import.meta.url), 'utf8');
 
+test('explicit presentation resets timing and opens photo one with music', () => {
+    const opened = [];
+    const music = [];
+    const context = vm.createContext({
+        cards: [{}, {}, {}], lightboxSlideshowEnabled: true,
+        // Deliberately different live settings prove the launch resets them.
+        lightboxSlideshowVisibleDuration: 4000,
+        lightboxSlideshowTransitionDuration: 500,
+        lightboxSlideshowSpeedPresets: {
+            interval: [4000, 2000, 1000], transition: [2000, 1000, 500],
+        },
+        overlay: {hasAttribute: () => false, querySelectorAll: () => []},
+        stopLightboxSlideshow: () => {}, refreshLightboxOrderFromDom: () => {},
+        openAt: index => opened.push(index),
+        startLightboxSlideshow: force => music.push(force),
+    });
+    vm.runInContext(productionFunction('presentGalleryFromStart'), context);
+    context.presentGalleryFromStart();
+    assert.deepEqual(opened, [0]);
+    assert.deepEqual(music, [true]);
+    assert.equal(context.lightboxSlideshowVisibleDuration, 2000);
+    assert.equal(context.lightboxSlideshowTransitionDuration, 1000);
+    context.lightboxSlideshowEnabled = false;
+    context.presentGalleryFromStart();
+    assert.deepEqual(opened, [0], 'Disabled slideshow must remain unavailable.');
+});
+
+test('presentation links launch once and require an eligible gallery control', async () => {
+    const deferred = readFileSync(new URL(
+        '../public/assets/gallery-modules/lightbox-deferred.js', import.meta.url
+    ), 'utf8');
+    const setup = deferred.match(
+        /^export function setupGalleryLightbox\([^]*?^}/m
+    );
+    assert.ok(setup, 'Deferred setup owner must remain available.');
+    const launches = [];
+    let eligible = true;
+    const state = {
+        setupToken: 0, presentationConsumed: false,
+        module: {startGalleryPresentation: () => launches.push('start')},
+    };
+    const context = vm.createContext({
+        AbortController, URLSearchParams,
+        deferredLightboxState: state,
+        location: {search: '?lang=cs&presentation=1'}, window: {},
+        document: {
+            querySelector: selector => selector === '[data-gallery-presentation-start]'
+                ? (eligible ? {} : null) : {},
+            addEventListener: () => {},
+        },
+        teardownGalleryLightbox: () => {},
+        scheduleIdleLightboxActivation: () => {},
+        activateFullLightbox: async () => { launches.push('activate'); },
+    });
+    vm.runInContext(setup[0].replace('export ', ''), context);
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.deepEqual(launches, ['activate', 'start']);
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.equal(launches.length, 2, 'Fragment refresh must not replay a link.');
+    state.presentationConsumed = false;
+    eligible = false;
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.equal(launches.length, 2, 'Missing authorization/control must not launch.');
+});
+
 /**
  * Extract one production declaration at its actual viewer-closure indentation.
  * @param {string} name Production function name to execute in the adapter.

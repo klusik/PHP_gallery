@@ -22,7 +22,7 @@ let currentSignature = '';
  *     in saved order.
  * @param {HTMLAudioElement} audio Native audio instance, injectable for
  *     lifecycle fixtures.
- * @returns {{refresh:function():void,start:function():void, stop:function():void,
+ * @returns {{refresh:function():void,start:function(boolean=):void, stop:function():void,
  *     closeViewer:function():void, destroy:function():void,
  *     command:function(string, string=, boolean=):void}} Shared activation,
  *     slideshow boundaries, disposal and explicit control actions.
@@ -182,13 +182,13 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
          */
         refresh: sync,
         /**
-         * Apply the gallery's saved default when slideshow starts.
-         * @returns {void} Replace existing playback only when
-         *     automatic music is on.
+         * Apply the saved default or the visitor's explicit soundtrack launch.
+         * @param {boolean} force Whether this launch explicitly requests music.
+         * @returns {void} Start the first track without persisting preferences.
          */
-        start() {
+        start(force = false) {
             slideshow = true;
-            if (disposed || playlist.enabled !== true) return;
+            if (disposed || (!force && playlist.enabled !== true)) return;
             owner = 'slideshow';
             index = 0;
             failed.clear();
@@ -442,12 +442,34 @@ export function scanGalleryMusicDurations(root = document) {
     for (const cell of root.querySelectorAll('[data-music-duration]')) {
         if (durationSeen.has(cell)) continue;
         durationSeen.add(cell);
-        if (durationObserver) durationObserver.observe(cell);
+        // Public totals need the complete authorized list while its disclosure
+        // is closed. Keep one silent reader; editor-only rows stay viewport-led.
+        const summary = cell.closest('[data-gallery-music]')
+            ?.querySelector('[data-music-duration-total]');
+        if (summary) durationQueue.push(cell);
+        else if (durationObserver) durationObserver.observe(cell);
         else durationQueue.push(cell);
     }
     // Permanent support for browsers without IntersectionObserver: metadata
     // remains serialized and bounded by the same per-row deadline.
-    if (!durationObserver) void drainMusicDurations();
+    void drainMusicDurations();
+}
+
+/**
+ * Show a complete playlist duration without treating missing tracks as zero.
+ * @param {Element} card Authorized public music section containing its rows.
+ * @returns {void} Show the total, pending ellipsis or explicit unknown dash.
+ */
+function updateMusicDurationTotal(card) {
+    const total = card.querySelector('[data-music-duration-total]');
+    if (!total) return;
+    const cells = [...card.querySelectorAll('[data-music-duration]')];
+    const ready = cells.every(cell => cell.dataset.musicDurationLoaded === '1');
+    const known = cells.every(cell => cell.dataset.musicDurationValue !== undefined);
+    total.textContent = !ready ? '…' : !known ? '—' : formatMusicDuration(
+        cells.reduce((sum, cell) => sum + Number(cell.dataset.musicDurationValue), 0)
+    );
+    if (ready && known) total.removeAttribute('title');
 }
 
 /**
@@ -520,9 +542,14 @@ async function drainMusicDurations() {
             const duration = await readMusicDuration(cell.dataset.musicSrc || '');
             if (cell.isConnected) {
                 cell.textContent = formatMusicDuration(duration);
+                cell.dataset.musicDurationLoaded = '1';
+                delete cell.dataset.musicDurationValue;
                 if (Number.isFinite(duration) && duration >= 0) {
+                    cell.dataset.musicDurationValue = String(duration);
                     cell.removeAttribute('title');
                 }
+                const card = cell.closest('[data-gallery-music]');
+                if (card) updateMusicDurationTotal(card);
             }
         }
     } finally { durationRunning = false; }

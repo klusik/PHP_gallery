@@ -198,6 +198,10 @@ function view_music_control_icon(string $action): string
         'previous' => '<path d="M5 5v14m13-14L7 12l11 7Z"/>',
         'next' => '<path d="M19 5v14M6 5l11 7-11 7Z"/>',
         'download' => '<path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/>',
+        'document' => '<path d="M5 3h9l5 5v13H5ZM14 3v6h5M8 13h8m-8 4h6"/>',
+        'music' => '<path d="M9 18V5l11-2v13M9 9l11-2"/>'
+            . '<ellipse cx="6" cy="18" rx="3" ry="2"/>'
+            . '<ellipse cx="17" cy="16" rx="3" ry="2"/>',
         'locked' => '<rect x="5" y="10" width="14" height="11" rx="2"/>'
             . '<path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
         'up' => '<path d="M12 20V4m-6 6 6-6 6 6"/>',
@@ -240,13 +244,19 @@ function view_music_player_controls(bool $viewer): string
  * @param string $id Unique gallery/surface presentation identity.
  * @param string $title Localized document or playlist label.
  * @param int $count Number of authorized entries supplied by the controller.
+ * @param string $icon Trusted decorative SVG markup, or empty for no symbol.
  * @return void Emit the native disclosure, popup header and scroll container.
  */
-function view_media_panel_start(string $id, string $title, int $count): void
+function view_media_panel_start(
+    string $id,
+    string $title,
+    int $count,
+    string $icon = ''
+): void
 {
     echo '<details class="gallery-media-widget" data-gallery-media-widget>'
         . '<summary aria-controls="' . e($id) . '">'
-        . '<span>' . e($title) . '</span>'
+        . $icon . '<span>' . e($title) . '</span>'
         . '<span class="gallery-media-count">' . $count . '</span>'
         . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
         . '<path d="m9 5 7 7-7 7"/></svg></summary>'

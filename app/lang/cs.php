@@ -1279,4 +1279,13 @@ return [
         '{processed} / {total} záznamů',
     'admin.storage.tab_files_hint' =>
         'Fotografie, odvozené soubory, originály PDF a hudby',
+    'media_summary.files' => 'Soubory',
+    'media_summary.tracks' => 'Skladby',
+    'media_summary.duration' => 'Celková stopáž',
+    'presentation.start' => 'Prezentace',
+    'presentation.share' => 'Zkopírovat odkaz na prezentaci',
+    'presentation.copied' => 'Odkaz na prezentaci byl zkopírován.',
+    'presentation.copy_manually' => 'Zkopírujte tento odkaz na prezentaci ručně.',
+    'presentation.description' => 'Od první fotografie · S hudbou',
+    'presentation.description_silent' => 'Od první fotografie',
 ];

@@ -68,6 +68,19 @@ The music model also owns permanent v1 compatibility: a missing download flag
 means false. New tracks always start locked; bulk permission affects current
 tracks only. This prevents old indexes or later uploads inheriting permission.
 
+Public media cards retain native disclosure support while their always-visible
+totals use the same authorized rows. An unreadable PDF or audio duration leaves
+the full total unknown. The shared PDF metadata owner releases each original
+before opening the next; no page rendering or database migration is introduced.
+Real-host metadata latency and device coverage remain unknown.
+
+Explicit presentation launches temporarily override default-off music without
+changing persisted preferences. Deferred activation starts audio in the original
+click task; shared-link autoplay can still require the existing Play gesture.
+The media-panel copy owner permanently supports denied/unavailable clipboard
+access through a selectable URL. Retain these browser capability paths until
+deployment and supported-device evidence establishes safe retirement.
+
 ## Smart Gallery music and visibility compatibility
 
 Owners: music model/service/controller and existing Smart source/presentation

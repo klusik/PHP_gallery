@@ -177,7 +177,12 @@ function view_render_public_gallery_preview_toolbar(array $viewModel): void
 /**
  * Render the public gallery title and optional branding assets.
  *
- * @param array{title?:string,description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>,banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string} $viewModel Controller-prepared branding, description links and protected PDF table markup; omitted presentation fields use their existing empty defaults.
+ * @param array{title?:string,description?:string,
+ *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
+ *     banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string,
+ *     presentation_url?:string,presentation_music?:bool} $viewModel Prepared
+ *     branding, authorized attachments and optional presentation controls;
+ *     omitted fields retain their empty presentation defaults.
  * @param bool $includeContent Whether to append description and documents; defaults to true for direct view consumers.
  * @return void Emits public gallery branding and conditional flight-plan controls.
  */
@@ -208,7 +213,9 @@ function view_render_public_gallery_branding_header(array $viewModel, bool $incl
  * Render description text beside the compact document and playlist launchers.
  * @param array{description?:string,
  *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
- *     pdf_html?:string} $viewModel Prepared description, link metadata and
+ *     pdf_html?:string,presentation_url?:string,
+ *     presentation_music?:bool} $viewModel Prepared description, link metadata,
+ *     eligible presentation URL and
  *     protected attachment markup; absent fields render no content.
  * @return void Emit the hero row, standalone text or left-aligned applets.
  */
@@ -216,6 +223,12 @@ function view_render_public_gallery_description_documents(array $viewModel): voi
 {
     $description = (string) ($viewModel['description'] ?? '');
     $pdfHtml = (string) ($viewModel['pdf_html'] ?? '');
+    $presentationUrl = (string) ($viewModel['presentation_url'] ?? '');
+    if ($presentationUrl !== '') {
+        $pdfHtml .= view_public_gallery_presentation(
+            $presentationUrl, !empty($viewModel['presentation_music'])
+        );
+    }
     $hasDescription = trim($description) !== '';
     if ($hasDescription && $pdfHtml !== '') {
         echo '<div class="gallery-description-documents">';
@@ -237,6 +250,41 @@ function view_render_public_gallery_description_documents(array $viewModel): voi
     if ($hasDescription && $pdfHtml !== '') {
         echo '</div>';
     }
+}
+
+/**
+ * Render a soundtrack presentation launcher and its explicit copy action.
+ * @param string $url Complete canonical, localized presentation launch URL.
+ * @param bool $hasMusic Whether authorized music is available for this launch.
+ * @return string Escaped links, accessible feedback and manual-copy fallback.
+ */
+function view_public_gallery_presentation(string $url, bool $hasMusic): string
+{
+    return '<div class="gallery-presentation" data-gallery-presentation>'
+        . '<p class="gallery-presentation-caption">'
+        . e(t($hasMusic ? 'presentation.description'
+            : 'presentation.description_silent')) . '</p>'
+        . '<div class="gallery-presentation-actions">'
+        . '<a class="button secondary" href="' . e($url) . '"'
+        . ' data-gallery-presentation-start>'
+        . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        . '<path d="m8 4 13 8-13 8Z"/></svg>'
+        . e(t('presentation.start')) . '</a>'
+        . '<a class="music-icon" href="' . e($url) . '"'
+        . ' data-gallery-presentation-share aria-label="'
+        . e(t('presentation.share')) . '" title="'
+        . e(t('presentation.share')) . '">'
+        . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        . ' stroke-width="1.7" stroke-linecap="round"'
+        . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        . '<path d="M12 15V2m-4 4 4-4 4 4M5 10H3v12h18V10h-2"/>'
+        . '</svg></a></div><output role="status" aria-live="polite"'
+        . ' data-presentation-status data-copied="'
+        . e(t('presentation.copied')) . '" data-copy-failed="'
+        . e(t('presentation.copy_manually')) . '"></output>'
+        . '<input type="url" readonly hidden data-presentation-copy'
+        . ' aria-label="' . e(t('presentation.share')) . '" value="'
+        . e($url) . '"></div>';
 }
 
 /**

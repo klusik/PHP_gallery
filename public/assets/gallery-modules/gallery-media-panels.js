@@ -8,6 +8,9 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
+import {
+    scanPdfPageCountCells,
+} from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
 
 /**
  * Keep attachment disclosure motion brief without delaying media controls.
@@ -205,11 +208,18 @@ function refreshPanels() {
  * @returns {void} Bind keyboard/outside dismissal, viewport fitting and replacement.
  */
 export function setupGalleryMediaPanels() {
+    scanPdfPageCountCells(document);
     if (bound) return;
     bound = true;
     document.body.dataset.mediaPanelsBound = '1';
     document.addEventListener('click', event => {
         const target = event.target instanceof Element ? event.target : null;
+        const share = target?.closest('[data-gallery-presentation-share]');
+        if (share instanceof HTMLAnchorElement) {
+            event.preventDefault();
+            void copyPresentationLink(share);
+            return;
+        }
         const widget = target?.closest('[data-gallery-media-widget]');
         const summary = target?.closest('summary');
         if (widget instanceof HTMLDetailsElement
@@ -245,7 +255,14 @@ export function setupGalleryMediaPanels() {
     window.addEventListener('scroll', refreshPanels, true);
     window.visualViewport?.addEventListener('resize', refreshPanels);
     window.visualViewport?.addEventListener('scroll', refreshPanels);
-    new MutationObserver(refreshPanels).observe(document.body, {
+    new MutationObserver(changes => {
+        refreshPanels();
+        for (const change of changes) for (const node of change.addedNodes) {
+            if (node instanceof Element || node instanceof DocumentFragment) {
+                scanPdfPageCountCells(node);
+            }
+        }
+    }).observe(document.body, {
         childList: true, subtree: true,
     });
     window.addEventListener('pagehide', () => {
@@ -253,4 +270,28 @@ export function setupGalleryMediaPanels() {
             finishClose(widget, state, false);
         }
     });
+}
+
+/**
+ * Copy only the prepared canonical launch URL and expose a selectable fallback.
+ * @param {HTMLAnchorElement} link Explicit share action beside Presentation.
+ * @returns {Promise<void>} Report copy success or offer the URL for manual copy.
+ */
+async function copyPresentationLink(link) {
+    const panel = link.closest('[data-gallery-presentation]');
+    const status = panel.querySelector('[data-presentation-status]');
+    const input = panel.querySelector('[data-presentation-copy]');
+    try {
+        await navigator.clipboard.writeText(link.href);
+        status.textContent = status.dataset.copied;
+        input.hidden = true;
+    } catch {
+        // Permanent browser capability fallback owned by this copy action:
+        // denied clipboard access leaves the same URL selectable by keyboard.
+        status.textContent = status.dataset.copyFailed;
+        input.value = link.href;
+        input.hidden = false;
+        input.focus();
+        input.select();
+    }
 }

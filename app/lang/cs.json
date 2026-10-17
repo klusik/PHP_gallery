@@ -7596,5 +7596,14 @@
     "admin.settings.item.feature_gallery_pdf_documents.example": "Zapnutí povolí tento typ médií; vypnutí zachová soubory a je vratné.",
     "admin.settings.item.feature_gallery_music": "Hudba galerií",
     "admin.settings.item.feature_gallery_music.hint": "Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí zachová soubory, playlisty a nastavení slideshow.",
-    "admin.settings.item.feature_gallery_music.example": "Zapnutí povolí tento typ médií; vypnutí zachová soubory a je vratné."
+    "admin.settings.item.feature_gallery_music.example": "Zapnutí povolí tento typ médií; vypnutí zachová soubory a je vratné.",
+    "media_summary.files": "Soubory",
+    "media_summary.tracks": "Skladby",
+    "media_summary.duration": "Celková stopáž",
+    "presentation.start": "Prezentace",
+    "presentation.share": "Zkopírovat odkaz na prezentaci",
+    "presentation.copied": "Odkaz na prezentaci byl zkopírován.",
+    "presentation.copy_manually": "Zkopírujte tento odkaz na prezentaci ručně.",
+    "presentation.description": "Od první fotografie · S hudbou",
+    "presentation.description_silent": "Od první fotografie"
 }

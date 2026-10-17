@@ -1564,7 +1564,18 @@
 .gallery-pdf-icon svg { width: 1em; height: 1em; }
 .gallery-pdf-icon:is(:hover, :focus-visible) { background: var(--color-border); outline: 1px solid currentColor; }
 .gallery-pdf-table [data-pdf-controls] > td { padding: 0.5rem; }
-.gallery-description-documents { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, min(50%, 36rem)); align-items: start; gap: 1.25rem; margin-block: 0.65rem; }
+.gallery-description-documents {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    align-items: start;
+    gap: 1.25rem;
+    margin-block: 0.65rem;
+}
+.gallery-description-documents > .gallery-description-rich {
+    flex: 1 1 28rem;
+    max-width: none;
+}
 .gallery-description-documents > .gallery-pdf-documents { justify-self: end; margin-top: 0; }
 .gallery-description-documents .gallery-description-rich { min-width: 0; margin-top: 0; }
 @media (max-width: 760px) {
@@ -2167,21 +2178,111 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     }
 }
 
+/* Keep useful facts in the hero column while attachment lists stay collapsed. */
+.gallery-media-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin: 0.55rem 0 0;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+}
+.gallery-media-summary > div { flex: 1 1 auto; }
+.gallery-media-summary dt { color: var(--muted); }
+.gallery-media-summary dd {
+    margin: 0.15rem 0 0;
+    font-weight: 700;
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.gallery-presentation-caption {
+    margin: 0 0 0.55rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+.gallery-presentation-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.gallery-presentation-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    flex: 1;
+    justify-content: center;
+}
+.gallery-presentation-actions svg { width: 1rem; height: 1rem; }
+.gallery-presentation-actions .button svg { fill: currentColor; }
+.gallery-presentation output { display: block; font-size: 0.8rem; }
+.gallery-presentation input { width: 100%; box-sizing: border-box; }
+
 /* Attachment lists occupy one launcher row until explicitly disclosed. */
 .gallery-attachment-applets {
     display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
+    flex-wrap: wrap;
+    /* Intrinsic wrapping follows gallery space, including a resized window
+       or an open side panel. Fourteen rem keeps each compact card readable. */
+    gap: 0.65rem;
     min-width: 0;
     align-items: stretch;
 }
 .gallery-description-documents > .gallery-attachment-applets {
-    grid-column: 2;
-    justify-self: end;
-    width: min(36rem, 100%);
+    flex: 1 1 28rem;
+    width: 100%;
 }
 .gallery-attachment-applets > :is(.gallery-music, .gallery-pdf-documents) {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* Use the real theme tokens so glass remains visible across saved themes. */
+.gallery-attachment-applets > :is(
+    .gallery-music, .gallery-pdf-documents, .gallery-presentation
+) {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 0.7rem;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    box-shadow: 0 0.2rem 0.7rem #00000008;
+    min-width: 0;
+    flex: 1 1 14rem;
+    width: auto;
+}
+.gallery-attachment-applets > .gallery-presentation { flex-basis: 100%; }
+.gallery-attachment-applets .gallery-media-widget { order: -1; }
+.gallery-attachment-applets .gallery-media-widget > summary {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    color: var(--ink);
+    gap: 0.5rem;
+}
+.gallery-attachment-applets .gallery-media-widget > summary svg:first-child {
+    width: 1.15rem;
+    height: 1.15rem;
+    color: var(--accent);
+}
+.gallery-attachment-applets .gallery-media-widget > summary svg:last-child {
+    margin-left: auto;
+}
+.gallery-attachment-applets .music-player {
+    margin-top: 0.65rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--line);
+}
+.gallery-presentation-actions > .music-icon {
+    border: 1px solid var(--line);
+    border-radius: 0.45rem;
+    width: 2rem;
+    height: 2rem;
+}
+.gallery-attachment-applets .gallery-media-count {
+    background: color-mix(in srgb, var(--line) 50%, transparent);
 }
 .gallery-pdf-documents { overflow: visible; }
 .gallery-media-widget { min-width: 0; }
@@ -2192,7 +2293,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     width: fit-content;
     max-width: 100%;
     padding: 0.3rem 0.5rem;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--line);
     border-radius: 0.45rem;
     font-size: 0.85rem;
     font-weight: 600;
@@ -2201,12 +2302,12 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
 }
 .gallery-media-widget > summary::-webkit-details-marker { display: none; }
 .gallery-media-widget > summary:is(:hover, :focus-visible) {
-    background: var(--color-border);
+    background: color-mix(in srgb, var(--line) 40%, transparent);
 }
 .gallery-media-count {
     padding: 0 0.3rem;
     border-radius: 0.3rem;
-    background: var(--color-border);
+    background: var(--line);
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
 }
@@ -2217,7 +2318,9 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     stroke: currentColor;
     stroke-width: 1.7;
 }
-.gallery-media-widget[open] > summary svg { transform: rotate(90deg); }
+.gallery-media-widget[open] > summary svg:last-child {
+    transform: rotate(90deg);
+}
 .gallery-media-panel {
     box-sizing: border-box;
     display: flex;
@@ -2226,10 +2329,10 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     width: 100%;
     margin-top: 0.4rem;
     padding: 0;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--line);
     border-radius: 0.65rem;
-    background: var(--color-surface, #fff);
-    color: var(--color-text, #181818);
+    background: var(--panel);
+    color: var(--ink);
     box-shadow: 0 0.5rem 1.75rem #0003;
     overflow: hidden;
 }
@@ -2246,7 +2349,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--line);
     flex: 0 0 auto;
 }
 .gallery-media-panel > header h3 {

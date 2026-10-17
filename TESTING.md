@@ -17,6 +17,23 @@ filesystem collision behavior. Live-host rename/upload acceptance remains manual
 
 ## Gallery music
 
+The existing music Chromium fixture also verifies explicit soundtrack launches
+without changing default-off preferences, complete duration while collapsed,
+clipboard success/refusal without navigation, and media cards wrapping when only
+the gallery container is resized. The PDF workflow fixture executes the shared
+production metadata queue for totals, exact-version reuse, version changes,
+serial disposal and unreadable originals. The slideshow speed fixture exercises
+the production presentation launcher for photo one, default timing and disabled
+slideshow behavior. Hosted central integration owns execution.
+
+Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
+and music count/duration against the opened lists, including unknown metadata;
+resize the gallery/window so cards move beside/below each other; start from a later
+photo page and verify photo one/default speeds/music; copy/open the presentation
+link with ordinary visitor access; close/stop and verify audio is released.
+Real browser codec/autoplay, native fullscreen and mobile-device behavior remain
+environment-dependent acceptance, separate from controlled fixture evidence.
+
 `gallery_music_service_test.php` uses isolated real PCM WAV bytes to exercise
 exact-byte storage, gallery-scoped lookup, content rejection, ordered mutations,
 stale revisions, persistent preferences, deletion, damaged-index preservation,

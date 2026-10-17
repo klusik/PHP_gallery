@@ -24,8 +24,14 @@ The gallery presents documents in a compact table with title, original byte size
 actual PDF page count and text-sized icons. The title and eye icon open the same
 protected viewer; the download icon retains the original filename. PDF.js reads
 page-count metadata sequentially without rasterizing pages. Unknown or unreadable
-counts remain an em dash. PDF and music launchers share one compact column
-beside the description on desktop, or below it on narrow screens. Without a
+counts remain an em dash. A translucent summary stays visible with the authorized
+file count, total original bytes and combined page count, including the OFP.
+The public and editor surfaces share one exact-version metadata queue; no PDF
+pages are rasterized for these totals. Pending metadata shows an ellipsis; if any
+document is unreadable, the complete total stays unknown instead of omitting it.
+PDF and music cards wrap beside each other when the actual gallery width permits,
+then below each other and below the description as space shrinks. Resizing a
+window or opening a side panel changes this layout without JavaScript. Without a
 description they stay left-aligned. Clicking a launcher reveals a small overlay;
 the list body has a 12rem maximum height and scrolls independently. Its count
 reflects authorized documents, and the panel fits the visual viewport. Tags, breadcrumbs,

@@ -1223,4 +1223,13 @@ return [
         '{processed} / {total} poster',
     'admin.storage.tab_files_hint' =>
         'Foton, härledda filer, PDF- och musikoriginal',
+    'media_summary.files' => 'Filer',
+    'media_summary.tracks' => 'Spår',
+    'media_summary.duration' => 'Total speltid',
+    'presentation.start' => 'Presentation',
+    'presentation.share' => 'Kopiera presentationslänk',
+    'presentation.copied' => 'Presentationslänken har kopierats.',
+    'presentation.copy_manually' => 'Kopiera presentationslänken manuellt.',
+    'presentation.description' => 'Från första fotot · Med musik',
+    'presentation.description_silent' => 'Från första fotot',
 ];

@@ -1227,4 +1227,13 @@ return [
         '{processed} / {total} Datensätze',
     'admin.storage.tab_files_hint' =>
         'Fotos, Ableitungen, PDF- und Musikoriginale',
+    'media_summary.files' => 'Dateien',
+    'media_summary.tracks' => 'Titel',
+    'media_summary.duration' => 'Gesamtdauer',
+    'presentation.start' => 'Präsentation',
+    'presentation.share' => 'Präsentationslink kopieren',
+    'presentation.copied' => 'Präsentationslink kopiert.',
+    'presentation.copy_manually' => 'Kopieren Sie diesen Präsentationslink manuell.',
+    'presentation.description' => 'Ab dem ersten Foto · Mit Musik',
+    'presentation.description_silent' => 'Ab dem ersten Foto',
 ];

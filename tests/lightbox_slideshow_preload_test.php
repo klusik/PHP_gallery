@@ -59,7 +59,11 @@ slideshow_preload_assert(!str_contains($prepareSource, 'loadDecodedLightboxImage
 slideshow_preload_assert(str_contains($prepareSource, 'fetchLightboxWindowAround(normalizedIndex)'), 'Slideshow preparation must support sparse paginated gallery metadata.');
 
 $scheduleStart = strpos($source, 'function scheduleLightboxSlideshowNext()');
-$scheduleEnd = strpos($source, 'async function startLightboxSlideshow()', $scheduleStart === false ? 0 : $scheduleStart);
+$scheduleEnd = strpos(
+    $source,
+    'async function startLightboxSlideshow(forceMusic = false)',
+    $scheduleStart === false ? 0 : $scheduleStart
+);
 slideshow_preload_assert($scheduleStart !== false && $scheduleEnd !== false, 'Slideshow scheduler is missing.');
 $scheduleSource = substr($source, (int) $scheduleStart, (int) $scheduleEnd - (int) $scheduleStart);
 $preparePosition = strpos($scheduleSource, 'prepareLightboxSlideshowImage(nextIndex, preloadController.signal)');

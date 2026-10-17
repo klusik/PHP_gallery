@@ -31,6 +31,13 @@ body { margin: 8px; font: 16px sans-serif; }
 </head><body><pre id="results"></pre>
 <aside data-admin-side-panel data-open="1"><div data-music-mount></div></aside>
 <div data-fixture-music></div>
+<div data-fixture-presentation data-gallery-presentation>
+<a href="/gallery?lang=en&amp;presentation=1"
+ data-gallery-presentation-share>Share presentation</a>
+<output data-presentation-status data-copied="Copied"
+ data-copy-failed="Copy manually"></output>
+<input type="url" readonly hidden data-presentation-copy>
+</div>
 <div data-lightbox><div data-lightbox-music data-music-gallery="42"
  data-music-playback-error="Press Play to retry">
 <button type="button" data-music-action="previous" aria-label="Previous">◀</button>
@@ -43,7 +50,7 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261017-media-applets-v1';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261017-media-summary-v1';
 import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
@@ -147,6 +154,13 @@ try {
     );
     silent.start();
     check(silentAudio.calls.length === 0, 'Default-off gallery started music');
+    silent.start(true);
+    check(silentAudio.src === '/track-one',
+        'Explicit presentation did not enable the default-off soundtrack');
+    silent.stop();
+    silent.start();
+    check(silentAudio.src === '',
+        'Explicit launch changed the saved automatic music preference');
     silentAudio.results.push(Promise.reject(
         new DOMException('Gesture required', 'NotAllowedError')
     ));
@@ -227,6 +241,9 @@ try {
             + '"><script type="application/json" data-gallery-music-playlist'
             + ' data-music-gallery="' + galleryId + '" data-music-editor="'
             + (editor ? '1' : '0') + '">' + data + '<' + '/script>'
+            + (editor ? '' : '<dl class="gallery-media-summary">'
+                + '<dt>Total duration</dt><dd data-music-duration-total>…</dd>'
+                + '</dl>')
             + mediaPanel('playlist-' + galleryId,
                 '<table class="gallery-music-table"><thead><tr>'
                 + '<th>Track</th><th class="gallery-music-duration">Duration</th>'
@@ -271,6 +288,20 @@ try {
     const collapsedHeight = publicCard.getBoundingClientRect().height;
     check(!widget.open && mini.getBoundingClientRect().height > 0,
         'Closed playlist hid the always-available miniplayer');
+    const durationReady = new Promise(resolve => {
+        const observer = new MutationObserver(() => {
+            if (publicCard.querySelector('[data-music-duration-total]')
+                .textContent === '4:06') {
+                observer.disconnect(); resolve();
+            }
+        });
+        observer.observe(publicCard, {subtree: true, childList: true});
+    });
+    if (publicCard.querySelector('[data-music-duration-total]')
+        .textContent !== '4:06') {
+        await durationReady;
+    }
+    check(!widget.open, 'Total duration required opening the playlist');
     widget.querySelector('summary').click();
     const popup = widget.querySelector('[data-gallery-media-panel]');
     await Promise.all(popup.getAnimations().map(item => item.finished));
@@ -330,20 +361,32 @@ try {
         && formatMusicDuration(3601) === '1:00:01'
         && formatMusicDuration(Infinity) === '—',
         'Duration text did not reflect finite metadata');
-    const durationReady = new Promise(resolve => {
-        const observer = new MutationObserver(() => {
-            if (publicCard.querySelector('[data-music-duration]').textContent === '2:03') {
-                observer.disconnect(); resolve();
-            }
-        });
-        observer.observe(publicCard, {subtree: true, childList: true});
-    });
-    if (publicCard.querySelector('[data-music-duration]').textContent !== '2:03') {
-        await durationReady;
-    }
     check(AudioAdapter.instances.filter(item => item.preload === 'metadata')
         .every(item => item.calls.length === 0),
         'Duration observation started audible playback');
+
+    const presentation = document.querySelector('[data-fixture-presentation]');
+    const share = presentation.querySelector('a');
+    const copyInput = presentation.querySelector('input');
+    let copiedUrl = '';
+    Object.defineProperty(navigator, 'clipboard', {configurable: true,
+        value: {writeText: async value => { copiedUrl = value; }},
+    });
+    const sharePage = location.href;
+    share.click();
+    await turn();
+    check(copiedUrl === share.href && location.href === sharePage
+        && presentation.querySelector('output').textContent === 'Copied',
+        'Share did not copy the prepared URL without navigation');
+    navigator.clipboard.writeText = async () => {
+        throw new DOMException('Denied', 'NotAllowedError');
+    };
+    share.click();
+    await turn();
+    check(!copyInput.hidden && copyInput.value === share.href
+        && document.activeElement === copyInput
+        && presentation.querySelector('output').textContent === 'Copy manually',
+        'Denied clipboard did not expose a keyboard-selectable launch URL');
 
     // Eight rows exceed the five-row applet sample; this is a layout vector.
     const documents = document.createElement('section');
@@ -450,6 +493,28 @@ try {
             'Music mutation navigated or closed its originating panel');
     }
     window.fetch = nativeFetch;
+    // Resize the gallery container itself, independently of browser width.
+    // These are explicit wide/narrow layout vectors, not runtime policies.
+    const layout = document.createElement('div');
+    layout.className = 'gallery-description-documents';
+    layout.innerHTML = '<div class="gallery-description-rich">Description</div>'
+        + '<div class="gallery-attachment-applets">'
+        + '<section class="gallery-pdf-documents">PDF summary</section>'
+        + '<section class="gallery-music">Music summary</section>'
+        + '<div class="gallery-presentation">Presentation</div></div>';
+    document.body.append(layout);
+    const tiles = layout.querySelectorAll('section');
+    layout.style.width = '1280px';
+    check(tiles[0].getBoundingClientRect().top
+        === tiles[1].getBoundingClientRect().top,
+        'Wide gallery did not place media summaries beside each other');
+    layout.style.width = '340px';
+    check(tiles[1].getBoundingClientRect().top
+        > tiles[0].getBoundingClientRect().bottom,
+        'Narrow gallery did not wrap media summaries vertically');
+    check(layout.scrollWidth <= 340,
+        'Narrow media cards overflowed the gallery container');
+    layout.remove();
     document.getElementById('results').textContent = 'BROWSER PASS gallery music repeat-all, controls, rejection, teardown and dynamic panel';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + (error.stack || String(error));

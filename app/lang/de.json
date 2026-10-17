@@ -7596,5 +7596,14 @@
     "admin.settings.item.feature_gallery_pdf_documents.example": "ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist umkehrbar.",
     "admin.settings.item.feature_gallery_music": "Galeriemusik",
     "admin.settings.item.feature_gallery_music.hint": "Musik für Galerien und Smart-Galerien hochladen und abspielen. Deaktivieren erhält Dateien, Wiedergabelisten und Diashow-Einstellungen.",
-    "admin.settings.item.feature_gallery_music.example": "ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist umkehrbar."
+    "admin.settings.item.feature_gallery_music.example": "ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist umkehrbar.",
+    "media_summary.files": "Dateien",
+    "media_summary.tracks": "Titel",
+    "media_summary.duration": "Gesamtdauer",
+    "presentation.start": "Präsentation",
+    "presentation.share": "Präsentationslink kopieren",
+    "presentation.copied": "Präsentationslink kopiert.",
+    "presentation.copy_manually": "Kopieren Sie diesen Präsentationslink manuell.",
+    "presentation.description": "Ab dem ersten Foto · Mit Musik",
+    "presentation.description_silent": "Ab dem ersten Foto"
 }

@@ -32,6 +32,10 @@ Use these ownership rules:
 - Controllers: request globals, route/request normalization, authentication/CSRF boundary checks, response type/status/headers, service calls, view-model preparation.
 - Views: markup and presentation-only formatting from already prepared data.
 
+Always prepare complete localized public action URLs in the controller. Pass
+the final URL into the view; locale/session resolution belongs with request
+policy, including calls to `translation_active_language()`.
+
 Before adding a helper, search for the existing domain owner and extend/centralize it instead of creating a near-duplicate. Semantic inputs must cross layers, not SQL fragments. For example, a service may pass a gallery scope or ID to a model, but not `$whereSql`. Keep existing docstrings/comments when moving code.
 
 Review persistence as one transition: schema readiness, old fields that take precedence, atomic updates and failure/reconciliation. A newly saved mode must not remain silently overridden by an old value.

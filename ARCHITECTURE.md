@@ -28,6 +28,15 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
 ## Gallery music ownership
 
+The public gallery controller prepares canonical presentation links only when
+authorized photos and lightbox capability are available. Views render translucent
+PDF/music summary cards that wrap with the gallery's available width. The shared
+PDF metadata queue and serialized audio metadata reader complete their totals.
+Deferred presentation activation hands off to the existing lightbox scheduler,
+including sparse photo-one loading and temporary soundtrack enablement. Clipboard
+copy and its selectable-URL fallback belong to the existing media-panel module.
+No persistence, delivery route or access-policy change is involved.
+
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.
 Missing preferences preserve enabled behavior on upgrades; explicit OFF survives

@@ -34,6 +34,9 @@ require a browser/database only when the behavior needs one.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.
+- Always search fixtures for both complete imports and bare revision tokens,
+  plus the old callable signature, when changing a browser module interface.
+  Update every affected extraction/assertion while retaining behavioral checks.
 - Always use single namespace separators in executable fully qualified PHP
   fixture calls. Double separators belong only to escaped string literals;
   review the executable and string layers separately before committing adapters.

@@ -26,6 +26,25 @@ Documents / PDFs tab also retains independent upload and playlist controls.
 
 The music launcher shows the authorized track count. Clicking it opens a small
 overlay with a bounded, scrollable list; closing it leaves playback running.
+Its translucent card also keeps the track count and complete playlist duration
+visible while the list is closed. One silent metadata reader visits all public
+rows in saved order; missing duration produces an explicit unknown total. Cards
+wrap according to the gallery's available width, including a resized window.
+
+Physical galleries with authorized photographs and enabled lightbox controls
+offer **Presentation** below the attachment cards, even without attachments.
+This explicit action opens photo one, resets both temporary speed controls to
+their rendered defaults, and enables the existing soundtrack for that launch.
+It does not change the saved slideshow music preference. Normal viewer slideshow
+controls continue honoring that preference. Photo one can be loaded through the
+existing sparse metadata endpoint when another pagination page is visible.
+
+The adjacent share icon copies the canonical gallery URL with the active language
+and `presentation=1`. Pagination, photo selection and administrator/preview state
+are omitted. The link retains ordinary gallery access requirements and starts
+the same presentation once after loading. Clipboard refusal exposes a selectable
+URL. Browser autoplay/fullscreen refusal keeps photo playback available with the
+existing explicit Play/fullscreen controls; a link cannot bypass browser policy.
 PDFs use the same disclosure. The existing miniplayer remains visible outside
 the list and retains its four controls. The table shows titles, browser-reported
 durations and one context-sensitive Play/Stop icon **before** each title, with

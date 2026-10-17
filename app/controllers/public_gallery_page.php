@@ -456,7 +456,9 @@ function cms_gallery(): void
     $heroCountBadge = gallery_count_badge_presentation($gallery, $isCountAdmin, $heroBranchImageCount, $heroAllImageCount);
 
     ob_start();
-    $descriptionDocumentsHtml = render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    $descriptionDocumentsHtml = render_public_gallery_branding_header(
+        $gallery, $seo, $publicOnly, $lightboxTotalCount > 0
+    );
     $brandingHeaderHtml = (string) ob_get_clean();
     ob_start();
     render_breadcrumbs($gallery);

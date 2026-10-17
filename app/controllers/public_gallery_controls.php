@@ -430,9 +430,15 @@ function public_gallery_ofp_document_url(int $galleryId, bool $download = false)
  * @param array{id:int,folder_path:string,title?:string,description?:string} $gallery Authorized source gallery identity, text and branding owner inputs.
  * @param array{title?:string} $seo Optional localized title override.
  * @param bool $publicOnly Whether only visitor-visible assets should be used.
+ * @param bool $hasPhotos Whether the authorized lightbox contains any photos.
  * @return string Prepared description/document HTML for the full-width content row; emits title and date markup separately.
  */
-function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): string
+function render_public_gallery_branding_header(
+    array $gallery,
+    array $seo,
+    bool $publicOnly,
+    bool $hasPhotos = false
+): string
 {
     // $brandingSchemaReady avoids repeated schema-policy inspection for the optional assets.
     $brandingSchemaReady = gallery_branding_schema_ready();
@@ -442,6 +448,7 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     $dateHtml = (string) ob_get_clean();
 
     $pdfHtml = '';
+    $hasMusic = false;
     // Only attachment galleries load document presentation; the prepared HTML
     // joins the description in the view without moving unrelated hero controls.
     if (\Gallery\Services\feature_capability_effective_enabled(
@@ -460,8 +467,21 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
         ) . '/.gallery-music/index.json')) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
-        \Gallery\Views\view_render_gallery_music(gallery_music_view_model($gallery));
+        $musicModel = gallery_music_view_model($gallery);
+        $hasMusic = $musicModel['tracks'] !== [] && $musicModel['error'] === '';
+        \Gallery\Views\view_render_gallery_music($musicModel);
         $pdfHtml .= (string) ob_get_clean();
+    }
+    // Build complete localized launch intent at the HTTP/view-model boundary.
+    // The view consumes the final URL without reading locale/session policy.
+    $presentationUrl = '';
+    if ($hasPhotos && feature_capability_effective_enabled('lightbox_modes')) {
+        $presentationUrl = gallery_public_url($gallery);
+        $presentationUrl .= (str_contains($presentationUrl, '?') ? '&' : '?')
+            . http_build_query([
+                'lang' => \Gallery\Services\translation_active_language(),
+                'presentation' => '1',
+            ]);
     }
     $viewModel = [
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
@@ -471,6 +491,10 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
         'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
         'date_html' => $dateHtml,
         'pdf_html' => $pdfHtml,
+        // A launch URL carries presentation intent only; ordinary access
+        // gates still run before this public gallery can be rendered.
+        'presentation_url' => $presentationUrl,
+        'presentation_music' => $hasMusic,
     ];
     \Gallery\Views\view_render_public_gallery_branding_header($viewModel, false);
     ob_start();

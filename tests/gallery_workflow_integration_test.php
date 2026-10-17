@@ -366,9 +366,12 @@ try {
                 === $musicEnabled,
             'Public PDF/music presentation ignored independent master state.');
         if (!$pdfEnabled && !$musicEnabled) {
-            check(!str_contains($mediaPage['body'],
-                'data-gallery-attachment-applets'),
-                'Both masters OFF must leave no empty media column.');
+            check(str_contains($mediaPage['body'],
+                'data-gallery-presentation-start')
+                && !str_contains($mediaPage['body'], 'data-pdf-page-total')
+                && !str_contains($mediaPage['body'], 'data-music-duration-total'),
+                'Both masters OFF must retain photo presentation without'
+                    . ' attachment summaries or players.');
         }
         $mediaSmartPage = $anonymous->request($smartRoute);
         check($mediaSmartPage['status'] === 200

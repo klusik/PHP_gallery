@@ -73,11 +73,24 @@ function view_render_gallery_pdf_documents(array $model): void
         return;
     }
     echo '<section class="gallery-pdf-documents" data-gallery-pdf-documents>';
+    if (!$model['editor']) {
+        // Summarize only the controller-authorized list, including its OFP.
+        echo '<dl class="gallery-media-summary">'
+            . '<div><dt>' . e(t('media_summary.files')) . '</dt><dd>'
+            . count($model['documents']) . '</dd></div><div><dt>'
+            . e(t('pdf.size')) . '</dt><dd>'
+            . e(format_bytes((int) array_sum(array_column(
+                $model['documents'], 'size'
+            )))) . '</dd></div><div><dt>' . e(t('pdf.pages'))
+            . '</dt><dd data-pdf-page-total title="'
+            . e(t('pdf.pages_unavailable')) . '">…</dd></div></dl>';
+    }
     $surface = $model['editor'] ? 'editor' : 'public';
     view_media_panel_start(
         'gallery-pdf-list-' . $model['gallery_id'] . '-' . $surface,
         t('pdf.documents', 'Documents / PDFs'),
-        count($model['documents'])
+        count($model['documents']),
+        view_music_control_icon('document')
     );
     echo '<table class="gallery-pdf-table' . ($model['admin'] ? ' is-admin' : '')
         . '"><colgroup><col class="gallery-pdf-title-column">'

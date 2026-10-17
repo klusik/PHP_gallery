@@ -1072,11 +1072,16 @@ function isBrowserUploadPdfFile(file) {
  * @param {HTMLElement} progress Existing gallery upload progress surface.
  * @param {File[]} files Selected PDF originals in picker order.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Existing upload operation owning retries.
- * @param {Record<string, *> | null} baseResult Acknowledged photo aggregate or null for PDF-only submissions.
- * @returns {Promise<Record<string, *>>} Canonical aggregate after the shared workflow acknowledges every PDF; clears its separate picker only after success.
+ * @param {import('./admin-side-panel.js').AdminPanelResponse|null} baseResult
+ *     Acknowledged photo aggregate, or null for PDF-only submissions.
+ * @returns {Promise<import('./admin-side-panel.js').AdminPanelResponse & {
+ *     pdf_documents_uploaded:number,pdf_document_ids:string[],
+ *     mutation_envelopes:import('./admin-side-panel.js').AdminPanelResponse[]}>}
+ *     Canonical aggregate with PDF identities and acknowledged envelopes;
+ *     clears the separate PDF picker only after success.
  */
 async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
-    const helper = await import('./admin-pdf-documents.js?v=20261017-media-applets-v1');
+    const helper = await import('./admin-pdf-documents.js?v=20261017-media-summary-v1');
     if (typeof helper.uploadGalleryPdfFiles !== 'function') {
         throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
     }

@@ -7596,5 +7596,14 @@
     "admin.settings.item.feature_gallery_pdf_documents.example": "ON tillåter medietypen; OFF bevarar filer och kan återställas.",
     "admin.settings.item.feature_gallery_music": "Gallerimusik",
     "admin.settings.item.feature_gallery_music.hint": "Ladda upp och spela musik i gallerier och smarta gallerier. Avstängning bevarar filer, spellistor och bildspelsinställningar.",
-    "admin.settings.item.feature_gallery_music.example": "ON tillåter medietypen; OFF bevarar filer och kan återställas."
+    "admin.settings.item.feature_gallery_music.example": "ON tillåter medietypen; OFF bevarar filer och kan återställas.",
+    "media_summary.files": "Filer",
+    "media_summary.tracks": "Spår",
+    "media_summary.duration": "Total speltid",
+    "presentation.start": "Presentation",
+    "presentation.share": "Kopiera presentationslänk",
+    "presentation.copied": "Presentationslänken har kopierats.",
+    "presentation.copy_manually": "Kopiera presentationslänken manuellt.",
+    "presentation.description": "Från första fotot · Med musik",
+    "presentation.description_silent": "Från första fotot"
 }
